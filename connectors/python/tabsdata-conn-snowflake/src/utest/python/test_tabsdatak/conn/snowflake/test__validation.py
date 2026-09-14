@@ -108,3 +108,29 @@ def test_snowflake_fqn_def_uses_double_quote_and_doubled_quote_escape():
     assert _validation._SNOWFLAKE_FQN_DEF.quote == '"'
     assert _validation._SNOWFLAKE_FQN_DEF.escape == '"'
     assert _validation._SNOWFLAKE_FQN_DEF.outer_only is False
+
+
+# ---------------------------------------------------------------------------
+# Merge columns
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value,stored",
+    [
+        ("order_id", "ORDER_ID"),
+        ("ORDER_ID", "ORDER_ID"),
+        ("mIxEd$1", "MIXED$1"),
+        ('"myCol"', "myCol"),
+        ('"weird""name"', 'weird"name'),
+        ('"a.b"', "a.b"),
+    ],
+)
+def test_merge_column_key_folds_unquoted_and_keeps_quoted(value, stored):
+    assert _validation.merge_column_key(value) == stored
+
+
+@pytest.mark.parametrize("value", ["orders.id", "", "1st", "a-b"])
+def test_merge_column_validator_rejects_invalid(value):
+    with pytest.raises(ValueError, match="not a Snowflake column identifier"):
+        _validation.MERGE_COLUMN_VALIDATOR.func(value)

@@ -71,15 +71,58 @@ class SnowflakeErrorCode(ErrorCode):
         " {table!r} cannot take the column(s) {columns}. Encode them before"
         " writing -- for example base64 into a string",
     )  # write_all_tables: parquet binary column, rejected before loading
-
-    # --- Field-value rules (tabsdatak.conn.snowflake) ---------------
     SNOWFLAKE_9 = ErrorDef(
         ConnInitException,
-        "not a valid Snowflake account identifier (letters, digits, dots, "
-        "underscores and hyphens, starting and ending alphanumeric): {value!r}",
+        "not a valid Snowflake account identifier (alphanumerics with dots,"
+        " hyphens and underscores, starting and ending alphanumeric):"
+        " {value!r}",
     )  # AccountSpec
     SNOWFLAKE_10 = ErrorDef(
         ConnInitException,
-        "not a valid Snowflake identifier (unquoted letters, digits, underscore "
-        "and $, or a double-quoted name): {value!r}",
-    )  # IdentifierSpec
+        "not a valid Snowflake identifier (unquoted: a letter or underscore"
+        " followed by letters, digits, underscores or dollar signs; or"
+        " double-quoted for a case-sensitive / special-char name): {value!r}",
+    )  # IdentifierSpec / NameSpec
+    SNOWFLAKE_11 = ErrorDef(
+        ConnInitException,
+        "MergeCfg validation failed",
+    )  # MergeCfg
+    SNOWFLAKE_12 = ErrorDef(
+        SnowflakeValidateException,
+        'SnowflakeDest.if_table_exists="merge" requires merge_cfg to be set',
+    )  # SnowflakeDest.validate()
+    SNOWFLAKE_13 = ErrorDef(
+        SnowflakeValidateException,
+        "SnowflakeDest.merge_cfg is set but if_table_exists={if_table_exists!r};"
+        ' merge_cfg only applies to if_table_exists="merge"',
+    )  # SnowflakeDest.validate()
+    SNOWFLAKE_14 = ErrorDef(
+        SnowflakeValidateException,
+        "SnowflakeDest.merge_cfg has {cfgs} entries but tables has {tables}; a"
+        " list of merge configs must line up one-to-one with tables (pass a"
+        " single MergeCfg to apply one config to every table)",
+    )  # SnowflakeDest.validate()
+    SNOWFLAKE_16 = ErrorDef(
+        SnowflakeRuntimeException,
+        "Table {table} shares no column with the incoming data, so a merge onto"
+        " it would write nothing. Check the target name and that the frame's"
+        " columns match the table's",
+    )  # _merge_into: nothing to write
+    SNOWFLAKE_18 = ErrorDef(
+        SnowflakeRuntimeException,
+        "MergeCfg.op_column={column!r} is not a column of the data written to"
+        " table {table}, so the merge cannot read each row's i/u/d marker. Every"
+        " incoming row has to carry it",
+    )  # _coalesced_parquet / _written_columns: op column absent from the data
+    SNOWFLAKE_19 = ErrorDef(
+        SnowflakeRuntimeException,
+        "MergeCfg.on names {columns}, which the data written to table {table}"
+        " does not carry, so incoming rows cannot be matched against it. Every"
+        " key column has to be a column of the frame",
+    )  # _coalesced_parquet: key column absent from the incoming data
+    SNOWFLAKE_20 = ErrorDef(
+        SnowflakeRuntimeException,
+        "MergeCfg column {column!r} matches {matches} of the data written to"
+        " table {table}. The Snowflake load matches columns case-insensitively,"
+        " so columns whose names differ only in case cannot be told apart",
+    )  # _coalesced_parquet: ambiguous case-insensitive match

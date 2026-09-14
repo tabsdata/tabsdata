@@ -4,7 +4,7 @@
 
 """Snowflake connector -- public API.
 
-Two classes, imported from `tabsdatak.conn.snowflake`:
+Three classes, imported from `tabsdatak.conn.snowflake`:
 
 * `SnowflakeDestConn` -- the connection: a Snowflake `account`,
   `UserPassword` credentials, and optional default `role` /
@@ -12,6 +12,8 @@ Two classes, imported from `tabsdatak.conn.snowflake`:
 * `SnowflakeDest` -- the `@subscriber` destination: a list of
   target `tables`, one output slot per table (loaded with `PUT` +
   `COPY INTO` through a stage).
+* `MergeCfg` -- how `SnowflakeDest(if_table_exists="merge")` matches
+  incoming rows onto the target table.
 
 Snowflake is destination-only -- there is no `SnowflakeSrc`. The
 connection (with credentials) is registered on a collection, not
@@ -40,6 +42,9 @@ from tabsdatak.api import Dest, StrOrSecretSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge import MergeCfg as SqlMergeCfg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
@@ -82,7 +87,15 @@ SnowflakeTableNameSpec: TypeAlias = Annotated[
     _validation.SNOWFLAKE_TABLE_FQN_VALIDATION,
 ]
 SnowflakeTableNamesSpec: TypeAlias = list[SnowflakeTableNameSpec]
-IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+IfTableExistsSpec: TypeAlias = Literal["append", "replace", "merge"]
+
+SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
+
+# A merge column is a single Snowflake identifier -- the `IdentifierSpec`
+# shape, minus the FQN separator, so a dotted value is rejected instead of
+# being read as a qualified reference.
+MergeColumnSpec: TypeAlias = Annotated[str, _validation.MERGE_COLUMN_VALIDATOR]
+MergeColumnsSpec: TypeAlias = list[MergeColumnSpec]
 
 
 # --- SnowflakeDest.dest_cfg keys ------------------------------------
@@ -91,6 +104,72 @@ DestCfgKey: TypeAlias = Literal["snowflake.logging_level",]
 DestCfgSpec: TypeAlias = Annotated[
     Mapping[DestCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
 ]
+
+
+# --- Merge -----------------------------------------------------------
+
+
+@_api.dataclass(SnowflakeErrorCode.SNOWFLAKE_11, kw_only=True)
+class MergeCfg(SqlMergeCfg):
+    """How `if_table_exists="merge"` matches incoming rows onto a target table.
+
+    :categories: destination
+
+    The Snowflake spelling of the shared `MergeCfg`: the connector stages the
+    incoming parquet into a session-scoped temp table, then runs one `MERGE` per
+    target table.
+
+    Columns are named the way the target stores them: an unquoted name is
+    upper-folded (so `on=["order_id"]` hits `ORDER_ID`), a double-quoted one is
+    case-sensitive and taken verbatim.
+
+    Every incoming row carries a marker in `op_column` saying what to do with it,
+    and the marker is what decides which clause claims the row:
+
+    * `'i'` -- insert the row, if it matches no key.
+    * `'u'` -- update the row it matches.
+    * `'d'` -- delete the row it matches.
+
+    The marker is lower-cased before it is compared, so a feed emitting `'I'` /
+    `'U'` / `'D'` works as well as one emitting lower case. Anything else matches
+    no clause and the row is passed over.
+
+    An update writes every column both sides share except the keys, which are
+    what the row matched on; an insert writes those and the keys. Columns the
+    target has and the incoming data does not keep their value on an update and
+    take a NULL on an insert.
+
+    Args:
+        on: The key columns rows are matched by, joined with `AND`. Must be
+            present on both sides. Each is a Snowflake column identifier --
+            unquoted, or double-quoted for a case-sensitive / special-char name.
+        op_column: The column holding each row's `i` / `u` / `d` marker. Read
+            to decide each row's fate and never written, so the target does not
+            need the column and will not gain it.
+
+    Examples:
+        A CDC feed whose `op` column says what to do with each row:
+
+        .. code-block:: python
+
+            MergeCfg(on=["order_id", "customer_id"], op_column="op")
+    """
+
+    __kind__ = "snowflakeMergeCfg"
+
+    # Re-annotated so the shared fields carry the Snowflake column shape: a
+    # value that is not a Snowflake identifier is rejected here rather than
+    # surfacing as invalid SQL when the MERGE is built.
+    on: MergeColumnsSpec
+    op_column: MergeColumnSpec
+
+    def _fold(self, name: str) -> str:
+        return _validation.merge_column_key(name)
+
+
+MergeCfgSpec: TypeAlias = MergeCfg | list[MergeCfg]
+"""One `MergeCfg` applied to every target table, or one per entry in
+`SnowflakeDest.tables`."""
 
 
 # --- Connection ------------------------------------------------------
@@ -179,7 +258,17 @@ class SnowflakeDest(Dest):
             case-sensitive / special-char names.
         if_table_exists: `"append"` (the default) adds rows;
             `"replace"` issues `TRUNCATE` before `COPY INTO` (so
-            the existing schema is preserved).
+            the existing schema is preserved);
+            `"merge"` stages the rows and `MERGE`s them onto the
+            target by the keys in `merge_cfg`, updating, deleting or
+            inserting each one.
+        schema_evolution: `"strict"` (the default) rejects schema changes;
+            `"update"` adds new columns to the target to match the schema of
+            the incoming data.
+        merge_cfg: Required by -- and only valid with --
+            `if_table_exists="merge"`: how incoming rows are matched
+            onto existing ones. One `MergeCfg` applies to every table;
+            pass a list to configure each table in `tables` separately.
         dest_cfg: Optional connector config; the only supported key is
             `snowflake.logging_level`.
 
@@ -213,8 +302,55 @@ class SnowflakeDest(Dest):
             )
             def load_replace(rows: TableFrameSpec) -> TableFrameSpec:
                 return rows
+
+        Merge mode upserts by key instead of accumulating, and applies
+        the CDC tombstones the incoming `op` column marks:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=SnowflakeDest(
+                    tables=["cap_merge"],
+                    if_table_exists="merge",
+                    merge_cfg=MergeCfg(on=["cap_id"], op_column="op"),
+                ),
+                input_tables=["caps_input/cap_changes"],
+            )
+            def load_merge(changes: TableFrameSpec) -> TableFrameSpec:
+                return changes
     """
 
     tables: SnowflakeTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
+    schema_evolution: SchemaEvolutionSpec = "strict"
+    merge_cfg: MergeCfgSpec | None = None
     dest_cfg: DestCfgSpec | None = None
+
+    def _merge_cfgs(self) -> list[MergeCfg] | None:
+        """One `MergeCfg` per entry in `tables`, or `None` outside merge mode."""
+        if self.merge_cfg is None:
+            return None
+        if isinstance(self.merge_cfg, MergeCfg):
+            return [self.merge_cfg] * len(self.tables)
+        return list(self.merge_cfg)
+
+    def validate(self) -> None:
+        """Cross-field validation: `merge_cfg` and `if_table_exists="merge"`
+        require each other, and a list of configs must line up with `tables`.
+
+        Called by the framework; raises `SnowflakeValidateException`.
+        """
+        merging = self.if_table_exists == "merge"
+        if merging and self.merge_cfg is None:
+            # noinspection PyProtectedMember
+            raise SnowflakeErrorCode.SNOWFLAKE_12.exception()
+        if not merging and self.merge_cfg is not None:
+            # noinspection PyProtectedMember
+            raise SnowflakeErrorCode.SNOWFLAKE_13.exception(
+                if_table_exists=self.if_table_exists
+            )
+        if isinstance(self.merge_cfg, list) and len(self.merge_cfg) != len(self.tables):
+            # noinspection PyProtectedMember
+            raise SnowflakeErrorCode.SNOWFLAKE_14.exception(
+                cfgs=len(self.merge_cfg), tables=len(self.tables)
+            )

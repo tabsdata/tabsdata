@@ -113,7 +113,9 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDestConn, SnowflakeDest]):
         write_cfg = _impl.SnowflakeWriteCfg(
             conn=conn,
             target_tables=list(dest.tables),
+            schema_evolution=dest.schema_evolution,
             if_table_exists=dest.if_table_exists,
+            merge_cfgs=dest._merge_cfgs(),
         )
         try:
             _impl.write_all_tables(write_cfg, list(tables))

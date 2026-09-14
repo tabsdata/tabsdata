@@ -27,8 +27,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from tabsdatak.conn.common._validation import fqn, unfqn
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge._driver import merge_batch
 from tabsdatak.conn.common.types import UserPassword, _convert
-from tabsdatak.conn.snowflake import SnowflakeDestConn
+from tabsdatak.conn.snowflake import MergeCfg, SnowflakeDestConn
+from tabsdatak.conn.snowflake._merge_dialect import SnowflakeMergeDialect
+from tabsdatak.conn.snowflake._staging import (
+    copy_into,
+    create_file_format,
+    inferred_schema_template,
+    put_file_to_stage,
+)
 from tabsdatak.conn.snowflake._validation import _SNOWFLAKE_FQN_DEF
 from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
 
@@ -52,7 +62,6 @@ _DEFAULT_PURGE = "TRUE"
 # a TEMPORARY stage so it disappears with the session.
 _DEFAULT_TEMP_STAGE = "tabsdata_temp_stage"
 
-
 # --- Write cfg ------------------------------------------------------
 
 
@@ -60,7 +69,12 @@ _DEFAULT_TEMP_STAGE = "tabsdata_temp_stage"
 class SnowflakeWriteCfg:
     conn: SnowflakeDestConn
     target_tables: list[str]  # raw user input -- already FQN-shaped
-    if_table_exists: str  # "append" | "replace"
+    schema_evolution: str  # "strict" | "update"
+    if_table_exists: str  # "append" | "replace" | "merge"
+    # One entry per target table when merging, already normalized by
+    # ``SnowflakeDest._merge_cfgs()`` (a single MergeCfg broadcast across every
+    # table); ``None`` in every other disposition.
+    merge_cfgs: list[MergeCfg] | None = None
     match_by_column_name: str = _DEFAULT_MATCH_BY_COLUMN_NAME
     purge: str = _DEFAULT_PURGE
 
@@ -187,16 +201,6 @@ def _create_stage_if_not_exists(cursor, stage: str, is_temp: bool) -> None:
     cursor.execute(f"CREATE {kind}STAGE IF NOT EXISTS {stage}")
 
 
-def _put_file_to_stage(cursor, file_path: Path, stage: str) -> str:
-    """``PUT`` ``file_path`` into ``@stage`` and return the basename
-    snowflake will index it under."""
-    # snowflake's PUT accepts a file:// URI; use absolute path so
-    # the driver doesn't try to resolve against its own cwd.
-    file_uri = f"file://{file_path.resolve()}"
-    cursor.execute(f"PUT {file_uri} @{stage}")
-    return file_path.name
-
-
 def _create_table_from_inferred_schema(
     cursor,
     stage: str,
@@ -206,40 +210,24 @@ def _create_table_from_inferred_schema(
     """``CREATE TABLE IF NOT EXISTS`` for ``sql_table`` (already
     routed through :func:`_fq_for_sql`) using a schema inferred from
     the staged parquet file (mirrors the legacy template-with-
-    infer_schema approach)."""
-    cursor.execute("CREATE FILE FORMAT IF NOT EXISTS tabsdata_parquet TYPE = PARQUET")
+    infer_schema approach).
+
+    A merge target is not created here -- it is built from the staged relation
+    by the merge dialect, which is also what keeps the marker column out of it.
+    """
     cursor.execute(
         f"CREATE TABLE IF NOT EXISTS {sql_table} USING template ("
-        f"SELECT array_agg(object_construct(*)) "
-        f"FROM table ("
-        f"infer_schema("
-        f"location => '@{stage}/{file_name}', "
-        f"file_format => 'tabsdata_parquet', "
-        f"ignore_case => true"
-        f")"
-        f")"
+        f"{inferred_schema_template(stage, file_name)}"
         f")"
     )
 
 
-def _copy_into(
-    cursor,
-    stage: str,
-    file_name: str,
-    sql_table: str,
-    *,
-    match_by_column_name: str,
-    purge: str,
+def _set_copy_into_schema_evolution(
+    cursor, schema_evolution: bool, sql_table: str
 ) -> None:
     cursor.execute(
-        f"COPY INTO {sql_table} FROM @{stage} FILES = ('{file_name}') "
-        f"FILE_FORMAT = (TYPE = 'PARQUET') "
-        f"MATCH_BY_COLUMN_NAME = {match_by_column_name} "
-        f"PURGE = {purge}"
+        f"ALTER TABLE {sql_table} SET ENABLE_SCHEMA_EVOLUTION = {schema_evolution};"
     )
-
-
-# --- Write entry point ----------------------------------------------
 
 
 def reject_unsupported_columns(
@@ -294,11 +282,18 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
             with sf_conn.cursor() as cur:
                 cur.execute(f"USE WAREHOUSE {warehouse}")
         _use_namespace(sf_conn, cfg.conn)
+        with sf_conn.cursor() as cur:
+            create_file_format(cur)
         stage, is_temp = _stage(cfg.conn)
-        for i, (file_path, table) in enumerate(
+        # ``strict`` also holds the merge configs to one per table: the plugin
+        # normalizes them to that shape, and a mismatch here would silently
+        # merge one table by another's keys.
+        merge_cfgs = cfg.merge_cfgs or [None] * len(cfg.target_tables)
+        for i, (file_path, table, merge_cfg) in enumerate(
             zip(
                 files,
                 cfg.target_tables,
+                merge_cfgs,
                 strict=True,
             ),
             1,
@@ -316,6 +311,7 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
                 is_temp,
                 Path(file_path),
                 table,
+                merge_cfg,
             )
             logger.debug("snowflake: finished table %r", table)
     finally:
@@ -330,20 +326,34 @@ def _write_one(
     is_temp: bool,
     file_path: Path,
     table: str,
+    merge_cfg: MergeCfg | None = None,
 ) -> None:
     sql_table = _fq_for_sql(table)
     logger.info("Uploading %s -> %s", file_path.name, sql_table)
     cursor = sf_conn.cursor()
     try:
         _create_stage_if_not_exists(cursor, stage, is_temp)
-        file_name = _put_file_to_stage(cursor, file_path, stage)
+        if cfg.if_table_exists == "merge":
+            _merge_one(cursor, cfg, stage, file_path, sql_table, merge_cfg)
+            return
+        file_name = put_file_to_stage(cursor, file_path, stage)
         _create_table_from_inferred_schema(cursor, stage, file_name, sql_table)
+        logger.debug(
+            "Setting schema evolution for %s (if_table_exists=%s, schema_evolution=%s)",
+            sql_table,
+            cfg.if_table_exists,
+            cfg.schema_evolution,
+        )
+        _set_copy_into_schema_evolution(
+            cursor, cfg.schema_evolution == "update", sql_table
+        )
+
         if cfg.if_table_exists == "replace":
             logger.debug(
                 "Truncating %s before COPY (if_table_exists=replace)", sql_table
             )
             cursor.execute(f"TRUNCATE {sql_table}")
-        _copy_into(
+        copy_into(
             cursor,
             stage,
             file_name,
@@ -353,3 +363,36 @@ def _write_one(
         )
     finally:
         cursor.close()
+
+
+def _merge_one(
+    cursor,
+    cfg: SnowflakeWriteCfg,
+    stage: str,
+    file_path: Path,
+    sql_table: str,
+    merge_cfg: MergeCfg,
+) -> None:
+    """Drive one CDC merge through the shared driver.
+
+    Everything the merge does -- coalescing the batch, staging it, creating the
+    target, evolving it, running the statement -- belongs to the driver and to
+    :class:`~tabsdatak.conn.snowflake._merge_dialect.SnowflakeMergeDialect`.
+
+    ``ENABLE_SCHEMA_EVOLUTION`` is not set here, unlike the other dispositions.
+    The mark is read by ``COPY INTO``, and the only COPY a merge runs loads the
+    scratch table, which is templated from the batch and has nothing to evolve
+    onto. A merge evolves its target with ``ALTER`` statements instead.
+    """
+    merge_batch(
+        SnowflakeMergeDialect(
+            cursor,
+            stage,
+            match_by_column_name=cfg.match_by_column_name,
+            purge=cfg.purge,
+        ),
+        target=sql_table,
+        batch=file_path,
+        cfg=merge_cfg,
+        schema_evolution=cfg.schema_evolution,
+    )

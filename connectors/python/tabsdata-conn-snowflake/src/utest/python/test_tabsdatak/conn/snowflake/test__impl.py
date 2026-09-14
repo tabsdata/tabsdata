@@ -4,16 +4,29 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
 
 from tabsdatak.api import Secret
+from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.snowflake import SnowflakeDestConn
 
+from test_tabsdatak.conn.snowflake.support import (
+    _FakeConnection,
+    _FakeCursor,
+    column_fakes as _column_fakes,
+    insert_lists as _insert_lists,
+)
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.snowflake import _impl as impl
+from tabsdatak.conn.snowflake.error import (
+    SnowflakeErrorCode,
+    SnowflakeRuntimeException,
+)
 
 
 pytestmark = pytest.mark.snowflake
@@ -31,6 +44,24 @@ def _parquet(path: Path, **columns) -> Path:
 
     pq.write_table(pa.table(columns or {"c": pa.array([1], pa.int64())}), str(path))
     return path
+
+
+def _cdc_parquet(path: Path, **columns) -> Path:
+    """A one-row CDC batch: the key `_merge_cfgs` matches on, plus its marker.
+
+    Merge mode coalesces the file before staging it, so the key and marker
+    columns have to really be in the parquet -- a fake cursor reporting them
+    among the staged columns is not enough.
+    """
+    import pyarrow as pa
+
+    return _parquet(
+        path,
+        **(
+            columns
+            or {"c": pa.array([1], pa.int64()), "op": pa.array(["i"], pa.string())}
+        ),
+    )
 
 
 def _credentials() -> UserPassword:
@@ -52,6 +83,22 @@ def _conn(**overrides) -> SnowflakeDestConn:
     )
     kwargs.update(overrides)
     return SnowflakeDestConn(**kwargs)
+
+
+def _write_cfg(**overrides) -> impl.SnowflakeWriteCfg:
+    """A write cfg carrying the dispositions ``SnowflakeDest`` defaults to.
+
+    ``schema_evolution`` mirrors the dest's own default of ``"update"``, so a
+    test names it only when evolution is the thing under test.
+    """
+    kwargs: dict = dict(
+        conn=_conn(),
+        target_tables=["ANALYTICS.PUBLIC.T"],
+        if_table_exists="append",
+        schema_evolution="update",
+    )
+    kwargs.update(overrides)
+    return impl.SnowflakeWriteCfg(**kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -197,34 +244,6 @@ def test_stage_falls_back_to_session_temp_stage_when_unset():
 # ---------------------------------------------------------------------------
 
 
-class _FakeCursor:
-    def __init__(self, log: list[str]) -> None:
-        self._log = log
-        self.closed = False
-
-    def execute(self, sql: str) -> None:
-        self._log.append(sql)
-
-    def close(self) -> None:
-        self.closed = True
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        self.close()
-
-
-class _FakeConnection:
-    def __init__(self) -> None:
-        self.log: list[str] = []
-        self.closed = False
-
-    def cursor(self) -> _FakeCursor:
-        return _FakeCursor(self.log)
-
-    def close(self) -> None:
-        self.closed = True
 
 
 def test_build_snowflake_connection_calls_connect_with_resolved_params(monkeypatch):
@@ -274,11 +293,7 @@ def test_write_all_tables_drives_use_warehouse_first(
     fake_sf_connection, tmp_path
 ):
     parquet = _parquet(tmp_path / "in.parquet")
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(),
-        target_tables=["ANALYTICS.PUBLIC.T"],
-        if_table_exists="append",
-    )
+    cfg = _write_cfg()
     impl.write_all_tables(cfg, [parquet])
     assert fake_sf_connection.log[0] == "USE WAREHOUSE ETL_WH"
 
@@ -287,11 +302,8 @@ def test_write_all_tables_forces_database_and_schema_before_stage(
     fake_sf_connection, tmp_path
 ):
     parquet = _parquet(tmp_path / "in.parquet")
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(),  # database=ANALYTICS, schema=PUBLIC
-        target_tables=["ANALYTICS.PUBLIC.T"],
-        if_table_exists="append",
-    )
+    # _conn() carries database=ANALYTICS, schema=PUBLIC.
+    cfg = _write_cfg()
     impl.write_all_tables(cfg, [parquet])
     sql = fake_sf_connection.log
     use_wh = sql.index("USE WAREHOUSE ETL_WH")
@@ -308,11 +320,7 @@ def test_write_all_tables_skips_namespace_when_database_unset(
     fake_sf_connection, tmp_path
 ):
     parquet = _parquet(tmp_path / "in.parquet")
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(database=None, schema=None, warehouse=None),
-        target_tables=["T"],
-        if_table_exists="append",
-    )
+    cfg = _write_cfg(conn=_conn(database=None, schema=None, warehouse=None), target_tables=["T"])
     impl.write_all_tables(cfg, [parquet])
     assert not any(s.startswith("USE DATABASE") for s in fake_sf_connection.log)
     assert not any(s.startswith("USE SCHEMA") for s in fake_sf_connection.log)
@@ -331,9 +339,7 @@ def test_write_all_tables_raises_when_namespace_not_adopted(monkeypatch, tmp_pat
     fake.cursor = lambda: _BoomOnUseCursor(fake.log)  # type: ignore[method-assign]
     monkeypatch.setattr(impl, "build_snowflake_connection", lambda conn: fake)
     parquet = _parquet(tmp_path / "in.parquet")
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(), target_tables=["ANALYTICS.PUBLIC.T"], if_table_exists="append"
-    )
+    cfg = _write_cfg()
     with pytest.raises(SnowflakeRuntimeException, match="could not adopt database"):
         impl.write_all_tables(cfg, [parquet])
 
@@ -342,11 +348,7 @@ def test_write_all_tables_creates_stage_puts_then_copies(
     fake_sf_connection, tmp_path
 ):
     parquet = _parquet(tmp_path / "in.parquet")
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(),
-        target_tables=["ANALYTICS.PUBLIC.T"],
-        if_table_exists="append",
-    )
+    cfg = _write_cfg()
     impl.write_all_tables(cfg, [parquet])
     sql = fake_sf_connection.log
     # Order: USE WAREHOUSE, CREATE STAGE, CREATE FILE FORMAT, CREATE TABLE,
@@ -370,11 +372,7 @@ def test_write_all_tables_uses_temporary_stage_when_conn_stage_unset(
         database="ANALYTICS",
         schema="PUBLIC",
     )
-    cfg = impl.SnowflakeWriteCfg(
-        conn=conn,
-        target_tables=["ANALYTICS.PUBLIC.T"],
-        if_table_exists="append",
-    )
+    cfg = _write_cfg(conn=conn)
     impl.write_all_tables(cfg, [parquet])
     sql = fake_sf_connection.log
     assert any(
@@ -387,11 +385,7 @@ def test_write_all_tables_truncates_before_copy_on_replace(
     fake_sf_connection, tmp_path
 ):
     parquet = _parquet(tmp_path / "in.parquet")
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(),
-        target_tables=["ANALYTICS.PUBLIC.T"],
-        if_table_exists="replace",
-    )
+    cfg = _write_cfg(if_table_exists="replace")
     impl.write_all_tables(cfg, [parquet])
     sql = fake_sf_connection.log
     truncate_idx = next(
@@ -411,11 +405,7 @@ def test_write_all_tables_does_not_truncate_on_append(
     fake_sf_connection, tmp_path
 ):
     parquet = _parquet(tmp_path / "in.parquet")
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(),
-        target_tables=["ANALYTICS.PUBLIC.T"],
-        if_table_exists="append",
-    )
+    cfg = _write_cfg()
     impl.write_all_tables(cfg, [parquet])
     assert not any(s.startswith("TRUNCATE") for s in fake_sf_connection.log)
 
@@ -425,11 +415,7 @@ def test_write_all_tables_iterates_one_per_table(
 ):
     p1 = _parquet(tmp_path / "a.parquet")
     p2 = _parquet(tmp_path / "b.parquet")
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(),
-        target_tables=["DB.S.T1", "DB.S.T2"],
-        if_table_exists="append",
-    )
+    cfg = _write_cfg(target_tables=["DB.S.T1", "DB.S.T2"])
     impl.write_all_tables(cfg, [p1, p2])
     copies = [s for s in fake_sf_connection.log if s.startswith("COPY INTO ")]
     assert len(copies) == 2
@@ -441,11 +427,7 @@ def test_write_all_tables_closes_connection_on_exit(
     fake_sf_connection, tmp_path
 ):
     parquet = _parquet(tmp_path / "in.parquet")
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(),
-        target_tables=["ANALYTICS.PUBLIC.T"],
-        if_table_exists="append",
-    )
+    cfg = _write_cfg()
     impl.write_all_tables(cfg, [parquet])
     assert fake_sf_connection.closed is True
 
@@ -466,11 +448,7 @@ def test_write_all_tables_closes_connection_on_failure(
     fake.cursor = cursor_that_fails  # type: ignore[assignment]
     monkeypatch.setattr(impl, "build_snowflake_connection", lambda conn: fake)
 
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(),
-        target_tables=["ANALYTICS.PUBLIC.T"],
-        if_table_exists="append",
-    )
+    cfg = _write_cfg()
     with pytest.raises(RuntimeError, match="boom"):
         impl.write_all_tables(cfg, [parquet])
     assert fake.closed is True
@@ -491,11 +469,7 @@ def test_write_all_tables_rejects_a_binary_column_before_connecting(tmp_path):
         ok=pa.array([1], pa.int64()),
         payload=pa.array([b"\x00\x01"], pa.binary()),
     )
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(),
-        target_tables=["ANALYTICS.PUBLIC.T"],
-        if_table_exists="append",
-    )
+    cfg = _write_cfg()
     # No fake_sf_connection fixture: the check must fire before any connect.
     with pytest.raises(SnowflakeRuntimeException) as ei:
         impl.write_all_tables(cfg, [parquet])
@@ -515,11 +489,7 @@ def test_write_all_tables_rejects_large_and_fixed_binary(tmp_path):
         ("fixed", pa.array([b"xy"], pa.binary(2))),
     ):
         parquet = _parquet(tmp_path / f"{name}.parquet", **{name: array})
-        cfg = impl.SnowflakeWriteCfg(
-            conn=_conn(),
-            target_tables=["ANALYTICS.PUBLIC.T"],
-            if_table_exists="append",
-        )
+        cfg = _write_cfg()
         with pytest.raises(SnowflakeRuntimeException):
             impl.write_all_tables(cfg, [parquet])
 
@@ -534,11 +504,260 @@ def test_write_all_tables_names_the_table_the_offending_file_targets(tmp_path):
     dirty = _parquet(
         tmp_path / "dirty.parquet", payload=pa.array([b"x"], pa.binary())
     )
-    cfg = impl.SnowflakeWriteCfg(
-        conn=_conn(),
-        target_tables=["ANALYTICS.PUBLIC.FIRST", "ANALYTICS.PUBLIC.SECOND"],
-        if_table_exists="append",
-    )
+    cfg = _write_cfg(target_tables=["ANALYTICS.PUBLIC.FIRST", "ANALYTICS.PUBLIC.SECOND"])
     with pytest.raises(SnowflakeRuntimeException) as ei:
         impl.write_all_tables(cfg, [clean, dirty])
     assert "ANALYTICS.PUBLIC.SECOND" in str(ei.value)
+
+
+# ---------------------------------------------------------------------------
+# schema_evolution
+#
+# ``"strict"`` (the dest's default) leaves the target's columns alone.
+# ``"update"`` lets a widened file through, by two different mechanisms:
+#
+# * a COPY INTO evolves the target itself once the table is marked with
+#   ENABLE_SCHEMA_EVOLUTION, so append / replace need nothing else;
+# * a MERGE does not honour that mark, so merge mode also has to ALTER the
+#   missing columns in before the statement runs.
+# ---------------------------------------------------------------------------
+
+
+def _evolution_mark(enabled: bool, table: str = '"ANALYTICS"."PUBLIC"."T"') -> str:
+    return f"ALTER TABLE {table} SET ENABLE_SCHEMA_EVOLUTION = {enabled};"
+
+
+def _evolving_connection(monkeypatch, table_columns, file_columns):
+    """A fake write connection whose target has ``table_columns`` and whose
+    staged file infers to ``file_columns``."""
+    fake = _column_fakes(table_columns, file_columns)
+    monkeypatch.setattr(impl, "build_snowflake_connection", lambda conn: fake)
+    return fake
+
+
+def _merge_cfgs(*keys):
+    from tabsdatak.conn.snowflake import MergeCfg
+
+    return [MergeCfg(on=[key], op_column="op") for key in keys]
+
+
+@pytest.mark.parametrize("if_table_exists", ["append", "replace"])
+@pytest.mark.parametrize(
+    "schema_evolution,enabled", [("update", True), ("strict", False)]
+)
+def test_write_all_tables_sets_the_mark_to_match_the_setting(
+    monkeypatch, tmp_path, if_table_exists, schema_evolution, enabled
+):
+    """The mark is set on every write, not only when evolving. Strict has to
+    clear it explicitly: a target an earlier update-mode run marked would
+    otherwise keep evolving on every COPY after it."""
+    fake = _evolving_connection(
+        monkeypatch, ["C", "OP"], [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
+    )
+    parquet = _cdc_parquet(tmp_path / "in.parquet")
+    cfg = _write_cfg(
+        if_table_exists=if_table_exists,
+        schema_evolution=schema_evolution,
+        merge_cfgs=_merge_cfgs("c") if if_table_exists == "merge" else None,
+    )
+    impl.write_all_tables(cfg, [parquet])
+    marks = [s for s in fake.log if "ENABLE_SCHEMA_EVOLUTION" in s]
+    assert marks == [_evolution_mark(enabled)]
+
+
+@pytest.mark.parametrize("schema_evolution", ["update", "strict"])
+def test_write_all_tables_leaves_the_mark_alone_on_merge(
+    monkeypatch, tmp_path, schema_evolution
+):
+    """The mark is read by COPY INTO, and the only COPY a merge runs loads its
+    scratch table -- which is templated from the batch and has nothing to evolve
+    onto. A merge evolves its target with ALTER statements instead."""
+    fake = _evolving_connection(
+        monkeypatch, ["C", "OP"], [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
+    )
+    cfg = _write_cfg(
+        if_table_exists="merge",
+        schema_evolution=schema_evolution,
+        merge_cfgs=_merge_cfgs("c"),
+    )
+    impl.write_all_tables(cfg, [_cdc_parquet(tmp_path / "in.parquet")])
+    assert not any("ENABLE_SCHEMA_EVOLUTION" in s for s in fake.log)
+
+
+def test_write_all_tables_sets_the_mark_after_creating_and_before_copying(
+    fake_sf_connection, tmp_path
+):
+    # The mark is an ALTER, so the table has to exist; it changes how the COPY
+    # behaves, so it has to precede it.
+    parquet = _parquet(tmp_path / "in.parquet")
+    impl.write_all_tables(_write_cfg(schema_evolution="update"), [parquet])
+    sql = fake_sf_connection.log
+    create = next(i for i, s in enumerate(sql) if s.startswith("CREATE TABLE"))
+    mark = sql.index(_evolution_mark(True))
+    copy = next(i for i, s in enumerate(sql) if s.startswith("COPY INTO"))
+    assert create < mark < copy
+
+
+def test_write_all_tables_sets_the_mark_on_every_table_it_writes(
+    fake_sf_connection, tmp_path
+):
+    cfg = _write_cfg(
+        target_tables=["DB.S.T1", "DB.S.T2"], schema_evolution="update"
+    )
+    impl.write_all_tables(
+        cfg, [_parquet(tmp_path / f"{n}.parquet") for n in ("a", "b")]
+    )
+    marks = [s for s in fake_sf_connection.log if "ENABLE_SCHEMA_EVOLUTION" in s]
+    assert marks == [
+        _evolution_mark(True, '"DB"."S"."T1"'),
+        _evolution_mark(True, '"DB"."S"."T2"'),
+    ]
+
+
+def test_write_all_tables_does_not_add_columns_itself_outside_merge(
+    monkeypatch, tmp_path
+):
+    """A COPY evolves the marked table on its own, so append / replace never
+    reach for the ALTER ... ADD COLUMN path -- no column probe is issued."""
+    fake = _evolving_connection(
+        monkeypatch,
+        ["C", "OP"],
+        [("C", "NUMBER(38,0)"), ("OP", "TEXT"), ("EXTRA", "TEXT")],
+    )
+    parquet = _parquet(tmp_path / "in.parquet")
+    impl.write_all_tables(_write_cfg(schema_evolution="update"), [parquet])
+    assert not any(s.startswith("SELECT * FROM") for s in fake.log)
+    assert not any("ADD COLUMN" in s for s in fake.log)
+
+
+def test_write_all_tables_adds_missing_columns_before_merging_on_update(
+    monkeypatch, tmp_path
+):
+    """ENABLE_SCHEMA_EVOLUTION does not reach a MERGE, so merge mode has to put
+    the missing columns in itself -- before the statement that writes them.
+
+    The scratch table is loaded ahead of both: it is templated from the batch
+    and owes the target's schema nothing.
+    """
+    fake = _evolving_connection(
+        monkeypatch,
+        ["C", "OP"],
+        [("C", "NUMBER(38,0)"), ("OP", "TEXT"), ("EXTRA", "TEXT")],
+    )
+    parquet = _cdc_parquet(tmp_path / "in.parquet")
+    cfg = _write_cfg(
+        if_table_exists="merge",
+        schema_evolution="update",
+        merge_cfgs=_merge_cfgs("c"),
+    )
+    impl.write_all_tables(cfg, [parquet])
+    sql = fake.log
+    temp = next(i for i, s in enumerate(sql) if s.startswith("CREATE TEMPORARY TABLE"))
+    add = next(i for i, s in enumerate(sql) if "ADD COLUMN" in s)
+    merge = next(i for i, s in enumerate(sql) if s.startswith("MERGE INTO"))
+    assert temp < add < merge
+    assert 'ADD COLUMN IF NOT EXISTS "EXTRA" TEXT' in sql[add]
+
+
+def test_write_all_tables_merges_a_column_it_just_added(monkeypatch, tmp_path):
+    """The shared-column read happens after the ALTERs, so a column added a
+    moment ago is in the projection rather than being left behind by it."""
+    fake = _evolving_connection(
+        monkeypatch,
+        ["C", "OP"],
+        [("C", "NUMBER(38,0)"), ("OP", "TEXT"), ("EXTRA", "TEXT")],
+    )
+    parquet = _cdc_parquet(tmp_path / "in.parquet")
+    cfg = _write_cfg(
+        if_table_exists="merge",
+        schema_evolution="update",
+        merge_cfgs=_merge_cfgs("c"),
+    )
+    impl.write_all_tables(cfg, [parquet])
+    merge = next(s for s in fake.log if s.startswith("MERGE INTO"))
+    columns, _ = _insert_lists(merge)
+    assert columns == ['"C"', '"EXTRA"']
+
+
+def test_write_all_tables_does_not_add_columns_before_merging_on_strict(
+    monkeypatch, tmp_path
+):
+    fake = _evolving_connection(
+        monkeypatch,
+        ["C", "OP"],
+        [("C", "NUMBER(38,0)"), ("OP", "TEXT"), ("EXTRA", "TEXT")],
+    )
+    parquet = _cdc_parquet(tmp_path / "in.parquet")
+    cfg = _write_cfg(
+        if_table_exists="merge",
+        schema_evolution="strict",
+        merge_cfgs=_merge_cfgs("c"),
+    )
+    impl.write_all_tables(cfg, [parquet])
+    assert not any("ADD COLUMN" in s for s in fake.log)
+    # The merge itself still runs; the column the target lacks is simply not
+    # among the columns written, and neither is the marker.
+    merge = next(s for s in fake.log if s.startswith("MERGE INTO"))
+    columns, _ = _insert_lists(merge)
+    assert columns == ['"C"']
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+def test_set_copy_into_schema_evolution_statement(enabled):
+    fake = _FakeConnection()
+    impl._set_copy_into_schema_evolution(fake.cursor(), enabled, '"DB"."S"."T"')
+    assert fake.log == [
+        f'ALTER TABLE "DB"."S"."T" SET ENABLE_SCHEMA_EVOLUTION = {enabled};'
+    ]
+
+
+# ---------------------------------------------------------------------------
+# The marker and the created table
+#
+# A merge's marker column has to be kept out of the target at creation as well
+# as at write time: an ALTER can add a column later but nothing takes one back,
+# so a first run that templated the marker in would leave it there for good.
+# ---------------------------------------------------------------------------
+
+
+def _create_statement(log: list[str]) -> str:
+    return next(s for s in log if s.startswith("CREATE TABLE IF NOT EXISTS"))
+
+
+def _temp_create_statement(log: list[str]) -> str:
+    return next(s for s in log if s.startswith("CREATE TEMPORARY TABLE"))
+
+
+def test_write_all_tables_creates_a_merge_target_without_the_marker(
+    monkeypatch, tmp_path
+):
+    fake = _evolving_connection(
+        monkeypatch, ["C", "OP"], [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
+    )
+    cfg = _write_cfg(if_table_exists="merge", merge_cfgs=_merge_cfgs("c"))
+    impl.write_all_tables(cfg, [_cdc_parquet(tmp_path / "in.parquet")])
+    assert 'SELECT * EXCLUDE ("OP")' in _create_statement(fake.log)
+
+
+@pytest.mark.parametrize("if_table_exists", ["append", "replace"])
+def test_write_all_tables_creates_a_loaded_target_whole(
+    fake_sf_connection, tmp_path, if_table_exists
+):
+    # Only a merge reads a marker, so only a merge target loses a column to it.
+    cfg = _write_cfg(if_table_exists=if_table_exists)
+    impl.write_all_tables(cfg, [_parquet(tmp_path / "in.parquet")])
+    assert "WHERE" not in _create_statement(fake_sf_connection.log)
+
+
+def test_write_all_tables_keeps_the_marker_in_the_staging_table(
+    monkeypatch, tmp_path
+):
+    """The staging copy must keep the marker -- it is what the clauses read."""
+    fake = _evolving_connection(
+        monkeypatch, ["C", "OP"], [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
+    )
+    cfg = _write_cfg(if_table_exists="merge", merge_cfgs=_merge_cfgs("c"))
+    impl.write_all_tables(cfg, [_cdc_parquet(tmp_path / "in.parquet")])
+    assert "WHERE" not in _temp_create_statement(fake.log)
+
+

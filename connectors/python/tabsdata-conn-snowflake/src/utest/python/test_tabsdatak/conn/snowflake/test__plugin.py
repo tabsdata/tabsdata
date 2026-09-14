@@ -12,7 +12,7 @@ import pytest
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.snowflake import SnowflakeDestConn, SnowflakeDest
+from tabsdatak.conn.snowflake import MergeCfg, SnowflakeDestConn, SnowflakeDest
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.snowflake import _impl as impl
@@ -132,7 +132,50 @@ def test_dest_plugin_write_out_calls_write_all_tables(monkeypatch, work_dir):
     assert isinstance(cfg, impl.SnowflakeWriteCfg)
     assert cfg.target_tables == ["ANALYTICS.PUBLIC.USERS"]
     assert cfg.if_table_exists == "replace"
+    assert cfg.schema_evolution == "strict"
+    assert cfg.merge_cfgs is None
     assert captured["tables"] == [src]
+
+
+def test_dest_plugin_forwards_one_merge_cfg_per_table(monkeypatch, work_dir):
+    """A single MergeCfg reaches the impl already broadcast across the tables, so
+    the write side can index it by slot without re-deriving the mapping."""
+    files = [
+        _make_parquet(work_dir / "a.parquet", [{"id": 1}]),
+        _make_parquet(work_dir / "b.parquet", [{"id": 2}]),
+    ]
+    captured: dict = {}
+    monkeypatch.setattr(
+        impl, "write_all_tables", lambda cfg, tables: captured.update(cfg=cfg)
+    )
+
+    merge_cfg = MergeCfg(on=["id"], op_column="op")
+    dest = SnowflakeDest(
+        tables=["DB.S.A", "DB.S.B"],
+        if_table_exists="merge",
+        merge_cfg=merge_cfg,
+    )
+    plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, files)
+
+    assert captured["cfg"].merge_cfgs == [merge_cfg, merge_cfg]
+
+
+@pytest.mark.parametrize("schema_evolution", ["strict", "update"])
+def test_dest_plugin_forwards_schema_evolution(
+    monkeypatch, work_dir, schema_evolution
+):
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    captured: dict = {}
+    monkeypatch.setattr(
+        impl, "write_all_tables", lambda cfg, tables: captured.update(cfg=cfg)
+    )
+
+    dest = SnowflakeDest(
+        tables=["ANALYTICS.PUBLIC.USERS"], schema_evolution=schema_evolution
+    )
+    plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, [src])
+
+    assert captured["cfg"].schema_evolution == schema_evolution
 
 
 # ---------------------------------------------------------------------------
