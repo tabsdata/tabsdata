@@ -18,10 +18,17 @@ from pathlib import Path
 import pytest
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge import WatermarkCfg
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge._batch import coalesced_batch, incoming_column
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge._driver import write_columns
+from tabsdatak.conn.common.sql._merge._driver import (
+    MergeResult,
+    merge_batch,
+    write_columns,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge._statement import render_merge
@@ -51,9 +58,17 @@ class _RecordingCursor:
     """Captures every statement, and answers a ``DESCRIBE TABLE`` from
     ``columns``."""
 
-    def __init__(self, columns: list[tuple[str, str]] | None = None) -> None:
+    def __init__(
+        self,
+        columns: list[tuple[str, str]] | None = None,
+        *,
+        has_watermark: bool = False,
+        stamped: bool = False,
+    ) -> None:
         self.log: list[tuple[str, dict]] = []
         self._columns = columns or []
+        self._has_watermark = has_watermark
+        self._stamped = stamped
         self.description: list[tuple] = []
         self._rows: list[tuple] = []
 
@@ -65,10 +80,22 @@ class _RecordingCursor:
             # The partition / metadata block DESCRIBE appends after the columns.
             self._rows.append(("", "", ""))
             return
+        # The two probes a watermarked merge makes: whether the target has the
+        # column, and whether it already carries this trx's id.
+        if statement.startswith("SELECT COUNT(*) > 0"):
+            self.description, self._rows = [("stamped",)], [(self._stamped,)]
+            return
+        if statement.startswith("SELECT COUNT(*)"):
+            self.description = [("columns",)]
+            self._rows = [(1 if self._has_watermark else 0,)]
+            return
         self.description, self._rows = [], []
 
     def fetchall(self) -> list[tuple]:
         return list(self._rows)
+
+    def fetchone(self) -> tuple | None:
+        return self._rows[0] if self._rows else None
 
     @property
     def statements(self) -> list[str]:
@@ -119,8 +146,10 @@ def _staged(columns: list[tuple[str, str]], relation: str = _SCRATCH) -> Staged:
     return Staged(relation=relation, columns=list(columns))
 
 
-def _cfg(on=("order_id",), op_column="op") -> MergeCfg:
-    return MergeCfg(on=list(on), op_column=op_column)
+def _cfg(on=("order_id",), op_column="op", watermark_column=None) -> MergeCfg:
+    return MergeCfg(
+        on=list(on), op_column=op_column, watermark_column=watermark_column
+    )
 
 
 def _index_starting_with(statements: list[str], prefix: str) -> int:
@@ -417,6 +446,171 @@ class TestEvolve:
 
 
 # ---------------------------------------------------------------------------
+# The watermark
+#
+# A merge is not naturally idempotent: rerunning one applies the same batch
+# twice. Naming a watermark column makes it so -- every row written carries the
+# trx's id, and a rerun that finds the target already stamped with it does
+# nothing.
+# ---------------------------------------------------------------------------
+
+_TRX = "TRX_1"
+
+
+def _watermark(column: str = "wm", transaction_id: str = _TRX) -> WatermarkCfg:
+    return WatermarkCfg(column=column, transaction_id=transaction_id)
+
+
+def _probes(cursor: _RecordingCursor) -> list[str]:
+    return [s for s in cursor.statements if s.startswith("SELECT COUNT(")]
+
+
+class TestCheckWatermark:
+    def test_reads_unstamped_when_the_target_has_no_such_column(self):
+        """Which is also the answer for a target that does not exist yet: a
+        table that is not there contributes no rows to
+        ``information_schema.columns``, so one probe covers both."""
+        cursor = _RecordingCursor(has_watermark=False)
+        assert _dialect(cursor).check_watermark_column(_TARGET, _watermark()) is False
+
+    def test_does_not_probe_a_target_that_lacks_the_column(self):
+        """Selecting a column the table has not got is an error, not an
+        answer."""
+        cursor = _RecordingCursor(has_watermark=False)
+        _dialect(cursor).check_watermark_column(_TARGET, _watermark())
+        assert len(_probes(cursor)) == 1
+        assert not any(_TARGET in probe for probe in _probes(cursor))
+
+    def test_reads_stamped_when_the_target_carries_the_id(self):
+        cursor = _RecordingCursor(has_watermark=True, stamped=True)
+        assert _dialect(cursor).check_watermark_column(_TARGET, _watermark()) is True
+
+    def test_reads_unstamped_when_the_target_carries_another_id(self):
+        cursor = _RecordingCursor(has_watermark=True, stamped=False)
+        assert _dialect(cursor).check_watermark_column(_TARGET, _watermark()) is False
+
+    def test_asks_the_targets_own_catalog(self):
+        # information_schema is per-catalog, so the session's would answer about
+        # the wrong one.
+        cursor = _RecordingCursor(has_watermark=False)
+        _dialect(cursor).check_watermark_column(_TARGET, _watermark())
+        assert "`main`.information_schema.columns" in _probes(cursor)[0]
+
+    def test_compares_the_names_lower_cased(self):
+        """Unity Catalog stores an identifier lower-cased, which is also how
+        this dialect folds one, so both sides of each comparison agree."""
+        cursor = _RecordingCursor(has_watermark=False)
+        _dialect(cursor).check_watermark_column(_TARGET, _watermark(column="WM"))
+        probe = _probes(cursor)[0]
+        assert "lower(table_schema) = 'analytics'" in probe
+        assert "lower(table_name) = 'orders'" in probe
+        assert "lower(column_name) = 'wm'" in probe
+
+    def test_reads_the_stamp_off_the_target(self):
+        cursor = _RecordingCursor(has_watermark=True, stamped=True)
+        _dialect(cursor).check_watermark_column(_TARGET, _watermark())
+        assert _probes(cursor)[1] == (
+            f"SELECT COUNT(*) > 0 FROM {_TARGET} WHERE `wm` = '{_TRX}'"
+        )
+
+    @pytest.mark.parametrize(
+        "transaction_id,literal",
+        [("plain", "'plain'"), ("it's", r"'it\'s'"), ("a\\b", r"'a\\b'")],
+    )
+    def test_escapes_the_transaction_id(self, transaction_id, literal):
+        cursor = _RecordingCursor(has_watermark=True, stamped=True)
+        _dialect(cursor).check_watermark_column(
+            _TARGET, _watermark(transaction_id=transaction_id)
+        )
+        assert _probes(cursor)[1].endswith(f"`wm` = {literal}")
+
+
+class TestEnsureWatermarkColumn:
+    """Under ``"update"`` the MERGE carries ``WITH SCHEMA EVOLUTION`` and lands
+    the column itself, so this is reached only under ``"strict"`` -- where the
+    statement writes through ``*``, which resolves against the columns the
+    *target* has."""
+
+    def test_adds_the_column_a_strict_target_lacks(self):
+        cursor = _RecordingCursor(has_watermark=False)
+        added = _dialect(cursor, schema_evolution="strict").ensure_watermark_column(
+            _TARGET, _watermark()
+        )
+        assert added == ["wm"]
+        assert cursor.statements[-1] == (
+            f"ALTER TABLE {_TARGET} ADD COLUMNS (`wm` STRING)"
+        )
+
+    def test_adds_it_without_a_value(self):
+        """The rows already there belong to earlier transactions, and the rows
+        this merge writes take their id from the staged copy through the
+        statement itself."""
+        cursor = _RecordingCursor(has_watermark=False)
+        _dialect(cursor, schema_evolution="strict").ensure_watermark_column(
+            _TARGET, _watermark()
+        )
+        assert not any(s.startswith("UPDATE") for s in cursor.statements)
+
+    def test_leaves_a_target_that_already_has_it_alone(self):
+        cursor = _RecordingCursor(has_watermark=True)
+        dialect = _dialect(cursor, schema_evolution="strict")
+        assert dialect.ensure_watermark_column(_TARGET, _watermark()) == []
+        assert not any(s.startswith("ALTER TABLE") for s in cursor.statements)
+
+    def test_does_nothing_without_a_watermark(self):
+        cursor = _RecordingCursor()
+        dialect = _dialect(cursor, schema_evolution="strict")
+        assert dialect.ensure_watermark_column(_TARGET, None) == []
+        assert cursor.statements == []
+
+
+class TestStampingTheScratchTable:
+    def _stage(self, cursor, tmp_path, watermark_cfg):
+        batch = tmp_path / "in.parquet"
+        batch.write_bytes(b"")
+        with _dialect(cursor).staging(_TARGET, batch, watermark_cfg) as staged:
+            return staged
+
+    def test_stamps_the_scratch_table_with_the_transaction_id(self, tmp_path):
+        # Two statements: a Delta column added with a DEFAULT reaches rows
+        # inserted afterwards, and every row here is already in.
+        cursor = _staging_cursor()
+        staged = self._stage(cursor, tmp_path, _watermark())
+        assert [s for s in cursor.statements if s.startswith(("ALTER", "UPDATE"))] == [
+            f"ALTER TABLE {staged.relation} ADD COLUMNS (`wm` STRING)",
+            f"UPDATE {staged.relation} SET `wm` = '{_TRX}'",
+        ]
+
+    def test_stamps_after_the_rows_are_in(self, tmp_path):
+        # The batch does not carry the column, so a scratch table built with it
+        # would leave the COPY nothing to fill it from.
+        cursor = _staging_cursor()
+        self._stage(cursor, tmp_path, _watermark())
+        copy = _index_starting_with(cursor.statements, "COPY INTO")
+        update = _index_starting_with(cursor.statements, "UPDATE")
+        assert copy < update
+
+    def test_reports_the_watermark_among_the_staged_columns(self, tmp_path):
+        # Read back off DESCRIBE rather than appended by hand, so the column the
+        # merge sees is the one the scratch table actually has.
+        cursor = _RecordingCursor(
+            [("order_id", "BIGINT"), ("op", "STRING"), ("wm", "STRING")]
+        )
+        staged = self._stage(cursor, tmp_path, _watermark())
+        assert staged.columns == [
+            ("order_id", "BIGINT"),
+            ("op", "STRING"),
+            ("wm", "STRING"),
+        ]
+
+    def test_stamps_nothing_without_a_watermark(self, tmp_path):
+        cursor = _staging_cursor()
+        staged = self._stage(cursor, tmp_path, None)
+        assert not any(s.startswith("UPDATE") for s in cursor.statements)
+        assert staged.columns == [("order_id", "BIGINT"), ("op", "STRING")]
+
+
+# ---------------------------------------------------------------------------
 # The shared driver, read through this dialect
 # ---------------------------------------------------------------------------
 
@@ -558,3 +752,104 @@ class TestCoalescedBatch:
         with _coalesce(batch, _cfg(on=["k"])) as out:
             got = pl.read_parquet(out)
         assert got.is_empty()
+
+
+# ---------------------------------------------------------------------------
+# The driver, end to end over this dialect
+# ---------------------------------------------------------------------------
+
+
+class _FakeCtx:
+    def __init__(self, trx_id: str = _TRX) -> None:
+        self.trx_id = trx_id
+
+
+class TestMergeBatch:
+    """The whole sequence, which for the watermark is where the two evolution
+    settings part company: one lets the statement land the column, the other has
+    to be given it first."""
+
+    def _merge(self, cursor, batch, schema_evolution="update", **cfg_kwargs):
+        return merge_batch(
+            _dialect(cursor, schema_evolution=schema_evolution),
+            target=_TARGET,
+            batch=batch,
+            cfg=_cfg(on=["k"], **cfg_kwargs),
+            schema_evolution=schema_evolution,
+            ctx=_FakeCtx(),
+        )
+
+    def test_leaves_a_target_already_stamped_alone(self, tmp_path):
+        """The point of the whole thing: a trx that already wrote these rows is
+        not to write them again."""
+        batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
+        cursor = _RecordingCursor(
+            [("k", "BIGINT"), ("op", "STRING"), ("wm", "STRING")],
+            has_watermark=True,
+            stamped=True,
+        )
+        result = self._merge(cursor, batch, watermark_column="wm")
+        assert result == MergeResult(evolved=[], written=[])
+        assert not any(
+            s.startswith(("CREATE", "COPY INTO", "MERGE")) for s in cursor.statements
+        )
+
+    def test_checks_the_watermark_before_it_stages_anything(self, tmp_path):
+        # Staging is the expensive half, and the scratch table it would leave
+        # behind is one nobody asked for.
+        batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
+        cursor = _RecordingCursor(
+            [("k", "BIGINT"), ("op", "STRING"), ("wm", "STRING")]
+        )
+        self._merge(cursor, batch, watermark_column="wm")
+        probe = _index_starting_with(cursor.statements, "SELECT COUNT(*) FROM")
+        create = _index_starting_with(cursor.statements, "CREATE TABLE `main`")
+        assert probe < create
+
+    def test_lets_the_statement_land_the_watermark_on_update(self, tmp_path):
+        # WITH SCHEMA EVOLUTION adds the column the source has and the target
+        # does not, so there is nothing to ALTER onto the target first.
+        batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
+        cursor = _RecordingCursor(
+            [("k", "BIGINT"), ("op", "STRING"), ("wm", "STRING")]
+        )
+        result = self._merge(cursor, batch, watermark_column="wm")
+        assert result.evolved == []
+        merge = _only_starting_with(cursor.statements, "MERGE ")
+        assert merge.startswith("MERGE WITH SCHEMA EVOLUTION INTO")
+        assert not any(
+            s.startswith(f"ALTER TABLE {_TARGET} ADD COLUMNS")
+            for s in cursor.statements
+        )
+
+    def test_adds_the_watermark_to_the_target_on_strict(self, tmp_path):
+        # With the modifier off the statement writes through ``*``, which
+        # resolves against the target's own columns -- so the column has to be
+        # there before the MERGE runs or it would never be written.
+        batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
+        cursor = _RecordingCursor(
+            [("k", "BIGINT"), ("op", "STRING"), ("wm", "STRING")],
+            has_watermark=False,
+        )
+        result = self._merge(
+            cursor, batch, schema_evolution="strict", watermark_column="wm"
+        )
+        assert result.evolved == ["wm"]
+        alter = _only_starting_with(
+            cursor.statements, f"ALTER TABLE {_TARGET} ADD COLUMNS"
+        )
+        merge = _only_starting_with(cursor.statements, "MERGE ")
+        assert alter.endswith("(`wm` STRING)")
+        assert merge.startswith("MERGE INTO")
+        assert cursor.statements.index(alter) < cursor.statements.index(merge)
+
+    def test_adds_no_watermark_when_the_cfg_names_none(self, tmp_path):
+        batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
+        cursor = _RecordingCursor([("k", "BIGINT"), ("op", "STRING")])
+        result = self._merge(cursor, batch, schema_evolution="strict")
+        assert result.evolved == []
+        assert not any(s.startswith("SELECT COUNT(") for s in cursor.statements)
+        assert not any(
+            s.startswith(f"ALTER TABLE {_TARGET} ADD COLUMNS")
+            for s in cursor.statements
+        )

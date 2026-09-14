@@ -51,6 +51,7 @@ from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn, MergeCfg
 from tabsdatak.conn.databricks._merge_dialect import DatabricksMergeDialect
 from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
+from tabsdatak.spi import DestContext
 
 # Conn helpers operate on both Src and Dest variants.
 _AnyDatabricksConn = DatabricksSrcConn | DatabricksDestConn
@@ -114,6 +115,7 @@ class DatabricksWriteCfg:
     target_tables: list[str]  # raw user input -- not yet fqn'd
     if_table_exists: str  # "append" | "replace" | "merge"
     schema_evolution: str  # "update" | "strict"
+    ctx: DestContext  # the trx the write belongs to; a merge stamps its id
     merge_cfgs: list[MergeCfg] | None = None
     # Support knobs (legacy parity). Forwarded directly to
     # ``cursor.execute(**kwargs)``; only set when debugging.
@@ -984,6 +986,7 @@ def _merge_one(
             batch=parquet_path,
             cfg=merge_cfg,
             schema_evolution=cfg.schema_evolution,
+            ctx=cfg.ctx,
         )
     finally:
         cursor.close()

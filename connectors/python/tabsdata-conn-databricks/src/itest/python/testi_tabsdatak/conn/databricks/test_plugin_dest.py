@@ -131,6 +131,23 @@ def _types(db, table: str) -> dict[str, str]:
     }
 
 
+class _TrxCtx(PluginDestCtx):
+    """A plugin context whose trx id the test picks.
+
+    The watermark turns on which trx a write belongs to, and the shared stub
+    hard-codes one id for every context it fabricates -- so a test needs this to
+    say "the same trx again" apart from "a later one".
+    """
+
+    def __init__(self, work: Path, trx_id: str) -> None:
+        super().__init__(work)
+        self._trx_id = trx_id
+
+    @property
+    def trx_id(self) -> str:
+        return self._trx_id
+
+
 def _merge_out(
     conn,
     work: Path,
@@ -141,7 +158,7 @@ def _merge_out(
     trx_id: str | None = None,
 ) -> None:
     plugin._DatabricksDestPlugin().write_out(
-        PluginDestCtx(work),
+        PluginDestCtx(work) if trx_id is None else _TrxCtx(work, trx_id),
         conn,
         DatabricksDest(
             tables=[table],
@@ -685,3 +702,186 @@ def test_dest_plugin_write_out_merge_applies_one_cfg_per_table(
     finally:
         db.drop_table(orders)
         db.drop_table(items)
+
+
+# ---------------------------------------------------------------------------
+# if_table_exists="merge" + a watermark column
+#
+# A merge is not naturally idempotent: rerunning one applies the same batch a
+# second time. Naming a watermark column makes it so -- every row the merge
+# writes is stamped with the id of the trx that wrote it, and a rerun that finds
+# the target already carrying that id does nothing at all.
+#
+# The two evolution settings reach the column differently, which is what these
+# split on: under "update" the MERGE's own WITH SCHEMA EVOLUTION lands it, and
+# under "strict" the connector has to ALTER it in first, because the statement
+# writes through ``*`` and that resolves against the target's own columns.
+# ---------------------------------------------------------------------------
+
+_WATERMARK = "wm"
+
+
+def _watermark_cfg(on: str = "order_id") -> MergeCfg:
+    return MergeCfg(on=[on], op_column="op", watermark_column=_WATERMARK)
+
+
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_merge_stamps_the_rows_it_writes(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+):
+    db = store(domain_databricks)
+    table = "td_dest_merge_watermark_stamp"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_databricks)
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {"order_id": [1, 2], "status": ["new", "new"], "op": ["i", "i"]},
+    )
+    try:
+        _merge_out(conn, work, table, seed, _watermark_cfg(), trx_id="TRX_A")
+        assert _types(db, table)[_WATERMARK] == "string"
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2],
+                "status": ["new", "new"],
+                _WATERMARK: ["TRX_A", "TRX_A"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_merge_skips_a_batch_the_trx_already_wrote(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+):
+    # The point of the whole thing. The second write carries a different payload
+    # for the same key and a new one besides, so applying it would be plainly
+    # visible -- and it must not be, because the target already holds the stamp.
+    db = store(domain_databricks)
+    table = "td_dest_merge_watermark_rerun"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_databricks)
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {"order_id": [1], "status": ["new"], "op": ["i"]},
+    )
+    rerun = _batch(
+        tmp_path / "rerun.parquet",
+        {"order_id": [1, 2], "status": ["shipped", "new"], "op": ["u", "i"]},
+    )
+    try:
+        _merge_out(conn, work, table, seed, _watermark_cfg(), trx_id="TRX_A")
+        _merge_out(conn, work, table, rerun, _watermark_cfg(), trx_id="TRX_A")
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1],
+                "status": ["new"],
+                _WATERMARK: ["TRX_A"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_merge_applies_a_batch_from_a_later_trx(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+):
+    # The other half: the guard is on this trx's id, not on the column being
+    # populated at all, so a later trx merges normally and restamps the rows it
+    # touches. Order 1 keeps the older stamp because no clause claims it.
+    db = store(domain_databricks)
+    table = "td_dest_merge_watermark_next_trx"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_databricks)
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {"order_id": [1, 2], "status": ["new", "new"], "op": ["i", "i"]},
+    )
+    delta = _batch(
+        tmp_path / "delta.parquet",
+        {"order_id": [2, 3], "status": ["shipped", "new"], "op": ["u", "i"]},
+    )
+    try:
+        _merge_out(conn, work, table, seed, _watermark_cfg(), trx_id="TRX_A")
+        _merge_out(conn, work, table, delta, _watermark_cfg(), trx_id="TRX_B")
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2, 3],
+                "status": ["new", "shipped", "new"],
+                _WATERMARK: ["TRX_A", "TRX_B", "TRX_B"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_merge_stamps_an_older_target_on_strict_too(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+):
+    # Strict leaves ``WITH SCHEMA EVOLUTION`` off, so the statement writes
+    # through a bare ``*`` -- which resolves against the target's own columns.
+    # The connector has to ALTER the watermark in first or the column would never
+    # be written and the guard would read every run as the first. The seed merges
+    # without a watermark, the way a flow that turned one on later would have
+    # been running, so its row predates the column and keeps a NULL there.
+    db = store(domain_databricks)
+    table = "td_dest_merge_watermark_strict"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_databricks)
+    plain = MergeCfg(on=["order_id"], op_column="op")
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {"order_id": [1], "status": ["old"], "op": ["i"]},
+    )
+    batch = _batch(
+        tmp_path / "batch.parquet",
+        {"order_id": [2], "status": ["new"], "op": ["i"]},
+    )
+    rerun = _batch(
+        tmp_path / "rerun.parquet",
+        {"order_id": [2], "status": ["shipped"], "op": ["u"]},
+    )
+    try:
+        _merge_out(conn, work, table, seed, plain, schema_evolution="strict")
+        assert _WATERMARK not in _types(db, table)
+
+        _merge_out(
+            conn,
+            work,
+            table,
+            batch,
+            _watermark_cfg(),
+            schema_evolution="strict",
+            trx_id="TRX_A",
+        )
+        assert _types(db, table)[_WATERMARK] == "string"
+
+        _merge_out(
+            conn,
+            work,
+            table,
+            rerun,
+            _watermark_cfg(),
+            schema_evolution="strict",
+            trx_id="TRX_A",
+        )
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2],
+                "status": ["old", "new"],
+                _WATERMARK: [None, "TRX_A"],
+            }),
+        )
+    finally:
+        db.drop_table(table)

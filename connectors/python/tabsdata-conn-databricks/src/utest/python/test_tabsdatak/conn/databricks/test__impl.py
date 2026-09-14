@@ -41,6 +41,13 @@ def _col(type_value, *, name="c", precision=None, scale=None):
 pytestmark = pytest.mark.databricks
 
 
+class _FakeCtx:
+    """The slice of ``DestContext`` a write reads: the trx id a merge stamps its
+    watermark rows with."""
+
+    trx_id = "TRX_1"
+
+
 # ---------------------------------------------------------------------------
 # Helpers for building test DatabricksConn / DatabricksReadCfg /
 # DatabricksWriteCfg instances
@@ -444,6 +451,7 @@ def test_write_all_tables_rejects_a_time_column_before_connecting(tmp_path):
         target_tables=["main.analytics.events"],
         if_table_exists="append",
         schema_evolution="strict",
+        ctx=_FakeCtx(),
     )
     # No workspace/SQL fixture: the check must fire before any connect.
     with pytest.raises(DatabricksRuntimeException) as ei:
@@ -468,6 +476,7 @@ def test_write_all_tables_rejects_every_time_width(tmp_path, unit):
         target_tables=["main.analytics.events"],
         if_table_exists="append",
         schema_evolution="strict",
+        ctx=_FakeCtx(),
     )
     with pytest.raises(DatabricksRuntimeException):
         _impl.write_all_tables(cfg, [parquet])
@@ -486,6 +495,7 @@ def test_write_all_tables_names_the_table_the_offending_file_targets(tmp_path):
         target_tables=["main.analytics.first", "main.analytics.second"],
         if_table_exists="append",
         schema_evolution="strict",
+        ctx=_FakeCtx(),
     )
     with pytest.raises(DatabricksRuntimeException) as ei:
         _impl.write_all_tables(cfg, [clean, dirty])
