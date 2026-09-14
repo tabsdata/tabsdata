@@ -32,10 +32,12 @@ from tabsdatak.conn.common._validation import fqn, unfqn
 from tabsdatak.conn.common.sql._merge._driver import merge_batch
 from tabsdatak.conn.common.types import UserPassword, _convert
 from tabsdatak.conn.snowflake import MergeCfg, SnowflakeDestConn
+from tabsdatak.conn.snowflake._evolution import SnowflakeSchemaEvolver
 from tabsdatak.conn.snowflake._merge_dialect import SnowflakeMergeDialect
 from tabsdatak.conn.snowflake._staging import (
     copy_into,
     create_file_format,
+    inferred_columns,
     inferred_schema_template,
     put_file_to_stage,
 )
@@ -71,6 +73,7 @@ class SnowflakeWriteCfg:
     conn: SnowflakeDestConn
     target_tables: list[str]  # raw user input -- already FQN-shaped
     schema_evolution: str  # "strict" | "update"
+    schema_evolution_engine: str  # "native" | "iceberg"
     if_table_exists: str  # "append" | "replace" | "merge"
     ctx: DestContext  # the trx the write belongs to; a merge stamps its id
     # One entry per target table when merging, already normalized by
@@ -340,15 +343,28 @@ def _write_one(
             return
         file_name = put_file_to_stage(cursor, file_path, stage)
         _create_table_from_inferred_schema(cursor, stage, file_name, sql_table)
+        evolving = cfg.schema_evolution == "update"
+        natively = cfg.schema_evolution_engine == "native"
         logger.debug(
-            "Setting schema evolution for %s (if_table_exists=%s, schema_evolution=%s)",
+            "Setting schema evolution for %s (if_table_exists=%s,"
+            " schema_evolution=%s, engine=%s)",
             sql_table,
             cfg.if_table_exists,
             cfg.schema_evolution,
+            cfg.schema_evolution_engine,
         )
-        _set_copy_into_schema_evolution(
-            cursor, cfg.schema_evolution == "update", sql_table
-        )
+        # Emitted whichever engine is in play, and false for both of the cases
+        # that are not native evolution: the mark persists on the table, so a
+        # target an earlier native run set would otherwise go on evolving
+        # underneath the Iceberg pass -- or after the write asked for strict.
+        _set_copy_into_schema_evolution(cursor, evolving and natively, sql_table)
+        if evolving and not natively:
+            # Reads the staged file before the COPY purges it, and runs before
+            # the TRUNCATE so a replace still evolves the table it is about to
+            # refill.
+            SnowflakeSchemaEvolver(cursor).evolve(
+                sql_table, inferred_columns(cursor, stage, file_name)
+            )
 
         if cfg.if_table_exists == "replace":
             logger.debug(

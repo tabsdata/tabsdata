@@ -19,6 +19,7 @@ __all__ = [
     "copy_into",
     "create_file_format",
     "infer_schema_call",
+    "inferred_columns",
     "inferred_schema_template",
     "put_file_to_stage",
 ]
@@ -72,6 +73,23 @@ def infer_schema_call(stage: str, file_name: str) -> str:
         f"ignore_case => true"
         f")"
     )
+
+
+def inferred_columns(cursor, stage: str, file_name: str) -> list[tuple[str, str]]:
+    """The ``(name, type)`` pairs ``infer_schema`` reports for the staged file.
+
+    The types are ``infer_schema``'s own vocabulary -- ``TEXT`` where
+    ``DESC TABLE`` says ``VARCHAR(16777216)`` for the same column -- so a
+    caller diffing these against a table's own schema has to reconcile the two
+    spellings first.
+
+    Read before the ``COPY``, which purges the staged file: after that there is
+    nothing left to infer from.
+    """
+    cursor.execute(
+        f"SELECT COLUMN_NAME, TYPE FROM table ({infer_schema_call(stage, file_name)})"
+    )
+    return [(row[0], row[1]) for row in cursor.fetchall()]
 
 
 def inferred_schema_template(stage: str, file_name: str) -> str:

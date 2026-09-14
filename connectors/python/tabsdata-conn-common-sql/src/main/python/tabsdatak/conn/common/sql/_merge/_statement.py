@@ -13,8 +13,6 @@ from tabsdatak.conn.common.sql._merge import MergeCfg
 from tabsdatak.conn.common.sql._merge.dialect import MergeDialect, Staged
 from tabsdatak.conn.common.sql.cdc.constants import OP_DELETE, OP_INSERT, OP_UPDATE
 
-__all__ = ["render_merge"]
-
 # The markers ``MergeCfg.op_column`` carries, and what each one makes the merge
 # do with the row -- ``CdcOperation``'s, so a CDC source in this family feeds a
 # merge without a translation step. Lower case, and the column is lower-cased

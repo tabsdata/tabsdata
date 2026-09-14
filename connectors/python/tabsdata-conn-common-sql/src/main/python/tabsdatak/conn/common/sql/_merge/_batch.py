@@ -19,8 +19,6 @@ from tabsdatak.conn.common.sql._merge import MergeCfg
 from tabsdatak.conn.common.sql._merge.dialect import MergeDialect
 from tabsdatak.conn.common.sql.cdc import coalesce_cdc_batch
 
-__all__ = ["coalesced_batch", "incoming_column"]
-
 logger = logging.getLogger(__name__)
 
 

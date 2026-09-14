@@ -22,6 +22,7 @@ from tabsdatak.conn.snowflake import _plugin as plugin
 from tabsdatak.conn.snowflake.error import (
     SnowflakeErrorCode,
     SnowflakeRuntimeException,
+    SnowflakeValidateException,
 )
 from tabsdatak.conn.snowflake._explorer import SnowflakeConnectionExplorer
 
@@ -102,6 +103,40 @@ class ProgrammingError(Exception):
 # ---------------------------------------------------------------------------
 
 
+def test_dest_plugin_defaults_to_the_native_engine(work_dir):
+    cfg = plugin._resolve_dest_cfg(None)
+    assert cfg.schema_evolution_engine == "native"
+
+
+@pytest.mark.parametrize("engine", ["native", "iceberg"])
+def test_dest_plugin_reads_the_engine_off_dest_cfg(engine):
+    cfg = plugin._resolve_dest_cfg({"snowflake.schema_evolution_engine": engine})
+    assert cfg.schema_evolution_engine == engine
+
+
+def test_dest_plugin_rejects_an_unknown_engine():
+    """A typo would otherwise fall back to native evolution and lose the
+    widening the write asked for, with nothing said about it."""
+    with pytest.raises(SnowflakeValidateException) as ei:
+        plugin._resolve_dest_cfg({"snowflake.schema_evolution_engine": "icebrg"})
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_21
+    assert "'icebrg'" in str(ei.value)
+
+
+def test_dest_plugin_forwards_the_engine_to_the_write_cfg(monkeypatch, work_dir):
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    captured: dict = {}
+    monkeypatch.setattr(
+        impl, "write_all_tables", lambda cfg, tables: captured.update(cfg=cfg)
+    )
+    dest = SnowflakeDest(
+        tables=["ANALYTICS.PUBLIC.USERS"],
+        dest_cfg={"snowflake.schema_evolution_engine": "iceberg"},
+    )
+    plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, [src])
+    assert captured["cfg"].schema_evolution_engine == "iceberg"
+
+
 def test_dest_plugin_write_out_calls_write_all_tables(monkeypatch, work_dir):
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
 
@@ -125,6 +160,7 @@ def test_dest_plugin_write_out_calls_write_all_tables(monkeypatch, work_dir):
     assert cfg.target_tables == ["ANALYTICS.PUBLIC.USERS"]
     assert cfg.if_table_exists == "replace"
     assert cfg.schema_evolution == "strict"
+    assert cfg.schema_evolution_engine == "native"
     assert cfg.merge_cfgs is None
     assert captured["tables"] == [src]
 
@@ -146,6 +182,7 @@ def test_dest_plugin_forwards_one_merge_cfg_per_table(monkeypatch, work_dir):
         tables=["DB.S.A", "DB.S.B"],
         if_table_exists="merge",
         merge_cfg=merge_cfg,
+        dest_cfg={"snowflake.schema_evolution_engine": "iceberg"},
     )
     plugin.SnowflakeDestPlugin().write_out(_dest_ctx(work_dir), _conn(), dest, files)
 

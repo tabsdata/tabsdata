@@ -21,13 +21,6 @@ from pathlib import Path
 
 from tabsdatak.conn.common.sql._merge import WatermarkCfg
 
-__all__ = [
-    "MergeDialect",
-    "MergeErrors",
-    "MergeSyntax",
-    "Staged",
-]
-
 
 @dataclass(frozen=True)
 class Staged:

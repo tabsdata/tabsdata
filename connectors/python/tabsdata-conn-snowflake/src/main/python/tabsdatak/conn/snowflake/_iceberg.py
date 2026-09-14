@@ -24,8 +24,9 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
+# Re-exported so callers import every iceberg piece from one module.
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._iceberg import (
+from tabsdatak.conn.common.sql._iceberg import (  # noqa: F401
     Action,
     ColumnDef,
     DialectRenderer,
@@ -39,33 +40,6 @@ from tabsdatak.conn.common.sql._iceberg import (
     compute_delta,
     validate_delta,
 )
-
-__all__ = [
-    # Re-exported so callers import every iceberg piece from one module.
-    "Action",
-    "ColumnDef",
-    "DialectRenderer",
-    "RenderOptions",
-    "ReorderPolicy",
-    "SchemaChange",
-    "SchemaDelta",
-    "TableSchema",
-    "TypeWideningMap",
-    "UnsafeSchemaChangeError",
-    "compute_delta",
-    "validate_delta",
-    # Snowflake-specific surface.
-    "SNOWFLAKE_TYPE_WIDENING_MAP",
-    "SnowflakeRenderer",
-    "can_widen",
-    "quote_column",
-    "render_snowflake_sql",
-    "same_type",
-    "same_unalterable_base",
-    "table_schema_from_inferred",
-    "table_schema_from_probe",
-]
-
 
 # The connector never builds a table from rendered column definitions:
 # ``_impl._create_table_from_inferred_schema`` issues ``CREATE TABLE ...

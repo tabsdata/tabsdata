@@ -126,3 +126,18 @@ class SnowflakeErrorCode(ErrorCode):
         " table {table}. The Snowflake load matches columns case-insensitively,"
         " so columns whose names differ only in case cannot be told apart",
     )  # _coalesced_parquet: ambiguous case-insensitive match
+
+    # --- schema_evolution_engine (tabsdatak.conn.snowflake) ---------
+    SNOWFLAKE_21 = ErrorDef(
+        SnowflakeValidateException,
+        "SnowflakeDest.dest_cfg['snowflake.schema_evolution_engine']={value!r}"
+        " is not a schema evolution engine; it is {allowed} or unset",
+    )  # _resolve_dest_cfg
+    SNOWFLAKE_22 = ErrorDef(
+        SnowflakeValidateException,
+        'SnowflakeDest.if_table_exists="merge" requires'
+        " dest_cfg={{'snowflake.schema_evolution_engine': 'iceberg'}}."
+        " A MERGE does not read ENABLE_SCHEMA_EVOLUTION, so the connector"
+        " evolves a merge target with ALTER statements or not at all -- which"
+        " the write has to say out loud",
+    )  # SnowflakeDest.validate()

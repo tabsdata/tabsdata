@@ -23,8 +23,6 @@ from tabsdatak.conn.common.sql._merge._statement import render_merge
 from tabsdatak.conn.common.sql._merge.dialect import MergeDialect, Staged
 from tabsdatak.spi import DestContext
 
-__all__ = ["MergeResult", "merge_batch", "write_columns"]
-
 logger = logging.getLogger(__name__)
 
 

@@ -124,10 +124,66 @@ def test_snowflake_dest_rejects_unknown_dest_cfg_key():
 def test_snowflake_dest_accepts_known_dest_cfg_keys():
     dest = SnowflakeDest(
         tables=["analytics.users"],
-        dest_cfg={"snowflake.logging_level": 20},
+        dest_cfg={
+            "snowflake.logging_level": 20,
+            "snowflake.schema_evolution_engine": "iceberg",
+        },
     )
     loaded = SnowflakeDest.from_json(dest.to_json())
     assert loaded == dest
+
+
+# ---------------------------------------------------------------------------
+# schema_evolution_engine
+#
+# A MERGE does not read ENABLE_SCHEMA_EVOLUTION, so the only evolution it can
+# have is the Iceberg pass -- which the write has to ask for rather than get by
+# default. Append and replace keep native evolution unless they opt out.
+# ---------------------------------------------------------------------------
+
+
+def test_snowflake_dest_requires_iceberg_for_a_merge():
+    with pytest.raises(SnowflakeValidateException) as ei:
+        SnowflakeDest(
+            tables=["DB.S.T"],
+            if_table_exists="merge",
+            merge_cfg=_merge_cfg(),
+        )
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_22
+
+
+def test_snowflake_dest_rejects_native_evolution_for_a_merge():
+    with pytest.raises(SnowflakeValidateException) as ei:
+        SnowflakeDest(
+            tables=["DB.S.T"],
+            if_table_exists="merge",
+            merge_cfg=_merge_cfg(),
+            dest_cfg={"snowflake.schema_evolution_engine": "native"},
+        )
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_22
+
+
+def test_a_missing_merge_cfg_is_reported_before_the_engine():
+    """Both are wrong here; the merge_cfg is the more basic thing to fix, and
+    the engine flag would read as noise beside it."""
+    with pytest.raises(SnowflakeValidateException) as ei:
+        SnowflakeDest(tables=["DB.S.T"], if_table_exists="merge")
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_12
+
+
+@pytest.mark.parametrize("if_table_exists", ["append", "replace"])
+@pytest.mark.parametrize("engine", ["native", "iceberg", None])
+def test_a_bulk_load_takes_any_engine(if_table_exists, engine):
+    """Only a merge constrains the engine -- append and replace can do either,
+    and unset means native."""
+    dest = SnowflakeDest(
+        tables=["DB.S.T"],
+        if_table_exists=if_table_exists,
+        dest_cfg=(
+            None if engine is None else {"snowflake.schema_evolution_engine": engine}
+        ),
+    )
+    assert dest.if_table_exists == if_table_exists
 
 
 # ---------------------------------------------------------------------------
@@ -162,6 +218,11 @@ def test_snowflake_conn_rejects_missing_credentials():
 # ---------------------------------------------------------------------------
 
 
+# A MERGE does not read ENABLE_SCHEMA_EVOLUTION, so the connector evolves its
+# target with ALTER statements or not at all -- and the write has to say so.
+_ICEBERG = {"snowflake.schema_evolution_engine": "iceberg"}
+
+
 def _merge_cfg(**overrides) -> MergeCfg:
     kwargs: dict = dict(on=["order_id"], op_column="op")
     kwargs.update(overrides)
@@ -181,6 +242,7 @@ def test_snowflake_dest_round_trips_a_merge():
         tables=["ANALYTICS.PUBLIC.ORDERS"],
         if_table_exists="merge",
         merge_cfg=_merge_cfg(op_column="op"),
+        dest_cfg=_ICEBERG,
     )
     loaded = SnowflakeDest.from_json(dest.to_json())
     assert loaded == dest
@@ -192,6 +254,7 @@ def test_snowflake_dest_round_trips_a_merge_cfg_per_table():
         tables=["DB.S.ORDERS", "DB.S.ITEMS"],
         if_table_exists="merge",
         merge_cfg=[_merge_cfg(), _merge_cfg(on=["item_id"])],
+        dest_cfg=_ICEBERG,
     )
     loaded = SnowflakeDest.from_json(dest.to_json())
     assert loaded == dest
@@ -204,6 +267,7 @@ def test_merge_cfgs_broadcasts_a_single_cfg_to_every_table():
         tables=["DB.S.A", "DB.S.B", "DB.S.C"],
         if_table_exists="merge",
         merge_cfg=cfg,
+        dest_cfg=_ICEBERG,
     )
     assert dest._merge_cfgs() == [cfg, cfg, cfg]
 
@@ -324,6 +388,7 @@ def test_schema_evolution_is_independent_of_the_disposition(if_table_exists):
         if_table_exists=if_table_exists,
         schema_evolution="update",
         merge_cfg=merge_cfg,
+        dest_cfg=_ICEBERG if if_table_exists == "merge" else None,
     )
     assert dest.schema_evolution == "update"
 

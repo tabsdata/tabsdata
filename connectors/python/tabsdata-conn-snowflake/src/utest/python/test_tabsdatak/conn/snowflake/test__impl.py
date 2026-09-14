@@ -16,6 +16,7 @@ from tabsdatak.conn.snowflake import SnowflakeDestConn
 
 from test_tabsdatak.conn.snowflake.support import (
     _FakeConnection,
+    _INFER_PREFIX,
     _FakeCtx,
     _FakeCursor,
     column_fakes as _column_fakes,
@@ -23,7 +24,7 @@ from test_tabsdatak.conn.snowflake.support import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.snowflake import _impl as impl
+from tabsdatak.conn.snowflake import _iceberg, _impl as impl
 from tabsdatak.conn.snowflake.error import (
     SnowflakeErrorCode,
     SnowflakeRuntimeException,
@@ -97,6 +98,7 @@ def _write_cfg(**overrides) -> impl.SnowflakeWriteCfg:
         target_tables=["ANALYTICS.PUBLIC.T"],
         if_table_exists="append",
         schema_evolution="update",
+        schema_evolution_engine="native",
         ctx=_FakeCtx(),
     )
     kwargs.update(overrides)
@@ -599,6 +601,135 @@ def test_write_all_tables_leaves_the_mark_alone_on_merge(
     )
     impl.write_all_tables(cfg, [_cdc_parquet(tmp_path / "in.parquet")])
     assert not any("ENABLE_SCHEMA_EVOLUTION" in s for s in fake.log)
+
+
+# ---------------------------------------------------------------------------
+# schema_evolution_engine="iceberg"
+#
+# Snowflake's own evolution only ever adds a column. Diffing the target against
+# the staged file instead also widens a column whose type the batch has
+# outgrown, and refuses a change Snowflake could not make -- so the option is
+# opt-in per write, and turns the native mark off while it is in play.
+# ---------------------------------------------------------------------------
+
+
+def _iceberg_cfg(**overrides):
+    kwargs: dict = dict(schema_evolution="update", schema_evolution_engine="iceberg")
+    kwargs.update(overrides)
+    return _write_cfg(**kwargs)
+
+
+def _alters(log):
+    return [s for s in log if s.startswith("ALTER TABLE") and "ENABLE_" not in s]
+
+
+def test_iceberg_engine_widens_a_column_the_batch_has_outgrown(
+    monkeypatch, tmp_path
+):
+    fake = _evolving_connection(monkeypatch, [("NAME", "VARCHAR(10)")], [])
+    fake.results[_INFER_PREFIX] = (
+        [("COLUMN_NAME",), ("TYPE",)],
+        [("NAME", "VARCHAR(20)")],
+    )
+    impl.write_all_tables(_iceberg_cfg(), [_parquet(tmp_path / "in.parquet")])
+    assert _alters(fake.log) == [
+        'ALTER TABLE "ANALYTICS"."PUBLIC"."T" ALTER COLUMN "NAME"'
+        " SET DATA TYPE VARCHAR(20)"
+    ]
+
+
+def test_iceberg_engine_adds_a_column_the_target_lacks(monkeypatch, tmp_path):
+    fake = _evolving_connection(
+        monkeypatch, ["ID"], [("ID", "NUMBER(38,0)"), ("NOTE", "TEXT")]
+    )
+    impl.write_all_tables(_iceberg_cfg(), [_parquet(tmp_path / "in.parquet")])
+    assert _alters(fake.log) == [
+        'ALTER TABLE "ANALYTICS"."PUBLIC"."T" ADD COLUMN IF NOT EXISTS "NOTE" TEXT'
+    ]
+
+
+def test_iceberg_engine_turns_the_native_mark_off(monkeypatch, tmp_path):
+    """The mark persists on the table, so a target an earlier native run set
+    would otherwise go on evolving underneath the Iceberg pass -- two engines
+    on one write, only one of which the write asked for."""
+    fake = _evolving_connection(monkeypatch, ["ID"], [("ID", "NUMBER(38,0)")])
+    impl.write_all_tables(_iceberg_cfg(), [_parquet(tmp_path / "in.parquet")])
+    assert [s for s in fake.log if "ENABLE_SCHEMA_EVOLUTION" in s] == [
+        _evolution_mark(False)
+    ]
+
+
+def test_iceberg_engine_leaves_a_synonym_of_the_same_type_alone(
+    monkeypatch, tmp_path
+):
+    """DESC TABLE reports VARCHAR(16777216) where infer_schema reports TEXT for
+    the same column. Without aligning the two vocabularies every write on a
+    table with an unparameterized text column would be refused."""
+    fake = _evolving_connection(
+        monkeypatch, [("NAME", "VARCHAR(16777216)")], [("NAME", "TEXT")]
+    )
+    impl.write_all_tables(_iceberg_cfg(), [_parquet(tmp_path / "in.parquet")])
+    assert _alters(fake.log) == []
+
+
+def test_iceberg_engine_refuses_a_change_snowflake_cannot_make(
+    monkeypatch, tmp_path
+):
+    fake = _evolving_connection(
+        monkeypatch, [("AMOUNT", "NUMBER(38,0)")], [("AMOUNT", "TEXT")]
+    )
+    with pytest.raises(_iceberg.UnsafeSchemaChangeError):
+        impl.write_all_tables(_iceberg_cfg(), [_parquet(tmp_path / "in.parquet")])
+    assert _alters(fake.log) == []
+    assert not any(s.startswith("COPY INTO") for s in fake.log)
+
+
+def test_iceberg_engine_evolves_before_it_truncates_a_replace(
+    monkeypatch, tmp_path
+):
+    # A replace refills the table it just evolved, so the ALTER has to land
+    # first -- and before the COPY, which purges the file it is read from.
+    fake = _evolving_connection(
+        monkeypatch, ["ID"], [("ID", "NUMBER(38,0)"), ("NOTE", "TEXT")]
+    )
+    impl.write_all_tables(
+        _iceberg_cfg(if_table_exists="replace"), [_parquet(tmp_path / "in.parquet")]
+    )
+    alter = next(i for i, s in enumerate(fake.log) if s.startswith("ALTER TABLE")
+                 and "ENABLE_" not in s)
+    truncate = next(i for i, s in enumerate(fake.log) if s.startswith("TRUNCATE"))
+    copy = next(i for i, s in enumerate(fake.log) if s.startswith("COPY INTO"))
+    assert alter < truncate < copy
+
+
+def test_iceberg_engine_does_nothing_under_strict(monkeypatch, tmp_path):
+    """Strict pins the target's schema; the engine only says *how* a schema that
+    is allowed to move is moved."""
+    fake = _evolving_connection(
+        monkeypatch, ["ID"], [("ID", "NUMBER(38,0)"), ("NOTE", "TEXT")]
+    )
+    impl.write_all_tables(
+        _iceberg_cfg(schema_evolution="strict"), [_parquet(tmp_path / "in.parquet")]
+    )
+    assert _alters(fake.log) == []
+    assert [s for s in fake.log if "ENABLE_SCHEMA_EVOLUTION" in s] == [
+        _evolution_mark(False)
+    ]
+
+
+def test_native_engine_emits_no_alters_of_its_own(monkeypatch, tmp_path):
+    """The counterpart: native evolution is the mark and nothing else, so a
+    target short a column is left to COPY INTO."""
+    fake = _evolving_connection(
+        monkeypatch, ["ID"], [("ID", "NUMBER(38,0)"), ("NOTE", "TEXT")]
+    )
+    impl.write_all_tables(_write_cfg(schema_evolution="update"), [
+        _parquet(tmp_path / "in.parquet")
+    ])
+    assert _alters(fake.log) == []
+    assert [s for s in fake.log if "ENABLE_SCHEMA_EVOLUTION" in s] == [
+        _evolution_mark(True)
+    ]
 
 
 def test_write_all_tables_sets_the_mark_after_creating_and_before_copying(

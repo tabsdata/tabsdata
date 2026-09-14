@@ -28,15 +28,20 @@ logger = logging.getLogger(__name__)
 
 # --- dest_cfg keys --------------------------------------------------
 _KEY_DEST_LOGGING_LEVEL: DestCfgKey = "snowflake.logging_level"
+_KEY_DEST_SCHEMA_EVOLUTION_ENGINE: DestCfgKey = "snowflake.schema_evolution_engine"
 
 _DEST_CFGS_DEFAULTS: dict[DestCfgKey, Any] = {
     _KEY_DEST_LOGGING_LEVEL: logging.ERROR,
+    _KEY_DEST_SCHEMA_EVOLUTION_ENGINE: "native",
 }
+
+_SCHEMA_EVOLUTION_ENGINES = ("native", "iceberg")
 
 
 @dataclass(frozen=True)
 class _WriterCfg:
     logging_level: int
+    schema_evolution_engine: str
 
 
 def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
@@ -51,8 +56,19 @@ def _resolve_dest_cfg(dest_cfg: DestCfgSpec | None) -> _WriterCfg:
     def _get(key: DestCfgKey) -> Any:
         return cfg.get(key, _DEST_CFGS_DEFAULTS[key])
 
+    engine = _get(_KEY_DEST_SCHEMA_EVOLUTION_ENGINE)
+    if engine not in _SCHEMA_EVOLUTION_ENGINES:
+        # A typo here would otherwise fall back to native evolution and lose
+        # the widening the write asked for, with nothing said about it.
+        # noinspection PyProtectedMember
+        raise SnowflakeErrorCode.SNOWFLAKE_21.exception(
+            value=engine,
+            allowed=" or ".join(repr(e) for e in _SCHEMA_EVOLUTION_ENGINES),
+        )
+
     return _WriterCfg(
         logging_level=int(_get(_KEY_DEST_LOGGING_LEVEL)),
+        schema_evolution_engine=engine,
     )
 
 
@@ -114,6 +130,7 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDestConn, SnowflakeDest]):
             conn=conn,
             target_tables=list(dest.tables),
             schema_evolution=dest.schema_evolution,
+            schema_evolution_engine=cfg.schema_evolution_engine,
             if_table_exists=dest.if_table_exists,
             ctx=ctx,
             merge_cfgs=dest._merge_cfgs(),

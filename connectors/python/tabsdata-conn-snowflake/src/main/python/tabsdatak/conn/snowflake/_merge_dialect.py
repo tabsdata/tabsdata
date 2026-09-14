@@ -23,10 +23,10 @@ from pathlib import Path
 from tabsdatak.conn.common._validation import fqn, unfqn
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge import WatermarkCfg
+from tabsdatak.conn.common.sql._evolution import evolve_with_iceberg
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge._evolution import evolve_with_iceberg
+from tabsdatak.conn.common.sql._merge import WatermarkCfg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import (
@@ -36,9 +36,14 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     Staged,
 )
 from tabsdatak.conn.snowflake import _iceberg
+from tabsdatak.conn.snowflake._evolution import (
+    aligned_type,
+    describe_table_columns,
+    fold_identifier,
+)
 from tabsdatak.conn.snowflake._staging import (
     copy_into,
-    infer_schema_call,
+    inferred_columns,
     inferred_schema_template,
     put_file_to_stage,
 )
@@ -50,8 +55,6 @@ from tabsdatak.conn.snowflake._validation import (
     MERGE_TARGET_ALIAS,
 )
 from tabsdatak.conn.snowflake.error import SnowflakeErrorCode
-
-__all__ = ["SnowflakeMergeDialect"]
 
 logger = logging.getLogger(__name__)
 
@@ -112,10 +115,7 @@ class SnowflakeMergeDialect(MergeDialect):
         return _iceberg.quote_column(name)
 
     def fold(self, name: str) -> str:
-        """Snowflake upper-folds an unquoted identifier, and the load matches
-        columns with ``MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE``, so upper case
-        is the form two names are the same in."""
-        return name.upper()
+        return fold_identifier(name)
 
     @contextlib.contextmanager
     def staging(
@@ -143,7 +143,7 @@ class SnowflakeMergeDialect(MergeDialect):
         target.
         """
         file_name = put_file_to_stage(self._cursor, batch, self._stage)
-        columns = self._staged_columns(file_name)
+        columns = inferred_columns(self._cursor, self._stage, file_name)
         scratch = self._create_scratch_table(target, file_name)
         copy_into(
             self._cursor,
@@ -217,21 +217,7 @@ class SnowflakeMergeDialect(MergeDialect):
         )
 
     def target_columns(self, target: str) -> list[tuple[str, str]]:
-        """``(name, type)`` per column ``target`` currently has -- the name in
-        the case Snowflake stores it under, the type in the exact spelling a
-        statement can use: ``NUMBER(38,0)``, ``VARCHAR(16777216)``,
-        ``TIMESTAMP_NTZ(9)``.
-
-        ``DESC TABLE`` is the read that reports a type in that form; the
-        description of an empty result set carries the names but only the
-        driver's own type codes. Its output columns are located by name in
-        ``cursor.description`` rather than by position, so nothing here depends
-        on where Snowflake puts them or on how many of them there are.
-        """
-        self._cursor.execute(f"DESC TABLE {target}")
-        fields = [field[0].upper() for field in self._cursor.description]
-        name_at, type_at = fields.index("NAME"), fields.index("TYPE")
-        return [(row[name_at], row[type_at]) for row in self._cursor.fetchall()]
+        return describe_table_columns(self._cursor, target)
 
     def execute(self, statement: str) -> None:
         self._cursor.execute(statement)
@@ -252,12 +238,12 @@ class SnowflakeMergeDialect(MergeDialect):
         return evolve_with_iceberg(
             self,
             target,
-            staged,
-            marker,
+            staged.columns,
+            marker=marker,
             renderer=_iceberg.SnowflakeRenderer(),
             widening_map=_iceberg.SNOWFLAKE_TYPE_WIDENING_MAP,
             can_safely_widen=_iceberg.can_widen,
-            align_type=_aligned_type,
+            align_type=aligned_type,
             strict=True,
         )
 
@@ -289,13 +275,6 @@ class SnowflakeMergeDialect(MergeDialect):
         return [watermark_cfg.column]
 
     # --- Snowflake internals ------------------------------------------
-
-    def _staged_columns(self, file_name: str) -> list[tuple[str, str]]:
-        self._cursor.execute(
-            f"SELECT COLUMN_NAME, TYPE FROM table"
-            f" ({infer_schema_call(self._stage, file_name)})"
-        )
-        return [(row[0], row[1]) for row in self._cursor.fetchall()]
 
     def _create_scratch_table(self, target: str, file_name: str) -> str:
         scratch = _scratch_table_name(target)
@@ -334,34 +313,3 @@ def _scratch_table_name(target: str) -> str:
     parts = unfqn(target, _SNOWFLAKE_FQN_DEF)
     parts[-1] = f"{parts[-1]}_{uuid.uuid4().hex[:8].upper()}"
     return fqn(parts, _SNOWFLAKE_FQN_DEF)
-
-
-def _aligned_type(stored: str | None, inferred: str) -> str:
-    """``inferred`` in the target's own spelling when the difference between the
-    two is not one to act on.
-
-    The diff compares type strings, and the two sides come from different
-    vocabularies: ``DESC TABLE`` reports ``VARCHAR(16777216)`` where
-    ``infer_schema`` reports ``TEXT`` for the very same column. Left alone,
-    every such column reads as a retype -- an unsafe one, since there is nothing
-    to widen -- and the write is refused over a column nobody touched.
-
-    Two spellings are folded together on either of two grounds: they name one
-    type, or they differ only in the parameters of a base Snowflake will not
-    alter. ``TIMESTAMP_NTZ(9)`` against ``TIMESTAMP_NTZ(6)`` is the second kind:
-    a real difference, but ``ALTER COLUMN`` reaches the parameters of ``NUMBER``
-    and ``VARCHAR`` alone, so there is no statement to render and the load casts
-    into the target column as it always has. Refusing the write for it would
-    stop a load that works.
-
-    What survives the folding is a retype worth reporting: a column whose type
-    really moved within a base that can be altered, or one that changed base
-    outright.
-    """
-    if stored is None:
-        return inferred
-    if _iceberg.same_type(stored, inferred) or _iceberg.same_unalterable_base(
-        stored, inferred
-    ):
-        return stored
-    return inferred

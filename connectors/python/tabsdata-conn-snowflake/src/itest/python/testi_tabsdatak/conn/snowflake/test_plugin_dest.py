@@ -168,6 +168,11 @@ def test_dest_plugin_write_out_resolves_table_name_spelling(
 # ---------------------------------------------------------------------------
 
 
+# A MERGE does not read ENABLE_SCHEMA_EVOLUTION, so the connector evolves its
+# target with ALTER statements or not at all -- and the write has to say so.
+_ICEBERG = {"snowflake.schema_evolution_engine": "iceberg"}
+
+
 def _batch(path: Path, columns: dict[str, list | pl.Series]) -> Path:
     """A batch parquet. A column given as a `Series` pins its dtype, which the
     type-widening tests need -- a parquet decimal carries its precision and
@@ -211,6 +216,7 @@ def _merge_out(
             if_table_exists="merge",
             merge_cfg=merge_cfg,
             schema_evolution=schema_evolution,
+            dest_cfg=_ICEBERG,
         ),
         [parquet],
     )
@@ -453,6 +459,7 @@ def test_dest_plugin_write_out_merge_applies_one_cfg_per_table(
             MergeCfg(on=["order_id"], op_column="op"),
             MergeCfg(on=["item_id"], op_column="op"),
         ],
+        dest_cfg=_ICEBERG,
     )
     seeds = [
         _batch(
@@ -591,6 +598,155 @@ def test_dest_plugin_write_out_takes_a_new_column_on_update(
         assert "priority" in got.columns
         # replace truncates first, so only the widened row survives there.
         assert got.filter(got["order_id"] == 3)["priority"].to_list() == ["high"]
+    finally:
+        db.drop_table(table)
+
+
+# ---------------------------------------------------------------------------
+# schema_evolution_engine="iceberg" on a bulk load
+#
+# Snowflake's own evolution only ever adds a column, so a bulk load cannot widen
+# one however the batch has grown. Diffing the target against the staged file
+# reaches what the mark cannot -- and refuses what Snowflake could not do at all.
+#
+# A target of a particular width has to be built with DDL: one the connector
+# creates is templated from the staged file itself, so both sides would agree by
+# construction and there would be nothing to widen.
+# ---------------------------------------------------------------------------
+
+
+def _load_out(conn, work: Path, table: str, parquet: Path, **dest_kwargs) -> None:
+    plugin.SnowflakeDestPlugin().write_out(
+        PluginDestCtx(work),
+        conn,
+        SnowflakeDest(
+            tables=[table],
+            if_table_exists=dest_kwargs.pop("if_table_exists", "append"),
+            schema_evolution=dest_kwargs.pop("schema_evolution", "update"),
+            **dest_kwargs,
+        ),
+        [parquet],
+    )
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_iceberg_engine_widens_a_bounded_text_column(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # A parquet string carries no length, so infer_schema reports the widest
+    # text type and the bounded target column is widened to it. Recorded rather
+    # than endorsed -- it is the one widening no file can justify, and Snowflake
+    # cannot narrow the column back -- but it is what asking for the Iceberg
+    # engine buys, and native evolution cannot do it at all.
+    db = store(domain_snowflake)
+    table = "TD_DEST_ICEBERG_WIDEN_TEXT"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    db.create_typed_table(table, "ORDER_ID NUMBER(38,0), STATUS VARCHAR(10)")
+    assert db.column_types(table)["status"] == ("TEXT", 10, None)
+    batch = _batch(tmp_path / "short.parquet", {"order_id": [1], "status": ["new"]})
+    try:
+        _load_out(conn, work, table, batch, dest_cfg=_ICEBERG)
+        assert db.column_types(table)["status"] == ("TEXT", 16777216, None)
+        assert db.count(table) == 1
+    finally:
+        db.drop_table(table)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_native_engine_leaves_the_width_alone(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # The counterpart, and the reason the option exists: ENABLE_SCHEMA_EVOLUTION
+    # adds columns and nothing else, so the bounded column keeps its width.
+    db = store(domain_snowflake)
+    table = "TD_DEST_NATIVE_WIDEN_TEXT"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    db.create_typed_table(table, "ORDER_ID NUMBER(38,0), STATUS VARCHAR(10)")
+    batch = _batch(tmp_path / "short.parquet", {"order_id": [1], "status": ["new"]})
+    try:
+        _load_out(conn, work, table, batch)
+        assert db.column_types(table)["status"] == ("TEXT", 10, None)
+    finally:
+        db.drop_table(table)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_iceberg_engine_adds_a_new_column(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # The half both engines can do, so the Iceberg pass has to do it too --
+    # with the mark off, it is the only thing that would.
+    db = store(domain_snowflake)
+    table = "TD_DEST_ICEBERG_ADD_COLUMN"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    narrow = _batch(tmp_path / "narrow.parquet", {"order_id": [1], "status": ["new"]})
+    widened = _batch(
+        tmp_path / "widened.parquet",
+        {"order_id": [2], "status": ["new"], "priority": ["high"]},
+    )
+    try:
+        _load_out(conn, work, table, narrow, dest_cfg=_ICEBERG)
+        assert "priority" not in db.read_table(table).columns
+
+        _load_out(conn, work, table, widened, dest_cfg=_ICEBERG)
+        got = db.read_table(table)
+        assert "priority" in got.columns
+        assert got.filter(got["order_id"] == 2)["priority"].to_list() == ["high"]
+    finally:
+        db.drop_table(table)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_iceberg_engine_refuses_an_impossible_retype(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # No ALTER reconciles two bases, so the write stops before anything is
+    # loaded rather than after COPY INTO has half-applied it.
+    db = store(domain_snowflake)
+    table = "TD_DEST_ICEBERG_UNSAFE"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    db.create_typed_table(table, "ORDER_ID NUMBER(38,0), AMOUNT NUMBER(10,2)")
+    before = db.column_types(table)
+    batch = _batch(
+        tmp_path / "lettered.parquet",
+        {"order_id": [1], "amount": ["not a number"]},
+    )
+    try:
+        with pytest.raises(SnowflakeRuntimeException):
+            _load_out(conn, work, table, batch, dest_cfg=_ICEBERG)
+        assert db.column_types(table) == before
+        assert db.count(table) == 0
+    finally:
+        db.drop_table(table)
+
+
+@snowflake_domain("snowflake")
+def test_dest_plugin_write_out_iceberg_engine_does_nothing_under_strict(
+    domain_snowflake: SnowflakeDomain,
+    tmp_path: Path,
+):
+    # Strict pins the target's schema; the engine only says *how* a schema that
+    # is allowed to move is moved. The rows still land.
+    db = store(domain_snowflake)
+    table = "TD_DEST_ICEBERG_STRICT"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_snowflake)
+    db.create_typed_table(table, "ORDER_ID NUMBER(38,0), STATUS VARCHAR(10)")
+    batch = _batch(tmp_path / "short.parquet", {"order_id": [1], "status": ["new"]})
+    try:
+        _load_out(
+            conn, work, table, batch, schema_evolution="strict", dest_cfg=_ICEBERG
+        )
+        assert db.column_types(table)["status"] == ("TEXT", 10, None)
+        assert db.count(table) == 1
     finally:
         db.drop_table(table)
 

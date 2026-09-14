@@ -22,14 +22,6 @@ from pydantic import AfterValidator
 import tabsdatak._api as _api
 from tabsdatak.conn.common.sql.error import SqlCommonErrorCode
 
-__all__ = [
-    "MERGE_COLUMN_VALIDATOR",
-    "MergeCfg",
-    "MergeColumnSpec",
-    "MergeColumnsSpec",
-    "WatermarkCfg",
-]
-
 
 def _column_validate(value: str) -> str:
     """Reject a name no dialect could resolve.
