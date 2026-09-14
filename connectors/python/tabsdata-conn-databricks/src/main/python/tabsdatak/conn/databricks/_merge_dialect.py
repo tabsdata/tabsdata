@@ -32,27 +32,12 @@ from tabsdatak.conn.databricks.error import DatabricksErrorCode
 
 logger = logging.getLogger(__name__)
 
-# A trx id is an opaque string, and STRING is what DESCRIBE TABLE reports back
-# for the column, so a target that already has it does not read as a retype.
-_WATERMARK_TYPE = "STRING"
-
 _ERRORS = MergeErrors(
     marker_absent=DatabricksErrorCode.DATABRICKS_19.exception,
     keys_absent=DatabricksErrorCode.DATABRICKS_20.exception,
     no_shared_columns=DatabricksErrorCode.DATABRICKS_22.exception,
     ambiguous_column=DatabricksErrorCode.DATABRICKS_21.exception,
 )
-
-
-def _string_literal(value: str) -> str:
-    """``value`` as a Databricks SQL string literal.
-
-    The trx id is a system-generated token, but it is the one value in these
-    statements that does not come from the connector itself, and a statement
-    built by hand has nowhere to bind it.
-    """
-    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
-    return f"'{escaped}'"
 
 
 class DatabricksMergeDialect(MergeDialect):
@@ -259,15 +244,16 @@ class DatabricksMergeDialect(MergeDialect):
         answer. The column view covers both, since a missing table contributes
         no rows to it.
         """
-        if not self._has_watermark_column(watermark_cfg):
-            return False
-        self._cursor.execute(
-            f"SELECT COUNT(*) > 0 FROM {target}"
-            f" WHERE {self.quote_column(watermark_cfg.column)}"
-            f" = {_string_literal(watermark_cfg.transaction_id)}"
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.databricks._impl import check_watermark_column
+
+        return check_watermark_column(
+            self._cursor,
+            self._fq_table,
+            target,
+            watermark_cfg.column,
+            watermark_cfg.transaction_id,
         )
-        row = self._cursor.fetchone()
-        return bool(row and row[0])
 
     def ensure_watermark_column(
         self, target: str, watermark_cfg: WatermarkCfg | None
@@ -288,46 +274,15 @@ class DatabricksMergeDialect(MergeDialect):
         """
         if watermark_cfg is None:
             return []
-        if self._has_watermark_column(watermark_cfg):
-            return []
-        logger.debug("Adding watermark column %s to %s", watermark_cfg.column, target)
-        self.execute(
-            f"ALTER TABLE {target} ADD COLUMNS"
-            f" ({self.quote_column(watermark_cfg.column)} {_WATERMARK_TYPE})"
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.databricks._impl import ensure_watermark_column
+
+        added = ensure_watermark_column(
+            self._cursor, self._fq_table, target, watermark_cfg.column
         )
-        return [watermark_cfg.column]
+        return [watermark_cfg.column] if added else []
 
     # --- Databricks internals -----------------------------------------
-
-    def _has_watermark_column(self, watermark_cfg: WatermarkCfg) -> bool:
-        """Whether the target carries the watermark column.
-
-        Read off ``information_schema`` rather than ``DESCRIBE TABLE`` because
-        the target may not be there at all: both watermark passes can run before
-        anything has been written to it, and a missing table is not an error
-        here -- it simply has no such column. Unity Catalog stores an identifier
-        lower-cased, which is also how this dialect folds one, so both sides of
-        each comparison are lowered and the two agree.
-        """
-        # noinspection PyProtectedMember
-        from tabsdatak.conn.common._validation import fqn, unfqn
-
-        # noinspection PyProtectedMember
-        from tabsdatak.conn.databricks._validation import _DATABRICKS_FQN_DEF
-
-        catalog, schema, table = unfqn(
-            self._fq_table, _DATABRICKS_FQN_DEF, total_parts=3
-        )
-        self._cursor.execute(
-            f"SELECT COUNT(*) FROM {fqn([catalog], _DATABRICKS_FQN_DEF)}"
-            f".information_schema.columns"
-            f" WHERE lower(table_schema) = {_string_literal(self.fold(schema))}"
-            f" AND lower(table_name) = {_string_literal(self.fold(table))}"
-            f" AND lower(column_name)"
-            f" = {_string_literal(self.fold(watermark_cfg.column))}"
-        )
-        row = self._cursor.fetchone()
-        return bool(row and row[0])
 
     def _stamp(self, relation: str, watermark_cfg: WatermarkCfg) -> None:
         """Give the scratch table the watermark column and fill it in.
@@ -336,14 +291,14 @@ class DatabricksMergeDialect(MergeDialect):
         inserted afterwards, and every row here is already in, so the value is
         written with an ``UPDATE``.
         """
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.databricks._impl import WATERMARK_TYPE, string_literal
+
         column = self.quote_column(watermark_cfg.column)
-        self.execute(
-            f"ALTER TABLE {relation} ADD COLUMNS"
-            f" ({column} {_WATERMARK_TYPE})"
-        )
+        self.execute(f"ALTER TABLE {relation} ADD COLUMNS ({column} {WATERMARK_TYPE})")
         self.execute(
             f"UPDATE {relation} SET {column} ="
-            f" {_string_literal(watermark_cfg.transaction_id)}"
+            f" {string_literal(watermark_cfg.transaction_id)}"
         )
 
     def _relation_columns(self, relation: str) -> list[tuple[str, str]]:

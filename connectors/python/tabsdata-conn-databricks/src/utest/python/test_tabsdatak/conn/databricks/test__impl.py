@@ -11,6 +11,7 @@ Databricks integration suite.
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -668,3 +669,266 @@ class TestVolumeSchemaProjection:
     def test_quotes_a_name_that_needs_it(self):
         projection = _impl._volume_schema_projection(["weird col"])
         assert projection == "* EXCEPT (`weird col`)"
+
+
+# ---------------------------------------------------------------------------
+# watermark_column on an append
+#
+# An append is not idempotent on its own: a rerun of the same transaction
+# uploads the batch again and COPY INTO appends it a second time. Naming a
+# watermark closes it -- the column is written into the parquet before it goes
+# to the volume so the load stamps the rows it brings in, and a rerun that
+# finds the target already carrying this trx's id does nothing at all.
+# ---------------------------------------------------------------------------
+
+_WATERMARK = "wm"
+_WM_TABLE = "main.analytics.events"
+_WM_SQL_FQ = "`main`.`analytics`.`events`"
+
+
+class _BulkCursor:
+    """Records every statement and answers the two probes the watermark makes.
+
+    The column set has to move: the probe runs twice on one write -- once for
+    the rerun guard and once before the ALTER -- and a fake answering from a
+    frozen set would report a table its own DDL had already changed, so the
+    ALTER would be emitted for a column that is already there.
+    """
+
+    def __init__(self, columns=(), *, stamped=False) -> None:
+        self.log: list[str] = []
+        self._columns = {name.lower() for name in columns}
+        self._stamped = stamped
+        self._rows: list[tuple] = []
+
+    def execute(self, statement: str, **parameters) -> None:
+        self.log.append(statement)
+        if statement.startswith("SELECT COUNT(*) > 0"):
+            self._rows = [(self._stamped,)]
+            return
+        if statement.startswith("SELECT COUNT(*)"):
+            # The information_schema probe binds the column name as a literal.
+            wanted = statement.rsplit("= '", 1)[1].rstrip("'")
+            self._rows = [(1 if wanted in self._columns else 0,)]
+            return
+        if "ADD COLUMNS" in statement:
+            self._columns.add(
+                statement.rsplit("(`", 1)[1].split("`", 1)[0].lower()
+            )
+        self._rows = []
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return list(self._rows)
+
+
+def _bulk_clients(monkeypatch, cursor):
+    """Stub the workspace client and SQL connection ``write_all_tables`` opens,
+    recording every file handed to the volume."""
+    uploaded: list[str] = []
+
+    def upload(target, contents):
+        uploaded.append(target)
+
+    ws_client = SimpleNamespace(files=SimpleNamespace(upload=upload))
+    sql_conn = SimpleNamespace(cursor=lambda: cursor, close=lambda: None)
+    monkeypatch.setattr(_impl, "_build_workspace_client", lambda conn: ws_client)
+    monkeypatch.setattr(
+        _impl, "_build_sql_connection", lambda ws, conn: sql_conn
+    )
+    return uploaded
+
+
+def _staged_batches(monkeypatch):
+    """Capture the local path and rows of every volume upload, read while the
+    file still exists -- the rewritten batch lives in a temp directory removed
+    as soon as it has been staged."""
+    import polars as pl
+
+    staged: list[tuple[Path, list[dict]]] = []
+    original = _impl.upload_file_to_volume
+
+    def capture(ws_client, conn, fq_table, local_path):
+        staged.append((Path(local_path), pl.read_parquet(local_path).to_dicts()))
+        return original(ws_client, conn, fq_table, local_path)
+
+    monkeypatch.setattr(_impl, "upload_file_to_volume", capture)
+    return staged
+
+
+def _wm_cfg(**overrides) -> _impl.DatabricksWriteCfg:
+    kwargs: dict = dict(
+        conn=_dest_conn(),
+        target_tables=[_WM_TABLE],
+        if_table_exists="append",
+        schema_evolution="strict",
+        ctx=_FakeCtx(),
+        watermark_column=_WATERMARK,
+    )
+    kwargs.update(overrides)
+    return _impl.DatabricksWriteCfg(**kwargs)
+
+
+def _wm_parquet(tmp_path) -> Path:
+    import polars as pl
+
+    path = tmp_path / "in.parquet"
+    pl.DataFrame({"id": [1, 2]}).write_parquet(path)
+    return path
+
+
+def _alters(cursor) -> list[str]:
+    return [s for s in cursor.log if s.startswith("ALTER TABLE")]
+
+
+def test_append_watermark_stamps_every_staged_row(monkeypatch, tmp_path):
+    cursor = _BulkCursor(("id", _WATERMARK))
+    _bulk_clients(monkeypatch, cursor)
+    staged = _staged_batches(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(), [_wm_parquet(tmp_path)])
+    _, rows = staged[0]
+    assert [row[_WATERMARK] for row in rows] == ["TRX_1", "TRX_1"]
+
+
+def test_append_watermark_stages_a_copy_keeping_the_basename(monkeypatch, tmp_path):
+    # The staged name is built from the local basename, so the rewrite has to be
+    # indistinguishable from the file the write was handed.
+    cursor = _BulkCursor(("id", _WATERMARK))
+    _bulk_clients(monkeypatch, cursor)
+    staged = _staged_batches(monkeypatch)
+    parquet = _wm_parquet(tmp_path)
+    _impl.write_all_tables(_wm_cfg(), [parquet])
+    path, _ = staged[0]
+    assert path != parquet
+    assert path.name == parquet.name
+
+
+def test_append_without_a_watermark_stages_what_it_was_handed(monkeypatch, tmp_path):
+    cursor = _BulkCursor(("id",))
+    _bulk_clients(monkeypatch, cursor)
+    staged = _staged_batches(monkeypatch)
+    parquet = _wm_parquet(tmp_path)
+    _impl.write_all_tables(_wm_cfg(watermark_column=None), [parquet])
+    path, rows = staged[0]
+    assert path == parquet
+    assert rows == [{"id": 1}, {"id": 2}]
+
+
+def test_append_watermark_removes_the_copy_once_it_is_staged(monkeypatch, tmp_path):
+    cursor = _BulkCursor(("id", _WATERMARK))
+    _bulk_clients(monkeypatch, cursor)
+    staged = _staged_batches(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(), [_wm_parquet(tmp_path)])
+    path, _ = staged[0]
+    assert not path.exists()
+
+
+def test_append_watermark_adds_the_column_to_the_target(monkeypatch, tmp_path):
+    cursor = _BulkCursor(("id",))
+    _bulk_clients(monkeypatch, cursor)
+    _staged_batches(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(), [_wm_parquet(tmp_path)])
+    assert _alters(cursor) == [
+        f"ALTER TABLE {_WM_SQL_FQ} ADD COLUMNS (`{_WATERMARK}` STRING)"
+    ]
+
+
+def test_append_watermark_leaves_an_existing_column_alone(monkeypatch, tmp_path):
+    cursor = _BulkCursor(("id", _WATERMARK))
+    _bulk_clients(monkeypatch, cursor)
+    _staged_batches(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(), [_wm_parquet(tmp_path)])
+    assert _alters(cursor) == []
+
+
+def test_append_watermark_adds_the_column_between_create_and_copy(
+    monkeypatch, tmp_path
+):
+    # Under strict mergeSchema is off, so a batch carrying a column the target
+    # lacks fails the COPY -- and a column added afterwards would be NULL in the
+    # rows just written.
+    cursor = _BulkCursor(("id",))
+    _bulk_clients(monkeypatch, cursor)
+    _staged_batches(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(), [_wm_parquet(tmp_path)])
+    create = next(i for i, s in enumerate(cursor.log) if s.startswith("CREATE TABLE"))
+    alter = cursor.log.index(_alters(cursor)[0])
+    copy = next(i for i, s in enumerate(cursor.log) if s.startswith("COPY INTO"))
+    assert create < alter < copy
+
+
+def test_append_watermark_is_added_under_update_too(monkeypatch, tmp_path):
+    """mergeSchema='true' would land it, but one place owns the column so the
+    two settings cannot disagree about who added it."""
+    cursor = _BulkCursor(("id",))
+    _bulk_clients(monkeypatch, cursor)
+    _staged_batches(monkeypatch)
+    _impl.write_all_tables(
+        _wm_cfg(schema_evolution="update"), [_wm_parquet(tmp_path)]
+    )
+    assert len(_alters(cursor)) == 1
+
+
+def test_append_skips_entirely_when_the_trx_is_already_stamped(monkeypatch, tmp_path):
+    cursor = _BulkCursor(("id", _WATERMARK), stamped=True)
+    _bulk_clients(monkeypatch, cursor)
+    staged = _staged_batches(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(), [_wm_parquet(tmp_path)])
+    assert staged == []
+    assert not any(s.startswith("COPY INTO") for s in cursor.log)
+
+
+def test_append_proceeds_when_the_target_carries_another_trx(monkeypatch, tmp_path):
+    cursor = _BulkCursor(("id", _WATERMARK), stamped=False)
+    _bulk_clients(monkeypatch, cursor)
+    staged = _staged_batches(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(), [_wm_parquet(tmp_path)])
+    assert len(staged) == 1
+    assert any(s.startswith("COPY INTO") for s in cursor.log)
+
+
+def test_append_checks_the_watermark_before_it_stages_anything(monkeypatch, tmp_path):
+    # A rerun with nothing to do should not pay to rewrite and upload a file it
+    # is about to decline to load.
+    cursor = _BulkCursor(("id", _WATERMARK))
+    _bulk_clients(monkeypatch, cursor)
+    _staged_batches(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(), [_wm_parquet(tmp_path)])
+    probe = next(
+        i for i, s in enumerate(cursor.log) if s.startswith("SELECT COUNT(*) > 0")
+    )
+    create = next(i for i, s in enumerate(cursor.log) if s.startswith("CREATE TABLE"))
+    assert probe < create
+
+
+@pytest.mark.parametrize(
+    "trx_id,literal",
+    [("plain", "'plain'"), ("it's", "'it\\'s'"), ("a\\b", "'a\\\\b'")],
+)
+def test_append_escapes_the_trx_id_in_the_probe(monkeypatch, tmp_path, trx_id, literal):
+    # There is nowhere to bind a value in a statement built by hand.
+    class _Ctx:
+        pass
+
+    ctx = _Ctx()
+    ctx.trx_id = trx_id
+    cursor = _BulkCursor(("id", _WATERMARK))
+    _bulk_clients(monkeypatch, cursor)
+    _staged_batches(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(ctx=ctx), [_wm_parquet(tmp_path)])
+    probe = next(s for s in cursor.log if s.startswith("SELECT COUNT(*) > 0"))
+    assert probe.endswith(f"= {literal}")
+
+
+def test_a_replace_never_stamps_even_when_handed_a_watermark(monkeypatch, tmp_path):
+    """DatabricksDest refuses the pairing, and the write path declines it again
+    rather than resting on a validation two layers away."""
+    cursor = _BulkCursor(("id",))
+    _bulk_clients(monkeypatch, cursor)
+    staged = _staged_batches(monkeypatch)
+    parquet = _wm_parquet(tmp_path)
+    _impl.write_all_tables(_wm_cfg(if_table_exists="replace"), [parquet])
+    assert staged[0][0] == parquet
+    assert _alters(cursor) == []

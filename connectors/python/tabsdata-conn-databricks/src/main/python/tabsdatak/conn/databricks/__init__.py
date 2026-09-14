@@ -40,6 +40,7 @@ Examples:
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
@@ -158,6 +159,11 @@ class MergeCfg(SqlMergeCfg):
     * `'u'` -- update the row it matches.
     * `'d'` -- delete the row it matches.
 
+    The idempotency watermark is named on the destination rather than here --
+    see `DatabricksDest.watermark_column`. It belongs to the write, not to the
+    way one table's rows are matched, so a `DatabricksDest` naming a list of
+    configs still stamps every one of its targets with the same column.
+
     Args:
         on: The key columns rows are matched by, joined with `AND`. Must be
             present on both sides. Each is a Databricks column identifier --
@@ -165,12 +171,6 @@ class MergeCfg(SqlMergeCfg):
         op_column: The column holding each row's `i` / `u` / `d` marker. Read
             to decide each row's fate and never written, so the target does not
             need the column and will not gain it.
-        watermark_column: An optional column stamped with the id of the trx the
-            merge belongs to, making the merge idempotent: a rerun that finds
-            the target already carrying this trx's id writes nothing rather than
-            applying the same batch twice. The target gains the column under
-            either `schema_evolution` setting. Rows written before it existed
-            keep a NULL there.
 
     Examples:
         A CDC feed whose `op` column says what to do with each row:
@@ -187,7 +187,6 @@ class MergeCfg(SqlMergeCfg):
     # surfacing as invalid SQL when the MERGE is built.
     on: MergeColumnsSpec
     op_column: MergeColumnSpec
-    watermark_column: MergeColumnSpec | None = None
 
     def _fold(self, name: str) -> str:
         return _validation.merge_column_key(name)
@@ -391,6 +390,20 @@ class DatabricksDest(Dest):
             `if_table_exists="merge"`: how incoming rows are matched
             onto existing ones. One `MergeCfg` applies to every table;
             pass a list to configure each table in `tables` separately.
+        watermark_column: An optional column stamped with the id of the trx the
+            write belongs to, making the write idempotent: a rerun that finds
+            the target already carrying this trx's id writes nothing rather than
+            applying the same batch twice. Every table in `tables` is stamped in
+            the same column. The target gains the column under either
+            `schema_evolution` setting -- a watermark no row can be stamped in
+            would do nothing at all -- and rows written before it existed keep a
+            NULL there.
+
+            A merge stamps through the `MERGE` itself; an append writes the
+            column into the batch it stages, so `COPY INTO` stamps the rows it
+            loads. A replace is refused it, having nothing to make idempotent --
+            it rewrites the table wholesale, so a rerun already leaves the same
+            rows behind.
         dest_cfg: Optional connector config; the only supported key is
             `databricks.logging_level`.
 
@@ -447,19 +460,36 @@ class DatabricksDest(Dest):
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "strict"
     merge_cfg: MergeCfgSpec | None = None
+    watermark_column: MergeColumnSpec | None = None
     dest_cfg: DestCfgSpec | None = None
 
     def _merge_cfgs(self) -> list[MergeCfg] | None:
-        """One `MergeCfg` per entry in `tables`, or `None` outside merge mode."""
+        """One `MergeCfg` per entry in `tables`, or `None` outside merge mode.
+
+        Each carries this destination's `watermark_column`: the merge driver
+        reads the watermark off the config it is handed, so the destination's
+        choice is stamped onto every config on the way past rather than
+        threaded through the write as a value of its own.
+        """
         if self.merge_cfg is None:
             return None
         if isinstance(self.merge_cfg, MergeCfg):
-            return [self.merge_cfg] * len(self.tables)
-        return list(self.merge_cfg)
+            cfgs = [self.merge_cfg] * len(self.tables)
+        else:
+            cfgs = list(self.merge_cfg)
+        return [replace(cfg, watermark_column=self.watermark_column) for cfg in cfgs]
+
+    def _watermark_column(self) -> str | None:
+        """The watermark column's stored form, or `None`. Folded the way a
+        `MergeCfg` folds its own, so the two paths name one column."""
+        if self.watermark_column is None:
+            return None
+        return _validation.merge_column_key(self.watermark_column)
 
     def validate(self) -> None:
         """Cross-field validation: `merge_cfg` and `if_table_exists="merge"`
-        require each other, and a list of configs must line up with `tables`.
+        require each other, a list of configs must line up with `tables`, and
+        `watermark_column` is not a replace's to name.
 
         Called by the framework; raises `DatabricksValidateException`.
         """
@@ -487,3 +517,34 @@ class DatabricksDest(Dest):
                 f" one-to-one with tables (pass a single MergeCfg to apply one"
                 f" config to every table)",
             )
+        raw = (
+            [self.merge_cfg]
+            if isinstance(self.merge_cfg, MergeCfg)
+            else (self.merge_cfg or [])
+        )
+        # The field is inherited from the shared MergeCfg and so is still
+        # settable there, but this connector reads it off the destination.
+        # Silently dropping it would cost a rerun its idempotency.
+        if any(cfg.watermark_column is not None for cfg in raw):
+            # noinspection PyProtectedMember
+            raise DatabricksErrorCode.DATABRICKS_2.exception(
+                cls="Dest",
+                rule="MergeCfg.watermark_column is set; name the watermark on"
+                " DatabricksDest.watermark_column instead. It belongs to the"
+                " write rather than to the way one table's rows are matched,"
+                " and the destination stamps every one of its targets with it",
+            )
+        if self.watermark_column is not None and self.if_table_exists == "replace":
+            # noinspection PyProtectedMember
+            raise DatabricksErrorCode.DATABRICKS_2.exception(
+                cls="Dest",
+                rule='watermark_column is set but if_table_exists="replace"; a'
+                " replace rewrites the target wholesale, so rerunning one"
+                " already leaves the same rows behind and there is nothing for"
+                " a watermark to make idempotent",
+            )
+        for cfg in self._merge_cfgs() or []:
+            # The stamped config, not the one the user wrote: the watermark
+            # arrives from here now, so the collision checks MergeCfg makes
+            # against its keys and its op column only see it on this pass.
+            cfg.validate()

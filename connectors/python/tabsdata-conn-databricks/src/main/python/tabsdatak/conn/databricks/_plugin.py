@@ -274,6 +274,7 @@ class _DatabricksDestPlugin(DestPlugin[DatabricksDestConn, DatabricksDest]):
             if_table_exists=dest.if_table_exists,
             schema_evolution=dest.schema_evolution,
             ctx=ctx,
+            watermark_column=dest._watermark_column(),
             merge_cfgs=dest._merge_cfgs(),
         )
         host = _convert(conn.host_url, str)

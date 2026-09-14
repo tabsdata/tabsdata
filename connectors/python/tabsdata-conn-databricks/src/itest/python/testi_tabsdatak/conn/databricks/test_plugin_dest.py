@@ -156,6 +156,7 @@ def _merge_out(
     merge_cfg: MergeCfg,
     schema_evolution: str = "strict",
     trx_id: str | None = None,
+    watermark_column: str | None = None,
 ) -> None:
     plugin._DatabricksDestPlugin().write_out(
         PluginDestCtx(work) if trx_id is None else _TrxCtx(work, trx_id),
@@ -165,6 +166,7 @@ def _merge_out(
             if_table_exists="merge",
             merge_cfg=merge_cfg,
             schema_evolution=schema_evolution,
+            watermark_column=watermark_column,
         ),
         [parquet],
     )
@@ -722,7 +724,9 @@ _WATERMARK = "wm"
 
 
 def _watermark_cfg(on: str = "order_id") -> MergeCfg:
-    return MergeCfg(on=[on], op_column="op", watermark_column=_WATERMARK)
+    """The merge config a watermarked test uses. The watermark itself is named
+    on the destination -- see the ``watermark_column=`` each call passes."""
+    return MergeCfg(on=[on], op_column="op")
 
 
 @databricks_domain("databricks")
@@ -739,7 +743,15 @@ def test_dest_plugin_write_out_merge_stamps_the_rows_it_writes(
         {"order_id": [1, 2], "status": ["new", "new"], "op": ["i", "i"]},
     )
     try:
-        _merge_out(conn, work, table, seed, _watermark_cfg(), trx_id="TRX_A")
+        _merge_out(
+            conn,
+            work,
+            table,
+            seed,
+            _watermark_cfg(),
+            trx_id="TRX_A",
+            watermark_column=_WATERMARK,
+        )
         assert _types(db, table)[_WATERMARK] == "string"
         assert_frames_match(
             db.read_table(table),
@@ -774,8 +786,24 @@ def test_dest_plugin_write_out_merge_skips_a_batch_the_trx_already_wrote(
         {"order_id": [1, 2], "status": ["shipped", "new"], "op": ["u", "i"]},
     )
     try:
-        _merge_out(conn, work, table, seed, _watermark_cfg(), trx_id="TRX_A")
-        _merge_out(conn, work, table, rerun, _watermark_cfg(), trx_id="TRX_A")
+        _merge_out(
+            conn,
+            work,
+            table,
+            seed,
+            _watermark_cfg(),
+            trx_id="TRX_A",
+            watermark_column=_WATERMARK,
+        )
+        _merge_out(
+            conn,
+            work,
+            table,
+            rerun,
+            _watermark_cfg(),
+            trx_id="TRX_A",
+            watermark_column=_WATERMARK,
+        )
         assert_frames_match(
             db.read_table(table),
             pl.DataFrame({
@@ -809,8 +837,24 @@ def test_dest_plugin_write_out_merge_applies_a_batch_from_a_later_trx(
         {"order_id": [2, 3], "status": ["shipped", "new"], "op": ["u", "i"]},
     )
     try:
-        _merge_out(conn, work, table, seed, _watermark_cfg(), trx_id="TRX_A")
-        _merge_out(conn, work, table, delta, _watermark_cfg(), trx_id="TRX_B")
+        _merge_out(
+            conn,
+            work,
+            table,
+            seed,
+            _watermark_cfg(),
+            trx_id="TRX_A",
+            watermark_column=_WATERMARK,
+        )
+        _merge_out(
+            conn,
+            work,
+            table,
+            delta,
+            _watermark_cfg(),
+            trx_id="TRX_B",
+            watermark_column=_WATERMARK,
+        )
         assert_frames_match(
             db.read_table(table),
             pl.DataFrame({
@@ -861,6 +905,7 @@ def test_dest_plugin_write_out_merge_stamps_an_older_target_on_strict_too(
             table,
             batch,
             _watermark_cfg(),
+            watermark_column=_WATERMARK,
             schema_evolution="strict",
             trx_id="TRX_A",
         )
@@ -872,6 +917,7 @@ def test_dest_plugin_write_out_merge_stamps_an_older_target_on_strict_too(
             table,
             rerun,
             _watermark_cfg(),
+            watermark_column=_WATERMARK,
             schema_evolution="strict",
             trx_id="TRX_A",
         )
@@ -883,5 +929,232 @@ def test_dest_plugin_write_out_merge_stamps_an_older_target_on_strict_too(
                 _WATERMARK: [None, "TRX_A"],
             }),
         )
+    finally:
+        db.drop_table(table)
+
+
+# ---------------------------------------------------------------------------
+# if_table_exists="append" + a watermark column
+#
+# An append is not idempotent either, and for a blunter reason than a merge:
+# nothing recognises a re-staged batch, so a rerun of the same transaction
+# simply loads it a second time. Naming a watermark closes it -- the column is
+# written into the parquet before it goes to the volume, so `COPY INTO` stamps
+# the rows it brings in, and a rerun that finds the target already carrying
+# this trx's id does nothing at all.
+# ---------------------------------------------------------------------------
+
+
+def _append_out(
+    conn,
+    work: Path,
+    table: str,
+    parquet: Path,
+    schema_evolution: str = "strict",
+    trx_id: str | None = None,
+    watermark_column: str | None = None,
+) -> None:
+    plugin._DatabricksDestPlugin().write_out(
+        PluginDestCtx(work) if trx_id is None else _TrxCtx(work, trx_id),
+        conn,
+        DatabricksDest(
+            tables=[table],
+            if_table_exists="append",
+            schema_evolution=schema_evolution,
+            watermark_column=watermark_column,
+        ),
+        [parquet],
+    )
+
+
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_append_stamps_the_rows_it_loads(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+):
+    # The target is created from the staged file, and the watermark is written
+    # into that file before it is staged -- so even a first append under strict
+    # brings the column into being and stamps every row.
+    db = store(domain_databricks)
+    table = "td_dest_append_watermark_stamp"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_databricks)
+    batch = _batch(
+        tmp_path / "batch.parquet",
+        {"order_id": [1, 2], "status": ["new", "new"]},
+    )
+    try:
+        _append_out(
+            conn, work, table, batch, trx_id="TRX_A", watermark_column=_WATERMARK
+        )
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2],
+                "status": ["new", "new"],
+                _WATERMARK: ["TRX_A", "TRX_A"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_append_skips_a_batch_the_trx_already_loaded(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+):
+    # The point of the whole thing: the same trx running twice must leave the
+    # target exactly as one run did. Without the watermark this is the case that
+    # doubles the row count.
+    db = store(domain_databricks)
+    table = "td_dest_append_watermark_rerun"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_databricks)
+    batch = _batch(
+        tmp_path / "batch.parquet",
+        {"order_id": [1, 2], "status": ["new", "new"]},
+    )
+    try:
+        for _ in range(2):
+            _append_out(
+                conn, work, table, batch, trx_id="TRX_A", watermark_column=_WATERMARK
+            )
+        assert db.read_table(table).height == 2
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2],
+                "status": ["new", "new"],
+                _WATERMARK: ["TRX_A", "TRX_A"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_append_loads_again_under_a_later_trx(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+):
+    # The other half: the guard is on this trx's id, not on the column being
+    # populated at all, so a later trx appends normally and its rows carry their
+    # own stamp beside the earlier ones.
+    db = store(domain_databricks)
+    table = "td_dest_append_watermark_next_trx"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_databricks)
+    first = _batch(tmp_path / "first.parquet", {"order_id": [1], "status": ["new"]})
+    second = _batch(
+        tmp_path / "second.parquet", {"order_id": [2], "status": ["shipped"]}
+    )
+    try:
+        for parquet, trx in ((first, "TRX_A"), (second, "TRX_B")):
+            _append_out(
+                conn, work, table, parquet, trx_id=trx, watermark_column=_WATERMARK
+            )
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2],
+                "status": ["new", "shipped"],
+                _WATERMARK: ["TRX_A", "TRX_B"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@pytest.mark.parametrize("schema_evolution", ["strict", "update"])
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_append_adds_the_watermark_to_an_older_target(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+    schema_evolution,
+):
+    # A target that predates the watermark has no column to be stamped in. Under
+    # strict `mergeSchema` is off, so nothing else would add one and the COPY
+    # would fail on a batch carrying a column the target lacks -- which is why
+    # the append adds it itself.
+    #
+    # The rows already there belong to an earlier transaction and must not be
+    # claimed for this one, so they take a NULL.
+    db = store(domain_databricks)
+    table = f"td_dest_append_watermark_older_{schema_evolution}"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_databricks)
+    seed = _batch(tmp_path / "seed.parquet", {"order_id": [1], "status": ["new"]})
+    later = _batch(tmp_path / "later.parquet", {"order_id": [2], "status": ["new"]})
+    try:
+        # The way a flow that turned the watermark on later would have started.
+        _append_out(conn, work, table, seed, schema_evolution=schema_evolution)
+        assert _WATERMARK not in _types(db, table)
+
+        _append_out(
+            conn,
+            work,
+            table,
+            later,
+            schema_evolution=schema_evolution,
+            trx_id="TRX_A",
+            watermark_column=_WATERMARK,
+        )
+        assert _types(db, table)[_WATERMARK] == "string"
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2],
+                "status": ["new", "new"],
+                _WATERMARK: [None, "TRX_A"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_append_guards_a_rerun_of_an_older_target(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+):
+    # The column added on the way past has to be a working watermark, not just a
+    # column: the run that introduces it is also the first run the guard can
+    # protect, so rerunning it must still be a no-op.
+    db = store(domain_databricks)
+    table = "td_dest_append_watermark_older_rerun"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_databricks)
+    seed = _batch(tmp_path / "seed.parquet", {"order_id": [1], "status": ["new"]})
+    later = _batch(tmp_path / "later.parquet", {"order_id": [2], "status": ["new"]})
+    try:
+        _append_out(conn, work, table, seed, schema_evolution="strict")
+        for _ in range(2):
+            _append_out(
+                conn, work, table, later, trx_id="TRX_A", watermark_column=_WATERMARK
+            )
+        assert db.read_table(table).height == 2
+    finally:
+        db.drop_table(table)
+
+
+@databricks_domain("databricks")
+def test_dest_plugin_write_out_append_leaves_the_batch_columns_untouched(
+    domain_databricks: DatabricksDomain,
+    tmp_path: Path,
+):
+    # The watermark is added to the staged copy, not to the file the write was
+    # handed: a batch reused by a later write -- or by a second target in the
+    # same one -- must not come back carrying it.
+    db = store(domain_databricks)
+    table = "td_dest_append_watermark_batch_intact"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_databricks)
+    batch = _batch(tmp_path / "batch.parquet", {"order_id": [1], "status": ["new"]})
+    try:
+        _append_out(
+            conn, work, table, batch, trx_id="TRX_A", watermark_column=_WATERMARK
+        )
+        assert pl.read_parquet(batch).columns == ["order_id", "status"]
     finally:
         db.drop_table(table)

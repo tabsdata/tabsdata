@@ -20,12 +20,14 @@ metadata).
 
 from __future__ import annotations
 
+import contextlib
 import io
 import logging
+import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Collection
+from collections.abc import Collection, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -115,7 +117,11 @@ class DatabricksWriteCfg:
     target_tables: list[str]  # raw user input -- not yet fqn'd
     if_table_exists: str  # "append" | "replace" | "merge"
     schema_evolution: str  # "update" | "strict"
-    ctx: DestContext  # the trx the write belongs to; a merge stamps its id
+    ctx: DestContext  # the trx the write belongs to; a write stamps its id
+    # The target column each row is stamped with the trx id in, already in the
+    # form the target names it by; ``None`` when the write names no watermark.
+    # A merge reads its own off ``merge_cfgs``.
+    watermark_column: str | None = None
     merge_cfgs: list[MergeCfg] | None = None
     # Support knobs (legacy parity). Forwarded directly to
     # ``cursor.execute(**kwargs)``; only set when debugging.
@@ -776,6 +782,129 @@ def _quote_columns(names: Collection[str]) -> str:
     return ", ".join(_quote_column(name) for name in names)
 
 
+# --- Watermark ------------------------------------------------------
+#
+# Shared by the two paths that stamp a target with the id of the trx that wrote
+# it: the merge, through
+# :class:`~tabsdatak.conn.databricks._merge_dialect.DatabricksMergeDialect`,
+# and the bulk load below. They live here so the two cannot drift on the
+# column's type, on how a target is probed for it, or on whether the rows
+# already in a target get backfilled.
+
+# A trx id is an opaque string, and STRING is what DESCRIBE TABLE reports back
+# for the column, so a target that already has it does not read as a retype.
+WATERMARK_TYPE = "STRING"
+
+
+def string_literal(value: str) -> str:
+    """``value`` as a Databricks SQL string literal.
+
+    The trx id is a system-generated token, but it is the one value in these
+    statements that does not come from the connector itself, and a statement
+    built by hand has nowhere to bind it.
+    """
+    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+    return f"'{escaped}'"
+
+
+@contextlib.contextmanager
+def watermarked_batch(batch: Path, column: str | None, trx_id: str) -> Iterator[Path]:
+    """Yield a parquet carrying ``column`` stamped with ``trx_id``, to be staged
+    in place of ``batch`` -- or ``batch`` itself when the write names no
+    watermark.
+
+    Written into the file rather than added to the target afterwards: ``COPY
+    INTO`` matches it onto the target by name like any other column, so the load
+    stamps the rows it brings in and nothing has to walk them a second time.
+    Rows already in the target are left alone, which is what "written before
+    there was a watermark" looks like.
+
+    The rewritten file keeps the original's basename, which the staged name is
+    built from. It lives in a temp directory removed as soon as it has been
+    uploaded.
+    """
+    if column is None:
+        yield batch
+        return
+
+    import polars as pl
+
+    with tempfile.TemporaryDirectory() as work:
+        stamped = Path(work) / batch.name
+        logger.info(
+            "databricks: stamping %s with %s = %r before staging",
+            batch.name,
+            column,
+            trx_id,
+        )
+        pl.scan_parquet(batch).with_columns(
+            pl.lit(trx_id, dtype=pl.String).alias(column)
+        ).sink_parquet(stamped)
+        yield stamped
+
+
+def has_watermark_column(cursor, fq_table: str, column: str) -> bool:
+    """Whether ``fq_table`` carries ``column``.
+
+    Read off ``information_schema`` rather than ``DESCRIBE TABLE`` because the
+    target may not be there at all: every watermark pass can run before anything
+    has been written to it, and a missing table is not an error here -- it simply
+    has no such column. Unity Catalog stores an identifier lower-cased, which is
+    also how both paths fold one, so both sides of each comparison are lowered
+    and the two agree.
+    """
+    catalog, schema, table = unfqn(fq_table, _DATABRICKS_FQN_DEF, total_parts=3)
+    cursor.execute(
+        f"SELECT COUNT(*) FROM {fqn([catalog], _DATABRICKS_FQN_DEF)}"
+        f".information_schema.columns"
+        f" WHERE lower(table_schema) = {string_literal(schema.lower())}"
+        f" AND lower(table_name) = {string_literal(table.lower())}"
+        f" AND lower(column_name) = {string_literal(column.lower())}"
+    )
+    row = cursor.fetchone()
+    return bool(row and row[0])
+
+
+def check_watermark_column(
+    cursor, fq_table: str, sql_fq: str, column: str, transaction_id: str
+) -> bool:
+    """Whether ``fq_table`` already holds a row stamped with ``transaction_id``.
+
+    Asked of ``information_schema.columns`` first, and only then of the table: a
+    target that does not exist yet, or one that predates the watermark column,
+    has no such row and must not be probed for one -- selecting a column the
+    table has not got is an error rather than an answer.
+    """
+    if not has_watermark_column(cursor, fq_table, column):
+        return False
+    cursor.execute(
+        f"SELECT COUNT(*) > 0 FROM {sql_fq}"
+        f" WHERE {_quote_column(column)} = {string_literal(transaction_id)}"
+    )
+    row = cursor.fetchone()
+    return bool(row and row[0])
+
+
+def ensure_watermark_column(cursor, fq_table: str, sql_fq: str, column: str) -> bool:
+    """``ALTER`` the watermark column onto ``fq_table`` unless it is there
+    already, reporting whether anything was added.
+
+    ``ADD COLUMNS`` carries no ``IF NOT EXISTS``, so the probe is what makes
+    this idempotent.
+
+    Added bare, with no value: the rows already in the target were written by
+    earlier transactions and keep the NULL a new column starts with. Stamping
+    them with this trx's id would claim them for it.
+    """
+    if has_watermark_column(cursor, fq_table, column):
+        return False
+    logger.debug("Adding watermark column %s to %s", column, sql_fq)
+    cursor.execute(
+        f"ALTER TABLE {sql_fq} ADD COLUMNS ({_quote_column(column)} {WATERMARK_TYPE})"
+    )
+    return True
+
+
 def copy_into_table(
     sql_conn,
     cfg: DatabricksWriteCfg,
@@ -821,6 +950,15 @@ def copy_into_table(
             f"COPY_OPTIONS ({merge}{cfg.support_append_copy_options})"
         )
         _execute_volume_statement(cursor, create_stmt, cfg.support_append_create_table)
+        if cfg.watermark_column is not None:
+            # After the CREATE, so a target this write is creating already has
+            # the column from the staged file and the probe finds nothing to do.
+            # Before the COPY, because under strict ``mergeSchema`` is off and a
+            # batch carrying a column the target lacks fails the load outright
+            # -- and because a column added afterwards would be NULL in the rows
+            # just written, leaving the guard to read the next rerun as the
+            # first.
+            ensure_watermark_column(cursor, fq_table, sql_fq, cfg.watermark_column)
         _execute_volume_statement(cursor, copy_stmt, cfg.support_append_copy_into)
         return
     raise ValueError(
@@ -939,10 +1077,39 @@ def write_all_tables(
                 )
                 logger.debug("databricks: finished table %s", fq_table)
                 continue
-            logger.info("databricks: staging parquet for %s", fq_table)
-            file_in_volume = upload_file_to_volume(
-                ws_client, cfg.conn, fq_table, parquet_path
+            # Append is the only disposition that stamps: a merge has
+            # continued above, and a replace is refused the column by
+            # DatabricksDest.validate. Named again here rather than inferred
+            # from those two, so widening the API later cannot quietly start
+            # stamping a disposition that has no business being stamped.
+            watermark = (
+                cfg.watermark_column if cfg.if_table_exists == "append" else None
             )
+            if watermark is not None and check_watermark_column(
+                sql_conn.cursor(),
+                fq_table,
+                _fq_for_sql(fq_table),
+                watermark,
+                cfg.ctx.trx_id,
+            ):
+                # Asked before the batch is rewritten and uploaded: a rerun that
+                # has nothing to do should not pay to build and ship a file it
+                # will not load.
+                logger.info(
+                    "databricks: skipping append onto %s: watermark column %s"
+                    " already has value %s",
+                    fq_table,
+                    watermark,
+                    cfg.ctx.trx_id,
+                )
+                continue
+            logger.info("databricks: staging parquet for %s", fq_table)
+            with watermarked_batch(
+                Path(parquet_path), watermark, cfg.ctx.trx_id
+            ) as batch:
+                file_in_volume = upload_file_to_volume(
+                    ws_client, cfg.conn, fq_table, batch
+                )
             try:
                 copy_into_table(sql_conn, cfg, file_in_volume, fq_table)
             finally:

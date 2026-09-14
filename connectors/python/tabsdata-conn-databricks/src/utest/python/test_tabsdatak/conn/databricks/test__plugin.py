@@ -65,9 +65,12 @@ class _Ctx:
     a real :class:`tabsdatak.spi.SrcPluginCtx`.
     """
 
-    def __init__(self, work: Path, scratch: dict | None = None) -> None:
+    def __init__(
+        self, work: Path, scratch: dict | None = None, trx_id: str = "TRX_1"
+    ) -> None:
         self._work = work
         self._scratch: dict = dict(scratch) if scratch else {}
+        self.trx_id = trx_id
 
     @property
     def work_dir(self) -> Path:

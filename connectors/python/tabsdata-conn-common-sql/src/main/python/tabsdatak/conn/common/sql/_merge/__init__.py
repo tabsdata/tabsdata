@@ -74,12 +74,15 @@ class MergeCfg(_api.DescriptorBase):
         op_column: The column holding each row's `i` / `u` / `d` marker. Read
             to decide each row's fate and never written, so the target does not
             need the column and will not gain it.
-        watermark_column: An optional column holding a watermark for the current
-            transaction that the merge is part of. If provided, the given column is
-            populated with the transaction id the merge is part of; the merge will then
-            not be performed again if the transaction is re-run. This is useful for
-            idempotent merges, where the same transaction may be run multiple times and
-            we want to avoid duplicate writes.
+        watermark_column: The column each row the merge writes is stamped with
+            the current transaction's id in, making the merge idempotent: a
+            rerun that finds the target already carrying this trx's id writes
+            nothing rather than applying the same batch twice.
+
+            Not named here by a user. Every connector exposes the watermark on
+            its destination instead -- it belongs to the write rather than to
+            the way one table's rows are matched -- and stamps the choice onto
+            each config on the way past. This field is what the driver reads.
 
     Examples:
         A CDC feed whose `op` column says what to do with each row:
