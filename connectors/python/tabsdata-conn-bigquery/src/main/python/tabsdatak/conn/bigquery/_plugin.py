@@ -18,6 +18,7 @@ from tabsdatak.conn.bigquery import (
 )
 from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode
+from tabsdatak.conn.common.error import ConnException
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import cloud_full_path
@@ -79,7 +80,14 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
             build_bigquery_client,
             build_gcs_client,
             build_load_job_config,
+            quote_table,
         )
+
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.bigquery._merge_dialect import BigQueryMergeDialect
+
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.common.sql._merge._driver import merge_batch
 
         cfg = _resolve_dest_cfg(dest.dest_cfg)
         logger.setLevel(cfg.logging_level)
@@ -133,7 +141,51 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
             staging_uris.append(f"gs://{staging_bucket}/{relative}")
 
         total = len(write_cfg.target_tables)
+        merging = write_cfg.if_table_exists == "merge"
+        # One cfg per table when merging (``validate`` guarantees it),
+        # so the merge config travels with its table rather than
+        # being indexed out by the 1-based progress counter.
+        merge_cfgs = write_cfg.merge_cfgs or [None] * total
         try:
+            if merging:
+                # A merge stages, creates, evolves and writes one table at a
+                # time: the driver owns that sequence, and everything BigQuery
+                # contributes to it lives in the dialect.
+                for i, (parquet_path, uri, table_fqn, merge_cfg) in enumerate(
+                    zip(
+                        tables,
+                        staging_uris,
+                        write_cfg.target_tables,
+                        merge_cfgs,
+                    ),
+                    1,
+                ):
+                    logger.info(
+                        "bigquery: merging table %d/%d: %r", i, total, table_fqn
+                    )
+                    try:
+                        merge_batch(
+                            BigQueryMergeDialect(
+                                bq_client,
+                                gcs_client,
+                                uri=uri,
+                                target_fqn=table_fqn,
+                            ),
+                            target=quote_table(table_fqn),
+                            batch=Path(parquet_path),
+                            cfg=merge_cfg,
+                            schema_evolution=write_cfg.schema_evolution,
+                        )
+                    except ConnException:
+                        raise
+                    except Exception as e:
+                        raise BigQueryErrorCode.BIGQUERY_18.exception(
+                            cause=e,
+                            table=table_fqn,
+                        )
+                    logger.debug("bigquery: finished table %r", table_fqn)
+                return
+
             # Phase 1: upload each parquet to its staging GCS URI.
             logger.info("bigquery: staging %d parquet file(s) to GCS", total)
             for i, (parquet_path, uri) in enumerate(zip(tables, staging_uris), 1):
@@ -149,11 +201,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
             # Phase 2: kick off one ``load_table_from_uri`` per table
             # and wait for each load job to complete.
             for i, (table_fqn, uri) in enumerate(
-                zip(
-                    write_cfg.target_tables,
-                    staging_uris,
-                ),
-                1,
+                zip(write_cfg.target_tables, staging_uris), 1
             ):
                 logger.info(
                     "bigquery: writing table %d/%d: %r",
@@ -161,15 +209,16 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                     total,
                     table_fqn,
                 )
+                job_config = build_load_job_config(
+                    write_cfg.if_table_exists,
+                    write_cfg.schema_evolution,
+                )
                 try:
                     _load_table_from_uri(
                         bq_client,
                         uri=uri,
                         table=table_fqn,
-                        job_config=build_load_job_config(
-                            write_cfg.if_table_exists,
-                            write_cfg.schema_evolution,
-                        ),
+                        job_config=job_config,
                     )
                 except Exception as e:
                     raise BigQueryErrorCode.BIGQUERY_7.exception(

@@ -74,13 +74,16 @@ def render_merge(
         clauses.append(f"{syntax.not_matched}{marked(_INSERT)} THEN INSERT {written}")
         return " ".join(clauses)
 
-    # Keys are what the row matched on, so an update never reassigns them. A
-    # batch carrying nothing but keys has nothing to update and the clause is
-    # left off rather than emitted empty.
-    updatable = [name for name in columns if name not in keys]
+    # Keys are what the row matched on, so an update never reassigns them.
+    # Compared folded, because the write list carries the batch's spelling and
+    # the keys their folded one. A batch carrying nothing but keys has nothing to
+    # update and the clause is left off rather than emitted empty.
+    folded_keys = {dialect.fold(key) for key in keys}
+    updatable = [name for name in columns if dialect.fold(name) not in folded_keys]
     if updatable:
         assignments = ", ".join(
-            f"{into}.{quote(name)} = {using}.{quote(name)}" for name in updatable
+            f"{_assigned(syntax, quote, into, name)} = {using}.{quote(name)}"
+            for name in updatable
         )
         clauses.append(f"WHEN MATCHED{marked(_UPDATE)} THEN UPDATE SET {assignments}")
 
@@ -92,3 +95,8 @@ def render_merge(
         f" INSERT ({inserted}) VALUES ({values})"
     )
     return " ".join(clauses)
+
+
+def _assigned(syntax, quote, into: str, name: str) -> str:
+    """The left-hand side of one update item."""
+    return f"{into}.{quote(name)}" if syntax.update_qualified else quote(name)

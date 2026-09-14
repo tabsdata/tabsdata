@@ -56,13 +56,25 @@ def write_columns(
 
     The marker has to be in the batch, since the clauses read it from there; it
     does not have to be in the target, and under ``schema_evolution="update"``
-    it is deliberately kept out.
+    it is deliberately kept out. Every key, on the other hand, has to be on both
+    sides -- a dialect that supplies
+    :attr:`MergeErrors.keys_absent_from_target` has the target side checked here
+    rather than left to the engine.
     """
     marker = dialect.fold(cfg._op_column())
     staged_names = staged.names()
     if marker not in {dialect.fold(name) for name in staged_names}:
         raise dialect.errors.marker_absent(column=cfg.op_column, table=target)
     existing = {dialect.fold(name) for name, _ in dialect.target_columns(target)}
+    absent_keys = [
+        spec
+        for spec, key in zip(cfg.on, cfg._keys(), strict=True)
+        if dialect.fold(key) not in existing
+    ]
+    if absent_keys and dialect.errors.keys_absent_from_target is not None:
+        raise dialect.errors.keys_absent_from_target(
+            columns=", ".join(repr(name) for name in absent_keys), table=target
+        )
     return [
         name
         for name in staged_names

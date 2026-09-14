@@ -69,6 +69,10 @@ class MergeSyntax:
             dialect that supports a wildcard. ``None`` spells both write lists
             out column by column, which is the only way to keep the marker out
             of a target whose grammar has no ``EXCEPT``.
+        update_qualified: Whether an update item's left-hand side carries the
+            target alias. Some dialects require the bare column name there --
+            an update item can only ever resolve against the target, so they
+            read a qualified name as an error rather than as noise.
     """
 
     target_alias: str = "target"
@@ -76,6 +80,7 @@ class MergeSyntax:
     evolution_modifier: str = ""
     not_matched: str = "WHEN NOT MATCHED"
     wildcard_writes: str | None = None
+    update_qualified: bool = True
 
 
 @dataclass(frozen=True)
@@ -96,12 +101,17 @@ class MergeErrors:
             column in common, so the statement would write nothing.
         ambiguous_column: ``(column, table, matches)`` -- the batch has more
             than one column matching a wanted name once folded.
+        keys_absent_from_target: ``(columns, table)`` -- the target is missing
+            key columns, so no incoming row can be matched against it. Optional:
+            a dialect that leaves it unset is not checked, which is right for one
+            whose engine reports the same thing clearly enough on its own.
     """
 
     marker_absent: Callable[..., Exception]
     keys_absent: Callable[..., Exception]
     no_shared_columns: Callable[..., Exception]
     ambiguous_column: Callable[..., Exception]
+    keys_absent_from_target: Callable[..., Exception] | None = None
 
 
 class MergeDialect(ABC):

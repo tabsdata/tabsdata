@@ -4,12 +4,16 @@
 
 from __future__ import annotations
 
+import re
+
+from pydantic import AfterValidator
+
 # noinspection PyProtectedMember
 import tabsdatak._api as _api
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._validation import FqnDef, name_validate
+from tabsdatak.conn.common._validation import FqnDef, name_validate, unfqn
 
 # --- Project / dataset patterns -------------------------------------
 
@@ -49,3 +53,58 @@ _BIGQUERY_FQN_DEF = FqnDef(separator=".", quote="`", escape="\\", outer_only=Tru
 BIGQUERY_TABLE_FQN_VALIDATION = name_validate(
     _BIGQUERY_FQN_DEF, max_parts=3, syntax="BigQuery"
 )
+
+# --- Merge ----------------------------------------------------------
+
+# A merge column is one column name, never a path. A standard BigQuery
+# column name takes letters, digits and underscores, starts with a
+# letter or underscore, and is at most 300 characters; a flexible column
+# name (anything else BigQuery admits) is written backtick-quoted. A dot
+# is out either way -- it would read as a qualified reference.
+_UNQUOTED_COLUMN_PART = r"[A-Za-z_][A-Za-z0-9_]{0,299}"
+_BACKTICK_COLUMN_PART = (
+    r"`[^`.\\\s\x00-\x1f\x7f]"
+    r"(?:[^`.\\\x00-\x1f\x7f]{0,298}[^`.\\\s\x00-\x1f\x7f])?`"
+)
+
+COLUMN_PATTERN = rf"^(?:{_UNQUOTED_COLUMN_PART}|{_BACKTICK_COLUMN_PART})$"
+
+_COLUMN_RE = re.compile(COLUMN_PATTERN)
+
+
+def _column_validate(value: str) -> str:
+    if not _COLUMN_RE.match(value):
+        raise ValueError(
+            f"not a BigQuery column name (up to 300 characters of letters,"
+            f" digits and underscores, starting with a letter or underscore, or"
+            f" a backtick-quoted name for a flexible column name): {value!r}"
+        )
+    return value
+
+
+# Validator for the ``MergeColumnSpec`` field.
+MERGE_COLUMN_VALIDATOR = AfterValidator(_column_validate)
+
+# A column name is a single part, so it quotes per part -- the
+# ``outer_only`` wrapping ``_BIGQUERY_FQN_DEF`` uses for a table path
+# would demand backticks around a bare column name.
+_BIGQUERY_COLUMN_FQN_DEF = FqnDef(separator=".", quote="`", escape="\\")
+
+
+def merge_column_key(name: str) -> str:
+    """The canonical form of a merge column name: unquoted and lower-cased.
+
+    BigQuery resolves column names case-insensitively and refuses a table two
+    columns whose names differ only in case, and backticks quote a flexible
+    column name without making it case-sensitive -- so ``order_id``,
+    ``ORDER_ID`` and ```OrderId``` all name one column. Folding to a single case
+    is therefore the only way to tell the marker column apart from a key
+    whichever case either was written in.
+
+    Note this is a canonical *comparison* key, not the name BigQuery stores: a
+    column keeps the case it was defined with, which a config cannot know. That
+    differs from Snowflake, where an unquoted name really is upper-folded on the
+    way in and a quoted one really is case-sensitive.
+    """
+    (part,) = unfqn(name, _BIGQUERY_COLUMN_FQN_DEF)
+    return str(part).lower()

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,12 +14,37 @@ from tabsdatak.conn.bigquery import (
     BigQueryDest,
     BigQueryDestConn,
     IfTableExistsSpec,
+    MergeCfg,
     SchemaEvolutionSpec,
 )
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.bigquery._iceberg import quote_column
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.bigquery._validation import _BIGQUERY_FQN_DEF
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._validation import fqn
+from tabsdatak.conn.common.sql.cdc.constants import (
+    OP_DELETE,
+    OP_INSERT,
+    OP_UPDATE,
+)
 from tabsdatak.conn.common.types import CfgSpec, GCPJson, _convert
+
+# --- Constants -------------------------------------------------------
+
+MERGE_TARGET_ALIAS = "target"
+MERGE_SOURCE_ALIAS = "source"
+
+# ``CdcOperation`` mixes in ``str``, so an f-string interpolates the
+# member (``CdcOperation.INSERT``) rather than its value. The markers are
+# taken as plain strings once, here, so no emitted SQL can carry a
+# predicate no row could ever match.
+_OP_INSERT = OP_INSERT.value
+_OP_UPDATE = OP_UPDATE.value
+_OP_DELETE = OP_DELETE.value
 
 # --- Client builders -------------------------------------------------
 #
@@ -96,6 +122,17 @@ def unquote_table_fqn(table: str) -> str:
     return ".".join(p for p in parts if p is not None)
 
 
+def temp_table_fqn(table_fqn: str) -> str:
+    """Name a staging table beside ``table_fqn``.
+
+    The suffix lands on the table part, so the staging table keeps the
+    target's project and dataset -- a query cannot join tables across
+    regions, and a merge reads both sides at once. The random suffix is
+    what keeps two concurrent runs against one target apart.
+    """
+    return f"{table_fqn}_{uuid.uuid4().hex[:8]}"
+
+
 def qualify_table_fqn(table: str, project: str | None, dataset: str | None) -> str:
     # noinspection PyProtectedMember
     from tabsdatak.conn.common._validation import complete_levels
@@ -124,6 +161,10 @@ class BigQueryWriteCfg:
     target_tables: list[str]
     if_table_exists: IfTableExistsSpec
     schema_evolution: SchemaEvolutionSpec
+    # One entry per target table when merging, already normalized by
+    # ``BigQueryDest._merge_cfgs()`` (a single MergeCfg broadcast across every
+    # table); ``None`` in every other disposition.
+    merge_cfgs: list[MergeCfg] | None = None
     dest_cfg: CfgSpec | None = None
 
     @classmethod
@@ -148,6 +189,7 @@ class BigQueryWriteCfg:
             target_tables=target_tables,
             if_table_exists=dest.if_table_exists,
             schema_evolution=dest.schema_evolution,
+            merge_cfgs=dest._merge_cfgs(),
             dest_cfg=dest.dest_cfg,
         )
 
@@ -205,3 +247,79 @@ def build_load_job_config(
         create_disposition=bigquery.CreateDisposition.CREATE_IF_NEEDED,
         decimal_target_types=["NUMERIC", "BIGNUMERIC"],
     )
+
+
+def build_merge_staging_load_job_config() -> Any:
+    """Translate a merge's staging load into a ``LoadJobConfig``.
+
+    A merge lands its batch in a staging table of its own before the
+    ``MERGE`` reads it, so the load answers to the staging table, not to
+    the dest's strategy: ``WRITE_TRUNCATE`` (the batch is the table's
+    whole content) and ``CREATE_IF_NEEDED`` (the first load creates it).
+    No ``schema_update_options`` -- the staging table takes the incoming
+    parquet's schema outright, and it is the ``MERGE`` that answers for
+    evolving the target.
+
+    ``decimal_target_types`` is the same as in
+    :func:`build_load_job_config`, and for the same reason -- see its
+    docstring.
+    """
+    from google.cloud import bigquery
+
+    return bigquery.LoadJobConfig(
+        source_format=bigquery.SourceFormat.PARQUET,
+        write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+        create_disposition=bigquery.CreateDisposition.CREATE_IF_NEEDED,
+        decimal_target_types=["NUMERIC", "BIGNUMERIC"],
+    )
+
+
+# --- Merge -----------------------------------------------------------
+
+
+def quote_table(table_fqn: str) -> str:
+    """Reference a table in emitted SQL.
+
+    BigQuery wraps the whole path in one backtick pair --
+    ``\\`project.dataset.table\\``` -- which is what lets a project id
+    carry hyphens without the parser reading them as an operator.
+    """
+    return fqn(table_fqn.split("."), _BIGQUERY_FQN_DEF)
+
+
+def _standard_sql_type(type_: Any) -> str:
+    """Spell a ``StandardSqlDataType`` the way DDL takes it."""
+    kind = type_.type_kind.value
+    if kind == "ARRAY":
+        return f"ARRAY<{_standard_sql_type(type_.array_element_type)}>"
+    if kind == "STRUCT":
+        fields = ", ".join(
+            f"{quote_column(field.name)} {_standard_sql_type(field.type)}"
+            for field in type_.struct_type.fields
+        )
+        return f"STRUCT<{fields}>"
+    if kind == "RANGE":
+        return f"RANGE<{_standard_sql_type(type_.range_element_type)}>"
+    return kind
+
+
+def column_type(field: Any) -> str:
+    """The GoogleSQL type of a ``SchemaField``, as DDL spells it.
+
+    ``SchemaField.field_type`` reports the legacy name -- ``INTEGER`` for an
+    ``INT64`` column, ``RECORD`` for a ``STRUCT`` -- so the type is read off
+    ``to_standard_sql()`` instead, which also folds ``mode="REPEATED"`` into an
+    ``ARRAY<...>``.
+
+    Parameters are dropped: a ``NUMERIC(20, 4)`` column reads back as plain
+    ``NUMERIC``, so a column added from it takes the type's whole range. That is
+    the wider of the two, and the safer default for a column that has to hold
+    whatever arrives next.
+    """
+    return _standard_sql_type(field.to_standard_sql().type)
+
+
+def table_column_types(bq_client: Any, table_fqn: str) -> list[tuple[str, str]]:
+    """The ``(name, type)`` pairs of ``table_fqn``, in the table's own order."""
+    table_schema = bq_client.get_table(table_fqn).schema
+    return [(field.name, column_type(field)) for field in table_schema]

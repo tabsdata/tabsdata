@@ -130,3 +130,99 @@ def test_bigquery_fqn_def_uses_outer_only_backtick_with_backslash_escape():
     assert _validation._BIGQUERY_FQN_DEF.quote == "`"
     assert _validation._BIGQUERY_FQN_DEF.escape == "\\"
     assert _validation._BIGQUERY_FQN_DEF.outer_only is True
+
+
+# ---------------------------------------------------------------------------
+# Merge columns
+#
+# One column name, folded to lower case. BigQuery resolves column names
+# case-insensitively, so the folded form is a comparison key, not the stored
+# name -- a column keeps the case it was defined with.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "op",
+        "OP",
+        "order_id",
+        "_hidden",
+        "Col1",
+        "`op`",
+        "`weird col`",
+        "`OrderId`",
+        "`ünïcode`",
+        "a" * 300,
+        "`" + "a" * 300 + "`",
+    ],
+)
+def test_merge_column_validator_accepts_a_column_name(value):
+    assert _validation._column_validate(value) == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "1st",
+        "with space",
+        "with-hyphen",
+        "``",
+        "`unterminated",
+        "unopened`",
+        "`lead `",
+        "` trail`",
+        "a" * 301,
+        "`" + "a" * 301 + "`",
+        "col\x00",
+        "`col\n`",
+    ],
+)
+def test_merge_column_validator_rejects_a_non_column_name(value):
+    with pytest.raises(ValueError, match="not a BigQuery column name"):
+        _validation._column_validate(value)
+
+
+def test_merge_column_validator_rejects_a_dot_even_inside_backticks():
+    """A dot separates a path, so BigQuery cannot resolve a column carrying
+    one."""
+    with pytest.raises(ValueError, match="not a BigQuery column name"):
+        _validation._column_validate("`a.b`")
+
+
+def test_merge_column_validator_rejects_a_dotted_column():
+    """A merge column is one column, not a qualified reference -- otherwise
+    ``orders.id`` would read as a path."""
+    with pytest.raises(ValueError, match="not a BigQuery column name"):
+        _validation._column_validate("orders.id")
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("op", "op"),
+        ("OP", "op"),
+        ("Order_Id", "order_id"),
+    ],
+)
+def test_merge_column_key_folds_to_lower_case(value, expected):
+    assert _validation.merge_column_key(value) == expected
+
+
+def test_merge_column_key_strips_backticks():
+    assert _validation.merge_column_key("`weird col`") == "weird col"
+    assert _validation.merge_column_key("`op`") == "op"
+
+
+def test_merge_column_key_treats_quoted_and_bare_as_one_column():
+    """Backticks quote a flexible column name; they do not make it
+    case-sensitive, so these are the same column."""
+    assert _validation.merge_column_key("`OP`") == "op"
+    assert _validation.merge_column_key("op") == "op"
+
+
+def test_merge_column_fqn_def_quotes_per_part():
+    """A column name is one part, so ``outer_only`` is off -- otherwise a bare
+    name would have to be backtick-wrapped."""
+    assert _validation._BIGQUERY_COLUMN_FQN_DEF.outer_only is False

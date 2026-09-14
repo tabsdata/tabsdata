@@ -55,9 +55,12 @@ def evolve_with_iceberg(
     out of the rendered statements, so the diff never reports an addition
     nobody wants.
 
-    Both sides' names are folded before they are compared, the way a load
-    matches them, so a target holding a column in another case counts as having
-    it -- and a column added here is added under its folded name.
+    A column both sides have is named, on the desired side, with the *target's*
+    spelling. Names are matched folded, the way a load matches them, so a target
+    holding the column in another case counts as having it -- but the two sides
+    have to spell it identically or the diff reads one column as a drop plus an
+    add. A column only the batch has keeps the batch's spelling, which becomes
+    the new column's name.
 
     ``align_type`` restates the batch's type in the target's spelling where the
     two mean the same thing. An engine whose schema read and whose batch
@@ -76,20 +79,19 @@ def evolve_with_iceberg(
     align = align_type or (lambda stored, inferred: inferred)
     folded_marker = dialect.fold(marker)
 
+    stored = dialect.target_columns(target)
     current = TableSchema(
         table_name=target,
-        columns=[
-            ColumnDef(name=dialect.fold(name), type=type_)
-            for name, type_ in dialect.target_columns(target)
-        ],
+        columns=[ColumnDef(name=name, type=type_) for name, type_ in stored],
     )
-    stored = {column.name: column.type for column in current.columns}
+    spelling = {dialect.fold(name): name for name, _ in stored}
+    types = {dialect.fold(name): type_ for name, type_ in stored}
     desired = TableSchema(
         table_name=target,
         columns=[
             ColumnDef(
-                name=dialect.fold(name),
-                type=align(stored.get(dialect.fold(name)), type_),
+                name=spelling.get(dialect.fold(name), name),
+                type=align(types.get(dialect.fold(name)), type_),
             )
             for name, type_ in staged.columns
             if dialect.fold(name) != folded_marker

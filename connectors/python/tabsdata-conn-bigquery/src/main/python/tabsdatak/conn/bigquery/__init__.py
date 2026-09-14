@@ -4,7 +4,7 @@
 
 """BigQuery connector -- public API.
 
-Four classes, imported from `tabsdatak.conn.bigquery`:
+Five classes, imported from `tabsdatak.conn.bigquery`:
 
 * `BigQueryDestConn` -- the connection: a GCS `staging` location,
   GCP `credentials`, and optional default `project` / `dataset`.
@@ -13,6 +13,8 @@ Four classes, imported from `tabsdatak.conn.bigquery`:
   bucket and a `load_table_from_uri` load job.
 * `CloudLocation` and its concrete form `GCSLocation` -- the
   `staging` bucket the destination lands parquet in.
+* `MergeCfg` -- how `BigQueryDest(if_table_exists="merge")` matches
+  incoming rows onto the target table.
 
 BigQuery is destination-only -- there is no `BigQuerySrc`. The
 connection (with credentials) is registered on a collection, not
@@ -48,6 +50,9 @@ from tabsdatak.conn.bigquery.error import BigQueryErrorCode
 from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge import MergeCfg as SqlMergeCfg
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.types import (
     CfgSpec,
     CloudRelativePathSpec,
@@ -80,8 +85,14 @@ BigQueryTableNameSpec: TypeAlias = Annotated[
     str, _validation.BIGQUERY_TABLE_FQN_VALIDATION
 ]
 BigQueryTableNamesSpec: TypeAlias = list[BigQueryTableNameSpec]
-IfTableExistsSpec: TypeAlias = Literal["append", "replace"]
+IfTableExistsSpec: TypeAlias = Literal["append", "replace", "merge"]
 SchemaEvolutionSpec: TypeAlias = Literal["update", "strict"]
+
+# A merge column is one BigQuery column name -- standard, or
+# backtick-quoted for a flexible name. A dotted value is rejected
+# instead of being read as a qualified reference.
+MergeColumnSpec: TypeAlias = Annotated[str, _validation.MERGE_COLUMN_VALIDATOR]
+MergeColumnsSpec: TypeAlias = list[MergeColumnSpec]
 
 
 # --- BigQueryDest.dest_cfg keys -------------------------------------
@@ -143,6 +154,61 @@ class GCSLocation(CloudLocation):
 
     def _base_path(self) -> str:
         return _convert(self.base_path, str)
+
+
+# --- Merge -----------------------------------------------------------
+
+
+@_api.dataclass(BigQueryErrorCode.BIGQUERY_11, kw_only=True)
+class MergeCfg(SqlMergeCfg):
+    """How `if_table_exists="merge"` matches incoming rows onto a target table.
+
+    :categories: destination
+
+    The BigQuery spelling of the shared `MergeCfg`. Columns are named as
+    BigQuery resolves them: case-insensitively, so `on=["order_id"]` hits
+    `ORDER_ID` and `OrderId` alike -- a table cannot hold two columns whose
+    names differ only in case. Backticks are for a flexible column name; unlike
+    Snowflake, quoting does not make a name case-sensitive.
+
+    Every incoming row carries a marker in `op_column` saying what to do with it,
+    and the marker is what decides which clause claims the row:
+
+    * `'i'` -- insert the row, if it matches no key.
+    * `'u'` -- update the row it matches.
+    * `'d'` -- delete the row it matches.
+
+    Args:
+        on: The key columns rows are matched by, joined with `AND`. Must be
+            present on both sides. Each is a BigQuery column name -- bare, or
+            backtick-quoted for a flexible name.
+        op_column: The column holding each row's `i` / `u` / `d` marker. Read
+            to decide each row's fate and never written, so the target does not
+            need the column and will not gain it.
+
+    Examples:
+        A CDC feed whose `op` column says what to do with each row:
+
+        .. code-block:: python
+
+            MergeCfg(on=["order_id", "customer_id"], op_column="op")
+    """
+
+    __kind__ = "bigQueryMergeCfg"
+
+    # Re-annotated so the shared fields carry the BigQuery column shape: a
+    # value that is not a BigQuery column name is rejected here rather than
+    # surfacing as invalid SQL when the MERGE is built.
+    on: MergeColumnsSpec
+    op_column: MergeColumnSpec
+
+    def _fold(self, name: str) -> str:
+        return _validation.merge_column_key(name)
+
+
+MergeCfgSpec: TypeAlias = MergeCfg | list[MergeCfg]
+"""One `MergeCfg` applied to every target table, or one per entry in
+`BigQueryDest.tables`."""
 
 
 # --- Connection ------------------------------------------------------
@@ -213,9 +279,14 @@ class BigQueryDest(Dest):
             `project` / `dataset` defaults. BigQuery wraps the whole
             name in one backtick pair, e.g. `my-project.ds.t`.
         if_table_exists: `"append"` (the default) adds rows;
-            `"replace"` drops and recreates the table.
-        schema_evolution: `"update"` (the default) allows new columns;
-            `"strict"` rejects schema changes.
+            `"replace"` drops and recreates the table;
+            `"merge"` merges rows.
+        schema_evolution: `"strict"` (the default) rejects schema changes;
+            `"update"` allows new columns.
+        merge_cfg: Required by -- and only valid with --
+            `if_table_exists="merge"`: how incoming rows are matched
+            onto existing ones. One `MergeCfg` applies to every table;
+            pass a list to configure each table in `tables` separately.
         dest_cfg: Optional connector config; the only supported key is
             `bigquery.logging_level`.
 
@@ -248,9 +319,57 @@ class BigQueryDest(Dest):
             )
             def evolve(v2: TableFrameSpec) -> TableFrameSpec:
                 return v2
+
+        Merge mode merges incoming rows onto the target by the keys in `merge_cfg`:
+
+        .. code-block:: python
+
+            @subscriber(
+                destination=BigQueryDest(
+                    tables=["`cap_merge`"],
+                    if_table_exists="merge",
+                    merge_cfg=MergeCfg(
+                        on=["cap_id"],
+                        op_column="op",
+                    ),
+                ),
+                input_tables=["caps_input/cap_merge_v2"],
+            )
+            def merge(rows: TableFrameSpec) -> TableFrameSpec:
+                return rows
     """
 
     tables: BigQueryTableNamesSpec
     if_table_exists: IfTableExistsSpec = "append"
-    schema_evolution: SchemaEvolutionSpec = "update"
+    schema_evolution: SchemaEvolutionSpec = "strict"
+    merge_cfg: MergeCfgSpec | None = None
     dest_cfg: DestCfgSpec | None = None
+
+    def _merge_cfgs(self) -> list[MergeCfg] | None:
+        """One `MergeCfg` per entry in `tables`, or `None` outside merge mode."""
+        if self.merge_cfg is None:
+            return None
+        if isinstance(self.merge_cfg, MergeCfg):
+            return [self.merge_cfg] * len(self.tables)
+        return list(self.merge_cfg)
+
+    def validate(self) -> None:
+        """Cross-field validation: `merge_cfg` and `if_table_exists="merge"`
+        require each other, and a list of configs must line up with `tables`.
+
+        Called by the framework; raises `BigQueryValidateException`.
+        """
+        merging = self.if_table_exists == "merge"
+        if merging and self.merge_cfg is None:
+            # noinspection PyProtectedMember
+            raise BigQueryErrorCode.BIGQUERY_12.exception()
+        if not merging and self.merge_cfg is not None:
+            # noinspection PyProtectedMember
+            raise BigQueryErrorCode.BIGQUERY_13.exception(
+                if_table_exists=self.if_table_exists
+            )
+        if isinstance(self.merge_cfg, list) and len(self.merge_cfg) != len(self.tables):
+            # noinspection PyProtectedMember
+            raise BigQueryErrorCode.BIGQUERY_14.exception(
+                cfgs=len(self.merge_cfg), tables=len(self.tables)
+            )

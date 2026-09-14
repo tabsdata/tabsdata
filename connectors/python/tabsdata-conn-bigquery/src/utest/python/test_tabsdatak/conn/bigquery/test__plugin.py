@@ -6,13 +6,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.conn.bigquery import BigQueryDestConn, BigQueryDest
+from tabsdatak.conn.bigquery import BigQueryDestConn, BigQueryDest, MergeCfg
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.bigquery import _iceberg as iceberg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.bigquery import _impl as impl
@@ -159,6 +163,150 @@ def test_load_job_config_parquet_source_and_create_if_needed():
     assert cfg.create_disposition == bigquery.CreateDisposition.CREATE_IF_NEEDED
 
 
+def test_merge_staging_load_job_config_truncates_and_creates():
+    from google.cloud import bigquery
+
+    cfg = impl.build_merge_staging_load_job_config()
+    assert cfg.source_format == bigquery.SourceFormat.PARQUET
+    assert cfg.write_disposition == bigquery.WriteDisposition.WRITE_TRUNCATE
+    assert cfg.create_disposition == bigquery.CreateDisposition.CREATE_IF_NEEDED
+    # The staging table takes the parquet's schema outright; evolving the
+    # target is the MERGE's job.
+    assert list(cfg.schema_update_options or []) == []
+
+
+def test_merge_staging_load_job_config_widens_decimals_like_a_direct_load():
+    staging = impl.build_merge_staging_load_job_config()
+    direct = impl.build_load_job_config("append", "update")
+    assert staging.decimal_target_types == direct.decimal_target_types
+
+
+# ---------------------------------------------------------------------------
+# _impl.temp_table_fqn
+# ---------------------------------------------------------------------------
+
+
+def test_temp_table_fqn_suffixes_the_table_part():
+    name = impl.temp_table_fqn("my-project.analytics.users")
+    project, dataset, table = name.split(".")
+    assert (project, dataset) == ("my-project", "analytics")
+    assert table.startswith("users_")
+    suffix = table.removeprefix("users_")
+    assert len(suffix) == 8
+    int(suffix, 16)
+
+
+def test_temp_table_fqn_differs_per_call():
+    """Two runs against one target must not share a staging table."""
+    first = impl.temp_table_fqn("p.ds.t")
+    second = impl.temp_table_fqn("p.ds.t")
+    assert first != second
+
+
+# ---------------------------------------------------------------------------
+# _impl -- merge SQL
+# ---------------------------------------------------------------------------
+
+_TARGET = "my-project.analytics.orders"
+_STAGING = "my-project.analytics.orders_a1b2c3d4"
+
+
+def _merge_cfg(**overrides) -> MergeCfg:
+    kwargs: dict = dict(on=["order_id"], op_column="op")
+    kwargs.update(overrides)
+    return MergeCfg(**kwargs)
+
+
+def _schema_client(schemas: dict[str, list[str]]) -> MagicMock:
+    """A ``bq_client`` stub whose ``get_table`` answers with the given columns."""
+
+    def get_table(table_fqn: str):
+        return SimpleNamespace(
+            schema=[SimpleNamespace(name=name) for name in schemas[table_fqn]]
+        )
+
+    return MagicMock(get_table=MagicMock(side_effect=get_table))
+
+
+def test_quote_table_wraps_the_whole_path_in_one_backtick_pair():
+    assert impl.quote_table(_TARGET) == "`my-project.analytics.orders`"
+
+
+def test_quote_column_backticks_a_single_name():
+    assert impl.quote_column("order_id") == "`order_id`"
+    assert impl.quote_column("weird col") == "`weird col`"
+
+
+# ---------------------------------------------------------------------------
+# _impl -- schema evolution (Iceberg dialect)
+# ---------------------------------------------------------------------------
+
+
+def _field(name, type_, mode="NULLABLE", **kwargs):
+    from google.cloud import bigquery
+
+    return bigquery.SchemaField(name, type_, mode=mode, **kwargs)
+
+
+def _field_client(schemas: dict[str, list]) -> MagicMock:
+    """A ``bq_client`` stub whose ``get_table`` answers with ``SchemaField``s.
+
+    A table the caller did not describe does not exist, and says so the way the
+    SDK does.
+    """
+    from google.cloud.exceptions import NotFound
+
+    def get_table(table_fqn: str):
+        if table_fqn not in schemas:
+            raise NotFound(f"Not found: Table {table_fqn}")
+        return SimpleNamespace(schema=schemas[table_fqn])
+
+    return MagicMock(get_table=MagicMock(side_effect=get_table))
+
+
+@pytest.mark.parametrize(
+    ("field", "expected"),
+    [
+        (_field("a", "INTEGER"), "INT64"),
+        (_field("a", "FLOAT"), "FLOAT64"),
+        (_field("a", "BOOLEAN"), "BOOL"),
+        (_field("a", "STRING"), "STRING"),
+        (_field("a", "TIMESTAMP"), "TIMESTAMP"),
+        (_field("a", "NUMERIC"), "NUMERIC"),
+        (_field("a", "STRING", mode="REPEATED"), "ARRAY<STRING>"),
+    ],
+)
+def test_column_type_reads_the_googlesql_name(field, expected):
+    """``field_type`` reports the legacy name (INTEGER, BOOLEAN, RECORD), which
+    is not what DDL should carry."""
+    assert impl.column_type(field) == expected
+
+
+def test_column_type_renders_a_struct():
+    field = _field(
+        "addr",
+        "RECORD",
+        fields=[_field("city", "STRING"), _field("zip", "INTEGER")],
+    )
+    assert impl.column_type(field) == "STRUCT<`city` STRING, `zip` INT64>"
+
+
+def test_column_type_renders_a_repeated_struct():
+    field = _field("lines", "RECORD", mode="REPEATED", fields=[_field("q", "INTEGER")])
+    assert impl.column_type(field) == "ARRAY<STRUCT<`q` INT64>>"
+
+
+def test_column_type_drops_type_parameters():
+    """A NUMERIC(20, 4) reads back as plain NUMERIC, so the added column takes
+    the type's whole range -- wider than the staging column, never narrower."""
+    assert impl.column_type(_field("a", "NUMERIC", precision=20, scale=4)) == "NUMERIC"
+
+
+def test_table_column_types_pairs_names_with_googlesql_types():
+    client = _field_client({_TARGET: [_field("id", "INTEGER"), _field("s", "STRING")]})
+    assert impl.table_column_types(client, _TARGET) == [("id", "INT64"), ("s", "STRING")]
+
+
 # ---------------------------------------------------------------------------
 # _impl.BigQueryWriteCfg.from_dest
 # ---------------------------------------------------------------------------
@@ -174,13 +322,46 @@ def test_write_cfg_unwraps_backticked_tables():
         "my-project.analytics.orders",
     ]
     assert cfg.if_table_exists == "append"
-    assert cfg.schema_evolution == "update"
+    assert cfg.schema_evolution == "strict"
 
 
 def test_write_cfg_handles_empty_tables():
     dest = BigQueryDest(tables=[])
     cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
     assert cfg.target_tables == []
+
+
+def test_write_cfg_carries_no_merge_cfgs_outside_merge_mode():
+    dest = BigQueryDest(tables=["`p.ds.users`"])
+    cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
+    assert cfg.merge_cfgs is None
+
+
+def test_write_cfg_broadcasts_one_merge_cfg_across_every_table():
+    merge_cfg = MergeCfg(on=["user_id"], op_column="op")
+    dest = BigQueryDest(
+        tables=["`p.ds.users`", "`p.ds.orders`"],
+        if_table_exists="merge",
+        merge_cfg=merge_cfg,
+    )
+    cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
+    assert cfg.merge_cfgs == [merge_cfg, merge_cfg]
+
+
+def test_write_cfg_keeps_a_merge_cfg_per_table_aligned_with_target_tables():
+    first = MergeCfg(on=["user_id"], op_column="op")
+    second = MergeCfg(on=["order_id"], op_column="op")
+    dest = BigQueryDest(
+        tables=["`users`", "`orders`"],
+        if_table_exists="merge",
+        merge_cfg=[first, second],
+    )
+    cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
+    assert cfg.target_tables == [
+        "my-project.analytics.users",
+        "my-project.analytics.orders",
+    ]
+    assert cfg.merge_cfgs == [first, second]
 
 
 # ---------------------------------------------------------------------------
@@ -423,6 +604,534 @@ def test_dest_plugin_happy_path_calls_load_table_from_uri_per_table(
     ]
     # Cleanup attempted for both staging URIs.
     assert blob.delete.call_count == 2
+
+
+def _merge_ready_client() -> MagicMock:
+    """A ``bq_client`` stub the whole merge path can run against.
+
+    Every table answers with the same ``id, other_id, op`` schema, so the marker
+    and either key are where ``merge_into`` looks for them, and the schema
+    evolution pass finds nothing to add. Real ``SchemaField``s, since evolution
+    reads each column's type off ``to_standard_sql()``.
+    """
+    load_job = MagicMock(name="load_job")
+    load_job.result.return_value = None
+
+    bq_client = MagicMock(name="bq")
+    bq_client.load_table_from_uri.return_value = load_job
+    bq_client.get_table.side_effect = lambda table_fqn: SimpleNamespace(
+        schema=[
+            _field("id", "INTEGER"),
+            _field("other_id", "INTEGER"),
+            _field("op", "STRING"),
+        ]
+    )
+    return bq_client
+
+
+def test_dest_plugin_loads_a_merge_batch_into_a_staging_table(monkeypatch, work_dir):
+    from google.cloud import bigquery
+
+    bq_client = _merge_ready_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+
+    gcs_client = MagicMock(name="gcs")
+    bucket = MagicMock(name="bucket")
+    blob = MagicMock(name="blob")
+    gcs_client.bucket.return_value = bucket
+    bucket.blob.return_value = blob
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+
+    dest = BigQueryDest(
+        tables=["`my-project.analytics.users`"],
+        if_table_exists="merge",
+        merge_cfg=MergeCfg(on=["id"], op_column="op"),
+    )
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+    )
+
+    (call,) = bq_client.load_table_from_uri.call_args_list
+    loaded_table = call.args[1]
+    # The batch lands beside the target, never in it.
+    assert loaded_table != "my-project.analytics.users"
+    assert loaded_table.startswith("my-project.analytics.users_")
+    suffix = loaded_table.rsplit("_", 1)[1]
+    assert len(suffix) == 8
+    int(suffix, 16)
+
+    job_config = call.kwargs["job_config"]
+    assert job_config.write_disposition == bigquery.WriteDisposition.WRITE_TRUNCATE
+    assert (
+        job_config.create_disposition == bigquery.CreateDisposition.CREATE_IF_NEEDED
+    )
+    assert job_config.source_format == bigquery.SourceFormat.PARQUET
+    # Evolving the target is the MERGE's job, not this load's.
+    assert not job_config.schema_update_options
+
+
+def test_dest_plugin_gives_each_merge_table_its_own_staging_table(
+    monkeypatch, work_dir
+):
+    bq_client = _merge_ready_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+
+    gcs_client = MagicMock(name="gcs")
+    bucket = MagicMock(name="bucket")
+    blob = MagicMock(name="blob")
+    gcs_client.bucket.return_value = bucket
+    bucket.blob.return_value = blob
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+
+    dest = BigQueryDest(
+        tables=["`p.ds.users`", "`p.ds.users`"],
+        if_table_exists="merge",
+        merge_cfg=MergeCfg(on=["id"], op_column="op"),
+    )
+    src1 = _make_parquet(work_dir / "in1.parquet", [{"id": 1, "op": "i"}])
+    src2 = _make_parquet(work_dir / "in2.parquet", [{"id": 2, "op": "i"}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [src1, src2]
+    )
+
+    loaded = [c.args[1] for c in bq_client.load_table_from_uri.call_args_list]
+    assert len(set(loaded)) == 2
+
+
+def test_dest_plugin_merges_the_staging_table_then_drops_it(monkeypatch, work_dir):
+    bq_client = _merge_ready_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+
+    gcs_client = MagicMock(name="gcs")
+    bucket = MagicMock(name="bucket")
+    blob = MagicMock(name="blob")
+    gcs_client.bucket.return_value = bucket
+    bucket.blob.return_value = blob
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+
+    dest = BigQueryDest(
+        tables=["`my-project.analytics.users`"],
+        if_table_exists="merge",
+        merge_cfg=MergeCfg(on=["id"], op_column="op"),
+    )
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+    )
+
+    staged = bq_client.load_table_from_uri.call_args_list[0].args[1]
+    (merge,) = _statements(bq_client, "MERGE INTO")
+    assert merge.startswith("MERGE INTO `my-project.analytics.users` AS target")
+    assert f"USING `{staged}` AS source" in merge
+    bq_client.delete_table.assert_called_once_with(staged, not_found_ok=True)
+
+
+def _widening_client() -> MagicMock:
+    """A ``bq_client`` stub whose staging table is one column wider than the
+    target -- and carries the marker the target must not gain.
+
+    A completed ``ALTER`` shows up in the next ``get_table``, the way BigQuery
+    reports a table once the DDL job has finished. Without that the stub could
+    not tell a merge that writes the added column from one that ignores it.
+    """
+    load_job = MagicMock(name="load_job")
+    load_job.result.return_value = None
+
+    target = "my-project.analytics.users"
+    schemas = {target: [_field("id", "INTEGER")]}
+    staged = [_field("id", "INTEGER"), _field("note", "STRING"), _field("op", "STRING")]
+
+    def get_table(table_fqn: str):
+        return SimpleNamespace(schema=list(schemas.get(table_fqn, staged)))
+
+    def query_and_wait(statement: str):
+        if statement.startswith("ALTER TABLE") and "`note`" in statement:
+            schemas[target] = [*schemas[target], _field("note", "STRING")]
+        return MagicMock(name="rows")
+
+    bq_client = MagicMock(name="bq")
+    bq_client.load_table_from_uri.return_value = load_job
+    bq_client.get_table.side_effect = get_table
+    bq_client.query_and_wait.side_effect = query_and_wait
+    return bq_client
+
+
+def _statements(bq_client: MagicMock, prefix: str = "") -> list[str]:
+    """The statements sent to ``query_and_wait``, in order.
+
+    Selected by kind rather than by position: every merge write now issues a
+    CREATE ahead of the rest, and a run may or may not issue an ALTER.
+    """
+    return [
+        call.args[0]
+        for call in bq_client.query_and_wait.call_args_list
+        if call.args[0].startswith(prefix)
+    ]
+
+
+def _merge_dest(schema_evolution):
+    return BigQueryDest(
+        tables=["`my-project.analytics.users`"],
+        if_table_exists="merge",
+        schema_evolution=schema_evolution,
+        merge_cfg=MergeCfg(on=["id"], op_column="op"),
+    )
+
+
+def test_dest_plugin_evolves_the_target_before_merging(monkeypatch, work_dir):
+    bq_client = _widening_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
+
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "n", "op": "i"}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), _merge_dest("update"), [src]
+    )
+
+    statements = _statements(bq_client)
+    (alter,) = _statements(bq_client, "ALTER TABLE")
+    (merge,) = _statements(bq_client, "MERGE INTO")
+    # The column is added first, so the MERGE can write it.
+    assert statements.index(alter) < statements.index(merge)
+    assert alter == (
+        "ALTER TABLE `my-project.analytics.users`"
+        " ADD COLUMN IF NOT EXISTS `note` STRING"
+    )
+    assert "`note` = source.`note`" in merge
+    # The marker is not a column the target gains.
+    assert "`op`" not in alter
+
+
+def test_dest_plugin_does_not_evolve_the_target_in_strict_mode(monkeypatch, work_dir):
+    bq_client = _widening_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
+
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "n", "op": "i"}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [src]
+    )
+
+    assert _statements(bq_client, "ALTER TABLE") == []
+    (merge,) = _statements(bq_client, "MERGE INTO")
+    # The staged column the target does not have is simply not written.
+    assert "`note`" not in merge
+
+
+def _uploaded_rows(blob: MagicMock) -> list[dict]:
+    """The rows of the parquet that reached GCS.
+
+    Read inside the upload call, since the coalesced file lives in a temp
+    directory that is gone by the time ``write_out`` returns.
+    """
+    return blob.captured
+
+
+def _capturing_gcs() -> tuple[MagicMock, MagicMock]:
+    gcs_client = MagicMock(name="gcs")
+    bucket = MagicMock(name="bucket")
+    blob = MagicMock(name="blob")
+    gcs_client.bucket.return_value = bucket
+    bucket.blob.return_value = blob
+    blob.captured = []
+
+    def upload_from_filename(path: str) -> None:
+        blob.captured.extend(pl.read_parquet(path).to_dicts())
+
+    blob.upload_from_filename.side_effect = upload_from_filename
+    return gcs_client, blob
+
+
+def test_dest_plugin_coalesces_the_batch_before_uploading_it(monkeypatch, work_dir):
+    bq_client = _merge_ready_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+    gcs_client, blob = _capturing_gcs()
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+
+    src = _make_parquet(
+        work_dir / "in.parquet",
+        [
+            {"id": 1, "other_id": 10, "op": "i"},
+            {"id": 1, "other_id": 11, "op": "u"},
+            {"id": 2, "other_id": 20, "op": "i"},
+            {"id": 2, "other_id": 20, "op": "d"},
+        ],
+    )
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [src]
+    )
+
+    # Key 1 reduced to its net state; key 2 never existed.
+    assert _uploaded_rows(blob) == [{"id": 1, "other_id": 11, "op": "i"}]
+
+
+def test_dest_plugin_uploads_the_batch_untouched_outside_merge_mode(
+    monkeypatch, work_dir
+):
+    load_job = MagicMock(name="load_job")
+    load_job.result.return_value = None
+    bq_client = MagicMock(name="bq")
+    bq_client.load_table_from_uri.return_value = load_job
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+    gcs_client, blob = _capturing_gcs()
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+
+    rows = [{"id": 1, "op": "i"}, {"id": 1, "op": "u"}]
+    src = _make_parquet(work_dir / "in.parquet", rows)
+    dest = BigQueryDest(tables=["`my-project.analytics.users`"])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+    )
+
+    assert _uploaded_rows(blob) == rows
+
+
+def test_dest_plugin_refuses_a_batch_without_the_marker_before_uploading(
+    monkeypatch, work_dir
+):
+    bq_client = _merge_ready_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+    gcs_client, blob = _capturing_gcs()
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    with pytest.raises(BigQueryRuntimeException) as ei:
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [src]
+        )
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_15
+    # Nothing was staged, so nothing was loaded either.
+    blob.upload_from_filename.assert_not_called()
+    bq_client.load_table_from_uri.assert_not_called()
+
+
+def _creating_client() -> MagicMock:
+    """A stub whose target does not exist until the CREATE has run.
+
+    ``get_table`` reports the target absent, then reports it once the DDL has
+    been through -- so a test can tell a create that happened first from one
+    that happened at all.
+    """
+    from google.cloud.exceptions import NotFound
+
+    load_job = MagicMock(name="load_job")
+    load_job.result.return_value = None
+
+    target = "my-project.analytics.users"
+    staged = [_field("id", "INTEGER"), _field("note", "STRING"), _field("op", "STRING")]
+    created: dict[str, list] = {}
+
+    def get_table(table_fqn: str):
+        if table_fqn != target:
+            return SimpleNamespace(schema=staged)
+        if target not in created:
+            raise NotFound(f"Not found: Table {target}")
+        return SimpleNamespace(schema=created[target])
+
+    def query_and_wait(statement: str):
+        if statement.startswith("CREATE TABLE"):
+            created[target] = [f for f in staged if f.name != "op"]
+        return MagicMock(name="rows")
+
+    bq_client = MagicMock(name="bq")
+    bq_client.load_table_from_uri.return_value = load_job
+    bq_client.get_table.side_effect = get_table
+    bq_client.query_and_wait.side_effect = query_and_wait
+    return bq_client
+
+
+@pytest.mark.parametrize("schema_evolution", ["update", "strict"])
+def test_dest_plugin_creates_a_missing_target_before_merging(
+    monkeypatch, work_dir, schema_evolution
+):
+    """A merge reads the target to decide what it can write, so a target that is
+    not there is built first -- in either evolution mode, since strict has to be
+    able to bootstrap a target too."""
+    bq_client = _creating_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
+
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "n", "op": "i"}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), _merge_dest(schema_evolution), [src]
+    )
+
+    statements = _statements(bq_client)
+    (create,) = _statements(bq_client, "CREATE TABLE")
+    (merge,) = _statements(bq_client, "MERGE INTO")
+    assert statements.index(create) < statements.index(merge)
+    assert create.startswith("CREATE TABLE IF NOT EXISTS `my-project.analytics.users`")
+    # Built from the batch's own columns, without the marker.
+    assert "`id` INT64" in create
+    assert "`note` STRING" in create
+    assert "`op`" not in create
+
+
+def test_dest_plugin_does_not_create_a_target_that_already_exists(
+    monkeypatch, work_dir
+):
+    bq_client = _merge_ready_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
+
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), _merge_dest("update"), [src]
+    )
+
+    assert _statements(bq_client, "CREATE TABLE") == []
+    assert len(_statements(bq_client, "MERGE INTO")) == 1
+
+
+def test_dest_plugin_wraps_a_failed_schema_evolution_as_bigquery_18(
+    monkeypatch, work_dir
+):
+    bq_client = _widening_client()
+    bq_client.query_and_wait.side_effect = RuntimeError("alter boom")
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
+
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "note": "n", "op": "i"}])
+    with pytest.raises(BigQueryRuntimeException) as ei:
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), _merge_dest("update"), [src]
+        )
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_18
+    assert "my-project.analytics.users" in str(ei.value)
+    # The staging table is still dropped.
+    bq_client.delete_table.assert_called_once()
+
+
+def test_dest_plugin_wraps_a_failed_merge_as_bigquery_18(monkeypatch, work_dir):
+    bq_client = _merge_ready_client()
+    bq_client.query_and_wait.side_effect = RuntimeError("merge boom")
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
+
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
+    with pytest.raises(BigQueryRuntimeException) as ei:
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [src]
+        )
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_18
+    bq_client.delete_table.assert_called_once()
+
+
+def test_dest_plugin_keeps_a_classified_merge_error_unwrapped(monkeypatch, work_dir):
+    """A staging table missing the marker has a precise code of its own;
+    BIGQUERY_18 would bury which column the two sides disagree on."""
+    load_job = MagicMock(name="load_job")
+    load_job.result.return_value = None
+    bq_client = MagicMock(name="bq")
+    bq_client.load_table_from_uri.return_value = load_job
+    # The batch carries the marker, so coalescing passes; the staging table
+    # does not, so the merge is what objects.
+    bq_client.get_table.side_effect = lambda table_fqn: SimpleNamespace(
+        schema=[_field("id", "INTEGER")]
+    )
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: MagicMock())
+
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
+    with pytest.raises(BigQueryRuntimeException) as ei:
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), _merge_dest("strict"), [src]
+        )
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_15
+    bq_client.delete_table.assert_called_once()
+
+
+def test_dest_plugin_pairs_each_table_with_its_own_merge_cfg(monkeypatch, work_dir):
+    """The cfg travels with its table: a list of configs lines up one-to-one
+    with ``tables``, first with first."""
+    bq_client = _merge_ready_client()
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+
+    gcs_client = MagicMock(name="gcs")
+    bucket = MagicMock(name="bucket")
+    blob = MagicMock(name="blob")
+    gcs_client.bucket.return_value = bucket
+    bucket.blob.return_value = blob
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+
+    dest = BigQueryDest(
+        tables=["`p.ds.users`", "`p.ds.orders`"],
+        if_table_exists="merge",
+        merge_cfg=[
+            MergeCfg(on=["id"], op_column="op"),
+            MergeCfg(on=["other_id"], op_column="op"),
+        ],
+    )
+    rows = [{"id": 1, "other_id": 10, "op": "i"}]
+    src1 = _make_parquet(work_dir / "in1.parquet", rows)
+    src2 = _make_parquet(work_dir / "in2.parquet", rows)
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [src1, src2]
+    )
+
+    first, second = _statements(bq_client, "MERGE INTO")
+    assert "ON target.`id` = source.`id`" in first
+    assert "ON target.`other_id` = source.`other_id`" in second
+
+
+def test_dest_plugin_names_the_staging_table_in_a_failed_merge_load(
+    monkeypatch, work_dir
+):
+    load_job = MagicMock(name="load_job")
+    load_job.result.side_effect = RuntimeError("load_job boom")
+
+    bq_client = MagicMock(name="bq")
+    bq_client.load_table_from_uri.return_value = load_job
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+
+    gcs_client = MagicMock(name="gcs")
+    bucket = MagicMock(name="bucket")
+    blob = MagicMock(name="blob")
+    gcs_client.bucket.return_value = bucket
+    bucket.blob.return_value = blob
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+
+    dest = BigQueryDest(
+        tables=["`my-project.analytics.users`"],
+        if_table_exists="merge",
+        merge_cfg=MergeCfg(on=["id"], op_column="op"),
+    )
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
+    with pytest.raises(BigQueryRuntimeException) as ei:
+        plugin._BigQueryDestPlugin().write_out(
+            _dest_ctx(work_dir), _bare_conn(), dest, [src]
+        )
+    assert ei.value.api_error is BigQueryErrorCode.BIGQUERY_7
+    assert "my-project.analytics.users_" in str(ei.value)
+    blob.delete.assert_called()
+
+
+def test_dest_plugin_loads_straight_into_the_table_outside_merge_mode(
+    monkeypatch, work_dir
+):
+    load_job = MagicMock(name="load_job")
+    load_job.result.return_value = None
+
+    bq_client = MagicMock(name="bq")
+    bq_client.load_table_from_uri.return_value = load_job
+    monkeypatch.setattr(impl, "build_bigquery_client", lambda *a, **kw: bq_client)
+
+    gcs_client = MagicMock(name="gcs")
+    bucket = MagicMock(name="bucket")
+    blob = MagicMock(name="blob")
+    gcs_client.bucket.return_value = bucket
+    bucket.blob.return_value = blob
+    monkeypatch.setattr(impl, "build_gcs_client", lambda *a, **kw: gcs_client)
+
+    dest = BigQueryDest(tables=["`my-project.analytics.users`"])
+    src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+    )
+
+    (call,) = bq_client.load_table_from_uri.call_args_list
+    assert call.args[1] == "my-project.analytics.users"
 
 
 def test_dest_plugin_forwards_project_to_bigquery_client(monkeypatch, work_dir):
