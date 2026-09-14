@@ -12,12 +12,19 @@ pub mod services;
 pub enum GroupError {
     #[error("The group [{0}] is a system group and cannot be updated or deleted")]
     SystemGroup(GroupName) = 0,
+
+    #[error("The group [{0}] still has collections and cannot be deleted")]
+    GroupHasCollections(GroupName) = 2000,
+    #[error("The group [{0}] is referenced by past runs and cannot be deleted")]
+    GroupHasRuns(GroupName) = 2001,
 }
 
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::Dao;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::group::{GroupDB, GroupDBWithNames, GroupUpdate};
+use td_objects::dxo::transaction::TransactionDB;
 use td_objects::errors::SqlError;
 use td_queries::Queries;
 
@@ -27,6 +34,24 @@ use td_queries::Queries;
 pub fn assert_not_system(group: &GroupDBWithNames) -> Result<(), TdError> {
     if *group.base.base.system {
         Err(GroupError::SystemGroup(group.base.base.name.clone()))?
+    }
+    Ok(())
+}
+
+/// Collections (soft-deleted ones included) and transactions carry the group
+/// id, and the `RESTRICT` FKs refuse the delete once any exist; each run row
+/// hangs off a transaction in the same group, so these two cover them all.
+pub async fn assert_group_unused(
+    conn: &mut DomainConnection<Apiserver, InProject>,
+    group: &GroupDBWithNames,
+) -> Result<(), TdError> {
+    let id = group.base.base.id;
+    let name = &group.base.base.name;
+    if conn.fetch_first::<CollectionDB>(&id).await?.is_some() {
+        Err(GroupError::GroupHasCollections(name.clone()))?
+    }
+    if conn.fetch_first::<TransactionDB>(&id).await?.is_some() {
+        Err(GroupError::GroupHasRuns(name.clone()))?
     }
     Ok(())
 }

@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::group::assert_not_system;
+use crate::group::{assert_group_unused, assert_not_system};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -27,10 +27,8 @@ async fn delete_group(
     let conn = gated_trx.get(grant);
 
     let current: GroupDBWithNames = conn.fetch_one(&param.group).await?;
-    // Reject deletion of the seeded system groups via the `system`
-    // flag — `default` / `source` / `destination` carry it and
-    // therefore cannot be deleted.
     assert_not_system(&current)?;
+    assert_group_unused(conn, &current).await?;
     conn.delete::<GroupDB>(current.base.base.id).await?;
     Ok(())
 }
@@ -46,7 +44,9 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::group::GroupDB;
-    use td_objects::types::basic::{AccessTokenId, Description, GroupIdName, GroupName, UserId};
+    use td_objects::types::basic::{
+        AccessTokenId, CollectionName, Description, GroupIdName, GroupName, UserId,
+    };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
     use td_security::SOURCE_GROUP;
@@ -97,6 +97,45 @@ mod tests {
         let err = res.err().unwrap();
         let err = err.domain_err::<GroupError>();
         assert!(matches!(err, GroupError::SystemGroup(_)));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_delete_group_with_collections_rejected(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let scoped = db.scoped(p.id);
+        let group = scoped
+            .seed()
+            .group(
+                GroupName::try_from("analytics")?,
+                Description::try_from("Analytics tier group")?,
+            )
+            .await?;
+        scoped
+            .seed()
+            .collection_in_group(
+                &CollectionName::try_from("marts")?,
+                &UserId::admin(),
+                &group,
+            )
+            .await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .delete(GroupParam {
+                group: GroupIdName::from_str("analytics")?,
+            })
+            .in_project(p.id);
+
+        let service = Services::with_defaults(db.clone());
+        let err = service.delete_group(request).await.err().unwrap();
+        assert!(matches!(
+            err.domain_err::<GroupError>(),
+            GroupError::GroupHasCollections(_)
+        ));
+        let kept = db
+            .fetch_all::<GroupDB>(&GroupName::try_from("analytics")?)
+            .await?;
+        assert_eq!(kept.len(), 1);
         Ok(())
     }
 }
