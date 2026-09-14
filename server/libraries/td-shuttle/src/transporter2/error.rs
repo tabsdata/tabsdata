@@ -87,6 +87,29 @@ pub enum TransporterError {
         kind: String,
     },
 
+    #[error("copybook: {0}")]
+    Copybook(String),
+
+    #[error("an ebcdic source needs a format options block naming its `copybook`")]
+    CopybookSourceMissing,
+
+    #[error(
+        "file is {size} bytes, not a whole number of {lrecl}-byte records \
+         ({remainder} left over): the copybook does not match this file, or it \
+         was transferred in text mode rather than binary"
+    )]
+    EbcdicRecordLengthMismatch {
+        size: u64,
+        lrecl: usize,
+        remainder: u64,
+    },
+
+    #[error("unsupported ebcdic code page '{0}' (cp037, cp273, cp500, cp1140)")]
+    EbcdicUnsupportedCodepage(String),
+
+    #[error("field '{name}' declares {digits} digits, beyond the 38 a decimal can hold")]
+    EbcdicFieldTooWide { name: String, digits: u32 },
+
     /// A declared source codec the format's reader cannot see through.
     #[error(
         "a {format:?} source cannot be decompressed (declared {codec:?}): it is already a \
