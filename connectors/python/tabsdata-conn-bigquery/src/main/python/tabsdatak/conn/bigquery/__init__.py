@@ -185,6 +185,12 @@ class MergeCfg(SqlMergeCfg):
         op_column: The column holding each row's `i` / `u` / `d` marker. Read
             to decide each row's fate and never written, so the target does not
             need the column and will not gain it.
+        watermark_column: An optional column stamped with the id of the trx the
+            merge belongs to, making the merge idempotent: a rerun that finds
+            the target already carrying this trx's id writes nothing rather than
+            applying the same batch twice. The target gains the column under
+            either `schema_evolution` setting. Rows written before it
+            existed keep a NULL there.
 
     Examples:
         A CDC feed whose `op` column says what to do with each row:
@@ -201,6 +207,7 @@ class MergeCfg(SqlMergeCfg):
     # surfacing as invalid SQL when the MERGE is built.
     on: MergeColumnsSpec
     op_column: MergeColumnSpec
+    watermark_column: MergeColumnSpec | None = None
 
     def _fold(self, name: str) -> str:
         return _validation.merge_column_key(name)

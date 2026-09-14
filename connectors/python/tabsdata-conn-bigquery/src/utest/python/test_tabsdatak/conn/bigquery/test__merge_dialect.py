@@ -27,6 +27,9 @@ from tabsdatak.conn.bigquery._merge_dialect import BigQueryMergeDialect
 from tabsdatak.conn.bigquery.error import BigQueryErrorCode, BigQueryRuntimeException
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge import WatermarkCfg
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge._batch import coalesced_batch
 
 # noinspection PyProtectedMember
@@ -513,6 +516,183 @@ def test_staging_drops_the_table_when_the_merge_fails(work_dir, monkeypatch):
         with _dialect(client).staging(_QUOTED_TARGET, batch):
             raise RuntimeError("merge blew up")
     client.delete_table.assert_called_once_with(_STAGING, not_found_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# The watermark
+#
+# A merge is not naturally idempotent: rerunning one applies the same batch
+# twice. Naming a watermark column makes it so -- every row written carries the
+# trx's id, and a rerun that finds the target already stamped with it does
+# nothing.
+# ---------------------------------------------------------------------------
+
+_TRX = "TRX_1"
+
+
+def _watermark(column: str = "wm", transaction_id: str = _TRX) -> WatermarkCfg:
+    return WatermarkCfg(column=column, transaction_id=transaction_id)
+
+
+def _stamp_client(schemas: dict[str, list[str]], *, stamped: bool = False) -> MagicMock:
+    """A client described by column names, whose statements answer one boolean --
+    what the stamp probe reads."""
+    client = _named_client(schemas)
+    client.query_and_wait = MagicMock(return_value=[(stamped,)])
+    return client
+
+
+def test_watermark_reads_unstamped_when_the_target_is_not_there():
+    """Both watermark passes run before anything has been written, so a target
+    that does not exist yet is not an error -- it has simply never been
+    stamped."""
+    client = _stamp_client({})
+    assert _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is False
+    client.query_and_wait.assert_not_called()
+
+
+def test_watermark_does_not_probe_a_target_that_lacks_the_column():
+    """Selecting a column the table has not got is an error, not an answer."""
+    client = _stamp_client({_TARGET: ["order_id"]})
+    assert _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is False
+    client.query_and_wait.assert_not_called()
+
+
+def test_watermark_reads_stamped_when_the_target_carries_the_id():
+    client = _stamp_client({_TARGET: ["order_id", "wm"]}, stamped=True)
+    assert _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is True
+
+
+def test_watermark_reads_unstamped_when_the_target_carries_another_id():
+    client = _stamp_client({_TARGET: ["order_id", "wm"]}, stamped=False)
+    assert _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is False
+
+
+def test_watermark_probe_names_the_target_and_the_transaction():
+    client = _stamp_client({_TARGET: ["order_id", "wm"]}, stamped=True)
+    _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark())
+    (probe,) = _statements(client)
+    assert probe == (
+        f"SELECT COUNT(*) > 0 FROM {_QUOTED_TARGET} WHERE `wm` = '{_TRX}'"
+    )
+
+
+def test_watermark_matches_the_column_case_insensitively():
+    """BigQuery resolves a name case-insensitively, so a target holding ``WM``
+    already has the column ``wm`` names."""
+    client = _stamp_client({_TARGET: ["order_id", "WM"]}, stamped=True)
+    assert _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is True
+
+
+@pytest.mark.parametrize(
+    "trx_id,literal",
+    [
+        ("plain", "'plain'"),
+        ("it's", r"'it\'s'"),
+        ("back\\slash", r"'back\\slash'"),
+    ],
+)
+def test_watermark_escapes_the_transaction_id(trx_id, literal):
+    """A trx id is a system token, but it is the one value in these statements
+    the connector did not choose, and a hand-built statement has nowhere to bind
+    it."""
+    client = _stamp_client({_TARGET: ["wm"]}, stamped=True)
+    _dialect(client).check_watermark_column(
+        _QUOTED_TARGET, _watermark(transaction_id=trx_id)
+    )
+    assert _statements(client)[0].endswith(f"`wm` = {literal}")
+
+
+# --- Getting the column onto the target under strict ------------------
+
+
+def test_ensure_watermark_adds_the_column_a_strict_target_lacks():
+    # Strict holds the schema still, and this is the one column it cannot hold
+    # back: nothing else adds it, so the guard would read every run as the first.
+    client = _stamp_client({_TARGET: ["order_id"]})
+    added = _dialect(client).ensure_watermark_column(_QUOTED_TARGET, _watermark())
+    assert added == ["wm"]
+    assert _statements(client) == [
+        f"ALTER TABLE {_QUOTED_TARGET} ADD COLUMN IF NOT EXISTS `wm` STRING"
+    ]
+
+
+def test_ensure_watermark_leaves_the_rows_already_there_alone():
+    """They were written by earlier transactions; stamping them with this one's
+    id would claim them for it, so they keep the NULL a new column starts
+    with."""
+    client = _stamp_client({_TARGET: ["order_id"]})
+    _dialect(client).ensure_watermark_column(_QUOTED_TARGET, _watermark())
+    assert not any(s.startswith("UPDATE") for s in _statements(client))
+
+
+def test_ensure_watermark_leaves_a_target_that_already_has_it_alone():
+    client = _stamp_client({_TARGET: ["order_id", "WM"]})
+    assert _dialect(client).ensure_watermark_column(_QUOTED_TARGET, _watermark()) == []
+    assert _statements(client) == []
+
+
+def test_ensure_watermark_does_nothing_without_a_watermark():
+    client = _stamp_client({_TARGET: ["order_id"]})
+    assert _dialect(client).ensure_watermark_column(_QUOTED_TARGET, None) == []
+    assert _statements(client) == []
+
+
+def test_ensure_watermark_does_nothing_when_the_target_is_not_there():
+    client = _stamp_client({})
+    assert _dialect(client).ensure_watermark_column(_QUOTED_TARGET, _watermark()) == []
+    assert _statements(client) == []
+
+
+# --- Stamping the staged rows -----------------------------------------
+
+
+def _stage(client, work_dir, monkeypatch, watermark_cfg):
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.bigquery import _plugin
+
+    monkeypatch.setattr(_plugin, "_load_table_from_uri", lambda *a, **k: None)
+    monkeypatch.setattr(_plugin, "_upload_to_gcs", lambda *a: None)
+    monkeypatch.setattr(impl, "temp_table_fqn", lambda table: _STAGING)
+
+    batch = work_dir / "in.parquet"
+    pl.DataFrame({"order_id": [1], "op": ["i"]}).write_parquet(batch)
+    with _dialect(client).staging(_QUOTED_TARGET, batch, watermark_cfg) as staged:
+        return staged
+
+
+def test_staging_stamps_the_staging_table_with_the_transaction_id(
+    work_dir, monkeypatch
+):
+    # Two statements where Snowflake needs one: a DEFAULT on an added BigQuery
+    # column reaches rows inserted afterwards, and every row here is already in.
+    client = _stamp_client({_STAGING: ["order_id", "op"]})
+    _stage(client, work_dir, monkeypatch, _watermark())
+    assert _statements(client) == [
+        f"ALTER TABLE {_QUOTED_STAGING} ADD COLUMN IF NOT EXISTS `wm` STRING",
+        f"UPDATE {_QUOTED_STAGING} SET `wm` = '{_TRX}' WHERE TRUE",
+    ]
+
+
+def test_staging_reports_the_watermark_among_the_staged_columns(
+    work_dir, monkeypatch
+):
+    # Which is what carries it onward: ensure_target, evolve and the write list
+    # all read the target's shape off the staged columns.
+    client = _stamp_client({_STAGING: ["order_id", "op"]})
+    staged = _stage(client, work_dir, monkeypatch, _watermark())
+    assert staged.columns == [
+        ("order_id", "STRING"),
+        ("op", "STRING"),
+        ("wm", "STRING"),
+    ]
+
+
+def test_staging_stamps_nothing_without_a_watermark(work_dir, monkeypatch):
+    client = _stamp_client({_STAGING: ["order_id", "op"]})
+    staged = _stage(client, work_dir, monkeypatch, None)
+    assert _statements(client) == []
+    assert staged.columns == [("order_id", "STRING"), ("op", "STRING")]
 
 
 # ---------------------------------------------------------------------------

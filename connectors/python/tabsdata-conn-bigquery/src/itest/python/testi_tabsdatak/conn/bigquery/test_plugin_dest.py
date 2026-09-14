@@ -186,6 +186,23 @@ def _seed_target(conn, work: Path, table: str, parquet: Path) -> None:
     )
 
 
+class _TrxCtx(PluginDestCtx):
+    """A plugin context whose trx id the test picks.
+
+    The watermark turns on which trx a write belongs to, and the shared stub
+    hard-codes one id for every context it fabricates -- so a test needs this to
+    say "the same trx again" apart from "a later one".
+    """
+
+    def __init__(self, work: Path, trx_id: str) -> None:
+        super().__init__(work)
+        self._trx_id = trx_id
+
+    @property
+    def trx_id(self) -> str:
+        return self._trx_id
+
+
 def _merge_out(
     conn,
     work: Path,
@@ -193,9 +210,10 @@ def _merge_out(
     parquet: Path,
     merge_cfg: MergeCfg,
     schema_evolution: str = "strict",
+    trx_id: str | None = None,
 ) -> None:
     plugin._BigQueryDestPlugin().write_out(
-        PluginDestCtx(work),
+        PluginDestCtx(work) if trx_id is None else _TrxCtx(work, trx_id),
         conn,
         BigQueryDest(
             tables=[table_fqn(table)],
@@ -824,6 +842,237 @@ def test_dest_plugin_write_out_merge_evolves_only_while_update_is_asked_for(
                 "order_id": [1],
                 "status": ["shipped"],
                 "carrier": ["dhl"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+# ---------------------------------------------------------------------------
+# if_table_exists="merge" + a watermark column
+#
+# A merge is not naturally idempotent: rerunning one applies the same batch a
+# second time. Naming a watermark column makes it so -- every row the merge
+# writes is stamped with the id of the trx that wrote it, and a rerun that finds
+# the target already carrying that id does nothing at all.
+#
+# Which trx a write belongs to is the whole variable here, so these drive the
+# plugin through :class:`_TrxCtx` rather than the shared context stub.
+# ---------------------------------------------------------------------------
+
+_WATERMARK = "wm"
+
+
+def _watermark_cfg(on: str = "order_id") -> MergeCfg:
+    return MergeCfg(on=[on], op_column="op", watermark_column=_WATERMARK)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_stamps_the_rows_it_writes(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # The target the merge creates is built from the staging table, and that is
+    # stamped before the target is built from it, so even a first merge brings
+    # the column into being and every inserted row carries the id.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_watermark_stamp"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {"order_id": [1, 2], "status": ["new", "new"], "op": ["i", "i"]},
+    )
+    try:
+        _merge_out(conn, work, table, seed, _watermark_cfg(), trx_id="TRX_A")
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2],
+                "status": ["new", "new"],
+                _WATERMARK: ["TRX_A", "TRX_A"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_skips_a_batch_the_trx_already_wrote(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # The point of the whole thing. The second write carries a different payload
+    # for the same key and a new one besides, so applying it would be plainly
+    # visible -- and it must not be, because the target already holds the trx's
+    # stamp.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_watermark_rerun"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {"order_id": [1], "status": ["new"], "op": ["i"]},
+    )
+    rerun = _batch(
+        tmp_path / "rerun.parquet",
+        {"order_id": [1, 2], "status": ["shipped", "new"], "op": ["u", "i"]},
+    )
+    try:
+        _merge_out(conn, work, table, seed, _watermark_cfg(), trx_id="TRX_A")
+        _merge_out(conn, work, table, rerun, _watermark_cfg(), trx_id="TRX_A")
+        assert db.count(table) == 1
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1],
+                "status": ["new"],
+                _WATERMARK: ["TRX_A"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_applies_a_batch_from_a_later_trx(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # The other half: the guard is on this trx's id, not on the column being
+    # populated at all, so a later trx merges normally and restamps the rows it
+    # touches. Order 1 keeps the older stamp because no clause claims it.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_watermark_next_trx"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {"order_id": [1, 2], "status": ["new", "new"], "op": ["i", "i"]},
+    )
+    delta = _batch(
+        tmp_path / "delta.parquet",
+        {"order_id": [2, 3], "status": ["shipped", "new"], "op": ["u", "i"]},
+    )
+    try:
+        _merge_out(conn, work, table, seed, _watermark_cfg(), trx_id="TRX_A")
+        _merge_out(conn, work, table, delta, _watermark_cfg(), trx_id="TRX_B")
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2, 3],
+                "status": ["new", "shipped", "new"],
+                _WATERMARK: ["TRX_A", "TRX_B", "TRX_B"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_stamps_an_older_target_on_strict_too(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # Strict holds the target's schema still, and the watermark is the one column
+    # it cannot hold back: without it nothing is ever stamped, so the guard would
+    # read every run as the first. The seed merges without a watermark, the way a
+    # flow that turned one on later would have been running, so its row predates
+    # the column and keeps a NULL there -- nothing backfills this trx's id onto
+    # rows it did not write.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_watermark_strict"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {"order_id": [1], "status": ["old"], "op": ["i"]},
+    )
+    batch = _batch(
+        tmp_path / "batch.parquet",
+        {"order_id": [2], "status": ["new"], "op": ["i"]},
+    )
+    rerun = _batch(
+        tmp_path / "rerun.parquet",
+        {"order_id": [2], "status": ["shipped"], "op": ["u"]},
+    )
+    plain = MergeCfg(on=["order_id"], op_column="op")
+    try:
+        _merge_out(conn, work, table, seed, plain, schema_evolution="strict")
+        assert _WATERMARK not in db.column_types(table)
+
+        _merge_out(
+            conn,
+            work,
+            table,
+            batch,
+            _watermark_cfg(),
+            schema_evolution="strict",
+            trx_id="TRX_A",
+        )
+        assert db.column_types(table)[_WATERMARK] == ("STRING", None, None)
+
+        _merge_out(
+            conn,
+            work,
+            table,
+            rerun,
+            _watermark_cfg(),
+            schema_evolution="strict",
+            trx_id="TRX_A",
+        )
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1, 2],
+                "status": ["old", "new"],
+                _WATERMARK: [None, "TRX_A"],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_adds_only_the_watermark_on_strict(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # The watermark is an exception to strict, not a hole in it: the rest of a
+    # widened batch is still held back, so `priority` has nowhere to land and
+    # goes unwritten while `wm` is added.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_watermark_strict_widened"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    seed = _batch(tmp_path / "seed.parquet", {"order_id": [1], "status": ["new"]})
+    widened = _batch(
+        tmp_path / "widened.parquet",
+        {
+            "order_id": [1],
+            "status": ["shipped"],
+            "priority": ["high"],
+            "op": ["u"],
+        },
+    )
+    try:
+        _seed_target(conn, work, table, seed)
+        _merge_out(
+            conn,
+            work,
+            table,
+            widened,
+            _watermark_cfg(),
+            schema_evolution="strict",
+            trx_id="TRX_A",
+        )
+        assert "priority" not in db.column_types(table)
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [1],
+                "status": ["shipped"],
+                _WATERMARK: ["TRX_A"],
             }),
         )
     finally:

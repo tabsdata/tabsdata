@@ -175,6 +175,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                             batch=Path(parquet_path),
                             cfg=merge_cfg,
                             schema_evolution=write_cfg.schema_evolution,
+                            ctx=ctx,
                         )
                     except ConnException:
                         raise
