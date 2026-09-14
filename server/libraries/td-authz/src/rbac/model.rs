@@ -17,8 +17,13 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
+use td_database::access::DbScope;
+use td_database::domain::{Apiserver, DomainConnection};
+use td_error::TdError;
+use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::types::basic::UserId;
 use td_objects::types::visible_projects::VisibleProjects;
+use td_queries::Queries;
 
 /// An entity type permissions can target (the `entity_type` of the
 /// `(entity_type, entity_id)` pair).
@@ -31,6 +36,15 @@ pub trait EntityKind: Copy + Eq + Hash + Debug + Send + Sync + 'static {
     type Permission: GrantedPermission;
     /// The entity type identifier, as it appears on the user-facing surface.
     const NAME: &'static str;
+    /// Whether the kind's source of truth still knows the entity; nothing is
+    /// authorized on one it does not. Kinds whose entities never go away keep
+    /// the default.
+    fn is_current<S: DbScope>(
+        _conn: &mut DomainConnection<Apiserver, S>,
+        _id: &Self::Id,
+    ) -> impl Future<Output = Result<bool, TdError>> + Send {
+        async { Ok(true) }
+    }
 }
 
 /// A permission within an entity kind.
@@ -331,6 +345,13 @@ impl EntityKind for Project {
     type Id = ProjectId;
     type Permission = ProjectPermission;
     const NAME: &'static str = "project";
+    async fn is_current<S: DbScope>(
+        conn: &mut DomainConnection<Apiserver, S>,
+        id: &Self::Id,
+    ) -> Result<bool, TdError> {
+        let live: Option<ActiveProjectDB> = conn.fetch_optional(id).await?;
+        Ok(live.is_some())
+    }
 }
 
 /// The `user` identity kind: requester identity modeled as ordinary grants.

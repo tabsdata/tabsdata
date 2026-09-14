@@ -23,7 +23,7 @@
 //! The async/database boundary lives entirely here; the enforcement decision
 //! ([`crate::rbac::model::Grants::allows`]) stays pure.
 
-use crate::rbac::model::Grants;
+use crate::rbac::model::{EntityKind, Grants};
 use crate::rbac::registry::AuthzRegistry;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -197,16 +197,29 @@ impl super::source::RbacSource for SqlRbacSource {
     ) -> Result<(), TdError> {
         self.provider.purge(slot).await
     }
+
+    async fn is_current<E: EntityKind, S: DbScope>(
+        &self,
+        slot: &mut DomainConnection<Apiserver, S>,
+        id: &E::Id,
+    ) -> Result<bool, TdError> {
+        E::is_current(slot, id).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::rbac::model::{Project, ProjectPermission, Requires, SystemPermission};
+    use crate::rbac::model::{ProjectId, System, SystemEntity};
     use crate::rbac::source::RbacSource;
     use td_database::access::InProject;
     use td_database::pool::TdPool;
-    use td_objects::types::basic::UserId;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::project::ProjectDeleteDB;
+    use td_objects::types::basic::{AccessTokenId, ProjectName, UserId};
+    use td_queries::Queries;
+    use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
     async fn test_admin_user_effective_grants(db: TdPool) -> Result<(), TdError> {
@@ -226,6 +239,39 @@ mod tests {
         // an unknown user resolves to empty grants, not an error.
         let unknown = source.user_grants(&mut slot, &UserId::default()).await?;
         assert!(!unknown.allows(&Requires::system(SystemPermission::ManageAccess)));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_is_current_follows_project_soft_delete(db: TdPool) -> Result<(), TdError> {
+        let project = db.seed().project(ProjectName::try_from("doomed")?).await?;
+        let source = SqlRbacSource::default();
+        let mut slot = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+
+        assert!(
+            source
+                .is_current::<Project, _>(&mut slot, &project.id)
+                .await?
+        );
+        assert!(
+            !source
+                .is_current::<Project, _>(&mut slot, &ProjectId::default())
+                .await?
+        );
+        assert!(
+            source
+                .is_current::<System, _>(&mut slot, &SystemEntity)
+                .await?
+        );
+
+        let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
+        db.update::<ProjectDeleteDB>(&project.to_delete_dao(&ctx), project.id)
+            .await?;
+        assert!(
+            !source
+                .is_current::<Project, _>(&mut slot, &project.id)
+                .await?
+        );
         Ok(())
     }
 }

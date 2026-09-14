@@ -198,6 +198,7 @@ mod tests {
 
         assert_service_error(service.create_permission(request).await, |err| match err {
             RbacError::Forbidden(_, _) => {}
+            other => panic!("expected Forbidden, got {other:?}"),
         });
         Ok(())
     }

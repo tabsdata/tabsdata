@@ -53,5 +53,6 @@ async fn test_not_allowed_to_delete_collection(db: TdPool) {
 
     assert_service_error(service.delete_collection(request).await, |err| match err {
         RbacError::Forbidden(_, _) => {}
+        other => panic!("expected Forbidden, got {other:?}"),
     });
 }

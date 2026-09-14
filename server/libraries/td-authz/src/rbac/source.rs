@@ -10,8 +10,8 @@
 //! SQL-backed implementation ([`super::sql_source`]) loads `role_permission`
 //! rows, groups them per user, and caches the result.
 
-use crate::rbac::model::{Grants, IdentityClaim, RoleGrant, User};
-use std::collections::HashMap;
+use crate::rbac::model::{EntityKind, Grants, IdentityClaim, RoleGrant, User};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use td_database::access::DbScope;
 use td_database::domain::{Apiserver, DomainConnection};
@@ -40,6 +40,14 @@ pub trait RbacSource: Send + Sync {
         &self,
         slot: &mut DomainConnection<Apiserver, S>,
     ) -> impl Future<Output = Result<(), TdError>> + Send;
+
+    /// Whether the kind's source of truth still knows the entity; nothing is
+    /// authorized on one it does not.
+    fn is_current<E: EntityKind, S: DbScope>(
+        &self,
+        slot: &mut DomainConnection<Apiserver, S>,
+        id: &E::Id,
+    ) -> impl Future<Output = Result<bool, TdError>> + Send;
 }
 
 /// An in-memory [`RbacSource`].
@@ -50,6 +58,7 @@ pub trait RbacSource: Send + Sync {
 #[derive(Debug)]
 pub struct FixedRbacSource {
     users: HashMap<UserId, Arc<Grants>>,
+    gone: HashSet<(&'static str, String)>,
     empty: Arc<Grants>,
 }
 
@@ -57,6 +66,7 @@ impl Default for FixedRbacSource {
     fn default() -> Self {
         Self {
             users: HashMap::new(),
+            gone: HashSet::new(),
             empty: Arc::new(Grants::new()),
         }
     }
@@ -71,6 +81,12 @@ impl FixedRbacSource {
     /// Set the effective grants for a user.
     pub fn with_user(mut self, user: UserId, grants: Grants) -> Self {
         self.users.insert(user, Arc::new(grants));
+        self
+    }
+
+    /// Mark an entity as no longer current; every other entity is.
+    pub fn with_gone<E: EntityKind>(mut self, id: E::Id) -> Self {
+        self.gone.insert((E::NAME, id.to_string()));
         self
     }
 
@@ -99,6 +115,14 @@ impl RbacSource for FixedRbacSource {
         _slot: &mut DomainConnection<Apiserver, S>,
     ) -> Result<(), TdError> {
         Ok(())
+    }
+
+    async fn is_current<E: EntityKind, S: DbScope>(
+        &self,
+        _slot: &mut DomainConnection<Apiserver, S>,
+        id: &E::Id,
+    ) -> Result<bool, TdError> {
+        Ok(!self.gone.contains(&(E::NAME, id.to_string())))
     }
 }
 

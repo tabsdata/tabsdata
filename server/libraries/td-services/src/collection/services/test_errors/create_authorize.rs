@@ -54,5 +54,6 @@ async fn test_not_allowed_to_create_collection(db: TdPool) {
 
     assert_service_error(service.create_collection(request).await, |err| match err {
         RbacError::Forbidden(_, _) => {}
+        other => panic!("expected Forbidden, got {other:?}"),
     });
 }

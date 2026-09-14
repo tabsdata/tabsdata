@@ -153,10 +153,38 @@ mod tests {
     use crate::Services;
     use crate::execution::services::execute::tests::test_execute;
     use td_database::pool::TdPool;
+    use td_error::ApiError;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::types::basic::{AccessTokenId, UserId};
+    use td_objects::dxo::project::ProjectDeleteDB;
+    use td_objects::types::basic::{AccessTokenId, ProjectName, UserId};
     use td_queries::test_utils::SeedEntry;
+
+    #[td_test::test(db)]
+    async fn test_read_execution_in_deleted_project_is_not_found(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
+        let execution = test_execute(db.clone(), alpha.id, false, false, false).await?;
+        let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
+        let request = |ctx: &RequestContext| {
+            ctx.read((
+                ExecutionParam {
+                    execution: execution.id.clone(),
+                },
+                AllowDisabled::FALSE,
+            ))
+        };
+
+        let service = Services::with_defaults(db.clone());
+        service.execution_read(request(&ctx)).await?;
+
+        db.update::<ProjectDeleteDB>(&alpha.to_delete_dao(&ctx), alpha.id)
+            .await?;
+        let err = service.execution_read(request(&ctx)).await.unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
+        Ok(())
+    }
 
     #[td_test::test(db)]
     async fn test_read_execution(db: TdPool) -> Result<(), TdError> {

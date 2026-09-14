@@ -174,6 +174,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         assert_service_error(service.table_list(request).await, |err| match err {
             RbacError::Forbidden(_, _) => {}
+            other => panic!("expected Forbidden, got {other:?}"),
         });
         Ok(())
     }

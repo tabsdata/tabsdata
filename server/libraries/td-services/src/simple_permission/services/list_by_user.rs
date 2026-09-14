@@ -193,6 +193,7 @@ mod tests {
             service.list_simple_permission_by_user(request).await,
             |err| match err {
                 RbacError::Forbidden(_, _) => {}
+                other => panic!("expected Forbidden, got {other:?}"),
             },
         );
         Ok(())

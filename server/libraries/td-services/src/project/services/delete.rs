@@ -76,3 +76,59 @@ pub fn reject_delete_non_empty_project(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Services;
+    use std::str::FromStr;
+    use td_database::pool::TdPool;
+    use td_database::pool::scoped::ScopedExt as _;
+    use td_objects::dxo::collection::CollectionParam;
+    use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::types::basic::{AccessTokenId, CollectionIdName, ProjectIdName, UserId};
+    use td_queries::test_utils::{SeedEntry, seed_run};
+
+    #[td_test::test(db)]
+    async fn test_delete_project_hides_it_and_its_plans(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let execution = seed_run(&db, p.id).await?.execution;
+        let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
+        let service = Services::with_defaults(db.clone());
+        let delete_project = || {
+            ctx.delete(ProjectParam {
+                project: ProjectIdName::from_str(&format!("~{}", p.id)).unwrap(),
+            })
+        };
+
+        let err = service.delete_project(delete_project()).await.unwrap_err();
+        assert!(matches!(
+            err.domain_err(),
+            ProjectError::ProjectNotEmpty(id) if *id == p.id.to_string()
+        ));
+
+        service
+            .delete_collection(
+                ctx.delete(CollectionParam {
+                    collection: CollectionIdName::from_str("collection")?,
+                })
+                .in_project(p.id),
+            )
+            .await?;
+        service.delete_project(delete_project()).await?;
+
+        let projects = service
+            .list_projects(ctx.list((), ListParams::default()))
+            .await?
+            .data;
+        assert!(projects.data.iter().all(|row| row.id != p.id));
+        let executions = service
+            .execution_list(ctx.list((), ListParams::default()))
+            .await?
+            .data;
+        assert!(executions.data.iter().all(|row| row.id != execution));
+        let live: Option<ActiveProjectDB> = db.fetch_optional(&p.id).await?;
+        assert!(live.is_none());
+        Ok(())
+    }
+}

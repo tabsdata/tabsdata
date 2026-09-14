@@ -60,6 +60,10 @@ use td_objects::types::visible_projects::VisibleProjects;
 /// Errors raised by the enforcement layer.
 #[td_error::td_error]
 pub enum RbacError {
+    /// The kind's source of truth no longer knows the entity (kind, id);
+    /// gone and never-existed are indistinguishable on purpose.
+    #[error("{0} `{1}` not found")]
+    EntityNotFound(String, String) = 1000,
     /// The requester's effective grants do not satisfy the requirement
     /// (requirement type, scope) of the operation.
     #[error("Forbidden: requester does not satisfy {0} on {1}")]
@@ -250,6 +254,14 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
         if request.provenance == Provenance::InternalToken {
             return Ok(());
         }
+        if let On::Entity(id) = &scope.0
+            && !source.is_current::<E, _>(conn, id).await?
+        {
+            Err(RbacError::EntityNotFound(
+                E::NAME.to_string(),
+                id.to_string(),
+            ))?
+        }
         let user_grants = source.user_grants(conn, &request.user_id).await?;
         let request_grants = identity_grants(request);
         if enforce::<E, R>(&user_grants, &request_grants, &scope.0) {
@@ -339,6 +351,7 @@ mod tests {
     use crate::rbac::model::{ProjectId, ProjectRole, RoleGrant, System, SystemEntity, SystemRole};
     use crate::rbac::source::FixedRbacSource;
     use td_database::access::InProject;
+    use td_database::pool::TdPool;
     use td_objects::types::basic::{AccessTokenId, UserId};
 
     fn request(user_id: UserId) -> RequestContext {
@@ -512,7 +525,7 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_enforce_authorize(db: td_database::pool::TdPool) {
+    async fn test_enforce_authorize(db: TdPool) {
         let user_id = UserId::default();
         let p = ProjectId::default();
 
@@ -538,7 +551,9 @@ mod tests {
         .await
         .unwrap_err();
         let rbac_err: &RbacError = err.domain_err();
-        let RbacError::Forbidden(requirement, scope_str) = rbac_err;
+        let RbacError::Forbidden(requirement, scope_str) = rbac_err else {
+            panic!("expected Forbidden, got {rbac_err:?}");
+        };
         assert!(requirement.contains("ManageProject"));
         assert_eq!(scope_str, &format!("project:{p}"));
 
@@ -559,7 +574,7 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_enforce_authorize_fixed_source(db: td_database::pool::TdPool) {
+    async fn test_enforce_authorize_fixed_source(db: TdPool) {
         // FixedRbacSource answers from memory; the connection is unused.
         let user_id = UserId::default();
         let p = ProjectId::default();
@@ -582,7 +597,73 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_enforce_bypasses_for_internal_token(db: td_database::pool::TdPool) {
+    async fn test_enforce_gone_project_is_not_found(db: TdPool) {
+        let admin_id = UserId::default();
+        let dev_id = UserId::default();
+        let stranger_id = UserId::default();
+        let p = ProjectId::default();
+        let source = FixedRbacSource::new()
+            .with_user_roles(admin_id, [SystemRole::SysAdmin.grants()])
+            .with_user_roles(dev_id, [ProjectRole::Dev.grants(p)])
+            .with_gone::<Project>(p);
+        let scope = Scope::<Project>(On::Entity(p));
+        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+
+        let err = Enforce::<FixedRbacSource, Project, ViewProject>::authorize(
+            &source,
+            &mut conn,
+            &request(admin_id),
+            &scope,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            err.domain_err(),
+            RbacError::EntityNotFound(kind, id) if kind == "project" && *id == p.to_string()
+        ));
+
+        for user in [dev_id, stranger_id] {
+            let err = Enforce::<FixedRbacSource, Project, ViewProject>::authorize(
+                &source,
+                &mut conn,
+                &request(user),
+                &scope,
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(err.domain_err(), RbacError::EntityNotFound(_, _)));
+        }
+
+        Enforce::<FixedRbacSource, Project, ViewProject>::authorize(
+            &source,
+            &mut conn,
+            &request(admin_id),
+            &Scope::<Project>(On::Entity(ProjectId::default())),
+        )
+        .await
+        .unwrap();
+
+        Enforce::<FixedRbacSource, System, CreateProjects>::authorize(
+            &source,
+            &mut conn,
+            &request(admin_id),
+            &Scope::<System>(On::Entity(SystemEntity)),
+        )
+        .await
+        .unwrap();
+
+        Enforce::<FixedRbacSource, Project, ViewProject>::authorize(
+            &source,
+            &mut conn,
+            &RequestContext::internal(),
+            &scope,
+        )
+        .await
+        .unwrap();
+    }
+
+    #[td_test::test(db)]
+    async fn test_enforce_bypasses_for_internal_token(db: TdPool) {
         // `RequestContext::internal()` is the context the apiserver's
         // `internal_token_layer` injects once it has validated an
         // internal-endpoint token, which already binds (method, scope,
@@ -618,7 +699,7 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_enforce_no_bypass_for_system_identity(db: td_database::pool::TdPool) {
+    async fn test_enforce_no_bypass_for_system_identity(db: TdPool) {
         // The bypass keys on internal-token provenance, not on identity: a
         // session context that merely carries `UserId::system()` (a hijacked
         // or mis-seeded session, a context built from an id found in data)
@@ -639,7 +720,9 @@ mod tests {
         .await
         .unwrap_err();
         let rbac_err: &RbacError = err.domain_err();
-        let RbacError::Forbidden(requirement, scope_str) = rbac_err;
+        let RbacError::Forbidden(requirement, scope_str) = rbac_err else {
+            panic!("expected Forbidden, got {rbac_err:?}");
+        };
         assert!(requirement.contains("ViewProject"));
         assert_eq!(scope_str, &format!("project:{p}"));
     }

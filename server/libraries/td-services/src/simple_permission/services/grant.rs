@@ -359,6 +359,7 @@ mod tests {
             service.grant_simple_permission(request).await,
             |err| match err {
                 RbacError::Forbidden(_, _) => {}
+                other => panic!("expected Forbidden, got {other:?}"),
             },
         );
         let _ = target;

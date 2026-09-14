@@ -34,10 +34,12 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::project::ProjectDeleteDB;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, ProjectName, UserId,
     };
+    use td_queries::Queries;
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
 
     #[td_test::test(db)]
@@ -164,6 +166,28 @@ mod tests {
 
         assert!(response.data.iter().any(|e| e.id == base_exec));
         assert!(!response.data.iter().any(|e| e.id == alpha_exec));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_list_execution_wildcard_skips_deleted_project(db: TdPool) -> Result<(), TdError> {
+        let base = db.seed().test_project().await?;
+        let base_exec = seed_run(&db, base.id).await?.execution;
+        let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
+        let alpha_exec = seed_run(&db, alpha.id).await?.execution;
+
+        let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
+        db.update::<ProjectDeleteDB>(&alpha.to_delete_dao(&ctx), alpha.id)
+            .await?;
+
+        let service = Services::with_defaults(db.clone());
+        let wildcard = service
+            .execution_list(ctx.list((), ListParams::default()))
+            .await?
+            .data;
+
+        assert!(wildcard.data.iter().any(|e| e.id == base_exec));
+        assert!(!wildcard.data.iter().any(|e| e.id == alpha_exec));
         Ok(())
     }
 }
