@@ -24,6 +24,7 @@ impl Locations for StageTriggerInput {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct Info {
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub worker_id: WorkerId,
     /// The trigger's project — workers resolve project-scoped resources
     /// (e.g. the connection artifacts under `connections/<project_id>/`)
@@ -31,6 +32,7 @@ pub struct Info {
     pub project_id: ProjectId,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub function_version_id: FunctionVersionId,
     pub function_defined_on: AtTime,
     pub function: FunctionName,
@@ -129,8 +131,8 @@ mod tests {
 
         let defined_on = serde_json::to_string(&defined_on).unwrap();
 
-        let function_version_id = function_version_id.unpadded_str();
-        let worker_id = worker_id.unpadded_str();
+        let function_version_id = function_version_id.padded_str();
+        let worker_id = worker_id.padded_str();
 
         assert_eq!(
             serialized.as_str(),

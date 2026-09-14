@@ -18,6 +18,11 @@
 //! The JSON (REST API) generated representation does not have the `<COUNTER>` padded, but it
 //! accepts both.
 //!
+//! Worker request documents are the exception: the `dxo::yaml` DTOs opt into the padded form
+//! through the [`padded`] / [`padded_option`] serde adapters, so a `request.yaml` reads the
+//! same whether the supervisor wrote it locally or a kubernetes pod pulled it from the
+//! internal `/message` endpoint, and its IDs order as plain strings.
+//!
 //! Key features:
 //! - **Type-safe ID kinds**: `KeyId` trait allows distinguishing different logical IDs at
 //!   compile time.
@@ -320,6 +325,46 @@ impl<K: KeyId> PgHasArrayType for IdL<K> {
     }
 }
 
+/// Renders a logical ID in the padded, at-rest form.
+///
+/// Serde writes the unpadded form, which is the REST representation meant for
+/// human consumption. Documents whose IDs are read back as plain strings —
+/// the worker request YAMLs — need the padded form instead, so that ordering
+/// the string orders the ID. Use it through the [`padded`] and
+/// [`padded_option`] serde adapters.
+pub trait PaddedIdL {
+    fn padded(&self) -> String;
+}
+
+impl<K: KeyId> PaddedIdL for IdL<K> {
+    fn padded(&self) -> String {
+        self.padded_str()
+    }
+}
+
+/// `#[serde(serialize_with = "td_common::logic_id::padded")]` for a logical ID.
+///
+/// Serialization only: [`IdL::parse`] already reads both forms back.
+pub fn padded<T, S>(value: &T, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: PaddedIdL,
+    S: Serializer,
+{
+    serializer.serialize_str(&value.padded())
+}
+
+/// [`padded`] for an `Option<logical ID>`.
+pub fn padded_option<T, S>(value: &Option<T>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    T: PaddedIdL,
+    S: Serializer,
+{
+    match value {
+        Some(value) => serializer.serialize_some(&value.padded()),
+        None => serializer.serialize_none(),
+    }
+}
+
 /// The internal state of the `IdLGenerator`.
 #[derive(Debug)]
 struct GeneratorState {
@@ -612,5 +657,74 @@ mod tests {
 
         let decoded_id = TestId::parse(&encoded_str).unwrap();
         assert_eq!(id, decoded_id);
+    }
+
+    #[derive(Serialize)]
+    struct PaddedHolder {
+        #[serde(serialize_with = "padded")]
+        id: TestId,
+        #[serde(serialize_with = "padded_option")]
+        maybe: Option<TestId>,
+    }
+
+    fn logic(counter: usize) -> TestId {
+        TestId::new_logic(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(), counter)
+    }
+
+    #[test]
+    fn test_padded_adapter_pads_where_plain_serde_does_not() {
+        let holder = PaddedHolder {
+            id: logic(123),
+            maybe: Some(logic(7)),
+        };
+        assert_eq!(
+            serde_json::to_string(&holder).unwrap(),
+            r#"{"id":"tst20240101-0000000123","maybe":"tst20240101-0000000007"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&holder.id).unwrap(),
+            r#""tst20240101-123""#
+        );
+    }
+
+    #[test]
+    fn test_padded_option_adapter_keeps_none() {
+        let holder = PaddedHolder {
+            id: logic(1),
+            maybe: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&holder).unwrap(),
+            r#"{"id":"tst20240101-0000000001","maybe":null}"#
+        );
+    }
+
+    #[test]
+    fn test_padded_adapter_leaves_legacy_ids_alone() {
+        let id_str = id::id().to_string();
+        let holder = PaddedHolder {
+            id: TestId::parse(&id_str).unwrap(),
+            maybe: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&holder).unwrap(),
+            format!(r#"{{"id":"{id_str}","maybe":null}}"#)
+        );
+    }
+
+    #[test]
+    fn test_padded_output_orders_as_a_string() {
+        let counters = [1usize, 2, 9, 10, 100];
+
+        let padded: Vec<String> = counters.iter().map(|c| logic(*c).padded()).collect();
+        let mut padded_sorted = padded.clone();
+        padded_sorted.sort();
+        assert_eq!(padded, padded_sorted);
+
+        // Which is exactly what the unpadded REST form cannot do.
+        let unpadded: Vec<String> = counters.iter().map(|c| logic(*c).unpadded_str()).collect();
+        let mut unpadded_sorted = unpadded.clone();
+        unpadded_sorted.sort();
+        assert_ne!(unpadded, unpadded_sorted);
     }
 }

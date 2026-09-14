@@ -44,14 +44,18 @@ pub struct FunctionInfo {
     pub project_id: ProjectId,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub function_version_id: FunctionVersionId,
     pub function_defined_on: AtTime,
     pub function: FunctionName,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub function_run_id: PhysicalFunctionRunId,
     pub function_bundle: Location,
     pub function_stage: Location,
     pub triggered_on: AtTime,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub transaction_id: TransactionId,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub execution_id: ExecutionId,
     pub execution_name: Option<ExecutionName>,
     pub function_data: Location,
@@ -69,10 +73,14 @@ pub struct InputTableVersion {
     pub collection: CollectionName,
     pub table_id: TableId,
     pub table_version_id: TableVersionId,
+    #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub execution_id: Option<ExecutionId>,
+    #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub transaction_id: Option<TransactionId>,
+    #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub function_run_id: Option<PhysicalFunctionRunId>,
     pub triggered_on: Option<AtTime>,
+    #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub table_data_version_id: Option<PhysicalTableDataVersionId>,
     pub location: Option<Location>,
     pub input_idx: InputIdx,
@@ -98,10 +106,14 @@ pub struct InputPartitionTableVersion {
     pub collection: CollectionName,
     pub table_id: TableId,
     pub table_version_id: TableVersionId,
+    #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub execution_id: Option<ExecutionId>,
+    #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub transaction_id: Option<TransactionId>,
+    #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub function_run_id: Option<PhysicalFunctionRunId>,
     pub triggered_on: Option<AtTime>,
+    #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub table_data_version_id: Option<PhysicalTableDataVersionId>,
     pub partitions: HashMap<PartitionName, Location>,
     pub input_idx: InputIdx,
@@ -186,6 +198,7 @@ pub struct OutputTableVersion {
     pub collection: CollectionName,
     pub table_id: TableId,
     pub table_version_id: TableVersionId,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub table_data_version_id: PhysicalTableDataVersionId,
     pub location: Location,
     pub table_pos: TableFunctionParamPos,
@@ -199,6 +212,7 @@ pub struct OutputPartitionTableVersion {
     pub collection: CollectionName,
     pub table_id: TableId,
     pub table_version_id: TableVersionId,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub table_data_version_id: PhysicalTableDataVersionId,
     pub base_location: Location,
     pub table_pos: TableFunctionParamPos,
@@ -357,11 +371,11 @@ mod tests {
 
         let defined_on = serde_json::to_string(&defined_on).unwrap();
 
-        let function_version_id = function_version_id.unpadded_str();
-        let transaction_id = transaction_id.unpadded_str();
-        let execution_id = execution_id.unpadded_str();
-        let function_run_id = function_run_id.unpadded_str();
-        let table_data_version_id = table_data_version_id.unpadded_str();
+        let function_version_id = function_version_id.padded_str();
+        let transaction_id = transaction_id.padded_str();
+        let execution_id = execution_id.padded_str();
+        let function_run_id = function_run_id.padded_str();
+        let table_data_version_id = table_data_version_id.padded_str();
 
         assert_eq!(
             serialized.as_str(),

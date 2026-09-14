@@ -23,9 +23,11 @@ impl Locations for CronTriggerInput {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct Info {
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub worker_id: WorkerId,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub function_version_id: FunctionVersionId,
     pub function: FunctionName,
     pub scheduled_on: AtTime, // when the request yaml was created
@@ -81,8 +83,8 @@ mod tests {
         let scheduled_on = scheduled_on.to_string();
         let start = serde_json::to_string(&start).unwrap();
         let end = serde_json::to_string(&end).unwrap();
-        let function_version_id = function_version_id.unpadded_str();
-        let worker_id = worker_id.unpadded_str();
+        let function_version_id = function_version_id.padded_str();
+        let worker_id = worker_id.padded_str();
         assert_eq!(
             serialized.as_str(),
             format!(

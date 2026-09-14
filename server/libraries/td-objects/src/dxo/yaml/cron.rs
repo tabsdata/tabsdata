@@ -28,9 +28,11 @@ impl Locations for CronInput {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct CronInfo {
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub worker_id: WorkerId,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
     pub function_version_id: FunctionVersionId,
     pub function: FunctionName,
     pub scheduled_on: AtTime,
@@ -51,12 +53,14 @@ mod tests {
             end: None,
             mask: CronMask::try_from("* * * * *").unwrap(),
         };
+        let worker_id = WorkerId::new();
+        let function_version_id = FunctionVersionId::new();
         let input = WorkerInput::Cron(Box::new(CronInput {
             info: CronInfo {
-                worker_id: WorkerId::new(),
+                worker_id: worker_id.clone(),
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
-                function_version_id: FunctionVersionId::new(),
+                function_version_id: function_version_id.clone(),
                 function: FunctionName::try_from("function").unwrap(),
                 scheduled_on: AtTime::default(),
                 config: WorkerConfig::serialize(cfg).unwrap(),
@@ -67,6 +71,13 @@ mod tests {
         // Lean: no `task` callback.
         assert!(serialized.starts_with("!Cron\ninfo:"));
         assert!(!serialized.contains("task"));
+
+        // Logical ids are written in the padded, at-rest form.
+        assert!(serialized.contains(&format!("worker_id: {}\n", worker_id.padded_str())));
+        assert!(serialized.contains(&format!(
+            "function_version_id: {}\n",
+            function_version_id.padded_str()
+        )));
 
         let deserialized: WorkerInput = serde_yaml::from_str(&serialized).unwrap();
         assert_eq!(input, deserialized);

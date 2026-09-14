@@ -718,6 +718,12 @@ fn expand_idl_appendix(name: &Ident, inner: &Type, key: &Ident) -> proc_macro2::
         }
 
         impl From<#inner> for #name { fn from(v: #inner) -> Self { Self(v) } }
+
+        impl td_common::logic_id::PaddedIdL for #name {
+            fn padded(&self) -> String {
+                td_common::logic_id::PaddedIdL::padded(&self.0)
+            }
+        }
     }
 }
 
