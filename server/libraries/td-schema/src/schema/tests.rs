@@ -369,8 +369,9 @@ enum Phase {
     Trigger = 1,
     View = 2,
     Index = 3,
-    Insert = 4,
-    Rls = 5,
+    Statistics = 4,
+    Insert = 5,
+    Rls = 6,
 }
 
 fn phase_name(idx: usize) -> &'static str {
@@ -379,8 +380,9 @@ fn phase_name(idx: usize) -> &'static str {
         1 => "Trigger",
         2 => "View",
         3 => "Index",
-        4 => "Insert",
-        5 => "Rls",
+        4 => "Statistics",
+        5 => "Insert",
+        6 => "Rls",
         _ => "?",
     }
 }
@@ -397,6 +399,8 @@ fn classify_stmt(sql: &str) -> Phase {
         Phase::View
     } else if s.starts_with("CREATE INDEX") || s.starts_with("CREATE UNIQUE INDEX") {
         Phase::Index
+    } else if s.starts_with("CREATE STATISTICS") {
+        Phase::Statistics
     } else if s.starts_with("INSERT") {
         Phase::Insert
     } else if s.starts_with("ALTER TABLE") || s.starts_with("CREATE POLICY") {

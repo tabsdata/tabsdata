@@ -12,7 +12,7 @@ use td_bridge::BridgeProviderHandle;
 use td_bridge::observer::{
     ObservedWorkload, WorkloadKind, WorkloadObservation, WorkloadObserver, WorkloadPhase,
 };
-use td_database::access::SeesProjectRows;
+use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
@@ -27,6 +27,7 @@ use td_objects::types::basic::{
     PhysicalFunctionRunStatus, ProjectId, WorkerId, WorkerStatus,
 };
 use td_queries::Queries;
+use td_queries::metrics_facts::attempts_ended;
 use td_storage::Storage;
 use tracing::{debug, instrument, warn};
 
@@ -668,8 +669,8 @@ pub fn failed_worker_ids(actions: &RecoveryActions) -> Result<Vec<WorkerId>, TdE
     level = "debug",
     err(Debug)
 )]
-pub async fn fail_recovered_attempts<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn fail_recovered_attempts(
+    conn: &mut DomainConnection<Apiserver, InProject>,
     at: &AtTime,
     actions: &RecoveryActions,
 ) -> Result<(), TdError> {
@@ -684,6 +685,7 @@ pub async fn fail_recovered_attempts<S: SeesProjectRows>(
     }
     let update = PhysicalFunctionRunUpdateDB::failed_at(at)?;
     conn.scd2().chunked().update(&update, &pfr_ids).await?;
+    attempts_ended(conn, &pfr_ids).await?;
     Ok(())
 }
 

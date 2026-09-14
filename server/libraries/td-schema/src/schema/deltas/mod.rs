@@ -53,6 +53,14 @@ pub(crate) mod v5_to_v6;
 pub(crate) mod v6_to_v7;
 pub(crate) mod v7_to_v8;
 pub(crate) mod v8_to_v9;
+pub(crate) mod v9_to_v10;
+
+/// The v10 derivation of `metrics_facts` from the base rows. Exposed so the
+/// DAO gate can hold the live fact writers to the same rows the rung derives.
+#[cfg(feature = "td-test")]
+pub fn metrics_facts_backfill() -> String {
+    v9_to_v10::backfill_statement()
+}
 
 /// The rung upgrading from version `target_version - 1` to `target_version`.
 ///
@@ -75,6 +83,7 @@ pub fn get(target_version: usize) -> Delta {
         7 => rung::<v6_to_v7::Migration>(),
         8 => rung::<v7_to_v8::Migration>(),
         9 => rung::<v8_to_v9::Migration>(),
+        10 => rung::<v9_to_v10::Migration>(),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }

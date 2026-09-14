@@ -25,6 +25,7 @@ use td_objects::types::basic::{
     TableFunctionParamPos, TableId,
 };
 use td_queries::Queries;
+use td_queries::metrics_facts::runs_reattempted;
 
 /// The logical table-data versions the plan minted for one run, by table.
 pub async fn logical_versions_by_table<S: SeesProjectRows>(
@@ -107,6 +108,7 @@ pub async fn mint_function_run(
     let base_path = resolve_output_base_path(conn, &runnable.function_version_id).await?;
     let fr = build_function_run(lfr, runnable, at, &base_path)?;
     conn.scd2().open(&fr, at).await?;
+    runs_reattempted(conn, std::slice::from_ref(&lfr.base.id)).await?;
     Ok(fr)
 }
 

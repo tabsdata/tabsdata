@@ -5,7 +5,7 @@
 use itertools::Itertools;
 use std::collections::HashSet;
 use ta_services::ctx_service::{Message, ReqCtx};
-use td_database::access::SeesProjectRows;
+use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::and;
@@ -22,6 +22,7 @@ use td_objects::types::basic::{
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, SchemaChanged, WorkerId,
 };
 use td_queries::Queries;
+use td_queries::metrics_facts::{attempts_ended, runs_status_changed};
 use tracing::{debug, instrument};
 
 #[td_error]
@@ -70,8 +71,8 @@ pub async fn update_worker_status<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-pub async fn abandon_requested_physical_runs<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn abandon_requested_physical_runs(
+    conn: &mut DomainConnection<Apiserver, InProject>,
     at: &AtTime,
     logical_function_runs: &[LogicalFunctionRunDB],
 ) -> Result<(), TdError> {
@@ -108,10 +109,25 @@ pub async fn abandon_requested_physical_runs<S: SeesProjectRows>(
 
     let update = PhysicalFunctionRunUpdateDB::failed_at(at)?;
     conn.scd2().chunked().update(&update, &abandoned).await?;
+    attempts_ended(conn, &abandoned).await?;
     debug!(
         abandoned_count = abandoned.len(),
         "execution.recover_abandon: terminalized in-flight PFR(s) of Requested LFR(s)"
     );
+    Ok(())
+}
+
+/// The one door for a run's status; its facts follow.
+pub async fn set_lfr_status(
+    conn: &mut DomainConnection<Apiserver, InProject>,
+    lfr_ids: &[LogicalFunctionRunId],
+    update: &LogicalFunctionRunStatusUpdateDB,
+) -> Result<(), TdError> {
+    if lfr_ids.is_empty() {
+        return Ok(());
+    }
+    conn.chunked().update(update, lfr_ids).await?;
+    runs_status_changed(conn, lfr_ids, &update.status).await?;
     Ok(())
 }
 
@@ -263,9 +279,9 @@ fn cascade_transition(
     level = "debug",
     err(Debug)
 )]
-pub async fn update_function_run_status<S: SeesProjectRows>(
+pub async fn update_function_run_status(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, S>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     logical_function_runs: &Vec<LogicalFunctionRunDB>,
     update: &LogicalFunctionRunStatusUpdateDB,
 ) -> Result<(), TdError> {
@@ -292,7 +308,7 @@ pub async fn update_function_run_status<S: SeesProjectRows>(
         return Ok(());
     }
 
-    let _ = conn.chunked().update(update, &lfr_ids).await?;
+    set_lfr_status(conn, &lfr_ids, update).await?;
     debug!(
         updated_count = lfr_ids.len(),
         "execution.update_status: updated LFR(s)"
@@ -316,10 +332,7 @@ pub async fn update_function_run_status<S: SeesProjectRows>(
 
         if !to_commit_ffrs.is_empty() {
             let commit_update = LogicalFunctionRunStatusUpdateDB::committed();
-            let _ = conn
-                .chunked()
-                .update(&commit_update, &to_commit_ffrs)
-                .await?;
+            set_lfr_status(conn, &to_commit_ffrs, &commit_update).await?;
             debug!(
                 committed_count = to_commit_ffrs.len(),
                 "execution.commit: committed LFR(s)"
@@ -354,9 +367,9 @@ pub async fn update_function_run_status<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-async fn cascade_downstream_status<S: SeesProjectRows>(
+async fn cascade_downstream_status(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, S>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     starting: &[LogicalFunctionRunId],
     status: &LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {
@@ -384,7 +397,7 @@ async fn cascade_downstream_status<S: SeesProjectRows>(
     }
 
     let cascade_update = LogicalFunctionRunStatusUpdateDB { status: *status };
-    let _ = conn.chunked().update(&cascade_update, &to_update).await?;
+    set_lfr_status(conn, &to_update, &cascade_update).await?;
     debug!(
         cascade_status = %status,
         cascade_count = to_update.len(),

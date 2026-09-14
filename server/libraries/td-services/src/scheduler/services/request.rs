@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::execution::update_status::set_lfr_status;
 use crate::internal_api::InternalApi;
 use crate::logical::dispatch_mint::mint_function_runs_on_dispatch;
 use crate::project::active::active_project_ids;
@@ -129,7 +130,7 @@ async fn tick_project(
     conn.chunked().insert(&workers).await?;
     let lfr_ids = lfr_ids_from_minted_dispatch(&minted)?;
     let requested = LogicalFunctionRunStatusUpdateDB::requested();
-    conn.chunked().update(&requested, &lfr_ids).await?;
+    set_lfr_status(conn, &lfr_ids, &requested).await?;
     // Flip PFR.status Requested -> Dispatched so the replay-side readiness
     // query excludes these PFRs from the next tick.
     let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;

@@ -14,6 +14,7 @@ mod groups;
 mod logical_function_run_inputs;
 mod logical_function_runs;
 mod logical_table_data_versions;
+mod metrics_facts;
 mod permissions;
 mod physical_function_runs;
 mod physical_table_data_versions;
@@ -40,7 +41,7 @@ use sea_query::{DynIden, IntoIden};
 /// Schema revision within the current major; resets to 1 at each major bump
 /// (cross-major upgrade is refused via `tabsdata_version`). To evolve the
 /// schema, follow the README runbook; `test_schema_ddl_snapshot` gates the DDL.
-pub const VERSION: usize = 9;
+pub const VERSION: usize = 10;
 
 /// FK-safe ordering of every entity in the current schema.
 ///
@@ -76,6 +77,7 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &table_partitions::Defs,
     &workers::Defs,
     &logical_function_run_inputs::Defs,
+    &metrics_facts::Defs,
     &with_status_views::Defs,
 ];
 
@@ -108,6 +110,7 @@ pub(crate) fn project_scoped_tables() -> Vec<DynIden> {
         logical_function_runs::LogicalFunctionRuns::Table.into_iden(),
         logical_table_data_versions::LogicalTableDataVersions::Table.into_iden(),
         logical_function_run_inputs::LogicalFunctionRunInputs::Table.into_iden(),
+        metrics_facts::MetricsFacts::Table.into_iden(),
     ]
 }
 
@@ -146,7 +149,16 @@ impl SchemaSource for Source {
     }
 
     fn indexes(&self) -> Vec<Derived> {
-        ENTITIES.iter().flat_map(|e| e.create_indices()).map(index_derived).collect()
+        ENTITIES
+            .iter()
+            .flat_map(|e| e.create_indices())
+            .map(index_derived)
+            .chain(ENTITIES.iter().flat_map(|e| e.create_partial_indices()).map(|i| i.render()))
+            .collect()
+    }
+
+    fn statistics(&self) -> Vec<Derived> {
+        ENTITIES.iter().flat_map(|e| e.create_statistics()).map(|s| s.render()).collect()
     }
 
     fn seeds(&self) -> Vec<String> {

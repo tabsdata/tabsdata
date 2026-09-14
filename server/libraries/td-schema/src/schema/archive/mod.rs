@@ -43,6 +43,7 @@ pub(crate) mod v5;
 pub(crate) mod v6;
 pub(crate) mod v7;
 pub(crate) mod v8;
+pub(crate) mod v9;
 
 const ARCHIVED: usize = current::VERSION - 1;
 
@@ -58,6 +59,7 @@ pub(crate) const ARCHIVES: [&'static dyn SchemaSource; ARCHIVED] = [
     &v6::Source,
     &v7::Source,
     &v8::Source,
+    &v9::Source,
 ];
 
 /// The [`SchemaSource`] for an archived version.

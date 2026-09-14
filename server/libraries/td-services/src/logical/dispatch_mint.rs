@@ -21,6 +21,7 @@ use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionInsert
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{AtTime, FunctionId, FunctionVersionId, LogicalFunctionRunId};
 use td_queries::Queries;
+use td_queries::metrics_facts::runs_reattempted;
 use tracing::{debug, instrument};
 
 /// One ready LFR's mint output. Carries everything downstream steps
@@ -159,6 +160,9 @@ pub async fn mint_function_runs_on_dispatch(
 
     if !frs.is_empty() {
         conn.scd2().chunked().open(&frs, at).await?;
+        let reattempted: Vec<LogicalFunctionRunId> =
+            per_lfr.iter().map(|(lfr, _)| lfr.base.id.clone()).collect();
+        runs_reattempted(conn, &reattempted).await?;
     }
     if !all_tdvs.is_empty() {
         conn.scd2().chunked().open(&all_tdvs, at).await?;

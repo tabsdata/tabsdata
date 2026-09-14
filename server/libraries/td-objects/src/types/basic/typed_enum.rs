@@ -220,6 +220,41 @@ pub enum PhysicalFunctionRunStatus {
     Failed,
 }
 
+/// The kind of a `/metrics` edge row.
+#[derive(
+    TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash, Copy,
+)]
+pub enum EdgeKind {
+    /// A consumed version's producer dim → the consuming attempt's dim.
+    #[typed_enum(rename = "R")]
+    Real,
+    /// Produced by an attempt with no inputs: data entering the system.
+    #[typed_enum(rename = "S")]
+    ExternalSource,
+    /// Consumed by an attempt with no visible outputs: data leaving the system.
+    #[typed_enum(rename = "E")]
+    Egress,
+}
+
+/// Which event of an ended attempt a `/metrics` fact row records.
+#[derive(
+    TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash, Copy,
+)]
+pub enum FactSide {
+    /// The attempt itself.
+    #[typed_enum(rename = "A")]
+    Attempt,
+    /// A version the attempt wrote.
+    #[typed_enum(rename = "O")]
+    Written,
+    /// A version the attempt read.
+    #[typed_enum(rename = "I")]
+    Read,
+    /// A version the attempt read and no visible output carries onward.
+    #[typed_enum(rename = "E")]
+    Egress,
+}
+
 impl PhysicalFunctionRunStatus {
     /// Statuses where the attempt has finished and `ended_on` plus the
     /// bucket columns are populated.

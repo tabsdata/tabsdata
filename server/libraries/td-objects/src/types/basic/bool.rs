@@ -50,6 +50,39 @@ pub struct HasData(bool);
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub struct IsEmptyVersions(bool);
 
+/// `/metrics` fact marks. `CurrentAttempt` is false on an attempt a replay
+/// superseded; the `EdgeFirst*` pair marks one row per attempt and edge in
+/// each dimension, so runs per edge is a count instead of a `COUNT(DISTINCT)`.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = true)]
+pub struct CurrentAttempt(bool);
+
+/// Count the attempts a later attempt superseded too.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct IncludeReplaced(bool);
+
+/// Count the versions of private tables too.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct IncludePrivate(bool);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct RunHasInputs(bool);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct RunHasOutputs(bool);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct EdgeFirst(bool);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct EdgeFirstGroup(bool);
+
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 #[typed(default = false)]
 pub struct OverrideDisabledTrigger(bool);

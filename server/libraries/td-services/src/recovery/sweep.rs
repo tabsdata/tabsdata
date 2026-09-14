@@ -8,7 +8,7 @@ use crate::execution::update_status::{
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use ta_services::ctx_service::ReqCtx;
-use td_database::access::SeesProjectRows;
+use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
@@ -19,6 +19,7 @@ use td_objects::types::basic::{
     PhysicalFunctionRunId,
 };
 use td_queries::Queries;
+use td_queries::metrics_facts::attempts_ended;
 use tracing::{debug, instrument};
 
 /// `stuck_lfrs` get the full recover flow; `abandoned_pfr_ids` (attempts
@@ -110,8 +111,8 @@ pub async fn fetch_stale_dispatched_runs<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-pub async fn fail_stale_abandoned_attempts<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn fail_stale_abandoned_attempts(
+    conn: &mut DomainConnection<Apiserver, InProject>,
     at: &AtTime,
     stale: &StaleDispatchedRuns,
 ) -> Result<(), TdError> {
@@ -123,6 +124,7 @@ pub async fn fail_stale_abandoned_attempts<S: SeesProjectRows>(
         .chunked()
         .update(&update, &stale.abandoned_pfr_ids)
         .await?;
+    attempts_ended(conn, &stale.abandoned_pfr_ids).await?;
     debug!(
         failed_count = stale.abandoned_pfr_ids.len(),
         "scheduler.fail_stale_abandoned_attempts: terminalized stale attempt(s)"
@@ -134,9 +136,9 @@ pub async fn fail_stale_abandoned_attempts<S: SeesProjectRows>(
 /// `Failed`, and those under a `Requested` LFR additionally get the
 /// operator-recover flow.
 #[instrument(name = "recovery.sweep", skip_all, level = "debug", err(Debug))]
-pub async fn sweep_stale_runs<S: SeesProjectRows>(
+pub async fn sweep_stale_runs(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, S>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     at: &AtTime,
     config: &RecoveryConfig,
 ) -> Result<(), TdError> {

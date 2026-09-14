@@ -18,9 +18,19 @@ pub struct ByteCount(i64);
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 pub struct TableVersionCount(i64);
 
+/// Distinct tables behind a set of versions.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct TableCount(i64);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct FunctionRunCount(i64);
+
+/// The attempt's ordinal within its run: 0 for the first, one more per replay.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(default = 0)]
+pub struct ReplayOrdinal(i64);
+
 /// UTC epoch ms, floored to a bucket boundary (hour / day / week / month).
-/// Used by the operational-metrics endpoints to drive `GROUP BY` directly
-/// off indexed columns — no `date_trunc` at query time.
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct EpochMs(i64);
 

@@ -49,6 +49,8 @@ CREATE TABLE "workers" ( "id" bigint NOT NULL PRIMARY KEY, "project_id" text NOT
 
 CREATE TABLE "logical_function_run_inputs" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "execution_id" bigint NOT NULL, "transaction_id" bigint NOT NULL, "logical_function_run_id" bigint NOT NULL, "requirement_logical_table_data_version_id" bigint NULL, "requirement_input_idx" integer NULL, "requirement_dependency_pos" integer NULL, "requirement_version_pos" integer NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("requirement_logical_table_data_version_id") REFERENCES "logical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
+CREATE TABLE "metrics_facts" ( "ts" timestamp with time zone NOT NULL, "ts_hour_ms" bigint NOT NULL, "ts_day_ms" bigint NOT NULL, "ts_week_ms" bigint NOT NULL, "ts_month_ms" bigint NOT NULL, "project_id" text NOT NULL COLLATE "C", "from_group_id" text NULL COLLATE "C", "from_collection_id" text NULL COLLATE "C", "group_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "execution_id" bigint NOT NULL, "transaction_id" bigint NOT NULL, "function_id" text NOT NULL COLLATE "C", "function_run_id" bigint NOT NULL, "attempt_id" bigint NOT NULL, "attempt_outcome" text NOT NULL, "run_status" text NOT NULL, "replay" bigint NOT NULL, "current" bool NOT NULL, "run_has_inputs" bool NOT NULL, "run_has_outputs" bool NOT NULL, "side" text NOT NULL, "table_id" text NULL COLLATE "C", "table_version_id" bigint NULL, "private" bool NOT NULL, "has_data" bool NOT NULL, "row_count" bigint NOT NULL, "data_bytes" bigint NOT NULL, "first_consumed_on" timestamp with time zone NULL, "edge_kind" text NULL, "edge_first" bool NOT NULL, "edge_first_group" bool NOT NULL )
+
 CREATE OR REPLACE FUNCTION functions__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('functions:' || NEW.function_id, 0));
@@ -447,6 +449,18 @@ CREATE INDEX "logical_function_run_inputs___execution_id___idx" ON "logical_func
 
 CREATE INDEX "lfri___requirement_logical_table_data_version_id___idx" ON "logical_function_run_inputs" ("requirement_logical_table_data_version_id")
 
+CREATE INDEX "metrics_facts___project_id__ts___idx" ON "metrics_facts" ("project_id", "ts") INCLUDE ("from_group_id", "from_collection_id", "group_id", "collection_id", "run_status", "current", "side", "table_id", "private", "has_data", "row_count", "data_bytes", "first_consumed_on", "edge_kind", "edge_first", "edge_first_group")
+
+CREATE INDEX "metrics_facts___ts___idx" ON "metrics_facts" ("ts") INCLUDE ("project_id", "from_group_id", "from_collection_id", "group_id", "collection_id", "run_status", "current", "side", "table_id", "private", "has_data", "row_count", "data_bytes", "first_consumed_on", "edge_kind", "edge_first", "edge_first_group")
+
+CREATE INDEX "metrics_facts___function_run_id___idx" ON "metrics_facts" ("function_run_id")
+
+CREATE INDEX "metrics_facts___attempt_id___idx" ON "metrics_facts" ("attempt_id")
+
+CREATE INDEX "metrics_facts___table_version_id___written___idx" ON "metrics_facts" ("table_version_id") WHERE side = 'O'
+
+CREATE STATISTICS "metrics_facts___grouping___stx" (ndistinct) ON "side", "edge_kind", "from_collection_id", "from_group_id", "collection_id", "group_id", "run_status", "table_id" FROM "metrics_facts"
+
 INSERT INTO "tabsdata_system" ("name", "value") VALUES ('tabsdata_version', '2')
 
 INSERT INTO "users" ("id", "name", "full_name", "email", "created_on", "created_by_id", "modified_on", "modified_by_id", "password_hash", "password_set_on", "password_must_change", "enabled", "system") VALUES ('00000000000000000000000000', 'system', 'System', NULL, CURRENT_TIMESTAMP, '00000000000000000000000000', CURRENT_TIMESTAMP, '00000000000000000000000000', '!', CURRENT_TIMESTAMP, FALSE, FALSE, TRUE)
@@ -654,3 +668,13 @@ ALTER TABLE logical_function_run_inputs FORCE ROW LEVEL SECURITY
 CREATE POLICY project_isolation ON logical_function_run_inputs USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
 
 CREATE POLICY across_projects ON logical_function_run_inputs TO td_across_projects USING (true) WITH CHECK (true)
+
+ALTER TABLE metrics_facts ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
+
+ALTER TABLE metrics_facts ENABLE ROW LEVEL SECURITY
+
+ALTER TABLE metrics_facts FORCE ROW LEVEL SECURITY
+
+CREATE POLICY project_isolation ON metrics_facts USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON metrics_facts TO td_across_projects USING (true) WITH CHECK (true)

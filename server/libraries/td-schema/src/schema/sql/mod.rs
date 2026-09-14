@@ -6,11 +6,15 @@
 //! `render` method that turns it into SQL; the low-level rendering primitives
 //! and expression helpers live in `render`.
 
+pub(crate) mod partial_index;
 pub(crate) mod rls;
 pub(crate) mod scd2;
+pub(crate) mod statistics;
 pub mod trigger;
 pub(crate) mod view;
 
+pub(crate) use partial_index::PartialIndexDef;
+pub(crate) use statistics::StatisticsDef;
 pub(crate) use trigger::{ImmutableColumnsTriggerDef, Scd2TriggerDef, StickyTerminalsTriggerDef};
 pub(crate) use view::ViewDef;
 

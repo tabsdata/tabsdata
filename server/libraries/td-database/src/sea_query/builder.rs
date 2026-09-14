@@ -111,6 +111,18 @@ where
         pool.run_fetch_all_as::<O>(self.query)
     }
 
+    /// Planned with the bound values on every call; for statements whose
+    /// selectivity swings with them, such as a time window.
+    pub fn fetch_all_planned_per_call<'c>(
+        self,
+        pool: impl SeaExecutor + 'c,
+    ) -> BoxFuture<'c, Result<Vec<O>, Error>>
+    where
+        O: 'c,
+    {
+        pool.run_fetch_all_as_planned_per_call::<O>(self.query)
+    }
+
     pub fn fetch_one<'c>(self, pool: impl SeaExecutor + 'c) -> BoxFuture<'c, Result<O, Error>>
     where
         O: 'c,

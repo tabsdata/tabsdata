@@ -21,15 +21,16 @@ use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
     AtTime, BasePath, BundleId, ByteCount, CollectionName, Decorator, DependencyPos, Ended,
-    EpochMs, FunctionId, FunctionVersionId, HasData, InputIdx, LogicalFunctionRunId,
+    FunctionId, FunctionVersionId, HasData, InputIdx, LogicalFunctionRunId,
     LogicalFunctionRunInputId, LogicalFunctionRunStatus, LogicalTableDataVersionId,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private,
     ProjectId, ProjectName, ReuseFrozen, RowCount, TableFunctionParamPos, TableId, TableNameDto,
-    TableVersionCount, TransactionKey, Trigger, TriggeredOn, UserId, VersionPos,
+    TransactionKey, Trigger, TriggeredOn, UserId, VersionPos,
 };
 use td_objects::types::composed::TableDependencyDto;
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::derive_metrics_facts;
 use td_security::ENCODED_ID_SYSTEM;
 
 use crate::bulk::{bulk_insert, bulk_open};
@@ -95,7 +96,7 @@ async fn seed_project_runs(
     consumers: usize,
 ) -> Result<(), TdError> {
     let user = system_user()?;
-    let stamp = metrics_stamp()?;
+    let ended_on = ended_in_window()?;
     let s = next_salt();
     let mut graph = RunGraph::default();
     let mut producers: Vec<LogicalTableDataVersionInsertDB> = Vec::with_capacity(publishers);
@@ -115,7 +116,7 @@ async fn seed_project_runs(
             &format!("pub_f{s}_{i}"),
             "out",
             &[],
-            Some(&stamp),
+            Some(ended_on),
             &mut graph,
         )
         .await?;
@@ -137,7 +138,7 @@ async fn seed_project_runs(
             &format!("con_f{s}_{j}"),
             "out",
             &[],
-            Some(&stamp),
+            Some(ended_on),
             &mut graph,
         )
         .await?;
@@ -146,21 +147,13 @@ async fn seed_project_runs(
         }
     }
 
-    graph.flush(db, &pid).await
+    graph.flush(db, &pid).await?;
+    Ok(derive_metrics_facts(db).await?)
 }
 
-/// PFR window/metric stamp applied to seeded runs so they land inside the
-/// `/metrics` window with non-zero out-magnitudes.
-struct MetricsStamp {
-    ended_on: Ended<AtTime>,
-    bucket: i64,
-}
-
-fn metrics_stamp() -> Result<MetricsStamp, TdError> {
-    Ok(MetricsStamp {
-        ended_on: AtTime::from(td_common::datetime::Timestamp::try_from(IN_WINDOW_MS)?).into(),
-        bucket: IN_WINDOW_MS,
-    })
+/// The instant seeded attempts end, inside the `/metrics` window.
+fn ended_in_window() -> Result<Ended<AtTime>, TdError> {
+    Ok(AtTime::from(td_common::datetime::Timestamp::try_from(IN_WINDOW_MS)?).into())
 }
 
 /// `dep_refs` are table-name refs resolved within `collection`; the
@@ -377,7 +370,7 @@ async fn build_unit(
     fn_name: &str,
     out_table: &str,
     dep_refs: &[&str],
-    stamp: Option<&MetricsStamp>,
+    ended_on: Option<Ended<AtTime>>,
     graph: &mut RunGraph,
 ) -> Result<Unit, TdError> {
     let func = make_function(db, collection, fn_name, out_table, dep_refs).await?;
@@ -416,8 +409,6 @@ async fn build_unit(
         dispatched_on: None,
         started_on: None,
         ended_on: None,
-        status: PhysicalFunctionRunStatus::from(&LogicalFunctionRunStatus::Done),
-        function_version_patch_id: None,
         ended_on_hour_ms: None,
         ended_on_day_ms: None,
         ended_on_week_ms: None,
@@ -425,19 +416,14 @@ async fn build_unit(
         metric_table_versions: None,
         metric_rows: None,
         metric_data_bytes: None,
+        status: PhysicalFunctionRunStatus::from(&LogicalFunctionRunStatus::Done),
+        function_version_patch_id: None,
         logical_function_run_id: lfr.id.clone(),
     };
-    // Metrics datasets stamp the window/magnitude columns; chain datasets
-    // leave them NULL.
-    if let Some(s) = stamp {
-        pfr.ended_on = Some(s.ended_on);
-        pfr.ended_on_hour_ms = Some(EpochMs::try_from(s.bucket)?.into());
-        pfr.ended_on_day_ms = Some(EpochMs::try_from(s.bucket)?.into());
-        pfr.ended_on_week_ms = Some(EpochMs::try_from(s.bucket)?.into());
-        pfr.ended_on_month_ms = Some(EpochMs::try_from(s.bucket)?.into());
-        pfr.metric_table_versions = Some(TableVersionCount::try_from(1)?);
-        pfr.metric_rows = Some(RowCount::try_from(10)?);
-        pfr.metric_data_bytes = Some(ByteCount::try_from(100)?);
+    // Metrics datasets end their attempts inside the window; chain datasets
+    // leave them open.
+    if let Some(ended_on) = ended_on {
+        pfr.ended_on = Some(ended_on);
     }
     let pfr = pfr;
 

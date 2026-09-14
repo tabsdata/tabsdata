@@ -4,9 +4,11 @@
 
 // All seed methods exposed through the `Seed<E>` handle, reached via
 // `SeedEntry::seed` on any `QueryExecutor`.
+pub use metrics_facts::derive_metrics_facts;
 pub use seed::{Seed, SeedEntry};
 pub use seed_run::{SeededRun, seed_project_viewer, seed_run};
 
+mod metrics_facts;
 mod seed;
 mod seed_collection;
 mod seed_execution;

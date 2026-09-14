@@ -11,7 +11,7 @@ use crate::recovery::{
     finalize_recovery_actions, recover_lfrs_from_actions,
 };
 use ta_services::ctx_service::ReqCtx;
-use td_database::access::SeesProjectRows;
+use td_database::access::InProject;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::logical::LogicalFunctionRunStatusUpdateDB;
@@ -24,9 +24,9 @@ use tracing::instrument;
 /// callback wins), then worker rows → Failed, attempts → Failed, and the LFRs
 /// recover or fail.
 #[instrument(name = "recovery.apply", skip_all, level = "debug", err(Debug))]
-pub async fn apply_recovery_actions<S: SeesProjectRows>(
+pub async fn apply_recovery_actions(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, S>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     at: &AtTime,
     actions: &RecoveryActions,
 ) -> Result<(), TdError> {

@@ -32,7 +32,7 @@ use td_objects::dxo::metrics::{
 use td_objects::dxo::query_filters::{
     DimensionFilter, TimeWindow, WindowAlign, WindowSpec, WindowUnit,
 };
-use td_objects::types::basic::{EpochMs, LogicalFunctionRunStatus};
+use td_objects::types::basic::{EpochMs, LogicalFunctionRunStatus, WindowSpan};
 use td_services::Services;
 
 const METRICS_TAG: &str = "Metrics";
@@ -42,23 +42,20 @@ const METRICS_TAG: &str = "Metrics";
 fn resolve_window(
     unit: Option<WindowUnit>,
     align: Option<WindowAlign>,
-    from: Option<i64>,
-    span: Option<u32>,
-) -> Result<(TimeWindow, WindowUnit), TdError> {
-    let unit = unit.unwrap_or(WindowUnit::Day);
-    let from = from.map(EpochMs::try_from).transpose()?;
+    from: Option<EpochMs>,
+    span: Option<WindowSpan>,
+) -> Result<TimeWindow, TdError> {
     let spec = WindowSpec {
         align: align.unwrap_or(WindowAlign::Calendar),
         from,
-        unit,
-        span: span.unwrap_or(1),
+        unit: unit.unwrap_or(WindowUnit::Day),
+        span: span.unwrap_or_default(),
     };
-    let window = spec.resolve()?;
-    Ok((window, unit))
+    spec.resolve()
 }
 
 pub(crate) fn metrics_query_into_request(q: MetricsQuery) -> Result<MetricsRequest, TdError> {
-    let (window, unit) = resolve_window(q.unit, q.align, q.from, q.span)?;
+    let window = resolve_window(q.unit, q.align, q.from, q.span)?;
     // Dedup to bound the SQL `IN (...)` clause against repeated params.
     let statuses = if q.status.is_empty() {
         vec![LogicalFunctionRunStatus::Committed]
@@ -75,10 +72,11 @@ pub(crate) fn metrics_query_into_request(q: MetricsQuery) -> Result<MetricsReque
     Ok(MetricsRequest {
         dim: q.dim.unwrap_or(Dimension::Collection),
         window,
-        unit,
         collections: DimensionFilter::new(q.collection, q.collection_exclude),
         groups: DimensionFilter::new(q.group, q.group_exclude),
         statuses,
+        include_replaced: q.include_replaced.unwrap_or_default(),
+        include_private: q.include_private.unwrap_or_default(),
     })
 }
 
@@ -192,16 +190,25 @@ pub async fn get_snapshot(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use td_objects::types::basic::{CollectionId, GroupId, IncludePrivate, IncludeReplaced};
 
     #[test]
     fn default_resolves_to_day_unit() {
-        let (_, unit) = resolve_window(None, None, None, None).unwrap();
-        assert_eq!(unit, WindowUnit::Day);
+        let end: i64 = 1_779_321_600_000;
+        let window = resolve_window(
+            None,
+            Some(WindowAlign::Rolling),
+            Some(EpochMs::try_from(end).unwrap()),
+            None,
+        )
+        .unwrap();
+        assert_eq!(*window.end_ms - *window.start_ms, 86_400_000);
     }
 
     #[test]
     fn over_span_cap_is_rejected() {
-        let err = resolve_window(Some(WindowUnit::Hour), None, None, Some(200)).unwrap_err();
+        let span = WindowSpan::try_from(200).unwrap();
+        let err = resolve_window(Some(WindowUnit::Hour), None, None, Some(span)).unwrap_err();
         assert!(err.to_string().contains("cap"), "got: {err}");
     }
 
@@ -211,15 +218,15 @@ mod tests {
     fn from_param_pins_window_end() {
         // Wed 2026-05-20 00:00 UTC.
         let wed_midnight: i64 = 1_779_321_600_000;
-        let (window, _) = resolve_window(
+        let window = resolve_window(
             Some(WindowUnit::Week),
             Some(WindowAlign::Rolling),
-            Some(wed_midnight),
+            Some(EpochMs::try_from(wed_midnight).unwrap()),
             None,
         )
         .unwrap();
-        assert_eq!(window.end_ms, wed_midnight);
-        assert_eq!(window.start_ms, wed_midnight - 7 * 86_400_000);
+        assert_eq!(*window.end_ms, wed_midnight);
+        assert_eq!(*window.start_ms, wed_midnight - 7 * 86_400_000);
     }
 
     fn metrics_query(status: Vec<LogicalFunctionRunStatus>) -> MetricsQuery {
@@ -234,7 +241,45 @@ mod tests {
             group: vec![],
             group_exclude: vec![],
             status,
+            include_replaced: None,
+            include_private: None,
         }
+    }
+
+    /// A collection filter folds on either dim: on `dim=group` it narrows the
+    /// facts before they fold into group nodes and edges.
+    #[test]
+    fn collection_filter_applies_on_either_dim() {
+        let mut q = metrics_query(vec![]);
+        q.dim = Some(Dimension::Group);
+        q.collection = vec![CollectionId::default()];
+        let req = metrics_query_into_request(q).unwrap();
+        assert_eq!(req.collections.include.len(), 1);
+
+        let mut q = metrics_query(vec![]);
+        q.dim = Some(Dimension::Group);
+        q.group = vec![GroupId::default()];
+        metrics_query_into_request(q).unwrap();
+    }
+
+    #[test]
+    fn private_tables_are_excluded_by_default() {
+        let req = metrics_query_into_request(metrics_query(vec![])).unwrap();
+        assert!(!*req.include_private);
+
+        let mut q = metrics_query(vec![]);
+        q.include_private = Some(IncludePrivate::TRUE);
+        assert!(*metrics_query_into_request(q).unwrap().include_private);
+    }
+
+    #[test]
+    fn replaced_attempts_are_excluded_by_default() {
+        let req = metrics_query_into_request(metrics_query(vec![])).unwrap();
+        assert!(!*req.include_replaced);
+
+        let mut q = metrics_query(vec![]);
+        q.include_replaced = Some(IncludeReplaced::TRUE);
+        assert!(*metrics_query_into_request(q).unwrap().include_replaced);
     }
 
     fn inflight_query(statuses: Vec<LogicalFunctionRunStatus>) -> InflightQuery {

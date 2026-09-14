@@ -37,6 +37,7 @@ pub mod graph;
 pub mod group;
 pub mod logical;
 pub mod metrics;
+pub mod metrics_facts;
 pub mod permission;
 pub mod physical_function_run;
 pub mod physical_table_data_version;

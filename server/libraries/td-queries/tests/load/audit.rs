@@ -137,11 +137,17 @@ fn returns_future(output: &ReturnType) -> bool {
     })
 }
 
+/// `cfg(test)` and any `cfg(any(test, ..))` gate: test-only code is not
+/// request-path surface.
 fn is_cfg_test(attrs: &[Attribute]) -> bool {
     attrs.iter().any(|a| {
         a.path().is_ident("cfg")
-            && a.parse_args::<syn::Ident>()
-                .is_ok_and(|ident| ident == "test")
+            && a.meta.require_list().is_ok_and(|list| {
+                list.tokens
+                    .to_string()
+                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .any(|word| word == "test")
+            })
     })
 }
 

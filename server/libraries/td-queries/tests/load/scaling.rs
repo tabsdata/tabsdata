@@ -19,6 +19,7 @@ use crate::profile::{ChainKnobs, MetricsKnobs};
 use crate::raw::delete_by_pk;
 use crate::scd2_cases::build_attempt;
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 use td_common::datetime::Timestamp;
 use td_database::access::LockInstant;
 use td_database::connection::PgConnectionExt;
@@ -32,19 +33,20 @@ use td_objects::dxo::function::{Function, FunctionDB};
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunInputInsertDB, LogicalFunctionRunStatusUpdateDB,
 };
-use td_objects::dxo::metrics::{Dimension, InflightRequest, MetricsRequest, NodeKind};
+use td_objects::dxo::metrics::{Dimension, InflightRequest, MetricsRequest};
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
+use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
 use td_objects::dxo::table::{Table, TableDB};
 use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{
-    AtTime, DependencyPos, Depth, InputIdx, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
-    PhysicalFunctionRunStatus, VersionPos,
+    AtTime, DependencyPos, Depth, EpochMs, FactSide, IncludePrivate, IncludeReplaced, InputIdx,
+    LogicalFunctionRunInputId, LogicalFunctionRunStatus, PhysicalFunctionRunStatus, VersionPos,
 };
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::visible_projects::VisibleProjects;
 use td_queries::Queries;
+use td_queries::test_utils::derive_metrics_facts;
 
 type Ptdv = PhysicalTableDataVersionDB;
 
@@ -79,7 +81,33 @@ pub(crate) fn assert_subquadratic(
     n_big: f64,
     t_big_us: f64,
 ) {
-    for (n, t_us) in [(n_small, t_small_us), (n_big, t_big_us)] {
+    assert_growth(case, n_small, t_small_us, n_big, t_big_us, true)
+}
+
+/// [`assert_subquadratic`] without the per-request budget: a bulk build over
+/// a whole project answers no request, so only its growth is judged.
+pub(crate) fn assert_subquadratic_bulk(
+    case: &str,
+    n_small: f64,
+    t_small_us: f64,
+    n_big: f64,
+    t_big_us: f64,
+) {
+    assert_growth(case, n_small, t_small_us, n_big, t_big_us, false)
+}
+
+fn assert_growth(
+    case: &str,
+    n_small: f64,
+    t_small_us: f64,
+    n_big: f64,
+    t_big_us: f64,
+    budgeted: bool,
+) {
+    for (n, t_us) in [(n_small, t_small_us), (n_big, t_big_us)]
+        .into_iter()
+        .filter(|_| budgeted)
+    {
         assert!(
             t_us <= BUDGET_US,
             "{case} took {t_us:.0}us at n {n} — over the {BUDGET_US:.0}us budget. \
@@ -638,11 +666,15 @@ async fn report_scaling_chain(db: TdPool) -> Result<(), TdError> {
 fn metrics_request() -> MetricsRequest {
     MetricsRequest {
         dim: Dimension::Collection,
-        window: TimeWindow::new(WINDOW_START_MS, WINDOW_END_MS),
-        unit: WindowUnit::Day,
+        window: TimeWindow::new(
+            EpochMs::try_from(WINDOW_START_MS).unwrap(),
+            EpochMs::try_from(WINDOW_END_MS).unwrap(),
+        ),
         collections: DimensionFilter::default(),
         groups: DimensionFilter::default(),
-        statuses: vec![],
+        statuses: LogicalFunctionRunStatus::ENDED.to_vec(),
+        include_replaced: IncludeReplaced::FALSE,
+        include_private: IncludePrivate::FALSE,
     }
 }
 
@@ -653,10 +685,11 @@ async fn time_metrics_queries(db: &TdPool) -> Result<Vec<(&'static str, f64)>, T
         groups: DimensionFilter::default(),
         statuses: vec![],
     };
+    let mut out = Vec::new();
+    timed_once!(out, "metrics::backfill", derive_metrics_facts(db).await?);
     // The metrics service's read context: the read-only transaction from
     // `begin_ro`.
     let mut conn = db.begin_ro().await.unwrap();
-    let mut out = Vec::new();
     let _ = timed!(
         out,
         "metrics::inflight",
@@ -666,86 +699,43 @@ async fn time_metrics_queries(db: &TdPool) -> Result<Vec<(&'static str, f64)>, T
     );
     let _ = timed!(
         out,
-        "metrics::metrics_nodes",
+        "metrics::per_table",
         conn.metrics()
-            .metrics_nodes(&req, &VisibleProjects::All)
-            .await?
-    );
-    let _ = timed!(
-        out,
-        "metrics::metrics_edges",
-        conn.metrics()
-            .metrics_edges(&req, &VisibleProjects::All)
-            .await?
-    );
-    let _ = timed!(
-        out,
-        "metrics::metrics_node_output_tables",
-        conn.metrics()
-            .metrics_node_output_tables(&req, &VisibleProjects::All)
-            .await?
-    );
-    let _ = timed!(
-        out,
-        "metrics::metrics_edge_tables",
-        conn.metrics()
-            .metrics_edge_tables(&req, &VisibleProjects::All)
+            .per_table(&req, &VisibleProjects::All)
             .await?
     );
     Ok(out)
 }
 
-/// Asserts the metrics queries stay window-first with every correlated probe
-/// fenced — the shape that keeps them O(window) under RLS. Checked on the SQL
-/// text rather than by timing: the cartesian a missing fence causes only
-/// surfaces once a window holds thousands of rows, past the suite's seed sizes.
+/// Asserts the metrics read touches only the fact table, bounded on the
+/// indexed `ts`, with no base-table probe and no fence. Checked on the SQL.
 #[test]
-fn metrics_queries_hold_window_first_fenced_contract() {
-    use td_objects::dxo::query_filters::WindowUnit::{Day, Hour, Month, Quarter, Week, Year};
-
-    for unit in [Hour, Day, Week, Month, Quarter, Year] {
-        for dim in [Dimension::Collection, Dimension::Group] {
-            let mut req = metrics_request();
-            req.unit = unit;
-            req.dim = dim;
-            let statements = td_queries::metrics_plan_sql(&req);
-            let tag = format!("{unit:?}/{dim:?}");
-
-            for (which, sql) in &statements {
+fn metrics_queries_read_only_facts() {
+    for dim in [Dimension::Collection, Dimension::Group] {
+        let mut req = metrics_request();
+        req.dim = dim;
+        let statements = td_queries::metrics_plan_sql(&req).expect("render");
+        let tag = format!("{dim:?}");
+        for (which, sql) in &statements {
+            for base in [
+                "physical_function_runs",
+                "logical_table_data_versions",
+                "logical_function_run_inputs",
+                "table_data_versions__with_names",
+            ] {
                 assert!(
-                    sql.contains(r#"FROM "physical_function_runs""#)
-                        && sql.contains(r#""physical_function_runs"."ended_on" >="#)
-                        && sql.contains(r#""physical_function_runs"."ended_on" <"#),
-                    "{which} {tag}: not window-first (no ended_on-bounded \
-                     physical_function_runs drive):\n{sql}"
-                );
-                let probes = sql.matches(r#" AS "p""#).count();
-                let fences = sql.matches("OFFSET 0").count();
-                assert!(
-                    probes > 0 && probes == fences,
-                    "{which} {tag}: {probes} correlated probes but {fences} \
-                     OFFSET-0 fences — a probe escaped its fence and will \
-                     cartesian at wide windows:\n{sql}"
-                );
-                // Run-resolution probe: both dims reshape to a lean base-LFR
-                // probe (names attached after aggregation).
-                assert!(
-                    sql.contains(r#"FROM "logical_function_runs" AS "p""#),
-                    "{which} {tag}: run-resolution probe not fenced:\n{sql}"
-                );
-                assert!(
-                    sql.contains(r#"FROM "table_data_versions__with_names" AS "p""#),
-                    "{which} {tag}: magnitude (TDV) probe not fenced:\n{sql}"
+                    !sql.contains(&format!("FROM \"{base}\"")),
+                    "{which} {tag}: reads {base} instead of the facts:\n{sql}"
                 );
             }
-            for which in ["edges", "edge_tables"] {
-                let sql = &statements.iter().find(|(n, _)| *n == which).unwrap().1;
-                assert!(
-                    sql.contains(r#"FROM "logical_function_run_inputs" AS "p""#),
-                    "{which} {tag}: consumed-input (LFRI) join not fenced — \
-                     wide windows will cartesian:\n{sql}"
-                );
-            }
+            assert!(
+                !sql.contains("OFFSET 0"),
+                "{which} {tag}: a fenced probe survived:\n{sql}"
+            );
+            assert!(
+                sql.contains(r#""metrics_facts"."ts" >="#),
+                "{which} {tag}: not bounded on the indexed timestamp:\n{sql}"
+            );
         }
     }
 }
@@ -772,50 +762,21 @@ async fn metrics_rows_under_bypass(db: TdPool) -> Result<(), TdError> {
         let mut req = metrics_request();
         req.dim = dim;
 
-        let nodes = conn
+        let rows = conn
             .metrics()
-            .metrics_nodes(&req, &VisibleProjects::All)
+            .per_table(&req, &VisibleProjects::All)
             .await?;
-        assert!(!nodes.is_empty(), "{dim:?}: no node rows on seeded data");
-        for n in &nodes {
-            match dim {
-                Dimension::Collection => assert!(
-                    n.collection_id.is_some() && n.collection_name.is_some(),
-                    "{dim:?} node lost its collection identity: {n:?}"
-                ),
-                Dimension::Group => assert!(
-                    n.collection_id.is_none() && n.collection_name.is_none(),
-                    "{dim:?} node must fold collections to NULL: {n:?}"
-                ),
-            }
+        assert!(!rows.is_empty(), "{dim:?}: no fact rows on seeded data");
+        let sides: HashSet<FactSide> = rows.iter().map(|r| r.side).collect();
+        assert!(
+            sides.contains(&FactSide::Attempt) && sides.contains(&FactSide::Written),
+            "{dim:?}: the seeded publishers produced no attempt or written rows"
+        );
+        for r in &rows {
             assert!(
-                n.group_id.is_some() && n.group_name.is_some(),
-                "{dim:?} node group name did not resolve: {n:?}"
+                matches!(r.side, FactSide::Attempt) || r.table_id.is_some(),
+                "{dim:?} version row lost its table identity: {r:?}"
             );
-            assert!(
-                n.project_id.is_some() && n.project_name.is_some(),
-                "{dim:?} node project name did not resolve: {n:?}"
-            );
-        }
-
-        let edges = conn
-            .metrics()
-            .metrics_edges(&req, &VisibleProjects::All)
-            .await?;
-        assert!(!edges.is_empty(), "{dim:?}: no edge rows on seeded data");
-        for e in &edges {
-            if matches!(e.source_kind, NodeKind::Dim) {
-                assert!(
-                    e.source.is_some() && e.source_name.is_some(),
-                    "{dim:?} edge source name did not resolve: {e:?}"
-                );
-            }
-            if matches!(e.target_kind, NodeKind::Dim) {
-                assert!(
-                    e.target.is_some() && e.target_name.is_some(),
-                    "{dim:?} edge target name did not resolve: {e:?}"
-                );
-            }
         }
     }
     Ok(())
@@ -846,7 +807,11 @@ async fn report_scaling_metrics(db: TdPool) -> Result<(), TdError> {
     assert_eq!(t1.len(), t2.len(), "two passes must time the same queries");
     for ((name, a), (name2, b)) in t1.iter().zip(&t2) {
         assert_eq!(name, name2, "the two passes drifted out of order");
-        assert_subquadratic(name, n_small, *a, n_big, *b);
+        if *name == "metrics::backfill" {
+            assert_subquadratic_bulk(name, n_small, *a, n_big, *b);
+        } else {
+            assert_subquadratic(name, n_small, *a, n_big, *b);
+        }
     }
     Ok(())
 }
@@ -862,18 +827,16 @@ async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
     const HISTORIC_MS: i64 = WINDOW_START_MS - 30 * 86_400_000;
 
     async fn push_history(db: &TdPool) {
-        let sql = format!(
-            "UPDATE physical_function_runs SET \
-               ended_on = to_timestamp({HISTORIC_MS}::double precision / 1000), \
-               ended_on_hour_ms = {HISTORIC_MS}, ended_on_day_ms = {HISTORIC_MS}, \
-               ended_on_week_ms = {HISTORIC_MS}, ended_on_month_ms = {HISTORIC_MS} \
-             WHERE ended_on IS NOT NULL AND id NOT IN (\
-               SELECT id FROM physical_function_runs WHERE ended_on IS NOT NULL \
-               ORDER BY id LIMIT 40)"
-        );
-        db.execute_batch(&[sql])
+        let keep = "SELECT id FROM physical_function_runs WHERE ended_on IS NOT NULL \
+                    ORDER BY id LIMIT 40";
+        let sql = [format!(
+            "UPDATE physical_function_runs SET ended_on = to_timestamp({HISTORIC_MS} / 1000.0) \
+               WHERE ended_on IS NOT NULL AND id NOT IN ({keep})"
+        )];
+        db.execute_batch(&sql)
             .await
             .expect("push history out of window");
+        derive_metrics_facts(db).await.expect("derive facts");
     }
 
     let mut passes = Vec::new();
@@ -895,14 +858,14 @@ async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
         passes.push(time_metrics_queries(&db).await?);
     }
     let mut conn = db.begin_ro().await.unwrap();
-    for (name, sql) in &td_queries::metrics_plan_sql(&metrics_request()) {
+    for (name, sql) in &td_queries::metrics_plan_sql(&metrics_request()).expect("render") {
         let plan = conn.explain(sql).await.expect("explain").join("\n");
         eprintln!("[query-load] window plan {name}:\n{plan}\n");
         assert!(
-            plan.contains("logical_function_runs_pkey"),
-            "{name} plan does not resolve the window attempt to its run by \
-             primary key — the probe regressed to per-row view re-expansion \
-             (the RLS O(window×history) blowup):\n{plan}"
+            plan.contains("metrics_facts___ts___idx")
+                || plan.contains("metrics_facts___project_id__ts___idx"),
+            "{name} plan does not drive the facts through a covering index — \
+             the read became history-driven:\n{plan}"
         );
     }
     drop(conn);
@@ -913,8 +876,9 @@ async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
     );
     for ((name, a), (name2, b)) in passes[0].iter().zip(&passes[1]) {
         assert_eq!(name, name2, "the two passes drifted out of order");
-        // No window semantics on /inflight; the regular scaling pass covers it.
-        if *name == "metrics::inflight" {
+        // No window semantics on /inflight, and the backfill is by definition
+        // history-driven; the regular scaling pass covers both.
+        if *name == "metrics::inflight" || *name == "metrics::backfill" {
             continue;
         }
         eprintln!(

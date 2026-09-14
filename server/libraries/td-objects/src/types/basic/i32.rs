@@ -11,6 +11,11 @@ pub struct DependencyPos(i32);
 #[typed(min = 0, default = 0)]
 pub struct Depth(i32);
 
+/// Width of a `/metrics` window in units.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(min = 1, default = 1)]
+pub struct WindowSpan(i32);
+
 impl Depth {
     pub const ZERO: Self = Self(0);
 }

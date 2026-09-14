@@ -49,7 +49,7 @@ pub enum Status {
 }
 
 pub struct LoadCase {
-    /// Metric row key in the JSONL output, e.g. `"metrics::metrics_edges"`.
+    /// Metric row key in the JSONL output, e.g. `"metrics::per_table"`.
     pub name: &'static str,
     /// The `Struct::method` identifiers this case exercises; matched by the
     /// audit against the crate's `pub async fn`s.
@@ -407,26 +407,24 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
-        name: "metrics::metrics_nodes",
-        covers: &["Metrics::metrics_nodes"],
+        name: "metrics::per_table",
+        covers: &["Metrics::per_table"],
         family: Family::Metrics,
         status: Status::Implemented,
     },
+    // The v9 rung's own derivation over every project's base rows. The fact
+    // writers derive exactly the same rows per unit of work (the DAO gate
+    // holds them to it), so this case stands in for their growth too — they
+    // have no load case of their own.
     LoadCase {
-        name: "metrics::metrics_edges",
-        covers: &["Metrics::metrics_edges"],
-        family: Family::Metrics,
-        status: Status::Implemented,
-    },
-    LoadCase {
-        name: "metrics::metrics_node_output_tables",
-        covers: &["Metrics::metrics_node_output_tables"],
-        family: Family::Metrics,
-        status: Status::Implemented,
-    },
-    LoadCase {
-        name: "metrics::metrics_edge_tables",
-        covers: &["Metrics::metrics_edge_tables"],
+        name: "metrics::backfill",
+        covers: &[
+            "load_ended_attempts",
+            "attempts_ended",
+            "versions_consumed",
+            "runs_status_changed",
+            "runs_reattempted",
+        ],
         family: Family::Metrics,
         status: Status::Implemented,
     },

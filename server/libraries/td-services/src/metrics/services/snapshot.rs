@@ -60,8 +60,10 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::metrics::{Dimension, InflightRequest, MetricsRequest};
-    use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
-    use td_objects::types::basic::{AccessTokenId, UserId};
+    use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
+    use td_objects::types::basic::{
+        AccessTokenId, EpochMs, IncludePrivate, IncludeReplaced, UserId,
+    };
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -70,11 +72,15 @@ mod tests {
         let request = SnapshotRequest {
             metrics: MetricsRequest {
                 dim: Dimension::Collection,
-                window: TimeWindow::new(0, 86_400_000),
-                unit: WindowUnit::Day,
+                window: TimeWindow::new(
+                    EpochMs::try_from(0).unwrap(),
+                    EpochMs::try_from(86_400_000).unwrap(),
+                ),
                 collections: DimensionFilter::default(),
                 groups: DimensionFilter::default(),
                 statuses: vec![],
+                include_replaced: IncludeReplaced::FALSE,
+                include_private: IncludePrivate::FALSE,
             },
             inflight: InflightRequest {
                 collections: DimensionFilter::default(),
@@ -92,7 +98,6 @@ mod tests {
             .await?
             .data;
         assert_eq!(response.metrics.dim, Dimension::Collection);
-        assert_eq!(response.metrics.unit, WindowUnit::Day);
         assert!(response.metrics.nodes.is_empty());
         assert!(response.metrics.edges.is_empty());
         assert!(response.inflight.rows.is_empty());

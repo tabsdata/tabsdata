@@ -59,6 +59,11 @@ pub trait SchemaSource: Send + Sync + 'static {
     fn indexes(&self) -> Vec<Derived> {
         vec![]
     }
+    /// Extended statistics, as derived objects on the same lifecycle as
+    /// indexes. Defaults to none.
+    fn statistics(&self) -> Vec<Derived> {
+        vec![]
+    }
     /// Seed inserts. Defaults to none.
     fn seeds(&self) -> Vec<String> {
         vec![]
@@ -83,6 +88,7 @@ pub fn install_script(source: &dyn SchemaSource) -> Vec<String> {
     out.extend(source.triggers().into_iter().flat_map(|d| d.create));
     out.extend(source.views().into_iter().flat_map(|d| d.create));
     out.extend(source.indexes().into_iter().flat_map(|d| d.create));
+    out.extend(source.statistics().into_iter().flat_map(|d| d.create));
     out.extend(source.seeds());
     out.extend(source.rls());
     debug!(version = source.current_version(), tables, total = out.len(), "Install script composed");
@@ -91,17 +97,21 @@ pub fn install_script(source: &dyn SchemaSource) -> Vec<String> {
 
 /// The derived-object lifecycle scripts, split from a single render of the
 /// parts: drops (views in reverse creation order, so no `CASCADE` is needed,
-/// then triggers, then indexes) and creates (indexes, triggers, then views).
+/// then triggers, indexes and statistics) and creates (indexes, statistics,
+/// triggers, then views).
 /// The drop runs before a delta ladder — standing views block destructive
 /// deltas on PostgreSQL, and a dropped table takes its indexes with it.
 pub fn derived_scripts(source: &dyn SchemaSource) -> (Vec<String>, Vec<String>) {
     let triggers = source.triggers();
     let views = source.views();
     let indexes = source.indexes();
+    let statistics = source.statistics();
     let mut drop: Vec<String> = views.iter().rev().flat_map(|d| d.drop.clone()).collect();
     drop.extend(triggers.iter().flat_map(|d| d.drop.clone()));
     drop.extend(indexes.iter().flat_map(|d| d.drop.clone()));
+    drop.extend(statistics.iter().flat_map(|d| d.drop.clone()));
     let mut create: Vec<String> = indexes.into_iter().flat_map(|d| d.create).collect();
+    create.extend(statistics.into_iter().flat_map(|d| d.create));
     create.extend(triggers.into_iter().flat_map(|d| d.create));
     create.extend(views.into_iter().flat_map(|d| d.create));
     (drop, create)

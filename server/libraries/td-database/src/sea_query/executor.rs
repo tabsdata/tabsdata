@@ -57,6 +57,26 @@ mod op {
         };
     }
 
+    /// An unnamed statement: PostgreSQL plans it at bind time with the real
+    /// parameter values, where a named statement's generic plan is blind to
+    /// them after its fifth execution on a connection.
+    pub(super) fn fetch_all_as_planned_per_call<
+        'a,
+        O: Send + Unpin + for<'r> FromRow<'r, PgRow>,
+    >(
+        sql: String,
+        values: SqlxValues,
+        conn: &'a mut PgConnection,
+    ) -> BoxFuture<'a, Result<Vec<O>, Error>> {
+        async move {
+            sqlx::query_as_with(AssertSqlSafe(sql), values)
+                .persistent(false)
+                .fetch_all(conn)
+                .await
+        }
+        .boxed()
+    }
+
     op!(execute, PgQueryResult, query_with, execute);
     op!(fetch_all, Vec<PgRow>, query_with, fetch_all);
     op!(fetch_one, PgRow, query_with, fetch_one);
@@ -142,6 +162,16 @@ pub trait SeaExecutor: Domained + Sized {
         Self: 'e,
     {
         self.run(query, op::fetch_all_as::<O>)
+    }
+
+    fn run_fetch_all_as_planned_per_call<'e, O: Send + Unpin + for<'r> FromRow<'r, PgRow> + 'e>(
+        self,
+        query: impl SeaQuerySqlxBuild,
+    ) -> BoxFuture<'e, Result<Vec<O>, Error>>
+    where
+        Self: 'e,
+    {
+        self.run(query, op::fetch_all_as_planned_per_call::<O>)
     }
 
     fn run_fetch_one_as<'e, O: Send + Unpin + for<'r> FromRow<'r, PgRow> + 'e>(

@@ -3,57 +3,70 @@
 //
 
 use crate::Queries;
-use crate::test_utils::SeedEntry;
+use crate::daos::metrics::write::{attempts_ended, runs_reattempted, runs_status_changed};
+use crate::test_utils::{SeedEntry, derive_metrics_facts};
+use std::collections::HashMap;
 use ta_objects::and;
-use td_common::datetime::Timestamp;
 use td_database::access::LockInstant;
+use td_database::access::{AcrossProjects, DbPool, Grant, InProject};
+use td_database::domain::{Apiserver, DomainConnection, DomainPools};
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDeleteDB};
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
 use td_objects::dxo::logical::{
-    LogicalFunctionRunDB, LogicalFunctionRunInputInsertDB, LogicalTableDataVersionDB,
+    LogicalFunctionRunDB, LogicalFunctionRunInputInsertDB, LogicalFunctionRunStatusUpdateDB,
+    LogicalTableDataVersionDB,
 };
-use td_objects::dxo::metrics::{Dimension, InflightRequest, MetricsRequest, NodeKind};
+use td_objects::dxo::metrics::{Dimension, InflightRequest, MetricsRequest};
+use td_objects::dxo::metrics_facts::{MetricsFactDB, MetricsTableRow};
 use td_objects::dxo::physical_function_run::{
     PhysicalFunctionRunDB, PhysicalFunctionRunInsertDB, PhysicalFunctionRunUpdateDB,
 };
 use td_objects::dxo::physical_table_data_version::{
     PhysicalTableDataVersionDB, PhysicalTableDataVersionInsertDB,
 };
-use td_objects::dxo::project::{ActiveProjectDB, ProjectDeleteDB};
-use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow, WindowUnit};
+use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
 use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
-    AtTime, BasePath, BundleId, ByteCount, CollectionName, Decorator, DependencyPos, Ended,
-    EpochMs, HasData, InputIdx, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
-    PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId,
-    ProjectName, ReuseFrozen, RowCount, TableFunctionParamPos, TableNameDto, TableVersionCount,
-    TransactionKey, UserId, VersionPos,
+    AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, Decorator, DependencyPos,
+    Description, EdgeKind, EpochMs, FactSide, GroupName, HasData, IncludePrivate, IncludeReplaced,
+    InputIdx, LogicalFunctionRunInputId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
+    PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId, ReuseFrozen, RowCount,
+    TableFunctionParamPos, TableId, TableNameDto, TransactionKey, UserId, VersionPos,
 };
 use td_objects::types::visible_projects::VisibleProjects;
 use td_security::ENCODED_ID_SYSTEM;
 
-const WINDOW_DAY_START: i64 = 1_700_000_000_000;
-const WINDOW_DAY_END: i64 = WINDOW_DAY_START + 86_400_000;
-const IN_WINDOW: i64 = WINDOW_DAY_START + 3_600_000;
+const DAY_MS: i64 = 86_400_000;
 
+/// Attempts end now, so their reads see the materializations seeded before
+/// them, and the window is the day around now.
 fn in_window() -> Result<AtTime, TdError> {
-    Ok(AtTime::from(Timestamp::try_from(IN_WINDOW)?))
+    Ok(AtTime::now())
+}
+
+fn window() -> TimeWindow {
+    let now = (**AtTime::now()).timestamp_millis();
+    TimeWindow::new(
+        EpochMs::try_from(now - DAY_MS).unwrap(),
+        EpochMs::try_from(now + DAY_MS).unwrap(),
+    )
 }
 
 fn system_user() -> Result<UserId, TdError> {
     UserId::try_from(ENCODED_ID_SYSTEM)
 }
 
-fn empty_request(dim: Dimension) -> MetricsRequest {
+fn metrics_request(dim: Dimension) -> MetricsRequest {
     MetricsRequest {
         dim,
-        window: TimeWindow::new(WINDOW_DAY_START, WINDOW_DAY_END),
-        unit: WindowUnit::Day,
+        window: window(),
         collections: DimensionFilter::default(),
         groups: DimensionFilter::default(),
-        statuses: vec![],
+        statuses: LogicalFunctionRunStatus::ENDED.to_vec(),
+        include_replaced: IncludeReplaced::FALSE,
+        include_private: IncludePrivate::FALSE,
     }
 }
 
@@ -108,40 +121,8 @@ async fn make_publisher_function(
     make_function(db, collection, name, Decorator::Publisher, &["out"]).await
 }
 
-async fn stamp_buckets_on_pfr(db: &TdPool, pfr: &PhysicalFunctionRunDB) -> Result<(), TdError> {
-    stamp_buckets_and_metrics_on_pfr(db, pfr, 1, 10, 100).await
-}
-
-/// The attempt's metric columns hold the worker's full totals, private
-/// tables included; `/metrics` excludes private tables query-side, so tests
-/// stamp totals that differ from the expected response.
-async fn stamp_buckets_and_metrics_on_pfr(
-    db: &TdPool,
-    pfr: &PhysicalFunctionRunDB,
-    tables: i64,
-    rows: i64,
-    bytes: i64,
-) -> Result<(), TdError> {
-    let ended_on: Ended<AtTime> = in_window()?.into();
-    let bucket = EpochMs::try_from(IN_WINDOW)?;
-    let update = PhysicalFunctionRunUpdateDB {
-        dispatched_on: None,
-        started_on: None,
-        ended_on: Some(ended_on),
-        status: PhysicalFunctionRunStatus::Done,
-        ended_on_hour_ms: Some(bucket.into()),
-        ended_on_day_ms: Some(bucket.into()),
-        ended_on_week_ms: Some(bucket.into()),
-        ended_on_month_ms: Some(bucket.into()),
-        metric_table_versions: Some(TableVersionCount::try_from(tables)?),
-        metric_rows: Some(RowCount::try_from(rows)?),
-        metric_data_bytes: Some(ByteCount::try_from(bytes)?),
-    };
-    db.scoped(pfr.project_id)
-        .scd2()
-        .update(&update, &pfr.base.id)
-        .await?;
-    Ok(())
+async fn end_attempt(db: &TdPool, pfr: &PhysicalFunctionRunDB) -> Result<(), TdError> {
+    stamp_status_at(db, pfr, PhysicalFunctionRunStatus::Done).await
 }
 
 /// Mint a PTDV linked to the run's attempt, the version's current
@@ -206,17 +187,6 @@ async fn soft_delete_collection(db: &TdPool, coll: &ActiveCollectionDB) -> Resul
         name_when_deleted: coll.name.clone().into(),
     };
     db.scoped(coll.project_id).update(&del, &coll.id).await?;
-    Ok(())
-}
-
-async fn soft_delete_project(db: &TdPool, project: &ActiveProjectDB) -> Result<(), TdError> {
-    let del = ProjectDeleteDB {
-        name: ProjectName::try_from(format!("deleted_{}", project.id))?,
-        modified_on: in_window()?.into(),
-        modified_by_id: system_user()?.into(),
-        name_when_deleted: project.name.clone().into(),
-    };
-    db.scoped(project.id).update(&del, &project.id).await?;
     Ok(())
 }
 
@@ -292,7 +262,7 @@ async fn seed_publisher_with_ltdv(
     let coll = seed_collection(db, project_id, coll_name).await?;
     let func = make_publisher_function(db, &coll, fn_name).await?;
     let (lfr, pfr) = seed_done_run(db, &coll, &func).await?;
-    stamp_buckets_on_pfr(db, &pfr).await?;
+    end_attempt(db, &pfr).await?;
     let ltdvs: Vec<LogicalTableDataVersionDB> =
         db.timeline().fetch_all(&lfr.base.execution_id).await?;
     let ltdv = ltdvs
@@ -334,6 +304,94 @@ async fn bind_all_outputs(
     Ok(())
 }
 
+async fn stamp_status_at(
+    db: &TdPool,
+    pfr: &PhysicalFunctionRunDB,
+    status: PhysicalFunctionRunStatus,
+) -> Result<(), TdError> {
+    let update = PhysicalFunctionRunUpdateDB {
+        dispatched_on: None,
+        started_on: None,
+        ended_on: Some(in_window()?.into()),
+        status,
+        ended_on_hour_ms: None,
+        ended_on_day_ms: None,
+        ended_on_week_ms: None,
+        ended_on_month_ms: None,
+        metric_table_versions: None,
+        metric_rows: None,
+        metric_data_bytes: None,
+    };
+    db.scoped(pfr.project_id)
+        .scd2()
+        .update(&update, &pfr.base.id)
+        .await?;
+    Ok(())
+}
+
+fn pools(db: &TdPool) -> DbPool<AcrossProjects> {
+    DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects)
+}
+
+async fn in_project<F>(db: &TdPool, project: ProjectId, body: F) -> Result<(), TdError>
+where
+    F: AsyncFnOnce(&mut DomainConnection<Apiserver, InProject>) -> Result<(), TdError>,
+{
+    let mut trx = pools(db).in_project(&project).begin_exclusive().await?;
+    body(trx.get(Grant::asserted("metrics dao test"))).await?;
+    trx.commit().await?;
+    Ok(())
+}
+
+async fn facts(db: &TdPool) -> Result<Vec<String>, TdError> {
+    let rows: Vec<MetricsFactDB> = db.fetch_all(()).await?;
+    let mut out: Vec<String> = rows.iter().map(|r| format!("{r:?}")).collect();
+    out.sort();
+    Ok(out)
+}
+
+async fn assert_live_matches_backfill(db: &TdPool) -> Result<(), TdError> {
+    let live = facts(db).await?;
+    assert!(!live.is_empty(), "the seeded runs produced no facts");
+    derive_metrics_facts(db).await?;
+    assert_eq!(live, facts(db).await?, "the writers and the rung disagree");
+    Ok(())
+}
+
+async fn aggregates(db: &TdPool, dim: Dimension) -> Result<Vec<MetricsTableRow>, TdError> {
+    Ok(db
+        .metrics()
+        .per_table(&metrics_request(dim), &VisibleProjects::All)
+        .await?)
+}
+
+fn edges_of(rows: &[MetricsTableRow], kind: EdgeKind) -> Vec<&MetricsTableRow> {
+    rows.iter().filter(|r| r.edge_kind == Some(kind)).collect()
+}
+
+fn unconsumed_of(rows: &[MetricsTableRow], collection: &CollectionId) -> i64 {
+    rows.iter()
+        .filter(|r| r.side == FactSide::Written && r.collection_id == *collection)
+        .map(|r| r.versions_unconsumed)
+        .sum()
+}
+
+fn tables_unread_of(rows: &[MetricsTableRow], collection: &CollectionId) -> i64 {
+    let mut per_table: HashMap<Option<TableId>, (i64, i64)> = HashMap::new();
+    for r in rows
+        .iter()
+        .filter(|r| r.side == FactSide::Written && r.collection_id == *collection)
+    {
+        let (versions, unconsumed) = per_table.entry(r.table_id).or_default();
+        *versions += r.versions;
+        *unconsumed += r.versions_unconsumed;
+    }
+    per_table
+        .values()
+        .filter(|(versions, unconsumed)| *unconsumed > 0 && unconsumed == versions)
+        .count() as i64
+}
+
 #[td_test::test(db)]
 async fn test_inflight_empty_table(db: TdPool) -> Result<(), TdError> {
     let rows = db
@@ -345,7 +403,7 @@ async fn test_inflight_empty_table(db: TdPool) -> Result<(), TdError> {
 }
 
 #[td_test::test(db)]
-async fn test_inflight_excludes_soft_deleted_collection(db: TdPool) -> Result<(), TdError> {
+async fn test_inflight_keeps_soft_deleted_collection(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let coll = seed_collection(&db, p.id, "inflight_del").await?;
     let func = make_publisher_function(&db, &coll, "inflight_del_fn").await?;
@@ -361,576 +419,761 @@ async fn test_inflight_excludes_soft_deleted_collection(db: TdPool) -> Result<()
     );
 
     soft_delete_collection(&db, &coll).await?;
-    assert!(
-        db.metrics()
-            .inflight(&req, &VisibleProjects::All)
-            .await?
-            .is_empty(),
-        "a soft-deleted collection's in-flight run must be excluded"
-    );
+    let rows = db.metrics().inflight(&req, &VisibleProjects::All).await?;
+    assert_eq!(rows.len(), 1, "the run is still in flight, got {rows:?}");
+    assert_eq!(rows[0].collection_name, coll.name);
     Ok(())
 }
 
 #[td_test::test(db)]
-async fn test_nodes_empty_window(db: TdPool) -> Result<(), TdError> {
-    let req = empty_request(Dimension::Collection);
-    let nodes = db
-        .metrics()
-        .metrics_nodes(&req, &VisibleProjects::All)
-        .await?;
-    assert!(nodes.is_empty(), "empty DB → empty nodes, got {nodes:?}");
+async fn test_empty_window_has_no_facts(db: TdPool) -> Result<(), TdError> {
+    db.seed().test_project().await?;
+    assert!(aggregates(&db, Dimension::Collection).await?.is_empty());
     Ok(())
 }
 
 #[td_test::test(db)]
-async fn test_nodes_rejects_inverted_window(db: TdPool) -> Result<(), TdError> {
-    let mut req = empty_request(Dimension::Collection);
-    req.window = TimeWindow::new(WINDOW_DAY_END, WINDOW_DAY_START);
-    assert!(
-        db.metrics()
-            .metrics_nodes(&req, &VisibleProjects::All)
-            .await
-            .is_err()
-    );
-    Ok(())
-}
-
-#[td_test::test(db)]
-async fn test_nodes_publisher_out_magnitudes(db: TdPool) -> Result<(), TdError> {
+async fn test_publisher_writes_a_source_edge(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let (coll, _lfr, _ltdv) = seed_publisher_with_ltdv(&db, p.id, "pub_coll", "pub_fn").await?;
+    let (coll, lfr, _) = seed_publisher_with_ltdv(&db, p.id, "pub_coll", "pub_fn").await?;
+    let pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.base.id).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&pfr.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
 
-    let req = empty_request(Dimension::Collection);
-    let nodes = db
-        .metrics()
-        .metrics_nodes(&req, &VisibleProjects::All)
-        .await?;
+    let rows = aggregates(&db, Dimension::Collection).await?;
+    let attempts: Vec<_> = rows
+        .iter()
+        .filter(|r| r.side == FactSide::Attempt)
+        .collect();
+    assert_eq!(attempts.len(), 1, "one attempt row, got {rows:?}");
+    assert_eq!(attempts[0].fn_runs, 1);
+    assert_eq!(attempts[0].collection_id, coll.id);
 
-    assert_eq!(
-        nodes.len(),
-        1,
-        "one publisher → one node row, got {nodes:?}"
+    let source = edges_of(&rows, EdgeKind::ExternalSource);
+    assert_eq!(source.len(), 1, "one ingress edge, got {rows:?}");
+    assert_eq!(source[0].fn_runs, 1);
+    assert_eq!(source[0].versions, 1);
+    assert_eq!(source[0].row_count, 10);
+    assert_eq!(source[0].data_bytes, 100);
+    assert!(
+        edges_of(&rows, EdgeKind::Egress).is_empty(),
+        "a publisher reads nothing, so nothing leaves through it"
     );
-    let n = &nodes[0];
-    assert_eq!(n.collection_id.as_ref(), Some(&coll.id));
-    assert_eq!(n.fn_runs, 1);
-    assert_eq!(*n.table_versions_out, 1);
-    assert_eq!(*n.row_count_out, 10);
-    assert_eq!(*n.data_bytes_out, 100);
-    assert_eq!(*n.table_versions_in, 0);
-    assert_eq!(*n.row_count_in, 0);
-    assert_eq!(*n.data_bytes_in, 0);
-    Ok(())
+    assert_live_matches_backfill(&db).await
 }
 
 #[td_test::test(db)]
-async fn test_nodes_out_magnitudes_follow_the_current_materialization(
+async fn test_transformer_reads_a_real_edge(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let (source_coll, source_lfr, ltdv) =
+        seed_publisher_with_ltdv(&db, p.id, "src_coll", "src_fn").await?;
+    let target_coll = seed_collection(&db, p.id, "tgt_coll").await?;
+    let target_fn = make_function(
+        &db,
+        &target_coll,
+        "tgt_fn",
+        Decorator::Transformer,
+        &["out"],
+    )
+    .await?;
+    let (target_lfr, target_pfr) = seed_done_run(&db, &target_coll, &target_fn).await?;
+    end_attempt(&db, &target_pfr).await?;
+    link_input(&db, &target_coll, &target_lfr, &ltdv).await?;
+    bind_all_outputs(&db, &target_fn, &target_lfr, &target_pfr).await?;
+
+    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(
+            conn,
+            &[source_pfr.base.id.clone(), target_pfr.base.id.clone()],
+        )
+        .await
+        .map_err(Into::into)
+    })
+    .await?;
+
+    let rows = aggregates(&db, Dimension::Collection).await?;
+    let real = edges_of(&rows, EdgeKind::Real);
+    assert_eq!(real.len(), 1, "one real edge, got {rows:?}");
+    assert_eq!(real[0].from_collection_id, Some(source_coll.id));
+    assert_eq!(real[0].collection_id, target_coll.id);
+    assert_eq!(real[0].fn_runs, 1);
+    assert!(
+        edges_of(&rows, EdgeKind::Egress).is_empty(),
+        "the transformer writes a visible table, so nothing leaves the system"
+    );
+    assert_live_matches_backfill(&db).await
+}
+
+#[td_test::test(db)]
+async fn test_written_version_is_unconsumed_until_a_run_binds_it(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let (_coll, _lfr, ltdv) = seed_publisher_with_ltdv(&db, p.id, "void_coll", "void_fn").await?;
+    let (source_coll, source_lfr, ltdv) =
+        seed_publisher_with_ltdv(&db, p.id, "unread_coll", "unread_fn").await?;
+    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&source_pfr.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
 
-    let req = empty_request(Dimension::Collection);
-    let before = db
-        .metrics()
-        .metrics_nodes(&req, &VisibleProjects::All)
-        .await?;
-    assert_eq!(*before[0].row_count_out, 10);
-    assert_eq!(*before[0].data_bytes_out, 100);
-
-    // A retry that produced nothing supersedes the materialization the
-    // view was resolving, so its magnitudes stop counting.
-    let current: PhysicalTableDataVersionDB = db
-        .scoped(ltdv.project_id)
-        .scd2()
-        .fetch_one::<PhysicalTableDataVersionDB>(&ltdv.base.id)
-        .await?;
-    let producer: PhysicalFunctionRunDB = db
-        .timeline()
-        .fetch_one(&current.base.physical_function_run_id)
-        .await?;
-    let retried_on = LockInstant::asserted(Timestamp::try_from(4_102_444_800_000_i64)?);
-    let retry = PhysicalFunctionRunInsertDB {
-        id: PhysicalFunctionRunId::new(),
-        ..producer.base
-    };
-    db.scoped(p.id).scd2().open(&retry, retried_on).await?;
-    let empty = PhysicalTableDataVersionInsertDB {
-        id: PhysicalTableDataVersionId::new(),
-        physical_function_run_id: retry.id.clone(),
-        has_data: None,
-        row_count: None,
-        data_bytes: None,
-        ..current.base
-    };
-    db.scoped(p.id).scd2().open(&empty, retried_on).await?;
-
-    let after = db
-        .metrics()
-        .metrics_nodes(&req, &VisibleProjects::All)
-        .await?;
+    let rows = aggregates(&db, Dimension::Collection).await?;
     assert_eq!(
-        after.len(),
+        unconsumed_of(&rows, &source_coll.id),
         1,
-        "the run still exists, only its output magnitudes are gone"
+        "nothing has read the published version, got {rows:?}"
     );
-    assert_eq!(*after[0].row_count_out, 0);
-    assert_eq!(*after[0].data_bytes_out, 0);
-    Ok(())
-}
-
-#[td_test::test(db)]
-async fn test_node_output_tables_lists_distinct_output_table(db: TdPool) -> Result<(), TdError> {
-    let p = db.seed().test_project().await?;
-    let (coll, _lfr, ltdv) = seed_publisher_with_ltdv(&db, p.id, "lot_coll", "lot_fn").await?;
-
-    let req = empty_request(Dimension::Collection);
-    let rows = db
-        .metrics()
-        .metrics_node_output_tables(&req, &VisibleProjects::All)
-        .await?;
-
     assert_eq!(
-        rows.len(),
+        tables_unread_of(&rows, &source_coll.id),
         1,
-        "one publisher, one output table, got {rows:?}"
+        "every version of the published table is unread, got {rows:?}"
     );
-    assert_eq!(rows[0].collection_id.as_ref(), Some(&coll.id));
-    assert_eq!(rows[0].table_id, ltdv.base.table_id);
-    assert_eq!(rows[0].status, LogicalFunctionRunStatus::Done);
-    Ok(())
-}
 
-#[td_test::test(db)]
-async fn test_edges_empty_window(db: TdPool) -> Result<(), TdError> {
-    let req = empty_request(Dimension::Collection);
-    let edges = db
-        .metrics()
-        .metrics_edges(&req, &VisibleProjects::All)
-        .await?;
-    assert!(edges.is_empty(), "empty DB → empty edges, got {edges:?}");
-    Ok(())
-}
-
-/// An unconsumed publisher output yields an ingress edge
-/// (ExternalSource → coll) and an unused edge (coll → Unused), both carrying
-/// the version's magnitudes.
-#[td_test::test(db)]
-async fn test_edges_synthetic_for_publisher(db: TdPool) -> Result<(), TdError> {
-    let p = db.seed().test_project().await?;
-    let (coll, _, _ltdv) = seed_publisher_with_ltdv(&db, p.id, "pub_synth", "pub_synth_fn").await?;
-
-    let req = empty_request(Dimension::Collection);
-    let edges = db
-        .metrics()
-        .metrics_edges(&req, &VisibleProjects::All)
-        .await?;
-
-    let ingress: Vec<_> = edges
-        .iter()
-        .filter(|e| e.source_kind == NodeKind::ExternalSource)
-        .collect();
-    let unused: Vec<_> = edges
-        .iter()
-        .filter(|e| e.target_kind == NodeKind::Unused)
-        .collect();
-    assert_eq!(ingress.len(), 1, "expected one ingress edge, got {edges:?}");
-    assert_eq!(unused.len(), 1, "expected one unused edge, got {edges:?}");
-    assert_eq!(edges.len(), 2, "no other edges expected, got {edges:?}");
-
-    let ie = ingress[0];
-    assert!(ie.source.is_none());
-    assert_eq!(ie.target_kind, NodeKind::Dim);
-    assert_eq!(ie.target, Some(coll.id.to_string()));
-    assert_eq!(ie.fn_runs, 1);
-    assert_eq!(ie.tables, 1);
-    assert_eq!(*ie.row_count, 10);
-
-    let ue = unused[0];
-    assert_eq!(ue.source_kind, NodeKind::Dim);
-    assert_eq!(ue.source, Some(coll.id.to_string()));
-    assert!(ue.target.is_none());
-    assert_eq!(ue.fn_runs, 1);
-    assert_eq!(ue.tables, 1);
-    assert_eq!(*ue.row_count, 10);
-    Ok(())
-}
-
-/// A real edge's magnitudes come from the consumed source version.
-#[td_test::test(db)]
-async fn test_edges_real_edge_source_ltdv_attribution(db: TdPool) -> Result<(), TdError> {
-    let p = db.seed().test_project().await?;
-    let (producer_coll, _, producer_ltdv) =
-        seed_publisher_with_ltdv(&db, p.id, "real_prod", "real_prod_fn").await?;
-
-    let consumer_coll = seed_collection(&db, p.id, "real_cons").await?;
-    let consumer_fn = make_publisher_function(&db, &consumer_coll, "real_cons_fn").await?;
-    let (consumer_lfr, consumer_pfr) = seed_done_run(&db, &consumer_coll, &consumer_fn).await?;
-    stamp_buckets_on_pfr(&db, &consumer_pfr).await?;
-    link_input(&db, &consumer_coll, &consumer_lfr, &producer_ltdv).await?;
-
-    let req = empty_request(Dimension::Collection);
-    let edges = db
-        .metrics()
-        .metrics_edges(&req, &VisibleProjects::All)
-        .await?;
-
-    let real: Vec<_> = edges
-        .iter()
-        .filter(|e| e.source_kind == NodeKind::Dim && e.target_kind == NodeKind::Dim)
-        .collect();
-    assert_eq!(real.len(), 1, "one real edge expected, got {edges:?}");
-    let e = real[0];
-    assert_eq!(
-        e.source.as_deref(),
-        Some(producer_coll.id.to_string().as_str())
-    );
-    assert_eq!(e.target, Some(consumer_coll.id.to_string()));
-    assert_eq!(e.fn_runs, 1);
-    assert_eq!(e.tables, 1);
-    assert_eq!(*e.row_count, 10);
-
-    let edge_tables = db
-        .metrics()
-        .metrics_edge_tables(&req, &VisibleProjects::All)
-        .await?;
-    let real_tbls: Vec<_> = edge_tables
-        .iter()
-        .filter(|t| t.source_kind == NodeKind::Dim && t.target_kind == NodeKind::Dim)
-        .collect();
-    assert_eq!(
-        real_tbls.len(),
-        1,
-        "one (real edge, table) pair expected, got {edge_tables:?}"
-    );
-    assert_eq!(
-        real_tbls[0].source.as_deref(),
-        Some(producer_coll.id.to_string().as_str())
-    );
-    assert_eq!(real_tbls[0].target, Some(consumer_coll.id.to_string()));
-    assert_eq!(real_tbls[0].table_id, producer_ltdv.base.table_id);
-    Ok(())
-}
-
-/// A consumer with no output versions is a topological subscriber: its
-/// consumed input shows as an egress edge, and the producer's version is
-/// consumed, so it is not unused.
-#[td_test::test(db)]
-async fn test_edges_egress_for_subscriber(db: TdPool) -> Result<(), TdError> {
-    let p = db.seed().test_project().await?;
-    let (producer_coll, _, producer_ltdv) =
-        seed_publisher_with_ltdv(&db, p.id, "egress_prod", "egress_prod_fn").await?;
-
-    let consumer_coll = seed_collection(&db, p.id, "egress_cons").await?;
-    let consumer_fn = make_function(
+    let target_coll = seed_collection(&db, p.id, "reader_coll").await?;
+    let target_fn = make_function(
         &db,
-        &consumer_coll,
-        "egress_cons_fn",
-        Decorator::Subscriber,
-        &[],
+        &target_coll,
+        "reader_fn",
+        Decorator::Transformer,
+        &["out"],
     )
     .await?;
-    let (consumer_lfr, consumer_pfr) = seed_done_run(&db, &consumer_coll, &consumer_fn).await?;
-    stamp_buckets_on_pfr(&db, &consumer_pfr).await?;
-    link_input(&db, &consumer_coll, &consumer_lfr, &producer_ltdv).await?;
+    let (target_lfr, target_pfr) = seed_done_run(&db, &target_coll, &target_fn).await?;
+    end_attempt(&db, &target_pfr).await?;
+    link_input(&db, &target_coll, &target_lfr, &ltdv).await?;
+    bind_all_outputs(&db, &target_fn, &target_lfr, &target_pfr).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&target_pfr.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
 
-    let req = empty_request(Dimension::Collection);
-    let edges = db
-        .metrics()
-        .metrics_edges(&req, &VisibleProjects::All)
-        .await?;
-
-    let egress: Vec<_> = edges
-        .iter()
-        .filter(|e| e.target_kind == NodeKind::ExternalDestination)
-        .collect();
-    assert_eq!(egress.len(), 1, "expected one egress edge, got {edges:?}");
-    let e = egress[0];
-    assert_eq!(e.source_kind, NodeKind::Dim);
-    assert_eq!(e.source, Some(consumer_coll.id.to_string()));
-    assert!(e.target.is_none());
-    assert_eq!(e.fn_runs, 1);
-    assert_eq!(e.tables, 1);
-    assert_eq!(*e.row_count, 10);
-    let unused: Vec<_> = edges
-        .iter()
-        .filter(|e| e.target_kind == NodeKind::Unused)
-        .collect();
-    assert!(
-        unused.is_empty(),
-        "consumed LTDV must not appear as unused, got {unused:?}"
+    let rows = aggregates(&db, Dimension::Collection).await?;
+    assert_eq!(
+        unconsumed_of(&rows, &source_coll.id),
+        0,
+        "the transformer bound the version, got {rows:?}"
     );
-    let ingress: Vec<_> = edges
+    assert_eq!(
+        tables_unread_of(&rows, &source_coll.id),
+        0,
+        "the published table is read, got {rows:?}"
+    );
+    assert_eq!(
+        unconsumed_of(&rows, &target_coll.id),
+        1,
+        "nothing reads what the transformer wrote, got {rows:?}"
+    );
+    assert_eq!(
+        tables_unread_of(&rows, &target_coll.id),
+        1,
+        "the transformer's own table is never read, got {rows:?}"
+    );
+    assert_live_matches_backfill(&db).await
+}
+
+#[td_test::test(db)]
+async fn test_subscriber_yields_an_egress_edge(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let (_, source_lfr, ltdv) =
+        seed_publisher_with_ltdv(&db, p.id, "sub_src", "sub_src_fn").await?;
+    let coll = seed_collection(&db, p.id, "sub_coll").await?;
+    let func = make_function(&db, &coll, "sub_fn", Decorator::Subscriber, &[]).await?;
+    let (lfr, pfr) = seed_done_run(&db, &coll, &func).await?;
+    end_attempt(&db, &pfr).await?;
+    link_input(&db, &coll, &lfr, &ltdv).await?;
+
+    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, &[source_pfr.base.id.clone(), pfr.base.id.clone()])
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+
+    let rows = aggregates(&db, Dimension::Collection).await?;
+    let egress = edges_of(&rows, EdgeKind::Egress);
+    assert_eq!(egress.len(), 1, "one egress edge, got {rows:?}");
+    assert_eq!(egress[0].collection_id, coll.id);
+    assert_eq!(egress[0].fn_runs, 1, "the attempt is counted once");
+    assert_eq!(egress[0].row_count, 10);
+    assert_live_matches_backfill(&db).await
+}
+
+/// A private-only writer keeps its data inside the system: not an egress.
+#[td_test::test(db)]
+async fn test_private_outputs_are_marked_and_shown_on_request(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let (_, source_lfr, ltdv) =
+        seed_publisher_with_ltdv(&db, p.id, "priv_src", "priv_src_fn").await?;
+    let coll = seed_collection(&db, p.id, "priv_coll").await?;
+    let func = make_function(&db, &coll, "priv_fn", Decorator::Transformer, &["_priv"]).await?;
+    let (lfr, pfr) = seed_done_run(&db, &coll, &func).await?;
+    end_attempt(&db, &pfr).await?;
+    link_input(&db, &coll, &lfr, &ltdv).await?;
+    bind_all_outputs(&db, &func, &lfr, &pfr).await?;
+
+    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, &[source_pfr.base.id.clone(), pfr.base.id.clone()])
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+
+    let hidden = aggregates(&db, Dimension::Collection).await?;
+    assert!(
+        hidden
+            .iter()
+            .all(|r| r.side != FactSide::Written || r.collection_id != coll.id),
+        "the private version is hidden by default, got {hidden:?}"
+    );
+    assert!(
+        edges_of(&hidden, EdgeKind::Egress).is_empty(),
+        "a private-only writer keeps its data inside the system, got {hidden:?}"
+    );
+
+    let mut req = metrics_request(Dimension::Collection);
+    req.include_private = IncludePrivate::TRUE;
+    let rows = db.metrics().per_table(&req, &VisibleProjects::All).await?;
+    let written: Vec<_> = rows
         .iter()
-        .filter(|e| e.source_kind == NodeKind::ExternalSource)
+        .filter(|r| r.side == FactSide::Written && r.collection_id == coll.id)
         .collect();
-    assert_eq!(ingress.len(), 1);
-    assert_eq!(ingress[0].target, Some(producer_coll.id.to_string()));
+    assert_eq!(written.len(), 1, "shown on request, got {rows:?}");
+    assert_eq!(written[0].row_count, 7);
+    assert!(edges_of(&rows, EdgeKind::Egress).is_empty());
+    assert_live_matches_backfill(&db).await
+}
+
+#[td_test::test(db)]
+async fn test_an_attempt_ended_twice_owns_its_facts_once(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let (_, lfr, _) = seed_publisher_with_ltdv(&db, p.id, "twice_coll", "twice_fn").await?;
+    let pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.base.id).await?;
+    for _ in 0..2 {
+        in_project(&db, p.id, async |conn| {
+            attempts_ended(conn, std::slice::from_ref(&pfr.base.id))
+                .await
+                .map_err(Into::into)
+        })
+        .await?;
+    }
+    let rows = aggregates(&db, Dimension::Collection).await?;
+    let attempts: Vec<_> = rows
+        .iter()
+        .filter(|r| r.side == FactSide::Attempt)
+        .collect();
+    assert_eq!(attempts.len(), 1);
+    assert_eq!(attempts[0].fn_runs, 1, "got {rows:?}");
+    assert_live_matches_backfill(&db).await
+}
+
+#[td_test::test(db)]
+async fn test_group_dim_counts_a_run_once_per_source_group(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let group = db
+        .scoped(p.id)
+        .seed()
+        .group(
+            GroupName::try_from("shared")?,
+            Description::try_from("shared group")?,
+        )
+        .await?;
+    let mut ltdvs = Vec::new();
+    let mut ended = Vec::new();
+    for name in ["grp_a", "grp_b"] {
+        let coll = db
+            .scoped(p.id)
+            .seed()
+            .collection_in_group(&CollectionName::try_from(name)?, &system_user()?, &group)
+            .await?;
+        let func = make_publisher_function(&db, &coll, &format!("{name}_fn")).await?;
+        let (lfr, pfr) = seed_done_run(&db, &coll, &func).await?;
+        end_attempt(&db, &pfr).await?;
+        bind_all_outputs(&db, &func, &lfr, &pfr).await?;
+        let versions: Vec<LogicalTableDataVersionDB> =
+            db.timeline().fetch_all(&lfr.base.execution_id).await?;
+        ltdvs.extend(
+            versions
+                .into_iter()
+                .filter(|t| t.base.producer_logical_function_run_id.as_ref() == Some(&lfr.base.id)),
+        );
+        ended.push(pfr.base.id.clone());
+    }
+    let reader_coll = seed_collection(&db, p.id, "grp_reader").await?;
+    let reader_fn = make_function(
+        &db,
+        &reader_coll,
+        "grp_reader_fn",
+        Decorator::Transformer,
+        &["out"],
+    )
+    .await?;
+    let (reader_lfr, reader_pfr) = seed_done_run(&db, &reader_coll, &reader_fn).await?;
+    end_attempt(&db, &reader_pfr).await?;
+    for ltdv in &ltdvs {
+        link_input(&db, &reader_coll, &reader_lfr, ltdv).await?;
+    }
+    bind_all_outputs(&db, &reader_fn, &reader_lfr, &reader_pfr).await?;
+    ended.push(reader_pfr.base.id.clone());
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, &ended).await.map_err(Into::into)
+    })
+    .await?;
+
+    let by_collection = aggregates(&db, Dimension::Collection).await?;
+    let runs: i64 = edges_of(&by_collection, EdgeKind::Real)
+        .iter()
+        .map(|r| r.fn_runs)
+        .sum();
+    assert_eq!(
+        runs, 2,
+        "one run per source collection, got {by_collection:?}"
+    );
+
+    let by_group = aggregates(&db, Dimension::Group).await?;
+    let real = edges_of(&by_group, EdgeKind::Real);
+    assert!(
+        real.iter().all(|r| r.from_group_id == Some(group.base.id)),
+        "got {by_group:?}"
+    );
+    let runs: i64 = real.iter().map(|r| r.fn_runs).sum();
+    assert_eq!(runs, 1, "one run on the group edge, got {by_group:?}");
+    assert_live_matches_backfill(&db).await
+}
+
+#[td_test::test(db)]
+async fn test_collection_filter_keeps_either_endpoint(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let (source_coll, source_lfr, ltdv) =
+        seed_publisher_with_ltdv(&db, p.id, "flt_src", "flt_src_fn").await?;
+    let target_coll = seed_collection(&db, p.id, "flt_tgt").await?;
+    let target_fn = make_function(
+        &db,
+        &target_coll,
+        "flt_tgt_fn",
+        Decorator::Transformer,
+        &["out"],
+    )
+    .await?;
+    let (target_lfr, target_pfr) = seed_done_run(&db, &target_coll, &target_fn).await?;
+    end_attempt(&db, &target_pfr).await?;
+    link_input(&db, &target_coll, &target_lfr, &ltdv).await?;
+    bind_all_outputs(&db, &target_fn, &target_lfr, &target_pfr).await?;
+    let (other_coll, other_lfr, _) =
+        seed_publisher_with_ltdv(&db, p.id, "flt_other", "flt_other_fn").await?;
+
+    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
+    let other_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&other_lfr.base.id).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(
+            conn,
+            &[
+                source_pfr.base.id.clone(),
+                target_pfr.base.id.clone(),
+                other_pfr.base.id.clone(),
+            ],
+        )
+        .await
+        .map_err(Into::into)
+    })
+    .await?;
+
+    let mut req = metrics_request(Dimension::Collection);
+    req.collections = DimensionFilter::new(vec![target_coll.id], vec![]);
+    let rows = db.metrics().per_table(&req, &VisibleProjects::All).await?;
+    assert!(
+        rows.iter()
+            .all(|r| r.collection_id == target_coll.id
+                || r.from_collection_id == Some(target_coll.id)),
+        "got {rows:?}"
+    );
+    assert_eq!(
+        edges_of(&rows, EdgeKind::Real).len(),
+        1,
+        "the edge into the target survives"
+    );
+    assert!(
+        rows.iter().all(|r| r.collection_id != other_coll.id),
+        "the unrelated collection is gone"
+    );
+
+    let mut req = metrics_request(Dimension::Collection);
+    req.collections = DimensionFilter::new(vec![], vec![source_coll.id]);
+    let rows = db.metrics().per_table(&req, &VisibleProjects::All).await?;
+    assert!(
+        rows.iter()
+            .all(|r| r.collection_id != source_coll.id
+                && r.from_collection_id != Some(source_coll.id)),
+        "the excluded collection is gone from both ends, got {rows:?}"
+    );
+    assert!(
+        rows.iter().any(|r| r.collection_id == other_coll.id),
+        "the unrelated collection stays"
+    );
     Ok(())
 }
 
 #[td_test::test(db)]
-async fn test_private_output_excluded_from_nodes_and_edges(db: TdPool) -> Result<(), TdError> {
+async fn test_commit_moves_the_run_status(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let coll = seed_collection(&db, p.id, "priv_out").await?;
-    let func = make_function(
+    let (_, lfr, _) = seed_publisher_with_ltdv(&db, p.id, "commit_coll", "commit_fn").await?;
+    let pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.base.id).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&pfr.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+
+    let before = aggregates(&db, Dimension::Collection).await?;
+    assert!(
+        before
+            .iter()
+            .all(|r| r.run_status == LogicalFunctionRunStatus::Done),
+        "got {before:?}"
+    );
+
+    in_project(&db, p.id, async |conn| {
+        runs_status_changed(
+            conn,
+            std::slice::from_ref(&lfr.base.id),
+            &LogicalFunctionRunStatus::Committed,
+        )
+        .await
+        .map_err(Into::into)
+    })
+    .await?;
+
+    let after = aggregates(&db, Dimension::Collection).await?;
+    assert!(
+        after
+            .iter()
+            .all(|r| r.run_status == LogicalFunctionRunStatus::Committed),
+        "got {after:?}"
+    );
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn test_failed_attempt_keeps_its_outcome(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let coll = seed_collection(&db, p.id, "fail_coll").await?;
+    let func = make_publisher_function(&db, &coll, "fail_fn").await?;
+    let (lfr, pfr) = seed_run(&db, &coll, &func, LogicalFunctionRunStatus::Failed).await?;
+    stamp_status_at(&db, &pfr, PhysicalFunctionRunStatus::Failed).await?;
+
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&pfr.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+    in_project(&db, p.id, async |conn| {
+        runs_status_changed(
+            conn,
+            std::slice::from_ref(&lfr.base.id),
+            &LogicalFunctionRunStatus::Committed,
+        )
+        .await
+        .map_err(Into::into)
+    })
+    .await?;
+
+    let rows = aggregates(&db, Dimension::Collection).await?;
+    assert!(
+        rows.iter()
+            .all(|r| r.run_status == LogicalFunctionRunStatus::Failed),
+        "a failed attempt does not become a committed one: {rows:?}"
+    );
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn test_replaced_attempt_is_filtered_not_deducted(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let (_, lfr, _) = seed_publisher_with_ltdv(&db, p.id, "replay_coll", "replay_fn").await?;
+    let first: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.base.id).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&first.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+
+    let replay = PhysicalFunctionRunInsertDB {
+        id: PhysicalFunctionRunId::new(),
+        status: PhysicalFunctionRunStatus::Requested,
+        dispatched_on: None,
+        started_on: None,
+        ended_on: None,
+        ..first.base.clone()
+    };
+    db.scoped(p.id)
+        .scd2()
+        .open(&replay, LockInstant::asserted(*AtTime::now()))
+        .await?;
+    in_project(&db, p.id, async |conn| {
+        runs_reattempted(conn, std::slice::from_ref(&lfr.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+
+    let visible = aggregates(&db, Dimension::Collection).await?;
+    assert!(
+        visible.is_empty(),
+        "the superseded attempt is filtered out, got {visible:?}"
+    );
+
+    let mut req = metrics_request(Dimension::Collection);
+    req.include_replaced = IncludeReplaced::TRUE;
+    let all = db.metrics().per_table(&req, &VisibleProjects::All).await?;
+    assert!(
+        all.iter()
+            .any(|r| r.side == FactSide::Attempt && r.fn_runs == 1),
+        "the rows are still there to be counted, got {all:?}"
+    );
+    assert_live_matches_backfill(&db).await
+}
+
+/// A producer replayed after its output was read: the reader keeps the
+/// magnitudes it read, and the re-materialized version inherits its
+/// consumption, so nothing shows as unread.
+#[td_test::test(db)]
+async fn test_replaying_a_consumed_producer_keeps_what_was_read(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let (source_coll, source_lfr, ltdv) =
+        seed_publisher_with_ltdv(&db, p.id, "rp_src", "rp_src_fn").await?;
+    let target_coll = seed_collection(&db, p.id, "rp_tgt").await?;
+    let target_fn = make_function(
         &db,
-        &coll,
-        "priv_out_fn",
-        Decorator::Publisher,
+        &target_coll,
+        "rp_tgt_fn",
+        Decorator::Transformer,
+        &["out"],
+    )
+    .await?;
+    let (target_lfr, target_pfr) = seed_done_run(&db, &target_coll, &target_fn).await?;
+    end_attempt(&db, &target_pfr).await?;
+    link_input(&db, &target_coll, &target_lfr, &ltdv).await?;
+    bind_all_outputs(&db, &target_fn, &target_lfr, &target_pfr).await?;
+    let first: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, &[first.base.id.clone(), target_pfr.base.id.clone()])
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+
+    let replay = PhysicalFunctionRunInsertDB {
+        id: PhysicalFunctionRunId::new(),
+        status: PhysicalFunctionRunStatus::Requested,
+        dispatched_on: None,
+        started_on: None,
+        ended_on: None,
+        ..first.base.clone()
+    };
+    db.scoped(p.id)
+        .scd2()
+        .open(&replay, LockInstant::asserted(*AtTime::now()))
+        .await?;
+    in_project(&db, p.id, async |conn| {
+        runs_reattempted(conn, std::slice::from_ref(&source_lfr.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+    let replay: PhysicalFunctionRunDB = db.timeline().fetch_one(&replay.id).await?;
+    let tables: Vec<TableDB> = db
+        .scd2()
+        .fetch_all::<TableDB>(&source_lfr.base.function_id)
+        .await?;
+    let table = tables
+        .iter()
+        .find(|t| t.base.table_id == ltdv.base.table_id)
+        .expect("the publisher's table");
+    bind_ptdv_with_magnitudes(&db, &ltdv, table, &replay, 20, 200).await?;
+    end_attempt(&db, &replay).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&replay.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+
+    let rows = aggregates(&db, Dimension::Collection).await?;
+    let read: Vec<_> = rows
+        .iter()
+        .filter(|r| r.side == FactSide::Read && r.collection_id == target_coll.id)
+        .collect();
+    assert_eq!(read.len(), 1, "got {rows:?}");
+    assert_eq!(read[0].row_count, 10, "the reader keeps what it read");
+    assert_eq!(
+        unconsumed_of(&rows, &source_coll.id),
+        0,
+        "the re-materialized version was read before, got {rows:?}"
+    );
+    let written: Vec<_> = rows
+        .iter()
+        .filter(|r| r.side == FactSide::Written && r.collection_id == source_coll.id)
+        .collect();
+    assert_eq!(
+        written[0].row_count, 20,
+        "the current attempt's magnitudes, got {rows:?}"
+    );
+    assert_live_matches_backfill(&db).await
+}
+
+/// Recovery supersedes the failed attempt exactly as a replay would; the rung
+/// must derive the same rows.
+#[td_test::test(db)]
+async fn test_a_recovered_run_supersedes_its_failed_attempt(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let coll = seed_collection(&db, p.id, "recover_coll").await?;
+    let func = make_publisher_function(&db, &coll, "recover_fn").await?;
+    let (lfr, failed) = seed_run(&db, &coll, &func, LogicalFunctionRunStatus::Failed).await?;
+    stamp_status_at(&db, &failed, PhysicalFunctionRunStatus::Failed).await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&failed.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+
+    let retry = PhysicalFunctionRunInsertDB {
+        id: PhysicalFunctionRunId::new(),
+        status: PhysicalFunctionRunStatus::Requested,
+        dispatched_on: None,
+        started_on: None,
+        ended_on: None,
+        ..failed.base.clone()
+    };
+    db.scoped(p.id)
+        .scd2()
+        .open(&retry, LockInstant::asserted(*AtTime::now()))
+        .await?;
+    in_project(&db, p.id, async |conn| {
+        runs_reattempted(conn, std::slice::from_ref(&lfr.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+    let retry: PhysicalFunctionRunDB = db.timeline().fetch_one(&retry.id).await?;
+    stamp_status_at(&db, &retry, PhysicalFunctionRunStatus::Done).await?;
+    bind_all_outputs(&db, &func, &lfr, &retry).await?;
+    db.scoped(p.id)
+        .update(
+            &LogicalFunctionRunStatusUpdateDB {
+                status: LogicalFunctionRunStatus::Committed,
+            },
+            &lfr.base.id,
+        )
+        .await?;
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&retry.base.id))
+            .await
+            .map_err(Into::into)
+    })
+    .await?;
+    in_project(&db, p.id, async |conn| {
+        runs_status_changed(
+            conn,
+            std::slice::from_ref(&lfr.base.id),
+            &LogicalFunctionRunStatus::Committed,
+        )
+        .await
+        .map_err(Into::into)
+    })
+    .await?;
+
+    let current = aggregates(&db, Dimension::Collection).await?;
+    assert!(
+        current
+            .iter()
+            .all(|r| r.run_status == LogicalFunctionRunStatus::Committed),
+        "only the retry is current, got {current:?}"
+    );
+    let mut req = metrics_request(Dimension::Collection);
+    req.include_replaced = IncludeReplaced::TRUE;
+    let all = db.metrics().per_table(&req, &VisibleProjects::All).await?;
+    let attempts: i64 = all
+        .iter()
+        .filter(|r| r.side == FactSide::Attempt)
+        .map(|r| r.fn_runs)
+        .sum();
+    assert_eq!(attempts, 2, "both attempts are facts, got {all:?}");
+    assert!(
+        all.iter()
+            .any(|r| r.run_status == LogicalFunctionRunStatus::Failed),
+        "the failed attempt keeps its outcome, got {all:?}"
+    );
+    assert_live_matches_backfill(&db).await
+}
+
+#[td_test::test(db)]
+async fn test_mixed_project_matches_backfill(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let (_, publisher, ltdv) = seed_publisher_with_ltdv(&db, p.id, "mix_pub", "mix_pub_fn").await?;
+
+    let mid = seed_collection(&db, p.id, "mix_mid").await?;
+    let mid_fn = make_function(
+        &db,
+        &mid,
+        "mix_mid_fn",
+        Decorator::Transformer,
         &["out", "_priv"],
     )
     .await?;
-    let (lfr, pfr) = seed_done_run(&db, &coll, &func).await?;
-    stamp_buckets_and_metrics_on_pfr(&db, &pfr, 2, 17, 177).await?;
-    bind_all_outputs(&db, &func, &lfr, &pfr).await?;
+    let (mid_lfr, mid_pfr) = seed_done_run(&db, &mid, &mid_fn).await?;
+    end_attempt(&db, &mid_pfr).await?;
+    link_input(&db, &mid, &mid_lfr, &ltdv).await?;
+    bind_all_outputs(&db, &mid_fn, &mid_lfr, &mid_pfr).await?;
 
-    let nodes = db
-        .metrics()
-        .metrics_nodes(&empty_request(Dimension::Collection), &VisibleProjects::All)
-        .await?;
-    assert_eq!(nodes.len(), 1, "one node expected, got {nodes:?}");
-    let n = &nodes[0];
-    assert_eq!(
-        *n.table_versions_out, 1,
-        "private output must not count, got {n:?}"
-    );
-    assert_eq!(*n.row_count_out, 10);
-    assert_eq!(*n.data_bytes_out, 100);
+    let sink = seed_collection(&db, p.id, "mix_sink").await?;
+    let sink_fn = make_function(&db, &sink, "mix_sink_fn", Decorator::Subscriber, &[]).await?;
+    let (sink_lfr, sink_pfr) = seed_done_run(&db, &sink, &sink_fn).await?;
+    end_attempt(&db, &sink_pfr).await?;
+    link_input(&db, &sink, &sink_lfr, &ltdv).await?;
 
-    let edges = db
-        .metrics()
-        .metrics_edges(&empty_request(Dimension::Collection), &VisibleProjects::All)
-        .await?;
-    let ingress: Vec<_> = edges
-        .iter()
-        .filter(|e| e.source_kind == NodeKind::ExternalSource)
-        .collect();
-    let unused: Vec<_> = edges
-        .iter()
-        .filter(|e| e.target_kind == NodeKind::Unused)
-        .collect();
-    assert_eq!(ingress.len(), 1, "one ingress edge, got {edges:?}");
-    assert_eq!(ingress[0].tables, 1);
-    assert_eq!(*ingress[0].row_count, 10);
-    assert_eq!(unused.len(), 1, "one unused edge, got {edges:?}");
-    assert_eq!(unused[0].tables, 1);
-    assert_eq!(*unused[0].row_count, 10);
-    Ok(())
-}
+    let failed_fn = make_publisher_function(&db, &mid, "mix_failed_fn").await?;
+    let (_, failed_pfr) = seed_run(&db, &mid, &failed_fn, LogicalFunctionRunStatus::Failed).await?;
+    stamp_status_at(&db, &failed_pfr, PhysicalFunctionRunStatus::Failed).await?;
 
-/// A private version consumed across collections surfaces nowhere: no IN
-/// magnitudes, no real edge, no ingress for the producer, no unused edge.
-#[td_test::test(db)]
-async fn test_private_input_excluded_from_in_and_real_edges(db: TdPool) -> Result<(), TdError> {
-    let p = db.seed().test_project().await?;
-    let prod_coll = seed_collection(&db, p.id, "priv_in_prod").await?;
-    let prod_fn = make_function(
-        &db,
-        &prod_coll,
-        "priv_in_prod_fn",
-        Decorator::Publisher,
-        &["_priv"],
-    )
+    let publisher_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&publisher.base.id).await?;
+    let ended = vec![
+        publisher_pfr.base.id.clone(),
+        mid_pfr.base.id.clone(),
+        sink_pfr.base.id.clone(),
+        failed_pfr.base.id.clone(),
+    ];
+    in_project(&db, p.id, async |conn| {
+        attempts_ended(conn, &ended).await.map_err(Into::into)
+    })
     .await?;
-    let (prod_lfr, prod_pfr) = seed_done_run(&db, &prod_coll, &prod_fn).await?;
-    stamp_buckets_on_pfr(&db, &prod_pfr).await?;
-    bind_all_outputs(&db, &prod_fn, &prod_lfr, &prod_pfr).await?;
-    let prod_ltdvs: Vec<LogicalTableDataVersionDB> =
-        db.timeline().fetch_all(&prod_lfr.base.execution_id).await?;
-    let private_ltdv = &prod_ltdvs[0];
 
-    let cons_coll = seed_collection(&db, p.id, "priv_in_cons").await?;
-    let cons_fn = make_publisher_function(&db, &cons_coll, "priv_in_cons_fn").await?;
-    let (cons_lfr, cons_pfr) = seed_done_run(&db, &cons_coll, &cons_fn).await?;
-    stamp_buckets_on_pfr(&db, &cons_pfr).await?;
-    link_input(&db, &cons_coll, &cons_lfr, private_ltdv).await?;
-
-    let nodes = db
-        .metrics()
-        .metrics_nodes(&empty_request(Dimension::Collection), &VisibleProjects::All)
-        .await?;
-    let prod_node = nodes
-        .iter()
-        .find(|n| n.collection_id.as_ref() == Some(&prod_coll.id))
-        .expect("producer node");
-    assert_eq!(
-        *prod_node.table_versions_out, 0,
-        "private-only producer must report zero OUT, got {prod_node:?}"
-    );
-    assert_eq!(*prod_node.row_count_out, 0);
-    let cons_node = nodes
-        .iter()
-        .find(|n| n.collection_id.as_ref() == Some(&cons_coll.id))
-        .expect("consumer node");
-    assert_eq!(
-        *cons_node.table_versions_in, 0,
-        "private input must not count, got {cons_node:?}"
-    );
-    assert_eq!(*cons_node.row_count_in, 0);
-
-    let edges = db
-        .metrics()
-        .metrics_edges(&empty_request(Dimension::Collection), &VisibleProjects::All)
-        .await?;
-    let prod_id = prod_coll.id.to_string();
-    assert!(
-        edges
-            .iter()
-            .all(|e| e.source.as_deref() != Some(prod_id.as_str())
-                && e.target.as_deref() != Some(prod_id.as_str())),
-        "private-only producer must have no edges, got {edges:?}"
-    );
-    Ok(())
-}
-
-/// A consumer whose only outputs are private has no visible outputs, so it
-/// classifies as a topological subscriber.
-#[td_test::test(db)]
-async fn test_private_only_outputs_make_topological_subscriber(db: TdPool) -> Result<(), TdError> {
-    let p = db.seed().test_project().await?;
-    let (_prod_coll, _, prod_ltdv) =
-        seed_publisher_with_ltdv(&db, p.id, "priv_egr_prod", "priv_egr_prod_fn").await?;
-
-    let cons_coll = seed_collection(&db, p.id, "priv_egr_cons").await?;
-    let cons_fn = make_function(
-        &db,
-        &cons_coll,
-        "priv_egr_cons_fn",
-        Decorator::Publisher,
-        &["_state"],
-    )
-    .await?;
-    let (cons_lfr, cons_pfr) = seed_done_run(&db, &cons_coll, &cons_fn).await?;
-    stamp_buckets_on_pfr(&db, &cons_pfr).await?;
-    link_input(&db, &cons_coll, &cons_lfr, &prod_ltdv).await?;
-
-    let edges = db
-        .metrics()
-        .metrics_edges(&empty_request(Dimension::Collection), &VisibleProjects::All)
-        .await?;
-    let egress: Vec<_> = edges
-        .iter()
-        .filter(|e| e.target_kind == NodeKind::ExternalDestination)
-        .collect();
-    assert_eq!(egress.len(), 1, "one egress edge, got {edges:?}");
-    assert_eq!(egress[0].source, Some(cons_coll.id.to_string()));
-    assert_eq!(*egress[0].row_count, 10);
-    assert!(
-        edges.iter().all(
-            |e| e.target_kind != NodeKind::Unused || e.source != Some(cons_coll.id.to_string())
-        ),
-        "private output must not appear as unused, got {edges:?}"
-    );
-    Ok(())
+    assert_live_matches_backfill(&db).await
 }
 
 #[td_test::test(db)]
-async fn test_soft_deleted_collection_excluded_from_nodes_and_edges(
-    db: TdPool,
-) -> Result<(), TdError> {
+async fn test_the_rung_derives_a_cold_database(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let (coll, _lfr, _ltdv) = seed_publisher_with_ltdv(&db, p.id, "del_coll", "del_fn").await?;
-    let req = empty_request(Dimension::Collection);
-    assert_eq!(
-        db.metrics()
-            .metrics_nodes(&req, &VisibleProjects::All)
-            .await?
-            .len(),
-        1
-    );
-    assert!(
-        !db.metrics()
-            .metrics_edges(&req, &VisibleProjects::All)
-            .await?
-            .is_empty()
-    );
+    seed_publisher_with_ltdv(&db, p.id, "cold_coll", "cold_fn").await?;
+    assert!(aggregates(&db, Dimension::Collection).await?.is_empty());
 
-    soft_delete_collection(&db, &coll).await?;
-    assert!(
-        db.metrics()
-            .metrics_nodes(&req, &VisibleProjects::All)
-            .await?
-            .is_empty(),
-        "a soft-deleted collection must not appear as a node"
-    );
-    assert!(
-        db.metrics()
-            .metrics_edges(&req, &VisibleProjects::All)
-            .await?
-            .is_empty(),
-        "a soft-deleted collection's edges must vanish"
-    );
-    Ok(())
-}
+    derive_metrics_facts(&db).await?;
 
-#[td_test::test(db)]
-async fn test_soft_deleted_project_excluded_from_nodes(db: TdPool) -> Result<(), TdError> {
-    let p = db.seed().test_project().await?;
-    let (_coll, _lfr, _ltdv) =
-        seed_publisher_with_ltdv(&db, p.id, "del_proj_coll", "del_proj_fn").await?;
-    let req = empty_request(Dimension::Collection);
-    assert_eq!(
-        db.metrics()
-            .metrics_nodes(&req, &VisibleProjects::All)
-            .await?
-            .len(),
-        1
-    );
-
-    soft_delete_project(&db, &p).await?;
-    assert!(
-        db.metrics()
-            .metrics_nodes(&req, &VisibleProjects::All)
-            .await?
-            .is_empty(),
-        "runs under a soft-deleted project must be excluded even when the collection is live"
-    );
-    Ok(())
-}
-
-#[td_test::test(db)]
-async fn test_soft_deleted_source_collection_excluded_from_real_edge(
-    db: TdPool,
-) -> Result<(), TdError> {
-    let p = db.seed().test_project().await?;
-    let (producer_coll, _, producer_ltdv) =
-        seed_publisher_with_ltdv(&db, p.id, "edge_del_prod", "edge_del_prod_fn").await?;
-    let consumer_coll = seed_collection(&db, p.id, "edge_del_cons").await?;
-    let consumer_fn = make_publisher_function(&db, &consumer_coll, "edge_del_cons_fn").await?;
-    let (consumer_lfr, consumer_pfr) = seed_done_run(&db, &consumer_coll, &consumer_fn).await?;
-    stamp_buckets_on_pfr(&db, &consumer_pfr).await?;
-    link_input(&db, &consumer_coll, &consumer_lfr, &producer_ltdv).await?;
-
-    let req = empty_request(Dimension::Collection);
-    let producer_id = producer_coll.id.to_string();
-    assert!(
-        db.metrics()
-            .metrics_edges(&req, &VisibleProjects::All)
-            .await?
-            .iter()
-            .any(|e| e.source.as_deref() == Some(producer_id.as_str())),
-        "the live producer must be a real-edge source before deletion"
-    );
-
-    soft_delete_collection(&db, &producer_coll).await?;
-    let edges = db
-        .metrics()
-        .metrics_edges(&req, &VisibleProjects::All)
-        .await?;
-    assert!(
-        edges
-            .iter()
-            .all(|e| e.source.as_deref() != Some(producer_id.as_str())
-                && e.target.as_deref() != Some(producer_id.as_str())),
-        "no edge may reference the soft-deleted producer, got {edges:?}"
-    );
-    let cons_node = db
-        .metrics()
-        .metrics_nodes(&req, &VisibleProjects::All)
-        .await?
-        .into_iter()
-        .any(|n| n.collection_id.as_ref() == Some(&consumer_coll.id));
-    assert!(cons_node, "the live consumer must still be a node");
+    let rows = aggregates(&db, Dimension::Collection).await?;
+    assert!(!rows.is_empty(), "the rung derived nothing");
+    assert_eq!(edges_of(&rows, EdgeKind::ExternalSource).len(), 1);
     Ok(())
 }
