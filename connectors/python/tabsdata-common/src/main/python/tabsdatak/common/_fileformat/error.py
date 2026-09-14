@@ -30,3 +30,8 @@ class FileFormatErrorCode(ErrorCode):
         "Destination format=AUTO could not be inferred from paths {paths}: {reason}. "
         "Set ``format=DestFileFormat.<...>`` explicitly.",
     )  # resolve_auto_dest_format -- AUTO inference failure
+    FILE_FORMAT_5 = ErrorDef(
+        CommonInitException,
+        "A '#{sheet}' worksheet fragment is only valid on an EXCEL source, but the "
+        "format resolved to '{format}'",
+    )  # import_request -- a sheet survived onto a non-Excel source

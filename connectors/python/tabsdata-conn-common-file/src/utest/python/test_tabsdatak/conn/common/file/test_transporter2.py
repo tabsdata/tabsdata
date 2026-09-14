@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 import yaml
 
+from tabsdatak.common._fileformat.taxonomy import EXCEL_SHEET_KEY
 from tabsdatak.common._transporter.invoker import transporter2 as t
 from tabsdatak.conn.common.file.typing_ import DestFileFormat, SrcFileFormat
 
@@ -178,6 +179,47 @@ def test_to_format_spec_csv_dest_include_header_alias():
 def test_to_format_spec_csv_defaults_when_empty():
     spec = t.to_format_spec(t.TransporterCSVFormat())
     assert spec.options == t.CsvOptions(has_header=True, delimiter=",")
+
+
+def test_to_format_spec_excel_carries_the_sheet():
+    spec = t.to_format_spec(t.TransporterExcelFormat(sheet=3))
+    assert spec == t.FormatSpec(format="excel", options=t.ExcelOptions(sheet=3))
+
+
+def test_to_format_spec_excel_defaults_to_the_first_sheet():
+    assert t.to_format_spec(t.TransporterExcelFormat()) == t.FormatSpec(
+        format="excel", options=t.ExcelOptions(sheet=1)
+    )
+
+
+def test_one_options_field_carries_whichever_block_the_format_takes():
+    # There is no per-format option field: the binary reads `options` against
+    # the sibling `format`, so the two blocks share the one key.
+    assert isinstance(t.to_format_spec(t.TransporterCSVFormat()).options, t.CsvOptions)
+    assert isinstance(
+        t.to_format_spec(t.TransporterExcelFormat()).options, t.ExcelOptions
+    )
+    assert t.to_format_spec(t.TransporterParquetFormat()).options is None
+
+
+def test_dump_excel_source_format_matches_the_binary_field_names():
+    # Drift here is a runtime YAML parse failure in the binary rather than a
+    # Python one, so the emitted keys are pinned: an untagged `options` block
+    # beside `format`, with `sheet` inside it.
+    req = t.FindCopyRequest(
+        source=t.Location(uri="s3://b/2026/q2.xlsx"),
+        target_dir=t.Location(uri="file:///work/slot0"),
+        source_format=t.to_format_spec(t.TransporterExcelFormat(sheet=2)),
+        target_format=t.FormatSpec(format="parquet"),
+    )
+    dumped = t._dump(req)
+    assert dumped["source_format"] == {
+        "format": "excel",
+        "options": {"sheet": 2, "has_header": True},
+    }
+    assert dumped["target_format"] == {"format": "parquet"}
+    # ...and it survives a real YAML round trip, which is what the binary reads.
+    assert yaml.safe_load(yaml.safe_dump(dumped)) == dumped
 
 
 def test_to_format_spec_unsupported_raises():
@@ -687,6 +729,20 @@ def test_resolve_auto_src_format_uniform():
     )
 
 
+def test_resolve_auto_src_format_infers_excel_from_xlsx():
+    assert (
+        t.resolve_auto_src_format(SrcFileFormat.AUTO, ["q1.xlsx", "q2.xlsx"])
+        is SrcFileFormat.EXCEL
+    )
+
+
+def test_excel_is_source_only():
+    # There is no Excel writer, so the dest side must not infer it.
+    assert not hasattr(DestFileFormat, "EXCEL")
+    with pytest.raises(Exception):
+        t.resolve_auto_dest_format(DestFileFormat.AUTO, ["out.xlsx"])
+
+
 def test_resolve_auto_src_format_mixed_raises():
     with pytest.raises(Exception):
         t.resolve_auto_src_format(SrcFileFormat.AUTO, ["a.csv", "b.parquet"])
@@ -711,6 +767,45 @@ def test_src_format_to_transporter_maps_each():
         t.src_format_to_transporter(SrcFileFormat.PARQUET, None), t.TransporterParquetFormat
     )
     assert isinstance(t.src_format_to_transporter(SrcFileFormat.LOG, None), t.TransporterLogFormat)
+    assert isinstance(
+        t.src_format_to_transporter(SrcFileFormat.EXCEL, None), t.TransporterExcelFormat
+    )
+
+
+def test_src_format_to_transporter_excel_reads_has_header_from_the_cfg():
+    # Unlike the sheet, this one really is a user option: it stays in the
+    # cfg dict and is read, not popped.
+    assert t.src_format_to_transporter(SrcFileFormat.EXCEL, None).has_header is True
+    assert t.src_format_to_transporter(SrcFileFormat.EXCEL, {}).has_header is True
+    off = t.src_format_to_transporter(SrcFileFormat.EXCEL, {"has_header": False})
+    assert off.has_header is False
+    assert t.to_format_spec(off).options == t.ExcelOptions(sheet=1, has_header=False)
+
+
+def test_the_two_excel_options_are_independent():
+    fmt = t.src_format_to_transporter(
+        SrcFileFormat.EXCEL, {EXCEL_SHEET_KEY: 4, "has_header": False}
+    )
+    assert (fmt.sheet, fmt.has_header) == (4, False)
+
+
+def test_src_format_to_transporter_excel_takes_the_sheet():
+    cfg = {EXCEL_SHEET_KEY: 4}
+    assert t.src_format_to_transporter(SrcFileFormat.EXCEL, cfg).sheet == 4
+    # The carrier key is consumed, never passed on as an option.
+    assert cfg == {}
+    # No fragment on the path -> the first sheet, as the binary also defaults.
+    assert t.src_format_to_transporter(SrcFileFormat.EXCEL, None).sheet == 1
+    assert t.src_format_to_transporter(SrcFileFormat.EXCEL, {}).sheet == 1
+
+
+def test_a_sheet_never_reaches_another_format_as_an_option():
+    with pytest.raises(Exception):
+        t.src_format_to_transporter(SrcFileFormat.PARQUET, {EXCEL_SHEET_KEY: 4})
+    # ...and a csv cfg that never had one is passed through untouched.
+    csv = t.src_format_to_transporter(SrcFileFormat.CSV, {"separator": ";"})
+    assert csv.options["separator"] == ";"
+    assert EXCEL_SHEET_KEY not in csv.options
 
 
 def test_dest_format_to_transporter_maps_each():

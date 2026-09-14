@@ -11,6 +11,8 @@ import pytest
 
 from tabsdatak.common._error import CommonInitException
 from tabsdatak.common._fileformat.error import FileFormatErrorCode
+from tabsdatak.common._fileformat.taxonomy import EXCEL_SHEET_KEY
+from tabsdatak.common._transporter.handler import handler2
 from tabsdatak.common._transporter.invoker import transporter1, transporter2
 from tabsdatak.conn.common.constants import SRC_META_DROP_KEY
 from tabsdatak.conn.common.error import ConnException
@@ -47,6 +49,20 @@ def test_src_format_to_transporter_rejects_auto():
     is a programming error."""
     with pytest.raises(CommonInitException):
         transporter1.src_format_to_transporter(SrcFileFormat.AUTO, None)
+
+
+def test_src_format_to_transporter_rejects_excel():
+    """transporter1 is the legacy polars driver and has no Excel reader.
+    Adding ``EXCEL`` to the shared enum must therefore surface as an
+    explicit unsupported-format error here, not as a silent fallthrough."""
+    with pytest.raises(CommonInitException):
+        transporter1.src_format_to_transporter(SrcFileFormat.EXCEL, None)
+
+
+def test_resolve_auto_src_format_does_not_infer_excel():
+    """...and AUTO must not route an .xlsx path to it either."""
+    with pytest.raises(CommonInitException):
+        transporter1.resolve_auto_src_format(SrcFileFormat.AUTO, ["q2.xlsx"])
 
 
 def test_src_format_csv_carries_options():
@@ -358,7 +374,9 @@ def test_reader_conf_from_src_handles_none_format_cfg():
     src.format_cfg = None
     rc = _plugin.ReaderConf.from_src(object(), src)
     assert rc.file_format is SrcFileFormat.CSV
+    # No fragment and no cfg: nothing to carry, so nothing is invented.
     assert rc.format_cfg is None
+    assert rc.format_cfg_for(0) is None
 
 
 class _StubDest:
@@ -1032,3 +1050,352 @@ def test_run_write_out_wraps_transporter_failures(
             errors=_RUN_ERRORS,
         )
     assert ei.value.api_error is expected_code
+
+
+# --- worksheet fragment split ----------------------------------------
+
+
+class _Src:
+    """The handful of attributes ``ReaderConf.from_src`` reads."""
+
+    def __init__(self, paths, fmt=SrcFileFormat.AUTO):
+        self.paths = paths
+        self.format = fmt
+        self.format_cfg = None
+        self.initial_last_modified = None
+        self.src_cfg = None
+
+
+@pytest.mark.parametrize(
+    "path,expected",
+    [
+        ("2026/q2.xlsx", ("2026/q2.xlsx", None)),
+        ("2026/q2.xlsx#1", ("2026/q2.xlsx", 1)),
+        ("2026/q2.xlsx#12", ("2026/q2.xlsx", 12)),
+        ("s3://b/2026/q2.xlsx#3", ("s3://b/2026/q2.xlsx", 3)),
+        ("2026/*.xlsx#2", ("2026/*.xlsx", 2)),  # a glob keeps its fragment
+        ("2026/q2.xlsx#02", ("2026/q2.xlsx", 2)),  # a leading zero is harmless
+    ],
+)
+def test_split_sheet_fragment_returns_a_clean_path_and_the_sheet(path, expected):
+    assert _plugin.split_sheet_fragment(path, SrcFileFormat.AUTO) == expected
+
+
+def test_split_sheet_fragment_splits_on_the_first_hash():
+    # Splitting on the *last* '#' would read this as path "q2.xlsx#2" plus
+    # sheet 3; splitting on the first leaves the malformed fragment "2#3",
+    # which is rejected. Matches what ``Url::parse`` already does to the uri
+    # inside the binary, so a literal '#' in a key is no more expressible
+    # than it was before.
+    with pytest.raises(ConnException):
+        _plugin.split_sheet_fragment("q2.xlsx#2#3", SrcFileFormat.AUTO)
+
+
+@pytest.mark.parametrize("fragment", ["", "abc", "-1", "2.5", " 2", "2 ", "²", "٢"])
+def test_split_sheet_fragment_rejects_a_malformed_fragment(fragment):
+    with pytest.raises(ConnException) as ei:
+        _plugin.split_sheet_fragment(f"q2.xlsx#{fragment}", SrcFileFormat.AUTO)
+    assert "q2.xlsx" in str(ei.value)
+
+
+def test_split_sheet_fragment_rejects_a_fragment_wider_than_the_wire():
+    # The wire field is a u32; anything past it never had a sheet to name.
+    with pytest.raises(ConnException):
+        _plugin.split_sheet_fragment("q2.xlsx#4294967296", SrcFileFormat.AUTO)
+    assert _plugin.split_sheet_fragment("q2.xlsx#4294967295", SrcFileFormat.AUTO) == (
+        "q2.xlsx",
+        4294967295,
+    )
+
+
+def test_split_sheet_fragment_rejects_sheet_zero_distinctly():
+    with pytest.raises(ConnException) as ei:
+        _plugin.split_sheet_fragment("q2.xlsx#0", SrcFileFormat.AUTO)
+    assert "start at 1" in str(ei.value)
+
+
+def test_split_sheet_fragment_rejects_a_fragment_on_a_declared_non_excel_format():
+    with pytest.raises(ConnException) as ei:
+        _plugin.split_sheet_fragment("rows.csv#2", SrcFileFormat.CSV)
+    assert "CSV" in str(ei.value)
+
+
+def test_split_sheet_fragment_accepts_one_under_excel_and_auto():
+    for fmt in (SrcFileFormat.AUTO, SrcFileFormat.EXCEL):
+        assert _plugin.split_sheet_fragment("q2.xlsx#2", fmt) == ("q2.xlsx", 2)
+
+
+def test_a_path_with_no_fragment_is_untouched_by_any_format():
+    for fmt in SrcFileFormat:
+        assert _plugin.split_sheet_fragment("rows.csv", fmt) == ("rows.csv", None)
+
+
+# --- ReaderConf.from_src ---------------------------------------------
+
+
+def test_from_src_strips_fragments_and_carries_the_sheets_as_a_list():
+    cfg = _plugin.ReaderConf.from_src(
+        object(),
+        _Src(["2026/q1.xlsx", "2026/q2.xlsx#2", "2026/q2.xlsx#3"]),
+    )
+    # Downstream sees clean paths...
+    assert cfg.paths == ["2026/q1.xlsx", "2026/q2.xlsx", "2026/q2.xlsx"]
+    # ...and one config carries every slot's worksheet, in path order.
+    assert cfg.format_cfg == {SrcFileFormat.EXCEL: {EXCEL_SHEET_KEY: [None, 2, 3]}}
+
+
+def test_from_src_keeps_the_users_own_format_cfg_alongside_the_sheets():
+    src = _Src(["rows.csv", "2026/q2.xlsx#2"])
+    src.format_cfg = {SrcFileFormat.CSV: {"separator": ";"}}
+    cfg = _plugin.ReaderConf.from_src(object(), src)
+    assert cfg.format_cfg == {
+        SrcFileFormat.CSV: {"separator": ";"},
+        SrcFileFormat.EXCEL: {EXCEL_SHEET_KEY: [None, 2]},
+    }
+    # The user's own dict is never mutated -- it was copied.
+    assert src.format_cfg == {SrcFileFormat.CSV: {"separator": ";"}}
+
+
+def test_from_src_adds_nothing_when_no_path_names_a_worksheet():
+    src = _Src(["a.csv", "b.csv"])
+    src.format_cfg = {SrcFileFormat.CSV: {"separator": ";"}}
+    cfg = _plugin.ReaderConf.from_src(object(), src)
+    assert cfg.format_cfg == {SrcFileFormat.CSV: {"separator": ";"}}
+
+
+def test_from_src_reports_the_offending_path_not_the_stripped_one():
+    with pytest.raises(ConnException) as ei:
+        _plugin.ReaderConf.from_src(object(), _Src(["ok.xlsx", "2026/q2.xlsx#nope"]))
+    assert "2026/q2.xlsx#nope" in str(ei.value)
+
+
+def test_format_cfg_for_narrows_the_list_to_one_slots_sheet():
+    cfg = _plugin.ReaderConf.from_src(
+        object(), _Src(["2026/q1.xlsx", "2026/q2.xlsx#2", "2026/q2.xlsx#3"])
+    )
+    # A slot whose path named a sheet gets that one number...
+    assert cfg.format_cfg_for(1) == {SrcFileFormat.EXCEL: {EXCEL_SHEET_KEY: 2}}
+    assert cfg.format_cfg_for(2) == {SrcFileFormat.EXCEL: {EXCEL_SHEET_KEY: 3}}
+    # ...and one whose path named none has the key dropped, not nulled: the
+    # reader reads a missing key as "the first sheet".
+    assert cfg.format_cfg_for(0) == {SrcFileFormat.EXCEL: {}}
+    # Narrowing does not disturb the stored list.
+    assert cfg.format_cfg == {SrcFileFormat.EXCEL: {EXCEL_SHEET_KEY: [None, 2, 3]}}
+
+
+def test_format_cfg_for_passes_a_sheetless_cfg_straight_through():
+    cfg = _plugin.ReaderConf(
+        conn=object(),
+        paths=["a.csv", "b.csv"],
+        file_format=SrcFileFormat.CSV,
+        format_cfg={SrcFileFormat.CSV: {"separator": ";"}},
+    )
+    assert cfg.format_cfg_for(1) is cfg.format_cfg
+
+
+def test_format_cfg_for_is_none_on_a_conf_built_without_one():
+    cfg = _plugin.ReaderConf(
+        conn=object(), paths=["a.csv", "b.csv"], file_format=SrcFileFormat.CSV
+    )
+    assert [cfg.format_cfg_for(i) for i in range(2)] == [None, None]
+
+
+# --- import_files threading ------------------------------------------
+
+
+def test_import_files_passes_each_slot_its_own_sheet(monkeypatch, tmp_path):
+    calls: list[dict] = []
+
+    def fake_import_one(**kw):
+        calls.append(kw)
+        return _stub_report([str(kw["target_dir"] / "out.parquet")])
+
+    monkeypatch.setattr(_input_module, "import_one", fake_import_one)
+
+    cfg = _plugin.ReaderConf.from_src(
+        object(), _Src(["2026/q2.xlsx#2", "2026/q2.xlsx#3", "2026/q1.xlsx"])
+    )
+    _plugin.import_files(
+        ctx=_SrcCtx(tmp_path),
+        cfg=cfg,
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    assert [c["format_cfg"] for c in calls] == [
+        {SrcFileFormat.EXCEL: {EXCEL_SHEET_KEY: 2}},
+        {SrcFileFormat.EXCEL: {EXCEL_SHEET_KEY: 3}},
+        {SrcFileFormat.EXCEL: {}},
+    ]
+
+
+def test_build_location_never_sees_a_fragment(monkeypatch, tmp_path):
+    # The whole reason the split happens in ``from_src``: a surviving
+    # fragment would reach the object store as part of the key.
+    seen: list[str] = []
+
+    def recording_builder(conn, entry, handler):
+        seen.append(entry)
+        return _location_builder(conn, entry, handler)
+
+    monkeypatch.setattr(
+        _input_module,
+        "import_one",
+        lambda **kw: _stub_report([str(kw["target_dir"] / "out.parquet")]),
+    )
+    cfg = _plugin.ReaderConf.from_src(object(), _Src(["2026/q2.xlsx#2"]))
+    _plugin.import_files(
+        ctx=_SrcCtx(tmp_path),
+        cfg=cfg,
+        build_location=recording_builder,
+        errors=_RUN_ERRORS,
+    )
+    assert seen == ["2026/q2.xlsx"]
+
+
+# --- the handlers ----------------------------------------------------
+
+
+def test_handler2_import_request_carries_the_sheet(tmp_path):
+    handler = handler2.TransporterHandler2()
+    request = handler.import_request(
+        source=transporter2.TransporterLocalFile("file:///in/q2.xlsx"),
+        target_dir=tmp_path,
+        file_format=SrcFileFormat.AUTO,
+        paths=["2026/q2.xlsx"],
+        format_cfg={SrcFileFormat.EXCEL: {EXCEL_SHEET_KEY: 4}},
+    )
+    assert request.source_format == transporter2.FormatSpec(
+        format="excel", options=transporter2.ExcelOptions(sheet=4)
+    )
+
+
+def test_handler2_import_request_defaults_to_the_first_sheet(tmp_path):
+    handler = handler2.TransporterHandler2()
+    request = handler.import_request(
+        source=transporter2.TransporterLocalFile("file:///in/q2.xlsx"),
+        target_dir=tmp_path,
+        file_format=SrcFileFormat.AUTO,
+        paths=["2026/q2.xlsx"],
+    )
+    assert request.source_format.options == transporter2.ExcelOptions(sheet=1)
+
+
+def test_the_sheet_is_taken_back_out_of_the_cfg():
+    # It is a carrier, not an option: no format may see a key its own
+    # options do not define.
+    cfg = {EXCEL_SHEET_KEY: 4}
+    assert transporter2.src_format_to_transporter(SrcFileFormat.EXCEL, cfg).sheet == 4
+    assert cfg == {}
+
+
+def test_a_sheet_on_a_non_excel_format_is_refused_not_dropped():
+    # The case the split cannot catch: AUTO plus a fragment on something
+    # that turns out not to be a workbook. Dropping it would read the file
+    # and quietly ignore what the user asked for.
+    with pytest.raises(CommonInitException) as ei:
+        transporter2.src_format_to_transporter(
+            SrcFileFormat.CSV, {EXCEL_SHEET_KEY: 2, "separator": ";"}
+        )
+    assert "EXCEL" in str(ei.value)
+
+
+# --- worksheet provenance --------------------------------------------
+
+
+def test_provenance_carries_the_worksheet_back_onto_the_uri(monkeypatch, tmp_path):
+    # The transporter never saw the fragment -- it was split off before the
+    # request -- so the metadata has to put it back, or two slots reading
+    # different sheets of one workbook would be indistinguishable.
+    def fake_import_one(**kw):
+        return _stub_report(
+            [str(kw["target_dir"] / "out.parquet")],
+            sources=["s3://bucket/2026/q2.xlsx"],
+        )
+
+    monkeypatch.setattr(_input_module, "import_one", fake_import_one)
+
+    cfg = _plugin.ReaderConf.from_src(
+        object(), _Src(["2026/q2.xlsx#2", "2026/q2.xlsx#3", "2026/q1.xlsx"])
+    )
+    out = _plugin.import_files(
+        ctx=_SrcCtx(tmp_path),
+        cfg=cfg,
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    assert [slot[0].metadata[FILE_META_PATH] for slot in out] == [
+        "s3://bucket/2026/q2.xlsx#2",
+        "s3://bucket/2026/q2.xlsx#3",
+        # No fragment asked for, none invented.
+        "s3://bucket/2026/q2.xlsx",
+    ]
+
+
+def test_provenance_gives_every_globbed_file_its_own_uri_and_the_slots_sheet(
+    monkeypatch, tmp_path
+):
+    # One slot, many files: they differ in uri and share the one worksheet.
+    # Appending to each file's own ``from`` is what keeps that right --
+    # substituting the configured path would give them all the same value.
+    def fake_import_one(**kw):
+        return _stub_report(
+            [
+                str(kw["target_dir"] / "a.parquet"),
+                str(kw["target_dir"] / "b.parquet"),
+            ],
+            sources=[
+                "s3://bucket/2026/north/sales.xlsx",
+                "s3://bucket/2026/south/sales.xlsx",
+            ],
+        )
+
+    monkeypatch.setattr(_input_module, "import_one", fake_import_one)
+
+    cfg = _plugin.ReaderConf.from_src(object(), _Src(["2026/*/sales.xlsx#4"]))
+    out = _plugin.import_files(
+        ctx=_SrcCtx(tmp_path),
+        cfg=cfg,
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    assert [f.metadata[FILE_META_PATH] for f in out[0]] == [
+        "s3://bucket/2026/north/sales.xlsx#4",
+        "s3://bucket/2026/south/sales.xlsx#4",
+    ]
+
+
+def test_provenance_round_trips_back_into_paths():
+    # The point of keeping the fragment: the value names a readable source.
+    cfg = _plugin.ReaderConf.from_src(object(), _Src(["2026/q2.xlsx#2"]))
+    published = "s3://bucket/2026/q2.xlsx#2"
+    again = _plugin.ReaderConf.from_src(object(), _Src([published]))
+    assert again.paths == ["s3://bucket/2026/q2.xlsx"]
+    assert again.format_cfg == cfg.format_cfg
+
+
+def test_dropping_metadata_still_drops_it_for_a_worksheet(monkeypatch, tmp_path):
+    def fake_import_one(**kw):
+        return _stub_report(
+            [str(kw["target_dir"] / "out.parquet")],
+            sources=["s3://bucket/2026/q2.xlsx"],
+        )
+
+    monkeypatch.setattr(_input_module, "import_one", fake_import_one)
+
+    src = _Src(["2026/q2.xlsx#2"])
+    src.src_cfg = {SRC_META_DROP_KEY: True}
+    out = _plugin.import_files(
+        ctx=_SrcCtx(tmp_path),
+        cfg=_plugin.ReaderConf.from_src(object(), src),
+        build_location=_location_builder,
+        errors=_RUN_ERRORS,
+    )
+    assert out[0][0].metadata is None
+
+
+def test_sheet_in_reads_a_narrowed_cfg():
+    assert _plugin.sheet_in(None) is None
+    assert _plugin.sheet_in({}) is None
+    assert _plugin.sheet_in({SrcFileFormat.CSV: {"separator": ";"}}) is None
+    assert _plugin.sheet_in({SrcFileFormat.EXCEL: {}}) is None
+    assert _plugin.sheet_in({SrcFileFormat.EXCEL: {EXCEL_SHEET_KEY: 7}}) == 7

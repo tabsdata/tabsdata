@@ -18,7 +18,11 @@ from urllib.request import url2pathname
 import yaml
 
 from tabsdatak.common._fileformat.error import FileFormatErrorCode
-from tabsdatak.common._fileformat.taxonomy import DestFileFormat, SrcFileFormat
+from tabsdatak.common._fileformat.taxonomy import (
+    EXCEL_SHEET_KEY,
+    DestFileFormat,
+    SrcFileFormat,
+)
 
 # ===================================================================
 # ``td_transporter2`` Python shim.
@@ -269,6 +273,21 @@ class TransporterCSVFormat(TransporterFormat):
     options: dict = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class TransporterExcelFormat(TransporterFormat):
+    """Read-only. ``sheet`` is the 1-based position of the worksheet in
+    the workbook, counted over every sheet it declares -- hidden and chart
+    sheets included -- in tab order. It comes from the path's ``#N``
+    fragment, not from ``format_cfg``, so one path can name one sheet.
+
+    ``has_header`` is an ordinary ``format_cfg`` option: with it off no row
+    names the columns, every row is data, and the columns are called
+    ``column_1``, ``column_2``, ..."""
+
+    sheet: int = 1
+    has_header: bool = True
+
+
 # --- Wire dataclasses (request side) -------------------------------
 #
 # Mirror the td_transporter2 request structs. Serialized to YAML by the
@@ -304,13 +323,29 @@ class CsvOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class ExcelOptions:
+    """Excel reader options, carried in :class:`FormatSpec`'s ``options``.
+    Mirrors ``ExcelOptions`` in the binary's ``spec.rs`` field for field --
+    a name that drifts is a YAML parse failure there, not here."""
+
+    sheet: int = 1
+    has_header: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class FormatSpec:
     """A data format the binary can decode / encode: ``parquet``,
-    ``csv`` (with :class:`CsvOptions`), ``ndjson``, ``avro``, or ``text``
-    (read-only -- valid only as a ``source_format``)."""
+    ``csv`` (with :class:`CsvOptions`), ``ndjson``, ``avro``, or -- read-only,
+    so valid only as a ``source_format`` -- ``text`` and ``excel`` (with
+    :class:`ExcelOptions`).
+
+    ``options`` carries whichever block the format takes, untagged; the
+    binary reads it against the sibling ``format`` field rather than
+    against the block's own keys, so ``{}`` is unambiguous.
+    """
 
     format: str
-    options: CsvOptions | None = None
+    options: CsvOptions | ExcelOptions | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -591,6 +626,11 @@ def to_format_spec(fmt: TransporterFormat) -> FormatSpec:
     if isinstance(fmt, TransporterLogFormat):
         # ``log`` files are read as the binary's read-only ``text`` format.
         return FormatSpec(format="text")
+    if isinstance(fmt, TransporterExcelFormat):
+        return FormatSpec(
+            format="excel",
+            options=ExcelOptions(sheet=fmt.sheet, has_header=fmt.has_header),
+        )
     raise ValueError(f"unsupported transporter format: {type(fmt).__name__}")
 
 
@@ -784,6 +824,7 @@ _SRC_EXTENSION_FORMAT: dict[str, SrcFileFormat] = {
     ".parquet": SrcFileFormat.PARQUET,
     ".pq": SrcFileFormat.PARQUET,
     ".log": SrcFileFormat.LOG,
+    ".xlsx": SrcFileFormat.EXCEL,
 }
 
 _DEST_EXTENSION_FORMAT: dict[str, DestFileFormat] = {
@@ -867,6 +908,20 @@ def src_format_to_transporter(
     fmt: SrcFileFormat,
     cfg: dict | None,
 ) -> TransporterFormat:
+    """``cfg`` may carry :data:`EXCEL_SHEET_KEY`, the 1-based worksheet a
+    path's ``#N`` fragment named. It is taken back out here -- mutating the
+    caller's dict, which is the per-slot copy ``ReaderConf`` built for
+    exactly this -- so no format ever sees a key its own options do not
+    define.
+
+    A sheet under any other format means a fragment survived onto a path
+    that turned out not to be a workbook: the first point that knows what
+    ``AUTO`` resolved to is this one, so it is also the first that can say
+    so rather than quietly discard it.
+    """
+    sheet = cfg.pop(EXCEL_SHEET_KEY, None) if cfg is not None else None
+    if sheet is not None and fmt is not SrcFileFormat.EXCEL:
+        raise FileFormatErrorCode.FILE_FORMAT_5.exception(sheet=sheet, format=fmt.value)
     if fmt is SrcFileFormat.CSV:
         return TransporterCSVFormat({**_CSV_SRC_DEFAULTS, **(cfg or {})})
     if fmt is SrcFileFormat.JSON:
@@ -877,6 +932,14 @@ def src_format_to_transporter(
         return TransporterParquetFormat()
     if fmt is SrcFileFormat.LOG:
         return TransporterLogFormat()
+    if fmt is SrcFileFormat.EXCEL:
+        # No fragment means the first sheet, which is what the binary
+        # defaults to as well. ``has_header`` is a real user option, so it
+        # is read from what is left of ``cfg`` once the carrier is gone.
+        return TransporterExcelFormat(
+            sheet=1 if sheet is None else sheet,
+            has_header=bool((cfg or {}).get("has_header", True)),
+        )
     # AUTO must be resolved by ``resolve_auto_src_format`` before reaching
     # here -- the previous behaviour silently returned Parquet, which
     # masked CSV/JSON/AVRO mismatches as parquet-magic-byte failures.

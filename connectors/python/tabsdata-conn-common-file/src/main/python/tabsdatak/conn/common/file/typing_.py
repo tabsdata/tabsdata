@@ -8,8 +8,9 @@ builds its `Src` / `Dest` on the same path and format specs.
 
 * `SrcFileFormat` / `DestFileFormat` -- the formats the file
   connectors read and write: `AUTO`, `CSV`, `JSON`, `AVRO`,
-  `PARQUET` (plus `LOG` on the source side). `AUTO` lets the
-  transporter infer the format from the file extension.
+  `PARQUET` (plus `LOG` and `EXCEL` on the source side, both
+  read-only). `AUTO` lets the transporter infer the format from the
+  file extension.
 * `SrcPathsSpec` / `DestPathsSpec` -- the validated `paths` list
   a `Src` / `Dest` takes (one slot per entry).
 * `SrcFormatCfgSpec` / `DestFormatCfgSpec` -- the per-format
@@ -107,17 +108,26 @@ CsvDestKey: TypeAlias = Literal[
 """CSV writer options accepted in a destination `format_cfg[CSV]`
 entry."""
 
+ExcelSrcKey = Literal["has_header"]
+"""Excel reader options accepted in a source `format_cfg[EXCEL]` entry.
+
+`has_header` (default `True`) decides whether the worksheet's first
+non-empty row names the columns. With it off no row is spent on names,
+every row is data, and the columns are called `column_1`, `column_2`, ...
+"""
+
 CsvSrcCfg: TypeAlias = dict[CsvSrcKey, Any]
 CsvDestCfg: TypeAlias = dict[CsvDestKey, Any]
+ExcelSrcCfg: TypeAlias = dict[ExcelSrcKey, Any]
 
 
-SrcFormatCfgSpec: TypeAlias = dict[SrcFileFormat, CsvSrcCfg | dict]
+SrcFormatCfgSpec: TypeAlias = dict[SrcFileFormat, CsvSrcCfg | ExcelSrcCfg | dict]
 """Per-format reader options for a source, keyed by `SrcFileFormat`.
 
-Only `CSV` accepts non-empty options today (keys typed by
-`CsvSrcKey`); every other format must map to `{}` or be omitted. A
-destination-only key raises the connector's validate exception at
-descriptor construction.
+Only `CSV` (keys typed by `CsvSrcKey`) and `EXCEL` (`ExcelSrcKey`)
+accept non-empty options; every other format must map to `{}` or be
+omitted. A destination-only key raises the connector's validate exception
+at descriptor construction.
 """
 
 DestFormatCfgSpec: TypeAlias = dict[DestFileFormat, CsvDestCfg | dict]

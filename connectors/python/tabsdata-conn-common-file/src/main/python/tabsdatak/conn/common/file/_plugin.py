@@ -10,7 +10,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, cast
 
-from tabsdatak.common._fileformat.taxonomy import DestFileFormat, SrcFileFormat
+from tabsdatak.common._fileformat.taxonomy import (
+    EXCEL_SHEET_KEY,
+    DestFileFormat,
+    SrcFileFormat,
+)
 from tabsdatak.common._transporter.facade import make_handler
 from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.common._transporter.invoker.transporter1 import (
@@ -48,6 +52,76 @@ def initial_lastmod_to_iso(value: datetime | None) -> str | None:
     return value.astimezone(timezone.utc).isoformat(timespec="microseconds")
 
 
+# The wire carries the worksheet number as a u32, so a fragment above this
+# is malformed rather than merely out of range -- which sheet a workbook
+# actually has is the binary's to report, against the workbook.
+_MAX_SHEET = 0xFFFF_FFFF
+
+
+def split_sheet_fragment(
+    path: str, file_format: SrcFileFormat
+) -> tuple[str, int | None]:
+    """Split a source path's ``#<sheet>`` worksheet fragment off.
+
+    Returns the fragment-free path and the 1-based worksheet number the
+    fragment named, or ``None`` when there was none. Splitting on the
+    *first* ``#`` matches what ``Url::parse`` already does to the uri
+    inside the binary, so a literal ``#`` in an object key is no more
+    expressible than it was before this existed.
+
+    Everything downstream -- ``build_location``, AUTO inference, the
+    transporter's own output naming -- reads the path, so this runs before
+    any of them and they never see a fragment.
+
+    A fragment is only accepted under ``EXCEL`` or ``AUTO``; under AUTO a
+    path that turns out not to be a workbook is caught once the format
+    resolves, which is the first point that can know.
+    """
+    head, marker, fragment = path.partition("#")
+    if not marker:
+        return path, None
+    if file_format not in (SrcFileFormat.AUTO, SrcFileFormat.EXCEL):
+        raise FileCommonErrorCode.FILE_COMMON_30.exception(
+            path=path, format=file_format.name
+        )
+    # ``str.isdigit`` alone admits superscripts and other unicode digits
+    # that ``int`` then refuses, so ASCII is required too.
+    if not (fragment.isascii() and fragment.isdigit()) or int(fragment) > _MAX_SHEET:
+        raise FileCommonErrorCode.FILE_COMMON_28.exception(path=path, fragment=fragment)
+    sheet = int(fragment)
+    if sheet == 0:
+        raise FileCommonErrorCode.FILE_COMMON_29.exception(path=path)
+    return head, sheet
+
+
+def format_cfg_with_sheets(
+    format_cfg: dict | None, sheets: list[int | None]
+) -> dict | None:
+    """``format_cfg`` with the per-path worksheet numbers folded into its
+    EXCEL entry, as a list parallel to ``paths``.
+
+    Returned unchanged when no path named a worksheet, so a source that has
+    nothing to do with Excel keeps the config it was given -- ``None``
+    included. The user's own dict is copied, never mutated.
+    """
+    if all(sheet is None for sheet in sheets):
+        return format_cfg
+    merged = dict(format_cfg or {})
+    excel = dict(merged.get(SrcFileFormat.EXCEL) or {})
+    excel[EXCEL_SHEET_KEY] = list(sheets)
+    merged[SrcFileFormat.EXCEL] = excel
+    return merged
+
+
+def sheet_in(format_cfg: dict | None) -> int | None:
+    """The worksheet a *narrowed* ``format_cfg`` names, or ``None``.
+
+    The inverse of what :meth:`ReaderConf.format_cfg_for` produced, read
+    back for provenance -- the reader gets the number from the same place.
+    """
+    return ((format_cfg or {}).get(SrcFileFormat.EXCEL) or {}).get(EXCEL_SHEET_KEY)
+
+
 def resolve_dest_tokens(target_path: str, ctx: DestContext) -> str:
     tokens = {
         EXEC_PLAN_ID: ctx.exec_plan_id,
@@ -73,20 +147,49 @@ class ReaderConf:
     conn: Any
     paths: list[str]
     file_format: SrcFileFormat
+    # Carries the worksheet numbers the ``#N`` fragments named, as a list
+    # under its EXCEL entry -- see :func:`format_cfg_with_sheets`. Built by
+    # :meth:`from_src`, which is also where the fragments are split off
+    # ``paths``.
     format_cfg: dict | None = None
     initial_lastmod: str | None = None
     drop_metadata: bool = False
 
     @classmethod
     def from_src(cls, conn: Any, src: Any) -> "ReaderConf":
+        split = [split_sheet_fragment(p, src.format) for p in src.paths]
         return cls(
             conn=conn,
-            paths=list(src.paths),
+            paths=[path for path, _ in split],
             file_format=src.format,
-            format_cfg=src.format_cfg,
+            format_cfg=format_cfg_with_sheets(
+                src.format_cfg, [sheet for _, sheet in split]
+            ),
             initial_lastmod=initial_lastmod_to_iso(src.initial_last_modified),
             drop_metadata=bool((src.src_cfg or {}).get(SRC_META_DROP_KEY, False)),
         )
+
+    def format_cfg_for(self, index: int) -> dict | None:
+        """:attr:`format_cfg` with the EXCEL worksheet list narrowed to the
+        single number the path at ``index`` named.
+
+        Every request covers one path, so the reader is handed one number,
+        not the list; a slot whose path named no worksheet gets the key
+        dropped entirely and reads the first sheet. Narrowing here rather
+        than in :meth:`from_src` is what lets ``format_cfg`` stay the one
+        per-source dict it has always been.
+        """
+        excel = (self.format_cfg or {}).get(SrcFileFormat.EXCEL) or {}
+        if EXCEL_SHEET_KEY not in excel:
+            return self.format_cfg
+        sheets = excel[EXCEL_SHEET_KEY]
+        sheet = sheets[index] if index < len(sheets) else None
+        narrowed = dict(excel)
+        if sheet is None:
+            del narrowed[EXCEL_SHEET_KEY]
+        else:
+            narrowed[EXCEL_SHEET_KEY] = sheet
+        return {**self.format_cfg, SrcFileFormat.EXCEL: narrowed}
 
 
 @dataclass(frozen=True)
@@ -177,6 +280,8 @@ def import_files(
         # Resume from the prior trx's cursor if one was stored; otherwise
         # fall back to the Src's baseline (the first-run seed).
         prior_lastmod = cast(str | None, ctx.get_attr(lastmod_key))
+        slot_cfg = cfg.format_cfg_for(slot_idx)
+        sheet = sheet_in(slot_cfg)
         try:
             report = _input.import_one(
                 handler=handler,
@@ -184,7 +289,7 @@ def import_files(
                 target_dir=slot_dir,
                 file_format=cfg.file_format,
                 paths=cfg.paths,
-                format_cfg=cfg.format_cfg,
+                format_cfg=slot_cfg,
                 initial_lastmod=cfg.initial_lastmod,
                 lastmod_info=prior_lastmod,
                 env=env,
@@ -206,11 +311,18 @@ def import_files(
         for f in report.files:
             target = f.get("to") if isinstance(f, dict) else None
             if target:
-                metadata = (
-                    None
-                    if cfg.drop_metadata
-                    else {FILE_META_PATH: str(f.get("from", ""))}
-                )
+                # The uri the transporter read, with this slot's worksheet
+                # put back on it: the transporter never saw the fragment,
+                # but provenance has to name the sheet a row came from, and
+                # the value has to be pasteable straight back into ``paths``.
+                #
+                # Appended to each *file's* own ``from`` rather than taken
+                # from the configured path, because one slot can glob many
+                # files: they differ in uri and share the one worksheet.
+                origin = str(f.get("from", ""))
+                if sheet is not None:
+                    origin = f"{origin}#{sheet}"
+                metadata = None if cfg.drop_metadata else {FILE_META_PATH: origin}
                 slot_files.append(
                     TableFileInput(
                         file=Path(cast(str, target)),

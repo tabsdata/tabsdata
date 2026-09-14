@@ -172,8 +172,10 @@ class AzureBlobSrc(Src):
     Every table this source publishes automatically carries a
     `@td.file.path` metadata column: the `az://` object URI the row was read
     from. A path that globs several files reports the specific file
-    each row came from. Setting the `src_cfg` key
-    `tabsdata.src_metadata.drop` to `True` leaves the column off.
+    each row came from, and a worksheet read from a workbook keeps its
+    `#<n>` fragment, so the value can be pasted straight back into
+    `paths`. Setting the `src_cfg` key `tabsdata.src_metadata.drop` to
+    `True` leaves the column off.
 
     Args:
         paths: Source paths relative to the connection's `base_path`,
@@ -181,12 +183,19 @@ class AzureBlobSrc(Src):
             leading `/`), must not end with `/`, and must not contain
             empty segments (`//`). A path may use a `*` glob in its
             final segment only; backslashes, NUL and `${...}` tokens
-            are not allowed.
+            are not allowed. An `.xlsx` path may end with `#<n>` to name
+            the worksheet to read -- `1`-based, counting every sheet the
+            workbook declares, hidden ones included. Two paths may name
+            different sheets of one workbook, giving a slot each.
         format: File format -- one of `AUTO`, `CSV`, `JSON`,
-            `AVRO`, `PARQUET`, `LOG`. `AUTO` (the default)
-            infers it from the file extension.
+            `AVRO`, `PARQUET`, `LOG`, `EXCEL`. `AUTO` (the default)
+            infers it from the file extension. `EXCEL` reads one
+            worksheet of an `.xlsx` workbook, named by the path's
+            `#<n>` fragment.
         format_cfg: Optional per-format reader options (source-side
-            keys only), keyed by the `SrcFileFormat`.
+            keys only), keyed by the `SrcFileFormat`. `EXCEL` takes
+            `has_header` (default `True`); If `False`, the first row is read as data and
+            the column names are generated as `column_1`, `column_2`, ...
         initial_last_modified: Optional cutoff for incremental
             ingestion. The first run imports only files modified at or
             after this timestamp; the cutoff then advances each run so

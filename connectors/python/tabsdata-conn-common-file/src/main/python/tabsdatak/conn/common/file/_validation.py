@@ -153,13 +153,21 @@ DEST_PATH_VALIDATION = _api.ValueConstraints(
 
 def _allowed_keys(fmt_name: str, *, side: str) -> frozenset[str]:
     # Local import for the same circular-import reason as above.
-    from tabsdatak.conn.common.file.typing_ import CsvDestKey, CsvSrcKey
+    from tabsdatak.conn.common.file.typing_ import (
+        CsvDestKey,
+        CsvSrcKey,
+        ExcelSrcKey,
+    )
 
     if fmt_name == "CSV":
         if side == "src":
             return frozenset(get_args(CsvSrcKey))
         if side == "dest":
             return frozenset(get_args(CsvDestKey))
+    if fmt_name == "EXCEL" and side == "src":
+        # Deliberately not ``sheet``: that arrives as a path fragment, not
+        # as an option, and a user naming it here should be told so.
+        return frozenset(get_args(ExcelSrcKey))
     # JSON / AVRO / PARQUET / LOG / AUTO: no keys accepted today.
     return frozenset()
 

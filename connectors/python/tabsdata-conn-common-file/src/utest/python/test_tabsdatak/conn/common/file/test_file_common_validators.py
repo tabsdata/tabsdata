@@ -188,6 +188,30 @@ def test_format_cfg_rejects_non_dict_value():
     assert "got str" in msg
 
 
+def test_format_cfg_accepts_the_excel_src_key():
+    cfg = {SrcFileFormat.EXCEL: {"has_header": False}}
+    assert _validation.validate_format_cfg(cfg, side="src") == cfg
+    assert _validation.validate_format_cfg({SrcFileFormat.EXCEL: {}}, side="src") == {
+        SrcFileFormat.EXCEL: {}
+    }
+
+
+def test_format_cfg_rejects_the_worksheet_as_an_option():
+    # The sheet is the path's ``#<n>`` fragment, never a ``format_cfg`` key;
+    # a user who writes it here is told so rather than silently ignored.
+    with pytest.raises(ConnInitException) as ei:
+        _validation.validate_format_cfg({SrcFileFormat.EXCEL: {"sheet": 2}}, side="src")
+    assert ei.value.api_error is FileCommonErrorCode.FILE_COMMON_11
+    assert "has_header" in str(ei.value)
+
+
+def test_format_cfg_rejects_a_csv_key_on_excel():
+    with pytest.raises(ConnInitException):
+        _validation.validate_format_cfg(
+            {SrcFileFormat.EXCEL: {"separator": ","}}, side="src"
+        )
+
+
 def test_format_cfg_rejects_unknown_key_for_non_csv():
     # JSON / AVRO / PARQUET accept no keys today.
     with pytest.raises(ConnInitException):

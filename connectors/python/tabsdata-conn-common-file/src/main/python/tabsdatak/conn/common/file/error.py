@@ -141,3 +141,18 @@ class FileCommonErrorCode(ErrorCode):
         ConnInitException,
         "Destination path '{path}' cannot contain empty segments ('//')",
     )  # validate_dest_path
+    FILE_COMMON_28 = ErrorDef(
+        ConnInitException,
+        "Source path '{path}' has a malformed worksheet fragment '#{fragment}': "
+        "expected a decimal worksheet number, as in 'book.xlsx#2'",
+    )  # split_sheet_fragment
+    FILE_COMMON_29 = ErrorDef(
+        ConnInitException,
+        "Source path '{path}' names worksheet 0: worksheet numbers start at 1, "
+        "counting every sheet the workbook declares",
+    )  # split_sheet_fragment
+    FILE_COMMON_30 = ErrorDef(
+        ConnInitException,
+        "Source path '{path}' has a '#<sheet>' worksheet fragment, which only an "
+        "EXCEL source takes (format is {format})",
+    )  # split_sheet_fragment
