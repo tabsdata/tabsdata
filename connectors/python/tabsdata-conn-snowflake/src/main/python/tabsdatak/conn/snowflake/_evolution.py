@@ -20,9 +20,14 @@ from __future__ import annotations
 
 import logging
 
+from tabsdatak.conn.common._validation import fqn, unfqn
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._evolution import evolve_with_iceberg
 from tabsdatak.conn.snowflake import _iceberg
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.snowflake._validation import _SNOWFLAKE_FQN_DEF
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +54,75 @@ def describe_table_columns(cursor, target: str) -> list[tuple[str, str]]:
     fields = [field[0].upper() for field in cursor.description]
     name_at, type_at = fields.index("NAME"), fields.index("TYPE")
     return [(row[name_at], row[type_at]) for row in cursor.fetchall()]
+
+
+# A trx id is an opaque string, and STRING parses to the same type DESC TABLE
+# reports for it (VARCHAR(16777216)), so a target that already has the column
+# does not read as a retype of it.
+WATERMARK_TYPE = "STRING"
+
+
+def ensure_watermark_column(cursor, target: str, column: str) -> bool:
+    """``ALTER`` the watermark column onto ``target`` unless it is there
+    already, reporting whether anything was added.
+
+    Added without a ``DEFAULT``. Snowflake backfills a constant default into
+    the rows already present, and those were written by earlier transactions --
+    claiming them for this one would make the watermark lie. They take a NULL,
+    which is what "written before there was a watermark" looks like.
+
+    ``target`` has to exist: both dispositions that reach here have just
+    created it if it did not.
+    """
+    existing = {
+        fold_identifier(name) for name, _ in describe_table_columns(cursor, target)
+    }
+    if fold_identifier(column) in existing:
+        return False
+    logger.debug("Adding watermark column %s to %s", column, target)
+    cursor.execute(
+        f"ALTER TABLE {target} ADD COLUMN IF NOT EXISTS"
+        f" {_iceberg.quote_column(column)} {WATERMARK_TYPE}"
+    )
+    return True
+
+
+def check_watermark_column(
+    cursor, target: str, column: str, transaction_id: str
+) -> bool:
+    """Whether ``target`` already holds a row stamped with ``transaction_id``.
+
+    Asked of ``INFORMATION_SCHEMA.COLUMNS`` first, and only then of the table:
+    a target that does not exist yet, or one that predates the watermark
+    column, has no such row and must not be probed for one -- selecting the
+    column would be an error rather than an answer. The column view covers
+    both, since a missing table contributes no rows to it.
+
+    The names are matched as Snowflake stores them. The connector creates its
+    targets through ``_fq_for_sql``, whose parts are quoted verbatim, so the
+    parts ``unfqn`` gives back are the stored spellings rather than something to
+    fold. ``column`` has already been folded by whoever named it.
+    """
+    database, schema, table = unfqn(target, _SNOWFLAKE_FQN_DEF, total_parts=3)
+    # INFORMATION_SCHEMA is per-database; unqualified, it is the session's own,
+    # which is where an unqualified target lives too.
+    catalog = f"{fqn([database], _SNOWFLAKE_FQN_DEF)}." if database else ""
+    cursor.execute(
+        f"SELECT COUNT(*) FROM {catalog}INFORMATION_SCHEMA.COLUMNS"
+        f" WHERE TABLE_SCHEMA = COALESCE(%s, CURRENT_SCHEMA())"
+        f" AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+        (schema, table, column),
+    )
+    row = cursor.fetchone()
+    if not (row and row[0]):
+        return False
+
+    cursor.execute(
+        f"SELECT COUNT(*) > 0 FROM {target} WHERE {_iceberg.quote_column(column)} = %s",
+        (transaction_id,),
+    )
+    row = cursor.fetchone()
+    return bool(row and row[0])
 
 
 def aligned_type(stored: str | None, inferred: str) -> str:

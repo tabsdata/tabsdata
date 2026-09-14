@@ -133,6 +133,7 @@ class SnowflakeDestPlugin(DestPlugin[SnowflakeDestConn, SnowflakeDest]):
             schema_evolution_engine=cfg.schema_evolution_engine,
             if_table_exists=dest.if_table_exists,
             ctx=ctx,
+            watermark_column=dest._watermark_column(),
             merge_cfgs=dest._merge_cfgs(),
         )
         try:

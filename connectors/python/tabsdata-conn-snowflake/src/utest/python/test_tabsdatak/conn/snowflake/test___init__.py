@@ -276,6 +276,112 @@ def test_merge_cfgs_is_none_outside_merge_mode():
     assert SnowflakeDest(tables=["DB.S.A"])._merge_cfgs() is None
 
 
+# ---------------------------------------------------------------------------
+# watermark_column
+#
+# Named on the destination rather than on a MergeCfg: it says which trx a write
+# belongs to, which is a property of the write and not of the way any one
+# table's rows are matched. The merge driver still reads it off the config it is
+# handed, so the destination stamps it onto every config on the way past.
+# ---------------------------------------------------------------------------
+
+
+def test_merge_cfgs_stamp_the_destinations_watermark_onto_every_cfg():
+    dest = SnowflakeDest(
+        tables=["DB.S.A", "DB.S.B"],
+        if_table_exists="merge",
+        merge_cfg=[_merge_cfg(), _merge_cfg(on=["item_id"])],
+        watermark_column="wm",
+        dest_cfg=_ICEBERG,
+    )
+    assert [cfg.watermark_column for cfg in dest._merge_cfgs()] == ["wm", "wm"]
+
+
+def test_merge_cfgs_leave_the_watermark_unset_when_the_destination_names_none():
+    dest = SnowflakeDest(
+        tables=["DB.S.A"],
+        if_table_exists="merge",
+        merge_cfg=_merge_cfg(),
+        dest_cfg=_ICEBERG,
+    )
+    assert dest._merge_cfgs()[0].watermark_column is None
+
+
+def test_snowflake_dest_rejects_a_watermark_on_a_replace():
+    # A replace truncates and reloads, so a rerun already leaves the same rows
+    # behind. There is nothing here for a watermark to make idempotent.
+    with pytest.raises(SnowflakeValidateException) as ei:
+        SnowflakeDest(
+            tables=["DB.S.T"],
+            if_table_exists="replace",
+            watermark_column="wm",
+        )
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_23
+
+
+def test_snowflake_dest_accepts_a_watermark_on_an_append():
+    # Accepted, but nothing acts on it yet: an append neither stamps its rows
+    # nor skips a rerun. Only the config surface is in place.
+    dest = SnowflakeDest(
+        tables=["DB.S.T"],
+        if_table_exists="append",
+        watermark_column="wm",
+    )
+    assert dest.watermark_column == "wm"
+    assert dest._merge_cfgs() is None
+
+
+def test_snowflake_dest_rejects_a_watermark_named_on_the_merge_cfg():
+    # The field is inherited from the shared MergeCfg and so is still settable
+    # there. Taking it silently would cost the rerun its idempotency.
+    with pytest.raises(SnowflakeValidateException) as ei:
+        SnowflakeDest(
+            tables=["DB.S.T"],
+            if_table_exists="merge",
+            merge_cfg=_merge_cfg(watermark_column="wm"),
+            dest_cfg=_ICEBERG,
+        )
+    assert ei.value.api_error is SnowflakeErrorCode.SNOWFLAKE_24
+
+
+def test_a_destination_watermark_still_cannot_collide_with_a_key_column():
+    # The collision checks belong to MergeCfg, and the watermark no longer
+    # reaches it before the destination puts it there -- so the destination has
+    # to be what runs them.
+    with pytest.raises(SqlCommonValidateException) as ei:
+        SnowflakeDest(
+            tables=["DB.S.T"],
+            if_table_exists="merge",
+            merge_cfg=_merge_cfg(on=["order_id"]),
+            watermark_column="ORDER_ID",
+            dest_cfg=_ICEBERG,
+        )
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_7
+
+
+def test_a_destination_watermark_still_cannot_collide_with_the_op_column():
+    with pytest.raises(SqlCommonValidateException) as ei:
+        SnowflakeDest(
+            tables=["DB.S.T"],
+            if_table_exists="merge",
+            merge_cfg=_merge_cfg(op_column="op"),
+            watermark_column="op",
+            dest_cfg=_ICEBERG,
+        )
+    assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_8
+
+
+def test_snowflake_dest_round_trips_a_watermark_column():
+    dest = SnowflakeDest(
+        tables=["DB.S.T"],
+        if_table_exists="merge",
+        merge_cfg=_merge_cfg(),
+        watermark_column="wm",
+        dest_cfg=_ICEBERG,
+    )
+    assert SnowflakeDest.from_json(dest.to_json()) == dest
+
+
 def test_merge_cfg_folds_an_unquoted_column_the_way_snowflake_stores_it():
     # The connector templates its tables from ``infer_schema(ignore_case =>
     # true)``, which stores columns upper-folded whatever case the parquet

@@ -37,8 +37,11 @@ from tabsdatak.conn.common.sql._merge.dialect import (
 )
 from tabsdatak.conn.snowflake import _iceberg
 from tabsdatak.conn.snowflake._evolution import (
+    WATERMARK_TYPE,
     aligned_type,
+    check_watermark_column as _check_watermark_column,
     describe_table_columns,
+    ensure_watermark_column as _ensure_watermark_column,
     fold_identifier,
 )
 from tabsdatak.conn.snowflake._staging import (
@@ -68,11 +71,6 @@ _SYNTAX = MergeSyntax(
     not_matched="WHEN NOT MATCHED",
     wildcard_writes=None,
 )
-
-# A trx id is an opaque string, and STRING parses to the same type DESC TABLE
-# reports for it (VARCHAR(16777216)), so a target that already has the column
-# does not read as a retype of it.
-_WATERMARK_TYPE = "STRING"
 
 _ERRORS = MergeErrors(
     marker_absent=SnowflakeErrorCode.SNOWFLAKE_18.exception,
@@ -155,47 +153,24 @@ class SnowflakeMergeDialect(MergeDialect):
         )
         if watermark_cfg is not None:
             self._add_watermark_column(scratch, watermark_cfg)
-            columns.append((watermark_cfg.column, _WATERMARK_TYPE))
+            columns.append((watermark_cfg.column, WATERMARK_TYPE))
         yield Staged(relation=scratch, columns=columns)
 
     def check_watermark_column(self, target: str, watermark_cfg: WatermarkCfg) -> bool:
         """Whether ``target`` already holds a row stamped with this
-        transaction's id.
+        transaction's id -- see
+        :func:`~tabsdatak.conn.snowflake._evolution.check_watermark_column`,
+        which an append reaches for too.
 
-        Asked of ``INFORMATION_SCHEMA.COLUMNS`` first, and only then of the
-        table: a target that does not exist yet, or one that predates the
-        watermark column, has no such row and must not be probed for one --
-        selecting the column would be an error rather than an answer. The
-        column view covers both, since a missing table contributes no rows to
-        it.
-
-        The names are matched as Snowflake stores them. The connector creates
-        its targets through :func:`_fq_for_sql`, whose parts are quoted
-        verbatim, so the parts ``unfqn`` gives back are the stored spellings
-        rather than something to fold. ``watermark_cfg.column`` has already been
-        through ``MergeCfg._fold``, which is that same stored form.
+        ``watermark_cfg.column`` has already been through ``MergeCfg._fold``,
+        which is the stored form the probe matches on.
         """
-        database, schema, table = unfqn(target, _SNOWFLAKE_FQN_DEF, total_parts=3)
-        # INFORMATION_SCHEMA is per-database; unqualified, it is the session's
-        # own, which is where an unqualified target lives too.
-        catalog = f"{fqn([database], _SNOWFLAKE_FQN_DEF)}." if database else ""
-        self._cursor.execute(
-            f"SELECT COUNT(*) FROM {catalog}INFORMATION_SCHEMA.COLUMNS"
-            f" WHERE TABLE_SCHEMA = COALESCE(%s, CURRENT_SCHEMA())"
-            f" AND TABLE_NAME = %s AND COLUMN_NAME = %s",
-            (schema, table, watermark_cfg.column),
+        return _check_watermark_column(
+            self._cursor,
+            target,
+            watermark_cfg.column,
+            watermark_cfg.transaction_id,
         )
-        row = self._cursor.fetchone()
-        if not (row and row[0]):
-            return False
-
-        self._cursor.execute(
-            f"SELECT COUNT(*) > 0 FROM {target}"
-            f" WHERE {self.quote_column(watermark_cfg.column)} = %s",
-            (watermark_cfg.transaction_id,),
-        )
-        row = self._cursor.fetchone()
-        return bool(row and row[0])
 
     def ensure_target(self, target: str, staged: Staged, marker: str) -> None:
         """``CREATE TABLE IF NOT EXISTS`` from the scratch table's schema, less
@@ -257,22 +232,14 @@ class SnowflakeMergeDialect(MergeDialect):
         gains it, the merge never writes it, and the rerun guard reads every run
         as the first one -- a watermark that silently does nothing.
 
-        Unlike the scratch table's copy it is added without a ``DEFAULT``. The
-        rows already in the target were written by earlier transactions, and
-        backfilling this one's id would claim them for it. They take a NULL,
-        which is what "written before there was a watermark" looks like.
+        Unlike the scratch table's copy it is added without a ``DEFAULT`` --
+        see :func:`~tabsdatak.conn.snowflake._evolution.ensure_watermark_column`,
+        which an append reaches for too.
         """
         if watermark_cfg is None:
             return []
-        existing = {self.fold(name) for name, _ in self.target_columns(target)}
-        if self.fold(watermark_cfg.column) in existing:
-            return []
-        logger.debug("Adding watermark column %s to %s", watermark_cfg.column, target)
-        self._cursor.execute(
-            f"ALTER TABLE {target} ADD COLUMN IF NOT EXISTS"
-            f" {self.quote_column(watermark_cfg.column)} {_WATERMARK_TYPE}"
-        )
-        return [watermark_cfg.column]
+        added = _ensure_watermark_column(self._cursor, target, watermark_cfg.column)
+        return [watermark_cfg.column] if added else []
 
     # --- Snowflake internals ------------------------------------------
 
@@ -296,7 +263,7 @@ class SnowflakeMergeDialect(MergeDialect):
         logger.debug("Adding watermark column %s to %s", cfg.column, table)
         self._cursor.execute(
             f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS"
-            f" {self.quote_column(cfg.column)} {_WATERMARK_TYPE}"
+            f" {self.quote_column(cfg.column)} {WATERMARK_TYPE}"
             f" DEFAULT '{cfg.transaction_id}'"
         )
 

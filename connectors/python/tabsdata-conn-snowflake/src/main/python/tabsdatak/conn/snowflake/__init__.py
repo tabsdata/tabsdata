@@ -32,6 +32,7 @@ Examples:
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Annotated, Any, Literal, TypeAlias
 
 # noinspection PyProtectedMember
@@ -149,6 +150,11 @@ class MergeCfg(SqlMergeCfg):
     target has and the incoming data does not keep their value on an update and
     take a NULL on an insert.
 
+    The idempotency watermark is named on the destination rather than here --
+    see `SnowflakeDest.watermark_column`. It belongs to the write, not to the
+    way one table's rows are matched, so a `SnowflakeDest` naming a list of
+    configs still stamps every one of its targets with the same column.
+
     Args:
         on: The key columns rows are matched by, joined with `AND`. Must be
             present on both sides. Each is a Snowflake column identifier --
@@ -156,13 +162,6 @@ class MergeCfg(SqlMergeCfg):
         op_column: The column holding each row's `i` / `u` / `d` marker. Read
             to decide each row's fate and never written, so the target does not
             need the column and will not gain it.
-        watermark_column: An optional column stamped with the id of the trx the
-            merge belongs to, making the merge idempotent: a rerun that finds
-            the target already carrying this trx's id writes nothing rather than
-            applying the same batch twice. The target gains the column under
-            either `schema_evolution` setting -- a watermark no row can be
-            stamped in would do nothing at all -- and rows written before it
-            existed keep a NULL there.
 
     Examples:
         A CDC feed whose `op` column says what to do with each row:
@@ -179,7 +178,6 @@ class MergeCfg(SqlMergeCfg):
     # surfacing as invalid SQL when the MERGE is built.
     on: MergeColumnsSpec
     op_column: MergeColumnSpec
-    watermark_column: MergeColumnSpec | None = None
 
     def _fold(self, name: str) -> str:
         return _validation.merge_column_key(name)
@@ -287,6 +285,20 @@ class SnowflakeDest(Dest):
             `if_table_exists="merge"`: how incoming rows are matched
             onto existing ones. One `MergeCfg` applies to every table;
             pass a list to configure each table in `tables` separately.
+        watermark_column: An optional column stamped with the id of the trx the
+            write belongs to, making the write idempotent: a rerun that finds
+            the target already carrying this trx's id writes nothing rather than
+            applying the same batch twice. Every table in `tables` is stamped in
+            the same column. The target gains the column under either
+            `schema_evolution` setting -- a watermark no row can be stamped in
+            would do nothing at all -- and rows written before it existed keep a
+            NULL there.
+
+            A merge stamps through the `MERGE` itself; an append writes the
+            column into the batch it stages, so the `COPY` stamps the rows it
+            loads. A replace is refused it, having nothing to make idempotent --
+            it truncates and reloads, so a rerun already leaves the same rows
+            behind.
         dest_cfg: Optional connector config. Supported keys:
             `snowflake.logging_level`, and
             `snowflake.schema_evolution_engine` -- `"native"` (the default
@@ -355,20 +367,37 @@ class SnowflakeDest(Dest):
     if_table_exists: IfTableExistsSpec = "append"
     schema_evolution: SchemaEvolutionSpec = "strict"
     merge_cfg: MergeCfgSpec | None = None
+    watermark_column: MergeColumnSpec | None = None
     dest_cfg: DestCfgSpec | None = None
 
     def _merge_cfgs(self) -> list[MergeCfg] | None:
-        """One `MergeCfg` per entry in `tables`, or `None` outside merge mode."""
+        """One `MergeCfg` per entry in `tables`, or `None` outside merge mode.
+
+        Each carries this destination's `watermark_column`: the merge driver
+        reads the watermark off the config it is handed, so the destination's
+        choice is stamped onto every config on the way past rather than
+        threaded through the write as a value of its own.
+        """
         if self.merge_cfg is None:
             return None
         if isinstance(self.merge_cfg, MergeCfg):
-            return [self.merge_cfg] * len(self.tables)
-        return list(self.merge_cfg)
+            cfgs = [self.merge_cfg] * len(self.tables)
+        else:
+            cfgs = list(self.merge_cfg)
+        return [replace(cfg, watermark_column=self.watermark_column) for cfg in cfgs]
+
+    def _watermark_column(self) -> str | None:
+        """The watermark column's stored form, or `None`. Folded the way a
+        `MergeCfg` folds its own, so the two paths name one column."""
+        if self.watermark_column is None:
+            return None
+        return _validation.merge_column_key(self.watermark_column)
 
     def validate(self) -> None:
         """Cross-field validation: `merge_cfg` and `if_table_exists="merge"`
-        require each other, a list of configs must line up with `tables`, and
-        merging requires `schema_evolution_engine="iceberg"`.
+        require each other, a list of configs must line up with `tables`,
+        `watermark_column` is not a replace's to name, and merging requires
+        `schema_evolution_engine="iceberg"`.
 
         Called by the framework; raises `SnowflakeValidateException`.
         """
@@ -386,6 +415,25 @@ class SnowflakeDest(Dest):
             raise SnowflakeErrorCode.SNOWFLAKE_14.exception(
                 cfgs=len(self.merge_cfg), tables=len(self.tables)
             )
+        raw = (
+            [self.merge_cfg]
+            if isinstance(self.merge_cfg, MergeCfg)
+            else (self.merge_cfg or [])
+        )
+        # The field is inherited from the shared MergeCfg and so is still
+        # settable there, but this connector reads it off the destination.
+        # Silently dropping it would cost a rerun its idempotency.
+        if any(cfg.watermark_column is not None for cfg in raw):
+            # noinspection PyProtectedMember
+            raise SnowflakeErrorCode.SNOWFLAKE_24.exception()
+        if self.watermark_column is not None and self.if_table_exists == "replace":
+            # noinspection PyProtectedMember
+            raise SnowflakeErrorCode.SNOWFLAKE_23.exception()
+        for cfg in self._merge_cfgs() or []:
+            # The stamped config, not the one the user wrote: the watermark
+            # arrives from here now, so the collision checks MergeCfg makes
+            # against its keys and its op column only see it on this pass.
+            cfg.validate()
         # Last, so a merge that is malformed in a more basic way reports that
         # instead: a missing merge_cfg is the thing to fix first.
         engine = (self.dest_cfg or {}).get("snowflake.schema_evolution_engine")

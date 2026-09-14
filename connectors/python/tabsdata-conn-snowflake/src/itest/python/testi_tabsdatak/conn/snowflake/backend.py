@@ -18,10 +18,15 @@ from tabsdatak.conn.snowflake import SnowflakeDestConn
 DELIMITERS = ('"', '"')
 
 
-def dest_conn(domain: SnowflakeDomain) -> SnowflakeDestConn:
+def dest_conn(domain: SnowflakeDomain, stage: str | None = None) -> SnowflakeDestConn:
     # The domain's Personal Access Token rides in the password slot -- the driver
     # accepts either there. Database and schema go in bare: tdx provisions them
     # unquoted, so Snowflake upper-folds the reference onto the stored identifier.
+    #
+    # ``stage`` unset is the usual case and the one every other test runs: the
+    # connector then makes a TEMPORARY stage that goes with the session. Naming
+    # one asks for a permanent stage instead, which the connector creates if it
+    # is not there -- so a test that cares about the difference has to drop it.
     return SnowflakeDestConn(
         account=domain.account,
         credentials=UserPassword(
@@ -30,6 +35,7 @@ def dest_conn(domain: SnowflakeDomain) -> SnowflakeDestConn:
         database=domain.database,
         schema=domain.schema,
         warehouse=domain.warehouse,
+        stage=stage,
     )
 
 
@@ -67,6 +73,26 @@ class SnowflakeStore(SqlStore):
         the parquet the connector loaded."""
         rows, columns = self._query(f"SELECT * FROM {self._fqn(table)}")
         return pl.DataFrame(rows, schema=[c.lower() for c in columns], orient="row")
+
+    def drop_stage(self, stage: str) -> None:
+        self._execute(f"DROP STAGE IF EXISTS {self._database}.{self._schema}.{stage}")
+
+    def copy_history(self, table: str) -> list[tuple]:
+        """``(file_name, row_count, status)`` per COPY into ``table`` in the last
+        hour, newest first -- what Snowflake's own load metadata recorded.
+
+        Read to tell a skipped load apart from one that never ran: the row count
+        alone cannot, and the difference is the whole question a duplication test
+        is asking.
+        """
+        rows, _ = self._query(
+            "SELECT file_name, row_count, status FROM TABLE("
+            f"{self._database}.INFORMATION_SCHEMA.COPY_HISTORY("
+            f"TABLE_NAME => '{self._fqn(table)}',"
+            " START_TIME => DATEADD(hour, -1, CURRENT_TIMESTAMP())))"
+            " ORDER BY last_load_time DESC"
+        )
+        return rows
 
     def drop_table(self, table: str) -> None:
         self._execute(f"DROP TABLE IF EXISTS {self._fqn(table)}")

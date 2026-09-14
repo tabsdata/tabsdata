@@ -21,6 +21,7 @@ from test_tabsdatak.conn.snowflake.support import (
     _FakeCursor,
     column_fakes as _column_fakes,
     insert_lists as _insert_lists,
+    watermark_answers as _watermark_answers,
 )
 
 # noinspection PyProtectedMember
@@ -909,3 +910,234 @@ def test_write_all_tables_keeps_the_marker_in_the_staging_table(
     assert "WHERE" not in _temp_create_statement(fake.log)
 
 
+
+
+# ---------------------------------------------------------------------------
+# watermark_column on an append
+#
+# An append is not idempotent on its own: Snowflake's load history does not
+# dedup a re-staged file, so a rerun of the same transaction loads the batch
+# twice. Naming a watermark makes it idempotent -- the column is written into
+# the staged file so the COPY stamps the rows it loads, and a rerun that finds
+# the target already carrying this trx's id does nothing at all.
+# ---------------------------------------------------------------------------
+
+_WATERMARK = "WM"
+
+
+def _watermark_cfg(**overrides):
+    kwargs: dict = dict(watermark_column=_WATERMARK, schema_evolution="strict")
+    kwargs.update(overrides)
+    return _write_cfg(**kwargs)
+
+
+def _watermark_alters(log):
+    return [s for s in log if f'"{_WATERMARK}"' in s and s.startswith("ALTER TABLE")]
+
+
+def _staged_files(monkeypatch):
+    """Capture what each ``PUT`` was handed, read while it still exists.
+
+    The rewritten batch lives in a temp directory removed as soon as it has
+    been staged, so a test that reads it afterwards finds nothing. Reading it
+    from inside the ``PUT`` is the only moment it is on disk.
+    """
+    import polars as pl
+
+    staged: list[tuple[Path, pl.DataFrame]] = []
+    original = impl.put_file_to_stage
+
+    def capture(cursor, file_path, stage):
+        staged.append((file_path, pl.read_parquet(file_path)))
+        return original(cursor, file_path, stage)
+
+    monkeypatch.setattr(impl, "put_file_to_stage", capture)
+    return staged
+
+
+def test_append_watermark_stamps_every_staged_row_with_the_trx_id(
+    monkeypatch, tmp_path
+):
+    staged = _staged_files(monkeypatch)
+    _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
+    impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
+    _, frame = staged[0]
+    assert frame[_WATERMARK].to_list() == ["TRX_1"]
+
+
+def test_append_watermark_stages_a_copy_keeping_the_original_basename(
+    monkeypatch, tmp_path
+):
+    # Everything downstream is keyed off the staged file's name -- the COPY
+    # names it in FILES, and infer_schema reads it by path -- so the rewrite
+    # has to be indistinguishable from the file the write was handed.
+    staged = _staged_files(monkeypatch)
+    _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
+    parquet = _parquet(tmp_path / "in.parquet")
+    impl.write_all_tables(_watermark_cfg(), [parquet])
+    path, _ = staged[0]
+    assert path != parquet
+    assert path.name == parquet.name
+
+
+def test_append_without_a_watermark_stages_the_file_it_was_handed(
+    monkeypatch, tmp_path
+):
+    staged = _staged_files(monkeypatch)
+    _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
+    parquet = _parquet(tmp_path / "in.parquet")
+    impl.write_all_tables(_write_cfg(), [parquet])
+    path, frame = staged[0]
+    assert path == parquet
+    assert frame.columns == ["c"]
+
+
+def test_append_watermark_removes_the_rewritten_file_once_it_is_staged(
+    monkeypatch, tmp_path
+):
+    staged = _staged_files(monkeypatch)
+    _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
+    impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
+    path, _ = staged[0]
+    assert not path.exists()
+
+
+def test_append_watermark_adds_the_column_to_the_target_without_a_default(
+    monkeypatch, tmp_path
+):
+    # Without a DEFAULT: Snowflake backfills a constant one into the rows
+    # already there, and those belong to earlier transactions.
+    fake = _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
+    impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
+    assert _watermark_alters(fake.log) == [
+        'ALTER TABLE "ANALYTICS"."PUBLIC"."T" ADD COLUMN IF NOT EXISTS "WM" STRING'
+    ]
+
+
+def test_append_watermark_leaves_a_target_that_already_has_the_column_alone(
+    monkeypatch, tmp_path
+):
+    fake = _evolving_connection(
+        monkeypatch, ["C", _WATERMARK], [("C", "NUMBER(38,0)")]
+    )
+    impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
+    assert _watermark_alters(fake.log) == []
+
+
+def test_append_watermark_adds_the_column_before_the_copy(monkeypatch, tmp_path):
+    # A column added after the load would be NULL in the rows just written, and
+    # the guard would read the next rerun as the first.
+    fake = _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
+    impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
+    alter = fake.log.index(_watermark_alters(fake.log)[0])
+    copy = next(i for i, s in enumerate(fake.log) if s.startswith("COPY INTO"))
+    assert alter < copy
+
+
+def test_append_watermark_is_added_under_strict(monkeypatch, tmp_path):
+    """Strict pins the target's schema and this is its one exception: nothing
+    else adds the column, so without it the COPY drops what it cannot match and
+    the watermark silently does nothing."""
+    fake = _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
+    impl.write_all_tables(
+        _watermark_cfg(schema_evolution="strict"),
+        [_parquet(tmp_path / "in.parquet")],
+    )
+    assert len(_watermark_alters(fake.log)) == 1
+
+
+def test_append_watermark_leaves_the_iceberg_pass_nothing_to_add(
+    monkeypatch, tmp_path
+):
+    """Added ahead of the diff, so the engine that may also add columns finds
+    it already there -- one statement, not two claims on the same column."""
+    fake = _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
+    fake.results[_INFER_PREFIX] = (
+        [("COLUMN_NAME",), ("TYPE",)],
+        [("C", "NUMBER(38,0)"), (_WATERMARK, "TEXT")],
+    )
+    impl.write_all_tables(
+        _watermark_cfg(schema_evolution="update", schema_evolution_engine="iceberg"),
+        [_parquet(tmp_path / "in.parquet")],
+    )
+    after = fake.log[fake.log.index(_watermark_alters(fake.log)[0]) + 1 :]
+    # The diff really did run afterwards, and found nothing left to do.
+    assert any(s.startswith("DESC TABLE") for s in after)
+    assert not [s for s in after if s.startswith("ALTER TABLE") and "ENABLE_" not in s]
+
+
+def test_append_skips_entirely_when_the_trx_is_already_stamped(
+    monkeypatch, tmp_path
+):
+    fake = _column_fakes(
+        ["C", _WATERMARK],
+        [("C", "NUMBER(38,0)")],
+        _watermark_answers(has_column=True, stamped=True),
+    )
+    monkeypatch.setattr(impl, "build_snowflake_connection", lambda conn: fake)
+    impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
+    assert not any(s.startswith("PUT ") for s in fake.log)
+    assert not any(s.startswith("COPY INTO") for s in fake.log)
+
+
+def test_append_proceeds_when_the_target_carries_a_different_trx(
+    monkeypatch, tmp_path
+):
+    fake = _column_fakes(
+        ["C", _WATERMARK],
+        [("C", "NUMBER(38,0)")],
+        _watermark_answers(has_column=True, stamped=False),
+    )
+    monkeypatch.setattr(impl, "build_snowflake_connection", lambda conn: fake)
+    impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
+    assert any(s.startswith("COPY INTO") for s in fake.log)
+
+
+def test_append_checks_the_watermark_before_it_stages_anything(
+    monkeypatch, tmp_path
+):
+    # A rerun with nothing to do should not pay to rewrite and upload a file it
+    # is about to decline to load.
+    fake = _column_fakes(
+        ["C", _WATERMARK],
+        [("C", "NUMBER(38,0)")],
+        _watermark_answers(has_column=True, stamped=False),
+    )
+    monkeypatch.setattr(impl, "build_snowflake_connection", lambda conn: fake)
+    impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
+    probe = next(
+        i for i, s in enumerate(fake.log) if s.startswith("SELECT COUNT(*) > 0 FROM")
+    )
+    put = next(i for i, s in enumerate(fake.log) if s.startswith("PUT "))
+    assert probe < put
+
+
+def test_append_binds_the_trx_id_rather_than_interpolating_it(
+    monkeypatch, tmp_path
+):
+    fake = _column_fakes(
+        ["C", _WATERMARK],
+        [("C", "NUMBER(38,0)")],
+        _watermark_answers(has_column=True, stamped=False),
+    )
+    monkeypatch.setattr(impl, "build_snowflake_connection", lambda conn: fake)
+    impl.write_all_tables(_watermark_cfg(), [_parquet(tmp_path / "in.parquet")])
+    stamp = next(
+        params
+        for sql, params in fake.binds
+        if sql.startswith("SELECT COUNT(*) > 0 FROM")
+    )
+    assert stamp == ("TRX_1",)
+
+
+def test_a_replace_never_stamps_even_when_handed_a_watermark(
+    monkeypatch, tmp_path
+):
+    """SnowflakeDest refuses the pairing, and the write path declines it again
+    rather than resting on a validation two layers away."""
+    staged = _staged_files(monkeypatch)
+    fake = _evolving_connection(monkeypatch, ["C"], [("C", "NUMBER(38,0)")])
+    parquet = _parquet(tmp_path / "in.parquet")
+    impl.write_all_tables(_watermark_cfg(if_table_exists="replace"), [parquet])
+    assert staged[0][0] == parquet
+    assert _watermark_alters(fake.log) == []

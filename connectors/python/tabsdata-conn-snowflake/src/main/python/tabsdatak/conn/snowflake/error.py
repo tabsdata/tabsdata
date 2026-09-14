@@ -141,3 +141,18 @@ class SnowflakeErrorCode(ErrorCode):
         " evolves a merge target with ALTER statements or not at all -- which"
         " the write has to say out loud",
     )  # SnowflakeDest.validate()
+
+    # --- watermark_column (tabsdatak.conn.snowflake) ----------------
+    SNOWFLAKE_23 = ErrorDef(
+        SnowflakeValidateException,
+        'SnowflakeDest.watermark_column is set but if_table_exists="replace";'
+        " a replace truncates the target and reloads it, so rerunning one"
+        " already leaves the same rows behind and there is nothing for a"
+        " watermark to make idempotent",
+    )  # SnowflakeDest.validate()
+    SNOWFLAKE_24 = ErrorDef(
+        SnowflakeValidateException,
+        "MergeCfg.watermark_column is set; name the watermark on the"
+        " destination instead, as SnowflakeDest.watermark_column. It belongs"
+        " to the write rather than to the way one table's rows are matched",
+    )  # SnowflakeDest.validate()

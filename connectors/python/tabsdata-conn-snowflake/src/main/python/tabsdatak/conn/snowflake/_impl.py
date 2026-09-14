@@ -20,8 +20,11 @@ the plugin (registry scans pay only for the DestDef metadata).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
+import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -32,7 +35,11 @@ from tabsdatak.conn.common._validation import fqn, unfqn
 from tabsdatak.conn.common.sql._merge._driver import merge_batch
 from tabsdatak.conn.common.types import UserPassword, _convert
 from tabsdatak.conn.snowflake import MergeCfg, SnowflakeDestConn
-from tabsdatak.conn.snowflake._evolution import SnowflakeSchemaEvolver
+from tabsdatak.conn.snowflake._evolution import (
+    SnowflakeSchemaEvolver,
+    check_watermark_column,
+    ensure_watermark_column,
+)
 from tabsdatak.conn.snowflake._merge_dialect import SnowflakeMergeDialect
 from tabsdatak.conn.snowflake._staging import (
     copy_into,
@@ -75,7 +82,11 @@ class SnowflakeWriteCfg:
     schema_evolution: str  # "strict" | "update"
     schema_evolution_engine: str  # "native" | "iceberg"
     if_table_exists: str  # "append" | "replace" | "merge"
-    ctx: DestContext  # the trx the write belongs to; a merge stamps its id
+    ctx: DestContext  # the trx the write belongs to; a write stamps its id
+    # The target column each row is stamped with the trx id in, already in the
+    # form Snowflake stores it under; ``None`` when the write names no
+    # watermark. A merge reads its own off ``merge_cfgs``.
+    watermark_column: str | None = None
     # One entry per target table when merging, already normalized by
     # ``SnowflakeDest._merge_cfgs()`` (a single MergeCfg broadcast across every
     # table); ``None`` in every other disposition.
@@ -324,6 +335,40 @@ def write_all_tables(cfg: SnowflakeWriteCfg, files: list[Path]) -> None:
         sf_conn.close()
 
 
+@contextlib.contextmanager
+def _watermarked_batch(batch: Path, column: str | None, trx_id: str) -> Iterator[Path]:
+    """Yield a parquet carrying ``column`` stamped with ``trx_id``, to be staged
+    in place of ``batch`` -- or ``batch`` itself when the write names no
+    watermark.
+
+    Written into the file rather than added to the target afterwards: the load
+    matches it onto the target by name like any other column, so the ``COPY``
+    stamps the rows it inserts and nothing has to walk them a second time. Rows
+    already in the target are left alone, which is what "written before there
+    was a watermark" looks like.
+
+    The rewritten file keeps the original's basename, so the staged file -- and
+    everything downstream keyed off its name -- is indistinguishable from the
+    one the write was handed. It lives in a temp directory removed as soon as it
+    has been staged.
+    """
+    if column is None:
+        yield batch
+        return
+
+    import polars as pl
+
+    with tempfile.TemporaryDirectory() as work:
+        stamped = Path(work) / batch.name
+        logger.info(
+            "Stamping %s with %s = %r before staging", batch.name, column, trx_id
+        )
+        pl.scan_parquet(batch).with_columns(
+            pl.lit(trx_id, dtype=pl.String).alias(column)
+        ).sink_parquet(stamped)
+        yield stamped
+
+
 def _write_one(
     sf_conn,
     cfg: SnowflakeWriteCfg,
@@ -341,8 +386,40 @@ def _write_one(
         if cfg.if_table_exists == "merge":
             _merge_one(cursor, cfg, stage, file_path, sql_table, merge_cfg)
             return
-        file_name = put_file_to_stage(cursor, file_path, stage)
+        # Append is the only disposition that stamps: a merge has returned
+        # above, and a replace is refused the column by SnowflakeDest.validate.
+        # Named again here rather than inferred from those two, so widening the
+        # API later cannot quietly start stamping a disposition that has no
+        # business being stamped.
+        watermark = cfg.watermark_column if cfg.if_table_exists == "append" else None
+        if watermark is not None and check_watermark_column(
+            cursor, sql_table, watermark, cfg.ctx.trx_id
+        ):
+            # Asked before the batch is rewritten and staged: a rerun that has
+            # nothing to do should not pay to build the file it will not load.
+            logger.info(
+                "Skipping append onto %s: watermark column %s already has value %s",
+                sql_table,
+                watermark,
+                cfg.ctx.trx_id,
+            )
+            return
+        with _watermarked_batch(file_path, watermark, cfg.ctx.trx_id) as batch:
+            file_name = put_file_to_stage(cursor, batch, stage)
         _create_table_from_inferred_schema(cursor, stage, file_name, sql_table)
+        if watermark is not None:
+            # Strict is what makes this necessary: it adds nothing, so without
+            # this the target never gains the column, the COPY drops what it
+            # cannot match, and the rerun guard reads every run as the first.
+            # The same exception the merge carves out for its own watermark.
+            #
+            # Ahead of the evolution pass so that under "update" the column is
+            # already there when the diff runs, leaving one place that adds it
+            # rather than two engines each having a claim.
+            #
+            # A target that predates the watermark keeps NULL in the rows it
+            # already holds; only the rows this COPY brings in are stamped.
+            ensure_watermark_column(cursor, sql_table, watermark)
         evolving = cfg.schema_evolution == "update"
         natively = cfg.schema_evolution_engine == "native"
         logger.debug(
