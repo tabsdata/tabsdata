@@ -1247,9 +1247,7 @@ def test_find_copy_purge_deletes_what_a_prior_run_consumed(tmp_path: Path):
     assert first.purged is None, "the first run has nothing behind the cursor"
     assert a.exists() and b.exists()
 
-    second = _find_copy(
-        tmp_path, glob, lastmod_info=first.lastmod_info, purge=True
-    )
+    second = _find_copy(tmp_path, glob, lastmod_info=first.lastmod_info, purge=True)
     assert second.files == [], "both files were already consumed"
     names = sorted(Path(u.removeprefix("file://")).name for u in second.purged.deleted)
     assert names == ["a.csv", "b.csv"]
@@ -1264,9 +1262,7 @@ def test_find_copy_purge_leaves_the_file_it_is_reading(tmp_path: Path):
     src_dir = a.parent
     fresh = _write_csv(src_dir / "c.csv", [3], _BASELINE + timedelta(hours=3))
 
-    second = _find_copy(
-        tmp_path, glob, lastmod_info=first.lastmod_info, purge=True
-    )
+    second = _find_copy(tmp_path, glob, lastmod_info=first.lastmod_info, purge=True)
     assert len(second.files) == 1, "only the new file is read"
     assert len(second.purged.deleted) == 2
     # The file this run consumed survives -- it goes on the next run's list.

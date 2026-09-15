@@ -210,6 +210,7 @@ class AzureBlobSrc(Src):
             were never read. Only valid when `initial_last_modified` is set; the default
             is `False`.
     """
+
     paths: SrcPathsSpec
     format: SrcFileFormat = SrcFileFormat.AUTO
     format_cfg: SrcFormatCfgSpec | None = None
@@ -229,9 +230,7 @@ class AzureBlobSrc(Src):
             _file_validation.validate_src_format(
                 self.format, self.paths, self.format_cfg
             )
-            _file_validation.validate_src_purge(
-                self.purge, self.initial_last_modified
-            )
+            _file_validation.validate_src_purge(self.purge, self.initial_last_modified)
         except Exception as e:
             raise AzureBlobErrorCode.AZURE_BLOB_3.exception(cause=e)
 

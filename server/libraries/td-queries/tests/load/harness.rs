@@ -33,6 +33,11 @@ pub(crate) async fn analyze(db: &TdPool, what: &str) {
     conn.analyze_current_schema()
         .await
         .unwrap_or_else(|e| panic!("analyze {what}: {e:?}"));
+    // The statistics are transactional: dropping the transaction rolls them
+    // back, leaving the planner on whatever it held before.
+    conn.commit()
+        .await
+        .unwrap_or_else(|e| panic!("analyze {what}: {e:?}"));
 }
 
 /// `t` is captured immediately before the query, so seeding is excluded.

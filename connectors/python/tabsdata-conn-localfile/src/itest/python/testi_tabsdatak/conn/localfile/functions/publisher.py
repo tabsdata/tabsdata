@@ -102,4 +102,3 @@ def pub_publisher_purges_what_it_has_consumed(
     frames: TableFramesSpec,
 ) -> TableFrameSpec:
     return _first(frames)
-

@@ -851,8 +851,7 @@ async fn report_scaling_metrics_window(db: TdPool) -> Result<(), TdError> {
         passes.push(time_metrics_queries(&db).await?);
     }
     // The timing pass ends in a backfill, which deletes and rebuilds the facts
-    // wholesale. Without analyzing that rebuild the planner reads the window
-    // against stale counts, sizes it as the whole table and takes a seq scan.
+    // wholesale, so the plan guard needs the statistics of that rebuild.
     analyze(&db, "before the plan guard").await;
     let mut conn = db.begin_ro().await.unwrap();
     for (name, sql) in &td_queries::metrics_plan_sql(&metrics_request()).expect("render") {

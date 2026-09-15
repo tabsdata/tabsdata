@@ -182,5 +182,5 @@ class FileCommonErrorCode(ErrorCode):
     FILE_COMMON_35 = ErrorDef(
         ConnInitException,
         "initial_last_modified is required when purge=True: purge deletes source files "
-        "older than the incremental initial_last_modified cursor."
+        "older than the incremental initial_last_modified cursor.",
     )  # validate_src_purge

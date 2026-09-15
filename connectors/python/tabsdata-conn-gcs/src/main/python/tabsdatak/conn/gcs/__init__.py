@@ -273,9 +273,7 @@ class GCSSrc(Src):
             _file_validation.validate_src_format(
                 self.format, self.paths, self.format_cfg
             )
-            _file_validation.validate_src_purge(
-                self.purge, self.initial_last_modified
-            )
+            _file_validation.validate_src_purge(self.purge, self.initial_last_modified)
         except Exception as e:
             raise GCSErrorCode.GCS_3.exception(cause=e, side="src")
 

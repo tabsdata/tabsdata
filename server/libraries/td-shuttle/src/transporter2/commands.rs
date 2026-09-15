@@ -223,8 +223,7 @@ pub async fn run_find(req: FindRequest) -> Result<FindResponse> {
 pub async fn run_find_copy(req: FindCopyRequest, opts: &CopyOptions) -> Result<CopyResponse> {
     let store = io::resolve(&req.source)?;
     let mut cursor = make_cursor(req.initial_lastmod, req.lastmod_info.as_deref())?;
-    let (found, purgeable, _stats) =
-        find::find(&store, cursor.as_mut(), req.max_files).await?;
+    let (found, purgeable, _stats) = find::find(&store, cursor.as_mut(), req.max_files).await?;
 
     let src_dir = dir_uri(&req.source.uri);
     let tgt_dir = ensure_trailing_slash(&req.target_dir.uri);

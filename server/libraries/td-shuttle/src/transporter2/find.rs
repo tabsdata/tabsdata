@@ -255,8 +255,7 @@ mod test {
     fn touch(dir: &std::path::Path, name: &str, at: DateTime<Utc>) {
         let path = dir.join(name);
         std::fs::write(&path, b"x").unwrap();
-        let when = std::time::UNIX_EPOCH
-            + std::time::Duration::from_secs(at.timestamp() as u64);
+        let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(at.timestamp() as u64);
         std::fs::File::options()
             .write(true)
             .open(&path)
@@ -345,4 +344,3 @@ mod test {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
-
