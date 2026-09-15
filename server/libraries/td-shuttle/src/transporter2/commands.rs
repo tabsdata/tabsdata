@@ -68,6 +68,10 @@ pub struct FindCopyRequest {
     pub initial_lastmod: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lastmod_info: Option<String>,
+    /// Delete the matched source files the cursor turned down as already
+    /// consumed. Nothing acts on it yet.
+    #[serde(default)]
+    pub purge: bool,
 }
 
 /// `copy`: copy an explicit list of `(from, to)` pairs, optionally converting
@@ -120,6 +124,11 @@ pub struct CopyResponse {
     pub files: Vec<CopiedFile>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lastmod_info: Option<String>,
+    /// The outcome of `purge`: what it deleted and what it could not. `None`
+    /// when the request did not ask to purge, so "purged nothing" and "was not
+    /// purging" stay distinguishable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub purged: Option<DeleteResponse>,
 }
 
 /// A file moved by `copy` / `find-copy`. `rows` is present only when the file
@@ -188,7 +197,7 @@ fn make_cursor(initial: Option<DateTime<Utc>>, info: Option<&str>) -> Result<Opt
 pub async fn run_find(req: FindRequest) -> Result<FindResponse> {
     let store = io::resolve(&req.source)?;
     let mut cursor = make_cursor(req.initial_lastmod, req.lastmod_info.as_deref())?;
-    let (found, _stats) = find::find(&store, cursor.as_mut(), None).await?;
+    let (found, _purgeable, _stats) = find::find(&store, cursor.as_mut(), None).await?;
     let dir = dir_uri(&req.source.uri);
     let files = found
         .into_iter()
@@ -214,7 +223,8 @@ pub async fn run_find(req: FindRequest) -> Result<FindResponse> {
 pub async fn run_find_copy(req: FindCopyRequest, opts: &CopyOptions) -> Result<CopyResponse> {
     let store = io::resolve(&req.source)?;
     let mut cursor = make_cursor(req.initial_lastmod, req.lastmod_info.as_deref())?;
-    let (found, _stats) = find::find(&store, cursor.as_mut(), req.max_files).await?;
+    let (found, purgeable, _stats) =
+        find::find(&store, cursor.as_mut(), req.max_files).await?;
 
     let src_dir = dir_uri(&req.source.uri);
     let tgt_dir = ensure_trailing_slash(&req.target_dir.uri);
@@ -271,6 +281,29 @@ pub async fn run_find_copy(req: FindCopyRequest, opts: &CopyOptions) -> Result<C
     for r in results {
         files.push(r?);
     }
+
+    // Purge sources files older than the incremental lastmod cursor
+    let mut purged: Option<DeleteResponse> = None;
+    if req.purge {
+        let files = purgeable
+            .iter()
+            .map(|f| Location {
+                uri: format!("{src_dir}{}", f.filename),
+                configs: req.source.configs.clone(),
+            })
+            .collect();
+        let response = run_delete(DeleteRequest { files }).await?;
+        for failure in &response.failed {
+            tracing::warn!(
+                "transporter: purge of '{}' failed: {}",
+                failure.uri,
+                failure.error
+            );
+        }
+        tracing::info!("transporter: purged {} file(s)", response.deleted.len());
+        purged = Some(response);
+    }
+
     let lastmod_info = match cursor {
         Some(c) => Some(c.encode()?),
         None => None,
@@ -278,6 +311,7 @@ pub async fn run_find_copy(req: FindCopyRequest, opts: &CopyOptions) -> Result<C
     Ok(CopyResponse {
         files,
         lastmod_info,
+        purged,
     })
 }
 
@@ -327,6 +361,7 @@ pub async fn run_copy(req: CopyRequest, opts: &CopyOptions) -> Result<CopyRespon
     Ok(CopyResponse {
         files,
         lastmod_info: None,
+        purged: None,
     })
 }
 
@@ -439,10 +474,12 @@ pub fn samples() -> String {
             max_files: Some(100),
             initial_lastmod: None,
             lastmod_info: None,
+            purge: false,
         },
         &CopyResponse {
             files: vec![converted.clone()],
             lastmod_info: Some("eyJ2IjoxfQ".to_string()),
+            purged: None,
         },
     );
 
@@ -470,6 +507,7 @@ pub fn samples() -> String {
                 ended_at: sample_dt("2026-01-02T03:05:02Z"),
             }],
             lastmod_info: None,
+            purged: None,
         },
     );
 
@@ -491,6 +529,7 @@ pub fn samples() -> String {
         &CopyResponse {
             files: vec![converted],
             lastmod_info: None,
+            purged: None,
         },
     );
 

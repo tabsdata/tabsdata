@@ -48,6 +48,12 @@ impl LastMod {
         Ok(BASE64_STANDARD_NO_PAD.encode(json))
     }
 
+    /// Whether a file's `lastmod` is at or after the initial_last_modified set at
+    /// function registration time.
+    pub fn at_or_after_initial(&self, lastmod: DateTime<Utc>) -> bool {
+        lastmod >= self.initial
+    }
+
     /// Returns `true` if the file should be processed now (and records it so it
     /// is skipped on later calls). Files older than the initial baseline, or
     /// already recorded, return `false`.

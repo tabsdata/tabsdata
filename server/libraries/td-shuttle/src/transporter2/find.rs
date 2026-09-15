@@ -24,6 +24,9 @@ pub struct FindStats {
     pub found: usize,
     pub matched: usize,
     pub selected: usize,
+    /// Matched files the cursor turned down -- behind the watermark, and so
+    /// what a purging source deletes.
+    pub purgeable: usize,
 }
 
 /// Split a backend path into `(dir, filename)`; the wildcard lives in the
@@ -45,11 +48,16 @@ fn filename_of(path: &str) -> String {
 /// List the source's directory, keep names matching the wildcard, sort
 /// oldest-first, cap to `max_files`, then apply the lastmod cursor (recording
 /// only the files actually returned). `store.path()` carries the wildcard.
+///
+/// Returns the files to read, the matched files the cursor turned down as
+/// already consumed (a purging source's delete list -- always empty without a
+/// cursor, and never holding a file from below the cursor's baseline, which
+/// was never read), and the counts.
 pub async fn find(
     store: &Store,
     lastmod: Option<&mut LastMod>,
     max_files: Option<usize>,
-) -> Result<(Vec<Found>, FindStats)> {
+) -> Result<(Vec<Found>, Vec<Found>, FindStats)> {
     let (dir, pattern) = split_dir_file(store.path());
     if pattern.is_empty() {
         return Err(TransporterError::NoFileName(store.uri().to_string()));
@@ -80,6 +88,7 @@ pub async fn find(
     // `max_files` *new* files are taken (marking only those). Truncating before
     // the cursor check would keep an already-seen file in the window on resume
     // and starve newer files.
+    let mut purgeable: Vec<Found> = Vec::new();
     let selected: Vec<Found> = match lastmod {
         Some(cursor) => {
             let mut out = Vec::new();
@@ -89,6 +98,11 @@ pub async fn find(
                 }
                 if cursor.check_and_set(&pattern, &filename, meta.last_modified) {
                     out.push(Found { meta, filename });
+                } else if cursor.at_or_after_initial(meta.last_modified) {
+                    // Purge files that were either already consumed or are after
+                    // the initial_last_modified timestamp set at function registration
+                    // time.
+                    purgeable.push(Found { meta, filename });
                 }
             }
             out
@@ -108,8 +122,9 @@ pub async fn find(
         found,
         matched,
         selected: selected.len(),
+        purgeable: purgeable.len(),
     };
-    Ok((selected, stats))
+    Ok((selected, purgeable, stats))
 }
 
 // --------------------------------------------------------------------------
@@ -175,6 +190,7 @@ pub fn output_name(
 #[cfg(test)]
 mod test {
     use super::*;
+    use chrono::{DateTime, Utc};
 
     #[test]
     fn output_name_convert_strips_and_reextends() {
@@ -229,4 +245,104 @@ mod test {
         assert_eq!(split_dir_file("a/b/c.csv"), ("a/b".into(), "c.csv".into()));
         assert_eq!(split_dir_file("c.csv"), ("".into(), "c.csv".into()));
     }
+
+    // --- purgeable list -------------------------------------------------
+    //
+    // `find` reports the matched files the cursor turned down as already
+    // consumed. A file below the baseline is turned down too, but was never
+    // read, so it must not appear.
+
+    fn touch(dir: &std::path::Path, name: &str, at: DateTime<Utc>) {
+        let path = dir.join(name);
+        std::fs::write(&path, b"x").unwrap();
+        let when = std::time::UNIX_EPOCH
+            + std::time::Duration::from_secs(at.timestamp() as u64);
+        std::fs::File::options()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(when)
+            .unwrap();
+    }
+
+    fn at(secs: i64) -> DateTime<Utc> {
+        DateTime::from_timestamp(secs, 0).unwrap()
+    }
+
+    async fn find_in(
+        dir: &std::path::Path,
+        initial: DateTime<Utc>,
+        cursor: &mut Option<LastMod>,
+    ) -> (Vec<String>, Vec<String>) {
+        let _ = initial;
+        let uri = url::Url::from_file_path(dir.join("*.csv"))
+            .unwrap()
+            .to_string();
+        let store = crate::transporter2::io::resolve(&crate::transporter2::spec::Location {
+            uri,
+            configs: Default::default(),
+        })
+        .unwrap();
+        let (selected, purgeable, _stats) = find(&store, cursor.as_mut(), None).await.unwrap();
+        (
+            selected.into_iter().map(|f| f.filename).collect(),
+            purgeable.into_iter().map(|f| f.filename).collect(),
+        )
+    }
+
+    #[tokio::test]
+    async fn a_file_below_the_baseline_is_never_purgeable() {
+        let dir = std::env::temp_dir().join(format!("td-find-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        touch(&dir, "old.csv", at(1_000)); // below the baseline: never read
+        touch(&dir, "new.csv", at(3_000)); // at/after it: read now
+
+        let mut cursor = Some(LastMod::new(at(2_000)));
+        let (selected, purgeable) = find_in(&dir, at(2_000), &mut cursor).await;
+
+        assert_eq!(selected, vec!["new.csv".to_string()]);
+        assert!(
+            purgeable.is_empty(),
+            "a file the baseline excluded was never read, so it is not ours to \
+             delete: {purgeable:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn a_file_already_consumed_is_purgeable_on_the_next_pass() {
+        let dir = std::env::temp_dir().join(format!("td-find-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        touch(&dir, "a.csv", at(3_000));
+        touch(&dir, "b.csv", at(4_000));
+
+        // First pass consumes both and purges nothing -- neither is behind the
+        // watermark yet.
+        let mut cursor = Some(LastMod::new(at(2_000)));
+        let (selected, purgeable) = find_in(&dir, at(2_000), &mut cursor).await;
+        assert_eq!(selected, vec!["a.csv".to_string(), "b.csv".to_string()]);
+        assert!(purgeable.is_empty(), "{purgeable:?}");
+
+        // Second pass over the same directory: both are behind the watermark
+        // now, and both were genuinely read.
+        let (selected, purgeable) = find_in(&dir, at(2_000), &mut cursor).await;
+        assert!(selected.is_empty(), "{selected:?}");
+        assert_eq!(purgeable, vec!["a.csv".to_string(), "b.csv".to_string()]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn without_a_cursor_nothing_is_purgeable() {
+        let dir = std::env::temp_dir().join(format!("td-find-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        touch(&dir, "a.csv", at(1_000));
+
+        let mut none: Option<LastMod> = None;
+        let (selected, purgeable) = find_in(&dir, at(2_000), &mut none).await;
+
+        assert_eq!(selected, vec!["a.csv".to_string()]);
+        assert!(purgeable.is_empty(), "{purgeable:?}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
+
