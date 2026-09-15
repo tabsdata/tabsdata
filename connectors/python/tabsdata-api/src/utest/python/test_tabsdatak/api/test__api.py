@@ -4,15 +4,17 @@
 
 from __future__ import annotations
 
+import inspect
 import sys
 from dataclasses import FrozenInstanceError
 
 import pytest
-from pydantic import ValidationError
+from pydantic import ConfigDict, ValidationError
 
 # noinspection PyProtectedMember
 from tabsdatak import _api, _connectors as _connectors, _info, api as m, spi, tableframe
 from tabsdatak.api import (
+    CollTableNameSpec,
     Secret,
     Src,
 )
@@ -103,6 +105,146 @@ def test_dataclass_does_not_wrap_construction_errors_unrelated_to_validation():
 
     with pytest.raises(RuntimeError, match="boom"):
         _Boomer(x=1)
+
+
+# ---------------------------------------------------------------------------
+# 5b. ``_api.validate_call`` error wrapping (ValidationError -> ApiException)
+# ---------------------------------------------------------------------------
+
+
+@_api.validate_call(ApiErrorCode.API_14)
+def _doubled(n: int) -> int:
+    return n * 2
+
+
+def test_validate_call_passes_valid_arguments_through():
+    assert _doubled(3) == 6
+    # Pydantic coercion applies, exactly as it does on a dataclass field.
+    assert _doubled("3") == 6  # type: ignore[arg-type]
+
+
+def test_validate_call_wraps_validation_error_with_registered_exception(monkeypatch):
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+    with pytest.raises(ApiException) as excinfo:
+        _doubled("not-a-number")  # type: ignore[arg-type]
+    assert excinfo.value.api_error is ApiErrorCode.API_14
+    assert type(excinfo.value) is ApiInitException
+    assert isinstance(excinfo.value.cause, ValidationError)
+
+
+def test_validate_call_wraps_missing_argument():
+    with pytest.raises(ApiException) as excinfo:
+        _doubled()  # type: ignore[call-arg]
+    assert excinfo.value.api_error is ApiErrorCode.API_14
+
+
+def test_validate_call_does_not_wrap_errors_unrelated_to_validation():
+    @_api.validate_call(ApiErrorCode.API_14)
+    def _boomer(n: int) -> int:
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        _boomer(1)
+
+
+def test_validate_call_records_api_error_and_preserves_metadata():
+    assert _doubled.__api_error__ is ApiErrorCode.API_14
+    assert _doubled.__name__ == "_doubled"
+    assert list(inspect.signature(_doubled).parameters) == ["n"]
+
+
+class _Opaque:
+    """A type pydantic cannot build a schema for without
+    ``arbitrary_types_allowed``. Module level so the ``from __future__
+    import annotations`` string annotation resolves."""
+
+
+@_api.validate_call(
+    ApiErrorCode.API_14, config=ConfigDict(arbitrary_types_allowed=True)
+)
+def _takes_opaque(value: _Opaque) -> _Opaque:
+    return value
+
+
+def test_validate_call_forwards_config_for_arbitrary_types():
+    opaque = _Opaque()
+    assert _takes_opaque(opaque) is opaque
+    with pytest.raises(ApiException) as excinfo:
+        _takes_opaque("nope")  # type: ignore[arg-type]
+    assert excinfo.value.api_error is ApiErrorCode.API_14
+
+
+def test_validate_call_forwards_validate_return():
+    @_api.validate_call(ApiErrorCode.API_14, validate_return=True)
+    def _lies() -> int:
+        return "not-an-int"  # type: ignore[return-value]
+
+    with pytest.raises(ApiException) as excinfo:
+        _lies()
+    assert excinfo.value.api_error is ApiErrorCode.API_14
+
+
+@_api.validate_call(ApiErrorCode.API_14)
+def _named(table: CollTableNameSpec, n: int) -> int:
+    return n
+
+
+def test_validate_call_names_positional_arguments_in_the_message(monkeypatch):
+    # Passed positionally, pydantic locates the bad argument by index;
+    # the message must name the parameter, as the dataclass path does.
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+    with pytest.raises(ApiException) as excinfo:
+        _named("bad name", 1)
+    message = str(excinfo.value)
+    assert "table: " in message
+    assert "0: " not in message
+    assert [e["loc"] for e in excinfo.value.cause.errors()] == [("table",)]
+
+
+def test_validate_call_positional_and_keyword_messages_agree(monkeypatch):
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+    with pytest.raises(ApiException) as positional:
+        _named("bad name", 1)
+    with pytest.raises(ApiException) as keyword:
+        _named(table="bad name", n=1)
+    assert str(positional.value) == str(keyword.value)
+
+
+def test_validate_call_renders_constraint_error_code(monkeypatch):
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+    with pytest.raises(ApiException) as excinfo:
+        _named("bad name", 1)
+    # `_render_cause` reads the ConstraintError back off the pydantic
+    # error context, so the specific rule code survives the rebuild.
+    assert str(ApiErrorCode.API_25) in str(excinfo.value)
+
+
+def test_validate_call_keeps_surplus_positional_index(monkeypatch):
+    # Index 2 binds to no parameter -- there is no name to report, so
+    # the index must survive untouched.
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+    with pytest.raises(ApiException) as excinfo:
+        _named("t", 1, 3)  # type: ignore[call-arg]
+    assert [e["loc"] for e in excinfo.value.cause.errors()] == [(2,)]
+
+
+def test_validate_call_reports_every_bad_argument(monkeypatch):
+    monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
+    with pytest.raises(ApiException) as excinfo:
+        _named("bad name", "not-an-int")  # type: ignore[arg-type]
+    assert [e["loc"] for e in excinfo.value.cause.errors()] == [("table",), ("n",)]
+
+
+def test_validate_call_on_init_tags_construction():
+    class _Point:
+        @_api.validate_call(ApiErrorCode.API_14)
+        def __init__(self, x: int) -> None:
+            self.x = x
+
+    assert _Point(1).x == 1
+    with pytest.raises(ApiException) as excinfo:
+        _Point("nope")  # type: ignore[arg-type]
+    assert excinfo.value.api_error is ApiErrorCode.API_14
 
 
 # ---------------------------------------------------------------------------

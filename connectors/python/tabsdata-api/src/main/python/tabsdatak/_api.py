@@ -15,6 +15,11 @@ packages import as ``tabsdatak._api`` are:
   caller-chosen :class:`~tabsdatak.error.ErrorCode`. Used by
   every concrete ``Conn`` / ``Src`` / ``Dest`` / ``StreamSrc`` /
   position dataclass.
+* :func:`validate_call` -- the function counterpart of
+  :func:`dataclass`. Wraps :func:`pydantic.validate_call` and
+  translates a ``ValidationError`` raised while validating a call's
+  arguments the same way, against a caller-chosen
+  :class:`~tabsdatak.error.ErrorCode`.
 * :class:`JsonSerde` -- mixin providing JSON envelope round-trip
   (``to_json`` / ``from_json``) with a ``__kind__`` discriminator
   for polymorphic loading.
@@ -54,6 +59,7 @@ from pydantic import (
     TypeAdapter,
     ValidationError,
     model_validator,
+    validate_call as pydantic_validate_call,
 )
 from pydantic.dataclasses import dataclass as pydantic_dataclass
 from pydantic.errors import PydanticSchemaGenerationError
@@ -64,6 +70,7 @@ from pydantic_core import core_schema
 from tabsdatak.error import ApiErrorCode, ConstraintError, ErrorCode
 
 _C = TypeVar("_C", bound=type)
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 
 # PEP 681: tells type checkers and IDEs that this decorator produces a
@@ -120,6 +127,88 @@ def dataclass(
         # leaks a raw pydantic `ValidationError` with no error code.
         decorated.__api_error__ = api_error  # type: ignore[attr-defined]
         return decorated  # type: ignore[return-value]
+
+    return wrap
+
+
+def _positional_param_names(func: Callable[..., Any]) -> dict[int, str]:
+    try:
+        params = inspect.signature(func).parameters.values()
+    except (TypeError, ValueError):
+        return {}
+    kinds = (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    return {i: p.name for i, p in enumerate(params) if p.kind in kinds}
+
+
+def _name_positional_locs(
+    e: ValidationError,
+    names: dict[int, str],
+) -> ValidationError:
+    """Rewrite the argument indices in ``e``'s error locations to the
+    parameter names they bind to.
+
+    ``validate_call`` locates an argument passed positionally by its
+    index, so an untouched message reads ``0: not a valid table name``
+    where the :func:`dataclass` path reads ``name: ...``. Indices that
+    bind to no parameter (a surplus positional argument) are left alone:
+    they have no name to report.
+    """
+    if not names:
+        return e
+    line_errors: list[Any] = []
+    renamed = False
+    for err in e.errors(include_url=False):
+        loc = err["loc"]
+        if loc and isinstance(loc[0], int) and loc[0] in names:
+            loc = (names[loc[0]], *loc[1:])
+            renamed = True
+        entry = {"type": err["type"], "loc": loc, "input": err.get("input")}
+        if "ctx" in err:
+            entry["ctx"] = err["ctx"]
+        line_errors.append(entry)
+    if not renamed:
+        return e
+    try:
+        return ValidationError.from_exception_data(e.title, line_errors)
+    except (TypeError, ValueError):
+        # Rebuilding is a message-quality nicety; a shape pydantic
+        # declines to reconstruct must not mask the original failure.
+        return e
+
+
+def validate_call(
+    api_error: ErrorCode,
+    **vc_kwargs: Any,
+) -> Callable[[_F], _F]:
+    """Decorator wrapping :func:`pydantic.validate_call`.
+
+    The function counterpart of :func:`dataclass`: pydantic checks the
+    call's arguments against the annotations, and the resulting
+    ``ValidationError`` is translated into ``api_error.exception(cause=e)``
+    so a bad call surfaces the same stable :class:`ErrorCode` -- and the
+    same rendered per-argument detail, ``ConstraintError`` codes included
+    -- that a bad descriptor construction does. Use it on functions and
+    methods that carry validation but have no dataclass to hang it on.
+
+    ``vc_kwargs`` are forwarded to pydantic (``config``,
+    ``validate_return``); parameters pydantic cannot build a schema for
+    need ``config=ConfigDict(arbitrary_types_allowed=True)``, the same
+    escape hatch :func:`dataclass` callers pass as ``config``.
+    """
+
+    def wrap(func: _F) -> _F:
+        validated = pydantic_validate_call(func, **vc_kwargs)
+        positional = _positional_param_names(func)
+
+        @functools.wraps(validated)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return validated(*args, **kwargs)
+            except ValidationError as e:
+                raise api_error.exception(cause=_name_positional_locs(e, positional))
+
+        wrapper.__api_error__ = api_error  # type: ignore[attr-defined]
+        return wrapper  # type: ignore[return-value]
 
     return wrap
 

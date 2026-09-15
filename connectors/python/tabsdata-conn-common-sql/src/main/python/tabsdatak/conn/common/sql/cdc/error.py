@@ -10,22 +10,11 @@ variants each carry an `ErrorDef` (exception class + message
 template). Raise via `SqlCdcErrorCode.CDC_N.exception(...)`, e.g.
 `SqlCdcErrorCode.CDC_2.exception(schema=schema, table=table)`.
 
-`cdc_validate_call` is the CDC-local replacement for the old
-`tabsdata._utils.validation._td_validate_call`: it wraps a callable
-with pydantic argument validation and converts a `ValidationError`
-into the bound `SqlCdcException`.
+Argument validation bound to one of these codes goes through
+`tabsdatak._api.validate_call`.
 """
 
 from __future__ import annotations
-
-from functools import wraps
-from typing import Any, Callable
-
-from pydantic import (
-    ConfigDict,
-    ValidationError,
-    validate_call as _pydantic_validate_call,
-)
 
 from tabsdatak.conn.common.error import ConnException
 from tabsdatak.error import ErrorCode, ErrorDef
@@ -138,47 +127,3 @@ class SqlCdcErrorCode(ErrorCode):
         "coalesce_cdc_batch order_column={column!r} is also the op_column; the "
         "arrival order of a key's records cannot be read from the change marker",
     )  # coalesce_cdc_batch
-
-
-def cdc_validate_call(
-    error_code: SqlCdcErrorCode,
-    f: Callable | None = None,
-) -> Callable:
-    """Validate a callable's arguments with pydantic, raising a bound
-    `SqlCdcException` on failure.
-
-    :categories: error
-
-    CDC-local replacement for the old
-    `tabsdata._utils.validation._td_validate_call`; the pydantic
-    `ValidationError` is chained as the cause (the framework renders
-    it onto the message). Usable bare or as a partial -- decorate an
-    `__init__` with `@cdc_validate_call(SqlCdcErrorCode.CDC_14)`.
-
-    Args:
-        error_code: The `SqlCdcErrorCode` whose bound exception is
-            raised when argument validation fails.
-        f: The callable to wrap. Omitted when used as
-            `@cdc_validate_call(code)` (returns a decorator).
-
-    Returns:
-        The wrapped callable, or a decorator when `f` is omitted.
-
-    Raises:
-        SqlCdcException: If the wrapped call's arguments fail validation.
-    """
-    if f is None:
-        return lambda fn: cdc_validate_call(error_code, fn)
-
-    validated = _pydantic_validate_call(
-        f, config=ConfigDict(arbitrary_types_allowed=True)
-    )
-
-    @wraps(f)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        try:
-            return validated(*args, **kwargs)
-        except ValidationError as pyd_err:
-            raise error_code.exception(cause=pyd_err)
-
-    return wrapper

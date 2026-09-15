@@ -8,10 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, TypeAlias, Union
 
-from tabsdatak.conn.common.sql.cdc.error import (
-    SqlCdcErrorCode,
-    cdc_validate_call,
-)
+from tabsdatak import _api
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 
 QualifiedTableSpec: TypeAlias = str
 """A single qualified `schema.table` name of a table to track."""
@@ -37,7 +35,7 @@ class TimestampPosition:
 
     ts: datetime
 
-    @cdc_validate_call(SqlCdcErrorCode.CDC_13)
+    @_api.validate_call(SqlCdcErrorCode.CDC_13)
     def __init__(self, ts: datetime):
         object.__setattr__(self, "ts", ts)
 
@@ -65,7 +63,7 @@ class CdcFormat:
     columns_format: CdcColumnsFormatSpec = "columns"
     flatten_columns: bool = True
 
-    @cdc_validate_call(SqlCdcErrorCode.CDC_14)
+    @_api.validate_call(SqlCdcErrorCode.CDC_14)
     def __init__(
         self,
         columns_format: CdcColumnsFormatSpec = "columns",
