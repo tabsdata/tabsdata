@@ -56,6 +56,14 @@ class Admin:
     port: str
     user: str
     password: str
+    # TLS for this connection, where the dialect takes it on the URL and the
+    # setting is the system's rather than the class's (see ManagedPostgres);
+    # every container backend leaves these empty. `ca_pem` is the certificate
+    # itself -- `sslrootcert` is filled in with a path to it only for as long as
+    # a connection needs one.
+    sslmode: str = ""
+    sslrootcert: str = ""
+    ca_pem: str = ""
 
 
 class SqlContainerBackend(PortPoolMixin, HostMixin):

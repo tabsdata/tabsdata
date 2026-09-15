@@ -17,6 +17,9 @@ import pytest
 
 from tabsdatax.itest.tdksystems2 import datagen, options, systems
 from tabsdatax.itest.tdksystems2.errors import TdxError
+from tabsdatax.itest.tdksystems2.systems._common.managed_postgres import (
+    ManagedPostgres,
+)
 from tabsdatax.itest.tdksystems2.systems._common.sql import SqlContainerBackend
 
 # SQL *data* systems: a SqlContainerBackend subclass that drives a SQLAlchemy
@@ -85,6 +88,40 @@ def test_rdspostgres_options_come_from_the_environment():
     assert [o.name for o in opts if o.secret] == ["PASSWORD"]
 
 
+def test_managed_postgres_pair_shares_a_base_and_filters_its_own_provider():
+    """rdspostgres and gcppostgres differ only where the provider does. The role
+    filter is the load-bearing part: `purge` drops what a listing offers, and a
+    managed instance grants its master service roles of its own."""
+    rds, gcp = systems.get("rdspostgres"), systems.get("gcppostgres")
+    for backend in (rds, gcp):
+        assert isinstance(backend, ManagedPostgres)
+        assert not backend.is_container and backend.supports_purge
+        # every connection option reads the backend's own env prefix
+        env_opts = [o for o in backend.options() if o.default_doc.startswith("env $")]
+        assert env_opts and all(
+            o.default_doc.startswith(f"env ${backend.env_prefix}__") for o in env_opts
+        )
+
+    # RDS names an instance by region; Cloud SQL is reached at its host, so
+    # there the region is recorded but never holds a create up
+    def region(backend):
+        return next(o for o in backend.options() if o.name == "REGION")
+
+    assert region(rds).required and not region(gcp).required
+    assert "informational" in region(gcp).default_doc
+
+    assert "rdsadmin" in rds.system_schemas and "rds_" in rds.role_prefixes
+    assert "cloudsqladmin" in gcp.system_schemas and "cloudsql" in gcp.role_prefixes
+    # the master holds cloudsqlsuperuser; without the prefix it lists as a domain
+    assert "starts_with(r.rolname, 'cloudsql')" in gcp.list_schemas_sql()
+    assert "starts_with(r.rolname, 'rds_')" in rds.list_schemas_sql()
+    for backend in (rds, gcp):
+        assert "starts_with(r.rolname, 'pg_')" in backend.list_schemas_sql()
+    # neither borrows the other's provider names
+    assert "cloudsql" not in rds.list_schemas_sql()
+    assert "rds_" not in gcp.list_schemas_sql()
+
+
 def test_rdspostgres_creates_the_owner_before_the_database():
     # The RDS master user is not a superuser: it must already be a member of the
     # owner role to create a database owned by it, and the owner needs CREATEROLE
@@ -115,7 +152,7 @@ def test_rdspostgres_lists_owner_roles_that_outlived_their_database():
 
 
 _RDS_SSL = "sslmode=verify-full"
-_RDS_CA = "sslrootcert=%2Ftmp%2Fbundle.pem"
+_RDS_PEM = "-----BEGIN CERTIFICATE-----\nbundle\n-----END CERTIFICATE-----\n"
 
 
 @pytest.fixture
@@ -123,7 +160,7 @@ def rds(monkeypatch):
     """The RDS backend with the CA-bundle download stubbed, plus its system
     meta."""
     backend = systems.get("rdspostgres")
-    monkeypatch.setattr(type(backend), "ca_bundle", lambda self: "/tmp/bundle.pem")
+    monkeypatch.setattr(type(backend), "_ca_pem", lambda self, meta: _RDS_PEM)
     return backend, backend.plan_system(
         "rds",
         {
@@ -148,15 +185,26 @@ def test_rdspostgres_domain_targets_the_instance(rds):
     assert "@" not in meta["URI"] and "/d_u_0_dom?" in meta["URI"]
     assert meta["SYS_ADMIN_USER"] == "master" and meta["REGION"] == "eu-west-1"
     assert "SYS_CONTAINER" not in meta
+    # the domain descriptor is enough to reach the instance without the system's
+    assert meta["SSLMODE"] == "verify-full"
 
 
 def test_rdspostgres_verifies_tls_on_every_connection(rds):
     backend, sys_meta = rds
-    # tdx's own connection carries the throwaway CA bundle …
-    assert backend._admin_url(backend._admin(sys_meta)).endswith(
-        f"/postgres?{_RDS_SSL}&{_RDS_CA}"
-    )
-    # … the descriptor's URIs verify too, but never name the /tmp bundle.
+    admin = backend._admin(sys_meta)
+    # the bundle is the certificate, not a path: one is materialized only for
+    # as long as a connection needs it …
+    assert admin.ca_pem == _RDS_PEM and not admin.sslrootcert
+    assert backend._admin_url(admin).endswith(f"/postgres?{_RDS_SSL}")
+    with backend._ca_file(admin) as connectable:
+        written = Path(connectable.sslrootcert)
+        assert written.read_text() == _RDS_PEM
+        assert connectable.sslrootcert in backend._admin_url(connectable).replace(
+            "%2F", "/"
+        )
+    assert not written.exists() and not written.parent.exists()
+
+    # … and the descriptor's URIs verify too, but never name that file.
     urls = [
         v
         for v in backend.domain_meta(sys_meta, "d_u_0_dom", "opw").values()
@@ -175,12 +223,12 @@ def test_rdspostgres_url_survives_a_password_with_a_percent_escape(rds):
     backend, sys_meta = rds
     pw = "p%41ss?w#rd&x=1 y"
     url = backend.sqlalchemy_url("h", "5432", db="postgres", user="ma ster", password=pw)
-    parsed = make_url(url)
+    parsed = make_url(backend._with_ssl(url, backend.ssl_mode))
     assert parsed.password == pw and parsed.username == "ma ster"
     assert dict(parsed.query)["sslmode"] == "verify-full"
 
 
-def test_rdspostgres_ca_bundle_is_a_fresh_pem_in_tmp(monkeypatch, tmp_path):
+def test_rdspostgres_ca_bundle_is_fetched_once_and_never_kept_on_disk(monkeypatch):
     from tabsdatax.itest.tdksystems2.systems.rdspostgres import backend as rdsmod
 
     fetched = []
@@ -200,16 +248,13 @@ def test_rdspostgres_ca_bundle_is_a_fresh_pem_in_tmp(monkeypatch, tmp_path):
         return _Resp()
 
     monkeypatch.setattr(rdsmod.urllib.request, "urlopen", _urlopen)
-    monkeypatch.setattr(rdsmod, "CA_BUNDLE_PATH", str(tmp_path / "bundle.pem"))
     backend = systems.get("rdspostgres")
 
-    path = backend.ca_bundle()
+    pem = backend._ca_pem({})
     assert fetched == [rdsmod.CA_BUNDLE_URL]
-    assert Path(path).read_bytes().startswith(b"-----BEGIN CERTIFICATE-----")
+    assert pem.startswith("-----BEGIN CERTIFICATE-----")
     # fetched once per run, not once per connection
-    assert backend.ca_bundle() == path and len(fetched) == 1
-    # nothing but the bundle is left behind (the staged pid file is renamed)
-    assert [p.name for p in tmp_path.iterdir()] == ["bundle.pem"]
+    assert backend._ca_pem({}) == pem and len(fetched) == 1
 
 
 def test_rdspostgres_rejects_a_ca_bundle_that_is_not_a_pem(monkeypatch):
@@ -229,4 +274,161 @@ def test_rdspostgres_rejects_a_ca_bundle_that_is_not_a_pem(monkeypatch):
         rdsmod.urllib.request, "urlopen", lambda url, timeout=None: _Resp()
     )
     with pytest.raises(TdxError, match="did not return a PEM bundle"):
-        systems.get("rdspostgres").ca_bundle()
+        systems.get("rdspostgres")._ca_pem({})
+
+
+_GCP_BASE = {
+    "HOSTNAME": "10.0.0.1",
+    "PORT": "5432",
+    "USERNAME": "postgres",
+    "PASSWORD": "p",
+    "REGION": "europe-west1",
+}
+
+
+def test_gcppostgres_urls_carry_the_mode_and_keep_the_root_cert_to_admin():
+    """The root cert rides on tdx's own admin connections only: a descriptor's
+    URIs carry the mode alone, since a connector-under-test brings its own root."""
+    gcp = systems.get("gcppostgres")
+    sys_meta = gcp.plan_system(
+        "gcppostgres",
+        {
+            "HOSTNAME": "10.0.0.1",
+            "PORT": "5432",
+            "USERNAME": "postgres",
+            "PASSWORD": "p@ss %20 word",
+            "SSLMODE": "require",
+        },
+    )
+    assert sys_meta["LOCATION"] == "postgresql://10.0.0.1:5432"
+
+    admin_url = gcp._admin_url(gcp._admin(sys_meta))
+    assert "sslmode=require" in admin_url
+    # the password is percent-encoded, so a literal '%20' survives as itself
+    assert "p%40ss%20%2520%20word" in admin_url
+
+    dom = gcp.domain_meta(sys_meta, "d1", "secret")
+    assert dom["SSLMODE"] == "require" and dom["REGION"] == ""
+    # a domain records which instance its database lives in: not derivable from
+    # a host that may be a bare IP
+    assert dom["INSTANCE_ID"] == ""
+    for key in ("SQLALCHEMY_URI", "URI"):
+        assert "sslmode=require" in dom[key] and "sslrootcert" not in dom[key]
+    # a container's keys have no meaning on an externally-owned instance
+    assert not {"IMAGE", "SYS_CONTAINER", "SYS_CONTAINER_ID"} & set(dom)
+
+
+def test_gcppostgres_stores_the_ca_itself_and_gives_a_connection_a_file(tmp_path):
+    """The descriptor keeps the certificate, not a path into somebody's home
+    directory: a path is read at create, the domain inherits the PEM, and a
+    connection gets a file materialized from it."""
+    pem = "-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----\n"
+    src = tmp_path / "server-ca.pem"
+    src.write_text(pem)
+    gcp = systems.get("gcppostgres")
+
+    # a path is read at create; the PEM is what is stored
+    meta = gcp.plan_system(
+        "gcppostgres", {**_GCP_BASE, "SERVER_CA_CERT_PATH": str(src)}
+    )
+    assert meta["SERVER_CA_CERT"] == pem
+    # and so is the PEM handed over directly ($GCPPOSTGRES__SERVER_CA_CERT)
+    assert (
+        gcp.plan_system("gcppostgres", {**_GCP_BASE, "SERVER_CA_CERT": pem})[
+            "SERVER_CA_CERT"
+        ]
+        == pem
+    )
+
+    # the domain inherits the certificate, so it needs no back-ref to the system
+    dom = gcp.domain_meta(meta, "d1", "secret")
+    assert dom["SERVER_CA_CERT"] == pem
+    # ... and never leaks into the URIs a connector-under-test is handed
+    assert "sslrootcert" not in dom["SQLALCHEMY_URI"] + dom["URI"]
+
+    # a connection gets a real file -- and only for as long as it is connecting
+    admin = gcp._admin(dom)
+    assert admin.ca_pem == pem and not admin.sslrootcert
+    with gcp._ca_file(admin) as connectable:
+        written = Path(connectable.sslrootcert)
+        assert written.read_text() == pem
+        assert connectable.sslrootcert in gcp._admin_url(connectable).replace(
+            "%2F", "/"
+        )
+    assert not written.exists() and not written.parent.exists()
+
+    for bad in (
+        {"SERVER_CA_CERT": "not a pem"},
+        {"SERVER_CA_CERT_PATH": str(tmp_path / "x")},
+    ):
+        with pytest.raises(TdxError):
+            gcp.plan_system("gcppostgres", {**_GCP_BASE, **bad})
+    with pytest.raises(TdxError, match="not both"):
+        gcp.plan_system(
+            "gcppostgres",
+            {**_GCP_BASE, "SERVER_CA_CERT": pem, "SERVER_CA_CERT_PATH": str(src)},
+        )
+
+
+def test_gcppostgres_refuses_a_verifying_sslmode_without_the_instance_ca(tmp_path):
+    """Cloud SQL signs each instance with a CA of its own -- there is no bundle to
+    download -- and libpq reports the miss as a bare 'certificate verify failed'
+    long after create. So create refuses first, naming the way to get the cert."""
+    gcp = systems.get("gcppostgres")
+    # the default posture verifies, so it needs the cert
+    assert gcp.ssl_mode == "verify-ca"
+    with pytest.raises(TdxError) as missing:
+        gcp.plan_system("gcppostgres", _GCP_BASE)
+    assert "gcloud sql instances describe INSTANCE" in str(missing.value)
+    # ... and it names the instance when the system knows which one it is
+    with pytest.raises(TdxError) as named:
+        gcp.plan_system("gcppostgres", {**_GCP_BASE, "INSTANCE_ID": "k8sdb"})
+    assert "gcloud sql instances describe k8sdb" in str(named.value)
+    assert "--sslmode require" in str(missing.value)
+
+    with pytest.raises(TdxError, match="is not a file"):
+        gcp.plan_system(
+            "gcppostgres",
+            {**_GCP_BASE, "SERVER_CA_CERT_PATH": str(tmp_path / "nope.pem")},
+        )
+    with pytest.raises(TdxError, match="unknown sslmode"):
+        gcp.plan_system("gcppostgres", {**_GCP_BASE, "SSLMODE": "verify-most"})
+
+    # require encrypts without verifying: no cert to supply
+    assert gcp.plan_system("gcppostgres", {**_GCP_BASE, "SSLMODE": "require"})
+    # and a real cert file satisfies the verifying default, on the admin URL only
+    pem = tmp_path / "server-ca.pem"
+    pem.write_text("-----BEGIN CERTIFICATE-----\ncreate-time\n")
+    meta = gcp.plan_system(
+        "gcppostgres", {**_GCP_BASE, "SERVER_CA_CERT_PATH": str(pem)}
+    )
+    with gcp._ca_file(gcp._admin(meta)) as connectable:
+        admin_url = gcp._admin_url(connectable).replace("%2F", "/")
+        assert "sslmode=verify-ca" in admin_url
+        written = admin_url.split("sslrootcert=")[1]
+        assert Path(written).read_text() == pem.read_text()
+
+
+def test_a_managed_postgres_descriptor_exports_a_multiline_pem_intact():
+    """`info --format export` is eval'd by a shell, so a value is POSIX-quoted:
+    repr() would flatten a PEM into one line of literal \n and let the shell
+    expand a $ or a backtick in a password."""
+    import shlex
+
+    from tabsdatax.itest.tdksystems2 import descriptor
+
+    pem = "-----BEGIN CERTIFICATE-----\nMIIBfake\n-----END CERTIFICATE-----\n"
+    info = descriptor.SystemInfo(
+        system="gcppostgres",
+        name="g1",
+        started="2026-01-01T00:00:00Z",
+        meta={"SERVER_CA_CERT": pem, "PASSWORD": "a'b$c`d"},
+    )
+    lines = descriptor.info_render(info, "export", prefix="GCPPOSTGRES")
+    env = {}
+    for name, _, value in (
+        tok.partition("=") for tok in shlex.split(lines) if tok != "export"
+    ):
+        env[name] = value
+    assert env["GCPPOSTGRES__SERVER_CA_CERT"] == pem
+    assert env["GCPPOSTGRES__PASSWORD"] == "a'b$c`d"

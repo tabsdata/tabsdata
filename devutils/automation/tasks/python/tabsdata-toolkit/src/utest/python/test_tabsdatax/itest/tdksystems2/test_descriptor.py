@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import shlex
+
 import pytest
 
 from tabsdatax.itest.tdksystems2 import crypto, descriptor
@@ -153,10 +155,22 @@ def test_info_render(tmp_path):
     info = descriptor.load(p)
     assert '"role": "system"' in descriptor.info_render(info, "json")
     exported = descriptor.info_render(info, "export", prefix="MYSQL")
-    assert "export MYSQL__HOST='h'" in exported
+    assert "export MYSQL__HOST=h" in exported
     assert descriptor.info_render(info, "unset") == "unset HOST\nunset PORT"
     with pytest.raises(TdxError):
         descriptor.info_render(info, "bogus")
+
+
+def test_info_export_is_posix_quoted_so_eval_reproduces_every_value(tmp_path):
+    # The lines are eval'd by a shell: repr() would let it expand the $ and the
+    # backticks in a password, and flatten a multiline PEM into literal \n.
+    p = tmp_path / "s1"
+    pem = "-----BEGIN CERTIFICATE-----\nabc\n-----END CERTIFICATE-----\n"
+    meta = {"PASSWORD": "a'b$c`d e", "SERVER_CA_CERT": pem}
+    descriptor.write_system(p, "mysql", "s1", meta)
+    exported = descriptor.info_render(descriptor.load(p), "export", prefix="MYSQL")
+    got = dict(tok.split("=", 1) for tok in shlex.split(exported) if tok != "export")
+    assert got == {f"MYSQL__{k}": v for k, v in meta.items()}
 
 
 def test_is_descriptor_false_for_plain_file(tmp_path):
