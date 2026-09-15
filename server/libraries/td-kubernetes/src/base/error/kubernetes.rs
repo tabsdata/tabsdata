@@ -11,6 +11,7 @@
 
 pub mod client;
 pub mod cluster;
+pub mod companions;
 pub mod configmap;
 pub mod cronjob;
 pub mod deployment;
@@ -34,6 +35,7 @@ use crate::base::error::naming::NamingError;
 
 pub use client::KubeClientError;
 pub use cluster::KubeClusterError;
+pub use companions::KubeCompanionsError;
 pub use configmap::KubeConfigMapError;
 pub use cronjob::KubeCronJobError;
 pub use deployment::KubeDeploymentError;
@@ -55,6 +57,8 @@ pub enum KubernetesError {
     Client(#[from] KubeClientError),
     #[error(transparent)]
     Cluster(#[from] KubeClusterError),
+    #[error(transparent)]
+    Companions(#[from] KubeCompanionsError),
     #[error(transparent)]
     ConfigMap(#[from] KubeConfigMapError),
     #[error(transparent)]
@@ -100,6 +104,7 @@ impl From<KubernetesError> for TdError {
         match error {
             KubernetesError::Client(inner) => TdError::new(inner),
             KubernetesError::Cluster(inner) => TdError::new(inner),
+            KubernetesError::Companions(inner) => TdError::new(inner),
             KubernetesError::ConfigMap(inner) => TdError::new(inner),
             KubernetesError::CronJob(inner) => TdError::new(inner),
             KubernetesError::Deployment(inner) => TdError::new(inner),

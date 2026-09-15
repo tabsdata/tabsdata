@@ -357,6 +357,17 @@ pub fn classify_divergence(
                         None
                     }
                 }
+                // Creation applies a workload suspended, attaches its
+                // companions, then unsuspends it. Still suspended past the
+                // grace means that sequence never finished and its
+                // compensating delete did not run either.
+                WorkloadPhase::Suspended | WorkloadPhase::Paused => {
+                    if before_or_undated(&w.phase_since, &grace_cutoff) && dispatched_old {
+                        Some((true, true, "workload was never released".to_string()))
+                    } else {
+                        None
+                    }
+                }
                 WorkloadPhase::Unknown => {
                     // Strictly dated: one undatable blip must not kill.
                     if before(&w.phase_since, &grace_cutoff) && dispatched_old {
@@ -399,6 +410,9 @@ pub fn classify_divergence(
                     WorkloadPhase::Pending => before_or_undated(&w.phase_since, &prerun_cutoff),
                     // Streamers are services: any exit is a restart.
                     WorkloadPhase::Succeeded | WorkloadPhase::Failed => true,
+                    WorkloadPhase::Suspended | WorkloadPhase::Paused => {
+                        before_or_undated(&w.phase_since, &grace_cutoff)
+                    }
                     WorkloadPhase::Unknown => before(&w.phase_since, &grace_cutoff),
                 };
                 if restart {

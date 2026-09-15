@@ -22,7 +22,7 @@ use crate::base::constants::{
     PROBE_POD,
 };
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
-use crate::kube::api::companions::attach_companions;
+use crate::kube::api::companions::{as_one_unit, attach_companions};
 use crate::kube::api::{
     AwaitGoal, AwaitPatience, LabelFilter, await_condition_with_patience, label_tabsdata,
     owner_ref_for_pod, tabsdata_ephemeral_selector, tabsdata_non_ephemeral_selector,
@@ -97,21 +97,50 @@ pub async fn create_pod(
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
     let mut pod = pod.clone();
     label_tabsdata(context, &mut pod.metadata, &[], stamp).await?;
-    let created = api
-        .create(&PostParams::default(), &pod)
-        .await
-        .map_err(|error| {
-            KubernetesError::from(KubePodError::ApplyFailed {
-                namespace: context.namespace().to_owned(),
-                cause: error.to_string(),
-            })
-        })?;
-    if configmaps.is_empty() && secrets.is_empty() && latch.is_none() {
-        return Ok(created);
+    let companions = !configmaps.is_empty() || !secrets.is_empty() || latch.is_some();
+    if !companions {
+        return api
+            .create(&PostParams::default(), &pod)
+            .await
+            .map_err(|error| {
+                KubernetesError::from(KubePodError::ApplyFailed {
+                    namespace: context.namespace().to_owned(),
+                    cause: error.to_string(),
+                })
+            });
     }
-    let owner = owner_ref_for_pod(&created)?;
-    attach_companions(context, owner, configmaps, secrets, latch, None).await?;
-    Ok(created)
+
+    let name = pod.metadata.name.clone().unwrap_or_default();
+    let creating = context.clone();
+    let attaching = context.clone();
+    let removing = context.clone();
+    let removed = name.clone();
+    as_one_unit(
+        context.namespace().to_owned(),
+        name,
+        move || async move {
+            let api: Api<Pod> = Api::namespaced(creating.client().clone(), creating.namespace());
+            api.create(&PostParams::default(), &pod)
+                .await
+                .map_err(|error| {
+                    KubernetesError::from(KubePodError::ApplyFailed {
+                        namespace: creating.namespace().to_owned(),
+                        cause: error.to_string(),
+                    })
+                })
+        },
+        move |created: Pod| async move {
+            let outcome = match owner_ref_for_pod(&created) {
+                Ok(owner) => {
+                    attach_companions(&attaching, owner, configmaps, secrets, latch, None).await
+                }
+                Err(error) => Err(error.into()),
+            };
+            (created, outcome)
+        },
+        move || async move { delete_pod(&removing, &removed).await },
+    )
+    .await
 }
 
 pub async fn delete_pod(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {

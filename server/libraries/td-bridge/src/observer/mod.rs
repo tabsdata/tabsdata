@@ -51,12 +51,20 @@ impl From<&WorkerName> for WorkloadKind {
 
 /// `Present` is the phase-less state of schedule-holding workloads
 /// (a cron trigger's runs come and go; the schedule itself has no phase).
+///
+/// `Suspended` and `Paused` are a workload created but deliberately not
+/// started: the creation path applies it held, attaches its companions, then
+/// releases it. A job or cron job spells that `suspend`, a deployment spells
+/// it `paused`. One that stays held is a creation that never finished, not a
+/// workload waiting to be scheduled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WorkloadPhase {
     Pending,
     Running,
     Succeeded,
     Failed,
+    Suspended,
+    Paused,
     Unknown,
     Present,
 }

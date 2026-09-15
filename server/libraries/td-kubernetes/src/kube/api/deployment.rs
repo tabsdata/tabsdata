@@ -5,14 +5,14 @@
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::{ConfigMap, Pod, Secret};
 use kube::Api;
-use kube::api::{DeleteParams, ListParams, PostParams, PropagationPolicy};
+use kube::api::{DeleteParams, ListParams, Patch, PatchParams, PostParams, PropagationPolicy};
 use kube::core::Selector;
 use kube::runtime::wait::Condition;
 use tracing::debug;
 
-use crate::base::constants::HTTP_STATUS_NOT_FOUND;
+use crate::base::constants::{HTTP_STATUS_NOT_FOUND, KUBE_SPEC_FIELD, KUBE_SPEC_FIELD_PAUSED};
 use crate::base::error::kubernetes::{KubeDeploymentError, KubernetesError};
-use crate::kube::api::companions::attach_companions;
+use crate::kube::api::companions::{as_one_unit, attach_companions};
 use crate::kube::api::{
     AwaitGoal, AwaitPatience, await_condition_with_patience, label_tabsdata,
     owner_ref_for_deployment, tabsdata_non_ephemeral_selector, tabsdata_selector,
@@ -30,21 +30,75 @@ pub async fn create_deployment(
     let api: Api<Deployment> = Api::namespaced(context.client().clone(), context.namespace());
     let mut deployment = deployment.clone();
     label_tabsdata(context, &mut deployment.metadata, &[], stamp).await?;
-    let created = api
-        .create(&PostParams::default(), &deployment)
-        .await
-        .map_err(|error| {
-            KubernetesError::from(KubeDeploymentError::ApplyFailed {
-                namespace: context.namespace().to_owned(),
-                cause: error.to_string(),
-            })
-        })?;
-    if configmaps.is_empty() && secrets.is_empty() && latch.is_none() {
-        return Ok(created);
+    let companions = !configmaps.is_empty() || !secrets.is_empty() || latch.is_some();
+    if !companions {
+        return api
+            .create(&PostParams::default(), &deployment)
+            .await
+            .map_err(|error| {
+                KubernetesError::from(KubeDeploymentError::ApplyFailed {
+                    namespace: context.namespace().to_owned(),
+                    cause: error.to_string(),
+                })
+            });
     }
-    let owner = owner_ref_for_deployment(&created)?;
+
+    deployment.spec.get_or_insert_with(Default::default).paused = Some(true);
+    let name = deployment.metadata.name.clone().unwrap_or_default();
+
+    let creating = context.clone();
+    let attaching = context.clone();
+    let removing = context.clone();
+    let removed = name.clone();
+    as_one_unit(
+        context.namespace().to_owned(),
+        name,
+        move || async move {
+            let api: Api<Deployment> =
+                Api::namespaced(creating.client().clone(), creating.namespace());
+            api.create(&PostParams::default(), &deployment)
+                .await
+                .map_err(|error| {
+                    KubernetesError::from(KubeDeploymentError::ApplyFailed {
+                        namespace: creating.namespace().to_owned(),
+                        cause: error.to_string(),
+                    })
+                })
+        },
+        move |created: Deployment| async move {
+            let outcome = attach_and_resume(&attaching, &created, configmaps, secrets, latch).await;
+            (created, outcome)
+        },
+        move || async move { delete_deployment(&removing, &removed).await },
+    )
+    .await
+}
+
+async fn attach_and_resume(
+    context: &KubeContext,
+    created: &Deployment,
+    configmaps: Vec<ConfigMap>,
+    secrets: Vec<Secret>,
+    latch: Option<ConfigMap>,
+) -> Result<(), KubernetesError> {
+    let owner = owner_ref_for_deployment(created)?;
     attach_companions(context, owner, configmaps, secrets, latch, None).await?;
-    Ok(created)
+    let api: Api<Deployment> = Api::namespaced(context.client().clone(), context.namespace());
+    let name = created.metadata.name.clone().unwrap_or_default();
+    api.patch(
+        &name,
+        &PatchParams::default(),
+        &Patch::Merge(serde_json::json!({KUBE_SPEC_FIELD: {KUBE_SPEC_FIELD_PAUSED: false}})),
+    )
+    .await
+    .map(|_: Deployment| ())
+    .map_err(|error| {
+        KubeDeploymentError::ApplyFailed {
+            namespace: context.namespace().to_owned(),
+            cause: error.to_string(),
+        }
+        .into()
+    })
 }
 
 pub async fn delete_deployment(context: &KubeContext, name: &str) -> Result<(), KubernetesError> {

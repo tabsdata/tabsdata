@@ -178,6 +178,7 @@ trait JobOutcome {
     fn has_failed_pod(&self) -> bool;
     fn completed_at(&self) -> Option<AtTime>;
     fn failure(&self) -> Option<(Option<AtTime>, Option<String>)>;
+    fn suspended(&self) -> bool;
 }
 
 impl JobOutcome for Job {
@@ -222,6 +223,13 @@ impl JobOutcome for Job {
                 )
             })
     }
+
+    fn suspended(&self) -> bool {
+        self.spec
+            .as_ref()
+            .and_then(|spec| spec.suspend)
+            .unwrap_or(false)
+    }
 }
 
 trait FromKubernetes: Sized {
@@ -239,6 +247,8 @@ impl FromKubernetes for ObservedWorkload {
             (WorkloadPhase::Failed, None, finished_at, message)
         } else if job.has_failed_pod() {
             (WorkloadPhase::Failed, None, None, None)
+        } else if job.suspended() {
+            (WorkloadPhase::Suspended, job.metadata.created(), None, None)
         } else if let Some(pod) = pods_by_owner.get(&name) {
             (pod.phase(), pod.phase_since(), None, pod.message())
         } else {
@@ -256,11 +266,20 @@ impl FromKubernetes for ObservedWorkload {
     }
 
     fn from_cronjob(cronjob: &CronJob) -> Result<Self, ObserverError> {
+        let suspended = cronjob
+            .spec
+            .as_ref()
+            .and_then(|spec| spec.suspend)
+            .unwrap_or(false);
         Ok(Self {
             worker_id: Some(cronjob.metadata.worker_id()?),
             kind: cronjob.metadata.workload_kind()?,
             name: cronjob.metadata.name(),
-            phase: WorkloadPhase::Present,
+            phase: if suspended {
+                WorkloadPhase::Suspended
+            } else {
+                WorkloadPhase::Present
+            },
             phase_since: cronjob.metadata.created(),
             finished_at: None,
             message: None,

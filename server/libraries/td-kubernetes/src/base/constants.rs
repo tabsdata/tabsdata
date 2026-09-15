@@ -498,6 +498,9 @@ pub const SECRET_KEY_KUBECONFIG: &str = "kubeconfig";
 pub const KUBE_NAME_SEPARATOR: &str = "-";
 pub const KUBE_METADATA_FIELD_NAME: &str = "name";
 pub const KUBE_METADATA_FIELD_UID: &str = "uid";
+pub const KUBE_SPEC_FIELD: &str = "spec";
+pub const KUBE_SPEC_FIELD_SUSPEND: &str = "suspend";
+pub const KUBE_SPEC_FIELD_PAUSED: &str = "paused";
 
 pub const HTTP_STATUS_FORBIDDEN: u16 = 403;
 pub const HTTP_STATUS_NOT_FOUND: u16 = 404;

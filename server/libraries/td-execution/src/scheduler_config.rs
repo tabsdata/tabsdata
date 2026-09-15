@@ -20,9 +20,11 @@ seconds_knob!(
 
 seconds_knob!(
     /// Budget for one scheduler tick (the request or dispatch service call).
-    /// On expiry the tick is cancelled and rolled back — external side
-    /// effects are post-commit, so a cancelled tick leaves nothing behind
-    /// and the next tick retries.
+    /// On expiry the tick is cancelled and its transaction rolled back, and
+    /// the next tick retries. The orchestrator writes a tick makes are
+    /// post-commit, so they are not rolled back with it; each workload is
+    /// applied as one uncancellable unit so that expiry falls between
+    /// workloads rather than part-way through one.
     SchedulerTickTimeout,
     10
 );

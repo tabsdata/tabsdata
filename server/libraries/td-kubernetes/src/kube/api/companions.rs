@@ -2,14 +2,74 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::future::Future;
+
 use k8s_openapi::api::core::v1::{ConfigMap, Secret};
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, OwnerReference};
 use kube::Api;
 use kube::api::PostParams;
+use tracing::{error, warn};
 
-use crate::base::error::kubernetes::{KubeConfigMapError, KubeSecretError, KubernetesError};
+use crate::base::error::kubernetes::{
+    KubeCompanionsError, KubeConfigMapError, KubeSecretError, KubernetesError,
+};
 use crate::kube::api::label_tabsdata;
 use crate::kube::context::KubeContext;
+
+pub(super) async fn as_one_unit<K, Create, Attach, Remove, CreateFut, AttachFut, RemoveFut>(
+    namespace: String,
+    name: String,
+    create: Create,
+    attach: Attach,
+    remove: Remove,
+) -> Result<K, KubernetesError>
+where
+    K: Send + 'static,
+    Create: FnOnce() -> CreateFut + Send + 'static,
+    Attach: FnOnce(K) -> AttachFut + Send + 'static,
+    Remove: FnOnce() -> RemoveFut + Send + 'static,
+    CreateFut: Future<Output = Result<K, KubernetesError>> + Send,
+    AttachFut: Future<Output = (K, Result<(), KubernetesError>)> + Send,
+    RemoveFut: Future<Output = Result<(), KubernetesError>> + Send,
+{
+    let reported_namespace = namespace.clone();
+    let reported = name.clone();
+    let task = tokio::spawn(async move {
+        let created = create().await?;
+        let (created, attached) = attach(created).await;
+        match attached {
+            Ok(()) => Ok(created),
+            Err(failure) => {
+                warn!(
+                    "Could not attach the configmaps and secrets of '{name}' in \
+                     namespace '{namespace}', so it is being removed: {failure}"
+                );
+                if let Err(cause) = remove().await {
+                    error!(
+                        "Could not remove '{name}' in namespace '{namespace}' after \
+                         its configmaps and secrets failed to attach: {cause}"
+                    );
+                    return Err(KubeCompanionsError::CompensationFailed {
+                        namespace,
+                        name,
+                        cause: cause.to_string(),
+                    }
+                    .into());
+                }
+                Err(failure)
+            }
+        }
+    });
+    match task.await {
+        Ok(outcome) => outcome,
+        Err(cause) => Err(KubeCompanionsError::CreationAbandoned {
+            namespace: reported_namespace,
+            name: reported,
+            cause: cause.to_string(),
+        }
+        .into()),
+    }
+}
 
 pub(super) async fn attach_companions(
     context: &KubeContext,
@@ -115,3 +175,6 @@ async fn attach_secret(
             .into()
         })
 }
+
+#[cfg(test)]
+mod tests;
