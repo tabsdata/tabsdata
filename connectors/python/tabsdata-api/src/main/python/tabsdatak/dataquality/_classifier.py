@@ -546,7 +546,7 @@ class IsTrue(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -603,7 +603,7 @@ class IsFalse(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -651,7 +651,7 @@ class IsNull(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
             column type, so there is no wrong type to report.
@@ -707,7 +707,7 @@ class IsNotNull(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
             column type, so there is no wrong type to report.
@@ -767,7 +767,7 @@ class IsNan(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -818,7 +818,7 @@ class IsNotNan(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -869,7 +869,7 @@ class IsNullOrNan(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -920,7 +920,7 @@ class IsNotNullNorNan(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -977,7 +977,7 @@ class IsZero(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -1028,7 +1028,7 @@ class IsNotZero(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -1079,7 +1079,7 @@ class IsPositive(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -1130,7 +1130,7 @@ class IsPositiveOrZero(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -1181,7 +1181,7 @@ class IsNegative(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -1232,7 +1232,7 @@ class IsNegativeOrZero(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -1291,7 +1291,7 @@ class BetweenClassifier(BoolClassifier, ABC):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
 
     Examples:
@@ -1364,7 +1364,7 @@ class IsBetween(BetweenClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
 
     Examples:
@@ -1410,7 +1410,7 @@ class IsNotBetween(BetweenClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
 
     Examples:
@@ -1461,7 +1461,7 @@ class InClassifier(BoolClassifier, ABC):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
             column type, so there is no wrong type to report.
@@ -1519,7 +1519,7 @@ class IsIn(InClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
             column type, so there is no wrong type to report.
@@ -1561,7 +1561,7 @@ class IsNotIn(InClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_type: Fixed to `"ignore"`: this classifier accepts every
             column type, so there is no wrong type to report.
@@ -1606,7 +1606,7 @@ class MatchClassifier(BoolClassifier, ABC):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -1667,7 +1667,7 @@ class Matches(MatchClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -1707,7 +1707,7 @@ class DoesNotMatch(MatchClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -1750,7 +1750,7 @@ class HasLength(BoolClassifier):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
         on_wrong_value: Fixed to `"ignore"`: this classifier takes no value to
             compare against, so there is no wrong value to report.
@@ -1820,7 +1820,7 @@ class ScaleCategorizer(Categorizer):
             apply to all of them.
         prefix: Prepended verbatim to every verdict column name this
             classifier produces, inferred or explicit. `None` (the default)
-            uses `td.dq.`; `""` adds no prefix; any other string is used as
+            uses `@td.dq.`; `""` adds no prefix; any other string is used as
             given.
 
     Examples:

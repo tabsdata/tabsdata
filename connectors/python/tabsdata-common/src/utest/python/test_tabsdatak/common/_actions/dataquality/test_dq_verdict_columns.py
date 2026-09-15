@@ -563,21 +563,21 @@ def verdict_names(*classifiers, frame=None):
 
 def test_an_omitted_prefix_namespaces_an_inferred_name():
     assert verdict_names(dq.IsBetween(["discount_pct"], min_val=0.0, max_val=15.0)) == [
-        "td.dq.discount_pct_is_between"
+        "@td.dq.discount_pct_is_between"
     ]
 
 
 def test_an_omitted_prefix_namespaces_an_explicit_alias():
     assert verdict_names(
         dq.IsBetween([("discount_pct", "disc_ok")], min_val=0.0, max_val=15.0)
-    ) == ["td.dq.disc_ok"]
+    ) == ["@td.dq.disc_ok"]
 
 
 def test_an_omitted_prefix_namespaces_every_wildcard_column():
     assert verdict_names(dq.IsPositive(None)) == [
-        "td.dq.amount_is_positive",
-        "td.dq.discount_pct_is_positive",
-        "td.dq.order_id_is_positive",
+        "@td.dq.amount_is_positive",
+        "@td.dq.discount_pct_is_positive",
+        "@td.dq.order_id_is_positive",
     ]
 
 
@@ -624,7 +624,7 @@ def test_prefixes_are_per_classifier():
         between([("discount_pct", "v")], 15.0, prefix="s."),
         between([("amount", "v")], 40.0, prefix="l."),
         dq.IsBetween([("region", "v")], min_val=0.0, max_val=90.0),
-    ) == ["s.v", "l.v", "td.dq.v"]
+    ) == ["s.v", "l.v", "@td.dq.v"]
 
 
 # --- Prefixes and collision detection ---------------------------------------
@@ -679,7 +679,7 @@ def test_a_prefix_can_make_two_distinct_aliases_collide():
 def test_the_default_prefix_protects_an_alias_that_shadows_a_user_column():
     declared = action([between([("discount_pct", "order_id")], 15.0, prefix=None)])
     assert len(declared.classifiers) == 1
-    assert verdict_names(declared.classifiers[0]) == ["td.dq.order_id"]
+    assert verdict_names(declared.classifiers[0]) == ["@td.dq.order_id"]
 
 
 def test_two_wildcards_of_one_type_are_separated_by_their_prefixes():

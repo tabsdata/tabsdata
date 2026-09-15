@@ -43,7 +43,7 @@ A list of column references. Each element is a source column name or a
 ``(source, destination)`` tuple; the two forms may be mixed.
 """
 
-DEFAULT_VERDICT_COLUMN_PREFIX = "td.dq."
+DEFAULT_VERDICT_COLUMN_PREFIX = "@td.dq."
 """The prefix prepended to verdict column names when ``prefix`` is ``None``."""
 
 PrefixSpec: TypeAlias = str

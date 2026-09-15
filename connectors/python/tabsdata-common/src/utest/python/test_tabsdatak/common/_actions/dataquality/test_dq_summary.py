@@ -55,21 +55,21 @@ def test_column_precedes_classifier():
 def test_column_is_the_classified_column_not_the_verdict_column():
     df = summary(IsNotNull(["a", "b"])).sort(DQColumns.DQ_CLASSIFIER.value)
     assert df[DQColumns.DQ_CLASSIFIER.value].to_list() == [
-        "td.dq.a_is_not_null",
-        "td.dq.b_is_not_null",
+        "@td.dq.a_is_not_null",
+        "@td.dq.b_is_not_null",
     ]
     assert df[DQColumns.DQ_COLUMN.value].to_list() == ["a", "b"]
 
 
 def test_column_is_the_classified_column_for_an_aliased_verdict_column():
     df = summary(IsNotNull([("a", "a_ok")]))
-    assert df[DQColumns.DQ_CLASSIFIER.value].to_list() == ["td.dq.a_ok"]
+    assert df[DQColumns.DQ_CLASSIFIER.value].to_list() == ["@td.dq.a_ok"]
     assert df[DQColumns.DQ_COLUMN.value].to_list() == ["a"]
 
 
 def test_column_is_the_classified_column_for_a_categorizer():
     df = summary(ScaleCategorizer(["b"], scale=LinearScale(0.0, 100.0, bins=4)))
-    assert df[DQColumns.DQ_CLASSIFIER.value].to_list() == ["td.dq.b_category"]
+    assert df[DQColumns.DQ_CLASSIFIER.value].to_list() == ["@td.dq.b_category"]
     assert df[DQColumns.DQ_COLUMN.value].to_list() == ["b"]
 
 
