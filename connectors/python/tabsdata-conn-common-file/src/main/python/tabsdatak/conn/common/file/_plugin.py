@@ -114,6 +114,9 @@ class ReaderConf:
     format_cfg: dict | None = None
     initial_lastmod: str | None = None
     drop_metadata: bool = False
+    # Delete the source files the lastmod cursor turned down as already
+    # consumed, once every file in this run has been copied.
+    purge: bool = False
 
     @classmethod
     def from_src(cls, conn: Any, src: Any) -> "ReaderConf":
@@ -127,6 +130,7 @@ class ReaderConf:
             ),
             initial_lastmod=initial_lastmod_to_iso(src.initial_last_modified),
             drop_metadata=bool((src.src_cfg or {}).get(SRC_META_DROP_KEY, False)),
+            purge=bool(src.purge),
         )
 
     def format_cfg_for(self, index: int) -> dict | None:
@@ -266,6 +270,7 @@ def import_files(
                 format_cfg=slot_cfg,
                 initial_lastmod=cfg.initial_lastmod,
                 lastmod_info=prior_lastmod,
+                purge=cfg.purge,
                 env=env,
             )
         except TransporterBinaryNotFoundError as e:
@@ -274,6 +279,15 @@ def import_files(
             raise errors.read_failed.exception(cause=e, path=entry)
         except TransporterReportError as e:
             raise errors.report_invalid.exception(cause=e, path=entry)
+
+        # ``None`` unless this was a purging find-copy; transporter1 never
+        # sets it.
+        if report.purged is not None:
+            logger.info(
+                "file-reader: slot %d purged %d source file(s)",
+                slot_idx,
+                len(report.purged.deleted),
+            )
 
         # Stage this slot's fresh cursor for the next trx. The transporter
         # may return ``None`` (no files observed; nothing to track), in

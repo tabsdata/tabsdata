@@ -88,3 +88,18 @@ def pub_subscriber_writes_table_to_fs_domain(
     frame: TableFrameSpec,
 ) -> TableFrameSpec:
     return frame
+
+
+@publisher(
+    source=LocalFileSrc(
+        paths=["*.parquet"],
+        initial_last_modified=INCREMENTAL_CUTOFF,
+        purge=True,
+    ),
+    output_tables=[PUBLISHED_TABLE],
+)
+def pub_publisher_purges_what_it_has_consumed(
+    frames: TableFramesSpec,
+) -> TableFrameSpec:
+    return _first(frames)
+

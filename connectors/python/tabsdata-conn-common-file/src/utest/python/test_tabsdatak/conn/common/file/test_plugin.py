@@ -13,6 +13,7 @@ from tabsdatak.common._error import CommonInitException
 from tabsdatak.common._fileformat.error import FileFormatErrorCode
 from tabsdatak.common._fileformat.taxonomy import EXCEL_SHEET_KEY
 from tabsdatak.common._transporter.handler import handler2
+from tabsdatak.common._transporter.handler.handler import TransporterReport
 from tabsdatak.common._transporter.invoker import transporter1, transporter2
 from tabsdatak.conn.common.constants import SRC_META_DROP_KEY
 from tabsdatak.conn.common.error import ConnException
@@ -341,8 +342,8 @@ _STUB_ERRORS = _plugin.FilePluginErrors(
 class _StubSrc:
     """Duck-typed stand-in for any connector's Src dataclass --
     ReaderConf.from_src only reads ``.paths``, ``.format``,
-    ``.format_cfg``, ``.initial_last_modified`` and ``.src_cfg``
-    (``conn`` is now passed in separately by the plugin)."""
+    ``.format_cfg``, ``.initial_last_modified``, ``.src_cfg`` and
+    ``.purge`` (``conn`` is now passed in separately by the plugin)."""
 
     def __init__(self):
         self.paths = ["a.csv", "b.csv"]
@@ -350,6 +351,7 @@ class _StubSrc:
         self.format_cfg = {SrcFileFormat.CSV: {"separator": ","}}
         self.initial_last_modified = datetime(2026, 1, 1, tzinfo=timezone.utc)
         self.src_cfg = None
+        self.purge = False
 
 
 def test_reader_conf_from_src_translates_fields():
@@ -526,10 +528,9 @@ def _stub_report(
     (``from``), so the stub does too."""
     froms = sources or [f"/srv/in{i}.csv" for i in range(len(targets))]
     files = [{"from": f, "to": t} for f, t in zip(froms, targets)]
-    return transporter1.TransporterReport(
+    return TransporterReport(
         files=files,
         lastmod_info=None,
-        raw={"files": files, "lastmod_info": None},
     )
 
 
@@ -731,10 +732,9 @@ def test_run_read_in_metadata_key_present_when_report_omits_source(
     def fake_import_one(**kw):
         target = str(kw["target_dir"] / "out.parquet")
         files = [{"to": target}]
-        return transporter1.TransporterReport(
+        return TransporterReport(
             files=files,
             lastmod_info=None,
-            raw={"files": files, "lastmod_info": None},
         )
 
     monkeypatch.setattr(_input_module, "import_one", fake_import_one)
@@ -851,10 +851,9 @@ def test_run_read_in_stores_report_lastmod_back_to_ctx(monkeypatch, tmp_path):
         target = str(kw["target_dir"] / "out.parquet")
         slot_name = kw["target_dir"].name  # slot0 / slot1 / ...
         files = [{"to": target}]
-        return transporter1.TransporterReport(
+        return TransporterReport(
             files=files,
             lastmod_info=f"cursor-{slot_name}-fresh",
-            raw={},
         )
 
     monkeypatch.setattr(_input_module, "import_one", fake_import_one)
@@ -1064,6 +1063,7 @@ class _Src:
         self.format_cfg = None
         self.initial_last_modified = None
         self.src_cfg = None
+        self.purge = False
 
 
 @pytest.mark.parametrize(

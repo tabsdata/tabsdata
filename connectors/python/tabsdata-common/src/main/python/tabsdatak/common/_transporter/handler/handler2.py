@@ -101,7 +101,9 @@ class TransporterHandler2(TransporterHandler):
                 )
                 files = [_copied_file_to_dict(copied) for copied in response.files]
                 return TransporterReport(
-                    files=files, lastmod_info=response.lastmod_info
+                    files=files,
+                    lastmod_info=response.lastmod_info,
+                    purged=response.purged,
                 )
             case transporter2.CopyRequest():
                 response = transporter2.copy(
@@ -181,6 +183,7 @@ class TransporterHandler2(TransporterHandler):
         format_cfg: dict | None = None,
         initial_lastmod: str | None = None,
         lastmod_info: str | None = None,
+        purge: bool = False,
     ) -> transporter2.FindCopyRequest:
         resolved = transporter2.resolve_auto_src_format(file_format, list(paths))
         format = transporter2.src_format_to_transporter(
@@ -195,6 +198,7 @@ class TransporterHandler2(TransporterHandler):
             target_format=transporter2.FormatSpec(format="parquet"),
             initial_lastmod=initial_lastmod,
             lastmod_info=lastmod_info,
+            purge=purge,
         )
 
     def wildcard_request(

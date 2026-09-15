@@ -12,11 +12,12 @@ handshake (request YAML round-trip + report parsing).
 
 from __future__ import annotations
 
+import os
 import tempfile
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime
 from decimal import Decimal
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -541,6 +542,7 @@ class _Src:
     format_cfg: dict | None = None
     initial_last_modified: datetime | None = None
     src_cfg: dict = field(default_factory=dict)
+    purge: bool = False
 
 
 def _read_one(
@@ -1186,3 +1188,111 @@ def test_run_read_in_ebcdic_reads_each_path_against_its_own_copybook(
         {"NAME": "ALICE"}
     ]
     assert pl.read_parquet(out[1][0].file).select("QTY").to_dicts() == [{"QTY": 250}]
+# ---------------------------------------------------------------------------
+# find-copy purge
+#
+# Purge deletes the source files the lastmod cursor turned down as already
+# consumed. A fresh cursor turns nothing down -- everything at or after the
+# baseline is read -- so purge only has anything to do on a resumed run.
+# ---------------------------------------------------------------------------
+
+
+def _write_csv(path: Path, rows: list[int], when: datetime) -> Path:
+    path.write_text("id\n" + "".join(f"{r}\n" for r in rows))
+    stamp = when.timestamp()
+    os.utime(path, (stamp, stamp))
+    return path
+
+
+def _find_copy(
+    tmp_path: Path,
+    glob: str,
+    *,
+    initial_lastmod: str | None = None,
+    lastmod_info: str | None = None,
+    purge: bool = False,
+):
+    out_dir = Path(tempfile.mkdtemp(prefix="out-", dir=tmp_path))
+    handler = make_handler()
+    return _input_module.import_one(
+        handler=handler,
+        source=handler.local_location(handler.local_uri(glob)),
+        target_dir=out_dir,
+        file_format=SrcFileFormat.CSV,
+        paths=[glob],
+        initial_lastmod=initial_lastmod,
+        lastmod_info=lastmod_info,
+        purge=purge,
+    )
+
+
+_BASELINE = datetime(2026, 1, 1, tzinfo=timezone.utc)
+_BASELINE_ISO = _BASELINE.isoformat(timespec="microseconds")
+
+
+def _seed(tmp_path: Path) -> tuple[str, Path, Path]:
+    """Two files after the baseline, and the glob that matches them."""
+    src_dir = _input_dir(tmp_path)
+    a = _write_csv(src_dir / "a.csv", [1], _BASELINE + timedelta(hours=1))
+    b = _write_csv(src_dir / "b.csv", [2], _BASELINE + timedelta(hours=2))
+    return str(src_dir / "*.csv"), a, b
+
+
+def test_find_copy_purge_deletes_what_a_prior_run_consumed(tmp_path: Path):
+    glob, a, b = _seed(tmp_path)
+
+    first = _find_copy(tmp_path, glob, initial_lastmod=_BASELINE_ISO)
+    assert len(first.files) == 2
+    assert first.purged is None, "the first run has nothing behind the cursor"
+    assert a.exists() and b.exists()
+
+    second = _find_copy(
+        tmp_path, glob, lastmod_info=first.lastmod_info, purge=True
+    )
+    assert second.files == [], "both files were already consumed"
+    names = sorted(Path(u.removeprefix("file://")).name for u in second.purged.deleted)
+    assert names == ["a.csv", "b.csv"]
+    assert second.purged.failed == []
+    assert not a.exists() and not b.exists()
+
+
+def test_find_copy_purge_leaves_the_file_it_is_reading(tmp_path: Path):
+    glob, a, b = _seed(tmp_path)
+    first = _find_copy(tmp_path, glob, initial_lastmod=_BASELINE_ISO)
+
+    src_dir = a.parent
+    fresh = _write_csv(src_dir / "c.csv", [3], _BASELINE + timedelta(hours=3))
+
+    second = _find_copy(
+        tmp_path, glob, lastmod_info=first.lastmod_info, purge=True
+    )
+    assert len(second.files) == 1, "only the new file is read"
+    assert len(second.purged.deleted) == 2
+    # The file this run consumed survives -- it goes on the next run's list.
+    assert fresh.exists()
+    assert not a.exists() and not b.exists()
+
+
+def test_find_copy_purge_never_deletes_below_the_baseline(tmp_path: Path):
+    glob, a, b = _seed(tmp_path)
+    # Older than the baseline, so it is never read -- and so never purged.
+    stale = _write_csv(a.parent / "stale.csv", [0], _BASELINE - timedelta(days=1))
+
+    first = _find_copy(tmp_path, glob, initial_lastmod=_BASELINE_ISO)
+    assert len(first.files) == 2, "the stale file is below the baseline"
+
+    purged = _find_copy(
+        tmp_path, glob, lastmod_info=first.lastmod_info, purge=True
+    ).purged
+    assert len(purged.deleted) == 2
+    assert stale.exists(), "a file the baseline excluded was never ours to delete"
+    assert not a.exists() and not b.exists()
+
+
+def test_find_copy_without_purge_deletes_nothing(tmp_path: Path):
+    glob, a, b = _seed(tmp_path)
+    first = _find_copy(tmp_path, glob, initial_lastmod=_BASELINE_ISO)
+
+    second = _find_copy(tmp_path, glob, lastmod_info=first.lastmod_info)
+    assert second.purged is None, "purge was not requested"
+    assert a.exists() and b.exists()

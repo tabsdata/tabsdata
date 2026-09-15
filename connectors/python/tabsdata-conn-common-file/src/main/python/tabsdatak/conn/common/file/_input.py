@@ -23,6 +23,7 @@ def import_one(
     format_cfg: dict | None = None,
     initial_lastmod: str | None = None,
     lastmod_info: str | None = None,
+    purge: bool = False,
     env: dict[str, str] | None = None,
 ) -> TransporterReport:
     request = handler.import_request(
@@ -33,6 +34,7 @@ def import_one(
         format_cfg=format_cfg,
         initial_lastmod=initial_lastmod,
         lastmod_info=lastmod_info,
+        purge=purge,
     )
     return handler.execute(request, target_dir, env)
 

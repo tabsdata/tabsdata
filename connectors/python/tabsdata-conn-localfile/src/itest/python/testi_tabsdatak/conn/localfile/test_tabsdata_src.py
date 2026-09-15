@@ -116,3 +116,77 @@ def test_publisher_imports_only_new_files_across_runs(
         table_frame(collection, publisher.PUBLISHED_TABLE),
         pl.DataFrame({"name": ["second.parquet"]}),
     )
+
+
+@tabsdata_instance(consumer="tdtest")
+@fs_domain("fs")
+def test_publisher_purges_the_files_it_has_consumed(
+    instance_tdtest: Instance,
+    domain_fs: FsDomain,
+    collection_factory: CollectionFactory,
+    request: pytest.FixtureRequest,
+) -> None:
+    # Purge deletes what the cursor has moved past, so it only has anything to
+    # do on a resumed run: the first trigger reads `first` and leaves it, the
+    # second reads `second` and deletes the file the first one consumed.
+    _, base, _ = scratch(domain_fs, request)
+    first = stage_parquet(base, "first.parquet", publisher.INCREMENTAL_CUTOFF)
+
+    collection = collection_factory("sources", src_conn(base))
+    function = collection.register_function(
+        info=publisher.pub_publisher_purges_what_it_has_consumed,
+        project_root=str(FUNCTIONS),
+    )
+
+    status = wait_for_completion(function.trigger())
+    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert_frames_match(
+        table_frame(collection, publisher.PUBLISHED_TABLE),
+        pl.DataFrame({"name": ["first.parquet"]}),
+    )
+    assert first.exists(), "the run that read it has nothing behind the cursor yet"
+
+    second = stage_parquet(
+        base, "second.parquet", publisher.INCREMENTAL_CUTOFF + timedelta(hours=1)
+    )
+    status = wait_for_completion(function.trigger())
+    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert_frames_match(
+        table_frame(collection, publisher.PUBLISHED_TABLE),
+        pl.DataFrame({"name": ["second.parquet"]}),
+    )
+    assert not first.exists(), "the consumed file should have been purged"
+    assert second.exists(), "the file this run read is not purged until the next"
+
+
+@tabsdata_instance(consumer="tdtest")
+@fs_domain("fs")
+def test_publisher_purge_leaves_a_file_below_the_baseline(
+    instance_tdtest: Instance,
+    domain_fs: FsDomain,
+    collection_factory: CollectionFactory,
+    request: pytest.FixtureRequest,
+) -> None:
+    # A file older than `initial_last_modified` is never read, so purge must
+    # never delete it -- it is not "already consumed", it was never eligible.
+    _, base, _ = scratch(domain_fs, request)
+    stale = stage_parquet(
+        base, "stale.parquet", publisher.INCREMENTAL_CUTOFF - timedelta(days=1)
+    )
+    stage_parquet(base, "first.parquet", publisher.INCREMENTAL_CUTOFF)
+
+    collection = collection_factory("sources", src_conn(base))
+    function = collection.register_function(
+        info=publisher.pub_publisher_purges_what_it_has_consumed,
+        project_root=str(FUNCTIONS),
+    )
+
+    status = wait_for_completion(function.trigger())
+    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    stage_parquet(
+        base, "second.parquet", publisher.INCREMENTAL_CUTOFF + timedelta(hours=1)
+    )
+    status = wait_for_completion(function.trigger())
+    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+
+    assert stale.exists(), "a file the baseline excluded was never ours to delete"

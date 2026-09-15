@@ -179,3 +179,8 @@ class FileCommonErrorCode(ErrorCode):
         "each path is read against its own copybook, and a wildcard stands for "
         "an unknown number of files. Name each file on its own path",
     )  # validate_src_format
+    FILE_COMMON_35 = ErrorDef(
+        ConnInitException,
+        "initial_last_modified is required when purge=True: purge deletes source files "
+        "older than the incremental initial_last_modified cursor."
+    )  # validate_src_purge

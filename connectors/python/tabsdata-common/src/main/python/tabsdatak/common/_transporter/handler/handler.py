@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 class TransporterReport:
     files: list[dict]
     lastmod_info: str | None
+    # ``transporter2.DeleteResponse`` when a find-copy purged, else ``None``
+    # -- transporter1 has no purge and always leaves it unset. Typed loosely
+    # so this module stays free of either invoker.
+    purged: Any = None
 
 
 class TransporterHandler(ABC):
@@ -98,6 +102,7 @@ class TransporterHandler(ABC):
         format_cfg: dict | None = None,
         initial_lastmod: str | None = None,
         lastmod_info: str | None = None,
+        purge: bool = False,
     ) -> Any:
         raise NotImplementedError(
             f"{type(self).__name__} does not build connector requests."

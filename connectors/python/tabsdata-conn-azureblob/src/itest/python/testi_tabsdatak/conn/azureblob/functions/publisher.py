@@ -4,6 +4,8 @@
 
 """Publishers used by test_tabsdata_src.py and test_tabsdata_dest.py"""
 
+from datetime import datetime, timezone
+
 import polars as pl
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
@@ -69,3 +71,23 @@ def pub_subscriber_writes_table_to_azureblob_domain(
     frame: TableFrameSpec,
 ) -> TableFrameSpec:
     return frame
+
+
+# The baseline the purging publisher starts from. Purge deletes what the
+# incremental cursor has moved past, so the source must name one -- without a
+# baseline no cursor is kept and the descriptor is refused.
+PURGE_CUTOFF = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
+@publisher(
+    source=AzureBlobSrc(
+        paths=["*.parquet"],
+        initial_last_modified=PURGE_CUTOFF,
+        purge=True,
+    ),
+    output_tables=[PUBLISHED_TABLE],
+)
+def pub_publisher_purges_what_it_has_consumed(
+    frames: TableFramesSpec,
+) -> TableFrameSpec:
+    return _first(frames)

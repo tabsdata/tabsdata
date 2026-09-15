@@ -175,6 +175,12 @@ class LocalFileSrc(Src):
         src_cfg: Optional connector config; supported keys are
             `tabsdata.file.chunk_size` and
             `tabsdata.src_metadata.drop`.
+        purge: Delete each source file that is older than the incremental
+            `initial_last_modified` cursor. Files
+            older than the original `initial_last_modified` timestamp set at
+            registration time are never deleted -- they
+            were never read. Only valid when `initial_last_modified` is set; the default
+            is `False`.
 
     Examples:
         Publish one file, selecting the reader `format` explicitly.
@@ -213,6 +219,7 @@ class LocalFileSrc(Src):
     format_cfg: SrcFormatCfgSpec | None = None
     initial_last_modified: datetime | None = None
     src_cfg: SrcCfgSpec | None = None
+    purge: bool = False
 
     def validate(self) -> None:
         """Cross-field validation of `format`, `paths` and `format_cfg`
@@ -225,6 +232,9 @@ class LocalFileSrc(Src):
             _file_validation.validate_format_cfg(self.format_cfg, side="src")
             _file_validation.validate_src_format(
                 self.format, self.paths, self.format_cfg
+            )
+            _file_validation.validate_src_purge(
+                self.purge, self.initial_last_modified
             )
         except Exception as e:
             raise LocalFileErrorCode.LOCALFILE_3.exception(cause=e)

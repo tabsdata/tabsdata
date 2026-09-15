@@ -390,6 +390,7 @@ class FindCopyRequest:
     max_files: int | None = None
     initial_lastmod: str | None = None
     lastmod_info: str | None = None
+    purge: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -456,6 +457,9 @@ class CopyResponse:
 
     files: list[CopiedFile]
     lastmod_info: str | None = None
+    # What `purge` deleted and what it could not; ``None`` when the request
+    # did not ask to purge.
+    purged: DeleteResponse | None = None
 
 
 # Connector-facing alias: the read (find-copy) and write (copy) paths

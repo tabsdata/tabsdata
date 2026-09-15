@@ -283,3 +283,27 @@ def test_s3_src_rejects_a_bad_worksheet_fragment_at_declaration_time(path):
             format=SrcFileFormat.EXCEL if "xlsx" in path else SrcFileFormat.CSV,
         )
     assert ei.value.api_error is S3ErrorCode.S3_3
+
+
+# --- purge ----------------------------------------------------------------
+
+
+def test_s3_src_rejects_purge_without_a_baseline():
+    # purge deletes what the incremental cursor has moved past; with no
+    # `initial_last_modified` there is no cursor, so it would drain nothing.
+    with pytest.raises(S3ValidateException) as ei:
+        S3Src(paths=["in/*.csv"], purge=True)
+    assert ei.value.api_error is S3ErrorCode.S3_3
+
+
+def test_s3_src_accepts_purge_with_a_baseline():
+    src = S3Src(
+        paths=["in/*.csv"],
+        purge=True,
+        initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    assert src.purge is True
+
+
+def test_s3_src_does_not_purge_by_default():
+    assert S3Src(paths=["in/*.csv"]).purge is False

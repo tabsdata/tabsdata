@@ -301,3 +301,10 @@ def validate_src_format(fmt: Any, paths: Any, value: dict | None) -> None:
         raise FileCommonErrorCode.FILE_COMMON_34.exception(
             codepage=codepage, supported=", ".join(EBCDIC_CODEPAGES)
         )
+
+
+def validate_src_purge(purge: Any, initial_last_modified: Any) -> None:
+    """Raise an exception if `purge` is True but `initial_last_modified` is None."""
+    if purge and initial_last_modified is None:
+        raise FileCommonErrorCode.FILE_COMMON_35.exception()
+

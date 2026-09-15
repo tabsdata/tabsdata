@@ -3,6 +3,8 @@
 #
 
 
+from datetime import datetime, timezone
+
 import pytest
 
 # noinspection PyProtectedMember
@@ -564,3 +566,23 @@ def test_a_fragment_is_checked_even_on_an_ebcdic_source():
     with pytest.raises(ConnInitException) as excinfo:
         _validation.validate_src_format(SrcFileFormat.EBCDIC, ["cust.dat#2"], None)
     assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_30
+
+
+# --- validate_src_purge --------------------------------------------------
+
+
+def test_purge_requires_a_baseline_to_purge_against():
+    # Without `initial_last_modified` the transporter keeps no cursor, so
+    # purge would silently drain nothing.
+    with pytest.raises(ConnInitException) as excinfo:
+        _validation.validate_src_purge(True, None)
+    assert excinfo.value.api_error is FileCommonErrorCode.FILE_COMMON_35
+
+
+def test_purge_with_a_baseline_is_accepted():
+    _validation.validate_src_purge(True, datetime(2026, 1, 1, tzinfo=timezone.utc))
+
+
+@pytest.mark.parametrize("baseline", [None, datetime(2026, 1, 1, tzinfo=timezone.utc)])
+def test_no_purge_needs_no_baseline(baseline):
+    _validation.validate_src_purge(False, baseline)

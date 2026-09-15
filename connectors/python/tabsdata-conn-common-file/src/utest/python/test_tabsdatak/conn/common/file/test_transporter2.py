@@ -254,6 +254,8 @@ def test_dump_find_copy_drops_none_and_empty_configs():
         },
         "target_format": {"format": "parquet"},
         "decompress": "auto",
+        # A bool is not an absent optional, so it rides along at its default.
+        "purge": False,
     }
     assert "compress" not in wire
     assert "max_files" not in wire

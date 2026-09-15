@@ -481,7 +481,15 @@ class TransporterHandler1(TransporterHandler):
         format_cfg: dict | None = None,
         initial_lastmod: str | None = None,
         lastmod_info: str | None = None,
+        purge: bool = False,
     ) -> transporter1.V1ImportFormat:
+        if purge:
+            # transporter1 has no purge; say so rather than leave the caller
+            # believing its source is being drained.
+            logger.warning(
+                "transporter1 does not support purge;"
+                "Run under transporter2 for purge to take effect."
+            )
         resolved = transporter1.resolve_auto_src_format(file_format, list(paths))
         format = transporter1.src_format_to_transporter(
             resolved, (format_cfg or {}).get(resolved)

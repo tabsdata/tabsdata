@@ -285,3 +285,27 @@ def test_azureblob_src_rejects_a_bad_worksheet_fragment_at_declaration_time(path
             format=SrcFileFormat.EXCEL if "xlsx" in path else SrcFileFormat.CSV,
         )
     assert ei.value.api_error is AzureBlobErrorCode.AZURE_BLOB_3
+
+
+# --- purge ----------------------------------------------------------------
+
+
+def test_azureblob_src_rejects_purge_without_a_baseline():
+    # purge deletes what the incremental cursor has moved past; with no
+    # `initial_last_modified` there is no cursor, so it would drain nothing.
+    with pytest.raises(AzureBlobValidateException) as ei:
+        AzureBlobSrc(paths=["in/*.csv"], purge=True)
+    assert ei.value.api_error is AzureBlobErrorCode.AZURE_BLOB_3
+
+
+def test_azureblob_src_accepts_purge_with_a_baseline():
+    src = AzureBlobSrc(
+        paths=["in/*.csv"],
+        purge=True,
+        initial_last_modified=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    assert src.purge is True
+
+
+def test_azureblob_src_does_not_purge_by_default():
+    assert AzureBlobSrc(paths=["in/*.csv"]).purge is False
