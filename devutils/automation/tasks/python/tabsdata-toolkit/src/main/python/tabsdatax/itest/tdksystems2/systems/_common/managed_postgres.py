@@ -74,6 +74,10 @@ class ManagedPostgres(Postgres):
     supports_data = False
     supports_changes = False
 
+    # The prefix of the `$<PREFIX>__*` variables the connection is read from.
+    # Named by each provider, since it reaches its instance through its own.
+    env_prefix: str = ""
+
     # The default posture, used when the system's meta names no SSLMODE.
     ssl_mode = "verify-full"
     # Role-name prefixes the provider owns: memberships the master is given by

@@ -2,8 +2,8 @@
 #  Copyright 2026 Tabsdata Inc.
 #
 
-import ast
 import pathlib
+import shlex
 import shutil
 import subprocess
 import sys
@@ -42,12 +42,11 @@ def main() -> int:
         if not separator:
             continue
         try:
-            value = ast.literal_eval(quoted)
-        except (ValueError, SyntaxError) as error:
+            parts = shlex.split(quoted)
+        except ValueError as error:
             print(f"Could not decode {name}: {error}", file=sys.stderr)
             return 1
-        if not isinstance(value, str):
-            value = str(value)
+        value = parts[0] if parts else ""
         (folder / name).write_bytes(value.encode("utf-8"))
         print(name)
         exported += 1

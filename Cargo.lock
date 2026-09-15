@@ -1000,9 +1000,9 @@ dependencies = [
 
 [[package]]
 name = "camino"
-version = "1.2.5"
+version = "1.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb1307f12aa967b5a58416e87b3653360e0fd614a016b6e970db08fecbb1b80d"
+checksum = "bbbad30e4b4c14a39e3cc8aed085a12a327257c316619c93581e017bc52be591"
 dependencies = [
  "serde_core",
 ]
@@ -1158,9 +1158,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.6.6"
+version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "473c7e07f409a8d772161724aa8db6a765a2532a70f9667eeb7b49d3d02fbdca"
+checksum = "aa8876b300ab35ba921adea3dfd70157a46249b33f95c9084ae5709785478946"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1168,9 +1168,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.6.6"
+version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b48fea5a88e9ae728a2dcbedbfc0e730f7d60da42e1cb049a83c9fb8b789889"
+checksum = "ec0797fb7aeb1406c84efac526901f7ec3ead2124f946b494e72879d4b54704d"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1180,9 +1180,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.6.4"
+version = "4.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d012d2b9d65aca7f18f4d9878a045bc17899bba951561ba5ec3c2ba1eed9a061"
+checksum = "f9c751b79415d4e559e3d1fcf128e09e720eb673a06d26cf6f392d37d75b66e0"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -1192,9 +1192,9 @@ dependencies = [
 
 [[package]]
 name = "clap_lex"
-version = "1.1.0"
+version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
+checksum = "1c133bc6a41be0d194c306b5506d15e6feeea7b1d6604bd3f8310dfb2ca96486"
 
 [[package]]
 name = "clru"
@@ -8044,9 +8044,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.44"
+version = "0.23.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6725596c3f2c3a0aef021139e145d4eafe314a6623e4680ca83852b2c67ab2ba"
+checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
 dependencies = [
  "aws-lc-rs",
  "log",
@@ -9408,7 +9408,7 @@ dependencies = [
  "axum-server",
  "bytes",
  "chrono",
- "clap 4.6.6",
+ "clap 4.6.7",
  "config",
  "constcat",
  "futures",
@@ -9697,7 +9697,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
- "clap 4.6.6",
+ "clap 4.6.7",
  "clap_derive",
  "colored",
  "const_format",
@@ -9795,7 +9795,7 @@ dependencies = [
 name = "td-process"
 version = "2.1.0"
 dependencies = [
- "clap 4.6.6",
+ "clap 4.6.7",
  "clap_derive",
  "config",
  "dir-size",
@@ -9900,7 +9900,7 @@ dependencies = [
 name = "td-server"
 version = "2.1.0"
 dependencies = [
- "clap 4.6.6",
+ "clap 4.6.7",
  "openssl",
  "path-slash",
  "serde",
@@ -9986,7 +9986,7 @@ dependencies = [
  "bytes",
  "calamine",
  "chrono",
- "clap 4.6.6",
+ "clap 4.6.7",
  "clap_derive",
  "csv",
  "derive_builder",
@@ -10062,7 +10062,7 @@ dependencies = [
  "atomic_enum",
  "base64 0.22.1",
  "chrono",
- "clap 4.6.6",
+ "clap 4.6.7",
  "clap_derive",
  "colored",
  "console",
@@ -10154,7 +10154,7 @@ dependencies = [
 name = "td-xtask"
 version = "2.1.0"
 dependencies = [
- "clap 4.6.6",
+ "clap 4.6.7",
  "clap_derive",
  "td-build",
 ]
@@ -10163,7 +10163,7 @@ dependencies = [
 name = "te-apiserver"
 version = "2.1.0"
 dependencies = [
- "clap 4.6.6",
+ "clap 4.6.7",
  "getset",
  "openssl",
  "serde",

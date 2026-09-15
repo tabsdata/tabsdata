@@ -59,7 +59,7 @@ pub fn assess_open_files(provider: ClusterProvider) -> CommandResult<AssessCheck
                 started.elapsed().as_secs_f64(),
             ));
         }
-        return Ok(AssessCheck::failed(
+        Ok(AssessCheck::failed(
             CONCERN,
             OPEN_FILES,
             started.elapsed().as_secs_f64(),
@@ -73,7 +73,7 @@ pub fn assess_open_files(provider: ClusterProvider) -> CommandResult<AssessCheck
         .with_help(vec![AssessHelp::with_command(
             "Raise it in this shell, with command",
             format!("ulimit -n {KMINUS_MIN_NOFILE}"),
-        )]));
+        )]))
     }
 
     #[cfg(not(unix))]
