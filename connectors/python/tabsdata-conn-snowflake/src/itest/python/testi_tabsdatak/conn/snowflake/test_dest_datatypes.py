@@ -32,18 +32,6 @@ _XFAIL: dict[str, str] = {
         "COPY INTO fail once the stage and table exist -- encode it (base64 into "
         "a string) before writing"
     ),
-    "time": (
-        "Same variant gap as binary: a time rides the parquet as a plain integer "
-        "count, and a variant carries no unit, so Snowflake refuses the cast "
-        "('Failed to cast variant value 34215000000 to TIME') whether the column "
-        "counts microseconds or nanoseconds -- write it as a string, or as a "
-        "timestamp on a sentinel date"
-    ),
-    "datetime": (
-        "Same variant gap as time: the epoch count arrives without its unit and "
-        "is read as seconds, landing far outside the range a TIMESTAMP accepts "
-        "('year 56535358 is out of range')"
-    ),
 }
 
 

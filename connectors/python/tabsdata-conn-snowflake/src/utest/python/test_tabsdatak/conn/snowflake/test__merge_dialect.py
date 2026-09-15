@@ -577,6 +577,18 @@ def test_staging_puts_templates_and_copies_in_that_order(tmp_path):
     assert put < infer < create < copy
 
 
+def test_staging_loads_the_scratch_table_through_the_inferring_format(tmp_path):
+    # The scratch table is templated from the file's logical types, so the COPY
+    # that fills it has to read them too.
+    batch = tmp_path / "in.parquet"
+    batch.write_bytes(b"")
+    fake = _staging_fake()
+    with _dialect(fake).staging(_TARGET, batch):
+        pass
+    copy = next(s for s in fake.log if s.startswith("COPY INTO"))
+    assert "FILE_FORMAT = (FORMAT_NAME = 'tabsdata_parquet')" in copy
+
+
 def test_staging_reads_the_columns_before_the_copy_purges_the_file(tmp_path):
     # PURGE removes the staged file as soon as it has been ingested, so
     # infer_schema has to have run by then or there is nothing left to report.

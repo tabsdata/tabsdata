@@ -24,13 +24,16 @@ __all__ = [
     "put_file_to_stage",
 ]
 
-# Session file format the staged parquet is read through, both to template a
-# relation from it and to infer its columns.
+# Session file format the staged parquet is read through: to template a
+# relation from it, to infer its columns, and to load it. One definition for
+# all three, so the load reads the file exactly as the inference that shaped
+# its target did.
 PARQUET_FILE_FORMAT = "tabsdata_parquet"
 
 
 def create_file_format(cursor) -> None:
-    """Create the named parquet format every ``infer_schema`` call resolves.
+    """Create the named parquet format every ``infer_schema`` call and every
+    ``COPY`` resolves.
 
     ``USE_LOGICAL_TYPE = TRUE`` is what makes Snowflake read a parquet logical
     type instead of the physical type beneath it. Without it a timestamp column
@@ -39,12 +42,21 @@ def create_file_format(cursor) -> None:
     inferred schema is built with the wrong types, and one that already has the
     right ones reads as unmergeable drift.
 
-    Replaced rather than created-if-absent: the format is connector-owned, and
-    an account still holding an earlier definition has to be brought up to date
-    or it keeps inferring the old way.
+    The ``COPY`` has to read the file the same way, or the two disagree: a
+    target inferred with logical types gets a ``TIMESTAMP_NTZ`` column, and a
+    load without them hands that column the bare epoch count, which Snowflake
+    takes for seconds and lands millions of years out (a ``TIME`` column refuses
+    the count outright). ``copy_into`` names this format for that reason.
+
+    ``TEMPORARY`` scopes the format to this session. Every statement that
+    resolves the name runs on a cursor of the connection that created it, so
+    another destination loading into the same schema can neither replace it
+    under a running statement nor be refused for not owning it. It also shadows
+    a permanent ``tabsdata_parquet`` an earlier connector version left in the
+    schema, so a stale definition there is never the one read.
     """
     cursor.execute(
-        f"CREATE OR REPLACE FILE FORMAT {PARQUET_FILE_FORMAT}"
+        f"CREATE TEMPORARY FILE FORMAT {PARQUET_FILE_FORMAT}"
         f" TYPE = PARQUET USE_LOGICAL_TYPE = TRUE"
     )
 
@@ -114,12 +126,16 @@ def copy_into(
     """``COPY`` the staged file into ``relation`` -- the target itself for an
     append or a replace, the merge's scratch table for a merge.
 
+    Read through :data:`PARQUET_FILE_FORMAT`, the format that inferred the
+    relation's columns, so the values arrive typed the way the columns were
+    made -- see :func:`create_file_format`.
+
     ``purge`` removes the staged file once it has been ingested, so nothing
     downstream can read it again.
     """
     cursor.execute(
         f"COPY INTO {relation} FROM @{stage} FILES = ('{file_name}') "
-        f"FILE_FORMAT = (TYPE = 'PARQUET') "
+        f"FILE_FORMAT = (FORMAT_NAME = '{PARQUET_FILE_FORMAT}') "
         f"MATCH_BY_COLUMN_NAME = {match_by_column_name} "
         f"PURGE = {purge}"
     )

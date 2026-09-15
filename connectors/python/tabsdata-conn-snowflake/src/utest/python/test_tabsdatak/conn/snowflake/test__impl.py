@@ -371,14 +371,29 @@ def test_write_all_tables_reads_the_parquet_logical_types(
 ):
     # Without USE_LOGICAL_TYPE the inferred schema is the file's physical types:
     # a timestamp column comes back as the NUMBER holding its epoch, and a
-    # decimal without its precision and scale. OR REPLACE because an account
-    # holding an earlier definition of the format would otherwise keep it.
+    # decimal without its precision and scale. TEMPORARY so the format is this
+    # session's own: a destination loading into the same schema concurrently
+    # cannot replace it mid-statement, and creating it never needs ownership of
+    # a permanent one another role left behind, which it shadows instead.
     parquet = _parquet(tmp_path / "in.parquet")
     impl.write_all_tables(_write_cfg(), [parquet])
     assert (
-        "CREATE OR REPLACE FILE FORMAT tabsdata_parquet"
+        "CREATE TEMPORARY FILE FORMAT tabsdata_parquet"
         " TYPE = PARQUET USE_LOGICAL_TYPE = TRUE"
     ) in fake_sf_connection.log
+
+
+def test_write_all_tables_loads_through_the_format_that_inferred_the_target(
+    fake_sf_connection, tmp_path
+):
+    # The target is templated from the logical types; a COPY reading the file
+    # without them hands a TIMESTAMP_NTZ column the bare epoch count, which
+    # Snowflake takes for seconds, and a TIME column a count it refuses to cast.
+    parquet = _parquet(tmp_path / "in.parquet")
+    impl.write_all_tables(_write_cfg(), [parquet])
+    copy = next(s for s in fake_sf_connection.log if s.startswith("COPY INTO"))
+    assert "FILE_FORMAT = (FORMAT_NAME = 'tabsdata_parquet')" in copy
+    assert "TYPE = 'PARQUET'" not in copy
 
 
 def test_write_all_tables_uses_temporary_stage_when_conn_stage_unset(
