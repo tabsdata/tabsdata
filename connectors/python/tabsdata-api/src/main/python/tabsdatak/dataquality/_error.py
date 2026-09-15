@@ -239,10 +239,10 @@ class DataQualityErrorCode(ErrorCode):
     )
     DQPE_8 = ErrorDef(
         DataQualityProcessingError,
-        "Mismatch between table_infos and operations for output action table "
-        "'{table}'. Expected equal lengths, but got {index} table_infos and "
-        "{producing} operators. Total infoes is: {infos}; Total operators is: "
-        "{operators}",
+        "Data quality on output table '{table}' derived {index} of the "
+        "{producing} frames its producing operators should yield. The action "
+        "declares {operators} operator(s) and registers {infos} derived "
+        "table(s).",
     )
     DQPE_9 = ErrorDef(
         DataQualityProcessingError,

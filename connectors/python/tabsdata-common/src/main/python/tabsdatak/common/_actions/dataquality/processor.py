@@ -513,6 +513,9 @@ class DataQualityProcessor:
                 tableframe, action
             )
 
+            if derived_table_frame is None:
+                continue
+
             table_producing_operators = sum(
                 1 for operator in action.operators if self.producing(operator)
             )
