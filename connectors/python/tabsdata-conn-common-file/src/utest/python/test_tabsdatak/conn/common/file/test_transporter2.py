@@ -857,96 +857,9 @@ def test_dest_format_to_transporter_maps_each():
 # --- EBCDIC / copybook sources -----------------------------------
 
 
-def test_ebcdic_is_source_only():
-    assert SrcFileFormat.EBCDIC.value == "EBCDIC"
-    assert not hasattr(DestFileFormat, "EBCDIC")
-
-
-def test_auto_never_infers_ebcdic():
-    # A mainframe extract has no conventional extension, so there is nothing
-    # to infer from and the format must always be named.
-    for path in ["rec.dat", "rec.bin", "rec.ebc", "rec"]:
-        with pytest.raises(Exception):
-            t.resolve_auto_src_format(SrcFileFormat.AUTO, [path])
-
-
 def _copybook(record: str) -> str:
     """A minimal copybook source. `copybook` carries the COBOL itself, not a
     path to it, so fixtures have to be real (if tiny) layouts."""
     return f"      01  {record}.\n          05  FIELD PIC X(4).\n"
 
 
-def test_src_format_to_transporter_ebcdic_takes_the_copybook_source():
-    copybook = _copybook("CUSTOMER")
-    fmt = t.src_format_to_transporter(SrcFileFormat.EBCDIC, {"copybook": copybook})
-    assert isinstance(fmt, t.TransporterEbcdicFormat)
-    assert fmt.copybook == copybook
-
-
-def test_an_un_narrowed_copybook_list_is_a_wiring_bug_not_a_silent_first_entry():
-    # A list here means `format_cfg_for` did not narrow it; taking entry 0
-    # would read every path against the first path's copybook.
-    with pytest.raises(Exception, match="list of 2"):
-        t.src_format_to_transporter(
-            SrcFileFormat.EBCDIC,
-            {"copybook": [_copybook("JAN"), _copybook("FEB")]},
-        )
-
-
-def test_the_code_page_defaults_to_cp037():
-    copybook = _copybook("REC")
-    fmt = t.src_format_to_transporter(SrcFileFormat.EBCDIC, {"copybook": copybook})
-    assert fmt.codepage == "cp037"
-    other = t.src_format_to_transporter(
-        SrcFileFormat.EBCDIC, {"copybook": copybook, "codepage": "cp273"}
-    )
-    assert other.codepage == "cp273"
-
-
-@pytest.mark.parametrize("cfg", [None, {}, {"codepage": "cp037"}, {"copybook": ""}])
-def test_ebcdic_without_a_copybook_is_refused(cfg):
-    # The data carries no schema at all, so there is nothing to fall back to.
-    with pytest.raises(Exception, match="copybook"):
-        t.src_format_to_transporter(SrcFileFormat.EBCDIC, cfg)
-
-
-def test_dump_ebcdic_source_format_matches_the_binary_field_names():
-    # Drift is a runtime parse failure in the binary, so the keys are pinned.
-    req = t.FindCopyRequest(
-        source=t.Location(uri="s3://b/extract.dat"),
-        target_dir=t.Location(uri="file:///work/slot0"),
-        source_format=t.to_format_spec(
-            t.TransporterEbcdicFormat(copybook=_copybook("REC"), codepage="cp500")
-        ),
-        target_format=t.FormatSpec(format="parquet"),
-    )
-    dumped = t._dump(req)
-    assert dumped["source_format"] == {
-        "format": "ebcdic",
-        "options": {
-            # The copybook source itself, inline: the binary fetches nothing.
-            "copybook": _copybook("REC"),
-            "codepage": "cp500",
-        },
-    }
-    assert yaml.safe_load(yaml.safe_dump(dumped)) == dumped
-
-
-def test_the_binary_only_knobs_are_left_off_the_wire():
-    # `copybook_text`, `keep_filler`, `hfp` and `trim` are not reachable from
-    # a connector's format_cfg, so nothing is emitted for them and the binary
-    # applies its own defaults.
-    dumped = t._dump(
-        t.to_format_spec(t.TransporterEbcdicFormat(copybook=_copybook("REC")))
-    )
-    assert set(dumped["options"]) == {"copybook", "codepage"}
-
-
-def test_a_multiline_copybook_survives_the_yaml_round_trip():
-    # Newlines and leading columns are load-bearing: code starts at column 8.
-    copybook = (
-        "      01  REC.\n      05  NAME PIC X(20).\n      05  QTY  PIC S9(5) COMP-3.\n"
-    )
-    spec = t.to_format_spec(t.TransporterEbcdicFormat(copybook=copybook))
-    dumped = t._dump(spec)
-    assert yaml.safe_load(yaml.safe_dump(dumped))["options"]["copybook"] == copybook

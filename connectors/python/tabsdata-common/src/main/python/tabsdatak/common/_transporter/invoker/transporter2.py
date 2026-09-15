@@ -976,8 +976,8 @@ def src_format_to_transporter(
             sheet=1 if sheet is None else sheet,
             has_header=bool((cfg or {}).get("has_header", True)),
         )
-    if fmt is SrcFileFormat.EBCDIC:
-        return _ebcdic_format(cfg or {})
+    # if fmt is SrcFileFormat.EBCDIC:
+    #     return _ebcdic_format(cfg or {})
     # AUTO must be resolved by ``resolve_auto_src_format`` before reaching
     # here -- the previous behaviour silently returned Parquet, which
     # masked CSV/JSON/AVRO mismatches as parquet-magic-byte failures.

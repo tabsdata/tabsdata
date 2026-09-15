@@ -18,7 +18,8 @@ import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.gcs import GCSSystem, gcs_system
 from tabsdatax.itest.fixture.functions.files import ObjectStore, PluginSrcCtx
-from testi_tabsdatak.conn.common import ebcdic
+
+# from testi_tabsdatak.conn.common import ebcdic
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 from testi_tabsdatak.conn.gcs.backend import run_prefix, src_conn, store
 
@@ -469,92 +470,93 @@ def test_src_excel_has_header_false_generates_column_names(
 # survive the object store untouched -- a record carries no delimiters, so a
 # single byte gained or lost shifts every field after it.
 
+#
+# def _stage_records(
+#     objects: ObjectStore, prefix: str, name: str, tmp_path: Path, records: list[bytes]
+# ) -> None:
+#     local = tmp_path / f"stage-{uuid.uuid4().hex}-{name.replace('/', '_')}"
+#     ebcdic.write(local, records)
+#     objects.upload(local, f"{prefix}/{name}")
 
-def _stage_records(
-    objects: ObjectStore, prefix: str, name: str, tmp_path: Path, records: list[bytes]
-) -> None:
-    local = tmp_path / f"stage-{uuid.uuid4().hex}-{name.replace('/', '_')}"
-    ebcdic.write(local, records)
-    objects.upload(local, f"{prefix}/{name}")
+#
+# @gcs_system("gcs")
+# def test_src_ebcdic_reads_a_fixed_length_record(system_gcs: GCSSystem, tmp_path:
+# Path):
+#     prefix = run_prefix(system_gcs.sys_path, "td-integ")
+#     _stage_records(
+#         store(system_gcs),
+#         prefix,
+#         "cust.dat",
+#         tmp_path,
+#         [ebcdic.customer("ALICE", 42), ebcdic.customer("BOB", 7)],
+#     )
+#
+#     src = GCSSrc(
+#         paths=["cust.dat"],
+#         format=SrcFileFormat.EBCDIC,
+#         format_cfg={SrcFileFormat.EBCDIC: {"copybook": [ebcdic.CUSTOMER]}},
+#     )
+#     out = _read_back(system_gcs, prefix, src, tmp_path)
+#
+#     assert pl.read_parquet(out[0][0].file).select("NAME", "COUNT").to_dicts() == [
+#         {"NAME": "ALICE", "COUNT": 42},
+#         {"NAME": "BOB", "COUNT": 7},
+#     ]
 
+#
+# @gcs_system("gcs")
+# def test_src_ebcdic_bytes_are_not_mangled_in_transit(
+#     system_gcs: GCSSystem, tmp_path: Path
+# ):
+#     # Packed and binary fields are arbitrary bytes, including 0x00 and 0x1A.
+#     # Anything that treated the object as text would corrupt them silently.
+#     prefix = run_prefix(system_gcs.sys_path, "td-integ")
+#     layout = ebcdic.copybook(
+#         "01  RAW.",
+#         "    05  PACK PIC S9(5) COMP-3.",
+#         "    05  BIN  PIC S9(9) COMP.",
+#         "    05  RATE COMP-1.",
+#     )
+#     _stage_records(
+#         store(system_gcs),
+#         prefix,
+#         "raw.dat",
+#         tmp_path,
+#         [ebcdic.packed(-26, 5) + ebcdic.binary(0, 9) + ebcdic.hfp(1.0, 4)],
+#     )
+#
+#     src = GCSSrc(
+#         paths=["raw.dat"],
+#         format=SrcFileFormat.EBCDIC,
+#         format_cfg={SrcFileFormat.EBCDIC: {"copybook": [layout]}},
+#     )
+#     out = _read_back(system_gcs, prefix, src, tmp_path)
+#
+# assert pl.read_parquet(out[0][0].file).select("PACK", "BIN", "RATE").to_dicts() == [
+#         {"PACK": -26, "BIN": 0, "RATE": 1.0}
+#     ]
 
-@gcs_system("gcs")
-def test_src_ebcdic_reads_a_fixed_length_record(system_gcs: GCSSystem, tmp_path: Path):
-    prefix = run_prefix(system_gcs.sys_path, "td-integ")
-    _stage_records(
-        store(system_gcs),
-        prefix,
-        "cust.dat",
-        tmp_path,
-        [ebcdic.customer("ALICE", 42), ebcdic.customer("BOB", 7)],
-    )
-
-    src = GCSSrc(
-        paths=["cust.dat"],
-        format=SrcFileFormat.EBCDIC,
-        format_cfg={SrcFileFormat.EBCDIC: {"copybook": [ebcdic.CUSTOMER]}},
-    )
-    out = _read_back(system_gcs, prefix, src, tmp_path)
-
-    assert pl.read_parquet(out[0][0].file).select("NAME", "COUNT").to_dicts() == [
-        {"NAME": "ALICE", "COUNT": 42},
-        {"NAME": "BOB", "COUNT": 7},
-    ]
-
-
-@gcs_system("gcs")
-def test_src_ebcdic_bytes_are_not_mangled_in_transit(
-    system_gcs: GCSSystem, tmp_path: Path
-):
-    # Packed and binary fields are arbitrary bytes, including 0x00 and 0x1A.
-    # Anything that treated the object as text would corrupt them silently.
-    prefix = run_prefix(system_gcs.sys_path, "td-integ")
-    layout = ebcdic.copybook(
-        "01  RAW.",
-        "    05  PACK PIC S9(5) COMP-3.",
-        "    05  BIN  PIC S9(9) COMP.",
-        "    05  RATE COMP-1.",
-    )
-    _stage_records(
-        store(system_gcs),
-        prefix,
-        "raw.dat",
-        tmp_path,
-        [ebcdic.packed(-26, 5) + ebcdic.binary(0, 9) + ebcdic.hfp(1.0, 4)],
-    )
-
-    src = GCSSrc(
-        paths=["raw.dat"],
-        format=SrcFileFormat.EBCDIC,
-        format_cfg={SrcFileFormat.EBCDIC: {"copybook": [layout]}},
-    )
-    out = _read_back(system_gcs, prefix, src, tmp_path)
-
-    assert pl.read_parquet(out[0][0].file).select("PACK", "BIN", "RATE").to_dicts() == [
-        {"PACK": -26, "BIN": 0, "RATE": 1.0}
-    ]
-
-
-@gcs_system("gcs")
-def test_src_ebcdic_reads_each_path_against_its_own_copybook(
-    system_gcs: GCSSystem, tmp_path: Path
-):
-    prefix = run_prefix(system_gcs.sys_path, "td-integ")
-    objects = store(system_gcs)
-    orders = ebcdic.copybook("01  ORDER-REC.", "    05  QTY PIC 9(3).")
-    _stage_records(objects, prefix, "cust.dat", tmp_path, [ebcdic.customer("ZOE", 1)])
-    _stage_records(
-        objects, prefix, "ord.dat", tmp_path, [ebcdic.zoned(250, 3, signed=False)]
-    )
-
-    src = GCSSrc(
-        paths=["cust.dat", "ord.dat"],
-        format=SrcFileFormat.EBCDIC,
-        format_cfg={SrcFileFormat.EBCDIC: {"copybook": [ebcdic.CUSTOMER, orders]}},
-    )
-    out = _read_back(system_gcs, prefix, src, tmp_path)
-
-    # Two objects, two layouts: the per-path copybook list is narrowed per slot.
-    assert len(out) == 2
-    assert pl.read_parquet(out[0][0].file).select("NAME").item(0, 0) == "ZOE"
-    assert pl.read_parquet(out[1][0].file).select("QTY").item(0, 0) == 250
+#
+# @gcs_system("gcs")
+# def test_src_ebcdic_reads_each_path_against_its_own_copybook(
+#     system_gcs: GCSSystem, tmp_path: Path
+# ):
+#     prefix = run_prefix(system_gcs.sys_path, "td-integ")
+#     objects = store(system_gcs)
+#     orders = ebcdic.copybook("01  ORDER-REC.", "    05  QTY PIC 9(3).")
+#     _stage_records(objects, prefix, "cust.dat", tmp_path, [ebcdic.customer("ZOE", 1)])
+#     _stage_records(
+#         objects, prefix, "ord.dat", tmp_path, [ebcdic.zoned(250, 3, signed=False)]
+#     )
+#
+#     src = GCSSrc(
+#         paths=["cust.dat", "ord.dat"],
+#         format=SrcFileFormat.EBCDIC,
+#         format_cfg={SrcFileFormat.EBCDIC: {"copybook": [ebcdic.CUSTOMER, orders]}},
+#     )
+#     out = _read_back(system_gcs, prefix, src, tmp_path)
+#
+#     # Two objects, two layouts: the per-path copybook list is narrowed per slot.
+#     assert len(out) == 2
+#     assert pl.read_parquet(out[0][0].file).select("NAME").item(0, 0) == "ZOE"
+#     assert pl.read_parquet(out[1][0].file).select("QTY").item(0, 0) == 250

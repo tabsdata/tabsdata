@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Any, Callable, cast
 
 from tabsdatak.common._fileformat.taxonomy import (
-    EBCDIC_COPYBOOK_KEYS,
     EXCEL_SHEET_KEY,
     DestFileFormat,
     SrcFileFormat,
@@ -135,8 +134,7 @@ class ReaderConf:
 
     def format_cfg_for(self, index: int) -> dict | None:
         """:attr:`format_cfg` with every per-path list narrowed to the value
-        belonging to the path at ``index`` -- EXCEL's worksheet number and
-        EBCDIC's copybook.
+        belonging to the path at ``index`` -- EXCEL's worksheet number.
 
         Every request covers one path, so the reader is handed one value.
         Narrowing here rather than in :meth:`from_src` keeps ``format_cfg``
@@ -145,8 +143,8 @@ class ReaderConf:
         cfg = self.format_cfg
         if not cfg:
             return cfg
-        cfg = self._narrowed(cfg, SrcFileFormat.EXCEL, (EXCEL_SHEET_KEY,), index)
-        return self._narrowed(cfg, SrcFileFormat.EBCDIC, EBCDIC_COPYBOOK_KEYS, index)
+        # return self._narrowed(cfg, SrcFileFormat.EBCDIC, EBCDIC_COPYBOOK_KEYS, index)
+        return self._narrowed(cfg, SrcFileFormat.EXCEL, (EXCEL_SHEET_KEY,), index)
 
     @staticmethod
     def _narrowed(

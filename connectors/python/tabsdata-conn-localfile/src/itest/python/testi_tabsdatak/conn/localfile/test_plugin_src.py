@@ -7,13 +7,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from decimal import Decimal
 
+# from decimal import Decimal
 import polars as pl
 import pytest
 from tabsdatax.itest.fixture.backends.fs import FsDomain, fs_domain
 from tabsdatax.itest.fixture.functions.files import PluginSrcCtx
-from testi_tabsdatak.conn.common import ebcdic
+
+# from testi_tabsdatak.conn.common import ebcdic
 from testi_tabsdatak.conn.common.plugin_ctx import LastModSrcCtx
 from testi_tabsdatak.conn.localfile.backend import (
     scratch,
@@ -818,147 +819,147 @@ def test_src_excel_wildcard_matches_workbooks(
 # copybook is per path, so the pairing has to survive `ReaderConf` and reach
 # the reader one layout at a time.
 
+#
+# def _stage_records(base, name: str, records: list[bytes]):
+#     path = base / name
+#     path.parent.mkdir(parents=True, exist_ok=True)
+#     return ebcdic.write(path, records)
 
-def _stage_records(base, name: str, records: list[bytes]):
-    path = base / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return ebcdic.write(path, records)
+#
+# @fs_domain("fs")
+# def test_src_ebcdic_reads_a_fixed_length_record(
+#     domain_fs: FsDomain, request: pytest.FixtureRequest
+# ):
+#     _, base, work = scratch(domain_fs, request)
+#     _stage_records(
+#         base, "cust.dat", [ebcdic.customer("ALICE", 42), ebcdic.customer("BOB", 7)]
+#     )
+#
+#     src = LocalFileSrc(
+#         paths=["cust.dat"],
+#         format=SrcFileFormat.EBCDIC,
+#         format_cfg={SrcFileFormat.EBCDIC: {"copybook": [ebcdic.CUSTOMER]}},
+#     )
+#     out = _read_in(base, work, src)
+#
+#     assert _user_frame(out[0][0]).to_dicts() == [
+#         {"NAME": "ALICE", "COUNT": 42},
+#         {"NAME": "BOB", "COUNT": 7},
+#     ]
 
+#
+# @fs_domain("fs")
+# def test_src_ebcdic_decodes_each_numeric_encoding(
+#     domain_fs: FsDomain, request: pytest.FixtureRequest
+# ):
+#     # Storage width never reaches the schema: zoned, packed and binary fields
+#     # of the same precision all land on the same arrow type.
+#     _, base, work = scratch(domain_fs, request)
+#     layout = ebcdic.copybook(
+#         "01  NUMBERS.",
+#         "    05  ZONE  PIC S9(5).",
+#         "    05  SEP   PIC S9(5) SIGN LEADING SEPARATE.",
+#         "    05  PACK  PIC S9(7)V99 COMP-3.",
+#         "    05  BIN   PIC S9(9) COMP.",
+#         "    05  RATE  COMP-1.",
+#     )
+#     _stage_records(
+#         base,
+#         "nums.dat",
+#         [
+#             ebcdic.zoned(-6789, 5)
+#             + ebcdic.zoned_leading_sign(-42, 5)
+#             + ebcdic.packed(1234567, 9)
+#             + ebcdic.binary(-98765, 9)
+#             + ebcdic.hfp(1.0, 4)
+#         ],
+#     )
+#
+#     src = LocalFileSrc(
+#         paths=["nums.dat"],
+#         format=SrcFileFormat.EBCDIC,
+#         format_cfg={SrcFileFormat.EBCDIC: {"copybook": [layout]}},
+#     )
+#     df = _user_frame(_read_in(base, work, src)[0][0])
+#
+#     assert dict(df.schema) == {
+#         "ZONE": pl.Int64,
+#         "SEP": pl.Int64,
+#         "PACK": pl.Decimal(9, 2),
+#         "BIN": pl.Int64,
+#         "RATE": pl.Float64,
+#     }
+#     assert df.to_dicts() == [
+#         {
+#             "ZONE": -6789,
+#             "SEP": -42,
+#             "PACK": Decimal("12345.67"),
+#             "BIN": -98765,
+#             "RATE": 1.0,
+#         }
+#     ]
 
-@fs_domain("fs")
-def test_src_ebcdic_reads_a_fixed_length_record(
-    domain_fs: FsDomain, request: pytest.FixtureRequest
-):
-    _, base, work = scratch(domain_fs, request)
-    _stage_records(
-        base, "cust.dat", [ebcdic.customer("ALICE", 42), ebcdic.customer("BOB", 7)]
-    )
+#
+# @fs_domain("fs")
+# def test_src_ebcdic_reads_each_path_against_its_own_copybook(
+#     domain_fs: FsDomain, request: pytest.FixtureRequest
+# ):
+#     _, base, work = scratch(domain_fs, request)
+#     orders = ebcdic.copybook("01  ORDER-REC.", "    05  QTY PIC 9(3).")
+#     _stage_records(base, "cust.dat", [ebcdic.customer("ZOE", 1)])
+#     _stage_records(base, "ord.dat", [ebcdic.zoned(250, 3, signed=False)])
+#
+#     src = LocalFileSrc(
+#         paths=["cust.dat", "ord.dat"],
+#         format=SrcFileFormat.EBCDIC,
+#         format_cfg={SrcFileFormat.EBCDIC: {"copybook": [ebcdic.CUSTOMER, orders]}},
+#     )
+#     out = _read_in(base, work, src)
+#
+#     # Two paths, two layouts: the per-path copybook list is narrowed per slot.
+#     assert len(out) == 2
+#     assert _user_frame(out[0][0]).item(0, 0) == "ZOE"
+#     assert _user_frame(out[1][0]).item(0, 0) == 250
 
-    src = LocalFileSrc(
-        paths=["cust.dat"],
-        format=SrcFileFormat.EBCDIC,
-        format_cfg={SrcFileFormat.EBCDIC: {"copybook": [ebcdic.CUSTOMER]}},
-    )
-    out = _read_in(base, work, src)
+#
+# @fs_domain("fs")
+# def test_src_ebcdic_codepage_reaches_the_text_fields(
+#     domain_fs: FsDomain, request: pytest.FixtureRequest
+# ):
+#     # 0x4A is a cent sign under cp037 and A-umlaut under cp273; the digits
+#     # decode from raw nibbles either way.
+#     _, base, work = scratch(domain_fs, request)
+#     layout = ebcdic.copybook(
+#         "01  REC.", "    05  MARK PIC X(1).", "    05  NUM PIC 9(3)."
+#     )
+#     _stage_records(
+#         base, "page.dat", [bytes([0x4A]) + ebcdic.zoned(123, 3, signed=False)]
+#     )
+#
+#     for codepage, expected in [("cp037", "¢"), ("cp273", "Ä")]:
+#         src = LocalFileSrc(
+#             paths=["page.dat"],
+#             format=SrcFileFormat.EBCDIC,
+#             format_cfg={
+#                 SrcFileFormat.EBCDIC: {"copybook": [layout], "codepage": codepage}
+#             },
+#         )
+#         df = _user_frame(_read_in(base, work, src)[0][0])
+#         assert df.to_dicts() == [{"MARK": expected, "NUM": 123}], codepage
 
-    assert _user_frame(out[0][0]).to_dicts() == [
-        {"NAME": "ALICE", "COUNT": 42},
-        {"NAME": "BOB", "COUNT": 7},
-    ]
-
-
-@fs_domain("fs")
-def test_src_ebcdic_decodes_each_numeric_encoding(
-    domain_fs: FsDomain, request: pytest.FixtureRequest
-):
-    # Storage width never reaches the schema: zoned, packed and binary fields
-    # of the same precision all land on the same arrow type.
-    _, base, work = scratch(domain_fs, request)
-    layout = ebcdic.copybook(
-        "01  NUMBERS.",
-        "    05  ZONE  PIC S9(5).",
-        "    05  SEP   PIC S9(5) SIGN LEADING SEPARATE.",
-        "    05  PACK  PIC S9(7)V99 COMP-3.",
-        "    05  BIN   PIC S9(9) COMP.",
-        "    05  RATE  COMP-1.",
-    )
-    _stage_records(
-        base,
-        "nums.dat",
-        [
-            ebcdic.zoned(-6789, 5)
-            + ebcdic.zoned_leading_sign(-42, 5)
-            + ebcdic.packed(1234567, 9)
-            + ebcdic.binary(-98765, 9)
-            + ebcdic.hfp(1.0, 4)
-        ],
-    )
-
-    src = LocalFileSrc(
-        paths=["nums.dat"],
-        format=SrcFileFormat.EBCDIC,
-        format_cfg={SrcFileFormat.EBCDIC: {"copybook": [layout]}},
-    )
-    df = _user_frame(_read_in(base, work, src)[0][0])
-
-    assert dict(df.schema) == {
-        "ZONE": pl.Int64,
-        "SEP": pl.Int64,
-        "PACK": pl.Decimal(9, 2),
-        "BIN": pl.Int64,
-        "RATE": pl.Float64,
-    }
-    assert df.to_dicts() == [
-        {
-            "ZONE": -6789,
-            "SEP": -42,
-            "PACK": Decimal("12345.67"),
-            "BIN": -98765,
-            "RATE": 1.0,
-        }
-    ]
-
-
-@fs_domain("fs")
-def test_src_ebcdic_reads_each_path_against_its_own_copybook(
-    domain_fs: FsDomain, request: pytest.FixtureRequest
-):
-    _, base, work = scratch(domain_fs, request)
-    orders = ebcdic.copybook("01  ORDER-REC.", "    05  QTY PIC 9(3).")
-    _stage_records(base, "cust.dat", [ebcdic.customer("ZOE", 1)])
-    _stage_records(base, "ord.dat", [ebcdic.zoned(250, 3, signed=False)])
-
-    src = LocalFileSrc(
-        paths=["cust.dat", "ord.dat"],
-        format=SrcFileFormat.EBCDIC,
-        format_cfg={SrcFileFormat.EBCDIC: {"copybook": [ebcdic.CUSTOMER, orders]}},
-    )
-    out = _read_in(base, work, src)
-
-    # Two paths, two layouts: the per-path copybook list is narrowed per slot.
-    assert len(out) == 2
-    assert _user_frame(out[0][0]).item(0, 0) == "ZOE"
-    assert _user_frame(out[1][0]).item(0, 0) == 250
-
-
-@fs_domain("fs")
-def test_src_ebcdic_codepage_reaches_the_text_fields(
-    domain_fs: FsDomain, request: pytest.FixtureRequest
-):
-    # 0x4A is a cent sign under cp037 and A-umlaut under cp273; the digits
-    # decode from raw nibbles either way.
-    _, base, work = scratch(domain_fs, request)
-    layout = ebcdic.copybook(
-        "01  REC.", "    05  MARK PIC X(1).", "    05  NUM PIC 9(3)."
-    )
-    _stage_records(
-        base, "page.dat", [bytes([0x4A]) + ebcdic.zoned(123, 3, signed=False)]
-    )
-
-    for codepage, expected in [("cp037", "¢"), ("cp273", "Ä")]:
-        src = LocalFileSrc(
-            paths=["page.dat"],
-            format=SrcFileFormat.EBCDIC,
-            format_cfg={
-                SrcFileFormat.EBCDIC: {"copybook": [layout], "codepage": codepage}
-            },
-        )
-        df = _user_frame(_read_in(base, work, src)[0][0])
-        assert df.to_dicts() == [{"MARK": expected, "NUM": 123}], codepage
-
-
-@fs_domain("fs")
-def test_src_ebcdic_a_file_that_is_not_whole_records_fails_the_read(
-    domain_fs: FsDomain, request: pytest.FixtureRequest
-):
-    # The wrong copybook version, or a transfer made in text mode.
-    _, base, work = scratch(domain_fs, request)
-    (base / "ragged.dat").write_bytes(ebcdic.customer("ALICE", 42) + b"\x00\x00")
-
-    src = LocalFileSrc(
-        paths=["ragged.dat"],
-        format=SrcFileFormat.EBCDIC,
-        format_cfg={SrcFileFormat.EBCDIC: {"copybook": [ebcdic.CUSTOMER]}},
-    )
-    with pytest.raises(Exception, match="records"):
-        _read_in(base, work, src)
+#
+# @fs_domain("fs")
+# def test_src_ebcdic_a_file_that_is_not_whole_records_fails_the_read(
+#     domain_fs: FsDomain, request: pytest.FixtureRequest
+# ):
+#     # The wrong copybook version, or a transfer made in text mode.
+#     _, base, work = scratch(domain_fs, request)
+#     (base / "ragged.dat").write_bytes(ebcdic.customer("ALICE", 42) + b"\x00\x00")
+#
+#     src = LocalFileSrc(
+#         paths=["ragged.dat"],
+#         format=SrcFileFormat.EBCDIC,
+#         format_cfg={SrcFileFormat.EBCDIC: {"copybook": [ebcdic.CUSTOMER]}},
+#     )
+#     with pytest.raises(Exception, match="records"):
+#         _read_in(base, work, src)

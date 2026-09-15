@@ -153,21 +153,14 @@ class LocalFileSrc(Src):
             declares, hidden ones included. Two paths may name different
             sheets of one workbook, giving a slot each.
         format: File format -- one of `AUTO`, `CSV`, `JSON`,
-            `AVRO`, `PARQUET`, `LOG`, `EXCEL`, `EBCDIC`. `AUTO` (the default)
+            `AVRO`, `PARQUET`, `LOG`, `EXCEL`. `AUTO` (the default)
             infers it from the file extension. `EXCEL` reads one
             worksheet of an `.xlsx` workbook, named by the path's `#<n>`
-            fragment. `EBCDIC` reads fixed-length records described by a
-            COBOL copybook; it must be named explicitly (a mainframe
-            extract has no extension to infer from) and its paths may not
-            use a wildcard, each being read against its own copybook.
+            fragment.
         format_cfg: Optional per-format reader options (source-side
             keys only), keyed by the `SrcFileFormat`. `EXCEL` takes
             `has_header` (default `True`); with `False` the first row is
             data and the columns are named `column_1`, `column_2`, ...
-            `EBCDIC` requires `copybook`, a list holding the copybook
-            source text for each entry in `paths`, and takes `codepage`
-            -- one of `cp037` (the default), `cp273`, `cp500` or `cp1140`,
-            spelled exactly so.
         initial_last_modified: Optional cutoff for incremental
             ingestion. The first run imports only files modified at or
             after this timestamp; the cutoff then advances each run so

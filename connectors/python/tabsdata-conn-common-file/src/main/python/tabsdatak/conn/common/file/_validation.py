@@ -156,7 +156,6 @@ def _allowed_keys(fmt_name: str, *, side: str) -> frozenset[str]:
     from tabsdatak.conn.common.file.typing_ import (
         CsvDestKey,
         CsvSrcKey,
-        EbcdicSrcKey,
         ExcelSrcKey,
     )
 
@@ -165,8 +164,8 @@ def _allowed_keys(fmt_name: str, *, side: str) -> frozenset[str]:
             return frozenset(get_args(CsvSrcKey))
         if side == "dest":
             return frozenset(get_args(CsvDestKey))
-    if fmt_name == "EBCDIC" and side == "src":
-        return frozenset(get_args(EbcdicSrcKey))
+    # if fmt_name == "EBCDIC" and side == "src":
+    #     return frozenset(get_args(EbcdicSrcKey))
     if fmt_name == "EXCEL" and side == "src":
         # Deliberately not ``sheet``: that arrives as a path fragment, not
         # as an option, and a user naming it here should be told so.
@@ -255,56 +254,47 @@ def split_sheet_fragment(path: str, file_format: Any) -> tuple[str, int | None]:
 def validate_src_format(fmt: Any, paths: Any, value: dict | None) -> None:
     """Cross-check a source's `format` against its `paths` and `format_cfg`.
 
-    For Excel format, the paths are checked for a `#<sheet>` fragment and the fragment
-    is validated. For EBCDIC format, the paths are checked for a `copybook` entry in the
-    `format_cfg`, the number of copybooks must match the number of paths, and the
-    `codepage` is validated for valid values.
+    For Excel format, the paths are checked for a `#<sheet>` fragment and the
+    fragment is validated.
     """
-    # Local import for the same circular-import reason as above.
-    from tabsdatak.common._fileformat.taxonomy import (
-        EBCDIC_CODEPAGES,
-        SrcFileFormat,
-    )
-
     # Excel paths are checked for a `#<sheet>` fragment and the fragment is validated.
     for path in paths or []:
         split_sheet_fragment(str(path), fmt)
 
-    if fmt is not SrcFileFormat.EBCDIC:
-        return
-    cfg = (value or {}).get(SrcFileFormat.EBCDIC) or {}
-    copybooks = cfg.get("copybook")
-    if not copybooks:
-        raise FileCommonErrorCode.FILE_COMMON_31.exception()
+    # if fmt is not SrcFileFormat.EBCDIC:
+    #     return
+    # cfg = (value or {}).get(SrcFileFormat.EBCDIC) or {}
+    # copybooks = cfg.get("copybook")
+    # if not copybooks:
+    #     raise FileCommonErrorCode.FILE_COMMON_31.exception()
 
-    entries = list(paths or [])
-    # A wildcard is an unknown number of files, so no fixed list pairs with
-    # it. Before the count check, which would report an unactionable length.
-    for path in entries:
-        if "*" in str(path):
-            raise FileCommonErrorCode.FILE_COMMON_33.exception(path=path)
+    # entries = list(paths or [])
+    # # A wildcard is an unknown number of files, so no fixed list pairs with
+    # # it. Before the count check, which would report an unactionable length.
+    # for path in entries:
+    #     if "*" in str(path):
+    #         raise FileCommonErrorCode.FILE_COMMON_33.exception(path=path)
 
-    if not isinstance(copybooks, (list, tuple)) or len(copybooks) != len(entries):
-        given = (
-            f"{len(copybooks)}"
-            if isinstance(copybooks, (list, tuple))
-            else type(copybooks).__name__
-        )
-        raise FileCommonErrorCode.FILE_COMMON_32.exception(
-            paths=len(entries), given=given
-        )
+    # if not isinstance(copybooks, (list, tuple)) or len(copybooks) != len(entries):
+    #     given = (
+    #         f"{len(copybooks)}"
+    #         if isinstance(copybooks, (list, tuple))
+    #         else type(copybooks).__name__
+    #     )
+    #     raise FileCommonErrorCode.FILE_COMMON_32.exception(
+    #         paths=len(entries), given=given
+    #     )
 
-    codepage = cfg.get("codepage")
-    # Spelled exactly as the binary's enum spells it -- it deserializes by
-    # name, so `CP037` is as unusable as `cp1047`.
-    if codepage is not None and codepage not in EBCDIC_CODEPAGES:
-        raise FileCommonErrorCode.FILE_COMMON_34.exception(
-            codepage=codepage, supported=", ".join(EBCDIC_CODEPAGES)
-        )
+    # codepage = cfg.get("codepage")
+    # # Spelled exactly as the binary's enum spells it -- it deserializes by
+    # # name, so `CP037` is as unusable as `cp1047`.
+    # if codepage is not None and codepage not in EBCDIC_CODEPAGES:
+    #     raise FileCommonErrorCode.FILE_COMMON_34.exception(
+    #         codepage=codepage, supported=", ".join(EBCDIC_CODEPAGES)
+    #     )
 
 
 def validate_src_purge(purge: Any, initial_last_modified: Any) -> None:
     """Raise an exception if `purge` is True but `initial_last_modified` is None."""
     if purge and initial_last_modified is None:
         raise FileCommonErrorCode.FILE_COMMON_35.exception()
-

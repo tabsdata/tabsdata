@@ -29,7 +29,6 @@ class SrcFileFormat(Enum):
     PARQUET = "PARQUET"
     LOG = "LOG"
     EXCEL = "EXCEL"
-    EBCDIC = "EBCDIC"
 
 
 class DestFileFormat(Enum):
