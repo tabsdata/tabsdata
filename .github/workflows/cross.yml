@@ -15,6 +15,14 @@ on:
         description: "Build linux arm64"
         type: boolean
         default: true
+      run_on_macos:
+        description: "Build+test macOS (arm64 and x86_64)"
+        type: boolean
+        default: true
+      run_on_windows:
+        description: "Build+test Windows (x86_64 and arm64)"
+        type: boolean
+        default: true
       glibc_floor:
         description: "Maximum permitted GLIBC symbol version"
         type: string
@@ -28,7 +36,9 @@ on:
         type: choice
         default: floor-and-edges
         options:
+          # One image per glibc step: fast, still proves the floor and the top.
           - floor-and-edges
+          # Every image in the matrix: minors across all major families.
           - full
 
 permissions:
@@ -45,13 +55,15 @@ jobs:
             echo "### Placeholder workflow"
             echo ""
             echo "This registers \`.github/workflows/cross.yml\` on the default"
-            echo "branch so \`workflow_dispatch\` becomes available. It performs"
-            echo "no build."
+            echo "branch so \`workflow_dispatch\` and its input form are"
+            echo "available. It performs no build."
             echo ""
             echo "| input | value received |"
             echo "|---|---|"
             echo "| run_on_linux_x86_64 | \`${{ inputs.run_on_linux_x86_64 }}\` |"
             echo "| run_on_linux_arm_64 | \`${{ inputs.run_on_linux_arm_64 }}\` |"
+            echo "| run_on_macos | \`${{ inputs.run_on_macos }}\` |"
+            echo "| run_on_windows | \`${{ inputs.run_on_windows }}\` |"
             echo "| glibc_floor | \`${{ inputs.glibc_floor }}\` |"
             echo "| profile | \`${{ inputs.profile }}\` |"
             echo "| distro_scope | \`${{ inputs.distro_scope }}\` |"
