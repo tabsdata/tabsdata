@@ -203,9 +203,14 @@ def test_the_granted_rights_are_a_subset_of_what_the_operator_needs():
     assert {verb.caption for verb in GRANTED} <= {verb.caption for verb in WORKLOAD}
 
 
-def test_bulk_deletion_is_asked_for_separately_from_deletion():
+def test_bulk_deletion_is_asked_for_on_every_workload_kind():
     assert all(verb.verb == "deletecollection" for verb in TEARDOWN)
-    assert not any(verb.verb == "deletecollection" for verb in WORKLOAD)
+    assert {verb.resource for verb in TEARDOWN} == {
+        "pods",
+        "deployments",
+        "jobs",
+        "cronjobs",
+    }
 
 
 def test_authoring_covers_both_the_role_and_its_binding():

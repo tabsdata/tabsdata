@@ -319,11 +319,11 @@ pods:
     role_aks.yaml:
       action: create
     role_docker.yaml:
-      action: retain
+      action: replace
     role_eks.yaml:
-      action: retain
+      action: replace
     role_fargate.yaml:
-      action: retain
+      action: replace
     role_gke.yaml:
       action: create
   rolebinding.yaml:

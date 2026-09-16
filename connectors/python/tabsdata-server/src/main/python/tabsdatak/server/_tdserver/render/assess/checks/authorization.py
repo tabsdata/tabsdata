@@ -52,18 +52,32 @@ def verbs(group: str, resource: str, *names: str, subresource: str = "") -> list
     return [Verb(group, resource, name, subresource) for name in names]
 
 
+# Every verb a resource the instance owns is managed through, so a role that
+# grants the set outright is asked for the set outright.
+CRUDL = (
+    "get",
+    "list",
+    "watch",
+    "create",
+    "update",
+    "patch",
+    "delete",
+    "deletecollection",
+)
+
+
 WORKLOAD: list[Verb] = [
-    *verbs("", "pods", "get", "list", "watch", "create", "delete"),
+    *verbs("", "pods", *CRUDL),
     *verbs("", "pods", "get", subresource="log"),
     *verbs("", "pods", "create", subresource="portforward"),
-    *verbs("", "configmaps", "get", "list", "create", "update", "delete"),
-    *verbs("", "secrets", "get", "list", "create", "update", "delete"),
-    *verbs("", "services", "get", "list", "create", "update", "delete"),
-    *verbs("", "serviceaccounts", "create", "delete"),
-    *verbs("apps", "deployments", "get", "list", "create", "delete"),
-    *verbs("batch", "jobs", "get", "list", "create", "delete"),
-    *verbs("batch", "cronjobs", "get", "list", "create", "delete"),
-    *verbs("policy", "poddisruptionbudgets", "create", "update"),
+    *verbs("", "configmaps", *CRUDL),
+    *verbs("", "secrets", *CRUDL),
+    *verbs("", "services", *CRUDL),
+    *verbs("", "serviceaccounts", *CRUDL),
+    *verbs("apps", "deployments", *CRUDL),
+    *verbs("batch", "jobs", *CRUDL),
+    *verbs("batch", "cronjobs", *CRUDL),
+    *verbs("policy", "poddisruptionbudgets", *CRUDL),
 ]
 
 TEARDOWN: list[Verb] = [
@@ -79,12 +93,12 @@ AUTHORING: list[Verb] = [
 ]
 
 GRANTED: list[Verb] = [
-    *verbs("", "pods", "get", "list", "watch", "create", "delete"),
+    *verbs("", "pods", *CRUDL),
     *verbs("", "pods", "get", subresource="log"),
-    *verbs("", "configmaps", "get", "list", "create", "update", "delete"),
-    *verbs("", "secrets", "get", "list", "create", "update", "delete"),
-    *verbs("batch", "jobs", "get", "list", "create", "delete"),
-    *verbs("batch", "cronjobs", "get", "list", "create", "delete"),
+    *verbs("", "configmaps", *CRUDL),
+    *verbs("", "secrets", *CRUDL),
+    *verbs("batch", "jobs", *CRUDL),
+    *verbs("batch", "cronjobs", *CRUDL),
 ]
 
 CLUSTER_WIDE: list[Verb] = [
