@@ -15,6 +15,8 @@ through the `JsonSerde` envelope; polymorphic fields (`criteria`,
 from abc import ABC
 from dataclasses import field
 
+from pydantic import model_validator
+
 # noinspection PyProtectedMember
 from tabsdatak import _api
 from tabsdatak.api import TableNameSpec
@@ -489,7 +491,9 @@ class Filter(CriteriaOperator):
         to_table: Table to redirect the removed rows to; a valid table
             name. If `None` (default), they are discarded.
         include_quality_columns: Verdict columns to carry into `to_table`:
-            `"none"`, `"criteria"` or `"all"` (default `"none"`).
+            `"none"`, `"criteria"` or `"all"` (default `"none"`). The target
+            table never carries them, so any value other than `"none"`
+            requires `to_table`.
 
     Examples:
         Drop every row a classifier failed:
@@ -514,6 +518,14 @@ class Filter(CriteriaOperator):
 
     to_table: TableNameSpec | None = None
     include_quality_columns: IncludeQualityColumnsSpec = "none"
+
+    @model_validator(mode="after")
+    def validate_quality_columns_have_a_table(self) -> "Filter":
+        if self.to_table is None and self.include_quality_columns != "none":
+            raise DataQualityErrorCode.DQC_26.exception(
+                policy=self.include_quality_columns
+            )
+        return self
 
 
 @_api.dataclass(DataQualityErrorCode.DQC_28)

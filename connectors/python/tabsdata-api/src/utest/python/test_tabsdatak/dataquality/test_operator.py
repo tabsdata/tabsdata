@@ -83,3 +83,19 @@ def test_fail_round_trips_polymorphic_criteria_and_threshold():
 def test_operator_round_trip(op):
     back = type(op).from_json(op.to_json())
     assert back == op
+
+
+@pytest.mark.parametrize("policy", ["criteria", "all"])
+def test_filter_quality_columns_require_a_redirect_table(policy):
+    with pytest.raises(ParameterValidationError) as exc:
+        dq.Filter(dq.AnyFailed(), include_quality_columns=policy)
+    assert exc.value.api_error is DataQualityErrorCode.DQC_26
+    assert policy in str(exc.value)
+
+
+def test_filter_quality_columns_are_allowed_with_a_redirect_table():
+    operator = dq.Filter(
+        dq.AnyFailed(), to_table="rejected", include_quality_columns="all"
+    )
+    assert operator.include_quality_columns == "all"
+    assert dq.Filter(dq.AnyFailed()).include_quality_columns == "none"

@@ -10,7 +10,7 @@ import math
 from collections import namedtuple
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import TYPE_CHECKING, AbstractSet, Any, Callable, Self, TypeVar, cast
+from typing import TYPE_CHECKING, AbstractSet, Any, Callable, Self, TypeVar
 
 import polars as pl
 from polars._typing import ClosedInterval
@@ -83,7 +83,10 @@ from tabsdatak.dataquality._operator import (
     Enrich,
     Fail,
 )
-from tabsdatak.dataquality._typing import DEFAULT_VERDICT_COLUMN_PREFIX
+from tabsdatak.dataquality._typing import (
+    DEFAULT_VERDICT_COLUMN_PREFIX,
+    IncludeQualityColumnsSpec,
+)
 from tabsdatak.tableframe._core.hooks import tableframe_of
 from tabsdatak.tableframe._engine.taxonomy.column import ColumnKind
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
@@ -1656,122 +1659,72 @@ class DataQualityEngine:
         else:
             return Harvest(output=enrich_dtf, derived=None)
 
-    # noinspection DuplicatedCode
     def filter(
         self,
         operation: Filter,
     ) -> Harvest:
         condition = self._criteria_plan([operation.criteria])
 
-        user_columns, system_columns = _split_columns(self._schema.names())
-        columns = None
-        match operation.include_quality_columns:
-            case "all":
-                dq_columns = self._columns(None)
-                columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
-            case "criteria":
-                if isinstance(operation.criteria, BoolCriteria):
-                    dq_criteria = cast(BoolCriteria, operation.criteria)
-                    tags = self._tags_spec_to_list(dq_criteria.tags)
-                    tags = (
-                        None
-                        if tags is None
-                        else set(self._tags_spec_to_list(dq_criteria.tags))
-                    )
-                    dq_columns = self._columns(tags)
-                elif isinstance(operation.criteria, CategoryCriteria):
-                    dq_criteria = cast(CategoryCriteria, operation.criteria)
-                    dq_columns = {dq_criteria.column_name}
-                else:
-                    dq_columns = set()
-                columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
-            case "none":
-                columns = list(user_columns) + list(system_columns)
-            case _:
-                raise ValueError(
-                    "Unsupported data quality columns inclusion policy:"
-                    f" {operation.include_quality_columns}"
-                )
-
-        ok_lf = self._tf._lf.filter(condition).select(columns)
-        ok_tf = type(self._tf)._build(
-            ok_lf,
-            CreationMode.TAB,
-            source=self._tf,
-        )
-        ok_dtf = DerivedTableFrame(
-            status=DerivedTableFrameStatus.HARVESTED,
-            original_tf=self._tf,
-            derived_tf=ok_tf,
-        )
-
-        ko_lf = self._tf._lf.filter(~condition).select(columns)
-        ko_tf = type(self._tf)._build(
-            ko_lf,
-            CreationMode.TAB,
-            source=self._tf,
-        )
-        ko_dtf = DerivedTableFrame(
-            status=DerivedTableFrameStatus.HARVESTED,
-            original_tf=self._tf,
-            derived_tf=ko_tf,
-        )
-
+        keep_columns = self._criteria_columns(operation.criteria, "none")
+        keep_dtf = self._derive(self._tf._lf.filter(~condition).select(keep_columns))
         if operation.to_table is None:
-            return Harvest(output=ok_dtf, derived=None)
-        else:
-            return Harvest(output=ok_dtf, derived=ko_dtf)
+            return Harvest(output=keep_dtf, derived=None)
 
-    # noinspection DuplicatedCode
+        drop_columns = self._criteria_columns(
+            operation.criteria, operation.include_quality_columns
+        )
+        drop_dtf = self._derive(self._tf._lf.filter(condition).select(drop_columns))
+        return Harvest(output=keep_dtf, derived=drop_dtf)
+
     def select(
         self,
         operation: Select,
     ) -> Harvest:
         condition = self._criteria_plan([operation.criteria])
+        columns = self._criteria_columns(
+            operation.criteria, operation.include_quality_columns
+        )
 
+        selected_dtf = self._derive(self._tf._lf.filter(condition).select(columns))
+        return Harvest(output=None, derived=selected_dtf)
+
+    def _criteria_columns(
+        self,
+        criteria: Criteria,
+        include_quality_columns: IncludeQualityColumnsSpec,
+    ) -> list[str]:
         user_columns, system_columns = _split_columns(self._schema.names())
-        columns = None
-        match operation.include_quality_columns:
+        match include_quality_columns:
             case "all":
                 dq_columns = self._columns(None)
-                columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
             case "criteria":
-                if isinstance(operation.criteria, BoolCriteria):
-                    dq_criteria = cast(BoolCriteria, operation.criteria)
-                    tags = self._tags_spec_to_list(dq_criteria.tags)
-                    tags = (
-                        None
-                        if tags is None
-                        else set(self._tags_spec_to_list(dq_criteria.tags))
-                    )
-                    dq_columns = self._columns(tags)
-                elif isinstance(operation.criteria, CategoryCriteria):
-                    dq_criteria = cast(CategoryCriteria, operation.criteria)
-                    dq_columns = {dq_criteria.column_name}
+                if isinstance(criteria, BoolCriteria):
+                    tags = self._tags_spec_to_list(criteria.tags)
+                    dq_columns = self._columns(None if tags is None else set(tags))
+                elif isinstance(criteria, CategoryCriteria):
+                    dq_columns = {criteria.column_name}
                 else:
                     dq_columns = set()
-                columns = list(user_columns) + sorted(dq_columns) + list(system_columns)
             case "none":
-                columns = list(user_columns) + list(system_columns)
+                dq_columns = set()
             case _:
                 raise ValueError(
                     "Unsupported data quality columns inclusion policy:"
-                    f" {operation.include_quality_columns}"
+                    f" {include_quality_columns}"
                 )
+        return list(user_columns) + sorted(dq_columns) + list(system_columns)
 
-        ok_lf = self._tf._lf.filter(condition).select(columns)
-        ok_tf = type(self._tf)._build(
-            ok_lf,
+    def _derive(self, lf: pl.LazyFrame) -> DerivedTableFrame:
+        derived_tf = type(self._tf)._build(
+            lf,
             CreationMode.TAB,
             source=self._tf,
         )
-        ok_dtf = DerivedTableFrame(
+        return DerivedTableFrame(
             status=DerivedTableFrameStatus.HARVESTED,
             original_tf=self._tf,
-            derived_tf=ok_tf,
+            derived_tf=derived_tf,
         )
-
-        return Harvest(output=None, derived=ok_dtf)
 
     # noinspection DuplicatedCode
     def summary(

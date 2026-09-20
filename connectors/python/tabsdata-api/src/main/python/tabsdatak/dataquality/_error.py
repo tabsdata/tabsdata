@@ -76,6 +76,12 @@ class DataQualityErrorCode(ErrorCode):
     DQC_25 = ErrorDef(
         ParameterValidationError, "Invalid parameters for the 'Filter' operator."
     )
+    DQC_26 = ErrorDef(
+        ParameterValidationError,
+        "'Filter' carries verdict columns only into 'to_table', but "
+        "'include_quality_columns' is '{policy}' and no 'to_table' is set. Set "
+        "'to_table' or leave 'include_quality_columns' as 'none'.",
+    )
     DQC_28 = ErrorDef(
         ParameterValidationError, "Invalid parameters for the 'Select' operator."
     )

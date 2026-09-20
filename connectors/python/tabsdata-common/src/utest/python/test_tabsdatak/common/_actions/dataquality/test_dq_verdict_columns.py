@@ -340,7 +340,7 @@ def test_a_full_action_keeps_every_verdict_column_across_four_operators():
             dq.Enrich(),
             dq.Summary(to_table="orders_summary"),
             dq.Filter(
-                dq.AllOk(tags=["strict"]),
+                dq.AnyFailed(tags=["strict"]),
                 to_table="orders_bad",
                 include_quality_columns="all",
             ),
