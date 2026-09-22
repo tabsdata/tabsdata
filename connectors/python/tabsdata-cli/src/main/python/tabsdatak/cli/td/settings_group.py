@@ -15,28 +15,36 @@ from tabsdatak.cli.cli_utils import (
     PIN_COLLECTION,
     PIN_PROJECT,
     SERVER_URL_DEFAULTS_HELP,
+    active_profile,
     clear_current_cli_option,
+    clear_default_profile,
     cli_option_enabled,
     configured_server,
     format_option,
     get_current_cli_option,
     get_pin,
     hint_common_solutions,
+    load_cli_options,
+    read_default_profile,
     render,
+    set_profile,
     set_cli_option_enabled,
     set_current_cli_option,
     set_pin,
     store_cli_options,
+    store_default_profile,
+    validate_profile_name,
 )
 
 _NOTHING_TO_SET = (
     "Nothing to set. Specify at least one setting: --hints true|false, "
-    "--prompt true|false, --server SERVER, --proj PROJECT and/or "
-    "--coll COLLECTION."
+    "--prompt true|false, --server SERVER, --proj PROJECT, --coll COLLECTION "
+    "and/or --profile NAME."
 )
 _NOTHING_TO_UNSET = (
     "Nothing to unset. Specify at least one setting: --hints, --prompt, "
-    "--server, --proj and/or --coll -- or --all for every one of them."
+    "--server, --proj, --coll and/or --profile -- or --all for every one of "
+    "them but the profile."
 )
 
 _TRUE = "true"
@@ -45,6 +53,10 @@ _FALSE = "false"
 # leaves behind; both default to true, which is what `tdk unset` restores. The
 # same two words render them in `tdk settings`.
 _BOOL = click.Choice((_TRUE, _FALSE))
+
+
+def _valid_profile(ctx: click.Context, param, value):
+    return validate_profile_name(value) if value is not None else value
 
 
 @cli_command
@@ -84,6 +96,17 @@ _BOOL = click.Choice((_TRUE, _FALSE))
     "collection",
     help="Collection to pin (requires a pinned project).",
 )
+@click.option(
+    "--profile",
+    metavar="NAME",
+    callback=_valid_profile,
+    help=(
+        "Profile commands run under when given no --profile: their connection "
+        "and settings come from '<NAME>-connection.json' and "
+        "'<NAME>-options.json'. Recorded in 'profile.json'. The other settings "
+        "of this command are stored in that profile."
+    ),
+)
 @click.pass_context
 def set_setting(
     ctx: click.Context,
@@ -92,13 +115,14 @@ def set_setting(
     url: str,
     project: str,
     collection: str,
+    profile: str,
 ):
     """Give a setting a value.
 
     Settings are persisted in 'options.json' under the Tabsdata directory
-    ('~/.tabsdata') and apply to every later invocation; 'tdk unset' drops them
-    back to their default and 'tdk settings' shows them. More than one can be
-    set at once.
+    ('~/.tabsdata') -- or in '<NAME>-options.json' under a profile -- and apply
+    to every later invocation; 'tdk unset' drops them back to their default and
+    'tdk settings' shows them. More than one can be set at once.
 
     Examples:
         tdk set --hints false
@@ -107,9 +131,16 @@ def set_setting(
         tdk set --server 127.0.0.1              # http://127.0.0.1:2457
         tdk set --proj sales
         tdk set --proj sales --coll orders
+        tdk set --profile dev                   # default profile for commands
+        tdk set --profile dev --server dev-host # ...and dev's server
     """
-    if hints is None and prompt is None and not (url or project or collection):
+    settings_given = (
+        hints is not None or prompt is not None or bool(url or project or collection)
+    )
+    if not (settings_given or profile):
         raise click.UsageError(_NOTHING_TO_SET)
+    if profile:
+        _set_default_profile(ctx, profile)
     if hints is not None:
         _set_enabled(ctx, OPTION_HINTS, hints == _TRUE)
     if prompt is not None:
@@ -118,7 +149,8 @@ def set_setting(
         _set_server(ctx, url)
     if project or collection:
         _pin(ctx, project, collection)
-    store_cli_options(ctx)
+    if settings_given:
+        store_cli_options(ctx)
 
 
 @cli_command
@@ -146,8 +178,17 @@ def set_setting(
     "all_settings",
     is_flag=True,
     help=(
-        "Unset every setting: shorthand for all the flags above, leaving every "
-        "one of them at its default."
+        "Unset every setting stored in the profile: shorthand for --hints, "
+        "--prompt, --server, --proj and --coll, leaving every one of them at "
+        "its default. The default profile stays as it is."
+    ),
+)
+@click.option(
+    "--profile",
+    is_flag=True,
+    help=(
+        "Drop the default profile set with 'tdk set --profile', so commands "
+        "given no --profile use 'connection.json' and 'options.json' again."
     ),
 )
 @click.pass_context
@@ -159,6 +200,7 @@ def unset_setting(
     project: bool,
     collection: bool,
     all_settings: bool,
+    profile: bool,
 ):
     """Drop a setting back to its default.
 
@@ -172,11 +214,13 @@ def unset_setting(
         tdk unset --server
         tdk unset --coll                        # unpin the collection only
         tdk unset --proj                        # unpins the collection too
-        tdk unset --all                         # every setting
+        tdk unset --all                         # every setting of the profile
+        tdk unset --profile                     # back to the default profile
     """
     if all_settings:
         hints = prompt = url = project = collection = True
-    if not (hints or prompt or url or project or collection):
+    settings_given = hints or prompt or url or project or collection
+    if not (settings_given or profile):
         raise click.UsageError(_NOTHING_TO_UNSET)
     if hints:
         _clear_enabled(ctx, OPTION_HINTS)
@@ -186,7 +230,10 @@ def unset_setting(
         _unset_server(ctx)
     if project or collection:
         _unpin(ctx, project)
-    store_cli_options(ctx)
+    if profile:
+        _clear_default_profile(ctx)
+    if settings_given:
+        store_cli_options(ctx)
 
 
 @cli_command
@@ -196,8 +243,10 @@ def unset_setting(
 def settings(ctx: click.Context):
     """Show the current settings.
 
-    The machine formats mirror what is stored in 'options.json'.
+    The machine formats mirror what the profile's options file stores, plus the
+    profile itself.
     """
+    profile = active_profile(ctx)
     hints_enabled = cli_option_enabled(ctx, OPTION_HINTS)
     prompt_enabled = cli_option_enabled(ctx, OPTION_PROMPT)
     current_server = configured_server(ctx)
@@ -205,6 +254,7 @@ def settings(ctx: click.Context):
     collection = get_pin(ctx, PIN_COLLECTION)
 
     def _table():
+        click.echo(f"Profile:           {profile if profile else '(default)'}")
         click.echo(f"Hints:             {_true_false(hints_enabled)}")
         click.echo(f"Prompt:            {_true_false(prompt_enabled)}")
         click.echo(
@@ -216,6 +266,7 @@ def settings(ctx: click.Context):
     render(
         ctx,
         data={
+            "profile": profile,
             OPTION_HINTS: _stored(hints_enabled),
             OPTION_PROMPT: _stored(prompt_enabled),
             OPTION_SERVER: current_server,
@@ -253,6 +304,30 @@ def _clear_enabled(ctx: click.Context, option: str):
     else:
         clear_current_cli_option(ctx, option)
         click.echo(f"{label} unset, back to its default (true).")
+
+
+def _set_default_profile(ctx: click.Context, profile: str):
+    store_default_profile(ctx.obj["tabsdata_directory"], profile)
+    # The rest of this command stores its settings in the profile just made
+    # the default, so the two land together.
+    set_profile(ctx, profile)
+    load_cli_options(ctx)
+    click.echo(
+        f"Default profile set to {profile}. Commands given no --profile now use "
+        f"'{profile}-connection.json' and '{profile}-options.json'."
+    )
+
+
+def _clear_default_profile(ctx: click.Context):
+    directory = ctx.obj["tabsdata_directory"]
+    previous = read_default_profile(directory)
+    if clear_default_profile(directory):
+        click.echo(
+            f"Default profile unset (was {previous}). Commands given no --profile "
+            "use 'connection.json' and 'options.json'."
+        )
+    else:
+        click.echo("No default profile was set.")
 
 
 def _set_server(ctx: click.Context, url: str):

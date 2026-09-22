@@ -602,9 +602,7 @@ def _set_run_info(c: MagicMock) -> None:
 
 
 def _set_table_list(c: MagicMock) -> None:
-    _wire_listing(
-        c, "list_tables", [_DTO(_TABLES[0], function=_DTO({"name": "fn-a"}))]
-    )
+    _wire_listing(c, "list_tables", [_DTO(_TABLES[0], function=_DTO({"name": "fn-a"}))])
 
 
 def _set_table_schema(c: MagicMock) -> None:
@@ -652,7 +650,10 @@ CASES: tuple[RenderCase, ...] = (
         ("alice", "Alice A", "alice@x.io", "True", "bob", "Bob B", "bob@x.io", "False"),
     ),
     RenderCase(
-        "user-get", ["user", "get", "-n", "alice"], _set_user_info, _USERS[0],
+        "user-get",
+        ["user", "get", "-n", "alice"],
+        _set_user_info,
+        _USERS[0],
         ("alice", "Alice A", "alice@x.io", "True"),
     ),
     RenderCase(
@@ -663,7 +664,10 @@ CASES: tuple[RenderCase, ...] = (
         ("grp-a", "first group", "2026-01-01", "admin"),
     ),
     RenderCase(
-        "group-get", ["group", "get", "-n", "grp-a"], _set_group_info, _GROUP_INFO,
+        "group-get",
+        ["group", "get", "-n", "grp-a"],
+        _set_group_info,
+        _GROUP_INFO,
         # Form view: name/description/created + the collections in the group
         # ("coll-a" belongs to grp-a; "coll-z" is in another group).
         ("grp-a", "first group", "2026-01-01", "admin", "coll-a"),
@@ -676,8 +680,11 @@ CASES: tuple[RenderCase, ...] = (
         ("proj-a", "first project", "2026-01-02", "admin"),
     ),
     RenderCase(
-        "project-get", ["project", "get", "-n", "proj-a"], _set_project_info,
-        _PROJECTS[0], ("proj-a", "first project", "2026-01-02", "admin"),
+        "project-get",
+        ["project", "get", "-n", "proj-a"],
+        _set_project_info,
+        _PROJECTS[0],
+        ("proj-a", "first project", "2026-01-02", "admin"),
     ),
     RenderCase(
         "collection-list",
@@ -687,8 +694,11 @@ CASES: tuple[RenderCase, ...] = (
         ("coll-a", "first collection", "2026-01-03", "admin"),
     ),
     RenderCase(
-        "collection-get", ["collection", "get", "-n", "coll-a"], _set_collection_info,
-        _COLLECTIONS[0], ("coll-a", "first collection", "2026-01-03", "admin"),
+        "collection-get",
+        ["collection", "get", "-n", "coll-a"],
+        _set_collection_info,
+        _COLLECTIONS[0],
+        ("coll-a", "first collection", "2026-01-03", "admin"),
     ),
     RenderCase(
         # ``roles`` renders via beautify_list; assert the distinctive role value
@@ -708,10 +718,25 @@ CASES: tuple[RenderCase, ...] = (
         ("fn-a", "Publisher", "publishes stuff", "2026-02-01", "admin"),
     ),
     RenderCase(
-        "fn-get", ["fn", "get", "-n", "fn-a", "-c", "coll-a"], _set_fn_info, _FN_INFO,
+        "fn-get",
+        ["fn", "get", "-n", "fn-a", "-c", "coll-a"],
+        _set_fn_info,
+        _FN_INFO,
         # Form view: no ID row; project/collection/status(->"Active") are shown.
-        ("fn-a", "proj-a", "coll-a", "publishes stuff", "2026-02-01", "admin",
-         "Active", "dep1", "dep2", "trig1", "t1", "t2"),
+        (
+            "fn-a",
+            "proj-a",
+            "coll-a",
+            "publishes stuff",
+            "2026-02-01",
+            "admin",
+            "Active",
+            "dep1",
+            "dep2",
+            "trig1",
+            "t1",
+            "t2",
+        ),
     ),
     RenderCase(
         # plan get builds its tables inline for the table format and hands a
@@ -805,14 +830,17 @@ CASES: tuple[RenderCase, ...] = (
         # --show-history returns a list of versions via list_function_history.
         "fn-get-history",
         ["fn", "get", "-n", "fn-a", "-c", "coll-a", "--show-history"],
-        _set_fn_info_history, [_FN_VERSION],
+        _set_fn_info_history,
+        [_FN_VERSION],
         ("fn-a", "FID_1", "FV_0", "publishes stuff", "Active", "admin", "2026-02-01"),
     ),
     RenderCase(
         # epoch defined_on (1704067200000) is kept raw in json/yaml but rendered
         # as the UTC ISO string in the table.
-        "fn-patches", ["fn", "patches", "-n", "fn-a", "-c", "coll-a"],
-        _set_fn_list_patches, _PATCHES,
+        "fn-patches",
+        ["fn", "patches", "-n", "fn-a", "-c", "coll-a"],
+        _set_fn_list_patches,
+        _PATCHES,
         ("PV_2", "PV_1", "second patch", "2024-01-01T00:00:00Z", "published"),
     ),
     RenderCase(
@@ -1200,6 +1228,7 @@ def test_settings_renders_settings_store_offline(tmp_path):
         json.dumps({"pins": {"project": "proj-a", "collection": "coll-a"}})
     )
     payload = {
+        "profile": None,
         "hints": "enabled",
         "prompt": "enabled",
         "server": None,
@@ -1207,9 +1236,7 @@ def test_settings_renders_settings_store_offline(tmp_path):
     }
 
     for fmt in ("json", "yaml"):
-        result = _invoke(
-            ["settings", "-o", fmt], client=_client(), tmp_path=tmp_path
-        )
+        result = _invoke(["settings", "-o", fmt], client=_client(), tmp_path=tmp_path)
         assert result.exit_code == 0, result.output
         got = json.loads(result.output) if fmt == "json" else _load_yaml(result.output)
         assert got == payload

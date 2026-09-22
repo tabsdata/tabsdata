@@ -47,7 +47,8 @@ Ops & access
   metrics                Operational metrics
   permission             Grant/revoke user permissions
   connection             Inspect connector types & build connection docs (offline)
-  set / unset            Persistent CLI settings (pins, server, hints, prompting)
+  set / unset            Persistent CLI settings (pins, server, hints, prompting,
+                         default profile)
   settings               Show the persistent CLI settings
 
 Help & misc
@@ -78,6 +79,11 @@ Applied where shown in each command. Every value option takes an argument.
                                   for it before any other value.
   -c, --col    COLLECTION         Target collection. Default: pinned collection.
   -o, --format {table|json|yaml}  Output format. Default: table.
+      --profile NAME              Profile whose connection and settings the
+                                  command uses (`<NAME>-connection.json`,
+                                  `<NAME>-options.json`). Default: the profile
+                                  from `tdk set --profile`, else the bare files.
+                                  On every command; see Profiles.
       --max-result N              Maximum rows a `list` command shows. Default: 100.
                                   0 lists everything. When rows are left over,
                                   the command says so (on stderr under
@@ -294,13 +300,13 @@ shows them all. Each takes any combination of its settings in one command.
 
 ```
 set   [--hints true|false] [--prompt true|false] [--server SERVER]
-      [--proj PROJECT] [--coll COLLECTION]
-unset [--hints] [--prompt] [--server] [--proj] [--coll] | --all
+      [--proj PROJECT] [--coll COLLECTION] [--profile NAME]
+unset [--hints] [--prompt] [--server] [--proj] [--coll] [--profile] | --all
 settings [-o]                                       # current settings
 ```
 
-`unset --all` is shorthand for every flag at once, leaving every setting at its
-shipped default.
+`unset --all` is shorthand for every flag but `--profile` at once, leaving every
+setting of the profile at its shipped default.
 
 | Setting | What it does |
 |---|---|
@@ -309,6 +315,7 @@ shipped default.
 | `--server SERVER` | Server `tdk login` uses without `--server` |
 | `--proj PROJECT` | Default project of project-scoped commands |
 | `--coll COLLECTION` | Default collection (requires a pinned project) |
+| `--profile NAME` | Profile commands run under when given no `--profile` (see Profiles) |
 
 `set --prompt false` is the standing form of the root `--no-prompt` flag: with
 prompting off no command prompts, and one missing a required value fails, naming
@@ -320,6 +327,17 @@ under the old one.
 
 A server URL with no protocol defaults to `http://`, and one with no port to
 port `2457` — so `set --server 127.0.0.1` means `http://127.0.0.1:2457`.
+
+### Profiles
+
+A profile is a separate login and settings store: `<NAME>-connection.json` and
+`<NAME>-options.json` next to the bare `connection.json` / `options.json`, which
+are the default profile. Every command takes `--profile NAME` to run under a
+profile for that invocation, and `login --profile NAME` is how a profile's
+connection comes to exist. `set --profile NAME` records NAME in `profile.json`
+as the profile commands use when given no `--profile`, and stores the other
+settings of the same command in it; `unset --profile` removes `profile.json`,
+so the bare files apply again. `settings` names the profile it reports on.
 
 ## `tdk auth`
 
@@ -345,7 +363,8 @@ examples [--dir D] [--guide]
 
 `login` takes the server from `tdk set --server` when `--server` is
 omitted, and prompts only when neither is set. The URL defaults to the `http://`
-protocol and port `2457` when it carries neither.
+protocol and port `2457` when it carries neither. `login --profile NAME` stores
+the session in the profile's own connection file (see Profiles).
 
 ## Environment
 

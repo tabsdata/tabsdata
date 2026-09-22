@@ -219,7 +219,14 @@ def test_settings_commands_expose_every_setting():
         command = cli.commands.get(name)
         assert command is not None, f"`tdk {name}` missing"
         opts = {o for p in command.params for o in p.opts}
-        assert {"--hints", "--prompt", "--server", "--proj", "--coll"} <= opts
+        assert {
+            "--hints",
+            "--prompt",
+            "--server",
+            "--proj",
+            "--coll",
+            "--profile",
+        } <= opts
 
     settings = cli.commands.get("settings")
     assert settings is not None

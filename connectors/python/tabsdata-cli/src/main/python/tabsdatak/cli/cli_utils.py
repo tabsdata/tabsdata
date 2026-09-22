@@ -45,6 +45,13 @@ def make_console(**kwargs) -> "Console":
 
 
 CONNECTION_FILE = "connection.json"
+OPTIONS_FILE = "options.json"
+# A profile keeps its own ``<NAME>-connection.json`` and ``<NAME>-options.json``;
+# the bare files are the default profile. ``tdk set --profile`` records the
+# profile used when a command is given no ``--profile`` here, as
+# ``{"profile": NAME}``.
+PROFILE_FILE = "profile.json"
+PROFILE_KEY = "profile"
 
 # Mirrors tabsdatak.sdk._apiserver.DEFAULT_TABSDATA_DIRECTORY. Defined locally so
 # the common CLI path (which needs only this constant) never imports the
@@ -277,7 +284,7 @@ class _LazyTabsdataServer:
 
 def initialise_tabsdata_server_connection(ctx: click.Context):
     try:
-        with open(os.path.join(DEFAULT_TABSDATA_DIRECTORY, CONNECTION_FILE)) as f:
+        with open(get_credentials_file_path(ctx)) as f:
             credentials = json.load(f)
     except FileNotFoundError:
         ctx.obj["tabsdataserver"] = None
@@ -569,11 +576,68 @@ class MutuallyExclusiveOption(Option):
         return super(MutuallyExclusiveOption, self).handle_parse_result(ctx, opts, args)
 
 
+_PROFILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
+def validate_profile_name(name: str) -> str:
+    if not _PROFILE_NAME.fullmatch(name):
+        raise click.BadParameter(
+            f"'{name}' is not a valid profile name: use letters, digits, '.', "
+            "'_' or '-', starting with a letter or digit."
+        )
+    return name
+
+
+def profile_file_name(profile: str | None, file_name: str) -> str:
+    return file_name if profile is None else f"{profile}-{file_name}"
+
+
+def read_default_profile(tabsdata_directory: str) -> str | None:
+    try:
+        with open(os.path.join(tabsdata_directory, PROFILE_FILE)) as f:
+            return json.load(f).get(PROFILE_KEY) or None
+    except FileNotFoundError:
+        return None
+
+
+def store_default_profile(tabsdata_directory: str, profile: str) -> None:
+    with open(os.path.join(tabsdata_directory, PROFILE_FILE), "w") as f:
+        json.dump({PROFILE_KEY: profile}, f)
+
+
+def clear_default_profile(tabsdata_directory: str) -> bool:
+    """Drop the default profile; whether there was one to drop."""
+    try:
+        os.remove(os.path.join(tabsdata_directory, PROFILE_FILE))
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def set_profile(ctx: click.Context, profile: str | None) -> None:
+    """Point the invocation at ``profile``'s connection and options files, or at
+    the bare ones for the default profile. Callers reload what they hold from
+    the previously selected files."""
+    directory = ctx.obj["tabsdata_directory"]
+    ctx.obj["profile"] = profile
+    ctx.obj["connection_file"] = os.path.join(
+        directory, profile_file_name(profile, CONNECTION_FILE)
+    )
+    ctx.obj["options_file"] = os.path.join(
+        directory, profile_file_name(profile, OPTIONS_FILE)
+    )
+
+
+def active_profile(ctx: click.Context) -> str | None:
+    """The profile this invocation runs under; ``None`` for the default one."""
+    return ctx.obj.get("profile")
+
+
 def get_credentials_file_path(ctx: click.Context) -> str:
     """
     Get the path to the credentials file.
     """
-    return os.path.join(ctx.obj["tabsdata_directory"], CONNECTION_FILE)
+    return ctx.obj["connection_file"]
 
 
 def load_cli_options(ctx: click.Context):
@@ -591,7 +655,7 @@ def get_cli_options_file_path(ctx: click.Context) -> str:
     """
     Get the path to the cli options file.
     """
-    return os.path.join(ctx.obj["tabsdata_directory"], "options.json")
+    return ctx.obj["options_file"]
 
 
 def store_cli_options(ctx: click.Context):

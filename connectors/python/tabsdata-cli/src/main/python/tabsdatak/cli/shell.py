@@ -21,7 +21,7 @@ from prompt_toolkit.styles import Style
 from rich.panel import Panel
 from rich.text import Text
 
-from tabsdatak.cli.cli_utils import make_console
+from tabsdatak.cli.cli_utils import get_credentials_file_path, make_console
 
 # noinspection PyProtectedMember
 from tabsdatak.sdk._apiserver import APIServer
@@ -242,10 +242,10 @@ def show_banner(title, version):
 
 
 class SessionInfo:
-    """Tracks login state by watching connection.json."""
+    """Tracks login state by watching the connection file."""
 
-    def __init__(self, tabsdata_directory, tool_name):
-        self._cred_path = os.path.join(tabsdata_directory, "connection.json")
+    def __init__(self, credentials_path, tool_name):
+        self._cred_path = credentials_path
         self._tool_name = tool_name
         self._mtime = None
         self.user = None
@@ -343,7 +343,7 @@ def run_shell(ctx, cli_group, version, *, banner_title, tool_name):
     cli_group.add_command(exit, "quit")
     cli_group.add_command(help, "help")
 
-    session_info = SessionInfo(ctx.obj["tabsdata_directory"], tool_name)
+    session_info = SessionInfo(get_credentials_file_path(ctx), tool_name)
 
     # Key bindings: when the completion menu is visible, Enter accepts
     # the selected completion instead of executing the current input.

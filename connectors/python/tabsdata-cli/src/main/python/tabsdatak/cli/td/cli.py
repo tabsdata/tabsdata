@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from importlib.metadata import PackageNotFoundError, version
 
 import rich_click as click
+from dns import set
 
 try:
     __version__ = version("tabsdata-cli")
@@ -31,8 +32,11 @@ from tabsdatak.cli.cli_utils import (
     load_cli_options,
     logical_prompt,
     make_console,
+    read_default_profile,
+    set_profile,
     store_cli_options,
     utils_login,
+    validate_profile_name,
     verify_login_or_prompt,
 )
 
@@ -246,6 +250,56 @@ class _AiAgentGuardedGroup(click.RichGroup):
         return super().main(*args, **kwargs)
 
 
+def _activate_profile(ctx: click.Context, profile: str | None):
+    """Load what every command reads from ``profile``: its connection, its
+    persisted settings and the prompt setting among them."""
+    set_profile(ctx, profile)
+    initialise_tabsdata_server_connection(ctx)
+    load_cli_options(ctx)
+    # 'tdk set --prompt false' is a standing '--no-prompt'; the flag turns
+    # prompting off for a single invocation.
+    ctx.obj["prompt_setting"] = cli_option_enabled(ctx, OPTION_PROMPT)
+    ctx.obj["no_prompt"] = ctx.obj["no_prompt_flag"] or not ctx.obj["prompt_setting"]
+
+
+def _apply_profile(ctx: click.Context, param, value):
+    """``--profile`` option callback: run this command under the named profile
+    instead of the default one the root group loaded. Eager, so it lands before
+    ``--proj`` and the other options that act on the loaded connection."""
+    if value is not None:
+        _activate_profile(ctx, validate_profile_name(value))
+    return value
+
+
+def _profile_option() -> click.Option:
+    return click.Option(
+        ["--profile", "profile"],
+        metavar="NAME",
+        expose_value=False,
+        is_eager=True,
+        callback=_apply_profile,
+        help=(
+            "Profile whose connection and settings this command uses: "
+            "'<NAME>-connection.json' and '<NAME>-options.json' under the "
+            "Tabsdata directory. Default: the profile set with 'tdk set "
+            "--profile', else 'connection.json' and 'options.json'."
+        ),
+    )
+
+
+def _attach_profile_option(command: click.Command):
+    """Give every command under ``command`` the per-command ``--profile``.
+    ``tdk set`` and ``tdk unset`` already carry their own, which manages the
+    default profile instead, and keep it."""
+    if isinstance(command, click.Group):
+        for sub in command.commands.values():
+            _attach_profile_option(sub)
+        return
+    if any(param.name == "profile" for param in command.params):
+        return
+    command.params.append(_profile_option())
+
+
 @click.group(cls=_AiAgentGuardedGroup, context_settings=CONTEXT_SETTINGS)
 @click.version_option(version=__version__, message="Tabsdata Client %(version)s")
 @click.option(
@@ -281,19 +335,9 @@ def cli(ctx: click.Context, no_prompt: bool):
         os.makedirs(DEFAULT_TABSDATA_DIRECTORY, exist_ok=True)
         ctx.obj = {
             "tabsdata_directory": DEFAULT_TABSDATA_DIRECTORY,
-            "no_prompt": no_prompt,
+            "no_prompt_flag": no_prompt,
         }
-        # The server connection is set up lazily: the pinned project is applied
-        # when the connection is first built (on first use), so commands that
-        # never talk to the server don't construct it or import the server SDK.
-        initialise_tabsdata_server_connection(ctx)
-        # Every persisted setting -- hints, prompt, server, pins -- rides in
-        # the one options store.
-        load_cli_options(ctx)
-        # 'tdk set --prompt false' is a standing '--no-prompt'; the flag turns
-        # prompting off for a single invocation.
-        ctx.obj["prompt_setting"] = cli_option_enabled(ctx, OPTION_PROMPT)
-        ctx.obj["no_prompt"] = no_prompt or not ctx.obj["prompt_setting"]
+        _activate_profile(ctx, read_default_profile(DEFAULT_TABSDATA_DIRECTORY))
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to initialize CLI: {e}")
@@ -500,6 +544,9 @@ def status(ctx: click.Context):
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to get status: {e}")
+
+
+_attach_profile_option(cli)
 
 
 if __name__ == "__main__":

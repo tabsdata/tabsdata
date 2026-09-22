@@ -33,9 +33,10 @@ def _invoke(argv, *, client, tmp_path):
     def _inject(ctx):
         ctx.obj["tabsdataserver"] = client
 
-    with patch(
-        "tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject
-    ), patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)):
+    with (
+        patch("tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject),
+        patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)),
+    ):
         return CliRunner().invoke(cli, argv)
 
 
@@ -105,8 +106,17 @@ def test_several_settings_in_one_command(tmp_path):
 def test_unset_all_leaves_every_setting_at_its_default(tmp_path):
     _invoke(
         [
-            "set", "--hints", "false", "--prompt", "false",
-            "--server", "http://srv:2457", "--proj", "sales", "--coll", "orders",
+            "set",
+            "--hints",
+            "false",
+            "--prompt",
+            "false",
+            "--server",
+            "http://srv:2457",
+            "--proj",
+            "sales",
+            "--coll",
+            "orders",
         ],
         client=_client(),
         tmp_path=tmp_path,
@@ -171,8 +181,9 @@ def test_login_defaults_to_the_configured_server(tmp_path):
         client=_client(),
         tmp_path=tmp_path,
     )
-    with patch("tabsdatak.cli.td.cli.utils_login") as login, patch(
-        "tabsdatak.cli.td.config_utils.execute_actions_for_command"
+    with (
+        patch("tabsdatak.cli.td.cli.utils_login") as login,
+        patch("tabsdatak.cli.td.config_utils.execute_actions_for_command"),
     ):
         result = _invoke(
             ["login", "--user", "u", "--password", "p"],
@@ -210,6 +221,7 @@ def test_settings_reports_current_settings(tmp_path):
     result = _invoke(["settings", "-o", "json"], client=_client(), tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
     assert json.loads(result.output) == {
+        "profile": None,
         "hints": "disabled",
         "prompt": "enabled",
         "server": "http://srv:2457",
