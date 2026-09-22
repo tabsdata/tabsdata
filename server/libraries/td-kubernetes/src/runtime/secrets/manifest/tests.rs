@@ -5,6 +5,7 @@
 use super::*;
 
 use crate::base::constants::SECRET_FAMILY_CONFIG;
+use crate::runtime::secrets::discovery::Requirement;
 
 fn leaves(keys: &[(&str, &str)]) -> Vec<SecretLeaf> {
     keys.iter()
@@ -12,6 +13,7 @@ fn leaves(keys: &[(&str, &str)]) -> Vec<SecretLeaf> {
             path: path.split('.').map(str::to_owned).collect(),
             key: (*key).to_owned(),
             generator: None,
+            requirement: Requirement::Mandatory,
         })
         .collect()
 }

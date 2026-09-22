@@ -11,7 +11,9 @@ use crate::base::error::secret::SecretError;
 use crate::base::naming::name_from_kube_resource_name;
 use crate::kube::api::{LabelFilter, get_configmaps, get_secret, upsert_secret};
 use crate::kube::context::KubeContext;
-use crate::runtime::secrets::discovery::{Generator, SecretLeaf, extract_secret_leaves};
+use crate::runtime::secrets::discovery::{
+    Generator, Requirement, SecretLeaf, extract_secret_leaves,
+};
 use crate::runtime::secrets::source::to_secret_name;
 
 pub struct Settlement<'a> {
@@ -280,6 +282,7 @@ pub fn unsupplied_keys(
     let mut keys: Vec<String> = leaves
         .iter()
         .filter(|leaf| leaf.generator.is_none())
+        .filter(|leaf| leaf.requirement == Requirement::Mandatory)
         .filter(|leaf| {
             live.and_then(|data| data.get(&leaf.key))
                 .is_none_or(|value| value.is_empty())

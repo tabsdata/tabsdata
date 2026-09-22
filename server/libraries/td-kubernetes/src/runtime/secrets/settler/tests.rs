@@ -443,6 +443,7 @@ fn declared(pairs: &[(&str, &str, Generator)]) -> Vec<(String, Vec<SecretLeaf>)>
             path: Vec::new(),
             key: (*key).to_owned(),
             generator: Some(*generator),
+            requirement: Requirement::Mandatory,
         };
         match by_secret.iter_mut().find(|(name, _)| name == secret) {
             Some((_, leaves)) => leaves.push(leaf),
@@ -494,10 +495,15 @@ fn invalidated_generators_empty_when_all_values_exist() {
 }
 
 fn leaf(key: &str, generator: Option<Generator>) -> SecretLeaf {
+    required_leaf(key, generator, Requirement::Mandatory)
+}
+
+fn required_leaf(key: &str, generator: Option<Generator>, requirement: Requirement) -> SecretLeaf {
     SecretLeaf {
         path: vec![key.to_owned()],
         key: key.to_owned(),
         generator,
+        requirement,
     }
 }
 
@@ -558,4 +564,19 @@ fn the_pending_values_error_names_the_keys_and_the_commands() {
     assert!(rendered.contains("access_key, secret_key"));
     assert!(rendered.contains("tdkserver config get --instance demo1"));
     assert!(rendered.contains("tdkserver config put --instance demo1"));
+}
+
+#[test]
+fn an_optional_key_with_no_value_is_not_reported() {
+    let leaves = vec![required_leaf("api_key", None, Requirement::Optional)];
+    assert!(unsupplied_keys(&leaves, None).is_empty());
+}
+
+#[test]
+fn an_optional_key_beside_a_mandatory_one_reports_only_the_mandatory() {
+    let leaves = vec![
+        required_leaf("api_key", None, Requirement::Optional),
+        required_leaf("password", None, Requirement::Mandatory),
+    ];
+    assert_eq!(unsupplied_keys(&leaves, None), vec!["password".to_owned()]);
 }

@@ -14,8 +14,8 @@ use crate::runtime::secrets::generator::Generator;
 pub const SECRET_KEY_SEPARATOR: &str = "__";
 
 static PLACEHOLDER_PATTERN: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r"^\$\{\{secret(Auto)?(?::([A-Za-z0-9._-]*))?\??\}\}$")
-        .expect("invalid secret placeholder pattern")
+    Regex::new(r"^\$\{\{secret(Auto)?(?::([A-Za-z0-9._-]*))?(\?)?\}\}$")
+        .expect("Invalid secret placeholder pattern")
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,7 +24,16 @@ pub enum Placeholder {
     Generated(Generator),
 }
 
-pub fn parse_placeholder(config: &str, text: &str) -> Result<Option<Placeholder>, SecretError> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Requirement {
+    Mandatory,
+    Optional,
+}
+
+pub fn parse_placeholder(
+    config: &str,
+    text: &str,
+) -> Result<Option<(Placeholder, Requirement)>, SecretError> {
     let Some(captures) = PLACEHOLDER_PATTERN.captures(text) else {
         return Ok(None);
     };
@@ -33,11 +42,15 @@ pub fn parse_placeholder(config: &str, text: &str) -> Result<Option<Placeholder>
         .get(2)
         .map(|name| name.as_str())
         .unwrap_or_default();
+    let requirement = match captures.get(3) {
+        Some(_) => Requirement::Optional,
+        None => Requirement::Mandatory,
+    };
     if !auto {
-        return Ok(Some(Placeholder::Bare));
+        return Ok(Some((Placeholder::Bare, requirement)));
     }
     match Generator::from_name(name) {
-        Some(generator) => Ok(Some(Placeholder::Generated(generator))),
+        Some(generator) => Ok(Some((Placeholder::Generated(generator), requirement))),
         None => Err(SecretError::UnknownGeneratorName {
             config: config.to_owned(),
             name: name.to_owned(),
@@ -54,6 +67,7 @@ pub trait SecretVisitor {
         config: &str,
         path: &[String],
         placeholder: Placeholder,
+        requirement: Requirement,
         scalar: &mut String,
     ) -> Result<(), Self::Error>;
 }
@@ -75,8 +89,8 @@ fn walk_node<V: SecretVisitor>(
 ) -> Result<(), V::Error> {
     match node {
         Value::String(text) => {
-            if let Some(placeholder) = parse_placeholder(config, text)? {
-                visitor.visit_placeholder(config, path, placeholder, text)?;
+            if let Some((placeholder, requirement)) = parse_placeholder(config, text)? {
+                visitor.visit_placeholder(config, path, placeholder, requirement, text)?;
             }
             Ok(())
         }
