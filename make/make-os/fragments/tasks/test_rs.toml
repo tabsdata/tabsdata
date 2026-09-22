@@ -180,6 +180,7 @@ category = "04 - Test"
 private = true
 dependencies = ["__os__set_mode_test_rs"]
 cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+env = { TD_SKIP_TEST_SCALING = "true" }
 script_runner = "@duckscript"
 script = [
     '''
