@@ -190,7 +190,7 @@ python-dateutil==2.9.0.post0
 python-discovery==1.6.1
 python-dotenv==1.2.3
 python-on-whales==0.81.0
-python-slugify==9.1.0
+python-slugify==9.1.1
 pytimeparse==1.1.8
 pytokens==0.4.1
 pytz==2026.3.post1
