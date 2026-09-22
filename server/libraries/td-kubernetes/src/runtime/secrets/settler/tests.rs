@@ -492,3 +492,70 @@ fn invalidated_generators_empty_when_all_values_exist() {
     let invalidated = invalidated_generators(&leaves, &existing);
     assert!(invalidated.is_empty());
 }
+
+fn leaf(key: &str, generator: Option<Generator>) -> SecretLeaf {
+    SecretLeaf {
+        path: vec![key.to_owned()],
+        key: key.to_owned(),
+        generator,
+    }
+}
+
+fn secret(items: &[(&str, &str)]) -> BTreeMap<String, Vec<u8>> {
+    items
+        .iter()
+        .map(|(key, value)| ((*key).to_owned(), value.as_bytes().to_vec()))
+        .collect()
+}
+
+#[test]
+fn a_plain_key_with_no_secret_at_all_is_unsupplied() {
+    let leaves = vec![leaf("password", None)];
+    assert_eq!(unsupplied_keys(&leaves, None), vec!["password".to_owned()]);
+}
+
+#[test]
+fn a_plain_key_already_supplied_is_not_reported() {
+    let leaves = vec![leaf("password", None)];
+    let live = secret(&[("password", "s3cret")]);
+    assert!(unsupplied_keys(&leaves, Some(&live)).is_empty());
+}
+
+#[test]
+fn a_plain_key_present_but_empty_is_unsupplied() {
+    let leaves = vec![leaf("password", None)];
+    let live = secret(&[("password", "")]);
+    assert_eq!(
+        unsupplied_keys(&leaves, Some(&live)),
+        vec!["password".to_owned()]
+    );
+}
+
+#[test]
+fn a_generated_key_is_never_reported() {
+    let leaves = vec![leaf("token", Some(Generator::JwtSigningKey))];
+    assert!(unsupplied_keys(&leaves, None).is_empty());
+}
+
+#[test]
+fn the_reported_keys_are_sorted_and_deduplicated() {
+    let leaves = vec![leaf("zeta", None), leaf("alpha", None), leaf("zeta", None)];
+    assert_eq!(
+        unsupplied_keys(&leaves, None),
+        vec!["alpha".to_owned(), "zeta".to_owned()]
+    );
+}
+#[test]
+fn the_pending_values_error_names_the_keys_and_the_commands() {
+    let error = SecretError::SettlementValuesPending {
+        instance: "demo1".to_owned(),
+        count: 2,
+        pending: "\n  - apiserver.storage.yaml: access_key, secret_key".to_owned(),
+    };
+    let rendered = error.to_string();
+    assert!(rendered.contains("demo1"));
+    assert!(rendered.contains("2 configuration secret(s)"));
+    assert!(rendered.contains("access_key, secret_key"));
+    assert!(rendered.contains("tdkserver config get --instance demo1"));
+    assert!(rendered.contains("tdkserver config put --instance demo1"));
+}

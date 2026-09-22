@@ -15,6 +15,7 @@ use tracing::debug;
 use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, Family, ForeignAsset, ForeignAssetOrigin, KPROFILE_ASSETS_FAMILY,
     KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, PROGRAM_TD_RESOURCE, RESOURCE_KPROFILE,
+    SCHEMA_EXTENSION, SCHEMA_SOURCE_EXTENSION,
 };
 use crate::base::error::profile::ProfileError;
 use crate::core::system::file::is_hidden_or_system;
@@ -42,8 +43,6 @@ const CONFIGMAP_FAMILIES: &[&Family] = &[
     &KPROFILE_CONFIGS_FAMILY,
 ];
 
-const SCHEMA_EXTENSION: &str = ".yamls";
-const SCHEMA_SOURCE_EXTENSION: &str = ".schema.yaml";
 const SCHEMA_SOURCE_MARKER: &str = ".schema";
 const SCHEMA_SOURCE_SUFFIX: &str = ".yaml";
 

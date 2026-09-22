@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 
 use crate::base::constants::{
     Family, KPROFILE_ASSETS_FAMILY, KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    SCHEMA_SOURCE_EXTENSION,
 };
 use crate::runtime::instance::profile::bundle::{
     Axis, ParsedFileName, parse_filename, pick_winner,
@@ -30,6 +31,11 @@ pub fn plan(spec: &Spec, axes: &[Axis], preferred: &[&'static str]) -> Vec<Step>
     let mut steps = Vec::new();
     for (family, groups) in families {
         for (file, group) in groups {
+            if family.folder == KPROFILE_CONFIGS_FAMILY.folder
+                && file.ends_with(SCHEMA_SOURCE_EXTENSION)
+            {
+                continue;
+            }
             let names: Vec<&String> = group.keys().collect();
             let candidates: Vec<ParsedFileName> = names
                 .iter()

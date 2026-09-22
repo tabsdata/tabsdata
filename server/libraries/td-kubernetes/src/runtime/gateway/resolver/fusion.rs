@@ -17,7 +17,7 @@ use serde_yaml::Value;
 
 use crate::base::constants::{
     CUSTOMIZABLE_ASSETS, FOREIGN_ASSETS, ForeignAsset, KPROFILE_ASSETS_FAMILY,
-    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY,
+    KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, SCHEMA_EXTENSION,
 };
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::fusion::resolve::resolve_config_file;
@@ -30,7 +30,6 @@ use crate::runtime::instance::profile::{Profile, RenderedConfigmap};
 use crate::runtime::secrets::discovery::extract_secret_leaves;
 
 const CONFIG_EXTENSION: &str = ".yaml";
-const SCHEMA_EXTENSION: &str = ".yamls";
 
 pub struct FusedSecrets {
     pub by_file: Vec<(String, Vec<SecretEntry>)>,

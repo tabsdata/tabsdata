@@ -69,6 +69,7 @@ pub enum Operation {
     ModifyLeafValueIf(ModifyLeafValueIf),
     ModifyTextIf(ModifyTextIf),
     InsertSiblingIfExisting(InsertSiblingIfExisting),
+    InsertChildIfMissing(InsertChildIfMissing),
     NestChildrenIfFlat(NestChildrenIfFlat),
 }
 
@@ -114,6 +115,15 @@ pub enum Scope {
 pub struct NestChildrenIfFlat {
     pub leaf: String,
     pub under: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InsertChildIfMissing {
+    pub leaf: String,
+    pub child: String,
+    #[serde(default)]
+    pub value: serde_yaml::Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

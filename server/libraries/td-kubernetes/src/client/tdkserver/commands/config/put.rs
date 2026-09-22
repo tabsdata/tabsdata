@@ -10,7 +10,7 @@ use td_common::status::ExitStatus::Cancelled;
 use td_error::TdError;
 use tracing::info;
 
-use crate::base::constants::{KPROFILE_CONFIGS_FAMILY, SECRET_FAMILY_CONFIG};
+use crate::base::constants::{KPROFILE_CONFIGS_FAMILY, SCHEMA_EXTENSION, SECRET_FAMILY_CONFIG};
 use crate::base::error::cli::CliError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::base::reporter::{InteractiveReporter, Reporter};
@@ -36,8 +36,6 @@ use crate::runtime::provider::Provider;
 use crate::runtime::provider::provider_for_instance_mutating;
 use crate::runtime::secrets::settler::auto_fill_generated_secrets;
 use crate::runtime::secrets::source::to_secret_name;
-
-const SCHEMA_EXTENSION: &str = ".yamls";
 
 #[derive(Debug, Clone, Args)]
 pub struct PutArguments {

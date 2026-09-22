@@ -23,10 +23,7 @@ use crate::base::constants::{
     KPROFILE_ASSETS_FAMILY, REQUIREMENTS_FN_ASSET, REQUIREMENTS_TD_ASSET,
 };
 */
-use crate::base::constants::{
-    ENV_UV_INDEX, ENV_UV_INDEX_STRATEGY, KPROFILE_CONFIGS_FAMILY, LogLevel,
-    UV_INDEX_STRATEGY_BEST_MATCH,
-};
+use crate::base::constants::{ENV_TD_KUBE_UV_MODE, KPROFILE_CONFIGS_FAMILY, LogLevel, UvMode};
 #[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::base::error::cli::CliError;
@@ -49,8 +46,9 @@ use crate::client::tdkserver::widgets::show_notice;
 use crate::core::system::exit::abort;
 use crate::core::system::exit::{CommandResult, abort_with, render_error};
 use crate::cwarn;
+use crate::runtime::instance::index::{self, IndexPlan};
 use crate::runtime::instance::ports::DEFAULT_BASE_PORT;
-use crate::runtime::instance::tabsdata::{EnvValue, TABSDATA_FILE, TabsdataConfig};
+use crate::runtime::instance::tabsdata::{TABSDATA_FILE, TabsdataConfig};
 use crate::runtime::provider::ClusterProvider;
 
 const QUICKSTART_PROVIDER: ClusterProvider = ClusterProvider::Kminus;
@@ -175,7 +173,10 @@ pub struct QuickstartArguments {
         display_order = 150,
         long_help = "Python package index for the instance. The URI is set as the 'UV_INDEX' \
                      global environment variable of the initialized instance, which every \
-                     container of every pod receives.\n\n\
+                     container of every pod receives, and it takes precedence over the \
+                     'UV_INDEX' and 'PIP_INDEX_URL' variables of this machine.\n\n\
+                     Only valid with 'TD_KUBE_UV_MODE' unset, because only then are the \
+                     packages resolved from this machine's environment.\n\n\
                      Example:\n  \
                      tdk quickstart --uv-index http://localhost:8000/+simple"
     )]
@@ -364,7 +365,7 @@ fn persist_requirements(instance: &str, asset: &str, source: &Path) -> CommandRe
 }
 */
 
-fn persist_uv_index(instance: &str, uv_index: &str) -> CommandResult {
+fn persist_uv_index(instance: &str, plan: &IndexPlan) -> CommandResult {
     let target = instance_init_input_folder(instance)?
         .join(KPROFILE_CONFIGS_FAMILY.folder)
         .join(TABSDATA_FILE);
@@ -380,15 +381,7 @@ fn persist_uv_index(instance: &str, uv_index: &str) -> CommandResult {
             cause: error.to_string(),
         })
     })?;
-    config
-        .pods
-        .global
-        .envs
-        .insert(ENV_UV_INDEX.to_owned(), EnvValue::Text(uv_index.to_owned()));
-    config.pods.global.envs.insert(
-        ENV_UV_INDEX_STRATEGY.to_owned(),
-        EnvValue::Text(UV_INDEX_STRATEGY_BEST_MATCH.to_owned()),
-    );
+    index::apply(&mut config, plan.local.as_deref());
     let updated = serde_yaml::to_string(&config).map_err(|error| {
         TdError::from(CliError::FileSerializeFailed {
             file: target.display().to_string(),
@@ -402,8 +395,8 @@ fn persist_uv_index(instance: &str, uv_index: &str) -> CommandResult {
         })
     })?;
     info!(
-        "Set {} to {} and {} to {} in {}",
-        ENV_UV_INDEX, uv_index, ENV_UV_INDEX_STRATEGY, UV_INDEX_STRATEGY_BEST_MATCH, TABSDATA_FILE
+        "The instance will use the Python package index: {}",
+        plan.obtain_local()
     );
     Ok(())
 }
@@ -456,8 +449,17 @@ async fn run_quickstart(
         persist_requirements(&target_instance, REQUIREMENTS_AG_ASSET, source)?;
     }
     */
-    if let Some(uv_index) = &uv_index {
-        persist_uv_index(&target_instance, uv_index)?;
+    let uv_mode = UvMode::from_environment().map_err(TdError::from)?;
+    if index::governed(QUICKSTART_PROVIDER, uv_mode) {
+        let plan = index::resolve(uv_index.as_deref(), None);
+        persist_uv_index(&target_instance, &plan)?;
+    } else if uv_index.is_some() {
+        return Err(TdError::from(CliError::UvIndexNotGoverned {
+            variable: ENV_TD_KUBE_UV_MODE.to_owned(),
+            provider: QUICKSTART_PROVIDER.as_str().to_owned(),
+            mode: uv_mode.as_str().to_owned(),
+        })
+        .into());
     }
 
     let settings = SettingsContext::settings();

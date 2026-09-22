@@ -3,6 +3,7 @@
 //
 
 use super::*;
+use crate::base::constants::{ENV_UV_INDEX, ENV_UV_INDEX_STRATEGY, UV_INDEX_STRATEGY_BEST_MATCH};
 
 const INDEX: &str = "http://localhost:8000/simple";
 
@@ -18,15 +19,7 @@ pods:
 
 fn rewrite(yaml: &str, uv_index: &str) -> String {
     let mut config = TabsdataConfig::parse(yaml).expect("valid config");
-    config
-        .pods
-        .global
-        .envs
-        .insert(ENV_UV_INDEX.to_owned(), EnvValue::Text(uv_index.to_owned()));
-    config.pods.global.envs.insert(
-        ENV_UV_INDEX_STRATEGY.to_owned(),
-        EnvValue::Text(UV_INDEX_STRATEGY_BEST_MATCH.to_owned()),
-    );
+    index::apply(&mut config, Some(uv_index));
     serde_yaml::to_string(&config).expect("serialized")
 }
 

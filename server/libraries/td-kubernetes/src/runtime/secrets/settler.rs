@@ -268,6 +268,73 @@ fn resolve_generated_values<'a>(
     Ok(filled)
 }
 
+pub struct PendingSecret {
+    pub config: String,
+    pub keys: Vec<String>,
+}
+
+pub fn unsupplied_keys(
+    leaves: &[SecretLeaf],
+    live: Option<&BTreeMap<String, Vec<u8>>>,
+) -> Vec<String> {
+    let mut keys: Vec<String> = leaves
+        .iter()
+        .filter(|leaf| leaf.generator.is_none())
+        .filter(|leaf| {
+            live.and_then(|data| data.get(&leaf.key))
+                .is_none_or(|value| value.is_empty())
+        })
+        .map(|leaf| leaf.key.clone())
+        .collect();
+    keys.sort();
+    keys.dedup();
+    keys
+}
+
+pub async fn pending_secret_keys(context: &KubeContext) -> Result<Vec<PendingSecret>, SecretError> {
+    let mut pending = Vec::new();
+    for (config_file, config_yaml) in cluster_configs(context).await? {
+        let mut yaml: serde_yaml::Value = match serde_yaml::from_str(&config_yaml) {
+            Ok(yaml) => yaml,
+            Err(_) => continue,
+        };
+        let leaves = extract_secret_leaves(&config_file, &mut yaml)?;
+        let live = get_secret(context, &to_secret_name(&config_file)?).await?;
+        let keys = unsupplied_keys(&leaves, live.as_ref());
+        if keys.is_empty() {
+            continue;
+        }
+        pending.push(PendingSecret {
+            config: config_file,
+            keys,
+        });
+    }
+    Ok(pending)
+}
+
+async fn cluster_configs(context: &KubeContext) -> Result<Vec<(String, String)>, SecretError> {
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
+    let configmaps = get_configmaps(context, Some(filter)).await?;
+    let mut configs = Vec::new();
+    for (configmap_name, entries) in configmaps {
+        let config_file = name_from_kube_resource_name(
+            &configmap_name,
+            KPROFILE_CONFIGS_FAMILY.scope,
+            KPROFILE_CONFIGS_FAMILY.kind,
+        )?
+        .to_owned();
+        let Some((_, bytes)) = entries.into_iter().next() else {
+            continue;
+        };
+        let Ok(config_yaml) = String::from_utf8(bytes) else {
+            continue;
+        };
+        configs.push((config_file, config_yaml));
+    }
+    configs.sort_by(|left, right| left.0.cmp(&right.0));
+    Ok(configs)
+}
+
 pub async fn settle_cluster_configs_and_secrets(context: &KubeContext) -> Result<(), SecretError> {
     let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
     let configmaps = get_configmaps(context, Some(filter)).await?;

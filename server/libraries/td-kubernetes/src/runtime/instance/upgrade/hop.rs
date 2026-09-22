@@ -7,13 +7,17 @@ use std::path::Path;
 use chrono::Utc;
 use tracing::info;
 
-use crate::base::constants::CONFIGMAP_TABSDATA_MANIFEST;
+use crate::base::constants::{
+    CONFIGMAP_FAMILY_LABEL, CONFIGMAP_TABSDATA_MANIFEST, KPROFILE_CONFIGS_FAMILY,
+    SCHEMA_SOURCE_EXTENSION,
+};
 use crate::base::error::upgrade::UpgradeError;
+use crate::base::naming::name_from_kube_resource_name;
 use crate::base::reporter::Reporter;
 use crate::client::registry::{instance_edit_folder, instance_init_folder};
 use crate::core::system::exit::CommandResult;
 use crate::kube::api::configmap::replace_configmap_at_version;
-use crate::kube::api::{configmap as configmap_api, secret as secret_api};
+use crate::kube::api::{LabelFilter, configmap as configmap_api, secret as secret_api};
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::{MANIFEST_FILE, Manifest, serialize_manifest};
 use crate::runtime::instance::profile::bundle::Axis;
@@ -125,6 +129,8 @@ pub async fn walk(
         }
     }
 
+    walked.applied += purge_staged_schemas(context, &mut read.manifest).await?;
+
     walked.applied += apply_foreign_assets(context, &hop.to, &mut read.manifest, verbose).await?;
 
     for path in untouched(&read.manifest, &hop.to) {
@@ -135,6 +141,28 @@ pub async fn walk(
     read.manifest.settle(&hop.to, Utc::now());
     commit(context, instance, &read, &hop.to).await?;
     Ok(walked)
+}
+
+async fn purge_staged_schemas(
+    context: &KubeContext,
+    manifest: &mut Manifest,
+) -> CommandResult<usize> {
+    let family = &KPROFILE_CONFIGS_FAMILY;
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family.kind);
+    let existing = configmap_api::list_configmaps(context, Some(filter)).await?;
+    let mut purged = 0;
+    for (name, _) in existing {
+        let file = name_from_kube_resource_name(&name, family.scope, family.kind)?;
+        if !file.ends_with(SCHEMA_SOURCE_EXTENSION) {
+            continue;
+        }
+        let entry = format!("{}/{file}", family.folder);
+        configmap_api::delete_configmap(context, &name).await?;
+        manifest.drop_entry(&entry, Utc::now());
+        purged += 1;
+        info!("  {entry} -> deleted (schema files are not configs)");
+    }
+    Ok(purged)
 }
 
 async fn stamp_instance(context: &KubeContext, version: &str) -> CommandResult {

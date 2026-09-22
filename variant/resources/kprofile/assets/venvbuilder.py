@@ -597,6 +597,47 @@ def create_one_virtual_environment(
     ])
 
 
+def installed_packages() -> list[str]:
+    names: set[str] = set()
+    names.update(PACKAGES_TD)
+    names.update(PACKAGES_FN)
+    return sorted(names)
+
+
+def verify_packages(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
+    resolver = os.path.join(workspace["work"], "resolver")
+    run([
+        uv_binary(workspace),
+        "venv",
+        "--python-preference",
+        "only-managed",
+        "--python",
+        arguments.python_version,
+        resolver,
+    ])
+    packages = pinned(installed_packages(), arguments.version)
+    try:
+        run([
+            uv_binary(workspace),
+            "pip",
+            "install",
+            "--python",
+            venv_python(resolver),
+            *constrained(arguments),
+            "--dry-run",
+            *packages,
+        ])
+    except subprocess.CalledProcessError:
+        print(
+            f">> Cannot resolve {', '.join(packages)} from the configured indexes."
+            f" The existing virtual environments were left untouched."
+        )
+        raise
+    finally:
+        shutil.rmtree(resolver, ignore_errors=True)
+    print(f">> Resolved {', '.join(packages)}; the virtual environments can be rebuilt")
+
+
 def create_virtual_environment(
     arguments: argparse.Namespace, workspace: dict[str, str]
 ) -> None:
@@ -843,6 +884,7 @@ def main() -> None:
     step("Installing uv", install_uv, workspace)
     step("Cleaning the cache", clean_cache, workspace)
     step("Installing Python", install_python, arguments, workspace)
+    step("Verifying the packages", verify_packages, arguments, workspace)
     step(
         "Creating the compressor environment",
         create_compressor_environment,

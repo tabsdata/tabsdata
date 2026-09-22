@@ -16,6 +16,7 @@ pub const ENV_TD_KUBE_UV_MODE_NOWARN: &str = "TD_KUBE_UV_MODE_NOWARN";
 
 pub const ENV_UV_DEFAULT_INDEX: &str = "UV_DEFAULT_INDEX";
 pub const ENV_UV_INDEX: &str = "UV_INDEX";
+pub const ENV_PIP_INDEX_URL: &str = "PIP_INDEX_URL";
 pub const ENV_UV_INDEX_STRATEGY: &str = "UV_INDEX_STRATEGY";
 pub const ENV_UV_PYTHON_INSTALL_DIR: &str = "UV_PYTHON_INSTALL_DIR";
 
@@ -154,7 +155,7 @@ fn reach_from_container(index: &str) -> String {
     url.to_string()
 }
 
-fn environment_index(variable: &str) -> Option<String> {
+pub fn environment_index(variable: &str) -> Option<String> {
     std::env::var(variable)
         .ok()
         .map(|value| value.trim().to_owned())
@@ -243,6 +244,9 @@ pub struct Family {
     pub scope: Scope,
     pub kind: &'static str,
 }
+
+pub const SCHEMA_EXTENSION: &str = ".yamls";
+pub const SCHEMA_SOURCE_EXTENSION: &str = ".schema.yaml";
 
 pub const KPROFILE_PODS_FAMILY: Family = Family {
     folder: "pods",
@@ -538,6 +542,9 @@ pub const VALUE_Y: &str = "y";
 pub const VALUE_YES: &str = "yes";
 pub const VALUE_N: &str = "n";
 pub const VALUE_NO: &str = "no";
+pub const VALUE_CONTINUE: &str = "continue";
+pub const VALUE_CANCEL: &str = "cancel";
+pub const VALUE_CHANGE: &str = "change";
 
 pub const DELETE_WORKLOAD_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
 pub const DELETE_WORKLOAD_POLL_INTERVAL: Duration = Duration::from_millis(250);

@@ -20,7 +20,8 @@ use crate::runtime::instance::profile::resolve_foreign_path;
 use crate::runtime::instance::upgrade::catalog::read_content;
 use crate::runtime::instance::upgrade::plan::Step;
 use crate::runtime::instance::upgrade::spec::{
-    Action, InsertSiblingIfExisting, ModifyLeafValueIf, ModifyTextIf, NestChildrenIfFlat,
+    Action, InsertChildIfMissing, InsertSiblingIfExisting, ModifyLeafValueIf, ModifyTextIf,
+    NestChildrenIfFlat,
     Operation, Placement, Scope,
 };
 use crate::runtime::instance::upgrade::store::Store;
@@ -163,6 +164,7 @@ impl Operation {
             Self::ModifyTextIf(operation) => operation.replace(version, entry, current),
             Self::ModifyLeafValueIf(operation) => operation.replace(version, entry, current),
             Self::InsertSiblingIfExisting(operation) => operation.replace(version, entry, current),
+            Self::InsertChildIfMissing(operation) => operation.replace(version, entry, current),
             Self::NestChildrenIfFlat(operation) => operation.replace(version, entry, current),
         }
     }
@@ -215,6 +217,58 @@ impl NestChildrenIfFlat {
             serde_yaml::Value::from(self.under.as_str()),
             serde_yaml::Value::Mapping(children),
         );
+        true
+    }
+}
+
+impl InsertChildIfMissing {
+    fn replace(&self, version: &str, entry: &str, current: &str) -> CommandResult<(String, bool)> {
+        let mut document: serde_yaml::Value =
+            serde_yaml::from_str(current).map_err(|error| UpgradeError::ModifyParseFailed {
+                version: version.to_owned(),
+                entry: entry.to_owned(),
+                cause: error.to_string(),
+            })?;
+        if !self.insert(&mut document) {
+            info!(
+                "Upgrade to '{version}' left '{entry}' alone; leaf '{}' already has child '{}' \
+                 or does not hold a mapping.",
+                self.leaf, self.child
+            );
+            return Ok((current.to_owned(), false));
+        }
+        let rendered =
+            serde_yaml::to_string(&document).map_err(|error| UpgradeError::ModifyRenderFailed {
+                version: version.to_owned(),
+                entry: entry.to_owned(),
+                cause: error.to_string(),
+            })?;
+        Ok((rendered, true))
+    }
+
+    fn insert(&self, document: &mut serde_yaml::Value) -> bool {
+        let mut cursor = document;
+        for segment in split_leaf(&self.leaf) {
+            let key = serde_yaml::Value::from(segment.as_str());
+            if cursor.is_null() {
+                *cursor = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+            }
+            let serde_yaml::Value::Mapping(holder) = cursor else {
+                return false;
+            };
+            cursor = holder.entry(key).or_insert(serde_yaml::Value::Null);
+        }
+        if cursor.is_null() {
+            *cursor = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
+        }
+        let serde_yaml::Value::Mapping(holder) = cursor else {
+            return false;
+        };
+        let child = serde_yaml::Value::from(self.child.as_str());
+        if holder.contains_key(&child) {
+            return false;
+        }
+        holder.insert(child, self.value.clone());
         true
     }
 }

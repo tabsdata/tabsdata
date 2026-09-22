@@ -11,7 +11,10 @@ use humantime::format_duration;
 
 use td_common::status::ExitStatus;
 
-use crate::base::constants::{PROMPT_REMINDER, VALUE_N, VALUE_NO, VALUE_Y, VALUE_YES};
+use crate::base::constants::{
+    PROMPT_REMINDER, VALUE_CANCEL, VALUE_CHANGE, VALUE_CONTINUE, VALUE_N, VALUE_NO, VALUE_Y,
+    VALUE_YES,
+};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::{cerror, cwarn};
 
@@ -308,6 +311,45 @@ pub async fn confirm_resume(what: &str, waited: Duration) -> bool {
 
 pub fn confirm_at_leisure(skip: bool, message: &str) -> CommandResult<bool> {
     confirm_within(skip, message, LONG_PROMPT_TIMEOUT)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Choice {
+    Continue,
+    Cancel,
+    Change,
+}
+
+pub fn choose_at_leisure(skip: bool, message: &str, unattended: Choice) -> CommandResult<Choice> {
+    if skip {
+        return Ok(unattended);
+    }
+    require_interactive("for a choice")?;
+    let started = std::time::Instant::now();
+    let receiver = stdin_lines().lock().unwrap();
+    let mut reminded = false;
+    loop {
+        if reminded {
+            println!("Still waiting for your answer{}.", waited_for(started));
+        }
+        print!("{message} [{VALUE_CONTINUE}/{VALUE_CANCEL}/{VALUE_CHANGE}]: ");
+        io::stdout().flush().ok();
+        let outcome = receiver.recv_timeout(PROMPT_REMINDER);
+        match outcome {
+            Ok(LineOutcome::Line(line)) => match line.trim().to_lowercase().as_str() {
+                VALUE_CONTINUE => return Ok(Choice::Continue),
+                VALUE_CANCEL => return Ok(Choice::Cancel),
+                VALUE_CHANGE => return Ok(Choice::Change),
+                _ => continue,
+            },
+            Ok(LineOutcome::Closed) => return Ok(Choice::Cancel),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                reminded = true;
+                println!();
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => return Ok(Choice::Cancel),
+        }
+    }
 }
 
 fn confirm_within(skip: bool, message: &str, timeout: Option<Duration>) -> CommandResult<bool> {

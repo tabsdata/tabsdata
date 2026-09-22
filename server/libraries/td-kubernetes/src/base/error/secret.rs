@@ -127,6 +127,18 @@ pub enum SecretError {
     #[error("Cannot start the instance: configs and secrets are not in sync.{failures}")]
     SettlementBatchFailed { failures: String } = 5014,
     #[error(
+        "Cannot start the instance '{instance}': {count} configuration secret(s) have no \
+         value yet. Only you can provide them.{pending}\n\
+         Download the configurations, fill the values in, and upload them back:\n  \
+         tdkserver config get --instance {instance}\n  \
+         tdkserver config put --instance {instance}"
+    )]
+    SettlementValuesPending {
+        instance: String,
+        count: usize,
+        pending: String,
+    } = 5012,
+    #[error(
         "Config '{config}' uses unknown secret generator '${{secretAuto:{name}}}'. \
          Supported generators: {supported}."
     )]

@@ -138,3 +138,35 @@ pods:
     let steps = planned(yaml, ClusterProvider::Kminus);
     assert_eq!(steps.len(), 3);
 }
+
+#[test]
+fn a_schema_file_is_never_planned_as_a_config() {
+    let yaml = "\
+schema: 1
+configs:
+  apiserver.storage.schema.yaml:
+    apiserver.storage.schema.yaml:
+      action: replace
+    apiserver.storage.schema_eks.yaml:
+      action: replace
+  apiserver.storage.yaml:
+    apiserver.storage.yaml:
+      action: replace
+";
+    let steps = planned(yaml, ClusterProvider::Eks);
+    assert_eq!(steps.len(), 1);
+    assert_eq!(steps[0].file, "apiserver.storage.yaml");
+}
+
+#[test]
+fn a_schema_named_asset_is_still_planned() {
+    let yaml = "\
+schema: 1
+assets:
+  bundle.schema.yaml:
+    bundle.schema.yaml:
+      action: replace
+";
+    let steps = planned(yaml, ClusterProvider::Kminus);
+    assert_eq!(steps.len(), 1);
+}

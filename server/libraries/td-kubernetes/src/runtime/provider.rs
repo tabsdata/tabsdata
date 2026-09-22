@@ -56,7 +56,7 @@ use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::bundle::Axis;
 use crate::runtime::instance::profile::{Profile, parse_from_configmaps, read_family_configmaps};
-use crate::runtime::instance::upgrade::guard::ensure_upgraded;
+use crate::runtime::instance::upgrade::guard::{ensure_upgraded, require_supplied_secrets};
 use crate::runtime::instance::verify_instance_version;
 use crate::runtime::provider::axes::{Lifecycle, Locality, Location, Platform, Workload};
 use crate::runtime::provider::docker::DockerProvider;
@@ -480,6 +480,7 @@ pub trait Provider: Send + Sync {
         let instance = self.view().instance_name.unwrap_or_default();
         ensure_upgraded(&context, &instance).await?;
         auto_fill_generated_secrets(&context).await?;
+        require_supplied_secrets(&context, &instance).await?;
         settle_cluster_configs_and_secrets(&context).await?;
         self.start_instance_hook(reporter).await?;
         Ok(InstanceStartOutcome::Started)

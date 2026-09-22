@@ -176,7 +176,20 @@ configs:
     tabsdata_aks.yaml:
       action: create
     tabsdata_docker.yaml:
-      action: retain
+      action: modify
+      changes:
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_DEFAULT_INDEX
+          value: https://pypi.org/simple/
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_INDEX
+          value: null
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_INDEX_STRATEGY
+          value: unsafe-best-match
     tabsdata_eks.yaml:
       action: retain
     tabsdata_fargate.yaml:
@@ -184,7 +197,20 @@ configs:
     tabsdata_gke.yaml:
       action: create
     tabsdata_kminus.yaml:
-      action: retain
+      action: modify
+      changes:
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_DEFAULT_INDEX
+          value: https://pypi.org/simple/
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_INDEX
+          value: null
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_INDEX_STRATEGY
+          value: unsafe-best-match
 pods:
   apiserver-endpoint.yaml:
     apiserver-endpoint_aks.yaml:

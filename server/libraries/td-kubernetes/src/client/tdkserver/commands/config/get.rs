@@ -10,7 +10,7 @@ use td_common::status::ExitStatus::Cancelled;
 use td_error::TdError;
 use tracing::info;
 
-use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
+use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY, SCHEMA_EXTENSION};
 use crate::base::error::cli::CliError;
 use crate::base::naming::name_from_kube_resource_name;
 use crate::base::reporter::{InteractiveReporter, Reporter};
@@ -30,7 +30,6 @@ use crate::runtime::instance::profile::load_profile;
 use crate::runtime::provider::provider_for_instance;
 use crate::runtime::secrets::source::to_secret_name;
 
-const SCHEMA_EXTENSION: &str = ".yamls";
 const CONFIG_EXTENSION: &str = ".yaml";
 
 #[derive(Debug, Clone, Args)]

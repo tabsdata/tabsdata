@@ -2,11 +2,18 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::collections::BTreeMap;
+
 use clap_derive::Args;
 use colored::Colorize;
 use td_common::status::ExitStatus::Cancelled;
+use td_error::TdError;
 use tracing::info;
 
+use crate::base::constants::{ENV_TD_KUBE_UV_MODE, KPROFILE_CONFIGS_FAMILY, UvMode};
+use crate::base::error::cli::CliError;
+use crate::base::error::provider::ProviderError;
+use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::base::reporter::{InteractiveReporter, Reporter};
 use crate::client::registry::{InstanceSettings, instance_edit_folder, instance_init_folder};
 use crate::client::session::settings::SettingsContext;
@@ -14,16 +21,21 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use crate::client::tdkserver::commands::service::{
     instance_markers, resolved_details, resolved_instance, resolved_yes,
 };
-use crate::client::tdkserver::common::confirm_at_leisure;
+use crate::client::tdkserver::common::{Choice, choose_at_leisure, confirm_at_leisure};
 use crate::client::tdkserver::render::view::InstanceView;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort};
+use crate::cwarn;
+use crate::kube::api::configmap::{get_configmap, replace_configmap};
 use crate::kube::context::KubeContext;
+use crate::runtime::instance::index;
+use crate::runtime::instance::tabsdata::{TABSDATA_FILE, TabsdataConfig};
 use crate::runtime::instance::upgrade::hop;
 use crate::runtime::instance::upgrade::latch;
 use crate::runtime::instance::upgrade::lock::UpgradeLock;
 use crate::runtime::instance::upgrade::preflight::{Preflight, Standing, inspect};
 use crate::runtime::provider::{ClusterProvider, Provider, provider_for_instance_upgrading};
+use crate::runtime::secrets::settler::pending_secret_keys;
 
 struct Phases {
     total: usize,
@@ -115,6 +127,23 @@ pub struct UpgradeArguments {
         long_help = "Accept every confirmation prompt and proceed immediately."
     )]
     pub yes: Option<bool>,
+
+    #[arg(
+        long = "uv-index",
+        name = "uv-index",
+        required = false,
+        value_name = "URI",
+        display_order = 150,
+        long_help = "Python package index the rebuilt virtual environments resolve from. The \
+                     URI is set as the 'UV_INDEX' global environment variable of the instance, \
+                     which every container of every pod receives, and it takes precedence over \
+                     the 'UV_INDEX' and 'PIP_INDEX_URL' variables of this machine.\n\n\
+                     Only valid for a 'kminus' instance with 'TD_KUBE_UV_MODE' unset, because \
+                     only then are the packages resolved from this machine's environment.\n\n\
+                     Example:\n  \
+                     tdk upgrade --uv-index http://localhost:8000/+simple"
+    )]
+    pub uv_index: Option<String>,
 }
 
 pub async fn command_upgrade(
@@ -127,6 +156,7 @@ pub async fn command_upgrade(
         unlock,
         details,
         yes,
+        uv_index,
     } = arguments;
 
     let settings = SettingsContext::settings();
@@ -194,6 +224,7 @@ pub async fn command_upgrade(
         &lock,
         verbose,
         yes.value,
+        uv_index.as_deref(),
     )
     .await?
     {
@@ -251,6 +282,116 @@ async fn cluster_start_phase(
     Ok(true)
 }
 
+async fn settle_index(
+    provider: &dyn Provider,
+    context: &KubeContext,
+    uv_index: Option<&str>,
+    yes: bool,
+) -> CommandResult<bool> {
+    let uv_mode = UvMode::from_environment().map_err(TdError::from)?;
+    if !index::governed(provider.cluster_provider(), uv_mode) {
+        if uv_index.is_some() {
+            return Err(TdError::from(CliError::UvIndexNotGoverned {
+                variable: ENV_TD_KUBE_UV_MODE.to_owned(),
+                provider: provider.cluster_provider().as_str().to_owned(),
+                mode: uv_mode.as_str().to_owned(),
+            })
+            .into());
+        }
+        return Ok(true);
+    }
+
+    let configmap = to_kube_resource_name(
+        KPROFILE_CONFIGS_FAMILY.scope,
+        id_from_file(TABSDATA_FILE),
+        KPROFILE_CONFIGS_FAMILY.kind,
+        TABSDATA_FILE,
+    )
+    .map_err(TdError::from)?;
+    let Some(mut data) = get_configmap(context, &configmap).await? else {
+        return Err(
+            ProviderError::ConfigmapEntryMissing(configmap, TABSDATA_FILE.to_owned()).into(),
+        );
+    };
+    let Some(yaml) = data.remove(TABSDATA_FILE) else {
+        return Err(
+            ProviderError::ConfigmapEntryMissing(configmap, TABSDATA_FILE.to_owned()).into(),
+        );
+    };
+    let mut config = TabsdataConfig::parse(&yaml).map_err(|error| {
+        TdError::from(CliError::FileParseFailed {
+            file: TABSDATA_FILE.to_owned(),
+            cause: error.to_string(),
+        })
+    })?;
+
+    let plan = index::resolve(uv_index, index::remote_index(&config));
+    info!(
+        "  Python package index of this machine.: {}",
+        plan.obtain_local()
+    );
+    info!(
+        "  Python package index of the instance.: {}",
+        plan.obtain_remote()
+    );
+    if plan.same() {
+        info!(
+            "The instance will use the Python package index: {}",
+            plan.obtain_remote()
+        );
+        return Ok(true);
+    }
+
+    if plan.none() {
+        cwarn!(
+            "The Python package index '{}' of this instance will be cleared, because \
+             neither '--uv-index' nor the index environment variables are set here.",
+            plan.obtain_remote()
+        );
+    }
+    let choice = choose_at_leisure(
+        yes,
+        "The indexes differ. Continue with the instance one, cancel, or change it?",
+        Choice::Change,
+    )?;
+    match choice {
+        Choice::Cancel => return Ok(false),
+        Choice::Continue => {
+            info!(
+                "The instance will use the Python package index: {}",
+                plan.obtain_remote()
+            );
+            return Ok(true);
+        }
+        Choice::Change => {}
+    }
+
+    index::apply(&mut config, plan.local.as_deref());
+    let updated = serde_yaml::to_string(&config).map_err(|error| {
+        TdError::from(CliError::FileSerializeFailed {
+            file: TABSDATA_FILE.to_owned(),
+            cause: error.to_string(),
+        })
+    })?;
+    let mut written = BTreeMap::new();
+    written.insert(TABSDATA_FILE.to_owned(), updated);
+    replace_configmap(
+        context,
+        &configmap,
+        written,
+        BTreeMap::new(),
+        Some(KPROFILE_CONFIGS_FAMILY.kind),
+        None,
+    )
+    .await
+    .map_err(TdError::from)?;
+    info!(
+        "The instance will use the Python package index: {}",
+        plan.obtain_local()
+    );
+    Ok(true)
+}
+
 fn upgrade_viability_phase(
     phases: &Phases,
     preflight: &Preflight,
@@ -289,6 +430,14 @@ fn upgrade_viability_phase(
             preflight.instance, preflight.instance_version
         );
         return Ok(false);
+    }
+    if preflight.interrupted() && preflight.hops.is_empty() {
+        info!(
+            "A previous upgrade to '{}' left this instance unfinished.",
+            preflight.product_version
+        );
+        info!("Its resources are upgraded; the runtimes and the database are not.");
+        info!("This run will complete them.");
     }
     if unlock && preflight.lock.as_ref().is_some_and(UpgradeLock::held) {
         info!("'--unlock' will take over the upgrade lock shown above.");
@@ -371,6 +520,7 @@ async fn instance_upgrade_phase(
     lock: &UpgradeLock,
     verbose: bool,
     yes: bool,
+    uv_index: Option<&str>,
 ) -> CommandResult<bool> {
     phases.announce("Instance upgrade");
     info!(
@@ -409,6 +559,10 @@ async fn instance_upgrade_phase(
     );
 
     latch::verify(context, instance, lock).await?;
+    if !settle_index(provider, context, uv_index, yes).await? {
+        info!("Operation cancelled.");
+        return Ok(false);
+    }
     provider.upgrade_runtimes(reporter).await?;
     provider.upgrade_database(reporter).await?;
 
@@ -422,7 +576,27 @@ async fn instance_upgrade_phase(
         "Instance '{instance}' is upgraded to version '{}'.",
         preflight.product_version
     );
+    report_pending_secrets(context, instance).await?;
     Ok(true)
+}
+
+async fn report_pending_secrets(context: &KubeContext, instance: &str) -> CommandResult {
+    let pending = pending_secret_keys(context).await?;
+    if pending.is_empty() {
+        return Ok(());
+    }
+    cwarn!(
+        "This version needs {} configuration secret(s) that have no value yet. Only \
+         you can provide them, and the instance will not start until you do:",
+        pending.iter().map(|entry| entry.keys.len()).sum::<usize>()
+    );
+    for entry in &pending {
+        info!("  - {}: {}", entry.config, entry.keys.join(", "));
+    }
+    info!("Download the configurations, fill the values in, and upload them back:");
+    info!("  tdkserver config get --instance {instance}");
+    info!("  tdkserver config put --instance {instance}");
+    Ok(())
 }
 
 async fn instance_restart_phase(

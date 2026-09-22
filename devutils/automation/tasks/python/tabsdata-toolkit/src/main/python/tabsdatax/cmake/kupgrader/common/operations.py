@@ -177,14 +177,14 @@ def walk_mapping(
 
         anchor = anchor_of(keys, position, previous)
         if anchor is None:
-            synthesis.gaps.append(
-                Gap(
-                    leaf=render_leaf((*path, str(key))),
-                    shape="Key added without an anchor",
-                    detail=(
-                        "The new key has no sibling that already exists, so "
-                        "'insert-sibling-if-existing' cannot place it."
-                    ),
+            synthesis.operations.append(
+                Operation(
+                    op="insert-child-if-missing",
+                    fields={
+                        "leaf": render_leaf(path),
+                        "child": str(key),
+                        "value": current[key],
+                    },
                 )
             )
             continue

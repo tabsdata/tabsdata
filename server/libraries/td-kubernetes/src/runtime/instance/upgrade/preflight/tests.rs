@@ -182,3 +182,34 @@ fn an_absent_label_on_a_post_legacy_instance_is_mismatched() {
         }
     );
 }
+
+fn preflight(version: &str, product: &str, lock: Option<UpgradeLock>, hops: Vec<Hop>) -> Preflight {
+    Preflight {
+        instance: "demo".to_owned(),
+        instance_version: version.to_owned(),
+        product_version: product.to_owned(),
+        standing: Standing::Settled,
+        manifest: manifest(version, &[]),
+        lock,
+        hops,
+    }
+}
+
+#[test]
+fn an_instance_on_the_running_version_with_no_lock_is_up_to_date() {
+    let preflight = preflight("2.1.0", "2.1.0", None, Vec::new());
+    assert!(preflight.up_to_date());
+    assert!(!preflight.interrupted());
+}
+
+#[test]
+fn a_walked_instance_whose_lock_survived_is_not_up_to_date() {
+    let preflight = preflight(
+        "2.1.0",
+        "2.1.0",
+        Some(UpgradeLock::issue("2.1.0")),
+        Vec::new(),
+    );
+    assert!(preflight.interrupted());
+    assert!(!preflight.up_to_date());
+}

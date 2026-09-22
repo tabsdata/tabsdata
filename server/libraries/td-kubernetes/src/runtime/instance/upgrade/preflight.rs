@@ -38,7 +38,11 @@ pub struct Preflight {
 
 impl Preflight {
     pub fn up_to_date(&self) -> bool {
-        self.hops.is_empty()
+        self.hops.is_empty() && !self.interrupted()
+    }
+
+    pub fn interrupted(&self) -> bool {
+        self.lock.is_some()
     }
 
     pub fn upgraders(&self) -> usize {

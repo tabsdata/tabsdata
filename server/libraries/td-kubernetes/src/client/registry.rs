@@ -11,6 +11,7 @@ use td_common::settings::INSTANCES_FOLDER;
 use td_error::TdError;
 
 use td_python::python::get_python_scripts_folder;
+use te_system::edition::{Edition, TabsdataEdition};
 
 #[cfg(feature = "enterprise")]
 use crate::base::constants::FOLDER_PYENV_AG;
@@ -167,6 +168,10 @@ impl InstanceState {
     }
 }
 
+fn edition() -> String {
+    TabsdataEdition.label().to_owned()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InstanceSettings {
     pub state: InstanceState,
@@ -175,6 +180,7 @@ pub struct InstanceSettings {
     pub locality: Locality,
     pub cluster: ClusterViews,
     pub version: String,
+    #[serde(default = "edition")]
     pub edition: String,
     pub folder: PathBuf,
     #[serde(default)]
@@ -243,13 +249,7 @@ impl InstanceSettings {
             }
             .into());
         }
-        let settings = Self::load(name).map_err(|_| ProviderError::InstanceNotInitialized {
-            name: name.to_owned(),
-            reason: format!(
-                "its settings file '{}' could not be read",
-                settings_file.display()
-            ),
-        })?;
+        let settings = Self::load(name)?;
         settings.require_one_of(expected)?;
         Ok(settings)
     }

@@ -23,6 +23,17 @@ pub enum CliError {
         supported: String,
     } = 3,
     #[error(
+        "Argument '--uv-index' applies only to a 'kminus' instance with '{variable}' unset, \
+         because only then are the packages resolved from this machine's environment. \
+         This instance uses provider '{provider}' and '{variable}' is '{mode}'; set the \
+         index in the 'pods.global.envs' section of its configuration instead."
+    )]
+    UvIndexNotGoverned {
+        variable: String,
+        provider: String,
+        mode: String,
+    } = 15,
+    #[error(
         "Argument '--{argument}' is no longer supported by 'tdkserver quickstart'. To declare \
          additional packages for any of the tabsdata base virtual environments, either run \
          'tdkserver venv update', which works both with 'tdkserver quickstart' and on an \

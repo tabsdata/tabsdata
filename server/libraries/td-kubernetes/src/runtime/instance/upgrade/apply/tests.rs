@@ -6,7 +6,7 @@ use super::*;
 use crate::base::constants::{
     KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, TABSDATA_REQUIREMENTS_LOCK_ASSET,
 };
-use crate::runtime::instance::upgrade::spec::NestChildrenIfFlat;
+use crate::runtime::instance::upgrade::spec::{InsertChildIfMissing, NestChildrenIfFlat};
 use crate::runtime::instance::upgrade::store::family_of;
 
 fn operation(leaf: &str, from: serde_yaml::Value, to: serde_yaml::Value) -> Operation {
@@ -904,4 +904,108 @@ fn the_shipped_spec_is_idempotent_over_an_upgraded_config() {
     let (twice, touched) = applied(&once, &changes);
     assert!(!touched);
     assert_eq!(once, twice);
+}
+
+fn child(leaf: &str, child: &str, value: serde_yaml::Value) -> Operation {
+    Operation::InsertChildIfMissing(InsertChildIfMissing {
+        leaf: leaf.to_owned(),
+        child: child.to_owned(),
+        value,
+    })
+}
+
+#[test]
+fn a_child_is_added_to_an_empty_mapping() {
+    let (rendered, touched) = applied(
+        "pods:\n  global:\n    envs: {}\n",
+        &[child(
+            "pods.global.envs",
+            "UV_INDEX_STRATEGY",
+            serde_yaml::Value::from("unsafe-best-match"),
+        )],
+    );
+    assert!(touched);
+    assert!(rendered.contains("UV_INDEX_STRATEGY: unsafe-best-match"));
+}
+
+#[test]
+fn a_child_that_already_exists_is_left_alone() {
+    let (rendered, touched) = applied(
+        "pods:\n  global:\n    envs:\n      UV_INDEX: http://keep/simple\n",
+        &[child(
+            "pods.global.envs",
+            "UV_INDEX",
+            serde_yaml::Value::from("http://other/simple"),
+        )],
+    );
+    assert!(!touched);
+    assert!(rendered.contains("http://keep/simple"));
+}
+
+#[test]
+fn a_child_joins_the_keys_already_present() {
+    let (rendered, touched) = applied(
+        "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\n",
+        &[child(
+            "pods.global.envs",
+            "UV_INDEX",
+            serde_yaml::Value::from("http://private/simple"),
+        )],
+    );
+    assert!(touched);
+    assert!(rendered.contains("TD_TRACE: verbose"));
+    assert!(rendered.contains("UV_INDEX: http://private/simple"));
+}
+
+#[test]
+fn a_null_mapping_is_seeded_before_the_child_is_added() {
+    let (rendered, touched) = applied(
+        "pods:\n  global:\n    envs:\n",
+        &[child(
+            "pods.global.envs",
+            "UV_INDEX",
+            serde_yaml::Value::from("http://private/simple"),
+        )],
+    );
+    assert!(touched);
+    assert!(rendered.contains("UV_INDEX: http://private/simple"));
+}
+
+#[test]
+fn an_absent_parent_block_is_created() {
+    let (rendered, touched) = applied(
+        "pods:\n  global: {}\n",
+        &[child(
+            "pods.global.envs",
+            "UV_INDEX",
+            serde_yaml::Value::from("http://private/simple"),
+        )],
+    );
+    assert!(touched);
+    assert!(rendered.contains("envs:"));
+    assert!(rendered.contains("UV_INDEX: http://private/simple"));
+}
+
+#[test]
+fn a_leaf_holding_a_scalar_is_not_a_mapping_to_add_to() {
+    let (rendered, touched) = applied(
+        "pods:\n  global:\n    envs: plain\n",
+        &[child(
+            "pods.global.envs",
+            "UV_INDEX",
+            serde_yaml::Value::from("http://private/simple"),
+        )],
+    );
+    assert!(!touched);
+    assert!(rendered.contains("envs: plain"));
+}
+
+#[test]
+fn an_unset_value_renders_as_an_empty_key() {
+    let (rendered, touched) = applied(
+        "pods:\n  global:\n    envs: {}\n",
+        &[child("pods.global.envs", "UV_INDEX", serde_yaml::Value::Null)],
+    );
+    assert!(touched);
+    assert!(rendered.contains("UV_INDEX: null") || rendered.contains("UV_INDEX:"));
 }

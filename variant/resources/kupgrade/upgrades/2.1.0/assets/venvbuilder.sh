@@ -79,6 +79,7 @@ VENV_Z="z"
 UV_INSTALLER="https://astral.sh/uv/install.sh"
 
 ZSTANDARD_PACKAGE="zstandard"
+TABSDATA_PACKAGE="tabsdata[all]"
 
 ARCHIVE_MODULE="tabsdatak.common._interpreter.python.archive"
 
@@ -303,6 +304,21 @@ create_compressor_environment() {
    run uv pip install --python "$virtual_environment_z/bin/python" $(constrained) "$ZSTANDARD_PACKAGE"
 }
 
+verify_packages() {
+   local resolver="$work/resolver"
+   run uv venv --python-preference only-managed --python "$python_version" "$resolver"
+   local outcome=0
+   run uv pip install --python "$resolver/bin/python" $(constrained) --dry-run \
+      "$TABSDATA_PACKAGE==$version" || outcome="$?"
+   rm -rf "$resolver"
+   if (( outcome != 0 )); then
+      echo ">> Cannot resolve $TABSDATA_PACKAGE==$version from the configured indexes."
+      echo ">> The existing virtual environments were left untouched."
+      return "$outcome"
+   fi
+   echo ">> Resolved $TABSDATA_PACKAGE==$version; the virtual environments can be rebuilt"
+}
+
 create_virtual_environment() {
    remove_virtual_environment "$virtual_environment_td"
    run uv venv --seed --relocatable --python-preference only-managed --python "$python_version" "$virtual_environment_td"
@@ -320,14 +336,14 @@ has_requirements() {
 
 install_packages() {
    if has_requirements "$requirements_td"; then
-      run uv pip install --python "$virtual_environment_td/bin/python" $(constrained) "tabsdata[all]==$version" -r "$requirements_td"
+      run uv pip install --python "$virtual_environment_td/bin/python" $(constrained) "$TABSDATA_PACKAGE==$version" -r "$requirements_td"
    else
-      run uv pip install --python "$virtual_environment_td/bin/python" $(constrained) "tabsdata[all]==$version"
+      run uv pip install --python "$virtual_environment_td/bin/python" $(constrained) "$TABSDATA_PACKAGE==$version"
    fi
    if has_requirements "$requirements_fn"; then
-      run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) "tabsdata[all]==$version" -r "$requirements_fn"
+      run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) "$TABSDATA_PACKAGE==$version" -r "$requirements_fn"
    else
-      run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) "tabsdata[all]==$version"
+      run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) "$TABSDATA_PACKAGE==$version"
    fi
 }
 
@@ -462,6 +478,7 @@ main() {
    step "Installing prerequisites"            install_prerequisites
    step "Installing uv"                       install_uv
    step "Installing Python"                   install_python
+   step "Verifying the packages"              verify_packages
    step "Creating the compressor environment" create_compressor_environment
    step "Creating the virtual environments"   create_virtual_environment
    step "Installing packages"                 install_packages
