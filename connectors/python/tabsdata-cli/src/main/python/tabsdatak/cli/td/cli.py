@@ -10,7 +10,6 @@ from collections.abc import Mapping
 from importlib.metadata import PackageNotFoundError, version
 
 import rich_click as click
-from dns import set
 
 try:
     __version__ = version("tabsdata-cli")

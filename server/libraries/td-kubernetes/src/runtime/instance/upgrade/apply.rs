@@ -21,8 +21,7 @@ use crate::runtime::instance::upgrade::catalog::read_content;
 use crate::runtime::instance::upgrade::plan::Step;
 use crate::runtime::instance::upgrade::spec::{
     Action, InsertChildIfMissing, InsertSiblingIfExisting, ModifyLeafValueIf, ModifyTextIf,
-    NestChildrenIfFlat,
-    Operation, Placement, Scope,
+    NestChildrenIfFlat, Operation, Placement, Scope,
 };
 use crate::runtime::instance::upgrade::store::Store;
 

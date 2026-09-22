@@ -1004,7 +1004,11 @@ fn a_leaf_holding_a_scalar_is_not_a_mapping_to_add_to() {
 fn an_unset_value_renders_as_an_empty_key() {
     let (rendered, touched) = applied(
         "pods:\n  global:\n    envs: {}\n",
-        &[child("pods.global.envs", "UV_INDEX", serde_yaml::Value::Null)],
+        &[child(
+            "pods.global.envs",
+            "UV_INDEX",
+            serde_yaml::Value::Null,
+        )],
     );
     assert!(touched);
     assert!(rendered.contains("UV_INDEX: null") || rendered.contains("UV_INDEX:"));
