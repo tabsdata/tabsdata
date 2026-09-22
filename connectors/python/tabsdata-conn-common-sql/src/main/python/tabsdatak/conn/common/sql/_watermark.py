@@ -25,13 +25,15 @@ from __future__ import annotations
 import contextlib
 import logging
 import tempfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from tabsdatak.conn.common.sql.error import SqlCommonErrorCode
 
 if TYPE_CHECKING:
+    import polars as pl
+
     # noinspection PyProtectedMember
     from tabsdatak.conn.common.sql._merge import MergeCfg
 
@@ -39,10 +41,18 @@ logger = logging.getLogger(__name__)
 
 
 @contextlib.contextmanager
-def watermarked_batch(batch: Path, column: str | None, trx_id: str) -> Iterator[Path]:
+def watermarked_batch(
+    batch: Path,
+    column: str | None,
+    trx_id: str,
+    adapt: Callable[[pl.LazyFrame], pl.LazyFrame] | None = None,
+) -> Iterator[Path]:
     """Yield a parquet carrying ``column`` stamped with ``trx_id``, to be staged
-    in place of ``batch`` -- or ``batch`` itself when the write names no
-    watermark.
+    in place of ``batch`` -- or ``batch`` itself when the write neither names a
+    watermark nor adapts the batch.
+
+    ``adapt`` is the connector's own rewrite of the frame -- a cast its engine
+    needs, typically -- folded into this one so it costs no second round-trip.
 
     Written into the file rather than added to the target afterwards: a bulk
     load matches the column onto the target by name like any other, so the load
@@ -58,7 +68,7 @@ def watermarked_batch(batch: Path, column: str | None, trx_id: str) -> Iterator[
     differ on whether a batch carrying a column the target lacks is dropped or
     refused, and neither is a watermark.
     """
-    if column is None:
+    if column is None and adapt is None:
         yield batch
         return
 
@@ -66,12 +76,15 @@ def watermarked_batch(batch: Path, column: str | None, trx_id: str) -> Iterator[
 
     with tempfile.TemporaryDirectory() as work:
         stamped = Path(work) / batch.name
-        logger.info(
-            "Stamping %s with %s = %r before staging", batch.name, column, trx_id
-        )
-        pl.scan_parquet(batch).with_columns(
-            pl.lit(trx_id, dtype=pl.String).alias(column)
-        ).sink_parquet(stamped)
+        frame = pl.scan_parquet(batch)
+        if adapt is not None:
+            frame = adapt(frame)
+        if column is not None:
+            logger.info(
+                "Stamping %s with %s = %r before staging", batch.name, column, trx_id
+            )
+            frame = frame.with_columns(pl.lit(trx_id, dtype=pl.String).alias(column))
+        frame.sink_parquet(stamped)
         yield stamped
 
 

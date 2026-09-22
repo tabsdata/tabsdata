@@ -18,8 +18,12 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from tabsdatak.conn.common.sql._merge import WatermarkCfg
+
+if TYPE_CHECKING:
+    import polars as pl
 
 
 @dataclass(frozen=True)
@@ -153,6 +157,13 @@ class MergeDialect(ABC):
         stamped and so answers ``False`` too.
         """
         return False
+
+    def adapt_batch(self, frame: pl.LazyFrame) -> pl.LazyFrame:
+        """The batch as this engine can read it.
+
+        Folded into the coalesce's rewrite.
+        """
+        return frame
 
     @abstractmethod
     def staging(

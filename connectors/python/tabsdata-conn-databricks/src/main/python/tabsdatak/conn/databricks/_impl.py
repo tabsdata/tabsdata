@@ -60,6 +60,7 @@ from tabsdatak.spi import DestContext
 _AnyDatabricksConn = DatabricksSrcConn | DatabricksDestConn
 
 if TYPE_CHECKING:
+    import polars as pl
     import pyarrow as pa
 
     import databricks.sdk as dbsdk
@@ -78,6 +79,8 @@ _DOWNLOAD_READ_TIMEOUT_SECONDS = 300
 _DOWNLOAD_RETRY_ATTEMPTS = 12
 _DOWNLOAD_RETRY_WAIT_SECONDS = 5
 _PARQUET_COMPRESSION = "snappy"
+# Delta's only timestamp width: it has no nanosecond type.
+_DELTA_TIME_UNIT = "us"
 _COPY_INTO_RETRY_ATTEMPTS = 6
 _COPY_INTO_RETRY_WAIT_SECONDS = 5
 
@@ -969,13 +972,18 @@ def reject_unsupported_columns(
     parquet_files: list[Path],
 ) -> None:
     """Fail before uploading anything if a column has a type Databricks cannot
-    store.
+    store and cannot be cast to one.
 
     COPY INTO rejects the parquet TIME type outright
     ("[PARQUET_TYPE_ILLEGAL] Illegal Parquet type: INT64 (TIME(...))"), and it
     does so per file after the upload and the CREATE have already run. Reading
     the parquet footer up front costs nothing and turns that into one error that
     names the table and the offending columns.
+
+    Only types with no single correct target belong here: a time-of-day could
+    be a timestamp on some arbitrary date or a string in some format, and
+    picking one would be a guess. A type with one obvious target is cast by
+    :func:`narrow_timestamps` instead.
     """
     import pyarrow.parquet as pq
 
@@ -995,6 +1003,47 @@ def pa_is_time(arrow_type: Any) -> bool:
     import pyarrow as pa
 
     return pa.types.is_time(arrow_type)
+
+
+def pa_is_nanosecond_timestamp(arrow_type: Any) -> bool:
+    import pyarrow as pa
+
+    return pa.types.is_timestamp(arrow_type) and arrow_type.unit == "ns"
+
+
+def has_nanosecond_timestamps(batch: Path) -> bool:
+    """Whether ``batch`` needs :func:`narrow_timestamps` before it is staged.
+
+    Done reading schema only (file footer), no full scan done.
+    """
+    import pyarrow.parquet as pq
+
+    return any(
+        pa_is_nanosecond_timestamp(field.type) for field in pq.read_schema(str(batch))
+    )
+
+
+def narrow_timestamps(frame: pl.LazyFrame) -> pl.LazyFrame:
+    """Cast every nanosecond timestamp column to microseconds, which is the
+    only timestamp Delta has.
+    """
+    import polars as pl
+
+    narrowing = [
+        name
+        for name, dtype in frame.collect_schema().items()
+        if isinstance(dtype, pl.Datetime) and dtype.time_unit == "ns"
+    ]
+    if not narrowing:
+        return frame
+    logger.info(
+        "databricks: narrowing nanosecond timestamp column(s) to %s: %s",
+        _DELTA_TIME_UNIT,
+        ", ".join(repr(name) for name in narrowing),
+    )
+    return frame.with_columns(
+        pl.col(name).dt.cast_time_unit(_DELTA_TIME_UNIT) for name in narrowing
+    )
 
 
 def write_all_tables(
@@ -1034,12 +1083,11 @@ def write_all_tables(
             ),
             1,
         ):
+            path = Path(parquet_path)
             fq_table = _fully_qualify_table(cfg.conn, raw_table)
             logger.info("databricks: writing table %d/%d: %s", i, total, fq_table)
             if cfg.if_table_exists == "merge":
-                _merge_one(
-                    sql_conn, ws_client, cfg, Path(parquet_path), fq_table, merge_cfg
-                )
+                _merge_one(sql_conn, ws_client, cfg, path, fq_table, merge_cfg)
                 logger.debug("databricks: finished table %s", fq_table)
                 continue
             # Append is the only disposition that stamps: a merge has
@@ -1070,7 +1118,10 @@ def write_all_tables(
                 continue
             logger.info("databricks: staging parquet for %s", fq_table)
             with watermarked_batch(
-                Path(parquet_path), watermark, cfg.ctx.trx_id
+                path,
+                watermark,
+                cfg.ctx.trx_id,
+                adapt=narrow_timestamps if has_nanosecond_timestamps(path) else None,
             ) as batch:
                 file_in_volume = upload_file_to_volume(
                     ws_client, cfg.conn, fq_table, batch

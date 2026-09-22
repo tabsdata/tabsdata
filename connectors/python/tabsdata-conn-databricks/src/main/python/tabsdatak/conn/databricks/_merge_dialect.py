@@ -17,6 +17,7 @@ import contextlib
 import logging
 from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge import WatermarkCfg
@@ -29,6 +30,9 @@ from tabsdatak.conn.common.sql._merge.dialect import (
     Staged,
 )
 from tabsdatak.conn.databricks.error import DatabricksErrorCode
+
+if TYPE_CHECKING:
+    import polars as pl
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +125,13 @@ class DatabricksMergeDialect(MergeDialect):
         not make a name case-sensitive, so lower case is the form two names are
         the same in."""
         return name.lower()
+
+    def adapt_batch(self, frame: pl.LazyFrame) -> pl.LazyFrame:
+        """Narrow what Delta cannot store, inside the coalesce's rewrite."""
+        # noinspection PyProtectedMember
+        from tabsdatak.conn.databricks._impl import narrow_timestamps
+
+        return narrow_timestamps(frame)
 
     @contextlib.contextmanager
     def staging(

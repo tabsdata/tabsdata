@@ -483,6 +483,132 @@ def test_write_all_tables_rejects_every_time_width(tmp_path, unit):
         _impl.write_all_tables(cfg, [parquet])
 
 
+# ---------------------------------------------------------------------------
+# Nanosecond timestamps narrowed to what Delta can store
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("unit", "expected"),
+    [("s", False), ("ms", False), ("us", False), ("ns", True)],
+)
+def test_only_the_nanosecond_width_needs_narrowing(unit, expected):
+    assert _impl.pa_is_nanosecond_timestamp(pa.timestamp(unit)) is expected
+
+
+def test_a_batch_without_nanoseconds_needs_no_narrowing(tmp_path):
+    import datetime
+
+    parquet = _parquet(
+        tmp_path / "coarse.parquet",
+        n=pa.array([1], pa.int64()),
+        us=pa.array([datetime.datetime(2023, 1, 1, 8)], pa.timestamp("us")),
+    )
+    assert _impl.has_nanosecond_timestamps(parquet) is False
+
+
+def test_a_batch_with_nanoseconds_needs_narrowing(tmp_path):
+    import datetime
+
+    parquet = _parquet(
+        tmp_path / "fine.parquet",
+        ns=pa.array([datetime.datetime(2023, 1, 1, 8)], pa.timestamp("ns")),
+    )
+    assert _impl.has_nanosecond_timestamps(parquet) is True
+
+
+class TestNarrowTimestamps:
+    def _frame(self, **columns):
+        import polars as pl
+
+        return pl.LazyFrame(columns)
+
+    def test_a_nanosecond_column_becomes_microseconds(self):
+        import polars as pl
+
+        frame = self._frame(ts=[1]).with_columns(pl.col("ts").cast(pl.Datetime("ns")))
+        assert _impl.narrow_timestamps(frame).collect_schema()["ts"] == pl.Datetime(
+            "us"
+        )
+
+    def test_the_time_zone_is_kept(self):
+        """Delta reads a zoned timestamp differently from a naive one, so only
+        the unit may change."""
+        import polars as pl
+
+        frame = self._frame(ts=[1]).with_columns(
+            pl.col("ts").cast(pl.Datetime("ns", time_zone="UTC"))
+        )
+        assert _impl.narrow_timestamps(frame).collect_schema()["ts"] == pl.Datetime(
+            "us", time_zone="UTC"
+        )
+
+    def test_every_offending_column_is_cast(self):
+        import polars as pl
+
+        frame = self._frame(a=[1], b=[2]).with_columns(
+            pl.col("a").cast(pl.Datetime("ns")),
+            pl.col("b").cast(pl.Datetime("ns", time_zone="UTC")),
+        )
+        schema = _impl.narrow_timestamps(frame).collect_schema()
+        assert schema["a"] == pl.Datetime("us")
+        assert schema["b"] == pl.Datetime("us", time_zone="UTC")
+
+    def test_other_columns_are_left_alone(self):
+        import polars as pl
+
+        frame = self._frame(n=[7], s=["x"], ms=[1], ns=[2]).with_columns(
+            pl.col("ms").cast(pl.Datetime("ms")),
+            pl.col("ns").cast(pl.Datetime("ns")),
+        )
+        schema = _impl.narrow_timestamps(frame).collect_schema()
+        assert schema == {
+            "n": pl.Int64,
+            "s": pl.String,
+            "ms": pl.Datetime("ms"),
+            "ns": pl.Datetime("us"),
+        }
+
+    def test_a_frame_with_nothing_to_narrow_is_handed_back_as_it_is(self):
+        frame = self._frame(n=[1])
+        assert _impl.narrow_timestamps(frame) is frame
+
+    def test_precision_survives_to_the_microsecond(self):
+        import datetime
+
+        import polars as pl
+
+        exact = datetime.datetime(2023, 3, 4, 5, 6, 7, 123456)
+        frame = self._frame(ts=[exact]).with_columns(
+            pl.col("ts").cast(pl.Datetime("ns"))
+        )
+        assert _impl.narrow_timestamps(frame).collect()["ts"].to_list() == [exact]
+
+
+def test_a_time_column_is_still_refused_rather_than_narrowed(tmp_path):
+    """Narrowing does not weaken the rejection: TIME has no single correct
+    target, so it stays an error rather than becoming a guess."""
+    import datetime
+
+    parquet = _parquet(
+        tmp_path / "both.parquet",
+        clock=pa.array([datetime.time(9, 30)], pa.time64("ns")),
+        ts=pa.array([datetime.datetime(2023, 1, 1)], pa.timestamp("ns")),
+    )
+    cfg = _impl.DatabricksWriteCfg(
+        conn=_dest_conn(),
+        target_tables=["main.analytics.events"],
+        if_table_exists="append",
+        schema_evolution="strict",
+        ctx=_FakeCtx(),
+    )
+    with pytest.raises(DatabricksRuntimeException) as ei:
+        _impl.write_all_tables(cfg, [parquet])
+    assert ei.value.api_error is DatabricksErrorCode.DATABRICKS_13
+    assert "'clock'" in str(ei.value)
+    assert "'ts'" not in str(ei.value)
+
+
 def test_write_all_tables_names_the_table_the_offending_file_targets(tmp_path):
     import datetime
 
@@ -932,3 +1058,51 @@ def test_a_replace_never_stamps_even_when_handed_a_watermark(monkeypatch, tmp_pa
     _impl.write_all_tables(_wm_cfg(if_table_exists="replace"), [parquet])
     assert staged[0][0] == parquet
     assert _alters(cursor) == []
+
+
+def _staged_schemas(monkeypatch):
+    """The schema of every file handed to the volume, read while it still
+    exists."""
+    import polars as pl
+
+    schemas: list[dict] = []
+    original = _impl.upload_file_to_volume
+
+    def capture(ws_client, conn, fq_table, local_path):
+        schemas.append(dict(pl.read_parquet_schema(local_path)))
+        return original(ws_client, conn, fq_table, local_path)
+
+    monkeypatch.setattr(_impl, "upload_file_to_volume", capture)
+    return schemas
+
+
+def _ns_parquet(tmp_path) -> Path:
+    import polars as pl
+
+    path = tmp_path / "ns.parquet"
+    pl.DataFrame({"id": [1], "ts": [1]}).with_columns(
+        pl.col("ts").cast(pl.Datetime("ns"))
+    ).write_parquet(path)
+    return path
+
+
+def test_append_stages_timestamps_delta_can_read(monkeypatch, tmp_path):
+    import polars as pl
+
+    cursor = _BulkCursor(("id", _WATERMARK))
+    _bulk_clients(monkeypatch, cursor)
+    schemas = _staged_schemas(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(), [_ns_parquet(tmp_path)])
+    # The stamp and the cast in one rewrite.
+    assert schemas[0]["ts"] == pl.Datetime("us")
+    assert _WATERMARK in schemas[0]
+
+
+def test_append_narrows_even_with_no_watermark_to_ride(monkeypatch, tmp_path):
+    import polars as pl
+
+    cursor = _BulkCursor(("id",))
+    _bulk_clients(monkeypatch, cursor)
+    schemas = _staged_schemas(monkeypatch)
+    _impl.write_all_tables(_wm_cfg(watermark_column=None), [_ns_parquet(tmp_path)])
+    assert schemas[0]["ts"] == pl.Datetime("us")

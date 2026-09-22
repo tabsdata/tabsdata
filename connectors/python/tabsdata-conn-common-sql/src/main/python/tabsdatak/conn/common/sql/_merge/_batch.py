@@ -72,10 +72,15 @@ def coalesced_batch(
     everything downstream keyed off its name -- is indistinguishable from the
     uncoalesced one. It lives in a temp directory removed as soon as it has been
     staged.
+
+    :meth:`MergeDialect.adapt_batch` rides this rewrite, so a dialect needing a
+    cast before its engine reads the file pays no round-trip for it. It is
+    applied first, so the reduction sees the keys at the precision the target
+    will.
     """
     import polars as pl
 
-    lf = pl.scan_parquet(batch)
+    lf = dialect.adapt_batch(pl.scan_parquet(batch))
     # Reading the footer, not the rows: the names have to be known before the
     # transformation can be built, and the transformation never resolves a
     # schema of its own.

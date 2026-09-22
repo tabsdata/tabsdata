@@ -753,6 +753,18 @@ class TestCoalescedBatch:
             got = pl.read_parquet(out)
         assert got.is_empty()
 
+    def test_narrows_nanosecond_timestamps(self, tmp_path):
+        """The merge path's cast rides this rewrite instead of adding one: Delta
+        cannot read a nanosecond timestamp."""
+        import polars as pl
+
+        batch = tmp_path / "in.parquet"
+        pl.DataFrame({"k": [1], "op": ["i"], "ts": [1]}).with_columns(
+            pl.col("ts").cast(pl.Datetime("ns"))
+        ).write_parquet(batch)
+        with _coalesce(batch, _cfg(on=["k"])) as out:
+            assert pl.read_parquet(out).schema["ts"] == pl.Datetime("us")
+
 
 # ---------------------------------------------------------------------------
 # The driver, end to end over this dialect

@@ -104,6 +104,30 @@ class TestWatermarkedBatch:
         assert frame.height == 0
         assert "wm" in frame.columns
 
+    def test_the_adapt_rewrite_rides_the_stamp(self, tmp_path):
+        """One sink, not two -- which is the point of passing the rewrite in
+        rather than making it beforehand."""
+        batch = _batch(tmp_path / "in.parquet", id=[1, 2])
+        with watermarked_batch(
+            batch, "wm", _TRX, adapt=lambda frame: frame.with_columns(pl.col("id") * 10)
+        ) as out:
+            frame = pl.read_parquet(out)
+        assert frame["id"].to_list() == [10, 20]
+        assert frame["wm"].to_list() == [_TRX, _TRX]
+
+    def test_an_adapt_alone_is_enough_to_rewrite(self, tmp_path):
+        batch = _batch(tmp_path / "in.parquet", id=[1])
+        with watermarked_batch(
+            batch, None, _TRX, adapt=lambda frame: frame.with_columns(pl.col("id") * 10)
+        ) as out:
+            assert out != batch
+            assert pl.read_parquet(out)["id"].to_list() == [10]
+
+    def test_neither_a_column_nor_an_adapt_yields_the_original(self, tmp_path):
+        batch = _batch(tmp_path / "in.parquet")
+        with watermarked_batch(batch, None, _TRX, adapt=None) as out:
+            assert out == batch
+
 
 # --- validate_watermark_column ---------------------------------------
 
