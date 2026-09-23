@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::dependency::DependencyDB;
@@ -29,8 +29,8 @@ impl FunctionState {
         }
     }
 
-    pub async fn load<S: SeesProjectRows>(
-        conn: &mut DomainConnection<Apiserver, S>,
+    pub async fn load<S: SeesProjectRows, M: AccessMode>(
+        conn: &mut DomainConnection<Apiserver, S, M>,
         function_id: &FunctionId,
     ) -> Result<Self, TdError> {
         let tables: Vec<TableDB> = conn.scd2().fetch_all(function_id).await?;

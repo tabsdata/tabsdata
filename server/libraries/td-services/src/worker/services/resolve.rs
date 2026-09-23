@@ -8,7 +8,7 @@ use crate::scheduler::message_builder::{
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_database::access::{AcrossProjects, DbPool, SeesProjectRows};
+use td_database::access::{AcrossProjects, DbPool, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::ReadRequest;
@@ -52,8 +52,8 @@ async fn resolve_worker_message(
     level = "debug",
     err(Debug)
 )]
-pub async fn resolve_worker_message<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn resolve_worker_message<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     storage: &Storage,
     worker_id: &WorkerId,
     at: &AtTime,

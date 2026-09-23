@@ -12,7 +12,6 @@ use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
 use td_common::jwt::JwtConfig;
 use td_common::jwt::decode_token;
-use td_common::provider::Provider;
 use td_database::access::{DbPool, Global};
 use td_error::TdError;
 use td_objects::and;

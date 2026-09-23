@@ -17,7 +17,7 @@
 //! trx.commit().await?;
 //! ```
 
-use crate::access::DbScope;
+use crate::access::{AccessMode, DbScope};
 use crate::domain::{DbDomain, DomainConnection};
 
 /// Proof that an authz decision was made for this request. A zero-sized
@@ -45,18 +45,20 @@ impl Grant {
 pub trait Gated<D: DbDomain> {
     /// The RLS scope the connection behind this wrapper was acquired in.
     type Scope: DbScope;
+    type Mode: AccessMode;
 
-    fn get(&mut self, grant: Grant) -> &mut DomainConnection<D, Self::Scope>;
+    fn get(&mut self, grant: Grant) -> &mut DomainConnection<D, Self::Scope, Self::Mode>;
 }
 
 /// A raw connection is already unlocked — whoever holds one crossed the seam
 /// to get it. The identity impl lets authz methods and authz-calling helpers
 /// take `&mut impl Gated<D>` and accept wrappers and unlocked connections
 /// alike, so a body that unlocked early can still authorize further.
-impl<D: DbDomain, S: DbScope> Gated<D> for DomainConnection<D, S> {
+impl<D: DbDomain, S: DbScope, M: AccessMode> Gated<D> for DomainConnection<D, S, M> {
     type Scope = S;
+    type Mode = M;
 
-    fn get(&mut self, _grant: Grant) -> &mut DomainConnection<D, S> {
+    fn get(&mut self, _grant: Grant) -> &mut DomainConnection<D, S, M> {
         self
     }
 }

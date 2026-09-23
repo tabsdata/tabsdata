@@ -21,7 +21,7 @@
 //! `users_roles.role_id` are likewise `ON DELETE RESTRICT`, so those rows are
 //! deleted before the role rows.
 
-use td_database::access::DbScope;
+use td_database::access::{DbScope, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
@@ -30,8 +30,8 @@ use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::ProjectId;
 use td_queries::Queries;
 
-pub async fn delete_project_roles<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn delete_project_roles<S: DbScope, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     project_id: &ProjectId,
 ) -> Result<(), TdError> {
     // The `roles.project_id` column is `Option<ProjectId>`; its SQL condition

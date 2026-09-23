@@ -17,7 +17,7 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
-use td_database::access::DbScope;
+use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::project::ActiveProjectDB;
@@ -39,8 +39,8 @@ pub trait EntityKind: Copy + Eq + Hash + Debug + Send + Sync + 'static {
     /// Whether the kind's source of truth still knows the entity; nothing is
     /// authorized on one it does not. Kinds whose entities never go away keep
     /// the default.
-    fn is_current<S: DbScope>(
-        _conn: &mut DomainConnection<Apiserver, S>,
+    fn is_current<S: DbScope, M: AccessMode>(
+        _conn: &mut DomainConnection<Apiserver, S, M>,
         _id: &Self::Id,
     ) -> impl Future<Output = Result<bool, TdError>> + Send {
         async { Ok(true) }
@@ -345,8 +345,8 @@ impl EntityKind for Project {
     type Id = ProjectId;
     type Permission = ProjectPermission;
     const NAME: &'static str = "project";
-    async fn is_current<S: DbScope>(
-        conn: &mut DomainConnection<Apiserver, S>,
+    async fn is_current<S: DbScope, M: AccessMode>(
+        conn: &mut DomainConnection<Apiserver, S, M>,
         id: &Self::Id,
     ) -> Result<bool, TdError> {
         let live: Option<ActiveProjectDB> = conn.fetch_optional(id).await?;

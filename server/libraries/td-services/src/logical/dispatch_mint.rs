@@ -7,8 +7,8 @@
 //! versions. DB reads are hoisted to chunked fetches before the per-LFR
 //! loop, and FR and TDV rows are bulk-inserted.
 
-use td_database::access::InProject;
 use td_database::access::LockInstant;
+use td_database::access::{InProject, XW};
 
 use crate::function::topology::{RunnableVersion, latest_patch_or_head_batch};
 use crate::logical::mint::{build_function_run, build_output_table_data_versions};
@@ -42,7 +42,7 @@ pub struct MintedDispatch {
     err(Debug)
 )]
 pub async fn mint_function_runs_on_dispatch(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     ready_lfrs: &[LogicalFunctionRunDB],
     at: LockInstant,
 ) -> Result<Vec<MintedDispatch>, TdError> {
@@ -209,9 +209,7 @@ mod tests {
     use crate::Services;
     use crate::tests::fixtures::register;
     use std::str::FromStr;
-    use td_database::access::InProject;
-    use td_database::access::LockInstant;
-    use td_database::connection::PgConnectionExt;
+    use td_database::access::Grant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
@@ -222,7 +220,7 @@ mod tests {
         PhysicalFunctionRunId, ProjectId, TransactionKey, UserId,
     };
     use td_queries::Queries;
-    use td_queries::test_utils::SeedEntry;
+    use td_queries::test_utils::{SeedEntry, begin_exclusive};
 
     /// An identity that already ran (the recover re-run case).
     async fn seed_run_lfr(
@@ -335,14 +333,10 @@ mod tests {
             .fetch_one::<LogicalFunctionRunDB>(&pfr.base.logical_function_run_id)
             .await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
-        conn.scope_in_project(&p.id.to_string()).await.unwrap();
-        let minted = mint_function_runs_on_dispatch(
-            &mut conn,
-            &[lfr],
-            LockInstant::asserted(*AtTime::now()),
-        )
-        .await?;
+        let mut trx = begin_exclusive(&db, p.id).await?;
+        let at = trx.locked_at();
+        let conn = trx.get(Grant::asserted("dispatch mint test"));
+        let minted = mint_function_runs_on_dispatch(conn, &[lfr], at).await?;
         assert_eq!(minted.len(), 1);
         assert_eq!(minted[0].tdvs.len(), tables.len());
         Ok(())
@@ -359,11 +353,11 @@ mod tests {
             .await?;
         let (lfr, previous_pfr) = seed_run_lfr(&db, p.id, &coll, "fr").await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
-        conn.scope_in_project(&p.id.to_string()).await.unwrap();
+        let mut trx = begin_exclusive(&db, p.id).await?;
+        let at = trx.locked_at();
+        let conn = trx.get(Grant::asserted("dispatch mint test"));
         let ready = vec![lfr.clone()];
-        let at = LockInstant::asserted(*AtTime::now());
-        let minted = mint_function_runs_on_dispatch(&mut conn, &ready, at).await?;
+        let minted = mint_function_runs_on_dispatch(conn, &ready, at).await?;
 
         assert_eq!(minted.len(), 1, "the LFR is re-minted");
         assert_ne!(

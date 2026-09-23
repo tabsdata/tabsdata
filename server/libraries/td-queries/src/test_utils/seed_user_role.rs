@@ -2,16 +2,16 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::{Queries, QueryExecutor};
+use crate::{Queries, Writes};
 use td_database::access::SeesProjectRows;
-use td_database::domain::{Apiserver, Domained};
+use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::{AccessTokenId, Fixed, RoleId, UserId, UserRoleId};
 
 pub(crate) async fn seed_user_role(
-    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
+    db: impl Writes<Domain = Apiserver, Scope: SeesProjectRows>,
     user: &UserId,
     role: &RoleId,
 ) -> Result<UserRoleDB, TdError> {

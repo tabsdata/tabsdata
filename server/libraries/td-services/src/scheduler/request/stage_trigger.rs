@@ -13,7 +13,7 @@ use td_bridge::messaging::{
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::id;
 use td_common::worker::{Callback, MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
-use td_database::access::DbScope;
+use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::function::FunctionDBWithBundleBasePath;
@@ -32,11 +32,11 @@ use tracing::{instrument, warn};
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_stage_trigger_workers_start_request<S: DbScope>(
+pub async fn create_locked_stage_trigger_workers_start_request<S: DbScope, M: AccessMode>(
     orchestrator: Orchestrator,
     storage: &Storage,
     internal_api: &InternalApi,
-    conn: &mut DomainConnection<Apiserver, S>,
+    conn: &mut DomainConnection<Apiserver, S, M>,
     stage_trigger_workers: Vec<WorkerDBWithNames>,
     messages: &mut WorkerMessages,
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {

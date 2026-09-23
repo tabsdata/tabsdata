@@ -7,7 +7,7 @@
 //! project name, so a rename must keep them in step or the old names strand.
 
 use crate::project::per_project_roles::{PER_PROJECT_ROLES, per_project_role_name};
-use td_database::access::DbScope;
+use td_database::access::{AccessMode, DbScope, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::Dao;
@@ -27,8 +27,8 @@ fn new_role_names(new_name: &ProjectName) -> Result<Vec<RoleName>, TdError> {
 
 /// Surface a clean "already exists" error if a target `<new>_*` name is taken,
 /// instead of the raw unique-constraint violation from the rewrite.
-pub async fn assert_project_roles_rename_available<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn assert_project_roles_rename_available<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     update: &ProjectUpdate,
     current: &ActiveProjectDB,
 ) -> Result<(), TdError> {
@@ -49,8 +49,8 @@ pub async fn assert_project_roles_rename_available<S: DbScope>(
     Ok(())
 }
 
-pub async fn rename_project_roles<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn rename_project_roles<S: DbScope, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     context: &RequestContext,
     project_id: &ProjectId,
     update: &ProjectUpdate,

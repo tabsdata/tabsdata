@@ -5,8 +5,8 @@
 use crate::function::register::RegisterFunctionError;
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
-use td_database::access::LockInstant;
 use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, LockInstant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_execution::VersionResolver;
@@ -107,8 +107,8 @@ pub struct ResolvedSpec {
 /// duplicate and private-table rules, table ownership, the reuse of existing
 /// and frozen table ids, the tables dependencies and triggers reference (one
 /// batched lookup), self-triggers, and the version selectors.
-pub async fn resolve<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     collection: &ActiveCollectionDB,
     function_id: &FunctionId,
     spec: &FunctionSpec<'_>,
@@ -224,8 +224,8 @@ fn positioned<'a, T>(user: &'a [T], system: &'a [T]) -> impl Iterator<Item = (i3
     user.chain(system)
 }
 
-async fn resolve_tables<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     collection: &ActiveCollectionDB,
     function_id: &FunctionId,
     spec: &FunctionSpec<'_>,
@@ -325,8 +325,8 @@ fn trigger_list(
 
 /// Every table a dependency or trigger names, fetched once and keyed by
 /// (collection name, table name).
-async fn referenced_rows<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn referenced_rows<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     collection: &CollectionName,
     dependencies: &[TableDependency],
     triggers: &[TableTrigger],

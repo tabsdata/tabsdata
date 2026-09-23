@@ -3,7 +3,7 @@
 //
 
 use http::StatusCode;
-use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
@@ -46,8 +46,8 @@ pub fn assert_function_version(
     level = "debug",
     err(Debug)
 )]
-pub async fn reject_if_running<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn reject_if_running<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     function_version_id: &FunctionVersionId,
     skip_if_running: &SkipIfRunning,
     latest_execution: &Option<ExecutionDB>,
@@ -103,8 +103,8 @@ pub async fn reject_if_running<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-pub async fn reject_if_external_uid_in_use<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn reject_if_external_uid_in_use<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     function_id: &FunctionId,
     external_uid: &Option<ExternalUid>,
 ) -> Result<(), TdError> {

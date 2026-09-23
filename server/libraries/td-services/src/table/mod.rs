@@ -5,7 +5,7 @@
 pub mod services;
 
 use crate::table::storage::resolve_table_location;
-use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
@@ -25,8 +25,8 @@ pub mod storage;
 /// time. Only committed transactions are considered unless the parameter
 /// allows uncommitted versions; versions without data changes resolve to the
 /// previous version's data.
-pub async fn find_data_version_location_at<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn find_data_version_location_at<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     collection: &CollectionIdName,
     table: &TableIdName,
     at: &AtTime,

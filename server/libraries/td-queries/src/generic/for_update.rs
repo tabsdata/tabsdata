@@ -6,6 +6,7 @@
 //! transaction ends.
 
 use crate::Serves;
+use crate::Writes;
 use crate::primitives::table::{select_claim, select_for_update};
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
@@ -17,7 +18,7 @@ pub struct ForUpdate<E> {
     pub(crate) executor: E,
 }
 
-impl<E> ForUpdate<E> {
+impl<E: Writes> ForUpdate<E> {
     /// The row this unit of work serializes on, and the instant it took its
     /// lock: the read returning is the lock being held, so the instant follows
     /// every writer that held the row before. The `XW` twin is

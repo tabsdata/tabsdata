@@ -198,7 +198,7 @@ impl<S: DbScope, D: ScopedBy<S>> DbPool<S, D> {
         let conn = M::open(pool)
             .await
             .map_err(ServiceDbError::CannotBeginTransaction)?;
-        let mut conn = DomainConnection::<D, S>::new(conn);
+        let mut conn = DomainConnection::<D, S, M>::new(conn);
         self.scope.apply(&mut conn).await?;
         let lock = M::opened(&mut conn, &self.scope, pool).await?;
         Ok(GatedConnection::new(conn, lock))

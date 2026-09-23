@@ -10,16 +10,14 @@ use crate::function::topology::RunnableVersion;
 use crate::function_run::raw_data::raw_data_dir;
 use crate::logical::mint::{mint_function_run, resolve_output_base_path};
 use crate::tests::fixtures::{seed_ready_lfr, set_collection_base_path};
-use td_database::access::{InProject, LockInstant};
-use td_database::connection::PgConnectionExt;
-use td_database::domain::{Apiserver, DomainConnection};
+use td_database::access::Grant;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::types::basic::{AtTime, BasePath, CollectionName, UserId};
+use td_objects::types::basic::{BasePath, CollectionName, UserId};
 use td_queries::Queries;
-use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::{SeedEntry, begin_exclusive};
 
 /// Moving the collection prefix redirects new mints and leaves prior runs'
 /// stamped rows untouched, while the live resolution visibly changed.
@@ -43,14 +41,17 @@ async fn test_collection_move_freezes_prior_runs(db: TdPool) -> Result<(), TdErr
     let coll = set_collection_base_path(&db, p.id, &coll, Some(&new)).await?;
 
     // The live resolution moved...
-    let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
-    conn.scope_in_project(&p.id.to_string()).await.unwrap();
+    let mut trx = begin_exclusive(&db, p.id).await?;
     assert_eq!(
-        resolve_output_base_path(&mut conn, &lfr_before.base.function_version_id).await?,
+        resolve_output_base_path(
+            trx.get(Grant::asserted("base path test")),
+            &lfr_before.base.function_version_id
+        )
+        .await?,
         new,
         "the live effective prefix follows the collection"
     );
-    drop(conn);
+    drop(trx);
 
     // ...the stamped rows did not.
     let fr_row: PhysicalFunctionRunDB = db.timeline().fetch_one(&before.fr.id).await?;
@@ -123,30 +124,30 @@ async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdEr
         function_version_patch_id: None,
     };
 
-    let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
-    conn.scope_in_project(&p.id.to_string()).await.unwrap();
+    let mut trx = begin_exclusive(&db, p.id).await?;
+    let at = trx.locked_at();
     let attempt_1 = mint_function_run(
-        &mut conn,
+        trx.get(Grant::asserted("base path test")),
         &lfr,
         &runnable,
-        LockInstant::asserted(*AtTime::now()),
+        at,
     )
     .await?;
-    conn.commit().await.unwrap();
+    trx.commit().await?;
 
     let new = BasePath::try_from("/new")?;
     set_collection_base_path(&db, p.id, &coll, Some(&new)).await?;
 
-    let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
-    conn.scope_in_project(&p.id.to_string()).await.unwrap();
+    let mut trx = begin_exclusive(&db, p.id).await?;
+    let at = trx.locked_at();
     let attempt_2 = mint_function_run(
-        &mut conn,
+        trx.get(Grant::asserted("base path test")),
         &lfr,
         &runnable,
-        LockInstant::asserted(*AtTime::now()),
+        at,
     )
     .await?;
-    conn.commit().await.unwrap();
+    trx.commit().await?;
 
     assert_eq!(attempt_1.base_path, old);
     assert_eq!(attempt_2.base_path, new);

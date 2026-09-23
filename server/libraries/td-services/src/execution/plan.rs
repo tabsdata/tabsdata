@@ -8,7 +8,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use ta_services::api_message;
 use ta_services::ctx_service::ReqCtx;
-use td_database::access::{InProject, SeesProjectRows};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::{
@@ -222,8 +222,8 @@ pub fn build_logical_table_data_versions(
         .collect()
 }
 
-pub async fn resolve_execution_plan_versions<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     execution: &ExecutionInsertDB,
     execution_plan: &ExecutionPlan,
 ) -> Result<ResolvedExecutionPlan, TdError> {
@@ -382,8 +382,8 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows>(
 /// versions. Edges are walked in `(function_id, dep_pos)` order so the
 /// assignment is reproducible whenever the plan is rebuilt. Rows without a
 /// bound version carry `InputIdx::NO_DATA`; trigger rows carry NULL.
-pub async fn build_logical_function_run_inputs<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn build_logical_function_run_inputs<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     transaction_by: &TransactionBy,
     transaction_map: &TransactionMap<TransactionBy>,
     execution_plan: &ExecutionPlan,
@@ -512,7 +512,7 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows>(
     err(Debug)
 )]
 pub async fn update_initial_function_run_status(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     execution: &ExecutionInsertDB,
 ) -> Result<(), TdError> {
     let lfr_ids = conn.logical_runs().blocked_ids(&execution.id).await?;

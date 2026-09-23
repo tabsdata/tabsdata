@@ -21,8 +21,9 @@
 //! ```
 //!
 //! `<changed>` is the parents of the children a door just wrote; the backfill
-//! leaves it out. No lock of its own: every logical and physical run writer
-//! holds the project's exclusive-write lock for the whole transaction.
+//! leaves it out. No lock of its own: the doors that run it are typed on the
+//! `XW` connection, which holds the project's exclusive-write lock for the
+//! whole transaction.
 
 use sea_query::{
     CaseStatement, DynIden, Expr, ExprTrait, Func, Iden, IntoIden, IntoTableRef, JoinType, Query, SelectStatement, TableRef,

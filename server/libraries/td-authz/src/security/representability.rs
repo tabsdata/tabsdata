@@ -24,7 +24,7 @@
 //! *definitions*, not on who is in which role.
 
 use std::collections::HashMap;
-use td_database::access::DbScope;
+use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
@@ -82,8 +82,8 @@ fn row_matches(perm: &PermissionDB, (et, on_all, pt): &(&str, bool, &str)) -> bo
 /// Run the RBAC -> Simple representability check against the live `roles` and
 /// `role_permission` tables. Returns the list of reasons the configuration
 /// cannot be represented on the Simple surface (empty = representable).
-pub async fn check_representability<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn check_representability<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     sys_admin_extras: &[(&str, &str)],
 ) -> Result<Vec<String>, TdError> {
     let roles = conn.fetch_all::<RoleDB>(()).await?;
@@ -295,7 +295,7 @@ fn check_per_project(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use td_database::access::InProject;
+    use td_database::access::{InProject, RW};
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::project::ActiveProjectDB;
@@ -376,7 +376,7 @@ mod tests {
     /// A fresh bootstrap (only the built-in roles) is representable.
     #[td_test::test(db)]
     async fn test_fresh_bootstrap_is_representable(db: TdPool) -> Result<(), TdError> {
-        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons.is_empty(),
@@ -390,7 +390,7 @@ mod tests {
     async fn test_with_project_is_representable(db: TdPool) -> Result<(), TdError> {
         let project = db.seed().project(ProjectName::try_from("foo")?).await?;
         seed_per_project_roles(&db, &project).await?;
-        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons.is_empty(),
@@ -421,7 +421,7 @@ mod tests {
         };
         db.insert::<RoleDB>(&role).await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons
@@ -448,7 +448,7 @@ mod tests {
             )
             .await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons
@@ -475,7 +475,7 @@ mod tests {
             )
             .await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons
@@ -497,7 +497,7 @@ mod tests {
             .permission(PermissionType::manage_access(), None, None, &default_role)
             .await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
         let reasons = check_representability(&mut conn, &[]).await?;
         assert!(
             reasons

@@ -3,11 +3,13 @@
 //
 
 //! [`DomainConnection`] — a connection to one domain. `&mut
-//! DomainConnection<D>` IS the domain's executor: query it directly
+//! DomainConnection<D, S, M>` IS the domain's executor: query it directly
 //! (`conn...`). Opening and closing the transaction it runs in belong to
-//! an [`AccessMode`](crate::access::AccessMode).
+//! its [`AccessMode`] `M`, which the type keeps: a write needs a
+//! [`WriteMode`](crate::access::WriteMode), and work that must run under
+//! the project's lock spells `XW`.
 
-use crate::access::DbScope;
+use crate::access::{AccessMode, DbScope};
 use crate::domain::{DbDomain, Domained};
 use crate::sea_query::builder::SeaQuerySqlxBuild;
 use crate::sea_query::executor::{RunOp, SeaExecutor};
@@ -19,19 +21,22 @@ use sqlx::Transaction;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
-pub struct DomainConnection<D: DbDomain, S: DbScope> {
+pub struct DomainConnection<D: DbDomain, S: DbScope, M: AccessMode> {
     conn: Transaction<'static, Postgres>,
     _d: PhantomData<D>,
     _s: PhantomData<S>,
+    _m: PhantomData<M>,
 }
 
-impl<D: DbDomain, S: DbScope> DomainConnection<D, S> {
-    /// The caller asserts `conn` is pointed at `D`'s schema, in scope `S`.
+impl<D: DbDomain, S: DbScope, M: AccessMode> DomainConnection<D, S, M> {
+    /// The caller asserts `conn` is pointed at `D`'s schema, in scope `S`,
+    /// opened as `M`.
     pub fn new(conn: Transaction<'static, Postgres>) -> Self {
         Self {
             conn,
             _d: PhantomData,
             _s: PhantomData,
+            _m: PhantomData,
         }
     }
 
@@ -50,7 +55,7 @@ impl<D: DbDomain, S: DbScope> DomainConnection<D, S> {
     }
 }
 
-impl<D: DbDomain, S: DbScope> Deref for DomainConnection<D, S> {
+impl<D: DbDomain, S: DbScope, M: AccessMode> Deref for DomainConnection<D, S, M> {
     type Target = Transaction<'static, Postgres>;
 
     fn deref(&self) -> &Self::Target {
@@ -58,20 +63,21 @@ impl<D: DbDomain, S: DbScope> Deref for DomainConnection<D, S> {
     }
 }
 
-impl<D: DbDomain, S: DbScope> DerefMut for DomainConnection<D, S> {
+impl<D: DbDomain, S: DbScope, M: AccessMode> DerefMut for DomainConnection<D, S, M> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.conn
     }
 }
 
-impl<D: DbDomain, S: DbScope> Domained for &'_ mut DomainConnection<D, S> {
+impl<D: DbDomain, S: DbScope, M: AccessMode> Domained for &'_ mut DomainConnection<D, S, M> {
     type Domain = D;
     type Scope = S;
+    type Mode = M;
 }
 
-impl<D: DbDomain, S: DbScope> SeaExecutor for &mut DomainConnection<D, S> {
+impl<D: DbDomain, S: DbScope, M: AccessMode> SeaExecutor for &mut DomainConnection<D, S, M> {
     type Reused<'a>
-        = &'a mut DomainConnection<D, S>
+        = &'a mut DomainConnection<D, S, M>
     where
         Self: 'a;
 

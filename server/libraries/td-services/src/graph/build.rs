@@ -5,7 +5,7 @@
 use crate::graph::{FunctionOrTable, GraphConfig};
 use itertools::Itertools;
 use std::collections::HashMap;
-use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::dependency::DependencyDBWithNames;
@@ -24,9 +24,9 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    async fn chunked_at<S, D>(
+    async fn chunked_at<S, D, M: AccessMode>(
         &self,
-        conn: &mut DomainConnection<Apiserver, S>,
+        conn: &mut DomainConnection<Apiserver, S, M>,
         at: Option<&AtTime>,
         values: &[impl SqlCondition<D>],
         extra: impl SqlCondition<D>,
@@ -51,9 +51,9 @@ impl GraphBuilder {
         Ok(rows)
     }
 
-    pub async fn find_recursive_trigger_graph<S: SeesProjectRows>(
+    pub async fn find_recursive_trigger_graph<S: SeesProjectRows, M: AccessMode>(
         &self,
-        conn: &mut DomainConnection<Apiserver, S>,
+        conn: &mut DomainConnection<Apiserver, S, M>,
         at_time: Option<&AtTime>,
         function_or_table: &FunctionOrTable,
         recursion_options: &RecursionOptions,
@@ -114,9 +114,9 @@ impl GraphBuilder {
         Ok(trigger_graph)
     }
 
-    pub async fn find_recursive_dependency_graph<S: SeesProjectRows>(
+    pub async fn find_recursive_dependency_graph<S: SeesProjectRows, M: AccessMode>(
         &self,
-        conn: &mut DomainConnection<Apiserver, S>,
+        conn: &mut DomainConnection<Apiserver, S, M>,
         at_time: Option<&AtTime>,
         function_or_table: &FunctionOrTable,
         recursion_options: &RecursionOptions,
@@ -163,9 +163,9 @@ impl GraphBuilder {
         Ok(dep_graph)
     }
 
-    pub async fn main_function_id<S: SeesProjectRows>(
+    pub async fn main_function_id<S: SeesProjectRows, M: AccessMode>(
         &self,
-        conn: &mut DomainConnection<Apiserver, S>,
+        conn: &mut DomainConnection<Apiserver, S, M>,
         at_time: Option<&AtTime>,
         function_or_table: &FunctionOrTable,
     ) -> Result<FunctionId, TdError> {
@@ -221,9 +221,9 @@ impl GraphBuilder {
         Ok(unique_triggered_function_ids)
     }
 
-    pub async fn find_triggered_functions_dependency_graph<S: SeesProjectRows>(
+    pub async fn find_triggered_functions_dependency_graph<S: SeesProjectRows, M: AccessMode>(
         &self,
-        conn: &mut DomainConnection<Apiserver, S>,
+        conn: &mut DomainConnection<Apiserver, S, M>,
         at_time: Option<&AtTime>,
         triggered_functions: &[FunctionId],
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
@@ -231,9 +231,9 @@ impl GraphBuilder {
             .await
     }
 
-    pub async fn find_functions_output_tables<S: SeesProjectRows>(
+    pub async fn find_functions_output_tables<S: SeesProjectRows, M: AccessMode>(
         &self,
-        conn: &mut DomainConnection<Apiserver, S>,
+        conn: &mut DomainConnection<Apiserver, S, M>,
         at_time: Option<&AtTime>,
         functions: &[FunctionId],
     ) -> Result<Vec<TableDBWithNames>, TdError> {
@@ -241,9 +241,9 @@ impl GraphBuilder {
             .await
     }
 
-    pub async fn find_all_tables_map<S: SeesProjectRows>(
+    pub async fn find_all_tables_map<S: SeesProjectRows, M: AccessMode>(
         &self,
-        conn: &mut DomainConnection<Apiserver, S>,
+        conn: &mut DomainConnection<Apiserver, S, M>,
         at_time: Option<&AtTime>,
         trigger_graph: &[TriggerDBWithNames],
         dep_graph: &[DependencyDBWithNames],
@@ -272,9 +272,9 @@ impl GraphBuilder {
         Ok(all_tables)
     }
 
-    pub async fn find_all_functions_map<S: SeesProjectRows>(
+    pub async fn find_all_functions_map<S: SeesProjectRows, M: AccessMode>(
         &self,
-        conn: &mut DomainConnection<Apiserver, S>,
+        conn: &mut DomainConnection<Apiserver, S, M>,
         at_time: Option<&AtTime>,
         trigger_graph: &[TriggerDBWithNames],
         dep_graph: &[DependencyDBWithNames],

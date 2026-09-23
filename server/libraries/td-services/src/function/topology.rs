@@ -9,7 +9,7 @@
 //! "which fvid to run" is purely a head-vs-latest-patch choice.
 
 use std::collections::{HashMap, HashSet};
-use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
@@ -20,8 +20,8 @@ use td_queries::Queries;
 /// Resolve a fvid to its canonical head: try `functions` first, fall
 /// back to `function_patches`. Returns the parent fvid for patches and
 /// the row's own id for canonicals.
-pub async fn head_of<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn head_of<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     fvid: &FunctionVersionId,
 ) -> Result<FunctionVersionId, TdError> {
     if let Some(row) = conn.timeline().fetch_optional::<FunctionDB>(fvid).await? {
@@ -55,8 +55,8 @@ impl RunnableVersion {
 /// patch with `valid_from <= at`). Plan-build and replay each pass
 /// their own `at`, so patches registered later don't backfill into
 /// earlier mints.
-pub async fn latest_patch_or_head<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn latest_patch_or_head<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     fvid: &FunctionVersionId,
     at: &AtTime,
 ) -> Result<RunnableVersion, TdError> {
@@ -78,8 +78,8 @@ pub async fn latest_patch_or_head<S: SeesProjectRows>(
 /// Batched `latest_patch_or_head` for many fvids in one tick, pinned
 /// to time `at`. Returns a map keyed by the *input* fvid so callers
 /// can look up the runnable for each LFR they're minting.
-pub async fn latest_patch_or_head_batch<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn latest_patch_or_head_batch<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     fvids: Vec<FunctionVersionId>,
     at: &AtTime,
 ) -> Result<HashMap<FunctionVersionId, RunnableVersion>, TdError> {
@@ -166,7 +166,7 @@ pub async fn latest_patch_or_head_batch<S: SeesProjectRows>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use td_database::access::{InProject, LockInstant};
+    use td_database::access::{InProject, LockInstant, RW};
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::collection::ActiveCollectionDB;
@@ -261,7 +261,7 @@ mod tests {
         let p1 = insert_patch(&db, p.id, &head, t1, "p1").await?;
         let p2 = insert_patch(&db, p.id, &head, t2, "p2").await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
 
         let at_t1 = latest_patch_or_head(&mut conn, &head.base.id, &t1).await?;
         assert_eq!(at_t1.function_version_id, head.base.id);
@@ -292,7 +292,7 @@ mod tests {
         let p_a = insert_patch(&db, p.id, &head_a, now, "p-a").await?;
         let p_b = insert_patch(&db, p.id, &head_b, now, "p-b").await?;
 
-        let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
         let map = latest_patch_or_head_batch(
             &mut conn,
             vec![head_a.base.id.clone(), head_b.base.id.clone()],

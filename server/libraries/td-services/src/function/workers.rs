@@ -7,7 +7,7 @@
 //! the SCD2 engine rather than in it.
 
 use std::collections::HashMap;
-use td_database::access::{InProject, SeesProjectRows};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::function::FunctionInsertDB;
@@ -21,7 +21,7 @@ use td_queries::Queries;
 use tracing::{debug, error, warn};
 
 pub async fn register_workers(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     function: &FunctionInsertDB,
     previous_function_version_id: &Option<FunctionVersionId>,
     new_workers: &Option<HashMap<WorkerTypeDto, WorkerConfig>>,
@@ -32,8 +32,8 @@ pub async fn register_workers(
     Ok(())
 }
 
-pub async fn stop_current_workers<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn stop_current_workers<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     function_version_id: &Option<FunctionVersionId>,
 ) -> Result<(), TdError> {
     if let Some(function_version_id) = function_version_id {
@@ -91,8 +91,8 @@ pub async fn stop_current_workers<S: SeesProjectRows>(
     Ok(())
 }
 
-pub async fn build_workers<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn build_workers<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     function: &FunctionInsertDB,
     function_version_id: &Option<FunctionVersionId>,
     new: &Option<HashMap<WorkerTypeDto, WorkerConfig>>,

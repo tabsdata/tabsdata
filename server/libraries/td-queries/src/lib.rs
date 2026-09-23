@@ -22,7 +22,7 @@ pub mod metrics_facts {
 pub use daos::session::Sessions;
 pub use daos::table_data_versions::TableDataVersions;
 
-pub use executor::{QueryExecutor, Serves};
+pub use executor::{QueryExecutor, Serves, Writes};
 pub use generic::as_of::AsOf;
 pub use generic::chunked::{AsOfChunked, Chunked, Scd2Chunked, TimelineChunked};
 pub use generic::data_version::DataVersion;

@@ -3,9 +3,9 @@
 //
 
 use crate::Queries;
-use crate::QueryExecutor;
+use crate::Writes;
 use td_database::access::InProject;
-use td_database::domain::{Apiserver, Domained};
+use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupCreate, GroupDB, GroupInsertDB};
@@ -14,7 +14,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_group(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     name: GroupName,
     description: Description,
 ) -> Result<GroupDB, TdError> {

@@ -13,6 +13,7 @@
 
 use ta_objects::Dao;
 use ta_objects::ReachableFrom;
+use td_database::access::WriteMode;
 use td_database::domain::Domained;
 use td_database::sea_query::executor::SeaExecutor;
 
@@ -36,3 +37,11 @@ where
     E: QueryExecutor + Domained<Domain = D::Db>,
 {
 }
+
+/// An executor whose unit of work can be committed. Every write requires
+/// it, so a read-only connection has no write to reach; the row locks of
+/// `for_update()` take it too, which Postgres refuses in a read-only
+/// transaction.
+pub trait Writes: QueryExecutor + Domained<Mode: WriteMode> {}
+
+impl<E: QueryExecutor + Domained<Mode: WriteMode>> Writes for E {}

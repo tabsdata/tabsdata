@@ -11,7 +11,6 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use ta_services::service::Ctx;
 use td_authz::session_provider::{Session, SessionError, Sessions};
 use td_common::jwt::{JwtConfig, decode_token};
-use td_common::provider::Provider;
 use td_database::access::{DbPool, Global, Grant};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;

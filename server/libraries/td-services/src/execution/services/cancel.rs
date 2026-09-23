@@ -62,6 +62,7 @@ mod tests {
         TestExecution, TestFunction, TestTransaction, test_status_update,
     };
     use std::str::FromStr;
+    use td_database::access::Grant;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
@@ -71,7 +72,7 @@ mod tests {
         ProjectId, TableNameDto, TransactionStatus, UserId,
     };
     use td_objects::types::composed::TableDependencyDto;
-    use td_queries::test_utils::SeedEntry;
+    use td_queries::test_utils::{SeedEntry, begin_exclusive, seed_run};
 
     async fn test_cancel_execution(
         db: TdPool,

@@ -6,7 +6,7 @@ use sqlx::Connection;
 use std::time::Instant;
 use ta_services::factory::service_factory;
 use td_database::access::DbScope;
-use td_database::access::{GatedConnection, Grant, RO};
+use td_database::access::{AccessMode, GatedConnection, Grant, RO};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::system::ApiStatus;
@@ -20,8 +20,8 @@ async fn status(conn: &mut GatedConnection<RO>, _request: ()) -> Result<ApiStatu
     database_status(conn).await
 }
 
-pub async fn database_status<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn database_status<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
 ) -> Result<ApiStatus, TdError> {
     let start = Instant::now();
 

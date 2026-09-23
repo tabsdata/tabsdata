@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use crate::Queries;
 use crate::daos::metrics::rows::{EndedAttempt, Version};
 use ta_objects::errors::SqlError;
-use td_database::access::InProject;
+use td_database::access::{AccessMode, InProject};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalTableDataVersionDB,
@@ -20,8 +20,8 @@ use td_objects::types::basic::{
     LogicalFunctionRunId, LogicalTableDataVersionId, PhysicalFunctionRunId,
 };
 
-pub async fn load_ended_attempts(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+pub async fn load_ended_attempts<M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
     pfr_ids: &[PhysicalFunctionRunId],
 ) -> Result<Vec<EndedAttempt>, SqlError> {
     if pfr_ids.is_empty() {

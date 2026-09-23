@@ -2,9 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::{Queries, QueryExecutor};
+use crate::{Queries, Writes};
 use td_database::access::SeesProjectRows;
-use td_database::domain::{Apiserver, Domained};
+use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::{PermissionCreate, PermissionDB};
@@ -14,7 +14,7 @@ use td_objects::types::basic::{
 };
 
 pub async fn seed_permission(
-    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
+    db: impl Writes<Domain = Apiserver, Scope: SeesProjectRows>,
     permission_type: PermissionType,
     entity_name: Option<EntityName>,
     entity_id: Option<EntityId>,

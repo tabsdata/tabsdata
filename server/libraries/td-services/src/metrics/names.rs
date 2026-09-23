@@ -6,7 +6,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::ResolvedCollectionDB;
@@ -27,8 +27,8 @@ pub(crate) struct Names {
 
 impl Names {
     /// A soft-deleted collection keeps its pre-deletion name.
-    pub(crate) async fn of<S: SeesProjectRows>(
-        conn: &mut DomainConnection<Apiserver, S>,
+    pub(crate) async fn of<S: SeesProjectRows, M: AccessMode>(
+        conn: &mut DomainConnection<Apiserver, S, M>,
         rows: &[MetricsTableRow],
     ) -> Result<Self, TdError> {
         if rows.is_empty() {

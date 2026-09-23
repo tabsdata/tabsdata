@@ -13,7 +13,7 @@
 //! See [`services`] for the per-endpoint translation + authz, and
 //! the shared validation/resolution helpers below.
 
-use td_database::access::DbScope;
+use td_database::access::{AccessMode, DbScope};
 use td_error::td_error;
 
 pub mod services;
@@ -113,8 +113,8 @@ pub fn assert_simple_permission_valid(grant: &SimplePermissionGrant) -> Result<(
 /// - `create_projects`: the `project_creator` role;
 /// - `manage_system`: the `sys_admin` role, which holds the whole system bundle
 ///   (user/role administration plus authority over all projects).
-pub async fn resolve_grant<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn resolve_grant<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     grant: &SimplePermissionGrant,
 ) -> Result<ResolvedGrant, TdError> {
     // Resolve the user by name (the grant surface carries a UserName).
@@ -199,8 +199,8 @@ pub fn project_role_permission(role: &RoleDB) -> Option<SimplePermissionType> {
 
 /// `project_id -> project_name`, for resolving project-scoped permission rows
 /// to a human name without an extra query per row.
-async fn project_names<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn project_names<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
 ) -> Result<HashMap<ProjectId, ProjectName>, TdError> {
     let projects = conn.fetch_all::<ActiveProjectDB>(()).await?;
     Ok(projects.into_iter().map(|p| (p.id, p.name)).collect())
@@ -226,8 +226,8 @@ fn list_response<T: Clone>(data: Vec<T>) -> Result<ListResponse<T>, TdError> {
 ///
 /// The target user is taken as an already-resolved `UserId` (the service
 /// resolves it up front for the scope/authz check).
-pub async fn flatten_user_permissions<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn flatten_user_permissions<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     user_id: &UserId,
 ) -> Result<ListResponse<SimplePermission>, TdError> {
     let user_roles = conn.fetch_all::<UserRoleDB>(user_id).await?;
@@ -303,8 +303,8 @@ fn simple_permission_of(
 /// - `source = system (manage_system)` — members of any role holding
 ///   `(project:__all__, manage_project)` (i.e. system admins), mapped to
 ///   `manage_system`.
-pub async fn list_project_access<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn list_project_access<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     project_id_name: &ProjectIdName,
 ) -> Result<ListResponse<SimpleProjectAccess>, TdError> {
     let project = conn.fetch_one::<ActiveProjectDB>(project_id_name).await?;

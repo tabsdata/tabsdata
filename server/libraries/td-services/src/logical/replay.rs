@@ -9,7 +9,7 @@
 use crate::function::topology::{RunnableVersion, latest_patch_or_head};
 use crate::logical::mint::{mint_function_run, mint_output_table_data_versions};
 use td_database::access::LockInstant;
-use td_database::access::{InProject, SeesProjectRows};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunReplayResponse};
@@ -45,8 +45,8 @@ pub enum ReplayError {
     level = "debug",
     err(Debug)
 )]
-pub async fn load_current_function_run_id<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn load_current_function_run_id<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     lfr: &LogicalFunctionRunDB,
 ) -> Result<PhysicalFunctionRunId, TdError> {
     let current: Option<PhysicalFunctionRunDB> = conn
@@ -64,8 +64,8 @@ pub async fn load_current_function_run_id<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-pub async fn assert_no_concurrent_replay<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn assert_no_concurrent_replay<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     lfr: &LogicalFunctionRunDB,
 ) -> Result<(), TdError> {
     let current: Option<PhysicalFunctionRunDB> = conn
@@ -114,8 +114,8 @@ pub fn assert_lfr_terminal(lfr: &LogicalFunctionRunDB) -> Result<(), TdError> {
 /// Pins to the replay-request `at`, so a patch registered between the
 /// replay request and the dispatch tick won't be silently picked up.
 #[instrument(name = "replay.resolve_fvid", skip_all, level = "debug", err(Debug))]
-pub async fn resolve_replay_function_version_id<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn resolve_replay_function_version_id<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     lfr: &LogicalFunctionRunDB,
     at: &AtTime,
 ) -> Result<RunnableVersion, TdError> {
@@ -132,7 +132,7 @@ pub async fn resolve_replay_function_version_id<S: SeesProjectRows>(
 
 #[instrument(name = "replay.mint_fr_new", skip_all, level = "debug", err(Debug))]
 pub async fn mint_replay_function_run(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     at: LockInstant,
@@ -142,7 +142,7 @@ pub async fn mint_replay_function_run(
 
 #[instrument(name = "replay.mint_tdvs_new", skip_all, level = "debug", err(Debug))]
 pub async fn mint_replay_table_data_versions(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     fr_new: &PhysicalFunctionRunInsertDB,

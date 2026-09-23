@@ -9,7 +9,7 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::SeesProjectRows;
-use td_database::access::{AcrossProjects, DbPool};
+use td_database::access::{AccessMode, AcrossProjects, DbPool};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_error::td_error;
@@ -68,8 +68,8 @@ pub struct BundleDownload {
 /// Resolves a function version id — a head version or a patch, the union
 /// view serves both. A missing id, or one whose function has been
 /// deleted, surfaces as not found.
-pub async fn resolve_function_version<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn resolve_function_version<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     function_version_id: &FunctionVersionId,
 ) -> Result<FunctionVersionDBWithNames, TdError> {
     let version = conn
@@ -98,8 +98,8 @@ pub async fn resolve_function_version<S: SeesProjectRows>(
     Ok(version)
 }
 
-pub async fn build_bundle_download<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn build_bundle_download<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     storage: &Storage,
     function: &FunctionVersionDBWithNames,
 ) -> Result<BundleDownload, TdError> {

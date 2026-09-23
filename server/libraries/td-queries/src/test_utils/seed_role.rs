@@ -2,9 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::{Queries, QueryExecutor};
+use crate::{Queries, Writes};
 use td_database::access::SeesProjectRows;
-use td_database::domain::{Apiserver, Domained};
+use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::role::{RoleCreate, RoleDB};
@@ -13,7 +13,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_role(
-    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
+    db: impl Writes<Domain = Apiserver, Scope: SeesProjectRows>,
     name: RoleName,
     description: Description,
 ) -> Result<RoleDB, TdError> {

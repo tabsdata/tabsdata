@@ -8,7 +8,7 @@ use crate::test_utils::{SeedEntry, begin_exclusive, derive_metrics_facts};
 use std::collections::HashMap;
 use ta_objects::and;
 use td_database::access::LockInstant;
-use td_database::access::{Grant, InProject};
+use td_database::access::{Grant, InProject, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::TdError;
@@ -324,7 +324,7 @@ async fn stamp_status_at(
 
 async fn in_project<F>(db: &TdPool, project: ProjectId, body: F) -> Result<(), TdError>
 where
-    F: AsyncFnOnce(&mut DomainConnection<Apiserver, InProject>) -> Result<(), TdError>,
+    F: AsyncFnOnce(&mut DomainConnection<Apiserver, InProject, XW>) -> Result<(), TdError>,
 {
     let mut trx = begin_exclusive(db, project).await?;
     body(trx.get(Grant::asserted("metrics dao test"))).await?;

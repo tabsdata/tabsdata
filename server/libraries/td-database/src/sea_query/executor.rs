@@ -98,9 +98,11 @@ mod op {
 /// ([`Domained`] supertrait).
 pub trait SeaExecutor: Domained + Sized {
     /// A short-lived executor obtained by reborrowing `self` — the same
-    /// database in the same RLS scope, so a reused executor reaches exactly
-    /// what its parent does.
-    type Reused<'a>: SeaExecutor + Send + Domained<Domain = Self::Domain, Scope = Self::Scope>
+    /// database in the same RLS scope and mode, so a reused executor reaches
+    /// exactly what its parent does.
+    type Reused<'a>: SeaExecutor
+        + Send
+        + Domained<Domain = Self::Domain, Scope = Self::Scope, Mode = Self::Mode>
     where
         Self: 'a;
 

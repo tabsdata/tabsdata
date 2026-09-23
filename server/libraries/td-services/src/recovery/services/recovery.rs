@@ -17,7 +17,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_bridge::BridgeProviderHandle;
 use td_database::access::SeesProjectRows;
-use td_database::access::{AcrossProjects, DbPool, Grant};
+use td_database::access::{AccessMode, AcrossProjects, DbPool, Grant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::{RecoveryConfig, SchedulerNotify};
@@ -112,8 +112,8 @@ async fn recovery(
 /// function/bundle locations the recreates need, so the orchestrator then runs
 /// every Kubernetes call with no connection held.
 #[instrument(name = "recovery.snapshot", skip_all, level = "debug", err(Debug))]
-pub async fn take_recovery_snapshot<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn take_recovery_snapshot<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     at: &AtTime,
 ) -> Result<RecoverySnapshot, TdError> {
     let cron_workers: Vec<WorkerDBWithNames> = conn

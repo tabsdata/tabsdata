@@ -15,7 +15,6 @@
 //! Only the `test-utils` feature exposes this surface — production code
 //! cannot reach it.
 
-use crate::QueryExecutor;
 use crate::test_utils::seed_collection::{seed_collection, seed_collection_in_group};
 use crate::test_utils::seed_execution::{seed_cron_execution, seed_execution};
 use crate::test_utils::seed_function::seed_function;
@@ -34,6 +33,7 @@ use crate::test_utils::seed_transaction::seed_transaction;
 use crate::test_utils::seed_user::{seed_system_user, seed_user};
 use crate::test_utils::seed_user_role::seed_user_role;
 use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
+use crate::{QueryExecutor, Writes};
 use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, Domained};
 use td_database::pool::scoped::Scoped;
@@ -81,22 +81,20 @@ pub struct Seed<E> {
     pub(crate) executor: E,
 }
 
-impl<E: QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
+impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
     // Project seeding uses its executor only to scope into the freshly-created
     // project, so the write bound is on the scoped view; `&TdPool` is the only
     // executor that scopes to one.
     pub async fn project(self, name: ProjectName) -> Result<ActiveProjectDB, TdError>
     where
-        for<'s> &'s Scoped<E, ProjectId>:
-            QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
+        for<'s> &'s Scoped<E, ProjectId>: Writes<Domain = Apiserver, Scope = InProject>,
     {
         seed_project(self.executor, name).await
     }
 
     pub async fn test_project(self) -> Result<ActiveProjectDB, TdError>
     where
-        for<'s> &'s Scoped<E, ProjectId>:
-            QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
+        for<'s> &'s Scoped<E, ProjectId>: Writes<Domain = Apiserver, Scope = InProject>,
     {
         seed_project(self.executor, ProjectName::try_from("test")?).await
     }

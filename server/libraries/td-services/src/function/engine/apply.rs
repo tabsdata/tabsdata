@@ -4,7 +4,7 @@
 
 use crate::function::engine::diff::{Changes, TableTransition};
 use std::collections::HashMap;
-use td_database::access::{InProject, LockInstant, SeesProjectRows};
+use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
@@ -19,7 +19,7 @@ use td_queries::Queries;
 /// read the new table versions; the triggers reading a table that froze or
 /// thawed belong to other functions, so they are fetched here, not diffed.
 pub async fn apply(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     changes: &Changes,
     at: LockInstant,
 ) -> Result<(), TdError> {
@@ -46,8 +46,8 @@ pub async fn apply(
     Ok(())
 }
 
-async fn trigger_flips<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn trigger_flips<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     transitions: &[TableTransition],
 ) -> Result<Vec<TriggerInsertDB>, TdError> {
     if transitions.is_empty() {
@@ -82,8 +82,8 @@ async fn trigger_flips<S: SeesProjectRows>(
 
 /// The active functions depending on any of `table_ids`, the ones a table or
 /// collection deletion freezes.
-pub async fn dependants_of_tables<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn dependants_of_tables<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     table_ids: &[TableId],
 ) -> Result<Vec<FunctionDB>, TdError> {
     let dependencies: Vec<DependencyDB> = conn.scd2().chunked().fetch_all(table_ids, ()).await?;

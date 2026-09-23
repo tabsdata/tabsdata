@@ -29,7 +29,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::SeesProjectRows;
-use td_database::access::{DbPool, InProject};
+use td_database::access::{AccessMode, DbPool, InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::FromDao;
@@ -148,8 +148,8 @@ pub struct ConnectionRename {
     pub new_name: CollectionName,
 }
 
-pub async fn plan_collection_update<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn plan_collection_update<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     collection: &ActiveCollectionDB,
     update: &CollectionUpdate,
     update_db: &CollectionUpdateDB,
@@ -183,8 +183,8 @@ pub async fn plan_collection_update<S: SeesProjectRows>(
 
 /// The update transaction: apply the (store-confirmed) update and read the
 /// result back.
-pub async fn apply_collection_update<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn apply_collection_update<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     plan: &CollectionUpdatePlan,
 ) -> Result<CollectionRead, TdError> {
     conn.update::<CollectionUpdateDB>(&plan.update, plan.collection_id)

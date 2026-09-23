@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use crate::function::topology::RunnableVersion;
 use td_database::access::LockInstant;
-use td_database::access::{InProject, SeesProjectRows};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
@@ -28,8 +28,8 @@ use td_queries::Queries;
 use td_queries::metrics_facts::runs_reattempted;
 
 /// The logical table-data versions the plan minted for one run, by table.
-pub async fn logical_versions_by_table<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn logical_versions_by_table<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     logical_function_run_id: &LogicalFunctionRunId,
 ) -> Result<HashMap<TableId, LogicalTableDataVersionId>, TdError> {
     let ltdvs: Vec<LogicalTableDataVersionDB> = conn
@@ -46,8 +46,8 @@ pub async fn logical_versions_by_table<S: SeesProjectRows>(
 /// the function version's `base_path` override if set, else the
 /// collection's `base_path`. Stamped (frozen) onto the FR and every output
 /// TDV at mint so reads never recompute it.
-pub async fn resolve_output_base_path<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn resolve_output_base_path<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     function_version_id: &FunctionVersionId,
 ) -> Result<BasePath, TdError> {
     let effective = conn
@@ -93,7 +93,7 @@ pub fn build_function_run(
 }
 
 pub async fn mint_function_run(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     at: LockInstant,
@@ -165,7 +165,7 @@ pub fn build_output_table_data_versions(
 }
 
 pub async fn mint_output_table_data_versions(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     fr: &PhysicalFunctionRunInsertDB,

@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use td_database::access::InProject;
+use td_database::access::{AccessMode, InProject};
 use td_error::td_error;
 use td_objects::types::basic::GroupName;
 
@@ -42,7 +42,7 @@ pub fn assert_not_system(group: &GroupDBWithNames) -> Result<(), TdError> {
 /// id, and the `RESTRICT` FKs refuse the delete once any exist; each run row
 /// hangs off a transaction in the same group, so these two cover them all.
 pub async fn assert_group_unused(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl AccessMode>,
     group: &GroupDBWithNames,
 ) -> Result<(), TdError> {
     let id = group.base.base.id;
@@ -63,7 +63,7 @@ pub async fn assert_group_unused(
 /// The connection is project-scoped, matching the `(project_id, name)` unique
 /// index — names collide only within a project.
 pub async fn assert_group_rename_available(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl AccessMode>,
     update: &GroupUpdate,
     current: &GroupDBWithNames,
 ) -> Result<(), TdError> {

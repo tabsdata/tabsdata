@@ -3,9 +3,9 @@
 //
 
 use crate::Queries;
-use crate::QueryExecutor;
+use crate::Writes;
 use td_database::access::InProject;
-use td_database::domain::{Apiserver, Domained};
+use td_database::domain::Apiserver;
 use td_database::pool::scoped::{Scoped, ScopedExt};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -28,8 +28,7 @@ use td_objects::types::basic::{
 /// is not RLS-scoped, so it is inserted directly on the pool.
 pub(crate) async fn seed_project<E>(db: E, name: ProjectName) -> Result<ActiveProjectDB, TdError>
 where
-    for<'s> &'s Scoped<E, ProjectId>:
-        QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
+    for<'s> &'s Scoped<E, ProjectId>: Writes<Domain = Apiserver, Scope = InProject>,
 {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 

@@ -11,7 +11,7 @@ use crate::recovery::{
     finalize_recovery_actions, recover_lfrs_from_actions,
 };
 use ta_services::ctx_service::ReqCtx;
-use td_database::access::InProject;
+use td_database::access::{InProject, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::types::basic::AtTime;
@@ -26,7 +26,7 @@ use tracing::instrument;
 #[instrument(name = "recovery.apply", skip_all, level = "debug", err(Debug))]
 pub async fn apply_recovery_actions(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     at: &AtTime,
     actions: &RecoveryActions,
 ) -> Result<(), TdError> {

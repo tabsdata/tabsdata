@@ -3,7 +3,7 @@
 //
 
 use td_bridge::{BridgeProviderHandle, Orchestrator};
-use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::DisplayVec;
 use td_error::{TdError, td_error};
@@ -54,8 +54,8 @@ pub enum RegisterFunctionError {
 /// connection-less collections, so the contract cannot hold there -- the
 /// guard below skips the check. Remove the guard once the legacy client is
 /// retired, so the check applies under every orchestrator.
-pub async fn ensure_connection_kind_matches<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn ensure_connection_kind_matches<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     bridge: &BridgeProviderHandle,
     function: &FunctionInsertDB,
     collection: &ActiveCollectionDB,

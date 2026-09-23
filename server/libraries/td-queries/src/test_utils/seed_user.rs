@@ -2,9 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::{Queries, QueryExecutor};
+use crate::{Queries, Writes};
 use td_database::access::SeesProjectRows;
-use td_database::domain::{Apiserver, Domained};
+use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::user::{UserCreate, UserDB};
@@ -16,7 +16,7 @@ use td_security::config::PasswordHashingConfig;
 use td_security::password::create_password_hash;
 
 pub(crate) async fn seed_user(
-    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
+    db: impl Writes<Domain = Apiserver, Scope: SeesProjectRows>,
     name: &UserName,
     enabled: &UserEnabled,
 ) -> Result<UserDB, TdError> {
@@ -27,14 +27,14 @@ pub(crate) async fn seed_user(
 /// `system` flag drives for service users). Enabled so tests prove the
 /// row is hidden by the `system` flag rather than by `enabled`.
 pub(crate) async fn seed_system_user(
-    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
+    db: impl Writes<Domain = Apiserver, Scope: SeesProjectRows>,
     name: &UserName,
 ) -> Result<UserDB, TdError> {
     seed_user_with(db, name, &UserEnabled::TRUE, &UserSystem::TRUE).await
 }
 
 async fn seed_user_with(
-    db: impl QueryExecutor + Domained<Domain = Apiserver, Scope: SeesProjectRows>,
+    db: impl Writes<Domain = Apiserver, Scope: SeesProjectRows>,
     name: &UserName,
     enabled: &UserEnabled,
     system: &UserSystem,

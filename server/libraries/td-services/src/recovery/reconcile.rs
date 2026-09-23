@@ -12,7 +12,7 @@ use td_bridge::BridgeProviderHandle;
 use td_bridge::observer::{
     ObservedWorkload, WorkloadKind, WorkloadObservation, WorkloadObserver, WorkloadPhase,
 };
-use td_database::access::{InProject, SeesProjectRows};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
@@ -106,8 +106,8 @@ impl RecoveryActions {
 }
 
 #[instrument(name = "recovery.fn_candidates", skip_all, level = "debug", err(Debug))]
-pub async fn fn_candidates<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn fn_candidates<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
 ) -> Result<FnCandidates, TdError> {
     let mut pfrs: Vec<PhysicalFunctionRunDB> = conn
         .timeline()
@@ -150,8 +150,8 @@ pub async fn fn_candidates<S: SeesProjectRows>(
     Ok(FnCandidates(attempts))
 }
 
-pub async fn stage_trigger_functions<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn stage_trigger_functions<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     stage: &StageCandidates,
 ) -> Result<StageFunctions, TdError> {
     if stage.0.is_empty() {
@@ -176,8 +176,8 @@ pub async fn stage_trigger_functions<S: SeesProjectRows>(
 #[derive(Debug, Clone, Default)]
 pub struct CurrentTriggerVersions(pub HashSet<FunctionVersionId>);
 
-pub async fn current_trigger_versions<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn current_trigger_versions<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     cron: &CronCandidates,
     stage: &StageCandidates,
 ) -> Result<CurrentTriggerVersions, TdError> {
@@ -582,8 +582,8 @@ pub async fn recreate_trigger_workloads(
     level = "debug",
     err(Debug)
 )]
-pub async fn finalize_recovery_actions<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn finalize_recovery_actions<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     actions: &RecoveryActions,
 ) -> Result<RecoveryActions, TdError> {
     if actions.fn_actions.is_empty() {
@@ -683,7 +683,7 @@ pub fn failed_worker_ids(actions: &RecoveryActions) -> Result<Vec<WorkerId>, TdE
     err(Debug)
 )]
 pub async fn fail_recovered_attempts(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     at: &AtTime,
     actions: &RecoveryActions,
 ) -> Result<(), TdError> {

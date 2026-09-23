@@ -6,7 +6,6 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
-use td_common::provider::Provider;
 use td_database::access::{DbPool, Global};
 use td_error::TdError;
 use td_objects::dxo::auth::SessionInvalidateDB;

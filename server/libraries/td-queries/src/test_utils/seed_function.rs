@@ -3,10 +3,10 @@
 //
 
 use crate::Queries;
-use crate::QueryExecutor;
+use crate::Writes;
 use ta_objects::and;
 use td_database::access::{InProject, LockInstant};
-use td_database::domain::{Apiserver, Domained};
+use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::RequestContext;
@@ -28,7 +28,7 @@ use td_objects::types::basic::{
 /// (`db.scoped(p)`), the field-less rows (function, tables, dependencies,
 /// triggers) default their `project_id` from that scope.
 pub(crate) async fn seed_function(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     collection: &ActiveCollectionDB,
     function_create: &FunctionRegister,
 ) -> Result<FunctionDB, TdError> {

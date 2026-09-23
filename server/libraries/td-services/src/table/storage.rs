@@ -3,7 +3,7 @@
 //
 
 use polars::prelude::PolarsError;
-use td_database::access::DbScope;
+use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
@@ -22,8 +22,8 @@ pub enum StorageServiceError {
     CouldNotGetSchema(#[source] PolarsError) = 5002,
 }
 
-pub async fn resolve_table_location<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn resolve_table_location<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     triggered_on: &AtTime,
     table_id: &TableId,
     uncommitted: &UncommittedStatus,
@@ -62,7 +62,7 @@ mod tests {
     use crate::Services;
     use std::collections::HashMap;
     use std::str::FromStr;
-    use td_database::access::InProject;
+    use td_database::access::{InProject, RW};
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_objects::and;
@@ -470,7 +470,7 @@ mod tests {
         uncommitted: bool,
     ) -> Result<Option<SPath>, TdError> {
         let mut connection =
-            DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+            DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
         resolve_table_location(
             &mut connection,
             &AtTime::now(),

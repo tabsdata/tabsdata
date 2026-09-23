@@ -11,7 +11,7 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project};
 use td_database::access::DbScope;
-use td_database::access::{GatedConnection, RW};
+use td_database::access::{AccessMode, GatedConnection, RW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::Dao;
@@ -79,8 +79,8 @@ pub fn update_project_validate(update: &ProjectUpdate) -> Result<(), TdError> {
 /// with another project up front with a clean "already exists" error instead
 /// of the raw unique-constraint violation from the update write. Renaming a
 /// project to its own current name is a no-op and is not a collision.
-pub async fn assert_project_rename_available<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn assert_project_rename_available<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     update: &ProjectUpdate,
     current: &ActiveProjectDB,
 ) -> Result<(), TdError> {

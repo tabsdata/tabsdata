@@ -2,14 +2,13 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! No lock of its own: every logical and physical run writer holds the
-//! project's exclusive-write lock, so two recomputes of one parent never
-//! interleave.
+//! No lock of its own: the `XW` connection it runs on holds the project's
+//! exclusive-write lock, so two recomputes of one parent never interleave.
 
 use crate::primitives::chunked::{MAX_QUERY_CONDITIONS, warn_if_chunked};
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
-use td_database::access::InProject;
+use td_database::access::{InProject, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::execution::ExecutionDB;
@@ -18,21 +17,21 @@ use td_objects::types::basic::{LogicalFunctionRunId, PhysicalFunctionRunId};
 use td_schema::schema::current::{Changed, execution_rollup, transaction_rollup};
 
 pub(crate) async fn logical_runs_changed(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     lfr_ids: &[LogicalFunctionRunId],
 ) -> Result<(), SqlError> {
     recompute(conn, Changed::LogicalRuns, lfr_ids).await
 }
 
 pub(crate) async fn physical_runs_changed(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     pfr_ids: &[PhysicalFunctionRunId],
 ) -> Result<(), SqlError> {
     recompute(conn, Changed::PhysicalRuns, pfr_ids).await
 }
 
 async fn recompute(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     changed: Changed,
     ids: &[impl SeaValue],
 ) -> Result<(), SqlError> {

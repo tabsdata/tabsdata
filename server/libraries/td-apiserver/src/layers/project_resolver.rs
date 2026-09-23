@@ -16,7 +16,7 @@ use axum::response::Response;
 use std::collections::HashMap;
 use std::str::FromStr;
 use ta_apiserver::status::error_status::ErrorStatus;
-use td_database::access::{DbPool, DbScope, Global, Grant};
+use td_database::access::{AccessMode, DbPool, DbScope, Global, Grant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::project::ActiveProjectDB;
@@ -51,8 +51,8 @@ pub async fn project_resolver_layer(
     Ok(next.run(request).await)
 }
 
-async fn resolve<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn resolve<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     id_name: &ProjectIdName,
 ) -> Result<Option<ProjectId>, TdError> {
     let proj: Option<ActiveProjectDB> = conn.fetch_optional::<ActiveProjectDB>(id_name).await?;

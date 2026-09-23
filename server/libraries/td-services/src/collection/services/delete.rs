@@ -20,7 +20,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::SeesProjectRows;
-use td_database::access::{DbPool, InProject};
+use td_database::access::{DbPool, InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionParam;
@@ -110,8 +110,8 @@ async fn delete_collection(
     Ok(())
 }
 
-pub async fn update_deleted_workers<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn update_deleted_workers<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     collection_id: &CollectionId,
 ) -> Result<(), TdError> {
     let update = WorkerUpdateDB::stop_scheduled();

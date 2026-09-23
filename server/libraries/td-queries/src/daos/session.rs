@@ -3,6 +3,7 @@
 //
 
 use crate::QueryExecutor;
+use crate::Writes;
 use sea_query::{DeleteStatement, Expr, ExprTrait, Query};
 use ta_objects::Dao;
 use ta_objects::SeaValue;
@@ -18,7 +19,7 @@ pub struct Sessions<E> {
 
 impl<E> Sessions<E>
 where
-    E: QueryExecutor,
+    E: QueryExecutor + Writes,
 {
     /// Delete every session whose `expires_on` is in the past; returns how
     /// many were deleted.

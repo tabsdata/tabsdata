@@ -10,7 +10,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::SeesProjectRows;
-use td_database::access::{DbPool, InProject};
+use td_database::access::{AccessMode, DbPool, InProject};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
@@ -92,8 +92,8 @@ async fn update_function(
     Ok(read)
 }
 
-pub async fn assert_function_name_not_exists<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn assert_function_name_not_exists<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     collection_id: &CollectionId,
     function: &FunctionDBWithNames,
     function_update: &FunctionUpdate,

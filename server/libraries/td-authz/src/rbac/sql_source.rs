@@ -28,7 +28,7 @@ use crate::rbac::registry::AuthzRegistry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use td_common::provider::{CachedProvider, Provider};
-use td_database::access::DbScope;
+use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::permission::PermissionDB;
@@ -78,9 +78,9 @@ impl SqlRbacGrantsProvider {
 
     /// Load `role_permission` rows and group them into a per-role [`Grants`].
     #[instrument(name = "authz.rbac.role_grants", skip_all, level = "debug", err(Debug))]
-    async fn role_grants<S: DbScope>(
+    async fn role_grants<S: DbScope, M: AccessMode>(
         &self,
-        conn: &mut DomainConnection<Apiserver, S>,
+        conn: &mut DomainConnection<Apiserver, S, M>,
     ) -> Result<HashMap<RoleId, Grants>, TdError> {
         let permissions = conn.fetch_all::<PermissionDB>(()).await?;
         let total = permissions.len();
@@ -102,13 +102,13 @@ impl SqlRbacGrantsProvider {
 
 // Runs only on a cache miss (`CachedProvider` decides), so a warm cache never
 // materializes a latent slot.
-impl<'a, S: DbScope> Provider<UserGrants, &'a mut DomainConnection<Apiserver, S>>
+impl<'a, S: DbScope, M: AccessMode> Provider<UserGrants, &'a mut DomainConnection<Apiserver, S, M>>
     for SqlRbacGrantsProvider
 {
     #[instrument(name = "authz.rbac.get", skip_all, level = "debug", err(Debug))]
     async fn get(
         &self,
-        slot: &'a mut DomainConnection<Apiserver, S>,
+        slot: &'a mut DomainConnection<Apiserver, S, M>,
     ) -> Result<Arc<UserGrants>, TdError> {
         let role_grants = self.role_grants(&mut *slot).await?;
         let user_roles = slot.fetch_all::<UserRoleDB>(()).await?;
@@ -135,7 +135,7 @@ impl<'a, S: DbScope> Provider<UserGrants, &'a mut DomainConnection<Apiserver, S>
         Ok(Arc::new(by_user))
     }
 
-    async fn purge(&self, _slot: &'a mut DomainConnection<Apiserver, S>) -> Result<(), TdError> {
+    async fn purge(&self, _slot: &'a mut DomainConnection<Apiserver, S, M>) -> Result<(), TdError> {
         Ok(())
     }
 }
@@ -179,9 +179,9 @@ impl SqlRbacSource {
 }
 
 impl super::source::RbacSource for SqlRbacSource {
-    async fn user_grants<S: DbScope>(
+    async fn user_grants<S: DbScope, M: AccessMode>(
         &self,
-        slot: &mut DomainConnection<Apiserver, S>,
+        slot: &mut DomainConnection<Apiserver, S, M>,
         user: &UserId,
     ) -> Result<Arc<Grants>, TdError> {
         let by_user = self.provider.get(slot).await?;
@@ -191,16 +191,16 @@ impl super::source::RbacSource for SqlRbacSource {
             .unwrap_or_else(|| self.empty.clone()))
     }
 
-    async fn refresh<S: DbScope>(
+    async fn refresh<S: DbScope, M: AccessMode>(
         &self,
-        slot: &mut DomainConnection<Apiserver, S>,
+        slot: &mut DomainConnection<Apiserver, S, M>,
     ) -> Result<(), TdError> {
         self.provider.purge(slot).await
     }
 
-    async fn is_current<E: EntityKind, S: DbScope>(
+    async fn is_current<E: EntityKind, S: DbScope, M: AccessMode>(
         &self,
-        slot: &mut DomainConnection<Apiserver, S>,
+        slot: &mut DomainConnection<Apiserver, S, M>,
         id: &E::Id,
     ) -> Result<bool, TdError> {
         E::is_current(slot, id).await
@@ -213,7 +213,7 @@ mod tests {
     use crate::rbac::model::{Project, ProjectPermission, Requires, SystemPermission};
     use crate::rbac::model::{ProjectId, System, SystemEntity};
     use crate::rbac::source::RbacSource;
-    use td_database::access::InProject;
+    use td_database::access::{InProject, RW};
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::project::ProjectDeleteDB;
@@ -226,7 +226,7 @@ mod tests {
         // The bootstrap seeds the `admin` user into the `sys_admin` and
         // `default` roles; its effective grants are the union of both.
         let source = SqlRbacSource::default();
-        let mut slot = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let mut slot = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
 
         let grants = source.user_grants(&mut slot, &UserId::admin()).await?;
         // sys_admin role -> all system permissions
@@ -246,21 +246,21 @@ mod tests {
     async fn test_is_current_follows_project_soft_delete(db: TdPool) -> Result<(), TdError> {
         let project = db.seed().project(ProjectName::try_from("doomed")?).await?;
         let source = SqlRbacSource::default();
-        let mut slot = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
+        let mut slot = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
 
         assert!(
             source
-                .is_current::<Project, _>(&mut slot, &project.id)
+                .is_current::<Project, _, _>(&mut slot, &project.id)
                 .await?
         );
         assert!(
             !source
-                .is_current::<Project, _>(&mut slot, &ProjectId::default())
+                .is_current::<Project, _, _>(&mut slot, &ProjectId::default())
                 .await?
         );
         assert!(
             source
-                .is_current::<System, _>(&mut slot, &SystemEntity)
+                .is_current::<System, _, _>(&mut slot, &SystemEntity)
                 .await?
         );
 
@@ -269,7 +269,7 @@ mod tests {
             .await?;
         assert!(
             !source
-                .is_current::<Project, _>(&mut slot, &project.id)
+                .is_current::<Project, _, _>(&mut slot, &project.id)
                 .await?
         );
         Ok(())

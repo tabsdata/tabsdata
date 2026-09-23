@@ -14,7 +14,7 @@ use crate::execution::plan::{
 use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::ctx_service::ReqCtx;
 use td_database::access::LockInstant;
-use td_database::access::{InProject, SeesProjectRows};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::TransactionBy;
@@ -38,8 +38,8 @@ pub(crate) mod update_status;
 /// success response):
 ///   1) `skip_if_running` + the function is currently running -> 425 Too Early
 ///   2) `external_uid` already in use by a live execution     -> 409 Conflict
-async fn trigger_guards<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn trigger_guards<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     request: &ExecutionRequest,
     function_id: &FunctionId,
     function_version_id: &td_objects::types::basic::FunctionVersionId,
@@ -73,7 +73,7 @@ async fn trigger_guards<S: SeesProjectRows>(
 /// before reading anything: an unauthorized request must not observe the
 /// trigger gates.
 pub(crate) async fn execute(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     msgs: &mut ReqCtx,
     transaction_by: &TransactionBy,
     request_context: RequestContext,

@@ -4,7 +4,7 @@
 
 use crate::graph::build::GraphBuilder;
 use std::collections::HashMap;
-use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::function::FunctionDB;
@@ -66,8 +66,8 @@ impl From<&TableId> for FunctionOrTable {
 /// Generate the trigger/dependency graph around `function_or_table`, per the
 /// [`GraphConfig`] knobs, live (`None`) or as it existed at `at_time`.
 /// Authorization is owned by the calling service (see [`GraphConfig`]).
-pub async fn generate_td_graph<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn generate_td_graph<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     config: GraphConfig,
     at_time: Option<&AtTime>,
     function_or_table: &FunctionOrTable,

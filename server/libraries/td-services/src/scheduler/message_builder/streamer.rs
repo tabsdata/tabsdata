@@ -3,7 +3,7 @@
 //
 
 use super::build_external_location;
-use td_database::access::DbScope;
+use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::worker::WorkerDBWithNames;
@@ -19,8 +19,8 @@ use td_storage::location::StorageLocation;
 /// `build_function_v2` — needs only `conn` + `storage`, no jwt / server
 /// addresses, so the resolve endpoint can call it from its request-serving
 /// context.
-pub(crate) async fn build_streamer_input<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub(crate) async fn build_streamer_input<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     storage: &Storage,
     worker: WorkerDBWithNames,
 ) -> Result<StreamerInput, TdError> {

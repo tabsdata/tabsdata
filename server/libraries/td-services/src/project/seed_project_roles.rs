@@ -18,7 +18,7 @@
 //! and `ProjectId` is in context.
 
 use crate::project::per_project_roles::{PER_PROJECT_ROLES, per_project_role_name};
-use td_database::access::DbScope;
+use td_database::access::{DbScope, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -32,8 +32,8 @@ use td_objects::types::basic::{
 };
 use td_queries::Queries;
 
-pub async fn seed_project_roles<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn seed_project_roles<S: DbScope, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     context: &RequestContext,
     project_id: &ProjectId,
     project: &ProjectInsertDB,

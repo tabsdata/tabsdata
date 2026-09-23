@@ -5,7 +5,7 @@
 use itertools::Itertools;
 use std::collections::HashSet;
 use ta_services::ctx_service::{Message, ReqCtx};
-use td_database::access::{InProject, SeesProjectRows};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::and;
@@ -47,8 +47,8 @@ enum UpdateStatusRunError {
     level = "debug",
     err(Debug)
 )]
-pub async fn update_worker_status<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn update_worker_status<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     update: &WorkerUpdateDB,
     worker_id: &WorkerId,
 ) -> Result<(), TdError> {
@@ -71,7 +71,7 @@ pub async fn update_worker_status<S: SeesProjectRows>(
     err(Debug)
 )]
 pub async fn abandon_requested_physical_runs(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     at: &AtTime,
     logical_function_runs: &[LogicalFunctionRunDB],
 ) -> Result<(), TdError> {
@@ -264,7 +264,7 @@ fn cascade_transition(
 )]
 pub async fn update_function_run_status(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     logical_function_runs: &Vec<LogicalFunctionRunDB>,
     status: LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {
@@ -353,7 +353,7 @@ pub async fn update_function_run_status(
 )]
 async fn cascade_downstream_status(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     starting: &[LogicalFunctionRunId],
     status: &LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {
@@ -395,8 +395,8 @@ async fn cascade_downstream_status(
 /// aren't re-emitted. Loop ends when no new LFR ids surface. Returns the
 /// union of all reachable downstream LFRs, excluding the starting set
 /// itself.
-async fn bfs_downstream_lfrs<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn bfs_downstream_lfrs<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     starting: &[LogicalFunctionRunId],
 ) -> Result<Vec<LogicalFunctionRunId>, TdError> {
     let starting_set: HashSet<LogicalFunctionRunId> = starting.iter().cloned().collect();
@@ -424,8 +424,8 @@ async fn bfs_downstream_lfrs<S: SeesProjectRows>(
         .collect())
 }
 
-pub async fn update_table_data_version_status<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn update_table_data_version_status<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     physical_function_run_id: &PhysicalFunctionRunId,
     callback: &CallbackRequest,
 ) -> Result<(), TdError> {

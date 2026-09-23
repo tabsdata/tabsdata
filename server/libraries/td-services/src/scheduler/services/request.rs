@@ -18,7 +18,7 @@ use crate::scheduler::request::{
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_bridge::{BridgeProviderHandle, Orchestrator};
-use td_database::access::{DbPool, Global, Grant, SeesProjectRows};
+use td_database::access::{DbPool, Global, Grant, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::{SchedulerConfig, SchedulerNotify};
@@ -214,8 +214,8 @@ async fn tick_project(
 /// collection and function deletes — so the claim skips a worker one of them
 /// is mutating rather than enqueuing for it, and keeps the tick from blocking
 /// on it while holding the lock.
-async fn claim_trigger_workers<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn claim_trigger_workers<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     readiness: impl SqlCondition<WorkerDB>,
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
     let claimed: Vec<WorkerDB> = conn.for_update().claim_all::<WorkerDB>(readiness).await?;
@@ -232,8 +232,8 @@ async fn claim_trigger_workers<S: SeesProjectRows>(
 
 /// Flip the trigger workers' status (Requested, or the orchestrator-specific
 /// stop status) and mark their messages Locked.
-async fn update_worker_message_statuses<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn update_worker_message_statuses<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     orchestrator: Orchestrator,
     at: &AtTime,
     workers: &[WorkerDBWithNames],

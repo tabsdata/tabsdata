@@ -83,7 +83,7 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use td_authz::rbac::{ManageProject, Project, SqlRbacSource};
 use td_database::access::Gated;
-use td_database::access::{InProject, SeesProjectRows};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_objects::Dao;
 use td_objects::FromDao;
@@ -243,8 +243,8 @@ pub struct ConnectionResolution {
 /// Resolves the collection's connection ROW for an update. The connection
 /// exists by construction (created with the collection); its connector kind
 /// is immutable — content was stored under it.
-pub async fn resolve_connection<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn resolve_connection<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     collection: &ActiveCollectionDB,
     document: &ConnectionDocument,
 ) -> Result<ConnectionResolution, TdError> {
@@ -291,8 +291,8 @@ pub fn require_connection_id(collection: &ActiveCollectionDB) -> Result<Connecti
 /// orchestrator persists nothing until the store write succeeds).
 /// Source/Destination collections REQUIRE a connection — they are 1:1 with
 /// it and cannot exist without one; a DataFactory cannot carry one.
-pub async fn plan_collection_create<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn plan_collection_create<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     request_context: &RequestContext,
     create: &CollectionCreate,
     group_id: &GroupId,
@@ -357,8 +357,8 @@ pub async fn plan_collection_create<S: SeesProjectRows>(
 /// collection's artifact before the TX uniqueness check fires (the failure
 /// cleanup would then delete it). The store's own name-ownership guard covers
 /// the remaining race.
-pub(crate) async fn ensure_collection_name_free<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub(crate) async fn ensure_collection_name_free<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     name: &CollectionName,
 ) -> Result<(), TdError> {
     let existing: Vec<ActiveCollectionDB> = conn.fetch_all(name).await?;
@@ -389,7 +389,7 @@ pub struct CollectionCreatePlan {
 /// The create transaction: insert the (store-confirmed) connection row, then
 /// the collection pointing at it, and read the result back.
 pub async fn insert_collection_with_connection(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     request_context: &RequestContext,
     plan: &CollectionCreatePlan,
 ) -> Result<CollectionRead, TdError> {

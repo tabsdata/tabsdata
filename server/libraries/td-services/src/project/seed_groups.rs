@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use td_database::access::InProject;
+use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -23,7 +23,7 @@ use td_queries::Queries;
 /// `project_id` from that GUC. Bypass (`Global` scope) keeps RLS `WITH CHECK`
 /// satisfied; the GUC only feeds the column default.
 pub async fn seed_default_groups(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     context: &RequestContext,
 ) -> Result<(), TdError> {
     let mut rows = Vec::with_capacity(SYSTEM_GROUPS.len());

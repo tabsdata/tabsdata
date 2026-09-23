@@ -18,6 +18,7 @@
 
 use crate::QueryExecutor;
 use crate::Serves;
+use crate::Writes;
 use crate::daos::dependency::Dependencies;
 use crate::daos::execution::Executions;
 use crate::daos::function_runs::{LogicalRuns, PhysicalRuns};
@@ -49,7 +50,7 @@ pub trait Queries: QueryExecutor {
         dao: &D,
     ) -> impl Future<Output = Result<PgQueryResult, SqlError>> + Send
     where
-        Self: Serves<D>,
+        Self: Serves<D> + Writes,
     {
         async move {
             insert_query::<D>(dao)?
@@ -67,7 +68,7 @@ pub trait Queries: QueryExecutor {
         dao: &D,
     ) -> impl Future<Output = Result<PgQueryResult, SqlError>> + Send
     where
-        Self: Serves<D>,
+        Self: Serves<D> + Writes,
     {
         async move {
             upsert_query::<D>(dao)?
@@ -84,7 +85,7 @@ pub trait Queries: QueryExecutor {
         dao: &D,
     ) -> impl Future<Output = Result<PgQueryResult, SqlError>> + Send
     where
-        Self: Serves<D>,
+        Self: Serves<D> + Writes,
     {
         async move {
             insert_or_ignore_query::<D>(dao)?
@@ -102,7 +103,7 @@ pub trait Queries: QueryExecutor {
     ) -> impl Future<Output = Result<PgQueryResult, SqlError>> + Send
     where
         U::FilterBy: UnversionedDao,
-        Self: Serves<U>,
+        Self: Serves<U> + Writes,
     {
         async move {
             update_query(dao, condition)?
@@ -118,7 +119,7 @@ pub trait Queries: QueryExecutor {
         condition: impl SqlCondition<D>,
     ) -> impl Future<Output = Result<PgQueryResult, SqlError>> + Send
     where
-        Self: Serves<D>,
+        Self: Serves<D> + Writes,
     {
         async move {
             let values = condition.display_values();

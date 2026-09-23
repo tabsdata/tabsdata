@@ -7,7 +7,7 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::SeesProjectRows;
-use td_database::access::{GatedConnection, InProject, RW};
+use td_database::access::{AccessMode, GatedConnection, InProject, RW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_error::td_error;
@@ -69,8 +69,8 @@ pub enum CreateFunctionPatchError {
 
 /// Validate that the parent fvid (`patch_of`) resolves to a function in the
 /// URL's collection, with the URL's function name/id, and not deleted.
-pub async fn assert_patch_parent_matches_url<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn assert_patch_parent_matches_url<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     parent: &FunctionDB,
     url_collection: &CollectionId,
     url_function: &FunctionIdName,

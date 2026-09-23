@@ -3,10 +3,10 @@
 //
 
 use crate::Queries;
-use crate::QueryExecutor;
+use crate::Writes;
 use crate::test_utils::seed_logical_function_run::seed_logical_function_run;
 use td_database::access::{InProject, LockInstant};
-use td_database::domain::{Apiserver, Domained};
+use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
@@ -19,7 +19,7 @@ use td_objects::types::basic::{
 };
 
 pub(crate) async fn seed_physical_function_run(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     collection: &ActiveCollectionDB,
     function_version: &FunctionDB,
     execution: &ExecutionDB,

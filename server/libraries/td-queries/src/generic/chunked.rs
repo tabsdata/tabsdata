@@ -7,6 +7,7 @@
 //! OR-joined and `extra` AND-ed onto every chunk.
 
 use crate::Serves;
+use crate::Writes;
 use crate::primitives::chunked::{
     MAX_INSERT_ROWS, MAX_QUERY_CONDITIONS, close_chunk_query, fetch_all_at_chunk_query,
     fetch_all_chunk_query, fetch_all_current_chunk_query, fetch_chunked, insert_vec_query,
@@ -47,7 +48,7 @@ impl<E> Chunked<E> {
         daos: &[D],
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: Serves<D>,
+        E: Serves<D> + Writes,
     {
         let mut executor = self.executor;
         let mut result = PgQueryResult::default();
@@ -75,7 +76,7 @@ impl<E> Chunked<E> {
     ) -> Result<PgQueryResult, SqlError>
     where
         D::FilterBy: UnversionedDao,
-        E: Serves<D>,
+        E: Serves<D> + Writes,
     {
         let mut executor = self.executor;
         warn_if_chunked::<D>(values.len());
@@ -105,7 +106,7 @@ impl<E> Scd2Chunked<E> {
         at: LockInstant,
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: Serves<D>,
+        E: Serves<D> + Writes,
     {
         let mut executor = self.executor;
         warn_if_chunked::<D>(values.len());
@@ -130,7 +131,7 @@ impl<E> Scd2Chunked<E> {
     ) -> Result<PgQueryResult, SqlError>
     where
         D::FilterBy: Scd2Dao,
-        E: Serves<D>,
+        E: Serves<D> + Writes,
     {
         let mut executor = self.executor;
         warn_if_chunked::<D>(values.len());
@@ -153,7 +154,7 @@ impl<E> Scd2Chunked<E> {
         at: LockInstant,
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: Serves<D>,
+        E: Serves<D> + Writes,
     {
         let mut executor = self.executor;
         let mut result = PgQueryResult::default();

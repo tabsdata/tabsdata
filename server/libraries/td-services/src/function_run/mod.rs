@@ -5,7 +5,7 @@
 pub mod raw_data;
 pub mod services;
 
-use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
@@ -26,8 +26,8 @@ use tracing::instrument;
     level = "debug",
     err(Debug)
 )]
-pub async fn resolve_current_function_run<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn resolve_current_function_run<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     execution_id: &ExecutionId,
     function_id: &FunctionId,
 ) -> Result<PhysicalFunctionRunDBWithNames, TdError> {

@@ -71,10 +71,12 @@ impl ScopedBy<Global> for Apiserver {}
 impl ScopedBy<AcrossProjects> for Apiserver {}
 impl ScopedBy<InProject> for Apiserver {}
 
-/// The domain an executor serves, and the RLS scope it serves it in.
+/// The domain an executor serves, the RLS scope it serves it in, and the
+/// mode its unit of work was opened as.
 pub trait Domained {
     type Domain: DbDomain;
     type Scope: DbScope;
+    type Mode: AccessMode;
 }
 
 /// What plain executors serve in production builds: no DAO declares it, so a
@@ -99,22 +101,30 @@ type PlainExecutorDomain = NoDomain;
 /// Outside test builds it is paired with `NoDomain`, so nothing typechecks.
 type PlainExecutorScope = InProject;
 
+/// A bare pool's connection comes from the regular pool and holds no lock,
+/// which is what `RW` says.
+type PlainExecutorMode = RW;
+
 impl Domained for &'_ mut PgConnection {
     type Domain = PlainExecutorDomain;
     type Scope = PlainExecutorScope;
+    type Mode = PlainExecutorMode;
 }
 
 impl Domained for &'_ TdPool {
     type Domain = PlainExecutorDomain;
     type Scope = PlainExecutorScope;
+    type Mode = PlainExecutorMode;
 }
 
 impl Domained for &'_ PgPool {
     type Domain = PlainExecutorDomain;
     type Scope = PlainExecutorScope;
+    type Mode = PlainExecutorMode;
 }
 
 impl<P> Domained for &'_ Scoped<&'_ TdPool, P> {
     type Domain = PlainExecutorDomain;
     type Scope = InProject;
+    type Mode = PlainExecutorMode;
 }

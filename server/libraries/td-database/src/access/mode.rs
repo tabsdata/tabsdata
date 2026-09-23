@@ -28,7 +28,7 @@ use sqlx::{Error, Postgres, Transaction};
 use td_error::TdError;
 use tracing::warn;
 
-pub trait AccessMode: Send + Sync + 'static {
+pub trait AccessMode: Sized + Send + Sync + 'static {
     const KIND: PoolKind;
 
     /// What opening yields past the connection: the [`LockInstant`] for a
@@ -43,7 +43,7 @@ pub trait AccessMode: Send + Sync + 'static {
     /// End the unit of work; `ok` is whether the service succeeded. Awaited
     /// rather than left to `Drop`, whose rollback sqlx only queues.
     fn close<D: DbDomain, S: DbScope>(
-        conn: DomainConnection<D, S>,
+        conn: DomainConnection<D, S, Self>,
         ok: bool,
     ) -> impl Future<Output = Result<(), TdError>> + Send;
 }
@@ -65,8 +65,12 @@ pub trait OpensIn<S: DbScope>: AccessMode {
 }
 
 /// A mode whose work can be committed, which is what
-/// [`GatedConnection::commit`](super::GatedConnection::commit) requires: a read
-/// has nothing to commit.
+/// [`GatedConnection::commit`](super::GatedConnection::commit) and every write
+/// require: a read has nothing to commit.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is a read-only mode",
+    note = "writes and `FOR UPDATE` row locks need a connection opened as `RW` or `XW`"
+)]
 pub trait WriteMode: AccessMode {}
 
 pub struct RO;
@@ -85,7 +89,7 @@ impl AccessMode for RO {
     /// awaited — same as a write's rollback — rather than left to the
     /// rollback sqlx only queues on drop.
     async fn close<D: DbDomain, S: DbScope>(
-        conn: DomainConnection<D, S>,
+        conn: DomainConnection<D, S, Self>,
         _ok: bool,
     ) -> Result<(), TdError> {
         conn.rollback()
@@ -114,7 +118,7 @@ impl AccessMode for RW {
     }
 
     async fn close<D: DbDomain, S: DbScope>(
-        conn: DomainConnection<D, S>,
+        conn: DomainConnection<D, S, Self>,
         ok: bool,
     ) -> Result<(), TdError> {
         end_write(conn, ok).await
@@ -144,7 +148,7 @@ impl AccessMode for XW {
     }
 
     async fn close<D: DbDomain, S: DbScope>(
-        conn: DomainConnection<D, S>,
+        conn: DomainConnection<D, S, Self>,
         ok: bool,
     ) -> Result<(), TdError> {
         end_write(conn, ok).await
@@ -176,8 +180,8 @@ impl OpensIn<InProject> for XW {
 impl WriteMode for RW {}
 impl WriteMode for XW {}
 
-async fn end_write<D: DbDomain, S: DbScope>(
-    conn: DomainConnection<D, S>,
+async fn end_write<D: DbDomain, S: DbScope, M: WriteMode>(
+    conn: DomainConnection<D, S, M>,
     ok: bool,
 ) -> Result<(), TdError> {
     if ok {

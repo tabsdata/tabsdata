@@ -7,7 +7,9 @@
 //! `GatedConnection<RW>` or `GatedConnection<XW>`, and that word picks the pool,
 //! the transaction's posture, whether the work can be committed at all, and
 //! whether it serializes. The raw connection is never exposed — queries go
-//! through [`Gated::get`], which requires a [`Grant`](super::Grant).
+//! through [`Gated::get`], which requires a [`Grant`](super::Grant) and hands
+//! back a connection still typed with `M`: what the mode allows, the
+//! connection allows, and nothing more.
 //!
 //! `S` is the RLS scope acquired under: an `InProject` parameter only extracts
 //! from a project-scoped request, everything else is `Global` or
@@ -27,13 +29,13 @@ use td_error::TdError;
 /// ends it; taken from a [`DbPool`](super::DbPool), the body does.
 #[must_use = "a write is lost unless it is committed"]
 pub struct GatedConnection<M: AccessMode, S: DbScope = Global, D: ScopedBy<S> = Apiserver> {
-    conn: DomainConnection<D, S>,
+    conn: DomainConnection<D, S, M>,
     lock: M::Lock,
     _m: PhantomData<M>,
 }
 
 impl<M: AccessMode, S: DbScope, D: ScopedBy<S>> GatedConnection<M, S, D> {
-    pub(super) fn new(conn: DomainConnection<D, S>, lock: M::Lock) -> Self {
+    pub(super) fn new(conn: DomainConnection<D, S, M>, lock: M::Lock) -> Self {
         Self {
             conn,
             lock,
@@ -42,7 +44,7 @@ impl<M: AccessMode, S: DbScope, D: ScopedBy<S>> GatedConnection<M, S, D> {
     }
 
     /// Unlock for queries; inherent so bodies need no trait import.
-    pub fn get(&mut self, grant: Grant) -> &mut DomainConnection<D, S> {
+    pub fn get(&mut self, grant: Grant) -> &mut DomainConnection<D, S, M> {
         Gated::get(self, grant)
     }
 
@@ -65,7 +67,7 @@ impl<M: AccessMode, S: EntersProject, D: ScopedBy<S> + ScopedBy<InProject>>
         project: &impl Display,
     ) -> Result<GatedConnection<M, InProject, D>, TdError> {
         let scope = InProject::new(project);
-        let mut conn = DomainConnection::<D, InProject>::new(self.conn.into_transaction());
+        let mut conn = DomainConnection::<D, InProject, M>::new(self.conn.into_transaction());
         scope.apply(&mut conn).await?;
         Ok(GatedConnection::new(conn, self.lock))
     }
@@ -86,8 +88,9 @@ impl<M: WriteMode, S: DbScope, D: ScopedBy<S>> GatedConnection<M, S, D> {
 
 impl<M: AccessMode, S: DbScope, D: ScopedBy<S>> Gated<D> for GatedConnection<M, S, D> {
     type Scope = S;
+    type Mode = M;
 
-    fn get(&mut self, _grant: Grant) -> &mut DomainConnection<D, S> {
+    fn get(&mut self, _grant: Grant) -> &mut DomainConnection<D, S, M> {
         &mut self.conn
     }
 }

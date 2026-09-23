@@ -26,31 +26,29 @@ mod reads;
 mod stamping;
 
 use crate::logical::dispatch_mint::{MintedDispatch, mint_function_runs_on_dispatch};
-use td_database::access::{InProject, LockInstant};
-use td_database::connection::PgConnectionExt;
-use td_database::domain::{Apiserver, DomainConnection};
+use td_database::access::Grant;
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBWithNames;
-use td_objects::types::basic::{AtTime, PhysicalFunctionRunId};
+use td_objects::types::basic::PhysicalFunctionRunId;
 use td_queries::Queries;
+use td_queries::test_utils::begin_exclusive;
 
 /// Dispatch-mint `ready` and commit, so reads observe what mint wrote.
 async fn mint_committed(
     db: &TdPool,
     ready: &[LogicalFunctionRunDB],
 ) -> Result<Vec<MintedDispatch>, TdError> {
-    let mut conn = DomainConnection::<Apiserver, InProject>::new(db.begin().await.unwrap());
-    if let Some(first) = ready.first() {
-        conn.scope_in_project(&first.project_id.to_string())
-            .await
-            .unwrap();
-    }
+    let Some(first) = ready.first() else {
+        return Ok(Vec::new());
+    };
+    let mut trx = begin_exclusive(db, first.project_id).await?;
+    let at = trx.locked_at();
     let minted =
-        mint_function_runs_on_dispatch(&mut conn, ready, LockInstant::asserted(*AtTime::now()))
+        mint_function_runs_on_dispatch(trx.get(Grant::asserted("base path test")), ready, at)
             .await?;
-    conn.commit().await.unwrap();
+    trx.commit().await?;
     Ok(minted)
 }
 

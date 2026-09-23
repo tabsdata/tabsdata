@@ -6,7 +6,7 @@ use crate::generic::as_of::AsOf;
 use crate::generic::chunked::Scd2Chunked;
 use crate::primitives::scd2::select_open;
 use crate::primitives::scd2::{close_query, open_query, update_open_query};
-use crate::{QueryExecutor, Serves};
+use crate::{QueryExecutor, Serves, Writes};
 use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::SqlCondition;
@@ -51,7 +51,7 @@ impl<E> Scd2<E> {
         at: LockInstant,
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: Serves<D>,
+        E: Serves<D> + Writes,
     {
         open_query::<D>(dao, at)?
             .build_query()
@@ -68,7 +68,7 @@ impl<E> Scd2<E> {
     ) -> Result<PgQueryResult, SqlError>
     where
         U::FilterBy: Scd2Dao,
-        E: Serves<U>,
+        E: Serves<U> + Writes,
     {
         update_open_query(dao, condition)?
             .build_query()
@@ -85,7 +85,7 @@ impl<E> Scd2<E> {
         at: LockInstant,
     ) -> Result<PgQueryResult, SqlError>
     where
-        E: Serves<D>,
+        E: Serves<D> + Writes,
     {
         let values = condition.display_values();
         close_query::<D>(condition, at)?

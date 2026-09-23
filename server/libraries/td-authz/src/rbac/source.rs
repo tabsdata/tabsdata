@@ -13,7 +13,7 @@
 use crate::rbac::model::{EntityKind, Grants, IdentityClaim, RoleGrant, User};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use td_database::access::DbScope;
+use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -28,24 +28,24 @@ pub trait RbacSource: Send + Sync {
     /// The effective grants for the user: the union across their assigned
     /// roles; no grants is an empty [`Grants`], not an error. The slot may be
     /// latent — implementations should touch it only on a cache miss.
-    fn user_grants<S: DbScope>(
+    fn user_grants<S: DbScope, M: AccessMode>(
         &self,
-        slot: &mut DomainConnection<Apiserver, S>,
+        slot: &mut DomainConnection<Apiserver, S, M>,
         user: &UserId,
     ) -> impl Future<Output = Result<Arc<Grants>, TdError>> + Send;
 
     /// Invalidate any cached state. Must be called when role assignments or
     /// role permissions change.
-    fn refresh<S: DbScope>(
+    fn refresh<S: DbScope, M: AccessMode>(
         &self,
-        slot: &mut DomainConnection<Apiserver, S>,
+        slot: &mut DomainConnection<Apiserver, S, M>,
     ) -> impl Future<Output = Result<(), TdError>> + Send;
 
     /// Whether the kind's source of truth still knows the entity; nothing is
     /// authorized on one it does not.
-    fn is_current<E: EntityKind, S: DbScope>(
+    fn is_current<E: EntityKind, S: DbScope, M: AccessMode>(
         &self,
-        slot: &mut DomainConnection<Apiserver, S>,
+        slot: &mut DomainConnection<Apiserver, S, M>,
         id: &E::Id,
     ) -> impl Future<Output = Result<bool, TdError>> + Send;
 }
@@ -102,24 +102,24 @@ impl FixedRbacSource {
 }
 
 impl RbacSource for FixedRbacSource {
-    async fn user_grants<S: DbScope>(
+    async fn user_grants<S: DbScope, M: AccessMode>(
         &self,
-        _slot: &mut DomainConnection<Apiserver, S>,
+        _slot: &mut DomainConnection<Apiserver, S, M>,
         user: &UserId,
     ) -> Result<Arc<Grants>, TdError> {
         Ok(self.users.get(user).unwrap_or(&self.empty).clone())
     }
 
-    async fn refresh<S: DbScope>(
+    async fn refresh<S: DbScope, M: AccessMode>(
         &self,
-        _slot: &mut DomainConnection<Apiserver, S>,
+        _slot: &mut DomainConnection<Apiserver, S, M>,
     ) -> Result<(), TdError> {
         Ok(())
     }
 
-    async fn is_current<E: EntityKind, S: DbScope>(
+    async fn is_current<E: EntityKind, S: DbScope, M: AccessMode>(
         &self,
-        _slot: &mut DomainConnection<Apiserver, S>,
+        _slot: &mut DomainConnection<Apiserver, S, M>,
         id: &E::Id,
     ) -> Result<bool, TdError> {
         Ok(!self.gone.contains(&(E::NAME, id.to_string())))

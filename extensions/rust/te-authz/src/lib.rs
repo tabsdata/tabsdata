@@ -14,7 +14,7 @@
 use std::sync::Arc;
 use td_authz::rbac::AuthzRegistry;
 use td_authz::security::sys_admin::ensure_sys_admin_permissions;
-use td_database::access::Global;
+use td_database::access::{Global, RO, RW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::{TdError, td_error};
@@ -60,7 +60,7 @@ pub async fn enable_extensions(
         .begin()
         .await
         .map_err(|e| AuthzBootstrapError::TransactionBegin(e.to_string()))?;
-    let mut conn = DomainConnection::<Apiserver, Global>::new(tx);
+    let mut conn = DomainConnection::<Apiserver, Global, RW>::new(tx);
     ensure_sys_admin_permissions(&mut conn, registry.sys_admin_permissions()).await?;
     conn.commit()
         .await
@@ -83,7 +83,7 @@ async fn ensure_representable(db: &TdPool, registry: &AuthzRegistry) -> Result<(
         .begin_ro()
         .await
         .map_err(|e| AuthzBootstrapError::TransactionBegin(e.to_string()))?;
-    let mut conn = DomainConnection::<Apiserver, Global>::new(conn);
+    let mut conn = DomainConnection::<Apiserver, Global, RO>::new(conn);
     let reasons = td_authz::security::representability::check_representability(
         &mut conn,
         registry.sys_admin_permissions(),

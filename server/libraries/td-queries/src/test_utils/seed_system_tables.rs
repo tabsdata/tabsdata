@@ -3,10 +3,10 @@
 //
 
 use crate::Queries;
-use crate::QueryExecutor;
+use crate::Writes;
 use ta_objects::and;
 use td_database::access::{InProject, LockInstant};
-use td_database::domain::{Apiserver, Domained};
+use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::dependency::DependencyInsertDB;
@@ -27,7 +27,7 @@ use td_objects::types::table_ref::Versions;
 // (`db.scoped(p)`), the field-less rows default their `project_id` from that
 // scope.
 pub(crate) async fn seed_system_tables(
-    mut executor: impl QueryExecutor + Domained<Domain = Apiserver, Scope = InProject>,
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());

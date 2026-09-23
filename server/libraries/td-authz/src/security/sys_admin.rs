@@ -15,7 +15,7 @@
 //! check read the same `sys_admin_permissions()` list, so they stay consistent.
 
 use std::collections::HashSet;
-use td_database::access::DbScope;
+use td_database::access::{DbScope, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
@@ -30,8 +30,8 @@ use td_queries::Queries;
 /// permission in `sys_admin_extras` (`(entity_type, permission)` pairs). Rows
 /// already present are skipped; the extension rows are stored like the built-in
 /// system rows — on `__all__`, system-granted, `fixed = true`.
-pub async fn ensure_sys_admin_permissions<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn ensure_sys_admin_permissions<S: DbScope, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     sys_admin_extras: &[(&str, &str)],
 ) -> Result<(), TdError> {
     if sys_admin_extras.is_empty() {
@@ -71,7 +71,7 @@ pub async fn ensure_sys_admin_permissions<S: DbScope>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use td_database::access::InProject;
+    use td_database::access::{InProject, RW};
     use td_database::pool::TdPool;
 
     #[td_test::test(db)]
@@ -82,7 +82,7 @@ mod tests {
         // production startup path) so the row persists between calls.
         async fn reconcile(db: &TdPool, extras: &[(&str, &str)]) -> Result<(), TdError> {
             let tx = db.begin().await.unwrap();
-            let mut conn = DomainConnection::<Apiserver, InProject>::new(tx);
+            let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(tx);
             ensure_sys_admin_permissions(&mut conn, extras).await?;
             conn.commit().await.unwrap();
             Ok(())

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use td_bridge::messaging::{FunctionRequest, FunctionStartRequest, OrchestratorMessagePayload};
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::worker::{MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
-use td_database::access::SeesProjectRows;
+use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::SchedulerConfig;
@@ -37,8 +37,8 @@ use tracing::{debug, info, instrument, warn};
     level = "debug",
     err(Debug)
 )]
-pub async fn fetch_lfr_to_dispatch<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn fetch_lfr_to_dispatch<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     at: &AtTime,
     config: &SchedulerConfig,
     saturated: &mut bool,
@@ -76,8 +76,8 @@ pub async fn fetch_lfr_to_dispatch<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-pub async fn fetch_pfrs_to_dispatch<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn fetch_pfrs_to_dispatch<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     config: &SchedulerConfig,
     saturated: &mut bool,
 ) -> Result<Vec<PhysicalFunctionRunDB>, TdError> {
@@ -112,8 +112,8 @@ pub async fn fetch_pfrs_to_dispatch<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-pub async fn materialize_replay_dispatch<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn materialize_replay_dispatch<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     pfrs: &[PhysicalFunctionRunDB],
 ) -> Result<Vec<MintedDispatch>, TdError> {
     if pfrs.is_empty() {
@@ -191,8 +191,8 @@ pub async fn materialize_replay_dispatch<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-pub async fn enrich_minted_dispatch<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn enrich_minted_dispatch<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     minted: &[MintedDispatch],
 ) -> Result<Vec<PhysicalFunctionRunToExecute>, TdError> {
     if minted.is_empty() {
@@ -254,11 +254,14 @@ pub async fn put_worker_messages(bridge: &BridgeProviderHandle, messages: Worker
     level = "debug",
     err(Debug)
 )]
-pub async fn create_locked_function_runner_workers_start_request<S: SeesProjectRows>(
+pub async fn create_locked_function_runner_workers_start_request<
+    S: SeesProjectRows,
+    M: AccessMode,
+>(
     orchestrator: Orchestrator,
     storage: &Storage,
     internal_api: &InternalApi,
-    conn: &mut DomainConnection<Apiserver, S>,
+    conn: &mut DomainConnection<Apiserver, S, M>,
     at: &AtTime,
     physical_function_runs: &Vec<PhysicalFunctionRunToExecute>,
     messages: &mut WorkerMessages,

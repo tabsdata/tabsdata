@@ -12,8 +12,7 @@ use std::ops::Deref;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::session_provider::Sessions;
-use td_common::provider::Provider;
-use td_database::access::{DbPool, DbScope, Global, Grant};
+use td_database::access::{AccessMode, DbPool, DbScope, Global, Grant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::auth::{PasswordChange, SessionInvalidateDB};
@@ -69,8 +68,8 @@ async fn password_change(
     Ok(())
 }
 
-async fn authenticate<S: DbScope>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn authenticate<S: DbScope, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     request: &PasswordChange,
 ) -> Result<UserDB, TdError> {
     let user: UserDB = conn.fetch_one(&request.name).await?;

@@ -13,7 +13,9 @@ use td_bridge::messaging::{
     OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue,
 };
 use td_common::worker::{MessageAction, RequestMessagePayload, WorkerName};
-use td_database::access::{AcrossProjects, DbPool, Grant, InProject, SeesProjectRows};
+use td_database::access::{
+    AcrossProjects, DbPool, Grant, InProject, SeesProjectRows, WriteMode, XW,
+};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
@@ -127,7 +129,7 @@ async fn messages_by_project(
 
 async fn unlock_workers_request_infallible(
     message_queue: &dyn OrchestratorMessageQueue,
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     messages: Vec<OrchestratorMessage<Value>>,
 ) -> Vec<OrchestratorMessage<Value>> {
     let message_count = messages.len();
@@ -210,7 +212,7 @@ async fn unlock_workers_request_infallible(
     err(Debug)
 )]
 pub async fn unlock_function_runner_worker(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -308,7 +310,7 @@ impl DispatchBranch {
 }
 
 async fn commit_unlock(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: &WorkerId,
@@ -358,7 +360,7 @@ async fn commit_unlock(
 }
 
 async fn rollback_initial_function_run(
-    conn: &mut DomainConnection<Apiserver, InProject>,
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
     message_id: &WorkerId,
     lfr_id: &LogicalFunctionRunId,
 ) {
@@ -402,8 +404,8 @@ async fn rollback_initial_function_run(
     level = "debug",
     err(Debug)
 )]
-pub async fn unlock_cron_trigger_workers<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn unlock_cron_trigger_workers<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -427,8 +429,8 @@ pub async fn unlock_cron_trigger_workers<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-pub async fn unlock_stage_trigger_workers<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn unlock_stage_trigger_workers<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -445,8 +447,8 @@ pub async fn unlock_stage_trigger_workers<S: SeesProjectRows>(
     .await
 }
 
-async fn unlock_simple_worker<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn unlock_simple_worker<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
