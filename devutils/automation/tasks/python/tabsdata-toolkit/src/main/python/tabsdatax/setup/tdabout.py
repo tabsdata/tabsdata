@@ -19,6 +19,8 @@ import yaml
 from archspec import cpu
 from setuptools import build_meta as _backend
 
+from tabsdatax.setup._dirtiness import repository_dirty, strict_dirtiness
+
 
 # noinspection DuplicatedCode
 def _root_folder() -> Path:
@@ -87,7 +89,7 @@ def _capture_build_information():
 
     return {
         "build_date_utc": build_time_utc.strftime("%Y-%m-%d"),
-        "build_timestamp_utc": build_time_utc.isoformat(),
+        "build_timestamp_utc": build_time_utc.strftime("%Y-%m-%dT%H:%M:%S.%f000Z"),
         "build_date_local": build_time_local.strftime("%Y-%m-%d"),
         "build_timestamp_local": build_time_local.isoformat(),
         "build_timezone_name": timezone_name,
@@ -186,6 +188,15 @@ def _capture_node_information():
     return {"node_version": version}
 
 
+def memory_with_suffix(memory: int) -> str:
+    units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"]
+    count = 0
+    while memory >= 1024 and count < len(units) - 1:
+        memory //= 1024
+        count += 1
+    return f"{memory} {units[count]}"
+
+
 # noinspection PyBroadException
 def _capture_system_information():  # noqa: C901
     try:
@@ -206,6 +217,15 @@ def _capture_system_information():  # noqa: C901
     try:
         if os_name == "Darwin":
             os_version = f"macOS {platform.mac_ver()[0]}"
+        elif os_name == "Linux":
+            os_release = platform.freedesktop_os_release()
+            distribution = os_release.get("NAME", "unknown")
+            distribution_version = os_release.get("VERSION_ID")
+            os_name = distribution
+            if distribution_version:
+                os_version = f"Linux ({distribution} {distribution_version})"
+            else:
+                os_version = f"Linux ({distribution})"
         else:
             os_version = platform.release()
     except Exception:
@@ -230,15 +250,14 @@ def _capture_system_information():  # noqa: C901
         cpu_count = "-"
 
     try:
-        cpu_freq = psutil.cpu_freq()
-        cpu_frequency = str(int(cpu_freq.current))
+        frequencies = psutil.cpu_freq(percpu=True) or []
+        cpu_frequency_mhz = int(frequencies[0].current) if frequencies else 0
+        cpu_frequency = str(cpu_frequency_mhz) if cpu_frequency_mhz > 0 else "-"
     except Exception:
         cpu_frequency = "-"
 
     try:
-        total_memory_bytes = psutil.virtual_memory().total
-        total_memory_gib = total_memory_bytes / (1024**3)
-        total_memory = f"{total_memory_gib:.0f} GiB"
+        total_memory = memory_with_suffix(psutil.virtual_memory().total)
     except Exception:
         total_memory = "-"
 
@@ -266,18 +285,32 @@ def _get_solution_path():
     return current
 
 
-def _capture_git_information(repository_path):
+def commit_instant_of(repository_path_str):
+    timestamp = _run_git(["log", "-1", "--format=%ct"], cwd=repository_path_str)
+    try:
+        return datetime.fromtimestamp(int(timestamp), timezone.utc)
+    except ValueError:
+        return None
+
+
+def _capture_git_information(repository_name, repository_path, strict):
     if not repository_path or not Path(repository_path).exists():
         return None
     repository_path_str = str(repository_path)
     git_dir = Path(repository_path) / ".git"
     if not git_dir.exists():
         return None
+    tag = _run_git(
+        ["describe", "--tags", "--exact-match", "HEAD"],
+        cwd=repository_path_str,
+    )
+    commit_instant = commit_instant_of(repository_path_str)
+    dirty = repository_dirty(repository_name, Path(repository_path), strict)
+    describe = _run_git(["describe", "--always", "--tags"], cwd=repository_path_str)
+    if dirty == "true" and describe != "Undefined":
+        describe = f"{describe}-dirty"
     return {
-        "tag": _run_git(
-            ["describe", "--tags", "--exact-match", "HEAD"],
-            cwd=repository_path_str,
-        ),
+        "tag": "-" if tag == "Undefined" else tag,
         "branch": _run_git(
             ["rev-parse", "--abbrev-ref", "HEAD"],
             cwd=repository_path_str,
@@ -290,13 +323,13 @@ def _capture_git_information(repository_path):
             ["rev-parse", "HEAD"],
             cwd=repository_path_str,
         ),
-        "commit_date": _run_git(
-            ["log", "-1", "--format=%cI"],
-            cwd=repository_path_str,
+        "commit_date": (
+            commit_instant.strftime("%Y-%m-%d") if commit_instant else "Undefined"
         ),
-        "commit_timestamp": _run_git(
-            ["log", "-1", "--format=%cI"],
-            cwd=repository_path_str,
+        "commit_timestamp": (
+            commit_instant.strftime("%Y-%m-%dT%H:%M:%S.000000000Z")
+            if commit_instant
+            else "Undefined"
         ),
         "commit_author_name": _run_git(
             ["log", "-1", "--format=%an"],
@@ -314,19 +347,9 @@ def _capture_git_information(repository_path):
             ["rev-list", "--count", "HEAD"],
             cwd=repository_path_str,
         ),
-        "describe": _run_git(
-            ["describe", "--always", "--dirty", "--tags"],
-            cwd=repository_path_str,
-        ),
-        "dirty": _capture_git_dirty(repository_path_str),
+        "describe": describe,
+        "dirty": dirty,
     }
-
-
-def _capture_git_dirty(repository_path_str):
-    status = _run_git(["status", "--porcelain"], cwd=repository_path_str)
-    if status == "Undefined":
-        return "Undefined"
-    return "true" if status else "false"
 
 
 def _render_build(root_path):
@@ -345,6 +368,7 @@ def _render_build(root_path):
             "X-Build-Timezone-Offset": build_metadata.get("build_timezone_offset", "?"),
         }
         solution_path = _get_solution_path()
+        strict = strict_dirtiness()
         repositories = _load_repositories(root_path)
         for (
             repository_name,
@@ -353,11 +377,15 @@ def _render_build(root_path):
             repository_prefix,
         ) in repositories:
             repository_path = solution_path / repository_name
-            git_metadata = _capture_git_information(repository_path)
+            git_metadata = _capture_git_information(
+                repository_name, repository_path, strict
+            )
             if git_metadata is None and alternate_repository_name is not None:
                 # noinspection PyTypeChecker
                 alternate_repository_path = solution_path / alternate_repository_name
-                git_metadata = _capture_git_information(alternate_repository_path)
+                git_metadata = _capture_git_information(
+                    repository_name, alternate_repository_path, strict
+                )
             if git_metadata is None:
                 metadata[f"X-Git-{repository_prefix}-Exists"] = "false"
                 continue

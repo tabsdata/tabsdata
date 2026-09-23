@@ -2,7 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use anyhow::Result;
+use crate::dirtiness::{TD_CHECK_DIRTINESS, changed_tracked_files, strict_dirtiness};
+use anyhow::{Result, bail};
 use chrono::Local;
 use serde::Deserialize;
 use std::env;
@@ -88,26 +89,31 @@ macro_rules! invoke_add_git_sections {
     };
 }
 
-fn changed_tracked_files(repository_path: &Path) -> Vec<String> {
-    std::process::Command::new("git")
-        .arg("-C")
-        .arg(repository_path)
-        .arg("status")
-        .arg("--porcelain")
-        .arg("--untracked-files=no")
-        .output()
-        .ok()
-        .filter(|output| output.status.success())
-        .and_then(|output| String::from_utf8(output.stdout).ok())
-        .map(|status| {
-            status
-                .lines()
-                .map(str::trim_end)
-                .filter(|line| !line.is_empty())
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
+fn repository_dirty(repository_name: &str, repository_path: &Path, strict: bool) -> Result<String> {
+    if !strict {
+        return Ok(changed_tracked_files(repository_path, false)
+            .map(|changes| (!changes.is_empty()).to_string())
+            .unwrap_or_else(|_| "-".to_string()));
+    }
+    let changes = changed_tracked_files(repository_path, true)?;
+    if !changes.is_empty() {
+        let listing = changes
+            .iter()
+            .map(|change| format!("   {}", change))
+            .collect::<Vec<_>>()
+            .join("\n");
+        bail!(
+            "Repository '{}' at '{}' has {} modified tracked file(s). \
+             GA builds (and builds with {}=true) must not modify tracked files; \
+             review which step changed them:\n{}",
+            repository_name,
+            repository_path.display(),
+            changes.len(),
+            TD_CHECK_DIRTINESS,
+            listing
+        );
+    }
+    Ok("false".to_string())
 }
 
 pub struct Stamping;
@@ -188,6 +194,10 @@ impl Stamper for Stamping {
             return Ok(());
         }
         let on_ga = env::var(TD_ON_GA).unwrap_or_default().trim() == "true";
+        let strict = strict_dirtiness(on_ga);
+        println!("cargo:rerun-if-env-changed={}", TD_ON_GA);
+        println!("cargo:rerun-if-env-changed={}", TD_CHECK_DIRTINESS);
+        println!("cargo:rustc-env=VERGEN_TD_ON_GA={}", on_ga);
         let solution: PathBuf = Self::solution();
 
         let build = BuildBuilder::default()
@@ -242,7 +252,6 @@ impl Stamper for Stamping {
                 .commit_message(true)
                 .commit_count(true)
                 .describe(true, false, None)
-                .dirty(false)
                 .build()?;
             Emitter::default().add_instructions(&gix)?.emit_and_set()?;
             let git_envs = [
@@ -256,7 +265,6 @@ impl Stamper for Stamping {
                 "VERGEN_GIT_COMMIT_MESSAGE",
                 "VERGEN_GIT_COMMIT_COUNT",
                 "VERGEN_GIT_DESCRIBE",
-                "VERGEN_GIT_DIRTY",
             ];
             let long_hash: String;
             let tag: String;
@@ -276,16 +284,11 @@ impl Stamper for Stamping {
                                 .tags()
                                 .ok()?
                                 .filter_map(Result::ok)
-                                .find(|tag_ref| {
-                                    tag_ref
-                                        .id()
-                                        .object()
-                                        .ok()
-                                        .and_then(|obj| obj.try_into_commit().ok())
-                                        .map(|commit| commit.id == head_id)
-                                        .unwrap_or(false)
+                                .find_map(|mut tag_ref| {
+                                    let commit_id = tag_ref.peel_to_id().ok()?;
+                                    (commit_id == head_id)
+                                        .then(|| tag_ref.name().shorten().to_string())
                                 })
-                                .and_then(|tag_ref| tag_ref.name().shorten().to_string().into())
                         })
                         .unwrap_or_else(|| "-".to_string());
                 }
@@ -302,21 +305,18 @@ impl Stamper for Stamping {
                 "cargo:rustc-env=VERGEN_GIT_{}_TAG={}",
                 repository_prefix, tag
             );
-            if on_ga {
+            let dirty = repository_dirty(&repository.name, &repository_path, strict)?;
+            if dirty == "true"
+                && let Ok(describe) = env::var("VERGEN_GIT_DESCRIBE")
+            {
                 unsafe {
-                    env::set_var("VERGEN_GIT_DIRTY", "false");
-                }
-            } else if env::var("VERGEN_GIT_DIRTY").unwrap_or_default().trim() == "true" {
-                let changed_files = changed_tracked_files(&repository_path);
-                println!(
-                    "cargo:warning=Repository '{}' is dirty: {} tracked file(s) changed",
-                    repository.name,
-                    changed_files.len()
-                );
-                for changed_file in &changed_files {
-                    println!("cargo:warning=   {} | {}", repository.name, changed_file);
+                    env::set_var("VERGEN_GIT_DESCRIBE", format!("{}-dirty", describe));
                 }
             }
+            println!(
+                "cargo:rustc-env=VERGEN_GIT_{}_DIRTY={}",
+                repository_prefix, dirty
+            );
             for env_name in &git_envs {
                 if let Ok(env_value) = env::var(env_name) {
                     let prefixed_name = env_name
@@ -400,6 +400,18 @@ impl Stamper for Stamping {
             env::var("VERGEN_SYSINFO_CPU_BRAND").unwrap_or_else(|_| "?".to_string())
         };
         println!("cargo:rustc-env=VERGEN_SYSINFO_CPU_NAME={}", cpu_name);
+
+        let cpu_frequency = sys
+            .cpus()
+            .first()
+            .map(|cpu| cpu.frequency())
+            .filter(|frequency| *frequency > 0)
+            .map(|frequency| frequency.to_string())
+            .unwrap_or_else(|| "-".to_string());
+        println!(
+            "cargo:rustc-env=VERGEN_SYSINFO_CPU_FREQUENCY={}",
+            cpu_frequency
+        );
 
         let now_local = Local::now();
         let timezone_offset = now_local.offset().to_string();

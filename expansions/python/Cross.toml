@@ -22,6 +22,8 @@ pre-build = [
     "echo Installing dependencies...",
     "apt-get install -y curl",
     "apt-get install -y clang",
+    "apt-get install -y git",
+    "git config --system --add safe.directory '*'",
     "apt-get install -y libssl3t64",
     "apt-get install -y libgssapi-krb5-2",
     "getent passwd 1001 || echo 'runner:x:1001:1001::/home/runner:/bin/bash' >> /etc/passwd",
@@ -63,6 +65,7 @@ passthrough = [
     "TD_CROSS_BUILD=true",
     # >>> passthrough:MAKE:BEGIN >>>
     "TD_ON_GA",
+    "TD_CHECK_DIRTINESS",
     "CARGO_TERM_COLOR",
     "RUST_BACKTRACE",
     "RUST_LOG",
@@ -217,6 +220,8 @@ pre-build = [
     "echo Installing dependencies...",
     "apt-get install -y curl",
     "apt-get install -y clang",
+    "apt-get install -y git",
+    "git config --system --add safe.directory '*'",
     "apt-get install -y libssl3t64",
     "apt-get install -y libgssapi-krb5-2",
     "getent passwd 1001 || echo 'runner:x:1001:1001::/home/runner:/bin/bash' >> /etc/passwd",
@@ -258,6 +263,7 @@ passthrough = [
     "TD_CROSS_BUILD=true",
     # >>> passthrough:MAKE:BEGIN >>>
     "TD_ON_GA",
+    "TD_CHECK_DIRTINESS",
     "CARGO_TERM_COLOR",
     "RUST_BACKTRACE",
     "RUST_LOG",

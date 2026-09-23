@@ -7,5 +7,8 @@ use td_build::stamper::{Stamper, Stamping};
 
 pub fn boot() {
     Customization::customize();
-    Stamping::stamp().unwrap();
+    if let Err(error) = Stamping::stamp() {
+        eprintln!("{error:#}");
+        std::process::exit(1);
+    }
 }

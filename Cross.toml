@@ -10,6 +10,8 @@ image = "ghcr.io/cross-rs/x86_64-unknown-linux-musl:main"
 pre-build = [
     "apt-get update",
     "apt-get install -y clang",
+    "apt-get install -y git",
+    "git config --system --add safe.directory '*'",
     "apt-get install -y libssl3t64",
     "apt-get install -y libgssapi-krb5-2",
     "getent passwd 1001 || echo 'runner:x:1001:1001::/home/runner:/bin/bash' >> /etc/passwd",
@@ -30,6 +32,7 @@ passthrough = [
     "GITHUB_TOKEN",
     # >>> passthrough:MAKE:BEGIN >>>
     "TD_ON_GA",
+    "TD_CHECK_DIRTINESS",
     "CARGO_TERM_COLOR",
     "RUST_BACKTRACE",
     "RUST_LOG",
@@ -172,6 +175,8 @@ image = "ghcr.io/cross-rs/aarch64-unknown-linux-musl:main"
 pre-build = [
     "apt-get update",
     "apt-get install -y clang",
+    "apt-get install -y git",
+    "git config --system --add safe.directory '*'",
     "apt-get install -y libssl3t64",
     "apt-get install -y libgssapi-krb5-2",
     "getent passwd 1001 || echo 'runner:x:1001:1001::/home/runner:/bin/bash' >> /etc/passwd",
@@ -192,6 +197,7 @@ passthrough = [
     "GITHUB_TOKEN",
     # >>> passthrough:MAKE:BEGIN >>>
     "TD_ON_GA",
+    "TD_CHECK_DIRTINESS",
     "CARGO_TERM_COLOR",
     "RUST_BACKTRACE",
     "RUST_LOG",

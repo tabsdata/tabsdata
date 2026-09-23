@@ -9,5 +9,8 @@ use td_build::verifier::{Verification, Verifier};
 pub fn boot() {
     Customization::customize();
     Verification::verify();
-    Stamping::stamp().unwrap();
+    if let Err(error) = Stamping::stamp() {
+        eprintln!("{error:#}");
+        std::process::exit(1);
+    }
 }
