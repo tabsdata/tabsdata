@@ -2,7 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::update_status::update_function_run_status;
+use crate::execution::update_status::{
+    abandon_requested_physical_runs, update_function_run_status,
+};
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -46,6 +48,7 @@ async fn transaction_cancel(
     let conn = trx.get(grant);
 
     let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&transaction_id).await?;
+    abandon_requested_physical_runs(conn, &ctx.time, &lfrs).await?;
     update_function_run_status(msgs, conn, &lfrs, LogicalFunctionRunStatus::Canceled).await?;
     trx.commit().await?;
 

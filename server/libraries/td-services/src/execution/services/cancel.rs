@@ -2,7 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::update_status::update_function_run_status;
+use crate::execution::update_status::{
+    abandon_requested_physical_runs, update_function_run_status,
+};
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -47,6 +49,8 @@ async fn execution_cancel(
 
     let conn = trx.get(grant);
     let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&execution_id).await?;
+    // The attempts of Requested runs have no worker to report their end.
+    abandon_requested_physical_runs(conn, &ctx.time, &lfrs).await?;
     update_function_run_status(msgs, conn, &lfrs, LogicalFunctionRunStatus::Canceled).await?;
     trx.commit().await?;
 
@@ -66,11 +70,13 @@ mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::types::basic::ExecutionId;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
         ProjectId, TableNameDto, TransactionStatus, UserId,
     };
+    use td_objects::types::basic::{AtTime, PhysicalFunctionRunStatus};
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::{SeedEntry, begin_exclusive, seed_run};
 
@@ -100,6 +106,49 @@ mod tests {
             }
         })
         .await
+    }
+
+    #[td_test::test(db)]
+    async fn test_cancel_ends_the_attempt_nothing_will_report(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let run = seed_run(&db, p.id).await?;
+        let lfrs: Vec<LogicalFunctionRunDB> = db.scoped(p.id).fetch_all(&run.execution).await?;
+        let attempt: PhysicalFunctionRunDB =
+            db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
+        let mut trx = begin_exclusive(&db, p.id).await?;
+        let conn = trx.get(Grant::asserted("cancel test"));
+        conn.logical_runs()
+            .set_status(
+                &[lfrs[0].base.id.clone()],
+                LogicalFunctionRunStatus::Requested,
+            )
+            .await?;
+        conn.physical_runs()
+            .dispatched(std::slice::from_ref(&attempt.base.id), &AtTime::now())
+            .await?;
+        trx.commit().await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
+            ExecutionParam {
+                execution: run.execution.clone(),
+            },
+            (),
+        );
+        Services::with_defaults(db.clone())
+            .execution_cancel(request)
+            .await?;
+
+        let attempt: PhysicalFunctionRunDB =
+            db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
+        assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Failed);
+        assert!(attempt.base.ended_on.is_some());
+        let execution: ExecutionDB = db.scoped(p.id).fetch_one(&run.execution).await?;
+        assert_eq!(execution.status, ExecutionStatus::Finished);
+        assert_eq!(
+            execution.ended_on.as_deref(),
+            attempt.base.ended_on.as_deref()
+        );
+        Ok(())
     }
 
     #[td_test::test(db)]
