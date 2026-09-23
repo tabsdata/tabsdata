@@ -208,6 +208,7 @@ known-first-party = [
     "tabsdata",
     "tabsdatak",
     "test_tabsdata",
+    "test_tabsdata_ag",
     "test_tabsdata_agent",
     "test_tabsdata_bigquery",
     "test_tabsdata_cdc_common",
