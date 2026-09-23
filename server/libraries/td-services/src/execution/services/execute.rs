@@ -81,7 +81,7 @@ pub(crate) mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionParam;
     use td_objects::dxo::execution::{
-        ExecutionDB, ExecutionDBWithStatus, ExecutionResponse, ResolvedVersionResponse,
+        ExecutionDB, ExecutionDBWithNames, ExecutionResponse, ResolvedVersionResponse,
     };
     use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames, FunctionRegister};
     use td_objects::dxo::graph::GraphEdge;
@@ -91,7 +91,7 @@ pub(crate) mod tests {
         LogicalTableDataVersionDB,
     };
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
-    use td_objects::dxo::transaction::TransactionDBWithStatus;
+    use td_objects::dxo::transaction::TransactionDBWithNames;
     use td_objects::types::basic::AtTime;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
@@ -874,12 +874,12 @@ pub(crate) mod tests {
             created_tables.sort();
             assert_eq!(expected_created_tables, created_tables);
 
-            let executions: Vec<ExecutionDBWithStatus> =
-                db.fetch_all::<ExecutionDBWithStatus>(()).await?;
+            let executions: Vec<ExecutionDBWithNames> =
+                db.fetch_all::<ExecutionDBWithNames>(()).await?;
             assert_eq!(executions.len(), 1);
-            assert_eq!(executions[0].base.base.base.id, response.id);
-            assert_eq!(executions[0].base.base.base.name, response.name);
-            assert_eq!(executions[0].base.base.base.collection_id, collection_0.id);
+            assert_eq!(executions[0].base.base.id, response.id);
+            assert_eq!(executions[0].base.base.name, response.name);
+            assert_eq!(executions[0].base.base.collection_id, collection_0.id);
             // The status views aggregate the plan's runs; the plan's shape is
             // the edition's business and asserted in its te-execution tests.
             let runs: Vec<LogicalFunctionRunDB> = db.fetch_all::<LogicalFunctionRunDB>(()).await?;
@@ -891,10 +891,10 @@ pub(crate) mod tests {
             } else {
                 ExecutionStatus::Running
             };
-            assert_eq!(executions[0].status, expected);
+            assert_eq!(executions[0].base.status, expected);
 
-            let transactions: Vec<TransactionDBWithStatus> =
-                db.fetch_all::<TransactionDBWithStatus>(()).await?;
+            let transactions: Vec<TransactionDBWithNames> =
+                db.fetch_all::<TransactionDBWithNames>(()).await?;
             let transaction_ids: HashSet<_> =
                 runs.iter().map(|run| &run.base.transaction_id).collect();
             assert_eq!(transactions.len(), transaction_ids.len());
@@ -909,7 +909,7 @@ pub(crate) mod tests {
                 } else {
                     TransactionStatus::Stalled
                 };
-                assert_eq!(transaction.status, expected);
+                assert_eq!(transaction.base.status, expected);
             }
 
             // Concrete FRs/TDVs are minted at dispatch, not plan-build.
@@ -1198,6 +1198,15 @@ pub(crate) mod tests {
             .await?;
         assert_eq!(lfrs.len(), 1);
         assert_eq!(lfrs[0].base.status, expected_initial_status);
+        let execution: ExecutionDB = db
+            .scoped(project_id)
+            .fetch_one(&lfrs[0].base.execution_id)
+            .await?;
+        let expected_execution_status = match expected_initial_status {
+            LogicalFunctionRunStatus::OnHold => ExecutionStatus::Stalled,
+            _ => ExecutionStatus::Scheduled,
+        };
+        assert_eq!(execution.status, expected_execution_status);
         Ok(())
     }
 

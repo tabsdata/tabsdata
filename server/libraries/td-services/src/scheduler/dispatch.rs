@@ -13,11 +13,10 @@ use td_bridge::messaging::{
     OrchestratorMessage, OrchestratorMessagePayload, OrchestratorMessageQueue,
 };
 use td_common::worker::{MessageAction, RequestMessagePayload, WorkerName};
-use td_database::access::{AcrossProjects, DbPool, Grant, SeesProjectRows};
+use td_database::access::{AcrossProjects, DbPool, Grant, InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::and;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
+use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::{WorkerDB, WorkerMessageStatusUpdateDB};
 use td_objects::dxo::yaml::function::FunctionInput;
@@ -126,9 +125,9 @@ async fn messages_by_project(
     Ok((grouped.into_iter().collect(), unresolved))
 }
 
-async fn unlock_workers_request_infallible<S: SeesProjectRows>(
+async fn unlock_workers_request_infallible(
     message_queue: &dyn OrchestratorMessageQueue,
-    conn: &mut DomainConnection<Apiserver, S>,
+    conn: &mut DomainConnection<Apiserver, InProject>,
     messages: Vec<OrchestratorMessage<Value>>,
 ) -> Vec<OrchestratorMessage<Value>> {
     let message_count = messages.len();
@@ -210,8 +209,8 @@ async fn unlock_workers_request_infallible<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-pub async fn unlock_function_runner_worker<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn unlock_function_runner_worker(
+    conn: &mut DomainConnection<Apiserver, InProject>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: WorkerId,
@@ -308,8 +307,8 @@ impl DispatchBranch {
     }
 }
 
-async fn commit_unlock<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn commit_unlock(
+    conn: &mut DomainConnection<Apiserver, InProject>,
     message_queue: &dyn OrchestratorMessageQueue,
     message: &OrchestratorMessage<Value>,
     worker_id: &WorkerId,
@@ -358,26 +357,30 @@ async fn commit_unlock<S: SeesProjectRows>(
     }
 }
 
-async fn rollback_initial_function_run<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+async fn rollback_initial_function_run(
+    conn: &mut DomainConnection<Apiserver, InProject>,
     message_id: &WorkerId,
     lfr_id: &LogicalFunctionRunId,
 ) {
     // Conditional on `Requested`: the read feeding this was unlocked, and
     // forcing a run that has since moved on back to Scheduled would re-run it.
-    let update = LogicalFunctionRunStatusUpdateDB::scheduled();
     match conn
-        .update(&update, and!(lfr_id, LogicalFunctionRunStatus::Requested))
+        .logical_runs()
+        .set_status_if(
+            lfr_id,
+            LogicalFunctionRunStatus::Requested,
+            LogicalFunctionRunStatus::Scheduled,
+        )
         .await
     {
-        Ok(result) if result.rows_affected() == 0 => {
+        Ok(false) => {
             warn!(
                 worker_id = %message_id,
                 lfr_id = %lfr_id,
                 "dispatch: LFR no longer Requested; nothing to roll back"
             );
         }
-        Ok(_) => {
+        Ok(true) => {
             error!(
                 "Rolled back LFR status to Scheduled for locked message [{message_id}] for LFR [{lfr_id}] in DB"
             );

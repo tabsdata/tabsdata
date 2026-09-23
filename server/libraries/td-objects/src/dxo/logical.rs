@@ -9,7 +9,6 @@
 //! versions on `physical_function_runs` / `physical_table_data_versions`,
 //! the newest being the current one.
 
-use crate::dxo::worker::WorkerExecutionUpdate;
 use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CollectionName, CollectionWhenDeleted, ColumnCount,
     DataChanged, DependencyPos, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName,
@@ -204,44 +203,6 @@ impl FromDao for FunctionRun {
 )]
 pub struct LogicalFunctionRunStatusUpdateDB {
     pub status: LogicalFunctionRunStatus,
-}
-
-impl LogicalFunctionRunStatusUpdateDB {
-    pub fn scheduled() -> Self {
-        Self {
-            status: LogicalFunctionRunStatus::Scheduled,
-        }
-    }
-
-    pub fn requested() -> Self {
-        Self {
-            status: LogicalFunctionRunStatus::Requested,
-        }
-    }
-
-    pub fn recover() -> Self {
-        Self {
-            status: LogicalFunctionRunStatus::ReScheduled,
-        }
-    }
-
-    pub fn failed() -> Self {
-        Self {
-            status: LogicalFunctionRunStatus::Failed,
-        }
-    }
-
-    pub fn cancel() -> Self {
-        Self {
-            status: LogicalFunctionRunStatus::Canceled,
-        }
-    }
-
-    pub fn committed() -> Self {
-        Self {
-            status: LogicalFunctionRunStatus::Committed,
-        }
-    }
 }
 
 #[ta_objects::Dao]
@@ -480,15 +441,6 @@ pub struct LogicalFunctionRunInputDB {
     pub base: LogicalFunctionRunInputInsertDB,
     pub project_id: ProjectId,
 }
-impl TryFrom<&WorkerExecutionUpdate> for LogicalFunctionRunStatusUpdateDB {
-    type Error = TdError;
-    fn try_from(src: &WorkerExecutionUpdate) -> Result<Self, Self::Error> {
-        Ok(LogicalFunctionRunStatusUpdateDB {
-            status: src.status.clone().try_into()?,
-        })
-    }
-}
-
 #[ta_objects::UrlParam]
 pub struct LogicalFunctionRunParam {
     pub logical_function_run: LogicalFunctionRunId,

@@ -343,6 +343,22 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
+        name: "lfr::set_status",
+        covers: &["LogicalRuns::set_status", "LogicalRuns::set_status_if"],
+        family: Family::Default,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "pfr::reported",
+        covers: &[
+            "PhysicalRuns::reported",
+            "PhysicalRuns::dispatched",
+            "PhysicalRuns::failed",
+        ],
+        family: Family::Latest,
+        status: Status::Implemented,
+    },
+    LoadCase {
         name: "pfr::to_dispatch",
         covers: &["PhysicalRuns::to_dispatch"],
         family: Family::Chain,

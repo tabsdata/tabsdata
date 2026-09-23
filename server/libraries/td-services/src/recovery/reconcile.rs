@@ -19,7 +19,7 @@ use td_execution::RecoveryConfig;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithBundleBasePath};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::logical::LogicalFunctionRunInsertDB;
-use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerUpdateDB};
 use td_objects::or;
 use td_objects::types::basic::{
@@ -27,7 +27,6 @@ use td_objects::types::basic::{
     PhysicalFunctionRunStatus, ProjectId, WorkerId, WorkerStatus,
 };
 use td_queries::Queries;
-use td_queries::metrics_facts::attempts_ended;
 use td_storage::Storage;
 use tracing::{debug, instrument, warn};
 
@@ -697,9 +696,7 @@ pub async fn fail_recovered_attempts(
     if pfr_ids.is_empty() {
         return Ok(());
     }
-    let update = PhysicalFunctionRunUpdateDB::failed_at(at)?;
-    conn.scd2().chunked().update(&update, &pfr_ids).await?;
-    attempts_ended(conn, &pfr_ids).await?;
+    conn.physical_runs().failed(&pfr_ids, at).await?;
     Ok(())
 }
 

@@ -4,12 +4,12 @@
 
 use crate::Queries;
 use crate::daos::metrics::write::{attempts_ended, runs_reattempted, runs_status_changed};
-use crate::test_utils::{SeedEntry, derive_metrics_facts};
+use crate::test_utils::{SeedEntry, begin_exclusive, derive_metrics_facts};
 use std::collections::HashMap;
 use ta_objects::and;
 use td_database::access::LockInstant;
-use td_database::access::{AcrossProjects, DbPool, Grant, InProject};
-use td_database::domain::{Apiserver, DomainConnection, DomainPools};
+use td_database::access::{Grant, InProject};
+use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDeleteDB};
@@ -322,15 +322,11 @@ async fn stamp_status_at(
     Ok(())
 }
 
-fn pools(db: &TdPool) -> DbPool<AcrossProjects> {
-    DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects)
-}
-
 async fn in_project<F>(db: &TdPool, project: ProjectId, body: F) -> Result<(), TdError>
 where
     F: AsyncFnOnce(&mut DomainConnection<Apiserver, InProject>) -> Result<(), TdError>,
 {
-    let mut trx = pools(db).in_project(&project).begin_exclusive().await?;
+    let mut trx = begin_exclusive(db, project).await?;
     body(trx.get(Grant::asserted("metrics dao test"))).await?;
     trx.commit().await?;
     Ok(())

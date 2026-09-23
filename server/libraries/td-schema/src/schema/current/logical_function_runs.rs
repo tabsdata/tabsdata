@@ -9,14 +9,10 @@
 //! flow-control source of truth (sticky-Committed) — distinct from the
 //! per-attempt audit `status` on `physical_function_runs`.
 //!
-//! This file also owns the cross-cutting views that drive off LFR:
-//! `function_runs__with_names` (LFR + the attempt whose binding is open)
-//! and the dialect-specific `global_status_summary` / `execution_status_summary`
-//! / `transaction_status_summary` views (LFR-driven aggregations).
 
 use sea_query::{
     Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Func, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
-    Query, SubQueryStatement, Table, TableCreateStatement,
+    Query, SimpleExpr, SubQueryStatement, Table, TableCreateStatement,
 };
 
 use super::collections::{Collections, CollectionsResolved};
@@ -38,17 +34,14 @@ use crate::schema::sql::{id_column, logical_id_column};
 #[iden = "function_runs__with_names"]
 pub struct FunctionRunsWithNames;
 
-/// View names of the LFR-driven status summary views. Declared here (with the
-/// views' producer) and consumed by `executions__with_status` /
-/// `transactions__with_status` in `with_status_views.rs`.
-#[derive(Iden, Clone, Copy)]
-pub struct ExecutionStatusSummary;
+/// A run in one of these never leaves it; a parent all of whose runs are in
+/// the set has ended.
+pub(super) const RUN_TERMINALS: &[&str] = &["C", "X", "Y"];
 
-#[derive(Iden, Clone, Copy)]
-pub struct TransactionStatusSummary;
+pub(super) const RUN_LADDER_FALLBACK: &str = "U";
 
-/// Alias for the per-status count derived table inside the status-summary
-/// scalar subqueries; the dialect JSON aggregate reads its `status`/`count`
+/// Alias for the per-status count derived table inside the status-count
+/// scalar subquery; the dialect JSON aggregate reads its `status`/`count`
 /// columns back out through this name.
 #[derive(Iden, Clone, Copy)]
 struct InnerFr;
@@ -271,9 +264,7 @@ impl Entity for Defs {
                 .to_owned(),
         );
 
-        let mut views = vec![function_runs_with_names];
-        views.extend(status_summary_views());
-        views
+        vec![function_runs_with_names]
     }
 
     fn create_db_triggers(&self) -> Vec<Derived> {
@@ -282,123 +273,27 @@ impl Entity for Defs {
                 name: format!("{}__sticky_terminals", LogicalFunctionRuns::Table.to_string()),
                 source_table: LogicalFunctionRuns::Table.into_iden(),
                 status_col: LogicalFunctionRuns::Status.into_iden(),
-                terminal_values: &["C", "X", "Y"],
+                terminal_values: RUN_TERMINALS,
             }
             .derived(),
         ]
     }
 }
 
-/// Status summary views that use dialect-specific JSON aggregation.
-/// The CASE/COUNT expressions and the scalar subquery wrapping are all
-/// sea-query builders; only the JSON aggregate function itself stays as
-/// `Expr::cust()`, because its name is inherently dialect-specific.
+/// The per-status run counts of one parent, as a scalar subquery yielding a
+/// JSON object. Not filterable, so the listing views evaluate it for the rows
+/// of the page only — the counts stay derived where materializing them would
+/// buy nothing.
 ///
-/// Status lives on `logical_function_runs.status`; aggregation rows up
-/// from LFRs (one per logical run) rather than FRs (per-attempt audit).
-fn status_summary_views() -> Vec<ViewDef> {
-    let count_status_in = |statuses: &[&str]| {
-        Expr::expr(Func::count(Expr::expr(Expr::case(
-            Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)).is_in(statuses.iter().copied()),
-            Expr::val(1),
-        ))))
-    };
-
-    let count_all = || Expr::expr(Func::count(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status))));
-
-    let status_case = Expr::case(count_status_in(&["S"]).eq(count_all()), Expr::val("S"))
-        .case(count_status_in(&["C", "X", "Y"]).eq(count_all()), Expr::val("F"))
-        .case(count_status_in(&["C", "D", "F", "H"]).eq(count_all()).and(count_status_in(&["F", "H"]).gt(0)), Expr::val("L"))
-        .case(count_status_in(&["S", "RR", "RS", "R", "D", "E"]).gt(0), Expr::val("R"))
-        .finally(Expr::val("U"));
-
-    let finished = Expr::expr(Func::count(Expr::col(Asterisk))).eq(count_status_in(&["C", "X", "Y"]));
-
-    let trx_status_case = Expr::case(count_status_in(&["S"]).eq(count_all()), Expr::val("S"))
-        .case(count_status_in(&["C"]).eq(count_all()), Expr::val("C"))
-        .case(count_status_in(&["X"]).eq(count_all()), Expr::val("X"))
-        .case(count_status_in(&["Y"]).eq(count_all()), Expr::val("Y"))
-        .case(count_status_in(&["D", "F", "H"]).eq(count_all()).and(count_status_in(&["F", "H"]).gt(0)), Expr::val("L"))
-        .case(count_status_in(&["S", "RR", "RS", "R", "D", "E"]).gt(0), Expr::val("R"))
-        .finally(Expr::val("U"));
-
-    let trx_finished = Expr::expr(Func::count(Expr::col(Asterisk))).eq(count_status_in(&["C", "X", "Y"]));
-
-    let json_agg = json_object_agg("inner_fr.status", "inner_fr.count");
-
-    // A per-status `(status, count)` select, ready to be wrapped as a scalar
-    // subquery. The optional `correlate` predicate ties the counts to the outer
-    // row (per-execution / per-transaction); the global summary passes `None`.
-    let inner_status_counts = |correlate: Option<Expr>| {
-        let mut q = Query::select();
-        q.expr(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)))
-            .expr_as(Func::count(Expr::col(Asterisk)), Alias::new("count"))
-            .from(LogicalFunctionRuns::Table)
-            .group_by_col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status));
-        if let Some(pred) = correlate {
-            q.and_where(pred);
-        }
-        q.take()
-    };
-
-    // Wrap an inner status-count select as a scalar subquery that JSON-aggregates
-    // its rows into a single object. `from_subquery` owns the `inner_fr` alias, so
-    // the subquery wrapping is the query builder's job, not a `format!` string.
-    let json_count_subquery = |inner| {
-        Expr::from(SubQueryStatement::from(Query::select().expr(Expr::cust(json_agg.clone())).from_subquery(inner, InnerFr).take()))
-    };
-
-    let json_subquery = json_count_subquery(inner_status_counts(None));
-    let exec_json_subquery = json_count_subquery(inner_status_counts(Some(
-        Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::ExecutionId)).equals((Executions::Table, Executions::Id)),
-    )));
-    let trx_json_subquery = json_count_subquery(inner_status_counts(Some(
-        Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::TransactionId)).equals((Transactions::Table, Transactions::Id)),
-    )));
-
-    let global = ViewDef::new(
-        Alias::new("global_status_summary"),
-        Query::select()
-            .expr_as(status_case.clone(), Alias::new("status"))
-            .expr_as(finished.clone(), Alias::new("finished"))
-            .expr_as(json_subquery, Alias::new("function_run_status_count"))
-            .from(LogicalFunctionRuns::Table)
-            .to_owned(),
-    );
-
-    let execution = ViewDef::new(
-        ExecutionStatusSummary,
-        Query::select()
-            .expr_as(Expr::col((Executions::Table, Executions::Id)), Alias::new("execution_id"))
-            .expr_as(status_case, Alias::new("status"))
-            .expr_as(finished, Alias::new("finished"))
-            .expr_as(exec_json_subquery, Alias::new("function_run_status_count"))
-            .from(Executions::Table)
-            .join(
-                JoinType::LeftJoin,
-                LogicalFunctionRuns::Table,
-                Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::ExecutionId)).equals((Executions::Table, Executions::Id)),
-            )
-            .group_by_col((Executions::Table, Executions::Id))
-            .to_owned(),
-    );
-
-    let transaction = ViewDef::new(
-        TransactionStatusSummary,
-        Query::select()
-            .expr_as(Expr::col((Transactions::Table, Transactions::Id)), Alias::new("transaction_id"))
-            .expr_as(trx_status_case, Alias::new("status"))
-            .expr_as(trx_finished, Alias::new("finished"))
-            .expr_as(trx_json_subquery, Alias::new("function_run_status_count"))
-            .from(Transactions::Table)
-            .join(
-                JoinType::LeftJoin,
-                LogicalFunctionRuns::Table,
-                Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::TransactionId)).equals((Transactions::Table, Transactions::Id)),
-            )
-            .group_by_col((Transactions::Table, Transactions::Id))
-            .to_owned(),
-    );
-
-    vec![global, execution, transaction]
+pub(super) fn run_status_count<T: IntoIden, C: IntoIden>(run_parent_col: LogicalFunctionRuns, parent: (T, C)) -> SimpleExpr {
+    let (parent_table, parent_id) = parent;
+    let counts = Query::select()
+        .expr(Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status)))
+        .expr_as(Func::count(Expr::col(Asterisk)), Alias::new("count"))
+        .from(LogicalFunctionRuns::Table)
+        .and_where(Expr::col((LogicalFunctionRuns::Table, run_parent_col)).equals((parent_table, parent_id)))
+        .group_by_col((LogicalFunctionRuns::Table, LogicalFunctionRuns::Status))
+        .take();
+    let json = json_object_agg("inner_fr.status", "inner_fr.count");
+    Expr::from(SubQueryStatement::from(Query::select().expr(Expr::cust(json)).from_subquery(counts, InnerFr).take()))
 }

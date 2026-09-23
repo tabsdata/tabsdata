@@ -92,6 +92,13 @@ pub struct ExecutionDB {
     #[dao(flatten)]
     pub base: ExecutionInsertDB,
     pub project_id: ProjectId,
+
+    /// Rolled up from the execution's logical runs and their attempts by the
+    /// status roll-up door whenever a run or attempt changes; never written
+    /// from here.
+    pub status: ExecutionStatus,
+    pub started_on: Option<Started<AtTime>>,
+    pub ended_on: Option<Ended<AtTime>>,
 }
 
 #[ta_objects::Dao]
@@ -106,21 +113,11 @@ pub struct ExecutionDBWithNames {
     pub function: FunctionName,
     pub triggered_by: UserName,
     pub project: Option<ProjectName>,
-}
-
-#[ta_objects::Dao]
-#[dao(view = "executions__with_status", project_scoped)]
-pub struct ExecutionDBWithStatus {
-    #[dao(flatten)]
-    pub base: ExecutionDBWithNames,
-    pub started_on: Option<Started<AtTime>>,
-    pub ended_on: Option<Ended<AtTime>>,
-    pub status: ExecutionStatus,
     pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
 }
 
 #[ta_objects::Dto]
-#[dto(list(on = ExecutionDBWithStatus))]
+#[dto(list(on = ExecutionDBWithNames))]
 pub struct Execution {
     #[dto(list(pagination_by = "+", filter, filter_like))]
     pub id: ExecutionId,
@@ -150,9 +147,9 @@ pub struct Execution {
     #[dto(list(filter))]
     pub project_id: ProjectId,
 
-    #[dto(list(filter))]
+    #[dto(list(filter, order_by))]
     pub started_on: Option<Started<AtTime>>,
-    #[dto(list(filter))]
+    #[dto(list(filter, order_by))]
     pub ended_on: Option<Ended<AtTime>>,
     #[dto(list(filter, order_by))]
     pub status: ExecutionStatus,
@@ -160,28 +157,28 @@ pub struct Execution {
 }
 
 impl FromDao for Execution {
-    type Dao = ExecutionDBWithStatus;
+    type Dao = ExecutionDBWithNames;
 
-    fn from_dao(dao: ExecutionDBWithStatus) -> Result<Self, TdError> {
+    fn from_dao(dao: ExecutionDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.base.base.id,
-            name: dao.base.base.base.name,
-            collection_id: dao.base.base.base.collection_id,
-            function_id: dao.base.base.base.function_id,
-            function_version_id: dao.base.base.base.function_version_id,
-            triggered_on: dao.base.base.base.triggered_on,
-            triggered_by_id: dao.base.base.base.triggered_by_id,
-            trigger_type: dao.base.base.base.trigger_type,
-            external_uid: dao.base.base.base.external_uid,
-            collection: dao.base.collection,
-            collection_deleted: dao.base.collection_deleted,
-            function: dao.base.function,
-            triggered_by: dao.base.triggered_by,
-            project: dao.base.project,
-            project_id: dao.base.base.project_id,
-            started_on: dao.started_on,
-            ended_on: dao.ended_on,
-            status: dao.status,
+            id: dao.base.base.id,
+            name: dao.base.base.name,
+            collection_id: dao.base.base.collection_id,
+            function_id: dao.base.base.function_id,
+            function_version_id: dao.base.base.function_version_id,
+            triggered_on: dao.base.base.triggered_on,
+            triggered_by_id: dao.base.base.triggered_by_id,
+            trigger_type: dao.base.base.trigger_type,
+            external_uid: dao.base.base.external_uid,
+            collection: dao.collection,
+            collection_deleted: dao.collection_deleted,
+            function: dao.function,
+            triggered_by: dao.triggered_by,
+            project: dao.project,
+            project_id: dao.base.project_id,
+            started_on: dao.base.started_on,
+            ended_on: dao.base.ended_on,
+            status: dao.base.status,
             function_run_status_count: dao.function_run_status_count.into(),
         })
     }

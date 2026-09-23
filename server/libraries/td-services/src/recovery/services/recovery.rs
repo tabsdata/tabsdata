@@ -147,7 +147,7 @@ mod tests {
     use td_objects::dxo::collection::ActiveCollectionDB;
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::execution::ExecutionRequest;
+    use td_objects::dxo::execution::{ExecutionDB, ExecutionRequest};
     use td_objects::dxo::function::{
         FunctionDB, FunctionInsertDB, FunctionParam, FunctionRegister,
     };
@@ -157,10 +157,11 @@ mod tests {
     };
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
-        FunctionOnly, FunctionRuntimeValues, FunctionVersionId, LogicalFunctionRunStatus,
-        OverrideDisabledTrigger, PhysicalFunctionRunStatus, ProjectId, ReuseFrozen, SkipIfRunning,
-        TableNameDto, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionStatus,
+        FunctionIdName, FunctionOnly, FunctionRuntimeValues, FunctionVersionId,
+        LogicalFunctionRunStatus, OverrideDisabledTrigger, PhysicalFunctionRunStatus, ProjectId,
+        ReuseFrozen, SkipIfRunning, TableNameDto, UserId, WorkerMessageStatus, WorkerStatus,
+        WorkerType,
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -445,6 +446,9 @@ mod tests {
         let lfr_after: LogicalFunctionRunDB =
             db.fetch_one::<LogicalFunctionRunDB>(&lfr.base.id).await?;
         assert_eq!(lfr_after.base.status, LogicalFunctionRunStatus::Committed);
+        let rolled_up: ExecutionDB = db.scoped(p.id).fetch_one(&execution.base.id).await?;
+        assert_eq!(rolled_up.status, ExecutionStatus::Finished);
+        assert_eq!(rolled_up.ended_on.as_deref(), pfr.base.ended_on.as_deref());
         let current = db
             .scd2()
             .fetch_one::<PhysicalFunctionRunDB>(&lfr.base.id)

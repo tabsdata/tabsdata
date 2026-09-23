@@ -3,21 +3,21 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
-    TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
+    Query, Table, TableCreateStatement,
 };
 
 use super::collections::{Collections, CollectionsResolved};
 use super::functions::Functions;
+use super::logical_function_runs::{LogicalFunctionRuns, RUN_LADDER_FALLBACK, RUN_TERMINALS, run_status_count};
+use super::physical_function_runs::PhysicalFunctionRuns;
 use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
-use crate::schema::sql::ViewDef;
+use crate::schema::sql::{Logical, Parent, Physical, RollupArm, RollupDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
-/// `executions__with_names` view name. Re-used cross-file by
-/// `with_status_views` to build `executions__with_status`.
 #[derive(Iden, Clone, Copy)]
 #[iden = "executions__with_names"]
 pub struct ExecutionsWithNames;
@@ -36,7 +36,29 @@ pub enum Executions {
     FunctionId,
     TriggerType,
     ExternalUid,
+    Status,
+    StartedOn,
+    EndedOn,
 }
+
+/// The execution status ladder: the first arm holding over the execution's
+/// logical-run statuses wins. Rolled up onto `executions.status`.
+const EXECUTION_LADDER: &[RollupArm] = &[
+    RollupArm::All { all: &["S"], status: "S" },
+    RollupArm::All {
+        all: &["C", "X", "Y"],
+        status: "F",
+    },
+    RollupArm::AllWithAny {
+        all: &["C", "D", "F", "H"],
+        any: &["F", "H"],
+        status: "L",
+    },
+    RollupArm::Any {
+        any: &["S", "RR", "RS", "R", "D", "E"],
+        status: "R",
+    },
+];
 
 pub(super) struct Defs;
 
@@ -59,6 +81,10 @@ impl Entity for Defs {
                 .col(id_column(Executions::FunctionId).not_null().default(""))
                 .col(ColumnDef::new(Executions::TriggerType).text().not_null().default("M"))
                 .col(ColumnDef::new(Executions::ExternalUid).text().null())
+                // What the ladder yields before any run is planned.
+                .col(ColumnDef::new(Executions::Status).text().not_null().default("S"))
+                .col(ColumnDef::new(Executions::StartedOn).timestamp_with_time_zone().null())
+                .col(ColumnDef::new(Executions::EndedOn).timestamp_with_time_zone().null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Executions::Table, Executions::CollectionId)
@@ -129,6 +155,10 @@ impl Entity for Defs {
                     Alias::new("triggered_by"),
                 )
                 .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
+                .expr_as(
+                    run_status_count(LogicalFunctionRuns::ExecutionId, (Executions::Table, Executions::Id)),
+                    Alias::new("function_run_status_count"),
+                )
                 .from(Executions::Table)
                 .join(
                     JoinType::LeftJoin,
@@ -152,5 +182,33 @@ impl Entity for Defs {
                 )
                 .to_owned(),
         )]
+    }
+}
+
+pub fn rollup() -> RollupDef {
+    RollupDef {
+        parent: Parent {
+            table: Executions::Table.into_iden(),
+            id: Executions::Id.into_iden(),
+            status: Executions::Status.into_iden(),
+            started_on: Executions::StartedOn.into_iden(),
+            ended_on: Executions::EndedOn.into_iden(),
+        },
+        logical: Logical {
+            table: LogicalFunctionRuns::Table.into_iden(),
+            id: LogicalFunctionRuns::Id.into_iden(),
+            parent: LogicalFunctionRuns::ExecutionId.into_iden(),
+            status: LogicalFunctionRuns::Status.into_iden(),
+        },
+        physical: Physical {
+            table: PhysicalFunctionRuns::Table.into_iden(),
+            id: PhysicalFunctionRuns::Id.into_iden(),
+            parent: PhysicalFunctionRuns::ExecutionId.into_iden(),
+            started_on: PhysicalFunctionRuns::StartedOn.into_iden(),
+            ended_on: PhysicalFunctionRuns::EndedOn.into_iden(),
+        },
+        ladder: EXECUTION_LADDER,
+        fallback: RUN_LADDER_FALLBACK,
+        finished: RUN_TERMINALS,
     }
 }

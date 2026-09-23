@@ -4,10 +4,13 @@
 
 // All seed methods exposed through the `Seed<E>` handle, reached via
 // `SeedEntry::seed` on any `QueryExecutor`.
+pub use exclusive::begin_exclusive;
 pub use metrics_facts::derive_metrics_facts;
 pub use seed::{Seed, SeedEntry};
 pub use seed_run::{SeededRun, seed_project_viewer, seed_run};
+pub use status_rollup::derive_status_rollup;
 
+mod exclusive;
 mod metrics_facts;
 mod seed;
 mod seed_collection;
@@ -27,3 +30,4 @@ mod seed_transaction;
 mod seed_user;
 mod seed_user_role;
 mod seed_worker;
+mod status_rollup;

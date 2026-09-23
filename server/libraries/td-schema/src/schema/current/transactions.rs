@@ -3,22 +3,22 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
-    TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
+    Query, Table, TableCreateStatement,
 };
 
 use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::groups::Groups;
+use super::logical_function_runs::{LogicalFunctionRuns, RUN_LADDER_FALLBACK, RUN_TERMINALS, run_status_count};
+use super::physical_function_runs::PhysicalFunctionRuns;
 use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
-use crate::schema::sql::ViewDef;
+use crate::schema::sql::{Logical, Parent, Physical, RollupArm, RollupDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
-/// `transactions__with_names` view name. Re-used cross-file by
-/// `with_status_views` to build `transactions__with_status`.
 #[derive(Iden, Clone, Copy)]
 #[iden = "transactions__with_names"]
 pub struct TransactionsWithNames;
@@ -35,7 +35,29 @@ pub enum Transactions {
     TriggeredOn,
     TriggeredById,
     GroupId,
+    Status,
+    StartedOn,
+    EndedOn,
 }
+
+/// The transaction status ladder. Unlike an execution's, each terminal run
+/// status rolls up to its own transaction status, so a committed transaction
+/// is told apart from a canceled or a yanked one.
+const TRANSACTION_LADDER: &[RollupArm] = &[
+    RollupArm::All { all: &["S"], status: "S" },
+    RollupArm::All { all: &["C"], status: "C" },
+    RollupArm::All { all: &["X"], status: "X" },
+    RollupArm::All { all: &["Y"], status: "Y" },
+    RollupArm::AllWithAny {
+        all: &["D", "F", "H"],
+        any: &["F", "H"],
+        status: "L",
+    },
+    RollupArm::Any {
+        any: &["S", "RR", "RS", "R", "D", "E"],
+        status: "R",
+    },
+];
 
 pub(super) struct Defs;
 
@@ -53,6 +75,9 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Transactions::TriggeredOn).timestamp_with_time_zone().not_null())
                 .col(id_column(Transactions::TriggeredById).not_null())
                 .col(id_column(Transactions::GroupId).not_null())
+                .col(ColumnDef::new(Transactions::Status).text().not_null().default("S"))
+                .col(ColumnDef::new(Transactions::StartedOn).timestamp_with_time_zone().null())
+                .col(ColumnDef::new(Transactions::EndedOn).timestamp_with_time_zone().null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Transactions::Table, Transactions::CollectionId)
@@ -121,6 +146,10 @@ impl Entity for Defs {
                 )
                 .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
                 .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
+                .expr_as(
+                    run_status_count(LogicalFunctionRuns::TransactionId, (Transactions::Table, Transactions::Id)),
+                    Alias::new("function_run_status_count"),
+                )
                 .from(Transactions::Table)
                 .join(
                     JoinType::LeftJoin,
@@ -150,5 +179,33 @@ impl Entity for Defs {
                 )
                 .to_owned(),
         )]
+    }
+}
+
+pub fn rollup() -> RollupDef {
+    RollupDef {
+        parent: Parent {
+            table: Transactions::Table.into_iden(),
+            id: Transactions::Id.into_iden(),
+            status: Transactions::Status.into_iden(),
+            started_on: Transactions::StartedOn.into_iden(),
+            ended_on: Transactions::EndedOn.into_iden(),
+        },
+        logical: Logical {
+            table: LogicalFunctionRuns::Table.into_iden(),
+            id: LogicalFunctionRuns::Id.into_iden(),
+            parent: LogicalFunctionRuns::TransactionId.into_iden(),
+            status: LogicalFunctionRuns::Status.into_iden(),
+        },
+        physical: Physical {
+            table: PhysicalFunctionRuns::Table.into_iden(),
+            id: PhysicalFunctionRuns::Id.into_iden(),
+            parent: PhysicalFunctionRuns::TransactionId.into_iden(),
+            started_on: PhysicalFunctionRuns::StartedOn.into_iden(),
+            ended_on: PhysicalFunctionRuns::EndedOn.into_iden(),
+        },
+        ladder: TRANSACTION_LADDER,
+        fallback: RUN_LADDER_FALLBACK,
+        finished: RUN_TERMINALS,
     }
 }

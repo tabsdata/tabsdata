@@ -17,7 +17,7 @@ pub use daos::metrics::Metrics;
 #[cfg(feature = "td-test")]
 pub use daos::metrics::metrics_plan_sql;
 pub mod metrics_facts {
-    pub use crate::daos::metrics::write::{attempts_ended, runs_reattempted, runs_status_changed};
+    pub use crate::daos::metrics::write::runs_reattempted;
 }
 pub use daos::session::Sessions;
 pub use daos::table_data_versions::TableDataVersions;

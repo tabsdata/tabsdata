@@ -64,7 +64,7 @@ async fn scoped_relations(db: &TdPool) -> HashSet<String> {
 async fn every_dao_scoping_matches_its_relations_policies(db: TdPool) -> Result<(), TdError> {
     let scoped = scoped_relations(&db).await;
     assert!(
-        scoped.len() >= 40,
+        scoped.len() >= 35,
         "only {} project-scoped relations found; the policy query may be broken",
         scoped.len(),
     );

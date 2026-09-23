@@ -28,7 +28,6 @@ mod transactions;
 mod triggers;
 mod users;
 mod users_roles;
-mod with_status_views;
 mod workers;
 
 use crate::schema::Entity;
@@ -42,6 +41,10 @@ use sea_query::{DynIden, IntoIden};
 /// (cross-major upgrade is refused via `tabsdata_version`). To evolve the
 /// schema, follow the README runbook; `test_schema_ddl_snapshot` gates the DDL.
 pub const VERSION: usize = 10;
+
+pub use crate::schema::sql::{Changed, Logical, Parent, Physical, RollupArm, RollupDef};
+pub use executions::rollup as execution_rollup;
+pub use transactions::rollup as transaction_rollup;
 
 /// FK-safe ordering of every entity in the current schema.
 ///
@@ -78,7 +81,6 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &workers::Defs,
     &logical_function_run_inputs::Defs,
     &metrics_facts::Defs,
-    &with_status_views::Defs,
 ];
 
 /// Tables that carry a `project_id` and get PostgreSQL row-level security.

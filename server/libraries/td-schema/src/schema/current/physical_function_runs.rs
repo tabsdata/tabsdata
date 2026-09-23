@@ -158,11 +158,7 @@ impl Entity for Defs {
                 .col(PhysicalFunctionRuns::ProjectId)
                 .col(PhysicalFunctionRuns::DispatchedOn)
                 .to_owned(),
-            // The `__with_status` views aggregate MIN(started_on) /
-            // MAX(ended_on) per partition on the nullable side of a LEFT JOIN,
-            // so the outer id cannot be pushed down: without the timestamps in
-            // the index every read of those views aggregates the whole table.
-            // Leading with `project_id` keeps the aggregate to the tenant.
+            // The roll-up's MIN(started_on) / MAX(ended_on) probe, index-only.
             Index::create()
                 .name("pfr___project_id__execution_id__started_on__ended_on___idx")
                 .table(PhysicalFunctionRuns::Table)

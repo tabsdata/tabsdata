@@ -9,8 +9,8 @@ use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::and;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
-use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
+use td_objects::dxo::logical::LogicalFunctionRunDB;
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::{
     PhysicalTableDataVersionDBWithNames, PhysicalTableDataVersionUpdateDB,
 };
@@ -22,7 +22,6 @@ use td_objects::types::basic::{
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, SchemaChanged, WorkerId,
 };
 use td_queries::Queries;
-use td_queries::metrics_facts::{attempts_ended, runs_status_changed};
 use tracing::{debug, instrument};
 
 #[td_error]
@@ -107,27 +106,11 @@ pub async fn abandon_requested_physical_runs(
         return Ok(());
     }
 
-    let update = PhysicalFunctionRunUpdateDB::failed_at(at)?;
-    conn.scd2().chunked().update(&update, &abandoned).await?;
-    attempts_ended(conn, &abandoned).await?;
+    conn.physical_runs().failed(&abandoned, at).await?;
     debug!(
         abandoned_count = abandoned.len(),
         "execution.recover_abandon: terminalized in-flight PFR(s) of Requested LFR(s)"
     );
-    Ok(())
-}
-
-/// The one door for a run's status; its facts follow.
-pub async fn set_lfr_status(
-    conn: &mut DomainConnection<Apiserver, InProject>,
-    lfr_ids: &[LogicalFunctionRunId],
-    update: &LogicalFunctionRunStatusUpdateDB,
-) -> Result<(), TdError> {
-    if lfr_ids.is_empty() {
-        return Ok(());
-    }
-    conn.chunked().update(update, lfr_ids).await?;
-    runs_status_changed(conn, lfr_ids, &update.status).await?;
     Ok(())
 }
 
@@ -275,7 +258,7 @@ fn cascade_transition(
 #[instrument(
     name = "execution.update_status",
     skip_all,
-    fields(target_status = %update.status, input_count = logical_function_runs.len()),
+    fields(target_status = %status, input_count = logical_function_runs.len()),
     level = "debug",
     err(Debug)
 )]
@@ -283,12 +266,12 @@ pub async fn update_function_run_status(
     msgs: &mut ReqCtx,
     conn: &mut DomainConnection<Apiserver, InProject>,
     logical_function_runs: &Vec<LogicalFunctionRunDB>,
-    update: &LogicalFunctionRunStatusUpdateDB,
+    status: LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {
     let input_count = logical_function_runs.len();
     let mut lfr_ids = Vec::new();
     for current in logical_function_runs {
-        match transition(current, &update.status) {
+        match transition(current, &status) {
             Transition::Apply => lfr_ids.push(current.base.id.clone()),
             Transition::Skip => {}
             Transition::Absorb(reported) => msgs.warning(Message::of(reported)),
@@ -308,14 +291,14 @@ pub async fn update_function_run_status(
         return Ok(());
     }
 
-    set_lfr_status(conn, &lfr_ids, update).await?;
+    conn.logical_runs().set_status(&lfr_ids, status).await?;
     debug!(
         updated_count = lfr_ids.len(),
         "execution.update_status: updated LFR(s)"
     );
 
     // Publish LFRs if needed, including downstream publishing.
-    if update.status == LogicalFunctionRunStatus::Done {
+    if status == LogicalFunctionRunStatus::Done {
         let updated_set: HashSet<&LogicalFunctionRunId> = lfr_ids.iter().collect();
         let execution_ids: Vec<ExecutionId> = logical_function_runs
             .iter()
@@ -331,8 +314,9 @@ pub async fn update_function_run_status(
         );
 
         if !to_commit_ffrs.is_empty() {
-            let commit_update = LogicalFunctionRunStatusUpdateDB::committed();
-            set_lfr_status(conn, &to_commit_ffrs, &commit_update).await?;
+            conn.logical_runs()
+                .set_status(&to_commit_ffrs, LogicalFunctionRunStatus::Committed)
+                .await?;
             debug!(
                 committed_count = to_commit_ffrs.len(),
                 "execution.commit: committed LFR(s)"
@@ -340,7 +324,7 @@ pub async fn update_function_run_status(
         }
     }
 
-    let downstream_status = match update.status {
+    let downstream_status = match status {
         LogicalFunctionRunStatus::Canceled => Some(LogicalFunctionRunStatus::Canceled),
         LogicalFunctionRunStatus::Yanked => Some(LogicalFunctionRunStatus::Yanked),
         LogicalFunctionRunStatus::ReScheduled => Some(LogicalFunctionRunStatus::ReScheduled),
@@ -395,9 +379,7 @@ async fn cascade_downstream_status(
     if to_update.is_empty() {
         return Ok(());
     }
-
-    let cascade_update = LogicalFunctionRunStatusUpdateDB { status: *status };
-    set_lfr_status(conn, &to_update, &cascade_update).await?;
+    conn.logical_runs().set_status(&to_update, *status).await?;
     debug!(
         cascade_status = %status,
         cascade_count = to_update.len(),
@@ -540,7 +522,7 @@ pub(crate) mod tests {
     use td_error::TdError;
     use td_objects::and;
     use td_objects::dxo::collection::ActiveCollectionDB;
-    use td_objects::dxo::execution::{ExecutionDB, ExecutionDBWithStatus};
+    use td_objects::dxo::execution::{ExecutionDB, ExecutionDBWithNames};
     use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
     use td_objects::dxo::logical::LogicalFunctionRunDB;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
@@ -548,7 +530,7 @@ pub(crate) mod tests {
         PhysicalTableDataVersionDB, PhysicalTableDataVersionDBWithFunction,
     };
     use td_objects::dxo::table::TableDB;
-    use td_objects::dxo::transaction::{TransactionDB, TransactionDBWithStatus};
+    use td_objects::dxo::transaction::{TransactionDB, TransactionDBWithNames};
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, DependencyPos, ExecutionStatus, FunctionName,
@@ -558,7 +540,7 @@ pub(crate) mod tests {
     use td_objects::types::basic::{FunctionIdName, ReuseFrozen};
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::Queries;
-    use td_queries::test_utils::SeedEntry;
+    use td_queries::test_utils::{SeedEntry, derive_status_rollup};
 
     #[derive(Debug, Clone, Eq, PartialEq, Hash)]
     pub(crate) struct TestExecution {
@@ -921,6 +903,7 @@ pub(crate) mod tests {
             .into_iter()
             .collect::<HashMap<_, _>>();
 
+        derive_status_rollup(&db).await?;
         test_run(
             &collections,
             &executions,
@@ -932,24 +915,22 @@ pub(crate) mod tests {
 
         for test_execution in test_executions {
             let executions = db
-                .fetch_all::<ExecutionDBWithStatus>(
-                    &executions.get(test_execution).unwrap().base.id,
-                )
+                .fetch_all::<ExecutionDBWithNames>(&executions.get(test_execution).unwrap().base.id)
                 .await?;
             assert_eq!(executions.len(), 1);
             let execution = &executions[0];
-            assert_eq!(execution.status, test_execution.expected_status);
+            assert_eq!(execution.base.status, test_execution.expected_status);
         }
 
         for test_transaction in test_executions.iter().flat_map(|e| &e.transactions) {
             let transactions = db
-                .fetch_all::<TransactionDBWithStatus>(
+                .fetch_all::<TransactionDBWithNames>(
                     &transactions.get(test_transaction).unwrap().base.id,
                 )
                 .await?;
             assert_eq!(transactions.len(), 1);
             let transaction = &transactions[0];
-            assert_eq!(transaction.status, test_transaction.expected_status);
+            assert_eq!(transaction.base.status, test_transaction.expected_status);
         }
 
         for test_function in test_executions

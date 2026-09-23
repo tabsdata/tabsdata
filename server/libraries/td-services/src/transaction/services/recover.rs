@@ -15,8 +15,9 @@ use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::UpdateRequest;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
+use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionParam};
+use td_objects::types::basic::LogicalFunctionRunStatus;
 use td_queries::Queries;
 
 #[service_factory]
@@ -51,8 +52,7 @@ async fn transaction_recover(
     abandon_requested_physical_runs(conn, &ctx.time, &lfrs).await?;
     // Set recover status (ReScheduled). Dispatch re-mints per LFR; the new
     // attempt is the run's current version from mint.
-    let update = LogicalFunctionRunStatusUpdateDB::recover();
-    update_function_run_status(msgs, conn, &lfrs, &update).await?;
+    update_function_run_status(msgs, conn, &lfrs, LogicalFunctionRunStatus::ReScheduled).await?;
     trx.commit().await?;
 
     scheduler_notify.notify_scheduler();

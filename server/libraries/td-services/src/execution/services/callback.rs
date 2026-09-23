@@ -13,15 +13,14 @@ use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::UpdateRequest;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
+use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::FunctionRunParam;
-use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::{
     CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerParam, WorkerUpdateDB,
 };
-use td_objects::types::basic::PhysicalFunctionRunStatus;
+use td_objects::types::basic::{LogicalFunctionRunStatus, PhysicalFunctionRunStatus};
 use td_queries::Queries;
-use td_queries::metrics_facts::attempts_ended;
 
 #[service_factory]
 async fn execution_callback(
@@ -51,13 +50,6 @@ async fn execution_callback(
     let lfr: LogicalFunctionRunDB = conn
         .fetch_one(&physical_run.base.logical_function_run_id)
         .await?;
-    // Per-attempt audit on the PhysicalFunctionRunDB row: started_on,
-    // ended_on, and status (the per-attempt status — never sticky).
-    let audit_update = PhysicalFunctionRunUpdateDB::try_from(&update)?;
-    conn.scd2()
-        .update(&audit_update, &physical_run.base.id)
-        .await?;
-
     let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
     update_worker_status(conn, &worker_update, &worker_id).await?;
 
@@ -66,14 +58,14 @@ async fn execution_callback(
     // already ended is a late or duplicate callback — drop it.
     let in_flight = PhysicalFunctionRunStatus::IN_FLIGHT.contains(&physical_run.base.status);
     let lfrs = if in_flight { vec![lfr] } else { Vec::new() };
-    let lfr_update: LogicalFunctionRunStatusUpdateDB =
-        LogicalFunctionRunStatusUpdateDB::try_from(&update)?;
-    update_function_run_status(msgs, conn, &lfrs, &lfr_update).await?;
+    let lfr_status = LogicalFunctionRunStatus::try_from(update.status.clone())?;
+    update_function_run_status(msgs, conn, &lfrs, lfr_status).await?;
 
     update_table_data_version_status(conn, &physical_function_run_id, &callback).await?;
-    if in_flight {
-        attempts_ended(conn, &[physical_function_run_id]).await?;
-    }
+    // Last: the physical run's facts read the run and version rows written above.
+    conn.physical_runs()
+        .reported(&physical_run, &update)
+        .await?;
     trx.commit().await?;
 
     scheduler_notify.notify_scheduler();

@@ -192,13 +192,13 @@ impl PhysicalFunctionRunUpdateDB {
     /// `Requested` LFR abandons its in-flight attempt as `Failed` at
     /// `ended_on`, so late callbacks from it drop at the in-flight
     /// filter.
-    pub fn failed_at(ended_on: &AtTime) -> Result<Self, TdError> {
-        Ok(Self {
+    pub fn failed_at(ended_on: &AtTime) -> Self {
+        Self {
             dispatched_on: None,
             started_on: None,
             ended_on: Some((*ended_on).into()),
             status: PhysicalFunctionRunStatus::Failed,
-        })
+        }
     }
 }
 

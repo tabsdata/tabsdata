@@ -11,10 +11,10 @@ use td_database::pool::scoped::ScopedExt as _;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::execution::{ExecutionDBWithStatus, ExecutionRequest};
+use td_objects::dxo::execution::{ExecutionDBWithNames, ExecutionRequest};
 use td_objects::dxo::function::{FunctionParam, FunctionRegister};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
-use td_objects::dxo::transaction::TransactionDBWithStatus;
+use td_objects::dxo::transaction::TransactionDBWithNames;
 use td_objects::types::basic::{
     AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
     ExecutionStatus, FunctionIdName, FunctionName, FunctionRuntimeValues, LogicalFunctionRunStatus,
@@ -59,14 +59,14 @@ fn register(
 }
 
 /// `c0/f0` produces `t0`; `c1/f1` triggers on `c0/t0`. Runs `f0` and returns
-/// its runs, transactions and execution as the status views see them.
+/// its runs, transactions and execution with their rolled-up status.
 async fn run_trigger(
     db: &TdPool,
 ) -> Result<
     (
         Vec<LogicalFunctionRunDB>,
-        Vec<TransactionDBWithStatus>,
-        ExecutionDBWithStatus,
+        Vec<TransactionDBWithNames>,
+        ExecutionDBWithNames,
     ),
     TdError,
 > {
@@ -114,8 +114,8 @@ async fn run_trigger(
         .await?;
 
     let runs = db.fetch_all::<LogicalFunctionRunDB>(()).await?;
-    let transactions = db.fetch_all::<TransactionDBWithStatus>(()).await?;
-    let mut executions = db.fetch_all::<ExecutionDBWithStatus>(()).await?;
+    let transactions = db.fetch_all::<TransactionDBWithNames>(()).await?;
+    let mut executions = db.fetch_all::<ExecutionDBWithNames>(()).await?;
     assert_eq!(executions.len(), 1);
     let execution = executions.remove(0);
     Ok((runs, transactions, execution))
@@ -128,7 +128,7 @@ async fn plan_holds_the_trigger_alone(db: TdPool) -> Result<(), TdError> {
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].base.status, LogicalFunctionRunStatus::Scheduled);
     assert_eq!(transactions.len(), 1);
-    assert_eq!(transactions[0].status, TransactionStatus::Scheduled);
-    assert_eq!(execution.status, ExecutionStatus::Scheduled);
+    assert_eq!(transactions[0].base.status, TransactionStatus::Scheduled);
+    assert_eq!(execution.base.status, ExecutionStatus::Scheduled);
     Ok(())
 }

@@ -2,7 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::update_status::set_lfr_status;
 use crate::internal_api::InternalApi;
 use crate::logical::dispatch_mint::mint_function_runs_on_dispatch;
 use crate::project::active::active_project_ids;
@@ -23,13 +22,11 @@ use td_database::access::{DbPool, Global, Grant, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::{SchedulerConfig, SchedulerNotify};
-use td_objects::dxo::logical::LogicalFunctionRunStatusUpdateDB;
-use td_objects::dxo::physical_function_run::PhysicalFunctionRunUpdateDB;
 use td_objects::dxo::worker::{
     WorkerDB, WorkerDBWithNames, WorkerMessageStatusUpdateDB, WorkerUpdateDB,
 };
 use td_objects::sql_condition::SqlCondition;
-use td_objects::types::basic::{AtTime, ProjectId, WorkerId, WorkerType};
+use td_objects::types::basic::{AtTime, LogicalFunctionRunStatus, ProjectId, WorkerId, WorkerType};
 use td_queries::Queries;
 use td_storage::Storage;
 use tracing::{debug, error};
@@ -129,13 +126,13 @@ async fn tick_project(
     .await?;
     conn.chunked().insert(&workers).await?;
     let lfr_ids = lfr_ids_from_minted_dispatch(&minted)?;
-    let requested = LogicalFunctionRunStatusUpdateDB::requested();
-    set_lfr_status(conn, &lfr_ids, &requested).await?;
+    conn.logical_runs()
+        .set_status(&lfr_ids, LogicalFunctionRunStatus::Requested)
+        .await?;
     // Flip PFR.status Requested -> Dispatched so the replay-side readiness
     // query excludes these PFRs from the next tick.
     let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
-    let dispatched = PhysicalFunctionRunUpdateDB::dispatched(at);
-    conn.scd2().chunked().update(&dispatched, &pfr_ids).await?;
+    conn.physical_runs().dispatched(&pfr_ids, at).await?;
 
     // Replay dispatch path: PFRs minted by the replay endpoint (status
     // Requested, no worker). No mint, no bind, no LFR.status flip.
@@ -154,7 +151,7 @@ async fn tick_project(
     .await?;
     conn.chunked().insert(&workers).await?;
     let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
-    conn.scd2().chunked().update(&dispatched, &pfr_ids).await?;
+    conn.physical_runs().dispatched(&pfr_ids, at).await?;
 
     let to_stop =
         claim_trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::CronTrigger)).await?;

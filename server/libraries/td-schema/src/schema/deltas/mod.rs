@@ -62,6 +62,11 @@ pub fn metrics_facts_backfill() -> String {
     v9_to_v10::backfill_statement()
 }
 
+#[cfg(feature = "td-test")]
+pub fn status_rollup_backfill() -> Vec<String> {
+    v9_to_v10::status_rollup_backfill()
+}
+
 /// The rung upgrading from version `target_version - 1` to `target_version`.
 ///
 /// # Panics

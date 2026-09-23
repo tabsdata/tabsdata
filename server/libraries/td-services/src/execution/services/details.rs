@@ -11,7 +11,7 @@ use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::ExecutionParam;
-use td_objects::dxo::execution::{Execution, ExecutionDBWithStatus, ExecutionDetails};
+use td_objects::dxo::execution::{Execution, ExecutionDBWithNames, ExecutionDetails};
 use td_objects::dxo::function::{Function, FunctionDBWithNames};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::types::basic::FunctionVersionId;
@@ -27,8 +27,8 @@ async fn execution_details(
     let execution_id = param.execution;
 
     let mut trx = db.read().await?;
-    let execution: ExecutionDBWithStatus = trx.get(authz.none()).fetch_one(&execution_id).await?;
-    let project = execution.base.base.project_id;
+    let execution: ExecutionDBWithNames = trx.get(authz.none()).fetch_one(&execution_id).await?;
+    let project = execution.base.project_id;
     let mut trx = trx.enter_project(&project).await?;
     let grant = authz
         .require::<Project, ViewProject>(&mut trx, &ctx, &project)

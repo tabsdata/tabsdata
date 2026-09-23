@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::transaction::TransactionDBWithStatus;
+use crate::dxo::transaction::TransactionDBWithNames;
 use crate::types::basic::{
     CollectionId, ExecutionId, TransactionId, TransactionStatus, TriggeredOn, UserId,
 };
@@ -10,7 +10,7 @@ use ta_objects::FromDao;
 use td_error::TdError;
 
 #[ta_objects::Dto]
-#[dto(list(on = TransactionDBWithStatus))]
+#[dto(list(on = TransactionDBWithNames))]
 pub struct SynchrotronResponse {
     #[dto(list(pagination_by = "+", filter, filter_like))]
     pub id: TransactionId,
@@ -27,16 +27,16 @@ pub struct SynchrotronResponse {
 }
 
 impl FromDao for SynchrotronResponse {
-    type Dao = TransactionDBWithStatus;
+    type Dao = TransactionDBWithNames;
 
-    fn from_dao(dao: TransactionDBWithStatus) -> Result<Self, TdError> {
+    fn from_dao(dao: TransactionDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
             id: dao.base.base.id,
             collection_id: dao.base.base.collection_id,
             execution_id: dao.base.base.execution_id,
             triggered_on: dao.base.base.triggered_on,
             triggered_by_id: dao.base.base.triggered_by_id,
-            status: dao.status,
+            status: dao.base.status,
         })
     }
 }

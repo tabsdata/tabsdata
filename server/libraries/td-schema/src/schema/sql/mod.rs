@@ -8,12 +8,14 @@
 
 pub(crate) mod partial_index;
 pub(crate) mod rls;
+pub(crate) mod rollup;
 pub(crate) mod scd2;
 pub(crate) mod statistics;
 pub mod trigger;
 pub(crate) mod view;
 
 pub(crate) use partial_index::PartialIndexDef;
+pub use rollup::{Changed, Logical, Parent, Physical, RollupArm, RollupDef};
 pub(crate) use statistics::StatisticsDef;
 pub(crate) use trigger::{ImmutableColumnsTriggerDef, Scd2TriggerDef, StickyTerminalsTriggerDef};
 pub(crate) use view::ViewDef;

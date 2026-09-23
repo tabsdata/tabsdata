@@ -12,14 +12,13 @@ use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
-use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
-use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
+use td_objects::dxo::logical::LogicalFunctionRunDB;
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::types::basic::{
     AtTime, ExecutionId, FunctionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
     PhysicalFunctionRunId,
 };
 use td_queries::Queries;
-use td_queries::metrics_facts::attempts_ended;
 use tracing::{debug, instrument};
 
 /// `stuck_lfrs` get the full recover flow; `abandoned_pfr_ids` (attempts
@@ -119,12 +118,9 @@ pub async fn fail_stale_abandoned_attempts(
     if stale.abandoned_pfr_ids.is_empty() {
         return Ok(());
     }
-    let update = PhysicalFunctionRunUpdateDB::failed_at(at)?;
-    conn.scd2()
-        .chunked()
-        .update(&update, &stale.abandoned_pfr_ids)
+    conn.physical_runs()
+        .failed(&stale.abandoned_pfr_ids, at)
         .await?;
-    attempts_ended(conn, &stale.abandoned_pfr_ids).await?;
     debug!(
         failed_count = stale.abandoned_pfr_ids.len(),
         "scheduler.fail_stale_abandoned_attempts: terminalized stale attempt(s)"
@@ -146,7 +142,12 @@ pub async fn sweep_stale_runs(
     fail_stale_abandoned_attempts(conn, at, &stale).await?;
     let stuck_lfrs = stale.stuck_lfrs.clone();
     abandon_requested_physical_runs(conn, at, &stuck_lfrs).await?;
-    let recover = LogicalFunctionRunStatusUpdateDB::recover();
-    update_function_run_status(msgs, conn, &stuck_lfrs, &recover).await?;
+    update_function_run_status(
+        msgs,
+        conn,
+        &stuck_lfrs,
+        LogicalFunctionRunStatus::ReScheduled,
+    )
+    .await?;
     Ok(())
 }

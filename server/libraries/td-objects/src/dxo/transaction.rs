@@ -37,6 +37,9 @@ pub struct TransactionDB {
     #[dao(flatten)]
     pub base: TransactionInsertDB,
     pub project_id: ProjectId,
+    pub status: TransactionStatus,
+    pub started_on: Option<Started<AtTime>>,
+    pub ended_on: Option<Ended<AtTime>>,
 }
 
 #[ta_objects::Dlo]
@@ -52,13 +55,10 @@ pub struct TransactionValue {
 }
 
 #[ta_objects::Dao]
-#[dao(view = "transactions__with_status", project_scoped)]
-pub struct TransactionDBWithStatus {
+#[dao(view = "transactions__with_names", project_scoped)]
+pub struct TransactionDBWithNames {
     #[dao(flatten)]
     pub base: TransactionDB,
-    pub started_on: Option<Started<AtTime>>,
-    pub ended_on: Option<Ended<AtTime>>,
-    pub status: TransactionStatus,
     pub collection: CollectionName,
     pub execution: Option<ExecutionName>,
     pub triggered_by: UserName,
@@ -69,7 +69,7 @@ pub struct TransactionDBWithStatus {
 }
 
 #[ta_objects::Dto]
-#[dto(list(on = TransactionDBWithStatus))]
+#[dto(list(on = TransactionDBWithNames))]
 pub struct Transaction {
     #[dto(list(pagination_by = "+", filter, filter_like))]
     pub id: TransactionId,
@@ -91,7 +91,7 @@ pub struct Transaction {
     pub started_on: Option<Started<AtTime>>,
     #[dto(list(filter, order_by))]
     pub ended_on: Option<Ended<AtTime>>,
-    #[dto(list(filter))]
+    #[dto(list(filter, order_by))]
     pub status: TransactionStatus,
     #[dto(list(filter, filter_like, order_by))]
     pub collection: CollectionName,
@@ -108,9 +108,9 @@ pub struct Transaction {
 }
 
 impl FromDao for Transaction {
-    type Dao = TransactionDBWithStatus;
+    type Dao = TransactionDBWithNames;
 
-    fn from_dao(dao: TransactionDBWithStatus) -> Result<Self, TdError> {
+    fn from_dao(dao: TransactionDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
             id: dao.base.base.id,
             collection_id: dao.base.base.collection_id,
@@ -121,9 +121,9 @@ impl FromDao for Transaction {
             triggered_by_id: dao.base.base.triggered_by_id,
             group_id: dao.base.base.group_id,
             project_id: dao.base.project_id,
-            started_on: dao.started_on,
-            ended_on: dao.ended_on,
-            status: dao.status,
+            started_on: dao.base.started_on,
+            ended_on: dao.base.ended_on,
+            status: dao.base.status,
             collection: dao.collection,
             execution: dao.execution,
             triggered_by: dao.triggered_by,

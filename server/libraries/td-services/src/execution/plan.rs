@@ -8,7 +8,7 @@ use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use ta_services::api_message;
 use ta_services::ctx_service::ReqCtx;
-use td_database::access::SeesProjectRows;
+use td_database::access::{InProject, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::{
@@ -24,7 +24,7 @@ use td_objects::dxo::graph::FunctionNode;
 use td_objects::dxo::graph::{GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::dxo::logical::{
     ActiveLogicalTableDataVersionDB, LogicalFunctionRunInputInsertDB, LogicalFunctionRunInsertDB,
-    LogicalFunctionRunStatusUpdateDB, LogicalTableDataVersionInsertDB,
+    LogicalTableDataVersionInsertDB,
 };
 use td_objects::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithFunction;
@@ -511,8 +511,8 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows>(
     level = "debug",
     err(Debug)
 )]
-pub async fn update_initial_function_run_status<S: SeesProjectRows>(
-    conn: &mut DomainConnection<Apiserver, S>,
+pub async fn update_initial_function_run_status(
+    conn: &mut DomainConnection<Apiserver, InProject>,
     execution: &ExecutionInsertDB,
 ) -> Result<(), TdError> {
     let lfr_ids = conn.logical_runs().blocked_ids(&execution.id).await?;
@@ -524,12 +524,9 @@ pub async fn update_initial_function_run_status<S: SeesProjectRows>(
         lfr_ids.len()
     );
 
-    if !lfr_ids.is_empty() {
-        let update = LogicalFunctionRunStatusUpdateDB {
-            status: LogicalFunctionRunStatus::OnHold,
-        };
-        let _ = conn.chunked().update(&update, &lfr_ids).await?;
-    }
+    conn.logical_runs()
+        .set_status(&lfr_ids, LogicalFunctionRunStatus::OnHold)
+        .await?;
 
     Ok(())
 }

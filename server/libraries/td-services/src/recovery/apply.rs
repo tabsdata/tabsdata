@@ -14,8 +14,8 @@ use ta_services::ctx_service::ReqCtx;
 use td_database::access::InProject;
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::logical::LogicalFunctionRunStatusUpdateDB;
 use td_objects::types::basic::AtTime;
+use td_objects::types::basic::LogicalFunctionRunStatus;
 use td_queries::Queries;
 use tracing::instrument;
 
@@ -43,17 +43,21 @@ pub async fn apply_recovery_actions(
     // Running LFRs with a recover verdict → Failed first; ReScheduled is only
     // reachable from Failed/OnHold/Requested.
     let running = fail_running_lfrs_for_recover(&actions)?;
-    let failed = LogicalFunctionRunStatusUpdateDB::failed();
-    update_function_run_status(msgs, conn, &running, &failed).await?;
+    update_function_run_status(msgs, conn, &running, LogicalFunctionRunStatus::Failed).await?;
 
     // Requested and just-failed LFRs with a recover verdict → ReScheduled.
     let to_recover = recover_lfrs_from_actions(&actions)?;
     abandon_requested_physical_runs(conn, at, &to_recover).await?;
-    let recover = LogicalFunctionRunStatusUpdateDB::recover();
-    update_function_run_status(msgs, conn, &to_recover, &recover).await?;
+    update_function_run_status(
+        msgs,
+        conn,
+        &to_recover,
+        LogicalFunctionRunStatus::ReScheduled,
+    )
+    .await?;
 
     // The rest → Failed, with the downstream on-hold cascade.
     let to_fail = fail_lfrs_from_actions(&actions)?;
-    update_function_run_status(msgs, conn, &to_fail, &failed).await?;
+    update_function_run_status(msgs, conn, &to_fail, LogicalFunctionRunStatus::Failed).await?;
     Ok(())
 }

@@ -30,3 +30,4 @@ mod recursive_cases;
 mod report;
 mod scaling;
 mod scd2_cases;
+mod status_door_cases;
