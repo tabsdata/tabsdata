@@ -435,7 +435,7 @@ def install_uv(workspace: dict[str, str]) -> None:
         download(UV_INSTALLER_WINDOWS, installer)
         run(
             [
-                "powershell",
+                "pwsh",
                 "-NoProfile",
                 "-ExecutionPolicy",
                 "Bypass",
