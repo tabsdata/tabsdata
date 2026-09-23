@@ -129,6 +129,27 @@ impl Entity for Defs {
                 .col(Executions::ProjectId)
                 .col(Executions::Id)
                 .to_owned(),
+            Index::create()
+                .name("executions___triggered_on__id___idx")
+                .table(Executions::Table)
+                .col(Executions::TriggeredOn)
+                .col(Executions::Id)
+                .to_owned(),
+            Index::create()
+                .name("executions___collection_id__triggered_on__id___idx")
+                .table(Executions::Table)
+                .col(Executions::CollectionId)
+                .col(Executions::TriggeredOn)
+                .col(Executions::Id)
+                .to_owned(),
+            Index::create()
+                .name("executions___project_id__status__triggered_on__id___idx")
+                .table(Executions::Table)
+                .col(Executions::ProjectId)
+                .col(Executions::Status)
+                .col(Executions::TriggeredOn)
+                .col(Executions::Id)
+                .to_owned(),
             // Dedup key: a non-NULL `external_uid` is unique per function.
             // NULLs are distinct on all backends, so untagged triggers are
             // never deduplicated.

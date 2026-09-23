@@ -167,6 +167,8 @@ impl Entity for Defs {
                 .col(LogicalTableDataVersions::ProjectId)
                 .col(LogicalTableDataVersions::Id)
                 .to_owned(),
+            time_ordered("ltdv___collection_id__triggered_on__id___idx", Some(LogicalTableDataVersions::CollectionId)),
+            time_ordered("ltdv___execution_id__triggered_on__id___idx", Some(LogicalTableDataVersions::ExecutionId)),
         ]
     }
 
@@ -336,4 +338,14 @@ impl Entity for Defs {
             ),
         ]
     }
+}
+
+/// `id` last carries the keyset pagination tie-break.
+fn time_ordered(name: &str, filter: Option<LogicalTableDataVersions>) -> IndexCreateStatement {
+    let mut index = Index::create();
+    index.name(name).table(LogicalTableDataVersions::Table);
+    if let Some(filter) = filter {
+        index.col(filter);
+    }
+    index.col(LogicalTableDataVersions::TriggeredOn).col(LogicalTableDataVersions::Id).to_owned()
 }

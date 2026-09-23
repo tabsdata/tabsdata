@@ -186,6 +186,11 @@ impl Entity for Defs {
                 .col(LogicalFunctionRuns::TransactionId)
                 .col(LogicalFunctionRuns::Status)
                 .to_owned(),
+            time_ordered("logical_function_runs___triggered_on__id___idx", None),
+            time_ordered("logical_function_runs___project_id__triggered_on__id___idx", Some(LogicalFunctionRuns::ProjectId)),
+            time_ordered("logical_function_runs___collection_id__triggered_on__id___idx", Some(LogicalFunctionRuns::CollectionId)),
+            time_ordered("logical_function_runs___execution_id__triggered_on__id___idx", Some(LogicalFunctionRuns::ExecutionId)),
+            time_ordered("logical_function_runs___transaction_id__triggered_on__id___idx", Some(LogicalFunctionRuns::TransactionId)),
         ]
     }
 
@@ -296,4 +301,14 @@ pub(super) fn run_status_count<T: IntoIden, C: IntoIden>(run_parent_col: Logical
         .take();
     let json = json_object_agg("inner_fr.status", "inner_fr.count");
     Expr::from(SubQueryStatement::from(Query::select().expr(Expr::cust(json)).from_subquery(counts, InnerFr).take()))
+}
+
+/// `id` last carries the keyset pagination tie-break.
+fn time_ordered(name: &str, filter: Option<LogicalFunctionRuns>) -> IndexCreateStatement {
+    let mut index = Index::create();
+    index.name(name).table(LogicalFunctionRuns::Table);
+    if let Some(filter) = filter {
+        index.col(filter);
+    }
+    index.col(LogicalFunctionRuns::TriggeredOn).col(LogicalFunctionRuns::Id).to_owned()
 }

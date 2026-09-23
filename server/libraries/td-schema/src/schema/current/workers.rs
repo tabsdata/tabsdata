@@ -136,6 +136,27 @@ impl Entity for Defs {
                 .to_owned(),
             // Keyset pagination: `ORDER BY id` under the tenant predicate.
             Index::create()
+                .name("workers___started_on__id___idx")
+                .table(Workers::Table)
+                .col(Workers::StartedOn)
+                .col(Workers::Id)
+                .to_owned(),
+            Index::create()
+                .name("workers___project_id__started_on__id___idx")
+                .table(Workers::Table)
+                .col(Workers::ProjectId)
+                .col(Workers::StartedOn)
+                .col(Workers::Id)
+                .to_owned(),
+            Index::create()
+                .name("workers___project_id__status__started_on__id___idx")
+                .table(Workers::Table)
+                .col(Workers::ProjectId)
+                .col(Workers::Status)
+                .col(Workers::StartedOn)
+                .col(Workers::Id)
+                .to_owned(),
+            Index::create()
                 .name("workers___project_id__id___idx")
                 .table(Workers::Table)
                 .col(Workers::ProjectId)

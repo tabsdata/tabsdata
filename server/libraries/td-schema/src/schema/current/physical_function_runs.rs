@@ -158,7 +158,8 @@ impl Entity for Defs {
                 .col(PhysicalFunctionRuns::ProjectId)
                 .col(PhysicalFunctionRuns::DispatchedOn)
                 .to_owned(),
-            // The roll-up's MIN(started_on) / MAX(ended_on) probe, index-only.
+            // The roll-up's MIN(started_on) / MAX(ended_on) probes, index-only: the
+            // doors run under the project policy, whose qual supplies `project_id`.
             Index::create()
                 .name("pfr___project_id__execution_id__started_on__ended_on___idx")
                 .table(PhysicalFunctionRuns::Table)

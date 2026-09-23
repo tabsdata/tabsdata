@@ -197,6 +197,7 @@ pub struct CollectionUpdateDB {
 pub struct CollectionRead {
     #[dto(list(pagination_by = "+"))]
     pub id: CollectionId,
+    #[dto(list(filter))]
     pub project_id: ProjectId,
     #[dto(list(filter, filter_like, order_by))]
     pub name: CollectionName,

@@ -11,12 +11,12 @@
 //! `ended_on`, backfilled once here and kept current by the roll-up door.
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, CommonTableExpression, Condition, Expr, ExprTrait, Func, Iden, IntoIden, JoinType, PostgresQueryBuilder,
-    Query, SelectStatement, SimpleExpr, Table, TableCreateStatement, UnionType, WithClause,
+    Alias, Asterisk, ColumnDef, CommonTableExpression, Condition, Expr, ExprTrait, Func, Iden, Index, IntoIden, JoinType,
+    PostgresQueryBuilder, Query, SelectStatement, SimpleExpr, Table, TableCreateStatement, UnionType, WithClause,
 };
 
 use crate::schema::render::{render_query, render_schema, update_db_version};
-use crate::schema::sql::{Logical, Parent, Physical, RollupArm, RollupDef, id_column, logical_id_column};
+use crate::schema::sql::{RollupArm, RollupDef, id_column, logical_id_column};
 use crate::schema::version::SchemaDelta;
 
 /// Frozen: the delta cannot follow a later rename of the enums.
@@ -616,148 +616,6 @@ pub(super) fn backfill_statement() -> String {
     insert.to_string(PostgresQueryBuilder)
 }
 
-/// The listing views the roll-up columns replace. Standing at v9 and absent
-/// at v10, so the ladder takes their drops from this rung.
-const RETIRED_VIEWS: [&str; 5] = [
-    "executions__with_status",
-    "transactions__with_status",
-    "execution_status_summary",
-    "transaction_status_summary",
-    "global_status_summary",
-];
-
-/// Frozen at the shape they had at v10.
-#[derive(Iden, Clone, Copy)]
-enum Executions {
-    Table,
-    Id,
-    Status,
-    StartedOn,
-    EndedOn,
-}
-
-#[derive(Iden, Clone, Copy)]
-enum Transactions {
-    Table,
-    Id,
-    Status,
-    StartedOn,
-    EndedOn,
-}
-
-const RUN_TERMINALS: &[&str] = &["C", "X", "Y"];
-const RUN_LADDER_FALLBACK: &str = "U";
-
-const EXECUTION_LADDER: &[RollupArm] = &[
-    RollupArm::All { all: &["S"], status: "S" },
-    RollupArm::All {
-        all: &["C", "X", "Y"],
-        status: "F",
-    },
-    RollupArm::AllWithAny {
-        all: &["C", "D", "F", "H"],
-        any: &["F", "H"],
-        status: "L",
-    },
-    RollupArm::Any {
-        any: &["S", "RR", "RS", "R", "D", "E"],
-        status: "R",
-    },
-];
-
-const TRANSACTION_LADDER: &[RollupArm] = &[
-    RollupArm::All { all: &["S"], status: "S" },
-    RollupArm::All { all: &["C"], status: "C" },
-    RollupArm::All { all: &["X"], status: "X" },
-    RollupArm::All { all: &["Y"], status: "Y" },
-    RollupArm::AllWithAny {
-        all: &["D", "F", "H"],
-        any: &["F", "H"],
-        status: "L",
-    },
-    RollupArm::Any {
-        any: &["S", "RR", "RS", "R", "D", "E"],
-        status: "R",
-    },
-];
-
-fn rollup_columns<T: IntoIden + Copy>(table: T, status: impl IntoIden, started: impl IntoIden, ended: impl IntoIden) -> String {
-    render_schema(
-        Table::alter()
-            .table(table)
-            .add_column(ColumnDef::new(status).text().not_null().default("S"))
-            .add_column(ColumnDef::new(started).timestamp_with_time_zone().null())
-            .add_column(ColumnDef::new(ended).timestamp_with_time_zone().null())
-            .to_owned(),
-    )
-}
-
-fn execution_rollup() -> RollupDef {
-    RollupDef {
-        parent: Parent {
-            table: Executions::Table.into_iden(),
-            id: Executions::Id.into_iden(),
-            status: Executions::Status.into_iden(),
-            started_on: Executions::StartedOn.into_iden(),
-            ended_on: Executions::EndedOn.into_iden(),
-        },
-        logical: Logical {
-            table: LogicalFunctionRuns::Table.into_iden(),
-            id: LogicalFunctionRuns::Id.into_iden(),
-            parent: LogicalFunctionRuns::ExecutionId.into_iden(),
-            status: LogicalFunctionRuns::Status.into_iden(),
-        },
-        physical: Physical {
-            table: PhysicalFunctionRuns::Table.into_iden(),
-            id: PhysicalFunctionRuns::Id.into_iden(),
-            parent: PhysicalFunctionRuns::ExecutionId.into_iden(),
-            started_on: PhysicalFunctionRuns::StartedOn.into_iden(),
-            ended_on: PhysicalFunctionRuns::EndedOn.into_iden(),
-        },
-        ladder: EXECUTION_LADDER,
-        fallback: RUN_LADDER_FALLBACK,
-        finished: RUN_TERMINALS,
-    }
-}
-
-fn transaction_rollup() -> RollupDef {
-    RollupDef {
-        parent: Parent {
-            table: Transactions::Table.into_iden(),
-            id: Transactions::Id.into_iden(),
-            status: Transactions::Status.into_iden(),
-            started_on: Transactions::StartedOn.into_iden(),
-            ended_on: Transactions::EndedOn.into_iden(),
-        },
-        logical: Logical {
-            table: LogicalFunctionRuns::Table.into_iden(),
-            id: LogicalFunctionRuns::Id.into_iden(),
-            parent: LogicalFunctionRuns::TransactionId.into_iden(),
-            status: LogicalFunctionRuns::Status.into_iden(),
-        },
-        physical: Physical {
-            table: PhysicalFunctionRuns::Table.into_iden(),
-            id: PhysicalFunctionRuns::Id.into_iden(),
-            parent: PhysicalFunctionRuns::TransactionId.into_iden(),
-            started_on: PhysicalFunctionRuns::StartedOn.into_iden(),
-            ended_on: PhysicalFunctionRuns::EndedOn.into_iden(),
-        },
-        ladder: TRANSACTION_LADDER,
-        fallback: RUN_LADDER_FALLBACK,
-        finished: RUN_TERMINALS,
-    }
-}
-
-/// The v10 roll-up of the parents from their runs. Exposed so the DAO gate
-/// can hold the live door to the rows the rung derives.
-#[cfg(feature = "td-test")]
-pub fn status_rollup_backfill() -> Vec<String> {
-    vec![
-        render_query(execution_rollup().backfill()),
-        render_query(transaction_rollup().backfill()),
-    ]
-}
-
 pub struct Migration;
 
 impl SchemaDelta for Migration {
@@ -765,7 +623,9 @@ impl SchemaDelta for Migration {
     const TO_VERSION: usize = 10;
 
     fn retired() -> Vec<String> {
-        RETIRED_VIEWS.iter().map(|view| format!("DROP VIEW IF EXISTS {view}")).collect()
+        let views = RETIRED_VIEWS.iter().map(|view| format!("DROP VIEW IF EXISTS {view}"));
+        let indexes = RETIRED_INDEXES.iter().map(|index| render_schema(Index::drop().name(*index).if_exists().to_owned()));
+        views.chain(indexes).collect()
     }
 
     fn up() -> Vec<String> {

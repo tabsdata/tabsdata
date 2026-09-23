@@ -359,15 +359,27 @@ CREATE INDEX "executions___project_id__triggered_on__id___idx" ON "executions" (
 
 CREATE INDEX "executions___project_id__id___idx" ON "executions" ("project_id", "id")
 
+CREATE INDEX "executions___triggered_on__id___idx" ON "executions" ("triggered_on", "id")
+
+CREATE INDEX "executions___collection_id__triggered_on__id___idx" ON "executions" ("collection_id", "triggered_on", "id")
+
+CREATE INDEX "executions___project_id__status__triggered_on__id___idx" ON "executions" ("project_id", "status", "triggered_on", "id")
+
 CREATE UNIQUE INDEX "executions___function_id__external_uid___idx" ON "executions" ("function_id", "external_uid")
 
 CREATE INDEX "transactions___group_id__project_id___idx" ON "transactions" ("group_id", "project_id")
 
-CREATE INDEX "transactions___execution_id___idx" ON "transactions" ("execution_id")
+CREATE INDEX "transactions___execution_id__triggered_on__id___idx" ON "transactions" ("execution_id", "triggered_on", "id")
 
 CREATE INDEX "transactions___project_id__id___idx" ON "transactions" ("project_id", "id")
 
 CREATE INDEX "transactions___project_id__triggered_on__id___idx" ON "transactions" ("project_id", "triggered_on", "id")
+
+CREATE INDEX "transactions___triggered_on__id___idx" ON "transactions" ("triggered_on", "id")
+
+CREATE INDEX "transactions___project_id__status__triggered_on__id___idx" ON "transactions" ("project_id", "status", "triggered_on", "id")
+
+CREATE INDEX "transactions___project_id__started_on__id___idx" ON "transactions" ("project_id", "started_on", "id")
 
 CREATE INDEX "logical_function_runs___group_id__project_id___idx" ON "logical_function_runs" ("group_id", "project_id")
 
@@ -385,6 +397,16 @@ CREATE INDEX "logical_function_runs___execution_id__status___idx" ON "logical_fu
 
 CREATE INDEX "logical_function_runs___transaction_id__status___idx" ON "logical_function_runs" ("transaction_id", "status")
 
+CREATE INDEX "logical_function_runs___triggered_on__id___idx" ON "logical_function_runs" ("triggered_on", "id")
+
+CREATE INDEX "logical_function_runs___project_id__triggered_on__id___idx" ON "logical_function_runs" ("project_id", "triggered_on", "id")
+
+CREATE INDEX "logical_function_runs___collection_id__triggered_on__id___idx" ON "logical_function_runs" ("collection_id", "triggered_on", "id")
+
+CREATE INDEX "logical_function_runs___execution_id__triggered_on__id___idx" ON "logical_function_runs" ("execution_id", "triggered_on", "id")
+
+CREATE INDEX "logical_function_runs___transaction_id__triggered_on__id___idx" ON "logical_function_runs" ("transaction_id", "triggered_on", "id")
+
 CREATE INDEX "logical_table_data_versions___group_id__project_id___idx" ON "logical_table_data_versions" ("group_id", "project_id")
 
 CREATE INDEX "logical_table_data_versions___table_id__triggered_on__id___idx" ON "logical_table_data_versions" ("table_id", "triggered_on", "id")
@@ -394,6 +416,10 @@ CREATE INDEX "ltdv___producer_logical_function_run_id___idx" ON "logical_table_d
 CREATE INDEX "logical_table_data_versions___execution_id__table_id___idx" ON "logical_table_data_versions" ("execution_id", "table_id")
 
 CREATE INDEX "logical_table_data_versions___project_id__id___idx" ON "logical_table_data_versions" ("project_id", "id")
+
+CREATE INDEX "ltdv___collection_id__triggered_on__id___idx" ON "logical_table_data_versions" ("collection_id", "triggered_on", "id")
+
+CREATE INDEX "ltdv___execution_id__triggered_on__id___idx" ON "logical_table_data_versions" ("execution_id", "triggered_on", "id")
 
 CREATE INDEX "pfr___status__project_id__valid_from___idx" ON "physical_function_runs" ("status", "project_id", "valid_from")
 
@@ -428,6 +454,12 @@ CREATE INDEX "workers___collection_id___idx" ON "workers" ("collection_id")
 CREATE INDEX "workers___function_version_id__worker_type___idx" ON "workers" ("function_version_id", "worker_type")
 
 CREATE INDEX "workers___enabled__worker_type__status__project_id__id___idx" ON "workers" ("worker_enabled", "worker_type", "status", "project_id", "id")
+
+CREATE INDEX "workers___started_on__id___idx" ON "workers" ("started_on", "id")
+
+CREATE INDEX "workers___project_id__started_on__id___idx" ON "workers" ("project_id", "started_on", "id")
+
+CREATE INDEX "workers___project_id__status__started_on__id___idx" ON "workers" ("project_id", "status", "started_on", "id")
 
 CREATE INDEX "workers___project_id__id___idx" ON "workers" ("project_id", "id")
 

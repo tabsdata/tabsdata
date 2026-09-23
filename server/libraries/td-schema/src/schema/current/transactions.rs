@@ -112,7 +112,13 @@ impl Entity for Defs {
                 .col(Transactions::GroupId)
                 .col(Transactions::ProjectId)
                 .to_owned(),
-            Index::create().name("transactions___execution_id___idx").table(Transactions::Table).col(Transactions::ExecutionId).to_owned(),
+            Index::create()
+                .name("transactions___execution_id__triggered_on__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::ExecutionId)
+                .col(Transactions::TriggeredOn)
+                .col(Transactions::Id)
+                .to_owned(),
             // Keyset pagination: `ORDER BY id` under the tenant predicate.
             Index::create()
                 .name("transactions___project_id__id___idx")
@@ -126,6 +132,27 @@ impl Entity for Defs {
                 .table(Transactions::Table)
                 .col(Transactions::ProjectId)
                 .col(Transactions::TriggeredOn)
+                .col(Transactions::Id)
+                .to_owned(),
+            Index::create()
+                .name("transactions___triggered_on__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::TriggeredOn)
+                .col(Transactions::Id)
+                .to_owned(),
+            Index::create()
+                .name("transactions___project_id__status__triggered_on__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::ProjectId)
+                .col(Transactions::Status)
+                .col(Transactions::TriggeredOn)
+                .col(Transactions::Id)
+                .to_owned(),
+            Index::create()
+                .name("transactions___project_id__started_on__id___idx")
+                .table(Transactions::Table)
+                .col(Transactions::ProjectId)
+                .col(Transactions::StartedOn)
                 .col(Transactions::Id)
                 .to_owned(),
         ]
