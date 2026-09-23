@@ -117,6 +117,28 @@ pub(crate) fn project_scoped_tables() -> Vec<DynIden> {
 }
 
 /// The complete fresh-install script for the current schema.
+/// One index of the current schema, by name: what a registry of index
+/// consumers is checked against.
+pub struct IndexInfo {
+    pub name: String,
+    pub unique: bool,
+}
+
+pub fn indexes() -> Vec<IndexInfo> {
+    ENTITIES
+        .iter()
+        .flat_map(|e| e.create_indices())
+        .map(|i| IndexInfo {
+            name: i.get_index_spec().get_name().expect("every index is named").to_string(),
+            unique: i.is_unique_key(),
+        })
+        .chain(ENTITIES.iter().flat_map(|e| e.create_partial_indices()).map(|i| IndexInfo {
+            name: i.name().to_string(),
+            unique: false,
+        }))
+        .collect()
+}
+
 pub fn build() -> Vec<String> {
     install_script(&Source)
 }

@@ -41,7 +41,7 @@ fn is_exempt(key: &str) -> bool {
 /// logical query, matching the registry. Trait *impl* methods have inherited
 /// visibility, so they never contribute — only the trait's own declarations
 /// do.
-fn scan_surface() -> BTreeSet<String> {
+pub(crate) fn scan_surface() -> BTreeSet<String> {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut files: Vec<PathBuf> = Vec::new();
     let mut stack = vec![src];

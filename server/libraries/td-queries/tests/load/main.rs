@@ -20,6 +20,7 @@ mod dataversion_cases;
 mod default_write_cases;
 mod harness;
 mod history_cases;
+mod indexes;
 mod latest_default_cases;
 mod list_cases;
 mod metric;

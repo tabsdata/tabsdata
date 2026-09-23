@@ -30,6 +30,10 @@ impl PartialIndexDef {
         }
     }
 
+    pub(crate) fn name(&self) -> &'static str {
+        self.name
+    }
+
     pub(crate) fn render(&self) -> Derived {
         let columns = self.columns.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
         Derived {

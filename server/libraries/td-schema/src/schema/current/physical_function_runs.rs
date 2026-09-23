@@ -188,16 +188,6 @@ impl Entity for Defs {
                 .table(PhysicalFunctionRuns::Table)
                 .col(PhysicalFunctionRuns::FunctionVersionId)
                 .to_owned(),
-            // Metrics / Sankey time-window: the LFR-canonical view resolves
-            // only `ended_on` to this table (status/dimensions are the LFR's),
-            // and only the open attempt counts.
-            Index::create()
-                .name("pfr___project_id__ended_on___current_idx")
-                .table(PhysicalFunctionRuns::Table)
-                .col(PhysicalFunctionRuns::ProjectId)
-                .col(PhysicalFunctionRuns::EndedOn)
-                .and_where(open_interval(PhysicalFunctionRuns::ValidTo))
-                .to_owned(),
             // Keyset pagination: `ORDER BY id` under the tenant predicate.
             Index::create()
                 .name("pfr___project_id__id___idx")

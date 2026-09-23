@@ -433,8 +433,6 @@ CREATE INDEX "pfr___function_version_patch_id___idx" ON "physical_function_runs"
 
 CREATE INDEX "pfr___function_version_id___idx" ON "physical_function_runs" ("function_version_id")
 
-CREATE INDEX "pfr___project_id__ended_on___current_idx" ON "physical_function_runs" ("project_id", "ended_on") WHERE "valid_to" = ('infinity'::timestamptz)
-
 CREATE INDEX "pfr___project_id__id___idx" ON "physical_function_runs" ("project_id", "id")
 
 CREATE UNIQUE INDEX "pfr___logical_function_run_id___current_uidx" ON "physical_function_runs" ("logical_function_run_id") WHERE "valid_to" = ('infinity'::timestamptz)

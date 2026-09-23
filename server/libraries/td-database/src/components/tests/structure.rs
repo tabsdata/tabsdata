@@ -169,7 +169,6 @@ async fn assert_indices(db: &TdPool) {
         "pfr___function_version_patch_id___idx",
         "pfr___logical_function_run_id___current_uidx",
         "pfr___logical_function_run_id__valid_from__id___idx",
-        "pfr___project_id__ended_on___current_idx",
         "pfr___project_id__execution_id__started_on__ended_on___idx",
         "pfr___project_id__id___idx",
         "pfr___project_id__transaction_id__started_on__ended_on___idx",

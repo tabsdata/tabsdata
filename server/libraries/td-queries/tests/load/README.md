@@ -54,6 +54,18 @@ TD_QUERY_LOAD_BASELINE_UPDATE=1 cargo test -p td-queries --test load -- --ignore
 Thresholds: `TD_QUERY_LOAD_REGRESS_PCT` (default 50) over baselines above
 `TD_QUERY_LOAD_REGRESS_FLOOR_US` (default 5000).
 
+## Index consumers
+
+`indexes.rs` registers every index of the current schema with what reads it:
+a query on this crate's surface, a `list` filter/order combination a client
+can send, a constraint, or a path outside the crate (an FK probe, a keyset
+tie-break, a service lookup) with its reason. The registry is checked both
+ways against `td_schema::schema::current::indexes()`, the query names against
+the surface, and the list combinations by parsing them against their DTOs,
+so an index whose query went away, or a new index nobody named a consumer
+for, fails the build. Whether the planner actually picks an index is a
+question for a sized dataset and `pg_stat_user_indexes`, not for this guard.
+
 ## Adding a query
 
 Add the method, add a `LoadCase` to `cases.rs` (the audit tells you it's
