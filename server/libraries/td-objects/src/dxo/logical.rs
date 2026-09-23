@@ -307,6 +307,7 @@ pub struct TableDataVersionDBWithNames {
 /// Per-attempt drill (download, schema, sample) goes through
 /// `physical_table_data_version_id`.
 #[ta_objects::Dto]
+#[derive(Eq, PartialEq)]
 #[dto(list(on = TableDataVersionDBWithNames))]
 pub struct TableDataVersion {
     #[dto(list(pagination_by = "+", filter, filter_like))]
@@ -441,6 +442,11 @@ pub struct LogicalFunctionRunInputDB {
     pub base: LogicalFunctionRunInputInsertDB,
     pub project_id: ProjectId,
 }
+#[ta_objects::UrlParam]
+pub struct TableDataVersionParam {
+    pub table_data_version: LogicalTableDataVersionId,
+}
+
 #[ta_objects::UrlParam]
 pub struct LogicalFunctionRunParam {
     pub logical_function_run: LogicalFunctionRunId,

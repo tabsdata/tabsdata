@@ -207,7 +207,6 @@ pub struct ChainHandle {
     pub producer_lfrs: Vec<LogicalFunctionRunId>,
     pub consumer_function_id: FunctionId,
     pub producer_function_version_id: FunctionVersionId,
-    pub producer_tdv_id: PhysicalTableDataVersionId,
     /// Producer LTDV logical ids — partitions for the `find_at` reads.
     pub ltdv_ids: Vec<LogicalTableDataVersionId>,
     /// A producer output-table id (for `latest_bound_tdv_with_data_for_table`).
@@ -232,7 +231,6 @@ struct Unit {
     pfr_id: PhysicalFunctionRunId,
     lfr_id: LogicalFunctionRunId,
     ltdv: LogicalTableDataVersionInsertDB,
-    ptdv_id: PhysicalTableDataVersionId,
 }
 
 /// Build a chain graph: `units` independent collections, each with a producer
@@ -250,7 +248,7 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
     let mut table_id: Option<TableId> = None;
     let mut collection_id: Option<td_objects::types::basic::CollectionId> = None;
     let mut transaction_id: Option<td_objects::types::basic::TransactionId> = None;
-    let mut first: Option<(FunctionId, FunctionVersionId, PhysicalTableDataVersionId)> = None;
+    let mut first: Option<(FunctionId, FunctionVersionId)> = None;
 
     let mut graph = RunGraph::default();
     let s = next_salt();
@@ -305,17 +303,13 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
         }
 
         if first.is_none() {
-            first = Some((
-                consumer.function_id,
-                producer.function_version_id.clone(),
-                producer.ptdv_id.clone(),
-            ));
+            first = Some((consumer.function_id, producer.function_version_id.clone()));
         }
     }
 
     graph.flush(db, &pid).await?;
 
-    let (consumer_function_id, producer_function_version_id, producer_tdv_id) =
+    let (consumer_function_id, producer_function_version_id) =
         first.expect("chain_dataset requires units >= 1");
 
     Ok(ChainHandle {
@@ -324,7 +318,6 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
         producer_lfrs,
         consumer_function_id,
         producer_function_version_id,
-        producer_tdv_id,
         ltdv_ids,
         table_id: table_id.expect("chain_dataset requires units >= 1"),
         collection_id: collection_id.expect("chain_dataset requires units >= 1"),
@@ -439,9 +432,8 @@ async fn build_unit(
         triggered_by_id: trx.base.triggered_by_id,
         group_id: collection.group_id,
     };
-    let ptdv_id = PhysicalTableDataVersionId::new();
     let ptdv = PhysicalTableDataVersionInsertDB {
-        id: ptdv_id.clone(),
+        id: PhysicalTableDataVersionId::new(),
         collection_id: ltdv.collection_id,
         table_id: table.base.table_id,
         name: table.base.name.clone(),
@@ -474,7 +466,6 @@ async fn build_unit(
         pfr_id: pfr.id.clone(),
         lfr_id: lfr.id.clone(),
         ltdv: ltdv.clone(),
-        ptdv_id: ptdv.id.clone(),
     };
     graph.lfrs.push(lfr);
     let at = LockInstant::asserted(*trx.base.triggered_on);

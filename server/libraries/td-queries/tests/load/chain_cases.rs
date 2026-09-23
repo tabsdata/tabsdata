@@ -161,7 +161,7 @@ async fn load_executions_list_by_table_data_version(db: TdPool) -> Result<(), Td
     let t = Instant::now();
     let rows = db
         .executions()
-        .list_by_table_data_version(&Some(h.producer_tdv_id.clone()), &params)
+        .list_by_table_data_version(&h.ltdv_ids[0], &params)
         .await?;
     record(
         "executions::list_by_table_data_version",

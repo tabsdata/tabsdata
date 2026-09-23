@@ -195,7 +195,7 @@ async fn time_chain_queries(
         out,
         "executions::list_by_table_data_version",
         (db).executions()
-            .list_by_table_data_version(&Some(h.producer_tdv_id.clone()), &exec_params)
+            .list_by_table_data_version(&h.ltdv_ids[0], &exec_params)
             .await?
     );
     let _ = timed!(

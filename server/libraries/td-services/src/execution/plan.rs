@@ -15,6 +15,7 @@ use td_execution::{
     EXECUTION_GRAPH_OPTIONS, ExecutionPlan, ExecutionPlanner, ResolvedExecutionPlan, TransactionBy,
     VersionResolver,
 };
+use td_objects::FromDao;
 use td_objects::dxo::execution::{
     ExecutionInsertDB, ExecutionResponse, FunctionNodeResponse, ResolvedVersionResponse,
     TableNodeResponse,
@@ -24,10 +25,8 @@ use td_objects::dxo::graph::FunctionNode;
 use td_objects::dxo::graph::{GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::dxo::logical::{
     ActiveLogicalTableDataVersionDB, LogicalFunctionRunInputInsertDB, LogicalFunctionRunInsertDB,
-    LogicalTableDataVersionInsertDB,
+    LogicalTableDataVersionInsertDB, TableDataVersion, TableDataVersionDBWithNames,
 };
-use td_objects::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
-use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithFunction;
 use td_objects::dxo::transaction::TransactionInsertDB;
 use td_objects::graph::{MapGraph, TdGraph};
 use td_objects::transaction::map::{TransactionMap, TransactionMapper};
@@ -227,21 +226,14 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
     execution: &ExecutionInsertDB,
     execution_plan: &ExecutionPlan,
 ) -> Result<ResolvedExecutionPlan, TdError> {
-    let triggered_on = execution.triggered_on;
-    let at_time = AtTime::from(triggered_on);
+    let at_time = AtTime::from(execution.triggered_on);
 
-    // Per-edge metadata, in plan-iteration order; `cache_key` shares
-    // resolved LTDV vectors across edges asking for the same (table, versions).
-    struct EdgeMeta {
-        versions_original: Versions,
-        cache_key: (TableId, Versions),
-    }
-    let mut edge_meta: Vec<EdgeMeta> = Vec::new();
-    let mut ltdv_cache: HashMap<(TableId, Versions), Vec<Option<ActiveLogicalTableDataVersionDB>>> =
+    // Per-edge cache keys, in plan-iteration order; resolves are shared
+    // across edges asking for the same (table, versions).
+    let mut edge_meta: Vec<(Versions, (TableId, Versions))> = Vec::new();
+    let mut ltdv_cache: HashMap<(TableId, Versions), Vec<Option<LogicalTableDataVersionId>>> =
         HashMap::new();
 
-    // Pass 1 — resolve LTDVs once per (table, versions); LTDV→TDV
-    // translation is deferred to the batched pass below.
     for edge in execution_plan.graph.inner.edge_references() {
         let source = &execution_plan.graph.inner[edge.source()];
         let target = &execution_plan.graph.inner[edge.target()];
@@ -277,80 +269,26 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
                 .function_id(&function.function_id)
                 .table_id(&table.table_id)
                 .versions(&lookup_versions)
-                .triggered_on(&AtTime::from(triggered_on))
+                .triggered_on(&at_time)
                 .build()?
                 .resolve(&mut *conn)
-                .await?;
+                .await?
+                .into_iter()
+                .map(|ltdv| ltdv.map(|ltdv| ltdv.base.base.id))
+                .collect();
             ltdv_cache.insert(cache_key.clone(), ltdvs);
         }
 
-        edge_meta.push(EdgeMeta {
-            versions_original: versions_inner.clone(),
-            cache_key,
-        });
+        edge_meta.push((versions_inner.clone(), cache_key));
     }
 
-    // Pass 2 — translate every referenced LTDV to its materialization
-    // current at `at_time`, in one batched query.
-    let all_ftdv_ids: Vec<LogicalTableDataVersionId> = ltdv_cache
-        .values()
-        .flat_map(|ltdvs| {
-            ltdvs
-                .iter()
-                .filter_map(|f| f.as_ref().map(|f| f.base.base.id.clone()))
-        })
-        .collect::<HashSet<_>>()
+    let edge_results: Vec<ResolvedVersion> = edge_meta
         .into_iter()
-        .collect();
-    let tdvs: Vec<PhysicalTableDataVersionDBWithFunction> = if all_ftdv_ids.is_empty() {
-        Vec::new()
-    } else {
-        conn.scd2()
-            .as_of(&at_time)
-            .chunked()
-            .fetch_all::<PhysicalTableDataVersionDBWithFunction>(&all_ftdv_ids, ())
-            .await?
-    };
-    let tdv_by_ftdv: HashMap<LogicalTableDataVersionId, PhysicalTableDataVersionDBWithFunction> =
-        tdvs.into_iter()
-            .map(|t| (t.base.base.logical_table_data_version_id.clone(), t))
-            .collect();
-
-    let resolved_cache: HashMap<
-        (TableId, Versions),
-        Vec<Option<PhysicalTableDataVersionDBWithFunction>>,
-    > = ltdv_cache
-        .into_iter()
-        .map(|(k, ltdvs)| {
-            let resolved: Vec<Option<PhysicalTableDataVersionDBWithFunction>> = ltdvs
-                .into_iter()
-                .map(
-                    |ftdv_opt| -> Option<PhysicalTableDataVersionDBWithFunction> {
-                        let ltdv = ftdv_opt?;
-                        Some(tdv_by_ftdv.get(&ltdv.base.base.id)?.clone())
-                    },
-                )
-                .collect();
-            (k, resolved)
+        .map(|(original, cache_key)| ResolvedVersion {
+            inner: ltdv_cache[&cache_key].clone(),
+            original: original.into(),
         })
         .collect();
-
-    let mut edge_results: Vec<ResolvedVersion> = Vec::with_capacity(edge_meta.len());
-    for meta in edge_meta {
-        let resolved = resolved_cache
-            .get(&meta.cache_key)
-            .expect("cache populated for every edge in pass 1");
-        let found = resolved
-            .iter()
-            .map(|tdv_opt| tdv_opt.as_ref().map(ExecutionTableDataVersionRead::from))
-            .collect::<Vec<_>>();
-
-        let resolved_version = ResolvedVersion {
-            inner: found,
-            original: meta.versions_original.into(),
-        };
-        edge_results.push(resolved_version);
-    }
 
     let mut edge_iter = edge_results.into_iter();
     let execution_plan = execution_plan
@@ -371,6 +309,35 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
         .await?;
 
     Ok(execution_plan)
+}
+
+/// Every data version the plan's edges reference, as its logical identity
+/// merged with whatever materialization is current for it right now.
+pub async fn fetch_relations_info<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
+    execution_plan: &ResolvedExecutionPlan,
+) -> Result<HashMap<LogicalTableDataVersionId, TableDataVersion>, TdError> {
+    let ids: Vec<LogicalTableDataVersionId> = execution_plan
+        .graph
+        .inner
+        .edge_weights()
+        .flat_map(|edge| edge.versions().inner.iter().flatten().cloned())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    if ids.is_empty() {
+        return Ok(HashMap::new());
+    }
+    conn.timeline()
+        .chunked()
+        .fetch_all::<TableDataVersionDBWithNames>(&ids, ())
+        .await?
+        .into_iter()
+        .map(|dao| {
+            let info = TableDataVersion::from_dao(dao)?;
+            Ok((info.id.clone(), info))
+        })
+        .collect()
 }
 
 /// One row per resolved-version per input edge of every triggered function:
@@ -538,6 +505,7 @@ pub async fn build_response(
     execution_plan: &ResolvedExecutionPlan,
     logical_function_runs: &[LogicalFunctionRunInsertDB],
     logical_function_run_inputs: &[LogicalFunctionRunInputInsertDB],
+    relations_info: HashMap<LogicalTableDataVersionId, TableDataVersion>,
 ) -> Result<ExecutionResponse, TdError> {
     let dot = Dot::try_from(execution_plan.dot().to_string())?;
 
@@ -582,20 +550,7 @@ pub async fn build_response(
                 Ok::<_, TdError>(response)
             },
             |edge, _, target| async move {
-                let mut collected_info = Vec::new();
-                let inner: Vec<_> = edge
-                    .versions()
-                    .inner
-                    .iter()
-                    .map(|v| {
-                        v.as_ref()
-                            .map(|t| {
-                                collected_info.push((t.id.clone(), t.clone()));
-                                Ok::<_, TdError>(t.id.clone())
-                            })
-                            .transpose()
-                    })
-                    .collect::<Result<_, _>>()?;
+                let inner = edge.versions().inner.clone();
 
                 // Pair each resolved slot with its persisted `input_idx`;
                 // slots without a matching LFRI row render as NO_DATA.
@@ -624,19 +579,16 @@ pub async fn build_response(
                     input_idxs,
                     original: edge.versions().original.clone(),
                 };
-                Ok::<_, TdError>((response, collected_info))
+                Ok::<_, TdError>(response)
             },
         )
         .await?;
 
-    let mut relations_info = HashMap::new();
     let relations = execution_plan
         .relations()
         .into_iter()
         .map(|(f, t, e)| {
-            let (resolved_version, info) = e.versions();
-            let resolved_version = e.versioned(resolved_version.clone());
-            relations_info.extend(info.clone());
+            let resolved_version = e.versioned(e.versions().clone());
             (
                 f.function_version_id.clone(),
                 t.table_version_id,

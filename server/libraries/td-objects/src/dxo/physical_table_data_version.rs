@@ -96,72 +96,6 @@ pub struct PhysicalTableDataVersionDBWithFunction {
     pub storage_version: StorageVersion,
 }
 
-#[ta_objects::Dto]
-#[derive(Eq, PartialEq, Hash)]
-pub struct ExecutionTableDataVersionRead {
-    pub id: PhysicalTableDataVersionId,
-    pub project_id: ProjectId,
-    pub collection_id: CollectionId,
-    pub table_id: TableId,
-    pub name: TableName,
-    pub table_version_id: TableVersionId,
-    pub function_version_id: FunctionVersionId,
-    pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
-    pub execution_id: ExecutionId,
-    pub transaction_id: TransactionId,
-    pub physical_function_run_id: PhysicalFunctionRunId,
-    pub function_param_pos: TableFunctionParamPos,
-    pub triggered_on: AtTime,
-    pub base_path: BasePath,
-    pub has_data: Option<HasData>,
-    pub schema_changed: Option<SchemaChanged>,
-    pub column_count: Option<ColumnCount>,
-    pub row_count: Option<RowCount>,
-    pub data_bytes: Option<ByteCount>,
-    pub schema_hash: Option<SchemaHash>,
-    pub with_data_table_data_version_id: Option<WithData<PhysicalTableDataVersionId>>,
-    pub triggered_by_id: UserId,
-    pub started_on: Option<Started<AtTime>>,
-    pub ended_on: Option<Ended<AtTime>>,
-    pub status: PhysicalFunctionRunStatus,
-    pub storage_version: StorageVersion,
-}
-
-impl FromDao for ExecutionTableDataVersionRead {
-    type Dao = PhysicalTableDataVersionDBWithNames;
-
-    fn from_dao(dao: PhysicalTableDataVersionDBWithNames) -> Result<Self, TdError> {
-        Ok(Self {
-            id: dao.base.base.base.id,
-            project_id: dao.base.base.project_id,
-            collection_id: dao.base.base.base.collection_id,
-            table_id: dao.base.base.base.table_id,
-            name: dao.base.base.base.name,
-            table_version_id: dao.base.base.base.table_version_id,
-            function_version_id: dao.base.base.base.function_version_id,
-            function_version_patch_id: dao.base.base.base.function_version_patch_id,
-            execution_id: dao.base.base.base.execution_id,
-            transaction_id: dao.base.base.base.transaction_id,
-            physical_function_run_id: dao.base.base.base.physical_function_run_id,
-            function_param_pos: dao.base.base.base.function_param_pos,
-            triggered_on: dao.base.base.interval.valid_from.into(),
-            base_path: dao.base.base.base.base_path,
-            has_data: dao.base.base.base.has_data,
-            schema_changed: dao.base.base.base.schema_changed,
-            column_count: dao.base.base.base.column_count,
-            row_count: dao.base.base.base.row_count,
-            data_bytes: dao.base.base.base.data_bytes,
-            schema_hash: dao.base.base.base.schema_hash,
-            with_data_table_data_version_id: dao.base.base.base.with_data_table_data_version_id,
-            triggered_by_id: dao.base.triggered_by_id,
-            started_on: dao.base.started_on,
-            ended_on: dao.base.ended_on,
-            status: dao.base.status,
-            storage_version: dao.base.storage_version,
-        })
-    }
-}
-
 #[ta_objects::Dao]
 #[dao(
     view = "physical_table_data_versions__with_names",
@@ -286,9 +220,4 @@ pub struct PhysicalTableDataVersionUpdateDB {
     pub schema_hash: Option<SchemaHash>,
     #[dao(immutable)]
     pub with_data_table_data_version_id: Option<WithData<PhysicalTableDataVersionId>>,
-}
-
-#[ta_objects::UrlParam]
-pub struct PhysicalTableDataVersionParam {
-    pub table_data_version: PhysicalTableDataVersionId,
 }

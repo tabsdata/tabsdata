@@ -19,7 +19,7 @@ use td_objects::dxo::execution::{
     AllowDisabledParam, Execution, ExecutionDetails, ExecutionParam, ExecutionResponse,
 };
 use td_objects::dxo::function::FunctionVersionParam;
-use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionParam;
+use td_objects::dxo::logical::TableDataVersionParam;
 use td_services::Services;
 
 const EXECUTION_TAG: &str = "Execution";
@@ -100,16 +100,14 @@ pub async fn list_by_function_version(
     tag(EXECUTION_TAG),
     doc = "List executions by table data version"
 )]
-pub async fn list_by_physical_table_data_version(
+pub async fn list_by_table_data_version(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
-    Path(table_data_version): Path<PhysicalTableDataVersionParam>,
+    Path(table_data_version): Path<TableDataVersionParam>,
     Query(list_params): Query<ListParams>,
 ) -> Result<ListStatus<Execution>, ErrorStatus> {
     let request = context.list(table_data_version, list_params);
-    let response = state
-        .execution_list_by_physical_table_data_version(request)
-        .await?;
+    let response = state.execution_list_by_table_data_version(request).await?;
     Ok(ListStatus::OK(response))
 }
 

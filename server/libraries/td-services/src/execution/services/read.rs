@@ -3,7 +3,7 @@
 //
 
 use crate::execution::plan::{
-    build_execution_plan, build_response, resolve_execution_plan_versions,
+    build_execution_plan, build_response, fetch_relations_info, resolve_execution_plan_versions,
 };
 use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use std::collections::HashMap;
@@ -94,6 +94,7 @@ async fn execution_read(
         .into_iter()
         .map(|input| input.base)
         .collect();
+    let relations_info = fetch_relations_info(conn, &resolved_plan).await?;
 
     build_response(
         &transaction_by,
@@ -102,6 +103,7 @@ async fn execution_read(
         &resolved_plan,
         &lfrs,
         &inputs,
+        relations_info,
     )
     .await
 }

@@ -3,20 +3,16 @@
 //
 
 use crate::QueryExecutor;
-use crate::daos::function_runs::chain::{CurrentPtdv, Visibility, materialization_of_ltdv};
-use sea_query::{Expr, ExprTrait, JoinType, Query, SelectStatement};
+use sea_query::{Expr, ExprTrait, Query, SelectStatement};
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use ta_objects::{Dao, FromDao};
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::execution::{Execution, ExecutionDBIden};
-use td_objects::dxo::logical::{
-    LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden, LogicalTableDataVersionDBIden,
-};
+use td_objects::dxo::logical::{LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
-use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBIden;
 use td_objects::list::params::ListQueryParams;
-use td_objects::types::basic::{FunctionVersionId, PhysicalTableDataVersionId};
+use td_objects::types::basic::{FunctionVersionId, LogicalTableDataVersionId};
 
 type DaoOf = <Execution as FromDao>::Dao;
 type Iden = <DaoOf as Dao>::Iden;
@@ -34,7 +30,7 @@ where
     /// Executions that consumed `tdv_id` as an input.
     pub async fn list_by_table_data_version(
         self,
-        tdv_id: &Option<PhysicalTableDataVersionId>,
+        tdv_id: &LogicalTableDataVersionId,
         params: &ListQueryParams<Execution>,
     ) -> Result<Vec<Execution>, SqlError> {
         self.list(params.apply_to(list_by_tdv_query(tdv_id))).await
@@ -76,36 +72,22 @@ fn execution_id_matches<T: sea_query::IntoIden, C: sea_query::IntoIden>(
     Expr::col((table, col)).equals((Iden::Table, ExecutionDBIden::Id))
 }
 
-/// An EXISTS over `inputs → LTDV → open materialization` keeps the
-/// executions columns unaliased for the list params' ORDER BY.
-pub(crate) fn list_by_tdv_query(tdv_id: &Option<PhysicalTableDataVersionId>) -> SelectStatement {
+/// An EXISTS over the inputs keeps the executions columns unaliased for
+/// the list params' ORDER BY.
+pub(crate) fn list_by_tdv_query(tdv_id: &LogicalTableDataVersionId) -> SelectStatement {
     let consumed = Query::select()
         .expr(Expr::value(1))
         .from(LogicalFunctionRunInputDBIden::Table)
-        .join(
-            JoinType::InnerJoin,
-            LogicalTableDataVersionDBIden::Table,
-            Expr::col((
-                LogicalTableDataVersionDBIden::Table,
-                LogicalTableDataVersionDBIden::Id,
-            ))
-            .equals((
-                LogicalFunctionRunInputDBIden::Table,
-                LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
-            )),
-        )
-        .join_as(
-            JoinType::InnerJoin,
-            PhysicalTableDataVersionDBIden::Table,
-            CurrentPtdv,
-            materialization_of_ltdv(CurrentPtdv, Visibility::Open),
-        )
         .and_where(execution_id_matches(
             LogicalFunctionRunInputDBIden::Table,
             LogicalFunctionRunInputDBIden::ExecutionId,
         ))
         .and_where(
-            Expr::col((CurrentPtdv, PhysicalTableDataVersionDBIden::Id)).eq(tdv_id.as_sea_value()),
+            Expr::col((
+                LogicalFunctionRunInputDBIden::Table,
+                LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
+            ))
+            .eq(tdv_id.as_sea_value()),
         )
         .take();
     executions_where(Expr::exists(consumed))
@@ -154,20 +136,11 @@ mod tests {
 
     #[test]
     fn test_list_by_tdv_query() {
-        let tdv_id = Some(PhysicalTableDataVersionId::try_from("pdv20260101-0000000001").unwrap());
+        let tdv_id = LogicalTableDataVersionId::try_from("dv20260101-0000000001").unwrap();
         let sql = list_by_tdv_query(&tdv_id).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "executions__with_names"."id", "executions__with_names"."name", "executions__with_names"."collection_id", "executions__with_names"."function_id", "executions__with_names"."function_version_id", "executions__with_names"."triggered_on", "executions__with_names"."triggered_by_id", "executions__with_names"."trigger_type", "executions__with_names"."external_uid", "executions__with_names"."recursion_options", "executions__with_names"."project_id", "executions__with_names"."status", "executions__with_names"."started_on", "executions__with_names"."ended_on", "executions__with_names"."collection", "executions__with_names"."collection_deleted", "executions__with_names"."function", "executions__with_names"."triggered_by", "executions__with_names"."project", "executions__with_names"."function_run_status_count" FROM "executions__with_names" WHERE EXISTS(SELECT 1 FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" INNER JOIN "physical_table_data_versions" AS "current_ptdv" ON "current_ptdv"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND "current_ptdv"."valid_to" = ('infinity'::timestamptz) WHERE "logical_function_run_inputs"."execution_id" = "executions__with_names"."id" AND "current_ptdv"."id" = 202601010000000001)"#
-        );
-    }
-
-    #[test]
-    fn test_list_by_tdv_query_none() {
-        let sql = list_by_tdv_query(&None).to_string(PostgresQueryBuilder);
-        assert_eq!(
-            sql,
-            r#"SELECT "executions__with_names"."id", "executions__with_names"."name", "executions__with_names"."collection_id", "executions__with_names"."function_id", "executions__with_names"."function_version_id", "executions__with_names"."triggered_on", "executions__with_names"."triggered_by_id", "executions__with_names"."trigger_type", "executions__with_names"."external_uid", "executions__with_names"."recursion_options", "executions__with_names"."project_id", "executions__with_names"."status", "executions__with_names"."started_on", "executions__with_names"."ended_on", "executions__with_names"."collection", "executions__with_names"."collection_deleted", "executions__with_names"."function", "executions__with_names"."triggered_by", "executions__with_names"."project", "executions__with_names"."function_run_status_count" FROM "executions__with_names" WHERE EXISTS(SELECT 1 FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" INNER JOIN "physical_table_data_versions" AS "current_ptdv" ON "current_ptdv"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND "current_ptdv"."valid_to" = ('infinity'::timestamptz) WHERE "logical_function_run_inputs"."execution_id" = "executions__with_names"."id" AND "current_ptdv"."id" = NULL)"#
+            r#"SELECT "executions__with_names"."id", "executions__with_names"."name", "executions__with_names"."collection_id", "executions__with_names"."function_id", "executions__with_names"."function_version_id", "executions__with_names"."triggered_on", "executions__with_names"."triggered_by_id", "executions__with_names"."trigger_type", "executions__with_names"."external_uid", "executions__with_names"."recursion_options", "executions__with_names"."project_id", "executions__with_names"."status", "executions__with_names"."started_on", "executions__with_names"."ended_on", "executions__with_names"."collection", "executions__with_names"."collection_deleted", "executions__with_names"."function", "executions__with_names"."triggered_by", "executions__with_names"."project", "executions__with_names"."function_run_status_count" FROM "executions__with_names" WHERE EXISTS(SELECT 1 FROM "logical_function_run_inputs" WHERE "logical_function_run_inputs"."execution_id" = "executions__with_names"."id" AND "logical_function_run_inputs"."requirement_logical_table_data_version_id" = 202601010000000001)"#
         );
     }
 

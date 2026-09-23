@@ -11,22 +11,21 @@ use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
-use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionParam;
+use td_objects::dxo::logical::{LogicalTableDataVersionDB, TableDataVersionParam};
 use td_objects::list::params::ListQueryParams;
 use td_queries::Queries;
 
 #[service_factory]
-async fn execution_list_by_physical_table_data_version(
+async fn execution_list_by_table_data_version(
     authz: Ctx<AuthzContext>,
     db: DbPool<AcrossProjects>,
-    request: ListRequest<PhysicalTableDataVersionParam>,
+    request: ListRequest<TableDataVersionParam>,
 ) -> Result<ListResponse<Execution>, TdError> {
     let (ctx, param, list_params) = request.into_parts();
     let tdv_id = param.table_data_version;
 
     let mut trx = db.read().await?;
-    let tdv: PhysicalTableDataVersionDB =
+    let tdv: LogicalTableDataVersionDB =
         trx.get(authz.none()).timeline().fetch_one(&tdv_id).await?;
     let mut trx = trx.enter_project(&tdv.project_id).await?;
     let grant = authz
@@ -34,8 +33,7 @@ async fn execution_list_by_physical_table_data_version(
         .await?;
 
     let query_params = ListQueryParams::<Execution>::try_from(&list_params)?;
-    // Wrap into Option to match the nullable column.
-    list_executions_by_tdv(trx.get(grant), &Some(tdv_id), &list_params, &query_params).await
+    list_executions_by_tdv(trx.get(grant), &tdv_id, &list_params, &query_params).await
 }
 
 #[cfg(test)]
@@ -198,13 +196,13 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
-            PhysicalTableDataVersionParam {
-                table_data_version: tdv.base.id.clone(),
+            TableDataVersionParam {
+                table_data_version: tdv.base.logical_table_data_version_id.clone(),
             },
             ListParams::default(),
         );
         let response = service
-            .execution_list_by_physical_table_data_version(request)
+            .execution_list_by_table_data_version(request)
             .await?
             .data;
 
@@ -293,13 +291,13 @@ mod tests {
         // No function requirements reference this TDV.
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
-            PhysicalTableDataVersionParam {
-                table_data_version: tdv.base.id.clone(),
+            TableDataVersionParam {
+                table_data_version: tdv.base.logical_table_data_version_id.clone(),
             },
             ListParams::default(),
         );
         let response = service
-            .execution_list_by_physical_table_data_version(request)
+            .execution_list_by_table_data_version(request)
             .await?
             .data;
 

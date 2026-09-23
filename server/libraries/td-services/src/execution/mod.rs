@@ -8,8 +8,9 @@ use crate::execution::execution_version::{reject_if_external_uid_in_use, reject_
 use crate::execution::plan::{
     assert_function_status, build_execution_plan, build_logical_function_run_inputs,
     build_logical_function_runs, build_logical_table_data_versions, build_response,
-    build_transaction_map, build_transactions, resolve_execution_plan_versions,
-    update_initial_function_run_status, validate_execution_plan, with_recursion_options,
+    build_transaction_map, build_transactions, fetch_relations_info,
+    resolve_execution_plan_versions, update_initial_function_run_status, validate_execution_plan,
+    with_recursion_options,
 };
 use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::ctx_service::ReqCtx;
@@ -154,6 +155,7 @@ pub(crate) async fn execute(
     // current TDV -> upstream FR.status) to flip consumers OnHold
     // when upstream is Failed/OnHold.
     update_initial_function_run_status(conn, &execution).await?;
+    let relations_info = fetch_relations_info(conn, &resolved_plan).await?;
 
     build_response(
         transaction_by,
@@ -162,6 +164,7 @@ pub(crate) async fn execute(
         &resolved_plan,
         &logical_function_runs,
         &inputs,
+        relations_info,
     )
     .await
 }

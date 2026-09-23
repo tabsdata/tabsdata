@@ -4,15 +4,13 @@
 
 use crate::dxo::function::{Function, FunctionDBWithNames};
 use crate::dxo::graph::{FunctionNode, GraphEdge, TableNode};
-use crate::dxo::physical_table_data_version::{
-    ExecutionTableDataVersionRead, PhysicalTableDataVersionDBWithFunction,
-};
+use crate::dxo::logical::TableDataVersion;
 use crate::types::basic::{
     AllowDisabled, AtTime, CollectionId, CollectionName, CollectionWhenDeleted, Dot, Enabled,
     Ended, ExecutionId, ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName,
-    FunctionOnly, FunctionVersionId, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger,
-    PhysicalTableDataVersionId, ProjectId, ProjectName, SkipIfRunning, Started, StatusCount,
-    System, TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserName,
+    FunctionOnly, FunctionVersionId, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
+    OverrideDisabledTrigger, ProjectId, ProjectName, SkipIfRunning, Started, StatusCount, System,
+    TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserName,
 };
 use crate::types::composed::TableVersions;
 use crate::types::json::Json;
@@ -214,7 +212,7 @@ pub struct TableNodeResponse {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct ResolvedVersionResponse {
-    pub inner: Vec<Option<PhysicalTableDataVersionId>>,
+    pub inner: Vec<Option<LogicalTableDataVersionId>>,
     /// Per-slot provenance idx, paired 1:1 with `inner` on dependency
     /// edges (empty on trigger/output edges). Slots without a data
     /// version carry `InputIdx::NO_DATA`. Sourced from the persisted
@@ -245,7 +243,7 @@ pub struct ExecutionResponse {
         TableVersionId,
         GraphEdge<ResolvedVersionResponse>,
     )>,
-    pub relations_info: HashMap<PhysicalTableDataVersionId, ExecutionTableDataVersionRead>,
+    pub relations_info: HashMap<LogicalTableDataVersionId, TableDataVersion>,
 }
 impl From<&FunctionNode> for FunctionNodeResponse {
     fn from(src: &FunctionNode) -> Self {
@@ -281,39 +279,6 @@ impl From<&FunctionDBWithNames> for FunctionNode {
             name: src.base.base.name.clone(),
             enabled: src.base.base.enabled,
             group_id: src.group_id,
-        }
-    }
-}
-
-impl From<&PhysicalTableDataVersionDBWithFunction> for ExecutionTableDataVersionRead {
-    fn from(src: &PhysicalTableDataVersionDBWithFunction) -> Self {
-        ExecutionTableDataVersionRead {
-            id: src.base.base.id.clone(),
-            project_id: src.base.project_id,
-            collection_id: src.base.base.collection_id,
-            table_id: src.base.base.table_id,
-            name: src.base.base.name.clone(),
-            table_version_id: src.base.base.table_version_id,
-            function_version_id: src.base.base.function_version_id.clone(),
-            function_version_patch_id: src.base.base.function_version_patch_id.clone(),
-            execution_id: src.base.base.execution_id.clone(),
-            transaction_id: src.base.base.transaction_id.clone(),
-            physical_function_run_id: src.base.base.physical_function_run_id.clone(),
-            function_param_pos: src.base.base.function_param_pos,
-            triggered_on: src.base.interval.valid_from.into(),
-            base_path: src.base.base.base_path.clone(),
-            has_data: src.base.base.has_data,
-            schema_changed: src.base.base.schema_changed,
-            column_count: src.base.base.column_count,
-            row_count: src.base.base.row_count,
-            data_bytes: src.base.base.data_bytes,
-            schema_hash: src.base.base.schema_hash.clone(),
-            with_data_table_data_version_id: src.base.base.with_data_table_data_version_id.clone(),
-            triggered_by_id: src.triggered_by_id,
-            started_on: src.started_on,
-            ended_on: src.ended_on,
-            status: src.status,
-            storage_version: src.storage_version.clone(),
         }
     }
 }

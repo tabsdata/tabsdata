@@ -95,7 +95,7 @@ mod tests {
             (Mount::Global, "get_user"),
             (Mount::Global, "info"),
             (Mount::Global, "list_by_function_version"),
-            (Mount::Global, "list_by_physical_table_data_version"),
+            (Mount::Global, "list_by_table_data_version"),
             (Mount::Global, "list_collections"),
             (Mount::Global, "list_function_runs"),
             (Mount::Global, "list_projects"),

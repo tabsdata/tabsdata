@@ -3,12 +3,11 @@
 //
 
 use crate::dxo::function::FunctionDBWithNames;
-use crate::dxo::physical_table_data_version::ExecutionTableDataVersionRead;
 use crate::dxo::table::TableDBWithNames;
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
-    FunctionVersionId, GroupId, Private, SelfDependency, System, TableFunctionParamPos, TableId,
-    TableName, TableVersionId,
+    FunctionVersionId, GroupId, LogicalTableDataVersionId, Private, SelfDependency, System,
+    TableFunctionParamPos, TableId, TableName, TableVersionId,
 };
 use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
@@ -215,7 +214,7 @@ impl<V> GraphEdge<V> {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq, Hash)]
 pub struct ResolvedVersion {
-    pub inner: Vec<Option<ExecutionTableDataVersionRead>>,
+    pub inner: Vec<Option<LogicalTableDataVersionId>>,
     pub original: TableVersions,
 }
 

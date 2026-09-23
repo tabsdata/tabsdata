@@ -73,6 +73,7 @@ pub(crate) mod tests {
     use std::error::Error;
     use std::str::FromStr;
     use std::sync::LazyLock;
+    use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_error::{ApiError, TdError};
@@ -90,6 +91,12 @@ pub(crate) mod tests {
         LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunStatusUpdateDB,
         LogicalTableDataVersionDB,
     };
+    use td_objects::dxo::physical_function_run::{
+        PhysicalFunctionRunDB, PhysicalFunctionRunInsertDB,
+    };
+    use td_objects::dxo::physical_table_data_version::{
+        PhysicalTableDataVersionDB, PhysicalTableDataVersionInsertDB,
+    };
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::dxo::transaction::TransactionDBWithNames;
     use td_objects::types::basic::AtTime;
@@ -97,7 +104,8 @@ pub(crate) mod tests {
     use td_objects::types::basic::{
         AccessTokenId, AllowDisabled, BundleId, CollectionName, Decorator, Depth, Description,
         Enabled, ExecutionName, ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues,
-        GroupName, InputIdx, LogicalFunctionRunStatus, OverrideDisabledTrigger, ProjectId,
+        GroupName, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
+        OverrideDisabledTrigger, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId,
         ProjectName, SkipIfRunning, TableName, TableNameDto, TransactionKey, TransactionStatus,
         TriggeredOn, UserId, VersionPos,
     };
@@ -577,6 +585,156 @@ pub(crate) mod tests {
 
         assert_eq!(idxs(dep_edge(&response, 0)), vec![-1, -1, 0]);
         assert_eq!(idxs(dep_edge(&response, 1)), vec![-1]);
+
+        Ok(())
+    }
+
+    fn referenced_ltdvs(response: &ExecutionResponse) -> HashSet<LogicalTableDataVersionId> {
+        response
+            .relations
+            .iter()
+            .flat_map(|(_, _, e)| e.versions().inner.iter().flatten().cloned())
+            .collect()
+    }
+
+    fn output_edge<'a>(
+        response: &'a ExecutionResponse,
+        table: &str,
+    ) -> &'a ResolvedVersionResponse {
+        response
+            .relations
+            .iter()
+            .find_map(|(_, t, e)| match e {
+                GraphEdge::Output { versions, .. }
+                    if response.all_tables[t].name.to_string() == table =>
+                {
+                    Some(versions)
+                }
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("missing output edge to {table}"))
+    }
+
+    /// Dependency slots are the logical versions the plan persisted as the
+    /// consumer's inputs, and `relations_info` holds exactly the versions
+    /// the edges reference, keyed by logical id.
+    #[td_test::test(db)]
+    async fn test_execute_relations_are_logical(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?.id;
+        let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 2).await?;
+
+        let response =
+            execute_consumer(&db, p, &collection, &["table_p@HEAD~1..HEAD"], None).await?;
+
+        let rows: Vec<LogicalFunctionRunInputDB> = db.scoped(p).fetch_all(&response.id).await?;
+        let bound: Vec<_> = (0..2)
+            .map(|pos| {
+                lfri_slot(&rows, 0, pos)
+                    .base
+                    .requirement_logical_table_data_version_id
+                    .clone()
+            })
+            .collect();
+        assert!(bound.iter().all(Option::is_some));
+        assert_eq!(dep_edge(&response, 0).inner, bound);
+
+        let keys: HashSet<_> = response.relations_info.keys().cloned().collect();
+        assert_eq!(keys, referenced_ltdvs(&response));
+        for (id, info) in &response.relations_info {
+            assert_eq!(&info.id, id);
+        }
+        for id in bound.iter().flatten() {
+            assert!(
+                response.relations_info[id]
+                    .physical_table_data_version_id
+                    .is_some(),
+                "seeded inputs are materialized"
+            );
+        }
+
+        Ok(())
+    }
+
+    /// An output slot is the logical version this execution minted, present
+    /// before anything materializes it; its current-materialization fields
+    /// stay empty until a physical version exists.
+    #[td_test::test(db)]
+    async fn test_execute_output_relation_before_materialization(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?.id;
+        let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 1).await?;
+
+        let response = execute_consumer(&db, p, &collection, &["table_p"], None).await?;
+
+        let [Some(ltdv)] = output_edge(&response, "table_c").inner.as_slice() else {
+            panic!("output edge must resolve to one logical version");
+        };
+        let minted: LogicalTableDataVersionDB = db.scoped(p).timeline().fetch_one(ltdv).await?;
+        assert_eq!(minted.base.execution_id, response.id);
+
+        let info = &response.relations_info[ltdv];
+        assert_eq!(info.execution_id, response.id);
+        assert!(info.physical_table_data_version_id.is_none());
+        assert!(info.physical_status.is_none());
+
+        Ok(())
+    }
+
+    /// Re-materializing an input (as a replay does) leaves the plan alone:
+    /// the read keeps the same logical slots and attaches the newly current
+    /// physical version.
+    #[td_test::test(db)]
+    async fn test_read_relations_follow_rematerialization(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?.id;
+        let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 1).await?;
+
+        let response = execute_consumer(&db, p, &collection, &["table_p"], None).await?;
+        let ltdv = dep_edge(&response, 0).inner[0]
+            .clone()
+            .expect("dependency resolves to the seeded version");
+        let first_ptdv_id = response.relations_info[&ltdv]
+            .physical_table_data_version_id
+            .clone()
+            .expect("seeded version is materialized");
+
+        let first: PhysicalTableDataVersionDB =
+            db.scoped(p).timeline().fetch_one(&first_ptdv_id).await?;
+        let first_run: PhysicalFunctionRunDB = db
+            .scoped(p)
+            .timeline()
+            .fetch_one(&first.base.physical_function_run_id)
+            .await?;
+        let at = LockInstant::asserted(*AtTime::now());
+        let replayed_run = PhysicalFunctionRunInsertDB {
+            id: PhysicalFunctionRunId::new(),
+            ..first_run.base.clone()
+        };
+        db.scoped(p).scd2().open(&replayed_run, at).await?;
+        let replayed = PhysicalTableDataVersionInsertDB {
+            id: PhysicalTableDataVersionId::new(),
+            physical_function_run_id: replayed_run.id.clone(),
+            ..first.base.clone()
+        };
+        db.scoped(p).scd2().open(&replayed, at).await?;
+
+        let read = Services::with_defaults(db.clone())
+            .execution_read(
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
+                    ExecutionParam {
+                        execution: response.id.clone(),
+                    },
+                    AllowDisabled::FALSE,
+                )),
+            )
+            .await?
+            .data;
+
+        assert_eq!(read.relations, response.relations);
+        assert_eq!(
+            read.relations_info[&ltdv].physical_table_data_version_id,
+            Some(replayed.id),
+        );
 
         Ok(())
     }

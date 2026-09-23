@@ -7,7 +7,7 @@ use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 #[typed(default = false)]
 pub struct AllowDisabled(bool);
 
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub struct DataChanged(bool);
 
 impl From<Option<HasData>> for DataChanged {
@@ -113,7 +113,7 @@ pub struct ReuseFrozen(bool);
 #[typed(default = false)]
 pub struct SchemaChanged(bool);
 
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub struct SchemaDataChanged(bool);
 
 impl From<Option<SchemaChanged>> for SchemaDataChanged {
