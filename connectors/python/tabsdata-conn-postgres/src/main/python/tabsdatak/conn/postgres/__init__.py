@@ -494,15 +494,23 @@ class PostgresCdcStreamSrc(StreamSrc):
             `start_from` may be given. Defaults to `False`.
 
             Beyond the privileges plain CDC needs, the connecting role
-            must be able to create a replication slot that exports a
-            snapshot (the `REPLICATION` attribute already required, on a
-            server whose `max_replication_slots` leaves one free) and to
-            `SELECT` every tracked table, since the snapshot reads the
-            tables themselves rather than the write-ahead log. No table
-            is locked: the slot's exported snapshot fixes the position
-            without blocking writers.
+            must be able to `SELECT` every tracked table, since the
+            snapshot reads the tables themselves rather than the
+            write-ahead log. No table is locked.
+
+            How the snapshot is taken follows
+            `replication_slot_behavior`. With `"create"` the load creates
+            the slot, which exports the snapshot and the position it is
+            consistent at in one operation, so no change is repeated; the
+            named slot must not already exist. With `"reuse"` the load
+            touches no slot and exports a snapshot from a transaction of
+            its own, so the slot stays entirely with whoever provisioned
+            it -- it must already exist, and a transaction committing as
+            the snapshot is taken may be delivered again once capture
+            starts.
         replication_slot_behavior: `"reuse"` (default, slot must
-            exist) or `"create"` (create it, no-op if it exists).
+            exist) or `"create"` (create it, no-op if it exists). It
+            also selects how `initial_load` snapshots -- see there.
         publication_name: Optional publication scoping the slot's output
             (wal2json's `publication_names` option).
         columns_format: Layout for the new (and old) columns payload on

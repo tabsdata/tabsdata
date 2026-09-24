@@ -351,10 +351,17 @@ class CdcIngester(ABC):
         -> ``start_from``), otherwise reconstruct from the persisted
         ``stream_state`` via :meth:`offset_from_state`. External-owned
         ingesters override this to always return ``None`` (the source
-        resumes its own cursor)."""
+        resumes its own cursor).
+
+        A state that carries no offset -- one written before this stream
+        staged anything, such as a pending initial load -- is a cold start
+        too."""
         if first_stage or not stream_state:
             return None
-        return self.offset_from_state(stream_state[CDC_OFFSET_STATE_KEY])
+        offset_state = stream_state.get(CDC_OFFSET_STATE_KEY)
+        if offset_state is None:
+            return None
+        return self.offset_from_state(offset_state)
 
     def offset_from_state(self, offset_state: str) -> CdcOffset:
         """Reconstruct the resume offset from the Tabsdata-persisted

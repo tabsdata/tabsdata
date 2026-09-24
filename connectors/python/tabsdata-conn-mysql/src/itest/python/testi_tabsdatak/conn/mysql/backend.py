@@ -106,6 +106,9 @@ class CdcProbe:
     def delete(self, id_: int) -> None:
         self._execute(f"DELETE FROM {self._quoted} WHERE id = :id", id=id_)
 
+    def truncate(self) -> None:
+        self._execute(f"TRUNCATE TABLE {self._quoted}")
+
 
 @contextmanager
 def cdc_probe(domain: MysqlcdcDomain, table: str) -> Iterator[CdcProbe]:

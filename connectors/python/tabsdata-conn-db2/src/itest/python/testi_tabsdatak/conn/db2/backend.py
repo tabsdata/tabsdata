@@ -59,20 +59,33 @@ def cdc_engine(domain: Db2CdcDomain) -> Engine:
     return create_engine(domain.sqlalchemy_uri)
 
 
+def cd_table_of(table: str) -> str:
+    """The CD table ASN capture writes `table`'s changes into, derived the way
+    the domain derives it -- so a checked-in function can name it before the
+    table exists."""
+    from tabsdatax.itest.tdksystems2.systems.db2cdc.backend import Db2Cdc
+
+    return Db2Cdc().cd_table(table)
+
+
 @contextmanager
-def cdc_source_table(domain: Db2CdcDomain) -> Iterator[tuple[str, str]]:
+def cdc_source_table(
+    domain: Db2CdcDomain, name: str | None = None
+) -> Iterator[tuple[str, str]]:
     """A freshly registered CDC source table, yielded as ``(table, cd_table)``.
 
     Registration is the domain's (``Db2Cdc.register_table``), so the six-step
-    ``asnclp`` sequence lives in one place. The name is unique per call: a CD
-    table keeps its rows until asncap prunes them, so two tests sharing one
-    source table would see each other's events.
+    ``asnclp`` sequence lives in one place. The name is unique per call unless
+    one is given: a CD table keeps its rows until asncap prunes them, so two
+    tests sharing one source table would see each other's events. A fixed name
+    is for the tests whose checked-in function has to name the CD table at
+    decoration time, and those run sequentially.
     """
     from tabsdatax.itest.tdksystems2.systems.db2cdc.backend import Db2Cdc
 
     backend = Db2Cdc()
     meta = {"SYS_CONTAINER": domain.sys_container or "", "DB": domain.db}
-    table = f"TD_CDC_{uuid.uuid4().hex[:12]}".upper()
+    table = (name or f"TD_CDC_{uuid.uuid4().hex[:12]}").upper()
     schema = domain.schema.upper()
     ddl = (
         f"create table {schema}.{table} ("
@@ -81,6 +94,10 @@ def cdc_source_table(domain: Db2CdcDomain) -> Iterator[tuple[str, str]]:
         f"  AGE INTEGER"
         f")"
     )
+    if name:
+        # A generated name is new every time, but a fixed one may survive a run
+        # that died before its teardown.
+        backend.deregister_table(meta, table, drop=True)
     cd_table = backend.register_table(meta, table, ddl=ddl)
     try:
         yield table, cd_table

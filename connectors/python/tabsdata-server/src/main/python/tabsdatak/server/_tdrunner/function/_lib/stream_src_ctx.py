@@ -176,8 +176,12 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         self._flush_interval_mins = flush_interval_mins
         self._tabsdata_version = tabsdata_version
         self._active = True
-        self._first_stage = True
         self._state_view: StreamStateView | None = _load_state(self._backend)
+        # A state file means a previous run of this streamer already staged, so
+        # this pod resumes rather than seeds. Both branches write one on their
+        # first stage: the Tabsdata-owned offset dict, or the empty
+        # first-invocation marker for the external-offset path.
+        self._first_stage = self._state_view is None
 
     # --- StreamSrcPluginCtx contract ----------------------------------
 

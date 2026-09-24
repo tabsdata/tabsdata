@@ -49,7 +49,7 @@ from tabsdatak.spi import StreamSrcPluginCtx
 pytestmark = [
     pytest.mark.db2,
     pytest.mark.db2_seq,
-    pytest.mark.xdist_group("db2cdc_plugin_cdc_seq"),
+    pytest.mark.xdist_group("db2cdc_seq"),
 ]
 
 

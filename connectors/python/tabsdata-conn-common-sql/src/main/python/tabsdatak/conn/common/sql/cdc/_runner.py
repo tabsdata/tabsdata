@@ -156,7 +156,15 @@ def _publish(
     if not any(tables_files):
         return False
     offset = buffer_sentinel.offset
-    ctx.stage(tables_files, ingester.commit_state(offset))
+    state = ingester.commit_state(offset)
+    if isinstance(state, dict):
+        # The staged state replaces the persisted one wholesale, so a batch
+        # carrying only the offset would drop the record of an initial load
+        # already done and make the next run redo it.
+        done = (ctx.stream_state or {}).get(CDC_INITIAL_LOAD_STATE_KEY)
+        if done is not None:
+            state = {**state, CDC_INITIAL_LOAD_STATE_KEY: done}
+    ctx.stage(tables_files, state)
     ingester.commit_offset(offset)
     disk_sentinel.clear()
     return True

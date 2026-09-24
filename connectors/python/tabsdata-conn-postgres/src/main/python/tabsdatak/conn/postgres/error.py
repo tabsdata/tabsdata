@@ -131,7 +131,15 @@ class PostgresErrorCode(ErrorCode):
     )  # harvest_tables: partial large-text capture
     POSTGRES_21 = ErrorDef(
         PostgresRuntimeException,
-        "Replication slot {slot!r} already exists, so an initial load cannot "
-        "export the snapshot its consistency depends on. Drop the slot to load "
-        "from scratch, or run without initial_load to resume from it",
+        "Replication slot {slot!r} already exists, so an initial load asked to "
+        "create it cannot export the snapshot its consistency depends on. Drop "
+        "the slot, or set replication_slot_behavior to reuse so the load "
+        "snapshots without touching it",
+    )  # open_initial_load
+    POSTGRES_22 = ErrorDef(
+        PostgresRuntimeException,
+        "Replication slot {slot!r} does not exist. An initial load reusing a "
+        "slot leaves it to whoever provisioned it, and it must exist before the "
+        "load starts or the changes made during the load are not retained. "
+        "Create the slot, or set replication_slot_behavior to create",
     )  # open_initial_load

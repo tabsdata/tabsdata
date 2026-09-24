@@ -40,7 +40,7 @@ from tabsdatak.spi import StreamSrcPluginCtx
 
 pytestmark = [
     pytest.mark.postgres,
-    pytest.mark.xdist_group("postgrescdc_plugin_cdc_seq"),
+    pytest.mark.xdist_group("postgrescdc_seq"),
 ]
 
 CAPTURE_TIMEOUT_SECONDS = 90.0

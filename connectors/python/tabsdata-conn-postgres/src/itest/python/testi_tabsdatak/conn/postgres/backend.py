@@ -79,6 +79,37 @@ def replication_slot(domain: PostgrescdcDomain, name: str) -> Iterator[str]:
         engine.dispose()
 
 
+@contextmanager
+def free_replication_slot(domain: PostgrescdcDomain, name: str) -> Iterator[str]:
+    """`name` guaranteed free for an initial load to create itself, and dropped after.
+
+    An initial load exports its snapshot from ``CREATE_REPLICATION_SLOT ...
+    EXPORT_SNAPSHOT``, which only exports at creation, so the slot must not already
+    exist -- the source rejects one that does. The snapshot is what makes the assertion
+    deterministic here, in place of the pre-created slot :func:`replication_slot` gives
+    a plain capture test."""
+    engine = create_engine(domain.sqlalchemy_uri, isolation_level="AUTOCOMMIT")
+    try:
+        _drop_replication_slot(engine, name)
+        try:
+            yield name
+        finally:
+            _drop_replication_slot(engine, name)
+    finally:
+        engine.dispose()
+
+
+def drop_replication_slot(domain: PostgrescdcDomain, name: str) -> None:
+    """Drop `name` if it exists, the way an operator does before forcing a fresh
+    initial load: the load exports its snapshot at slot creation, so a second one over
+    a live slot is refused."""
+    engine = create_engine(domain.sqlalchemy_uri, isolation_level="AUTOCOMMIT")
+    try:
+        _drop_replication_slot(engine, name)
+    finally:
+        engine.dispose()
+
+
 def _drop_replication_slot(engine, name: str) -> None:
     # The source closes its replication connection client-side, but the server-side
     # walsender can still hold the slot, and a held slot cannot be dropped.
@@ -136,6 +167,9 @@ class CdcProbe:
 
     def delete(self, id_: int) -> None:
         self._execute(f"DELETE FROM {self._quoted} WHERE id = :id", id=id_)
+
+    def truncate(self) -> None:
+        self._execute(f"TRUNCATE TABLE {self._quoted}")
 
 
 @contextmanager

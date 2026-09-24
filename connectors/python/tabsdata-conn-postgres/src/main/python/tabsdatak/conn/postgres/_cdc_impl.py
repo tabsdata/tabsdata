@@ -363,44 +363,10 @@ def lsn_to_int(lsn: str) -> int:
 
 
 class Wal2JsonInitialLoadSession(InitialLoadSession):
-    """Snapshot seeded by creating the replication slot with
-    ``EXPORT_SNAPSHOT``: one operation yields both the WAL position the
-    slot became consistent at and a snapshot holding exactly the state at
-    that position, so the tables can be read without locking and capture
-    resumes with no gap.
-
-    The exporting replication connection must stay idle until the load
-    ends: any further command on it drops the snapshot.
-    """
-
-    def __init__(
-        self,
-        *,
-        engine: Any,
-        replication_settings: dict[str, Any],
-        replication_slot: str,
-    ):
+    def __init__(self, *, engine: Any):
         self._engine = engine
-        self._replicator = psycopg2.connect(**replication_settings)
-        self._cursor = self._replicator.cursor()
-        try:
-            self._cursor.execute(
-                f"CREATE_REPLICATION_SLOT {replication_slot} LOGICAL "
-                f"{WAL2JSON_PLUGIN} EXPORT_SNAPSHOT"
-            )
-            _, consistent_point, snapshot_name, _ = self._cursor.fetchone()
-        except psycopg2.errors.DuplicateObject as error:
-            raise PostgresErrorCode.POSTGRES_21.exception(
-                cause=error,
-                slot=replication_slot,
-            )
-        self._offset = LsnOffset(lsn=lsn_to_int(consistent_point))
-        self._snapshot_name = snapshot_name
-        logger.info(
-            "Initial load snapshot of slot %r is consistent at %s",
-            replication_slot,
-            consistent_point,
-        )
+        self._offset: LsnOffset | None = None
+        self._snapshot_name: str | None = None
 
     @property
     def engine(self) -> Any:
@@ -423,6 +389,45 @@ class Wal2JsonInitialLoadSession(InitialLoadSession):
                 yield tracked_table, connection
 
     def close(self) -> None:
+        if self._engine is not None:
+            try:
+                self._engine.dispose()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Failed to dispose initial-load engine: %s", exc)
+            self._engine = None
+
+
+class SlotSnapshotSession(Wal2JsonInitialLoadSession):
+    def __init__(
+        self,
+        *,
+        engine: Any,
+        replication_settings: dict[str, Any],
+        replication_slot: str,
+    ):
+        super().__init__(engine=engine)
+        self._replicator = psycopg2.connect(**replication_settings)
+        self._cursor = self._replicator.cursor()
+        try:
+            self._cursor.execute(
+                f"CREATE_REPLICATION_SLOT {replication_slot} LOGICAL "
+                f"{WAL2JSON_PLUGIN} EXPORT_SNAPSHOT"
+            )
+            _, consistent_point, snapshot_name, _ = self._cursor.fetchone()
+        except psycopg2.errors.DuplicateObject as error:
+            raise PostgresErrorCode.POSTGRES_21.exception(
+                cause=error,
+                slot=replication_slot,
+            )
+        self._offset = LsnOffset(lsn=lsn_to_int(consistent_point))
+        self._snapshot_name = snapshot_name
+        logger.info(
+            "Initial load snapshot of slot %r is consistent at %s",
+            replication_slot,
+            consistent_point,
+        )
+
+    def close(self) -> None:
         for closeable, what in (
             (self._cursor, "cursor"),
             (self._replicator, "replication connection"),
@@ -435,12 +440,43 @@ class Wal2JsonInitialLoadSession(InitialLoadSession):
                 logger.warning("Failed to close initial-load %s: %s", what, exc)
         self._cursor = None
         self._replicator = None
-        if self._engine is not None:
+        super().close()
+
+
+class TransactionSnapshotSession(Wal2JsonInitialLoadSession):
+    def __init__(self, *, engine: Any, replication_slot: str):
+        super().__init__(engine=engine)
+        with engine.connect() as connection:
+            exists = connection.execute(
+                text("select 1 from pg_replication_slots where slot_name = :slot"),
+                {"slot": replication_slot},
+            ).scalar()
+        if not exists:
+            raise PostgresErrorCode.POSTGRES_22.exception(slot=replication_slot)
+        self._holder = engine.connect().execution_options(
+            isolation_level="REPEATABLE READ"
+        )
+        self._snapshot_name = self._holder.execute(
+            text("select pg_export_snapshot()")
+        ).scalar()
+        lsn = self._holder.execute(
+            text("select pg_current_wal_lsn() - '0/0'::pg_lsn")
+        ).scalar()
+        self._offset = LsnOffset(lsn=int(lsn))
+        logger.info(
+            "Initial load exported snapshot %r at WAL position %s",
+            self._snapshot_name,
+            lsn,
+        )
+
+    def close(self) -> None:
+        if self._holder is not None:
             try:
-                self._engine.dispose()
+                self._holder.close()
             except Exception as exc:  # pragma: no cover
-                logger.warning("Failed to dispose initial-load engine: %s", exc)
-            self._engine = None
+                logger.warning("Failed to close initial-load snapshot holder: %s", exc)
+            self._holder = None
+        super().close()
 
 
 class LsnOffset(CdcOffset):
@@ -590,9 +626,14 @@ class Wal2JsonIngester(CdcIngester):
                 )
 
     def open_initial_load(self) -> Wal2JsonInitialLoadSession:
-        return Wal2JsonInitialLoadSession(
+        if self._replication_slot_behavior == "create":
+            return SlotSnapshotSession(
+                engine=self._build_engine(),
+                replication_settings=self._replication_connection_settings(),
+                replication_slot=self._replication_slot,
+            )
+        return TransactionSnapshotSession(
             engine=self._build_engine(),
-            replication_settings=self._replication_connection_settings(),
             replication_slot=self._replication_slot,
         )
 

@@ -32,7 +32,7 @@ from tabsdatak.conn.mysql import MySQLCdcStreamSrc, MySQLCdcStreamSrcConn
 from tabsdatak.conn.mysql._cdc_plugin import MySQLCdcStreamSrcPlugin
 from tabsdatak.spi import StreamSrcPluginCtx
 
-pytestmark = [pytest.mark.mysql, pytest.mark.xdist_group("mysqlcdc_plugin_cdc_seq")]
+pytestmark = [pytest.mark.mysql, pytest.mark.xdist_group("mysqlcdc_seq")]
 
 CAPTURE_TIMEOUT_SECONDS = 90.0
 PLUGIN_EXIT_TIMEOUT_SECONDS = 60.0
