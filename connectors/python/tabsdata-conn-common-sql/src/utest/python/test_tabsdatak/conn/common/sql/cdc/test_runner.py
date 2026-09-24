@@ -117,6 +117,7 @@ class FakeBuffer:
 class _FakeInitialLoadSession:
     def __init__(self):
         self.closed = False
+        self.engine = object()
 
     def close(self) -> None:
         self.closed = True
@@ -154,6 +155,9 @@ class FakeIngester:
 
     def harvest_tables(self, *, session, cdc_format):
         return {"s.t": object()}
+
+    def collect_tables(self, *, session, cdc_format):
+        return self.tracked_tables
 
     def base_offset(self):
         return object()

@@ -31,6 +31,7 @@ reaches into a particular replication protocol.
 from __future__ import annotations
 
 import logging
+import math
 import shutil
 import signal
 import sys
@@ -68,6 +69,8 @@ from tabsdatak.spi import Conn, StreamSrcPlugin, StreamSrcPluginCtx
 # Work-dir subdirectory the initial load's parquet files land in, wiped
 # at the start of a load so a previous attempt leaves nothing behind.
 _INITIAL_LOAD_DIR = "_cdc_initial_load"
+
+NO_TIME_LIMIT = math.inf
 
 logger = logging.getLogger(__name__)
 
@@ -190,12 +193,16 @@ def _load_initially(
 
     session = ingester.open_initial_load()
     try:
+        tracked_tables = ingester.collect_tables(
+            session=session.engine,
+            cdc_format=cfg.cdc_format,
+        )
         disk_sentinel = DiskSentinel(
             landing=landing,
-            max_rows=cfg.trigger_max_rows,
-            max_bytes=cfg.trigger_max_bytes,
-            max_secs=cfg.trigger_max_secs,
-            tables=ingester.tracked_tables,
+            max_rows=cfg.buffer_max_rows,
+            max_bytes=cfg.buffer_max_bytes,
+            max_secs=NO_TIME_LIMIT,
+            tables=tracked_tables,
             cdc_format=cfg.cdc_format,
         )
         loader = InitialLoader(

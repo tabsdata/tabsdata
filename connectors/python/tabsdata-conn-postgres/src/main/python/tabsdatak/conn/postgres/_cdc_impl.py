@@ -1056,6 +1056,16 @@ class Wal2JsonIngester(CdcIngester):
                 timestamp = None
                 continue
             if action == _V2Actions.TRUNCATE:
+                sequence += 1
+                truncated = self._truncate_change(
+                    payload=payload,
+                    xid=xid or "",
+                    sequence=sequence,
+                    timestamp=timestamp,
+                    offset=LsnOffset(lsn=message.data_start),
+                )
+                if truncated is not None:
+                    yield truncated
                 continue
             lsn_offset = LsnOffset(lsn=message.data_start)
             sequence += 1
@@ -1113,6 +1123,36 @@ class Wal2JsonIngester(CdcIngester):
             new_values=new_values,
             old_values=old_values,
             offset=offset,
+        )
+
+    def _truncate_change(
+        self,
+        *,
+        payload: dict,
+        xid: str,
+        sequence: int,
+        timestamp: datetime | None,
+        offset: LsnOffset,
+    ) -> CdcDataChange | None:
+        qualified = self._resolve_table(payload)
+        if qualified is None or self._schema_registry is None:
+            return None
+        schema_version = (
+            self._schema_registry.latest(qualified) or self._schema_registry.unknown()
+        )
+        null_row = {column.name: None for column in schema_version.columns}
+        return CdcDataChange(
+            operation=CdcOperation.TRUNCATE,
+            transaction=xid,
+            sequence=sequence,
+            timestamp=timestamp or datetime.now(tz=timezone.utc),
+            table=qualified,
+            new_values=dict(null_row),
+            old_values=dict(null_row),
+            offset=offset,
+            segment=offset.lsn,
+            ordinal=sequence,
+            schema=schema_version,
         )
 
     @staticmethod

@@ -16,14 +16,15 @@ from unittest.mock import MagicMock
 
 import pytest
 import sqlalchemy.types as sa_types
-from ibm_db_sa import DBCLOB, LONGVARCHAR, XML
+from ibm_db_sa import LONGVARCHAR
+from ibm_db_sa.base import DBCLOB, XML
 from sqlalchemy.types import BLOB, CLOB, LargeBinary, Text
 
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
+from tabsdatak.conn.common.sql.cdc.constants import DEFAULT_FETCH_SIZE
 from tabsdatak.conn.db2._cdc_impl import (
     COMMITSEQ_ORIGIN,
-    DEFAULT_FETCH_SIZE,
     CommitSeqOffset,
     Db2Dialect,
     MatchedColumns,
@@ -305,7 +306,9 @@ def test_ingester_type_is_sqlreplica():
 
 
 def test_ingester_default_fetch_size():
-    assert DEFAULT_FETCH_SIZE == 10000
+    """The fetch size is shared with the other CDC connectors rather than
+    db2-local, so a deployment tunes one key for all of them."""
+    assert DEFAULT_FETCH_SIZE == 100_000
 
 
 # --- base_offset / commit_offset ------------------------------------

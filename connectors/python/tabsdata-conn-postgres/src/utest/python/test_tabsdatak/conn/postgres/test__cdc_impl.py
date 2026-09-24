@@ -10,6 +10,7 @@ domain and live in the integration tests (``test_plugin_cdc.py``)."""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -19,6 +20,8 @@ from sqlalchemy.types import LargeBinary, Text
 
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
+from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
+from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.conn.postgres._cdc_impl import (
     DEFAULT_WAL2JSON_FORMAT_VERSION,
     LsnOffset,
@@ -32,6 +35,9 @@ from tabsdatak.error import TabsdataException
 # =====================================================================
 # PostgresDialect
 # =====================================================================
+
+
+TS = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture
@@ -346,6 +352,119 @@ def test_tables_without_text_columns_pass_silently(monkeypatch, caplog):
         identity="d",
     )
     assert warnings == []
+
+
+# --- truncate ---------------------------------------------------------
+
+
+def _truncate_ready(qualified: str = "public.users") -> Wal2JsonIngester:
+    """An ingester whose registry is live, so a truncate can resolve the
+    table definition it stamps on the emitted row."""
+    bi = _ingester_with_tables([qualified])
+    bi.init_schema_registry(CdcFormat())
+    return bi
+
+
+def _truncate_payload(schema: str = "public", table: str = "users") -> dict:
+    return {"action": "T", "schema": schema, "table": table}
+
+
+def test_truncate_is_emitted_with_the_known_table_definition():
+    """wal2json reports a truncate per table with no row image. The row
+    carries the table's current definition so it lands beside that table's
+    changes, with every value null."""
+    bi = _truncate_ready()
+    bi._schema_registry.register_from_log(
+        "public.users", (("id", "integer", "integer"), ("name", "text", "text"))
+    )
+
+    change = bi._truncate_change(
+        payload=_truncate_payload(),
+        xid="77",
+        sequence=3,
+        timestamp=TS,
+        offset=LsnOffset(lsn=900),
+    )
+
+    assert change.operation is CdcOperation.TRUNCATE
+    assert change.table == "public.users"
+    assert change.transaction == "77"
+    assert [column.name for column in change.schema.columns] == ["id", "name"]
+    assert change.new_values == {"id": None, "name": None}
+    assert change.old_values == {"id": None, "name": None}
+
+
+def test_truncate_of_a_never_captured_table_is_still_emitted():
+    """A table truncated before any change revealed its columns has no
+    definition. The event must still reach the destination -- dropping it
+    would leave rows there that nothing ever removes -- so it carries the
+    unknown definition instead."""
+    bi = _truncate_ready()
+
+    change = bi._truncate_change(
+        payload=_truncate_payload(),
+        xid="77",
+        sequence=1,
+        timestamp=TS,
+        offset=LsnOffset(lsn=900),
+    )
+
+    assert change is not None
+    assert change.operation is CdcOperation.TRUNCATE
+    assert change.schema.columns == ()
+    assert change.new_values == {}
+
+
+def test_truncate_keeps_the_transaction_position():
+    """Postgres truncates inside the transaction that issued them, so the
+    row takes that transaction's LSN and sequence and sorts between the
+    changes around it."""
+    bi = _truncate_ready()
+
+    change = bi._truncate_change(
+        payload=_truncate_payload(),
+        xid="88",
+        sequence=5,
+        timestamp=TS,
+        offset=LsnOffset(lsn=1234),
+    )
+
+    assert change.segment == 1234
+    assert change.ordinal == 5
+    assert change.sequence == 5
+    assert change.timestamp == TS
+
+
+def test_truncate_of_an_untracked_table_is_ignored():
+    bi = _truncate_ready()
+
+    assert (
+        bi._truncate_change(
+            payload=_truncate_payload(table="other"),
+            xid="77",
+            sequence=1,
+            timestamp=TS,
+            offset=LsnOffset(lsn=900),
+        )
+        is None
+    )
+
+
+def test_truncate_without_a_timestamp_falls_back_to_now():
+    """A truncate outside any transaction framing carries no commit
+    timestamp, so the row is stamped when it is captured."""
+    bi = _truncate_ready()
+
+    change = bi._truncate_change(
+        payload=_truncate_payload(),
+        xid="",
+        sequence=1,
+        timestamp=None,
+        offset=LsnOffset(lsn=900),
+    )
+
+    assert change.timestamp is not None
+    assert change.timestamp.tzinfo is not None
 
 
 def test_schema_table_filter_default_is_wildcard_when_empty():

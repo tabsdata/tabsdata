@@ -77,10 +77,7 @@ class InitialLoader:
         # it opens; a position read after the scan would sit ahead of the
         # snapshot and skip whatever committed in between.
         offset = session.offset
-        tracked_tables = self._ingester.collect_tables(
-            session=session.engine,
-            cdc_format=self._cdc_format,
-        )
+        tracked_tables = self._ingester.tracked_tables
         timestamp = datetime.now(tz=timezone.utc)
         for tracked_table, connection in session.tables(tracked_tables):
             self._load_table(tracked_table, connection, timestamp)

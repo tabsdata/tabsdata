@@ -41,9 +41,26 @@ class SchemaRegistry:
         self._cdc_format = cdc_format
         self._versions: dict[str, list[SchemaVersion]] = {}
         self._hashes: dict[str, dict[str, SchemaVersion]] = {}
+        self._unknown: SchemaVersion | None = None
 
     def version(self, table: str, ordinal: int) -> SchemaVersion:
         return self._versions[table][ordinal]
+
+    def latest(self, table: str) -> SchemaVersion | None:
+        versions = self._versions.get(table)
+        return versions[-1] if versions else None
+
+    def unknown(self) -> SchemaVersion:
+        if self._unknown is None:
+            self._unknown = SchemaVersion(
+                version=INITIAL_SCHEMA_VERSION,
+                raw=(),
+                hash=raw_schema_hash(()),
+                columns=(),
+                pa_schema=build_pa_schema((), self._cdc_format),
+                large_columns=(),
+            )
+        return self._unknown
 
     def large_columns(
         self, columns: tuple[TrackedColumn, ...]

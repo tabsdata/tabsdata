@@ -33,6 +33,8 @@ from sqlalchemy.types import LargeBinary, Text
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
+from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
+from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mysql._cdc_impl import (
     BinlogIngester,
@@ -348,6 +350,98 @@ def test_resolve_url_preserves_explicit_driver():
     conn.credentials = UserPassword(user=Secret("etl"), password=Secret("hunter2"))
     bi = BinlogIngester(conn=conn, tables=[], start_from="tail", server_id=42)
     assert bi._resolve_url().drivername == "mysql+pymysql"
+
+
+# --- truncate ---------------------------------------------------------
+
+
+def _truncate_ready(qualified: str = "app.users") -> BinlogIngester:
+    bi = _ingester_with_tables([qualified])
+    bi.init_schema_registry(CdcFormat())
+    return bi
+
+
+def _query_event(query: str, schema: str = "app") -> MagicMock:
+    event = MagicMock()
+    event.query = query
+    event.schema = schema.encode()
+    event.timestamp = 1767268800
+    return event
+
+
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "truncate table users",
+        "TRUNCATE TABLE users",
+        "truncate users",
+        "truncate table app.users",
+        "truncate table `app`.`users`",
+        "truncate table users;",
+    ],
+)
+def test_truncate_statement_forms_are_recognized(statement):
+    """A MySQL truncate reaches the binlog as statement text, so every
+    spelling of it has to resolve to the same tracked table."""
+    bi = _truncate_ready()
+
+    change = bi._truncate_change(_query_event(statement), "uuid:7")
+
+    assert change is not None
+    assert change.table == "app.users"
+    assert change.operation is CdcOperation.TRUNCATE
+
+
+@pytest.mark.parametrize(
+    "statement",
+    ["BEGIN", "COMMIT", "insert into users values (1)", "truncatex table users"],
+)
+def test_non_truncate_statements_are_ignored(statement):
+    bi = _truncate_ready()
+
+    assert bi._truncate_change(_query_event(statement), "uuid:7") is None
+
+
+def test_truncate_is_emitted_with_the_known_table_definition():
+    bi = _truncate_ready()
+    bi._schema_registry.register_from_log(
+        "app.users", (("id", "int", _Col(3)), ("name", "str", _Col(15, max_length=50)))
+    )
+
+    change = bi._truncate_change(_query_event("truncate table users"), "uuid:7")
+
+    assert [column.name for column in change.schema.columns] == ["id", "name"]
+    assert change.new_values == {"id": None, "name": None}
+
+
+def test_truncate_of_a_never_captured_table_is_still_emitted():
+    """Dropping it would strand rows in the destination, so it carries the
+    unknown definition rather than being skipped."""
+    bi = _truncate_ready()
+
+    change = bi._truncate_change(_query_event("truncate table users"), "uuid:7")
+
+    assert change is not None
+    assert change.schema.columns == ()
+    assert change.new_values == {}
+
+
+def test_truncate_stands_alone_in_its_own_transaction():
+    """MySQL truncates commit implicitly, so the event arrives outside any
+    surrounding transaction and carries that transaction's own GTID."""
+    bi = _truncate_ready()
+
+    change = bi._truncate_change(_query_event("truncate table users"), "uuid:42")
+
+    assert change.transaction == "uuid:42"
+    assert change.offset.gtid == "uuid:42"
+    assert change.segment == 42
+
+
+def test_truncate_of_an_untracked_table_is_ignored():
+    bi = _truncate_ready()
+
+    assert bi._truncate_change(_query_event("truncate table other"), "uuid:7") is None
 
 
 def test_schema_table_filter_empty_when_no_tables():

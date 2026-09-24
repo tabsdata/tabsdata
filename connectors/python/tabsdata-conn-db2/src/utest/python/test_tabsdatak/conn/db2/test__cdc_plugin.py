@@ -160,7 +160,7 @@ def test_build_ingester_constructs_with_timeout_and_fetch_size():
     src = _src(
         src_cfg={
             "db2.cdc.blocking_timeout_seconds": 7,
-            "db2.cdc.fetch_size": 5000,
+            "tabsdata.cdc.fetch_size": 5000,
         },
     )
     conn = _conn()
@@ -192,8 +192,8 @@ def test_build_ingester_defaults_when_no_src_cfg():
     kw = mock_ingester_cls.call_args.kwargs
     # DEFAULT_BLOCKING_TIMEOUT_SECONDS from common-sql constants.
     assert kw["blocking_timeout_seconds"] == 1
-    # DEFAULT_FETCH_SIZE from _cdc_impl.
-    assert kw["fetch_size"] == 10000
+    # DEFAULT_FETCH_SIZE from common-sql constants.
+    assert kw["fetch_size"] == 100_000
 
 
 # --- Public -> internal conversion at the plugin boundary -----------

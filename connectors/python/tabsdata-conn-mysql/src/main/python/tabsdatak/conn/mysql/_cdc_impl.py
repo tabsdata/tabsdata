@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from collections.abc import Generator, Iterator
 from datetime import datetime, timedelta, timezone, tzinfo
@@ -166,6 +167,21 @@ _BLOB_TYPES_BY_LENGTH_PREFIX_BYTES: dict[int, tuple[type, type]] = {
     4: (LONGBLOB, LONGTEXT),
 }
 _BINARY_CHARSET = "binary"
+
+_TRUNCATE_STATEMENT = re.compile(
+    r"^truncate\s+(?:table\s+)?"
+    r"(?:(?P<schema>`[^`]+`|\w+)\s*\.\s*)?"
+    r"(?P<table>`[^`]+`|\w+)\s*;?$",
+    re.IGNORECASE,
+)
+
+
+def _unquote_identifier(name: str) -> str:
+    name = name.strip()
+    if name.startswith("`") and name.endswith("`") and len(name) >= 2:
+        return name[1:-1].replace("``", "`")
+    return name
+
 
 # pymysqlreplication exposes binlog column types as integer codes;
 # this map decodes them into SQLAlchemy types so the schema
@@ -788,6 +804,40 @@ class BinlogIngester(CdcIngester):
     # Schema extraction
     # ------------------------------------------------------------------
 
+    def _truncate_change(self, event: Any, gtid: str) -> CdcDataChange | None:
+        match = _TRUNCATE_STATEMENT.match((event.query or "").strip())
+        if match is None:
+            return None
+        schema = match.group("schema") or self._event_schema(event)
+        table = match.group("table")
+        qualified = self._as_qualified_table(
+            _unquote_identifier(schema), _unquote_identifier(table)
+        )
+        if qualified is None or self._schema_registry is None:
+            return None
+        schema_version = (
+            self._schema_registry.latest(qualified) or self._schema_registry.unknown()
+        )
+        null_row = {column.name: None for column in schema_version.columns}
+        return CdcDataChange(
+            operation=CdcOperation.TRUNCATE,
+            transaction=gtid,
+            sequence=0,
+            timestamp=datetime.fromtimestamp(event.timestamp, tz=timezone.utc),
+            table=qualified,
+            new_values=dict(null_row),
+            old_values=dict(null_row),
+            offset=GtidOffset(gtid=gtid),
+            segment=self._transaction_number(gtid),
+            ordinal=0,
+            schema=schema_version,
+        )
+
+    @staticmethod
+    def _event_schema(event: Any) -> str:
+        schema = getattr(event, "schema", "") or ""
+        return schema.decode() if isinstance(schema, bytes) else schema
+
     def _extract_raw_schema(self, event: Any) -> tuple[tuple[str, str, Any], ...]:
         # Build the per-event raw-schema tuple the registry de-dupes
         # on. Names come from the event's table-map; type-string
@@ -916,6 +966,17 @@ class BinlogIngester(CdcIngester):
                 gtid = event.gtid
                 seq = 0
             elif isinstance(event, (XidEvent, QueryEvent)):
+                if isinstance(event, QueryEvent):
+                    truncated = self._truncate_change(event, gtid or "")
+                    if truncated is not None:
+                        seq += 1
+                        truncated.sequence = truncated.ordinal = seq
+                        yield truncated
+                        if gtid is not None:
+                            self._mark = GtidOffset(gtid=gtid)
+                        gtid = None
+                        seq = 0
+                        continue
                 if (
                     isinstance(event, QueryEvent)
                     and (event.query or "").strip().upper() != "COMMIT"

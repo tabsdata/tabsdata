@@ -153,7 +153,7 @@ _CD_SYSTEM_COLUMN_NAMES = frozenset(c.db_name for c in _SYSTEM_COLUMNS)
 # every Db2 large type is of the "object" kind. LONG VARCHAR reflects as
 # a VARCHAR subclass and is a regular column.
 try:
-    from ibm_db_sa import DBCLOB, XML
+    from ibm_db_sa.base import DBCLOB, XML
 
     _LARGE_OBJECT_TYPES = (LargeBinary, CLOB, DBCLOB, XML)
 except ImportError:
