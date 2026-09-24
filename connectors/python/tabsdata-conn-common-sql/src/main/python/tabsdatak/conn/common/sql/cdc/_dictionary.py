@@ -29,6 +29,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_META_TX,
     DOT,
 )
+from tabsdatak.conn.common.sql.cdc.dialect import LargeColumnKind
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 
 # Built per-row in the CDC hot path; plain tuples avoid dataclass allocation overhead.
@@ -104,9 +105,16 @@ def build_pa_schema(
 
 
 @dataclass(frozen=True)
+class LargeColumn:
+    name: str
+    kind: LargeColumnKind
+
+
+@dataclass(frozen=True)
 class SchemaVersion:
     version: int
     raw: RawSchema
     hash: str
     columns: tuple[TrackedColumn, ...]
     pa_schema: pa.Schema
+    large_columns: tuple[LargeColumn, ...]

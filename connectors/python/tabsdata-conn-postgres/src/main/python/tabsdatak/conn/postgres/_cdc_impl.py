@@ -15,7 +15,7 @@ Two pieces:
 
 * :class:`PostgresDialect` -- implements the dialect-agnostic
   ``Dialect`` abstract for catalog lookups, identifier quoting,
-  large-column detection, and wal2json-type-string ->
+  large-column classification, and wal2json-type-string ->
   SQLAlchemy mapping (``ddl_to_sa`` over the type strings wal2json
   emits in each change row).
 * :class:`Wal2JsonIngester` (+ :class:`LsnOffset`) -- the
@@ -39,12 +39,13 @@ from typing import Any, Literal, TypeAlias, Union
 import orjson
 import psycopg2
 import pyarrow as pa
+import sqlalchemy as sa
 import sqlalchemy.types as sa_types
 from psycopg2.extras import LogicalReplicationConnection
 from sqlalchemy import URL, make_url, text
-from sqlalchemy.dialects.postgresql import BYTEA
+from sqlalchemy.dialects.postgresql import OID
 from sqlalchemy.sql.elements import quoted_name
-from sqlalchemy.types import BLOB, CLOB, LargeBinary, Text
+from sqlalchemy.types import JSON, LargeBinary, Text
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
@@ -54,14 +55,19 @@ from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
     CdcOffset,
+    TrackedTable,
 )
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DOT,
     CdcOperation,
 )
-from tabsdatak.conn.common.sql.cdc.dialect import CdcIngesterType, Dialect
-from tabsdatak.conn.common.sql.cdc.typing import QualifiedTablesSpec
+from tabsdatak.conn.common.sql.cdc.dialect import (
+    CdcIngesterType,
+    Dialect,
+    LargeColumnKind,
+)
+from tabsdatak.conn.common.sql.cdc.typing import CdcFormat, QualifiedTablesSpec
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -90,6 +96,8 @@ POLL_INTERVAL_SECONDS = 1.0
 PENDING_TIMEOUT_MULTIPLIER = 16
 
 DEFAULT_WAL2JSON_FORMAT_VERSION: int = 2
+
+REPLICA_IDENTITY_FULL = "f"
 
 
 # Internal start-position shape consumed by the ingester after the
@@ -130,14 +138,8 @@ _V2_OPERATION_MAP = {
 # Dialect
 # ---------------------------------------------------------------------
 
-# Columns whose contents we drop from CDC ingestion (LOB family).
-_LARGE_COLUMN_TYPES = (
-    BLOB,
-    CLOB,
-    LargeBinary,
-    Text,
-    BYTEA,
-)
+_LARGE_OBJECT_TYPES = (LargeBinary, OID)
+_LARGE_TEXT_TYPES = (Text, JSON)
 
 
 def _parse_offset_string(value: str) -> tzinfo | None:
@@ -291,8 +293,25 @@ class PostgresDialect(Dialect):
             return _parse_offset_string(str(row[0]))
         return None
 
-    def is_large_column(self, satype: Any) -> bool:
-        return isinstance(satype, _LARGE_COLUMN_TYPES)
+    def large_column_kind(self, satype: Any) -> LargeColumnKind | None:
+        if isinstance(satype, _LARGE_OBJECT_TYPES):
+            return "object"
+        if isinstance(satype, _LARGE_TEXT_TYPES):
+            return "text"
+        return None
+
+    def replica_identity(self, connection: Any, schema: str, table: str) -> str:
+        return connection.execute(
+            text(
+                "select pg_catalog.pg_class.relreplident "
+                "from pg_catalog.pg_class "
+                "join pg_catalog.pg_namespace "
+                "on pg_catalog.pg_class.relnamespace = pg_catalog.pg_namespace.oid "
+                "where pg_catalog.pg_namespace.nspname = :schema "
+                "and pg_catalog.pg_class.relname = :table"
+            ),
+            {"schema": schema, "table": table},
+        ).scalar()
 
     def get_catalog_columns(
         self,
@@ -398,6 +417,7 @@ class Wal2JsonIngester(CdcIngester):
         blocking_timeout_seconds: int = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
         publication_name: str | None = None,
         wal2json_format_version: int = DEFAULT_WAL2JSON_FORMAT_VERSION,
+        unchanged_large_text_as_null: bool = False,
     ):
         super().__init__(tables=tables)
         self._conn = conn
@@ -407,6 +427,7 @@ class Wal2JsonIngester(CdcIngester):
         self._blocking_timeout_seconds = blocking_timeout_seconds
         self._publication_name = publication_name
         self._wal2json_format_version = wal2json_format_version
+        self._unchanged_large_text_as_null = unchanged_large_text_as_null
         self._mark: LsnOffset | None = None
         self._base_offset: LsnOffset | None = None
         self._replicator: Any | None = None
@@ -430,6 +451,55 @@ class Wal2JsonIngester(CdcIngester):
         logger.info("PostgreSQL server timezone: %s", self._server_tz)
         self.init_stream()
         return engine
+
+    def harvest_tables(
+        self,
+        session: Any,
+        cdc_format: CdcFormat = CdcFormat(),
+    ) -> dict[str, TrackedTable]:
+        tracked_tables = super().harvest_tables(session=session, cdc_format=cdc_format)
+        self._check_partial_text_capture(session, tracked_tables)
+        return tracked_tables
+
+    def _check_partial_text_capture(
+        self,
+        engine: Any,
+        tracked_tables: dict[str, TrackedTable],
+    ) -> None:
+        # Without REPLICA IDENTITY FULL, an UPDATE that leaves a TOASTed
+        # value untouched carries no copy of it in the WAL, so the column
+        # arrives as null. That is only acceptable when the user opted in
+        # with ``unchanged_large_text_as_null``; otherwise the stream
+        # refuses to start.
+        inspector = sa.inspect(engine)
+        with engine.connect() as connection:
+            for tracked in tracked_tables.values():
+                schema = tracked.data_table.schema
+                table = tracked.data_table.table
+                text_columns = [
+                    column["name"]
+                    for column in inspector.get_columns(table, schema=schema)
+                    if self.dialect.large_column_kind(column["type"]) == "text"
+                ]
+                if not text_columns:
+                    continue
+                identity = self.dialect.replica_identity(connection, schema, table)
+                if identity == REPLICA_IDENTITY_FULL:
+                    continue
+                if not self._unchanged_large_text_as_null:
+                    raise PostgresErrorCode.POSTGRES_20.exception(
+                        schema=schema,
+                        table=table,
+                        columns=text_columns,
+                    )
+                logger.warning(
+                    "Table %s.%s has large text columns %s but its REPLICA "
+                    "IDENTITY is not FULL: an UPDATE that does not modify one "
+                    "of them delivers that column as null",
+                    schema,
+                    table,
+                    text_columns,
+                )
 
     def close_session(self, session: Any) -> None:
         if self._cursor is not None:

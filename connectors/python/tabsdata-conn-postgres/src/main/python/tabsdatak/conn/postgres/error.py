@@ -122,3 +122,10 @@ class PostgresErrorCode(ErrorCode):
         "Postgres URI must start with postgres:// or postgresql:// (optionally "
         "with a +driver suffix): {value!r}",
     )  # UriSpec
+    POSTGRES_20 = ErrorDef(
+        PostgresRuntimeException,
+        "Table {schema}.{table} has large text columns {columns} but its REPLICA "
+        "IDENTITY is not FULL, so an UPDATE that does not modify one of them "
+        "delivers that column as null. Set REPLICA IDENTITY FULL on the table, or "
+        "set postgres.cdc.unchanged_large_text_as_null to true to accept the nulls",
+    )  # harvest_tables: partial large-text capture

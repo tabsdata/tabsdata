@@ -77,6 +77,7 @@ def test_run_config_uses_defaults_when_no_src_cfg():
     assert cfg.buffer_max_rows == 10_000
     assert cfg.buffer_max_secs == 60
     assert cfg.poll_interval_seconds == 1
+    assert cfg.max_large_text_length == 1024
 
 
 def test_run_config_picks_up_src_cfg_overrides():
@@ -85,12 +86,14 @@ def test_run_config_picks_up_src_cfg_overrides():
             "tabsdata.cdc.buffer.max_rows": 5,
             "tabsdata.cdc.buffer.max_secs": 30,
             "tabsdata.cdc.poll_interval_seconds": 2,
+            "tabsdata.cdc.max_large_text_length": 4096,
         },
     )
     cfg = _build_cdc_run_config(src)
     assert cfg.buffer_max_rows == 5
     assert cfg.buffer_max_secs == 30
     assert cfg.poll_interval_seconds == 2
+    assert cfg.max_large_text_length == 4096
 
 
 def test_run_config_carries_format_fields_from_src():
@@ -161,6 +164,7 @@ def test_build_ingester_constructs_with_slot_and_format_version():
         src_cfg={
             "postgres.cdc.blocking_timeout_seconds": 7,
             "postgres.cdc.wal2json_format_version": 1,
+            "postgres.cdc.unchanged_large_text_as_null": True,
         },
     )
     conn = _conn()
@@ -181,6 +185,7 @@ def test_build_ingester_constructs_with_slot_and_format_version():
     assert kw["publication_name"] == "pub_users"
     assert kw["blocking_timeout_seconds"] == 7
     assert kw["wal2json_format_version"] == 1
+    assert kw["unchanged_large_text_as_null"] is True
     assert ingester == "ingester-instance"
 
 
@@ -208,6 +213,17 @@ def test_build_ingester_format_version_falls_back_to_default():
     kw = mock_ingester_cls.call_args.kwargs
     # DEFAULT_WAL2JSON_FORMAT_VERSION = 2.
     assert kw["wal2json_format_version"] == 2
+
+
+def test_build_ingester_unchanged_large_text_as_null_defaults_to_false():
+    src = _src()
+
+    with patch(
+        "tabsdatak.conn.postgres._cdc_impl.Wal2JsonIngester",
+    ) as mock_ingester_cls:
+        PostgresCdcStreamSrcPlugin().build_ingester(_conn(), src)
+
+    assert mock_ingester_cls.call_args.kwargs["unchanged_large_text_as_null"] is False
 
 
 # --- Public -> internal conversion at the plugin boundary -----------

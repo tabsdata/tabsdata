@@ -197,13 +197,6 @@ class CdcIngester(ABC):
 
         columns = []
         for db_column, sa_column in zip(db_columns, sa_columns):
-            if self.dialect.is_large_column(sa_column["type"]):
-                logger.info(
-                    f"Excluding large column '{db_column}' "
-                    f"({type(sa_column['type']).__name__}) "
-                    f"from {db_schema}.{db_table}"
-                )
-                continue
             oname = f"{before_img_prefix}{db_column}" if before_img_prefix else None
             columns.append(
                 TrackedColumn(
@@ -251,6 +244,7 @@ class CdcIngester(ABC):
 
         self._schema_registry = SchemaRegistry(
             type_mapper=cdc_type_mapper,
+            large_column_classifier=self.dialect.large_column_kind,
             cdc_format=cdc_format,
         )
 

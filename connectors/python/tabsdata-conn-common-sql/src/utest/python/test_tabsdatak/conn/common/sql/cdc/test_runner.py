@@ -27,6 +27,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
+    DEFAULT_MAX_LARGE_TEXT_LENGTH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
@@ -355,3 +356,4 @@ def test_cdc_run_config_uses_package_defaults():
     assert cfg.trigger_max_bytes == DEFAULT_TRIGGER_MAX_BYTES
     assert cfg.trigger_max_secs == DEFAULT_TRIGGER_MAX_SECS
     assert cfg.poll_interval_seconds == DEFAULT_POLL_INTERVAL_SECONDS
+    assert cfg.max_large_text_length == DEFAULT_MAX_LARGE_TEXT_LENGTH

@@ -76,6 +76,7 @@ def test_run_config_uses_defaults_when_no_src_cfg():
     assert cfg.buffer_max_rows == 10_000
     assert cfg.buffer_max_secs == 60
     assert cfg.poll_interval_seconds == 1
+    assert cfg.max_large_text_length == 1024
 
 
 def test_run_config_picks_up_src_cfg_overrides():
@@ -84,12 +85,14 @@ def test_run_config_picks_up_src_cfg_overrides():
             "tabsdata.cdc.buffer.max_rows": 5,
             "tabsdata.cdc.buffer.max_secs": 30,
             "tabsdata.cdc.poll_interval_seconds": 2,
+            "tabsdata.cdc.max_large_text_length": 4096,
         },
     )
     cfg = _build_cdc_run_config(src)
     assert cfg.buffer_max_rows == 5
     assert cfg.buffer_max_secs == 30
     assert cfg.poll_interval_seconds == 2
+    assert cfg.max_large_text_length == 4096
 
 
 def test_run_config_carries_format_fields_from_src():

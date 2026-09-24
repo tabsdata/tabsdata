@@ -34,11 +34,18 @@ for a key the target has never seen is a no-op at best and noise in the
 merge statistics. Callers wanting the audit-grain reading -- the batch did
 contain a delete, so record it -- cannot get it from this function.
 
-The markers are :class:`CdcOperation`'s -- ``"i"``, ``"u"``, ``"d"`` --
-the same ones every CDC source in this package emits, read
-case-insensitively so a feed spelling them ``"I"`` / ``"U"`` / ``"D"``
-works unchanged. The resolved marker is always written back in lower
-case, so the output is normalized whatever the input looked like.
+The markers are :class:`CdcOperation`'s row operations -- ``"i"``,
+``"u"``, ``"d"`` -- the same ones every CDC source in this package emits,
+read case-insensitively so a feed spelling them ``"I"`` / ``"U"`` /
+``"D"`` works unchanged. The resolved marker is always written back in
+lower case, so the output is normalized whatever the input looked like.
+
+TODO: the control operations (``"l"`` load, ``"t"`` truncate) are not
+handled yet; today they fall under the unrecognized-marker rule below and
+are dropped. The intended behaviour is that a control record cuts the
+batch: everything coalesced up to that point is emitted first, then a
+reset signal for the table (so the destination is emptied), and the
+records after it are coalesced as a fresh batch.
 
 A record carrying anything else -- an unrecognized marker, or none at all
 -- is dropped whole, payload included, before any of the reduction runs.

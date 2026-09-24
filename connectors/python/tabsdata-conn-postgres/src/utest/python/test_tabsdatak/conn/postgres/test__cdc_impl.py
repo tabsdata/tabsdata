@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import sqlalchemy.types as sa_types
-from sqlalchemy.dialects.postgresql import BYTEA
+from sqlalchemy.dialects.postgresql import BYTEA, JSON, JSONB, OID, TEXT
 from sqlalchemy.types import LargeBinary, Text
 
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
@@ -105,18 +105,40 @@ def test_default_schema_uses_inspector_default(d):
     assert d.default_schema(inspector) == "public"
 
 
-# --- Large-column detection -----------------------------------------
+# --- Large-column classification ------------------------------------
 
 
-def test_is_large_column_includes_bytea(d):
-    assert d.is_large_column(BYTEA())
-    assert d.is_large_column(LargeBinary())
-    assert d.is_large_column(Text())
+def test_large_column_kind_object_for_bytea_and_large_objects(d):
+    assert d.large_column_kind(BYTEA()) == "object"
+    assert d.large_column_kind(LargeBinary()) == "object"
+    assert d.large_column_kind(OID()) == "object"
 
 
-def test_is_large_column_false_for_regular_types(d):
-    assert not d.is_large_column(sa_types.Integer())
-    assert not d.is_large_column(sa_types.String())
+def test_large_column_kind_text_for_text_and_json(d):
+    assert d.large_column_kind(Text()) == "text"
+    assert d.large_column_kind(TEXT()) == "text"
+    assert d.large_column_kind(JSON()) == "text"
+    assert d.large_column_kind(JSONB()) == "text"
+
+
+def test_large_column_kind_none_for_regular_types(d):
+    assert d.large_column_kind(sa_types.Integer()) is None
+    assert d.large_column_kind(sa_types.String()) is None
+    assert d.large_column_kind(sa_types.String(length=100_000)) is None
+
+
+def test_replica_identity_reads_relreplident_for_schema_and_table(d):
+    connection = MagicMock()
+    connection.execute.return_value.scalar.return_value = "f"
+
+    assert d.replica_identity(connection, "public", "orders") == "f"
+
+    statement, params = connection.execute.call_args.args
+    sql = str(statement).lower()
+    assert "relreplident" in sql
+    assert "pg_catalog.pg_class" in sql
+    assert "pg_catalog.pg_namespace" in sql
+    assert params == {"schema": "public", "table": "orders"}
 
 
 # --- cdc_to_sa ingester dispatch ------------------------------------
@@ -248,6 +270,82 @@ def _ingester_with_tables(qualified: list[str]) -> Wal2JsonIngester:
 
 
 # --- schema_table_filter --------------------------------------------
+
+
+def _partial_text_capture_check(
+    monkeypatch, caplog, *, columns, identity, unchanged_large_text_as_null=False
+):
+    import logging
+
+    from tabsdatak.conn.postgres import _cdc_impl
+
+    inspector = MagicMock()
+    inspector.get_columns.return_value = columns
+    monkeypatch.setattr(_cdc_impl.sa, "inspect", lambda engine: inspector)
+
+    bi = _ingester_with_tables(["public.docs"])
+    bi._unchanged_large_text_as_null = unchanged_large_text_as_null
+    monkeypatch.setattr(
+        PostgresDialect,
+        "replica_identity",
+        lambda self, connection, schema, table: identity,
+    )
+    with caplog.at_level(logging.WARNING, logger=_cdc_impl.__name__):
+        bi._check_partial_text_capture(MagicMock(), bi._tracked_tables)
+    return [record for record in caplog.records if record.levelno == logging.WARNING]
+
+
+_TEXT_AND_ID = [
+    {"name": "id", "type": sa_types.Integer()},
+    {"name": "body", "type": TEXT()},
+]
+
+
+def test_text_columns_without_replica_identity_full_fail_by_default(
+    monkeypatch, caplog
+):
+    with pytest.raises(TabsdataException) as ei:
+        _partial_text_capture_check(
+            monkeypatch, caplog, columns=_TEXT_AND_ID, identity="d"
+        )
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_20
+    assert "public.docs" in str(ei.value)
+    assert "body" in str(ei.value)
+
+
+def test_text_columns_without_replica_identity_full_warn_when_nulls_accepted(
+    monkeypatch, caplog
+):
+    warnings = _partial_text_capture_check(
+        monkeypatch,
+        caplog,
+        columns=_TEXT_AND_ID,
+        identity="d",
+        unchanged_large_text_as_null=True,
+    )
+    assert len(warnings) == 1
+    assert "public.docs" in warnings[0].getMessage()
+    assert "body" in warnings[0].getMessage()
+
+
+def test_replica_identity_full_passes_silently(monkeypatch, caplog):
+    warnings = _partial_text_capture_check(
+        monkeypatch,
+        caplog,
+        columns=[{"name": "body", "type": TEXT()}],
+        identity="f",
+    )
+    assert warnings == []
+
+
+def test_tables_without_text_columns_pass_silently(monkeypatch, caplog):
+    warnings = _partial_text_capture_check(
+        monkeypatch,
+        caplog,
+        columns=[{"name": "id", "type": sa_types.Integer()}],
+        identity="d",
+    )
+    assert warnings == []
 
 
 def test_schema_table_filter_default_is_wildcard_when_empty():

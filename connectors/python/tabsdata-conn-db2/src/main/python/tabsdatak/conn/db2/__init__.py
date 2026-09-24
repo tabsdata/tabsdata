@@ -438,6 +438,7 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.trigger.max_bytes",
     "tabsdata.cdc.trigger.max_secs",
     "tabsdata.cdc.poll_interval_seconds",
+    "tabsdata.cdc.max_large_text_length",
 ]
 
 CdcSrcCfgSpec: TypeAlias = Annotated[

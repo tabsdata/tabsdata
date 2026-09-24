@@ -13,7 +13,7 @@ Two pieces:
 
 * :class:`MySQLDialect` -- implements the dialect-agnostic
   ``Dialect`` abstract for catalog lookups, identifier quoting,
-  large-column detection, and binlog-field-type -> SQLAlchemy
+  large-column classification, and binlog-field-type -> SQLAlchemy
   mapping.
 * :class:`BinlogIngester` (+ :class:`GtidOffset`) -- the
   ``CdcIngester`` instance that reads MySQL binlog events via
@@ -61,10 +61,11 @@ from sqlalchemy.dialects.mysql import (
     TIMESTAMP,
     TINYBLOB,
     TINYINT,
+    TINYTEXT,
     YEAR,
 )
 from sqlalchemy.sql.elements import quoted_name
-from sqlalchemy.types import BLOB, CLOB, LargeBinary, Text
+from sqlalchemy.types import LargeBinary, Text
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
@@ -79,7 +80,11 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DOT,
     CdcOperation,
 )
-from tabsdatak.conn.common.sql.cdc.dialect import CdcIngesterType, Dialect
+from tabsdatak.conn.common.sql.cdc.dialect import (
+    CdcIngesterType,
+    Dialect,
+    LargeColumnKind,
+)
 from tabsdatak.conn.common.sql.cdc.typing import (
     QualifiedTablesSpec,
     TimestampPosition,
@@ -141,18 +146,23 @@ _OPERATION_MAP = {
 # Dialect
 # ---------------------------------------------------------------------
 
-# Columns whose contents we drop from CDC ingestion (LOB family).
-_LARGE_COLUMN_TYPES = (
-    BLOB,
-    CLOB,
-    LargeBinary,
-    Text,
-    LONGBLOB,
-    LONGTEXT,
-    MEDIUMBLOB,
-    MEDIUMTEXT,
-    TINYBLOB,
-)
+_LARGE_OBJECT_TYPES = (LargeBinary, TINYBLOB, MEDIUMBLOB, LONGBLOB)
+_LARGE_TEXT_TYPES = (Text, TINYTEXT, MEDIUMTEXT, LONGTEXT, sa_types.JSON)
+
+# The binlog reports all BLOB and TEXT variants under the single field
+# type code FIELD_TYPE.BLOB. The table map tells them apart through two
+# metadata items: ``length_size``, the width in bytes of the length prefix
+# stored in front of each value, which fixes the size variant (1 -> TINY,
+# 2 -> plain, 3 -> MEDIUM, 4 -> LONG); and the column charset, which
+# separates the binary column (charset "binary" -> BLOB family) from the
+# character one (any other charset -> TEXT family).
+_BLOB_TYPES_BY_LENGTH_PREFIX_BYTES: dict[int, tuple[type, type]] = {
+    1: (TINYBLOB, TINYTEXT),
+    2: (LargeBinary, Text),
+    3: (MEDIUMBLOB, MEDIUMTEXT),
+    4: (LONGBLOB, LONGTEXT),
+}
+_BINARY_CHARSET = "binary"
 
 # pymysqlreplication exposes binlog column types as integer codes;
 # this map decodes them into SQLAlchemy types so the schema
@@ -281,8 +291,12 @@ class MySQLDialect(Dialect):
             return None
         return _parse_offset_string(tz_value)
 
-    def is_large_column(self, satype: Any) -> bool:
-        return isinstance(satype, _LARGE_COLUMN_TYPES)
+    def large_column_kind(self, satype: Any) -> LargeColumnKind | None:
+        if isinstance(satype, _LARGE_OBJECT_TYPES):
+            return "object"
+        if isinstance(satype, _LARGE_TEXT_TYPES):
+            return "text"
+        return None
 
     def get_catalog_columns(
         self,
@@ -315,8 +329,21 @@ class MySQLDialect(Dialect):
         )
 
     @staticmethod
+    def _blob_to_sa(cdc_type: Any) -> sa_types.TypeEngine:
+        length_prefix_bytes = getattr(cdc_type, "length_size", 2)
+        binary_class, text_class = _BLOB_TYPES_BY_LENGTH_PREFIX_BYTES[
+            length_prefix_bytes
+        ]
+        charset = getattr(cdc_type, "character_set_name", None)
+        if charset is None or charset.lower() == _BINARY_CHARSET:
+            return binary_class()
+        return text_class()
+
+    @staticmethod
     def _cdc_to_sa_binlog(cdc_type: Any) -> sa_types.TypeEngine:
         column_type = getattr(cdc_type, "type", None)
+        if column_type == FIELD_TYPE.BLOB:
+            return MySQLDialect._blob_to_sa(cdc_type)
         column_class = _FIELD_TYPE_MAP.get(column_type)
         if column_class is None:
             raise ValueError(
@@ -690,6 +717,10 @@ class BinlogIngester(CdcIngester):
                 parts.append(f"dec={column.decimals}")
             if getattr(column, "fsp", None) is not None:
                 parts.append(f"fsp={column.fsp}")
+            if getattr(column, "length_size", None) is not None:
+                parts.append(f"lensize={column.length_size}")
+            if getattr(column, "character_set_name", None) is not None:
+                parts.append(f"charset={column.character_set_name}")
             schema.append((name, ":".join(parts), column))
         return tuple(schema)
 

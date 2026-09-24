@@ -15,7 +15,7 @@ Three pieces:
 * :class:`Db2Dialect` -- implements the dialect-agnostic
   ``Dialect`` abstract for catalog lookups, identifier quoting
   (double quotes, ``""`` escape), upper-case folding,
-  large-column detection (BLOB/CLOB), and a passthrough
+  large-column classification (BLOB/CLOB/XML), and a passthrough
   ``cdc_to_sa`` for the ``sqlreplica`` ingester (the schema
   introspection already returns SQLAlchemy types).
 * :class:`SqlReplicaIngester` (+ :class:`CommitSeqOffset`) -- the
@@ -42,7 +42,7 @@ import sqlalchemy as sa
 import sqlalchemy.types as sa_types
 from sqlalchemy import text
 from sqlalchemy.sql.elements import quoted_name
-from sqlalchemy.types import BLOB, CLOB, LargeBinary, Text, TypeEngine
+from sqlalchemy.types import CLOB, LargeBinary, TypeEngine
 
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
@@ -58,7 +58,11 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DOT,
     CdcOperation,
 )
-from tabsdatak.conn.common.sql.cdc.dialect import CdcIngesterType, Dialect
+from tabsdatak.conn.common.sql.cdc.dialect import (
+    CdcIngesterType,
+    Dialect,
+    LargeColumnKind,
+)
 from tabsdatak.conn.common.sql.cdc.typing import (
     QualifiedTablesSpec,
     TimestampPosition as _CommonTimestampPosition,
@@ -147,13 +151,15 @@ _CD_SYSTEM_COLUMN_NAMES = frozenset(c.db_name for c in _SYSTEM_COLUMNS)
 # Dialect
 # ---------------------------------------------------------------------
 
-# BLOB / CLOB / DBCLOB-family columns excluded from CDC ingestion.
+# SQL Replication does not copy LOB or XML values into the CD tables, so
+# every Db2 large type is of the "object" kind. LONG VARCHAR reflects as
+# a VARCHAR subclass and is a regular column.
 try:
-    from ibm_db_sa import BLOB as _DB2_BLOB, CLOB as _DB2_CLOB
+    from ibm_db_sa import DBCLOB, XML
 
-    _LARGE_COLUMN_TYPES = (BLOB, CLOB, LargeBinary, Text, _DB2_BLOB, _DB2_CLOB)
+    _LARGE_OBJECT_TYPES = (LargeBinary, CLOB, DBCLOB, XML)
 except ImportError:
-    _LARGE_COLUMN_TYPES = (BLOB, CLOB, LargeBinary, Text)
+    _LARGE_OBJECT_TYPES = (LargeBinary, CLOB)
 
 
 def _parse_offset_string(value: str) -> tzinfo | None:
@@ -240,8 +246,10 @@ class Db2Dialect(Dialect):
             return _parse_offset_string(str(row[0]))
         return None
 
-    def is_large_column(self, satype: Any) -> bool:
-        return isinstance(satype, _LARGE_COLUMN_TYPES)
+    def large_column_kind(self, satype: Any) -> LargeColumnKind | None:
+        if isinstance(satype, _LARGE_OBJECT_TYPES):
+            return "object"
+        return None
 
     def get_catalog_columns(
         self,

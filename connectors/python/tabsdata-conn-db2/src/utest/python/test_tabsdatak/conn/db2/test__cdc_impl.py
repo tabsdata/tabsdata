@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import sqlalchemy.types as sa_types
+from ibm_db_sa import DBCLOB, LONGVARCHAR, XML
 from sqlalchemy.types import BLOB, CLOB, LargeBinary, Text
 
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
@@ -113,19 +114,22 @@ def test_default_schema_queries_current_schema(d):
     assert "current schema" in sql
 
 
-# --- Large-column detection -----------------------------------------
+# --- Large-column classification ------------------------------------
 
 
-def test_is_large_column_blob_family(d):
-    assert d.is_large_column(BLOB())
-    assert d.is_large_column(CLOB())
-    assert d.is_large_column(LargeBinary())
-    assert d.is_large_column(Text())
+def test_large_column_kind_object_for_lob_and_xml(d):
+    assert d.large_column_kind(BLOB()) == "object"
+    assert d.large_column_kind(CLOB()) == "object"
+    assert d.large_column_kind(LargeBinary()) == "object"
+    assert d.large_column_kind(DBCLOB()) == "object"
+    assert d.large_column_kind(XML()) == "object"
 
 
-def test_is_large_column_false_for_regular_types(d):
-    assert not d.is_large_column(sa_types.Integer())
-    assert not d.is_large_column(sa_types.String())
+def test_large_column_kind_none_for_regular_types(d):
+    assert d.large_column_kind(sa_types.Integer()) is None
+    assert d.large_column_kind(sa_types.String()) is None
+    assert d.large_column_kind(LONGVARCHAR()) is None
+    assert d.large_column_kind(Text()) is None
 
 
 # --- cdc_to_sa ingester dispatch ------------------------------------

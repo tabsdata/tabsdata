@@ -410,6 +410,7 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "postgres.cdc.blocking_timeout_seconds",
     "postgres.cdc.logging_level",
     "postgres.cdc.wal2json_format_version",
+    "postgres.cdc.unchanged_large_text_as_null",
     "tabsdata.cdc.buffer.max_rows",
     "tabsdata.cdc.buffer.max_bytes",
     "tabsdata.cdc.buffer.max_secs",
@@ -417,6 +418,7 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.trigger.max_bytes",
     "tabsdata.cdc.trigger.max_secs",
     "tabsdata.cdc.poll_interval_seconds",
+    "tabsdata.cdc.max_large_text_length",
 ]
 
 CdcSrcCfgSpec: TypeAlias = Annotated[
@@ -490,7 +492,11 @@ class PostgresCdcStreamSrc(StreamSrc):
             inlined as top-level columns.
         src_cfg: Optional config mapping over the allowed CDC keys only
             -- buffer / trigger thresholds, polling cadence, wal2json
-            format version.
+            format version, the large text length limit and
+            `postgres.cdc.unchanged_large_text_as_null`. The latter
+            accepts that, on a table without `REPLICA IDENTITY FULL`, an
+            UPDATE not touching a large text column delivers it as null;
+            when unset, such a table refuses to start the stream.
     """
 
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)

@@ -17,12 +17,16 @@ import sqlalchemy.types as sa_types
 from sqlalchemy.dialects.mysql import (
     DATETIME,
     ENUM,
+    LONGBLOB,
     LONGTEXT,
+    MEDIUMBLOB,
+    MEDIUMTEXT,
     SET,
     TIME,
     TIMESTAMP,
     TINYBLOB,
     TINYINT,
+    TINYTEXT,
 )
 from sqlalchemy.types import LargeBinary, Text
 
@@ -107,19 +111,28 @@ def test_default_schema_uses_inspector_default(d):
     assert d.default_schema(inspector) == "app_db"
 
 
-# --- Large-column detection ------------------------------------------
+# --- Large-column classification -------------------------------------
 
 
-def test_is_large_column_blob_family(d):
-    assert d.is_large_column(LargeBinary())
-    assert d.is_large_column(TINYBLOB())
-    assert d.is_large_column(LONGTEXT())
-    assert d.is_large_column(Text())
+def test_large_column_kind_object_for_blob_family(d):
+    assert d.large_column_kind(LargeBinary()) == "object"
+    assert d.large_column_kind(TINYBLOB()) == "object"
+    assert d.large_column_kind(MEDIUMBLOB()) == "object"
+    assert d.large_column_kind(LONGBLOB()) == "object"
 
 
-def test_is_large_column_false_for_regular_types(d):
-    assert not d.is_large_column(sa_types.Integer())
-    assert not d.is_large_column(sa_types.String())
+def test_large_column_kind_text_for_text_family_and_json(d):
+    assert d.large_column_kind(Text()) == "text"
+    assert d.large_column_kind(TINYTEXT()) == "text"
+    assert d.large_column_kind(MEDIUMTEXT()) == "text"
+    assert d.large_column_kind(LONGTEXT()) == "text"
+    assert d.large_column_kind(sa_types.JSON()) == "text"
+
+
+def test_large_column_kind_none_for_regular_types(d):
+    assert d.large_column_kind(sa_types.Integer()) is None
+    assert d.large_column_kind(sa_types.String()) is None
+    assert d.large_column_kind(sa_types.String(length=65_535)) is None
 
 
 # --- cdc_to_sa ingester dispatch ------------------------------------
@@ -184,6 +197,38 @@ def test_binlog_enum_and_set(d):
     assert isinstance(e, ENUM)
     s = d.cdc_to_sa("binlog", _Col(FT.SET, set_values=["x", "y"]))
     assert isinstance(s, SET)
+
+
+@pytest.mark.parametrize(
+    "length_size,binary_type,text_type",
+    [
+        (1, TINYBLOB, TINYTEXT),
+        (2, LargeBinary, Text),
+        (3, MEDIUMBLOB, MEDIUMTEXT),
+        (4, LONGBLOB, LONGTEXT),
+    ],
+)
+def test_binlog_blob_variant_from_length_prefix_and_charset(
+    d, length_size, binary_type, text_type
+):
+    import pymysqlreplication.constants.FIELD_TYPE as FT
+
+    binary = d.cdc_to_sa(
+        "binlog",
+        _Col(FT.BLOB, length_size=length_size, character_set_name="binary"),
+    )
+    assert type(binary) is binary_type
+    textual = d.cdc_to_sa(
+        "binlog",
+        _Col(FT.BLOB, length_size=length_size, character_set_name="utf8mb4"),
+    )
+    assert type(textual) is text_type
+
+
+def test_binlog_blob_without_charset_is_binary(d):
+    import pymysqlreplication.constants.FIELD_TYPE as FT
+
+    assert type(d.cdc_to_sa("binlog", _Col(FT.BLOB, length_size=4))) is LONGBLOB
 
 
 def test_binlog_unknown_field_type_raises(d):

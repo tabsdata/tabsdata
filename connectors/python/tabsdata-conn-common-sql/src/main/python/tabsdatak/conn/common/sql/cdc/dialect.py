@@ -12,15 +12,16 @@ from typing import Any, Literal
 import sqlalchemy.types as sa_types
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.sql.elements import quoted_name
-from sqlalchemy.types import BLOB, CLOB, LargeBinary
 
 logger = logging.getLogger(__name__)
 
-LARGE_COLUMN_TYPES = (
-    BLOB,
-    CLOB,
-    LargeBinary,
-)
+LargeColumnKind = Literal["text", "object"]
+"""How a large column travels through CDC. `"text"`: the database's
+capture machinery delivers the value as any other column, so it is
+emitted as is, subject to the `max_large_text_length` limit.
+`"object"`: the value is not captured, or only with extra setup on the
+database, so the column is emitted with a null value. Bounded strings
+(`VARCHAR(n)` and friends) are regular columns, however large `n`."""
 
 CdcIngesterType = Literal[
     "binlog",
@@ -39,9 +40,9 @@ class Dialect(ABC):
 
     Each SQL CDC connector supplies one concrete subclass to bridge the
     dialect-agnostic ingester to its database: identifier quoting and
-    case-folding, catalog column introspection, large-column detection,
-    the server timezone and the mapping of capture-specific dtypes onto
-    SQLAlchemy types.
+    case-folding, catalog column introspection, large-column
+    classification, the server timezone and the mapping of
+    capture-specific dtypes onto SQLAlchemy types.
     """
 
     @property
@@ -69,9 +70,9 @@ class Dialect(ABC):
         in definition order."""
 
     @abstractmethod
-    def is_large_column(self, satype: Any) -> bool:
-        """Report whether a SQLAlchemy type is a large-object column
-        (BLOB / CLOB / large binary)."""
+    def large_column_kind(self, satype: Any) -> LargeColumnKind | None:
+        """Classify a SQLAlchemy type as a `"text"` or `"object"` large
+        column (see `LargeColumnKind`), or `None` for a regular column."""
 
     @abstractmethod
     def server_timezone(self, engine: Any) -> tzinfo | None:

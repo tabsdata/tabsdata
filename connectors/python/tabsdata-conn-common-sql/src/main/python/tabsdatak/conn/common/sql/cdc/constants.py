@@ -12,18 +12,27 @@ class CdcOperation(str, Enum):
 
     :categories: source
 
-    Recorded in the change metadata of each row a CDC source emits:
-    `INSERT` (`"i"`), `UPDATE` (`"u"`) or `DELETE` (`"d"`).
+    Recorded in the change metadata of each row a CDC source emits.
+    Row operations carry a row image: `INSERT` (`"i"`), `UPDATE`
+    (`"u"`) or `DELETE` (`"d"`). Control operations carry no row image
+    (every data column is null) and tell the consumer what happened to
+    the table as a whole: `LOAD` (`"l"`) opens an initial load, so the
+    destination must be emptied before the rows that follow are applied;
+    `TRUNCATE` (`"t"`) reports the source table was truncated.
     """
 
     INSERT = "i"
     UPDATE = "u"
     DELETE = "d"
+    LOAD = "l"
+    TRUNCATE = "t"
 
 
 OP_INSERT = CdcOperation.INSERT
 OP_UPDATE = CdcOperation.UPDATE
 OP_DELETE = CdcOperation.DELETE
+OP_LOAD = CdcOperation.LOAD
+OP_TRUNCATE = CdcOperation.TRUNCATE
 
 TD_CDC_INFIX = "cdc"
 
@@ -83,3 +92,5 @@ DEFAULT_TRIGGER_MAX_SECS = 60
 
 DEFAULT_POLL_INTERVAL_SECONDS = 1
 DEFAULT_BLOCKING_TIMEOUT_SECONDS = 1
+
+DEFAULT_MAX_LARGE_TEXT_LENGTH = 1024

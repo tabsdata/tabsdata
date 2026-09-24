@@ -34,6 +34,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
+    DEFAULT_MAX_LARGE_TEXT_LENGTH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
@@ -71,6 +72,7 @@ _KEY_CDC_TRIGGER_MAX_ROWS: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_rows"
 _KEY_CDC_TRIGGER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_bytes"
 _KEY_CDC_TRIGGER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_secs"
 _KEY_CDC_POLL_INTERVAL: CdcSrcCfgKey = "tabsdata.cdc.poll_interval_seconds"
+_KEY_CDC_MAX_LARGE_TEXT_LENGTH: CdcSrcCfgKey = "tabsdata.cdc.max_large_text_length"
 
 
 def _to_internal_start_from(spec: MySQLCdcStartFromSpec):
@@ -105,6 +107,9 @@ def _build_cdc_run_config(
         trigger_max_secs=cfg.get(_KEY_CDC_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
         poll_interval_seconds=cfg.get(
             _KEY_CDC_POLL_INTERVAL, DEFAULT_POLL_INTERVAL_SECONDS
+        ),
+        max_large_text_length=int(
+            cfg.get(_KEY_CDC_MAX_LARGE_TEXT_LENGTH, DEFAULT_MAX_LARGE_TEXT_LENGTH)
         ),
         logging_level=int(cfg.get(_KEY_CDC_LOGGING_LEVEL, logging.ERROR)),
     )

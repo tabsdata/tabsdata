@@ -11,7 +11,9 @@ hooks: :meth:`CdcPlugin.build_run_config` (translate the user-facing
 :class:`~tabsdatak.conn.common.sql.cdc._ingester.CdcIngester`, e.g.
 ``Wal2JsonIngester`` / ``BinlogIngester``). :meth:`CdcPlugin.run` owns
 everything that is the same across connectors: log-level wiring, signal
-handling, the buffer / disk sentinels, the poll loop (honouring
+handling, the buffer / disk sentinels, the large-column policy
+(:class:`~tabsdatak.conn.common.sql.cdc._large.LargeColumnPolicy`) every
+polled change passes through, the poll loop (honouring
 ``ctx.flush_interval_mins``), and the single-shot ``ctx.stage`` publish
 that commits each batch's resume offset via the ingester's
 :meth:`~CdcIngester.commit_state`.
@@ -37,12 +39,14 @@ from dataclasses import dataclass, field
 
 from tabsdatak.api import StreamSrc
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
+from tabsdatak.conn.common.sql.cdc._large import LargeColumnPolicy
 from tabsdatak.conn.common.sql.cdc._sentinel.buffer import BufferSentinel
 from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
+    DEFAULT_MAX_LARGE_TEXT_LENGTH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
@@ -76,6 +80,7 @@ class CdcRunConfig:
     trigger_max_bytes: int | None = DEFAULT_TRIGGER_MAX_BYTES
     trigger_max_secs: int = DEFAULT_TRIGGER_MAX_SECS
     poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS
+    max_large_text_length: int = DEFAULT_MAX_LARGE_TEXT_LENGTH
     logging_level: int = logging.ERROR
 
 
@@ -179,6 +184,9 @@ def _run_loop(
             session=session,
             cdc_format=cfg.cdc_format,
         )
+        large_column_policy = LargeColumnPolicy(
+            max_text_length=cfg.max_large_text_length,
+        )
         disk_sentinel = DiskSentinel(
             landing=ctx.work_dir,
             max_rows=cfg.trigger_max_rows,
@@ -202,7 +210,7 @@ def _run_loop(
 
         while not stop_signal.is_set() and ctx.active:
             buffer_sentinel.process_changes(
-                changes=ingester.poll_changes(session),
+                changes=large_column_policy.apply(ingester.poll_changes(session)),
             )
             buffer_sentinel.expire()
             # Stage on the sentinel's own thresholds, or once the

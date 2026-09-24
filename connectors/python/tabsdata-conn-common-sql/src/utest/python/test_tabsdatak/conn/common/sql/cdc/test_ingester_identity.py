@@ -36,8 +36,8 @@ class _FakeDialect(Dialect):
     def get_catalog_columns(self, connection, schema, table):  # pragma: no cover
         return []
 
-    def is_large_column(self, satype: Any) -> bool:  # pragma: no cover
-        return False
+    def large_column_kind(self, satype: Any):  # pragma: no cover
+        return None
 
     def server_timezone(self, engine: Any):  # pragma: no cover
         return None

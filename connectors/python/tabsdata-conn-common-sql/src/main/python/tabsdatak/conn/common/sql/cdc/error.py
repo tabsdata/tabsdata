@@ -127,3 +127,9 @@ class SqlCdcErrorCode(ErrorCode):
         "coalesce_cdc_batch order_column={column!r} is also the op_column; the "
         "arrival order of a key's records cannot be read from the change marker",
     )  # coalesce_cdc_batch
+    CDC_20 = ErrorDef(
+        SqlCdcException,
+        "Value of large text column {column!r} in table {table!r} has {length} "
+        "characters, above the tabsdata.cdc.max_large_text_length limit of "
+        "{limit}",
+    )
