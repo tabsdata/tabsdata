@@ -537,38 +537,81 @@ def test_ingester_default_format_version_is_v2():
 
 
 # =====================================================================
-# Offset ownership -- Postgres keeps the offset in the slot (external),
-# so it overrides commit_state / resume_offset away from the defaults.
+# Offset ownership -- Tabsdata persists the LSN in the stream state; the
+# slot is only acknowledged once a batch is staged.
 # =====================================================================
 
 
-def test_commit_state_is_a_plain_callable_not_a_dict():
-    """The slot owns the offset, so the commit callback runs a source
-    side effect rather than persisting Tabsdata stream state."""
+def test_commit_state_persists_lsn_in_stream_state():
     bi = _ingester_with_tables(["public.users"])
     spec = bi.commit_state(LsnOffset(lsn=5))
-    assert callable(spec)
-    assert not isinstance(spec, dict)
+    assert isinstance(spec, dict)
+    assert LsnOffset.read(spec[CDC_OFFSET_STATE_KEY]).lsn == 5
 
 
-def test_commit_state_callable_commits_the_offset_to_the_source():
+def test_offset_from_state_reconstructs_lsn_offset():
     bi = _ingester_with_tables(["public.users"])
-    committed: list = []
-    bi.commit_offset = lambda offset: committed.append(offset)  # type: ignore[method-assign]
-
-    bi.commit_state(LsnOffset(lsn=7))()
-
-    assert len(committed) == 1
-    assert committed[0].lsn == 7
+    offset = bi.offset_from_state(LsnOffset(lsn=9).write())
+    assert isinstance(offset, LsnOffset)
+    assert offset.lsn == 9
 
 
-def test_resume_offset_is_always_none_so_slot_resumes_itself():
+def test_resume_offset_round_trips_persisted_lsn():
     bi = _ingester_with_tables(["public.users"])
-    assert bi.resume_offset(first_stage=True, stream_state=None) is None
-    assert (
-        bi.resume_offset(
-            first_stage=False,
-            stream_state={CDC_OFFSET_STATE_KEY: {"lsn": 9}},
-        )
-        is None
+    state = bi.commit_state(LsnOffset(lsn=11))
+    resumed = bi.resume_offset(first_stage=False, stream_state=state)
+    assert isinstance(resumed, LsnOffset)
+    assert resumed.lsn == 11
+
+
+def test_resume_offset_first_stage_ignores_persisted_state():
+    bi = _ingester_with_tables(["public.users"])
+    state = bi.commit_state(LsnOffset(lsn=11))
+    assert bi.resume_offset(first_stage=True, stream_state=state) is None
+    assert bi.resume_offset(first_stage=False, stream_state=None) is None
+
+
+def test_commit_offset_acknowledges_the_offset_to_the_slot():
+    bi = _ingester_with_tables(["public.users"])
+    bi._cursor = MagicMock()
+    bi._mark = LsnOffset(lsn=99)
+
+    bi.commit_offset(LsnOffset(lsn=7))
+
+    bi._cursor.send_feedback.assert_called_once_with(flush_lsn=7, reply=True)
+
+
+def _replication_cursor(monkeypatch, bi: Wal2JsonIngester) -> MagicMock:
+    bi._conn._uri.return_value = "postgresql://h:5432/d"
+    bi._conn.credentials.user = "u"
+    bi._conn.credentials.password = "p"
+    cursor = MagicMock()
+    replicator = MagicMock()
+    replicator.cursor.return_value = cursor
+    monkeypatch.setattr(
+        "tabsdatak.conn.postgres._cdc_impl.psycopg2.connect",
+        lambda **settings: replicator,
     )
+    return cursor
+
+
+def test_init_stream_acknowledges_a_seeded_mark(monkeypatch):
+    bi = _ingester_with_tables(["public.users"])
+    cursor = _replication_cursor(monkeypatch, bi)
+    bi.seed_offset(LsnOffset(lsn=42))
+
+    bi.init_stream()
+
+    assert cursor.start_replication.call_args.kwargs["start_lsn"] == 42
+    cursor.send_feedback.assert_called_once_with(flush_lsn=42, reply=True)
+
+
+def test_init_stream_does_not_acknowledge_a_cold_head_start(monkeypatch):
+    bi = _ingester_with_tables(["public.users"])
+    bi._start_from = "head"
+    cursor = _replication_cursor(monkeypatch, bi)
+
+    bi.init_stream()
+
+    assert cursor.start_replication.call_args.kwargs["start_lsn"] == 0
+    cursor.send_feedback.assert_not_called()

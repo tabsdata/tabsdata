@@ -310,10 +310,10 @@ class CdcIngester(ABC):
     #
     # By default Tabsdata keeps the resume offset -- the run loop
     # persists it (:meth:`commit_state`) and resumes from it
-    # (:meth:`resume_offset` -> :meth:`offset_from_state`). Ingesters
-    # whose source keeps its own consumer cursor (e.g. a Postgres
-    # replication slot) override :meth:`commit_state` to commit there and
-    # :meth:`resume_offset` to let the source resume itself.
+    # (:meth:`resume_offset` -> :meth:`offset_from_state`). An ingester
+    # whose source must keep the consumer cursor itself overrides
+    # :meth:`commit_state` to commit there and :meth:`resume_offset` to
+    # let the source resume itself.
     # ------------------------------------------------------------------
 
     def commit_state(self, offset: CdcOffset) -> StreamStateSpec:

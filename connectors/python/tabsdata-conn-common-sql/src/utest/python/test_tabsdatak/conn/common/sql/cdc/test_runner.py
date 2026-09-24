@@ -56,6 +56,7 @@ class FakeCtx:
         self.stream_state = stream_state
         self.work_dir = Path("/tmp")
         self.staged: list[tuple] = []
+        self.stage_raises = False
 
     @property
     def active(self) -> bool:
@@ -65,6 +66,8 @@ class FakeCtx:
             return False
 
     def stage(self, tables_files, new_state) -> None:
+        if self.stage_raises:
+            raise RuntimeError("boom-stage")
         self.staged.append((tables_files, new_state))
 
 
@@ -119,6 +122,7 @@ class FakeIngester:
         self.closed = False
         self.commit_state_arg = None
         self.commit_state_marker = object()
+        self.committed_offsets: list = []
 
     def resume_offset(self, *, first_stage, stream_state):
         self.resume_args = (first_stage, stream_state)
@@ -149,6 +153,9 @@ class FakeIngester:
     def commit_state(self, offset):
         self.commit_state_arg = offset
         return self.commit_state_marker
+
+    def commit_offset(self, offset) -> None:
+        self.committed_offsets.append(offset)
 
 
 def _patch_sentinels(monkeypatch, disk, buffer):
@@ -190,7 +197,24 @@ def test_publish_stages_manifest_and_commits_offset():
     assert _publish(ctx, disk, buffer, ingester) is True
     assert ctx.staged == [(files, ingester.commit_state_marker)]
     assert ingester.commit_state_arg is buffer.offset
+    assert ingester.committed_offsets == [buffer.offset]
     assert disk.cleared == 1
+
+
+def test_publish_does_not_commit_offset_when_stage_fails():
+    """The source is acknowledged only for a batch Tabsdata has made
+    durable; a failed stage must leave the source cursor where it was."""
+    ctx = FakeCtx(active_values=[])
+    ctx.stage_raises = True
+    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
+    buffer = FakeBuffer()
+    ingester = FakeIngester()
+
+    with pytest.raises(RuntimeError, match="boom-stage"):
+        _publish(ctx, disk, buffer, ingester)
+
+    assert ingester.committed_offsets == []
+    assert disk.cleared == 0
 
 
 # --- _run_loop: seeding -------------------------------------------------

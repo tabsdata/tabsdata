@@ -23,7 +23,9 @@ Two pieces:
   replication slot via ``psycopg2``'s
   ``LogicalReplicationConnection`` and emits ``CdcDataChange``
   records for the runner. Supports wal2json output-plugin format
-  versions 1 and 2.
+  versions 1 and 2. Tabsdata owns the resume offset (the LSN is
+  persisted in the stream state); the slot is acknowledged once a
+  batch is staged so Postgres can release the WAL behind it.
 """
 
 from __future__ import annotations
@@ -73,7 +75,6 @@ from tabsdatak.conn.common.sql.cdc.typing import CdcFormat, QualifiedTablesSpec
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.postgres import LsnPosition
 from tabsdatak.conn.postgres.error import PostgresErrorCode
-from tabsdatak.spi import CommitStateFn
 
 logger = logging.getLogger(__name__)
 
@@ -605,6 +606,8 @@ class Wal2JsonIngester(CdcIngester):
             options=options,
         )
         logger.info("Replication slot %r attached", self._replication_slot)
+        if self._mark.lsn:
+            self.commit_offset(self._mark)
 
     def _current_wal_lsn(self) -> int:
         # Open a regular psycopg2 connection (not a logical
@@ -659,30 +662,11 @@ class Wal2JsonIngester(CdcIngester):
             )
         if self._cursor is None:  # pragma: no cover -- stream init failed
             return
-        # Postgres' standby-status update tells the slot it can
-        # garbage-collect WAL up to the flushed position. Use the
-        # current ``_mark`` (last fully-applied commit) when set.
-        flush_lsn = self._mark.lsn if self._mark is not None else offset.lsn
-        self._cursor.send_feedback(flush_lsn=flush_lsn, reply=True)
-        logger.debug("Confirmed LSN position %d", flush_lsn)
+        self._cursor.send_feedback(flush_lsn=offset.lsn, reply=True)
+        logger.debug("Confirmed LSN position %d", offset.lsn)
 
-    # Postgres keeps the offset in its replication slot (external-owned),
-    # so it overrides the Tabsdata-owned defaults: commit by advancing the
-    # slot, and let the slot resume itself rather than reading Tabsdata
-    # ``stream_state``.
-
-    def commit_state(self, offset: CdcOffset) -> CommitStateFn:
-        return lambda: self.commit_offset(offset)
-
-    def resume_offset(
-        self,
-        *,
-        first_stage: bool,
-        stream_state: dict | None,
-    ) -> CdcOffset | None:
-        # The slot resumes from its server-side confirmed position; the
-        # cold-start mark is seeded from ``start_from`` by ``init_stream``.
-        return None
+    def offset_from_state(self, offset_state: str) -> CdcOffset:
+        return LsnOffset.read(offset_state)
 
     # ------------------------------------------------------------------
     # Schema extraction

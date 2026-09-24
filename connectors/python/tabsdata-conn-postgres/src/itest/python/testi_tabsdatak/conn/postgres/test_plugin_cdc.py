@@ -28,7 +28,11 @@ from testi_tabsdatak.conn.postgres.backend import (
     replication_slot,
 )
 
+from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.postgres import PostgresCdcStreamSrc, PostgresCdcStreamSrcConn
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.postgres._cdc_impl import LsnOffset
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.postgres._cdc_plugin import PostgresCdcStreamSrcPlugin
@@ -134,8 +138,6 @@ class _CdcCtx(StreamSrcPluginCtx):
     def stage(self, tables_files, new_state):
         with self._lock:
             self._staged.append([list(files) for files in tables_files])
-            # Postgres owns its offset in the slot, so `stage` receives the commit
-            # callable to run rather than a state dict to persist.
             if isinstance(new_state, dict):
                 self._state = dict(new_state)
                 self._tabsdata_owns_state = True
@@ -321,12 +323,11 @@ def test_cdc_plugin_tail_skips_changes_committed_before_it_attached(
 
 
 @postgrescdc_domain("postgrescdc_employees_xs")
-def test_cdc_plugin_keeps_the_offset_in_the_slot_not_in_stream_state(
+def test_cdc_plugin_persists_the_lsn_in_stream_state(
     domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
 ):
-    """Postgres owns the resume offset in its replication slot, so the plugin commits by
-    advancing the slot and keeps no Tabsdata stream state -- unlike mysql / db2, which
-    persist theirs."""
+    """Tabsdata owns the resume offset: each staged batch persists the LSN in the
+    stream state, like mysql / db2 persist theirs; the slot is only acknowledged."""
     domain = domain_postgrescdc_employees_xs
     with cdc_probe(domain, "td_cdc_offset") as probe:
         with replication_slot(domain, "td_cdc_offset_slot") as slot:
@@ -337,7 +338,9 @@ def test_cdc_plugin_keeps_the_offset_in_the_slot_not_in_stream_state(
             with _running(ctx, cdc_src_conn(domain), src):
                 _await_captured(ctx, "the insert", lambda f: len(_ids(f)) >= 1)
 
-    assert ctx.stream_state is None
+    state = ctx.stream_state
+    assert state is not None
+    assert LsnOffset.read(state[CDC_OFFSET_STATE_KEY]).lsn > 0
 
 
 @postgrescdc_domain("postgrescdc_employees_xs")

@@ -23,8 +23,9 @@ The ingester provides the database-specific surface
 ``commit_offset`` / ``poll_changes`` / ``close_session``) and owns the
 offset policy -- Tabsdata-persisted (``stream_state``) or external
 (source-managed) -- via :meth:`~CdcIngester.resume_offset` /
-:meth:`~CdcIngester.commit_state`. The loop never reaches into a
-particular replication protocol.
+:meth:`~CdcIngester.commit_state`, plus the source-side acknowledgement
+of a staged offset via :meth:`~CdcIngester.commit_offset`. The loop never
+reaches into a particular replication protocol.
 """
 
 from __future__ import annotations
@@ -125,7 +126,9 @@ def _publish(
     (entry ``i`` -> table ``i``), which we hand to ``ctx.stage`` along
     with the ingester's :meth:`~CdcIngester.commit_state` -- the ingester
     decides whether Tabsdata persists the offset (read back via
-    ``ctx.stream_state``) or the source commits it itself.
+    ``ctx.stream_state``) or the source commits it itself. Once the batch
+    is staged, :meth:`~CdcIngester.commit_offset` lets the ingester
+    acknowledge the now-durable offset to the source.
 
     Returns whether anything was staged (so the caller can reset its
     flush-interval clock only on a real flush).
@@ -133,11 +136,9 @@ def _publish(
     tables_files = disk_sentinel.build_manifest()
     if not any(tables_files):
         return False
-    # The ingester decides how the new offset is committed: Tabsdata-owned
-    # ingesters persist it (a ``BasicDictSpec``); external-owned ones
-    # (e.g. a Postgres slot) commit on the source (a ``CommitStateFn``).
-    # ``ctx.stage`` runs that commit when it publishes the batch.
-    ctx.stage(tables_files, ingester.commit_state(buffer_sentinel.offset))
+    offset = buffer_sentinel.offset
+    ctx.stage(tables_files, ingester.commit_state(offset))
+    ingester.commit_offset(offset)
     disk_sentinel.clear()
     return True
 
