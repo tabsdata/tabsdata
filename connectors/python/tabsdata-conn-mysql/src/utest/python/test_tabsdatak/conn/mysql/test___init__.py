@@ -401,6 +401,29 @@ def test_mysql_cdc_stream_src_accepts_timestamp_start_from():
     assert src.start_from.ts == ts
 
 
+def test_mysql_cdc_stream_src_initial_load_defaults_to_false():
+    src = MySQLCdcStreamSrc(tables=["app.users"], start_from="tail")
+    assert src.initial_load is False
+
+
+def test_mysql_cdc_stream_src_accepts_initial_load_without_start_from():
+    src = MySQLCdcStreamSrc(tables=["app.users"], initial_load=True)
+    assert src.initial_load is True
+    assert src.start_from is None
+
+
+def test_mysql_cdc_stream_src_rejects_initial_load_with_start_from():
+    with pytest.raises(ConnInitException) as ei:
+        MySQLCdcStreamSrc(tables=["app.users"], start_from="tail", initial_load=True)
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_11
+
+
+def test_mysql_cdc_stream_src_requires_start_from_or_initial_load():
+    with pytest.raises(ConnInitException) as ei:
+        MySQLCdcStreamSrc(tables=["app.users"])
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_11
+
+
 def test_mysql_cdc_stream_src_rejects_unknown_src_cfg_key():
     with pytest.raises(ConnInitException) as ei:
         MySQLCdcStreamSrc(

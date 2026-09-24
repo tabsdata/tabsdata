@@ -63,6 +63,8 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
+from pydantic import model_validator
+
 # Private modules are imported as modules (not by symbol) so each
 # call-site is explicit about reaching into private surface.
 # noinspection PyProtectedMember
@@ -77,6 +79,7 @@ from tabsdatak.api import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
+from tabsdatak.conn.common.sql.cdc.typing import validate_start
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
     CfgSpec,
@@ -507,7 +510,13 @@ class MySQLCdcStreamSrc(StreamSrc):
         start_from: Where to begin reading the binlog when no prior
             offset is persisted -- `"head"` / `"tail"` keyword, a
             `GtidPosition`, a `BinlogPosition` or a
-            `TimestampPosition`.
+            `TimestampPosition`. Required unless `initial_load` is
+            `True`, and not allowed with it.
+        initial_load: When `True`, the stream first emits a full
+            snapshot of every tracked table (rows marked as inserts,
+            preceded by a `LOAD` control row per table) and then captures
+            changes from the exact position of that snapshot, so no
+            `start_from` may be given. Defaults to `False`.
         columns_format: Layout for the new (and old, when present)
             columns payload on each change row -- `"columns"`
             (default), `"struct"` or `"map"`.
@@ -522,7 +531,13 @@ class MySQLCdcStreamSrc(StreamSrc):
 
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)
     tables: list[MySQLTableNameSpec]
-    start_from: MySQLCdcStartFromSpec
+    start_from: MySQLCdcStartFromSpec | None = None
+    initial_load: bool = False
     columns_format: CdcColumnsFormatSpec = "columns"
     flatten_columns: bool = True
     src_cfg: CdcSrcCfgSpec | None = None
+
+    @model_validator(mode="after")
+    def _validate_start(self):
+        validate_start(self.initial_load, self.start_from)
+        return self

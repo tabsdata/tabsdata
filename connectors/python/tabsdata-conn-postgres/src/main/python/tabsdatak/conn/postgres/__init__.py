@@ -65,6 +65,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
+from pydantic import model_validator
+
 # Private modules are imported as modules (not by symbol) so each
 # call-site is explicit about reaching into private surface.
 # noinspection PyProtectedMember
@@ -79,6 +81,7 @@ from tabsdatak.api import (
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common import _validation as _common_validation
+from tabsdatak.conn.common.sql.cdc.typing import validate_start
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
     CfgSpec,
@@ -480,7 +483,13 @@ class PostgresCdcStreamSrc(StreamSrc):
         replication_slot: Logical replication slot to attach to.
         start_from: Where to begin -- `"head"` (replay from the oldest
             retained WAL), `"tail"` (current WAL LSN) or an
-            `LsnPosition`.
+            `LsnPosition`. Required unless `initial_load` is `True`, and
+            not allowed with it.
+        initial_load: When `True`, the stream first emits a full
+            snapshot of every tracked table (rows marked as inserts,
+            preceded by a `LOAD` control row per table) and then captures
+            changes from the exact position of that snapshot, so no
+            `start_from` may be given. Defaults to `False`.
         replication_slot_behavior: `"reuse"` (default, slot must
             exist) or `"create"` (create it, no-op if it exists).
         publication_name: Optional publication scoping the slot's output
@@ -502,9 +511,15 @@ class PostgresCdcStreamSrc(StreamSrc):
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)
     tables: list[PostgresTableNameSpec]
     replication_slot: str
-    start_from: PostgresCdcStartFromSpec
+    start_from: PostgresCdcStartFromSpec | None = None
+    initial_load: bool = False
     replication_slot_behavior: ReplicationSlotBehaviorSpec = "reuse"
     publication_name: str | None = None
     columns_format: CdcColumnsFormatSpec = "columns"
     flatten_columns: bool = True
     src_cfg: CdcSrcCfgSpec | None = None
+
+    @model_validator(mode="after")
+    def _validate_start(self):
+        validate_start(self.initial_load, self.start_from)
+        return self

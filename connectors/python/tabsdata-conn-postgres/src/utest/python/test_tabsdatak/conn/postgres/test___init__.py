@@ -348,6 +348,28 @@ def test_postgres_cdc_stream_src_accepts_head_and_tail_start_from():
     assert tail.start_from == "tail"
 
 
+def test_postgres_cdc_stream_src_initial_load_defaults_to_false():
+    assert _cdc_stream_src().initial_load is False
+
+
+def test_postgres_cdc_stream_src_accepts_initial_load_without_start_from():
+    src = _cdc_stream_src(start_from=None, initial_load=True)
+    assert src.initial_load is True
+    assert src.start_from is None
+
+
+def test_postgres_cdc_stream_src_rejects_initial_load_with_start_from():
+    with pytest.raises(ConnInitException) as ei:
+        _cdc_stream_src(initial_load=True)
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_11
+
+
+def test_postgres_cdc_stream_src_requires_start_from_or_initial_load():
+    with pytest.raises(ConnInitException) as ei:
+        _cdc_stream_src(start_from=None)
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_11
+
+
 def test_postgres_cdc_stream_src_accepts_publication_name():
     src = _cdc_stream_src(publication_name="pub_users")
     assert src.publication_name == "pub_users"
