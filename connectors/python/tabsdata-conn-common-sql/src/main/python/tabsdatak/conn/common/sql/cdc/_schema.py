@@ -42,6 +42,9 @@ class SchemaRegistry:
         self._versions: dict[str, list[SchemaVersion]] = {}
         self._hashes: dict[str, dict[str, SchemaVersion]] = {}
 
+    def version(self, table: str, ordinal: int) -> SchemaVersion:
+        return self._versions[table][ordinal]
+
     def large_columns(
         self, columns: tuple[TrackedColumn, ...]
     ) -> tuple[LargeColumn, ...]:

@@ -129,3 +129,9 @@ class PostgresErrorCode(ErrorCode):
         "delivers that column as null. Set REPLICA IDENTITY FULL on the table, or "
         "set postgres.cdc.unchanged_large_text_as_null to true to accept the nulls",
     )  # harvest_tables: partial large-text capture
+    POSTGRES_21 = ErrorDef(
+        PostgresRuntimeException,
+        "Replication slot {slot!r} already exists, so an initial load cannot "
+        "export the snapshot its consistency depends on. Drop the slot to load "
+        "from scratch, or run without initial_load to resume from it",
+    )  # open_initial_load

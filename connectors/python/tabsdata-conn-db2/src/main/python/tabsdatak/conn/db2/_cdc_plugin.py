@@ -32,6 +32,8 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_FETCH_SIZE,
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
@@ -62,7 +64,8 @@ if TYPE_CHECKING:
 # schema-construction time. ``_build_cdc_run_config`` reads from
 # src_cfg and falls back to common-sql defaults.
 _KEY_CDC_BLOCKING_TIMEOUT: CdcSrcCfgKey = "db2.cdc.blocking_timeout_seconds"
-_KEY_CDC_FETCH_SIZE: CdcSrcCfgKey = "db2.cdc.fetch_size"
+_KEY_CDC_FETCH_SIZE: CdcSrcCfgKey = "tabsdata.cdc.fetch_size"
+_KEY_CDC_CHUNK_SIZE: CdcSrcCfgKey = "tabsdata.cdc.chunk_size"
 _KEY_CDC_LOGGING_LEVEL: CdcSrcCfgKey = "db2.cdc.logging_level"
 _KEY_CDC_BUFFER_MAX_ROWS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_rows"
 _KEY_CDC_BUFFER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_bytes"
@@ -111,6 +114,9 @@ def _build_cdc_run_config(
         max_large_text_length=int(
             cfg.get(_KEY_CDC_MAX_LARGE_TEXT_LENGTH, DEFAULT_MAX_LARGE_TEXT_LENGTH)
         ),
+        initial_load=src.initial_load,
+        fetch_size=int(cfg.get(_KEY_CDC_FETCH_SIZE, DEFAULT_FETCH_SIZE)),
+        chunk_size=int(cfg.get(_KEY_CDC_CHUNK_SIZE, DEFAULT_CHUNK_SIZE)),
         logging_level=int(cfg.get(_KEY_CDC_LOGGING_LEVEL, logging.ERROR)),
     )
 
@@ -132,7 +138,7 @@ class Db2CdcStreamSrcPlugin(CdcPlugin[Db2CdcStreamSrcConn, Db2CdcStreamSrc]):
         stream_src: Db2CdcStreamSrc,
     ) -> SqlReplicaIngester:
         # noinspection PyProtectedMember
-        from tabsdatak.conn.db2._cdc_impl import DEFAULT_FETCH_SIZE, SqlReplicaIngester
+        from tabsdatak.conn.db2._cdc_impl import SqlReplicaIngester
 
         src_cfg = stream_src.src_cfg or {}
         blocking_timeout = src_cfg.get(

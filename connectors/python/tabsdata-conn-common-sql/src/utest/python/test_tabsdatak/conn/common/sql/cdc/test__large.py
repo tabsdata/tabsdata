@@ -110,6 +110,41 @@ def test_apply_passes_every_change_through_and_skips_non_data_changes():
     assert data.new_values["blob"] is None
 
 
+def test_apply_to_columns_nulls_objects_and_checks_text():
+    schema = _schema_version()
+    columns = {
+        "id": [1, 2],
+        "body": ["ok", "fine"],
+        "blob": [b"\x00", b"\x01"],
+    }
+    LargeColumnPolicy(max_text_length=10).apply_to_columns(
+        table=TABLE, schema=schema, columns=columns
+    )
+    assert columns == {"id": [1, 2], "body": ["ok", "fine"], "blob": [None, None]}
+
+
+def test_apply_to_columns_raises_on_long_text():
+    schema = _schema_version()
+    columns = {"id": [1], "body": ["a" * 11], "blob": [None]}
+    with pytest.raises(SqlCdcException):
+        LargeColumnPolicy(max_text_length=10).apply_to_columns(
+            table=TABLE, schema=schema, columns=columns
+        )
+
+
+def test_apply_to_columns_matches_the_row_path():
+    schema = _schema_version()
+    policy = LargeColumnPolicy(max_text_length=10)
+
+    change = _change(new_values={"id": 1, "body": "ok", "blob": b"\x00"})
+    policy.apply_to(change)
+
+    columns = {"id": [1], "body": ["ok"], "blob": [b"\x00"]}
+    policy.apply_to_columns(table=TABLE, schema=schema, columns=columns)
+
+    assert columns == {name: [value] for name, value in change.new_values.items()}
+
+
 def test_unknown_kind_raises():
     schema = _schema_version(classifier=lambda t: "weird")
     change = _change(new_values={"id": 1, "body": "x", "blob": b"z"}, schema=schema)

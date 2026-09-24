@@ -40,6 +40,10 @@ class DiskSentinel:
         self._total_rows: int = 0
         self._total_bytes: int = 0
         self._last_flushed: float = time.time()
+        self._chunks: dict[str, list[pa.Table]] = {}
+        self._chunk_rows: dict[str, int] = {}
+        self._chunk_bytes: dict[str, int] = {}
+        self._chunk_hash: dict[str, str] = {}
 
     @property
     def is_empty(self) -> bool:
@@ -92,19 +96,58 @@ class DiskSentinel:
             for i in range(start, stop)
         ]
         # noinspection PyArgumentList
-        pa_table = pa.Table.from_pylist(
+        arrow = pa.Table.from_pylist(
             mapping=records,
             schema=pa_schema,
         )
+        self.process_table(table, arrow)
 
+    def process_chunk(
+        self,
+        table: str,
+        schema_hash: str,
+        arrow: pa.Table,
+    ) -> None:
+        if self._chunk_hash.get(table) not in (None, schema_hash):
+            self.flush_chunks(table)
+        self._chunk_hash[table] = schema_hash
+        self._chunks.setdefault(table, []).append(arrow)
+        self._chunk_rows[table] = self._chunk_rows.get(table, 0) + arrow.num_rows
+        self._chunk_bytes[table] = self._chunk_bytes.get(table, 0) + arrow.nbytes
+        rows_hit = (
+            self._max_rows is not None and self._chunk_rows[table] >= self._max_rows
+        )
+        bytes_hit = (
+            self._max_bytes is not None and self._chunk_bytes[table] >= self._max_bytes
+        )
+        if rows_hit or bytes_hit:
+            self.flush_chunks(table)
+
+    def flush_chunks(self, table: str | None = None) -> None:
+        tables = [table] if table is not None else list(self._chunks)
+        for name in tables:
+            chunks = self._chunks.get(name)
+            if not chunks:
+                continue
+            self.process_table(name, pa.concat_tables(chunks))
+            self._chunks[name] = []
+            self._chunk_rows[name] = 0
+            self._chunk_bytes[name] = 0
+            self._chunk_hash.pop(name, None)
+
+    def process_table(
+        self,
+        table: str,
+        arrow: pa.Table,
+    ) -> None:
         _, file_suffix = encode_id()
         file_prefix = sanitize_file_name(table)
         file_name = f"{file_prefix}_{file_suffix}.parquet"
         file_path = self._landing / file_name
-        pq.write_table(pa_table, file_path)
+        pq.write_table(arrow, file_path)
 
         file_bytes = file_path.stat().st_size
-        file_rows = stop - start
+        file_rows = arrow.num_rows
 
         self._files[table].append(file_path)
         self._total_rows += file_rows
@@ -147,6 +190,10 @@ class DiskSentinel:
         timer. Called by the plugin once a batch has been committed."""
         for files in self._files.values():
             files.clear()
+        self._chunks.clear()
+        self._chunk_rows.clear()
+        self._chunk_bytes.clear()
+        self._chunk_hash.clear()
         self._total_rows = 0
         self._total_bytes = 0
         self._last_flushed = time.time()

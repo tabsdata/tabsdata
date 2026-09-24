@@ -237,6 +237,51 @@ def test_slots_tracked_independently_by_index(tmp_path):
     assert _cursor(ctx, 1) == ("20", "1")
 
 
+def test_initial_load_rows_publish_despite_a_prior_cursor(tmp_path):
+    """Segment -1 is reserved for the initial load and cannot be a real
+    position, so a reload publishes in full on a slot that already streamed;
+    the stale change at segment 400 is still filtered."""
+    files = [_write(tmp_path / "a.parquet", [
+        (-1, 0, "load"),
+        (-1, 1, "row-1"),
+        (-1, 2, "row-2"),
+        (400, 1, "already-published"),
+        (600, 3, "new"),
+    ])]
+    ctx = FakeCtx(tmp_path, _seed("500", "9"))
+
+    out = CdcStageSrcPlugin().process_files(ctx, [files])
+
+    assert _read(out[0][0]) == [(-1, 0), (-1, 1), (-1, 2), (600, 3)]
+    assert _cursor(ctx) == ("600", "3")
+
+
+def test_initial_load_only_batch_advances_the_cursor(tmp_path):
+    """A load with no changes after it still leaves a usable cursor, so the
+    next run filters from the load rather than from nothing."""
+    files = [_write(tmp_path / "a.parquet", [(-1, 0, "load"), (-1, 1, "row-1")])]
+    ctx = FakeCtx(tmp_path)
+
+    out = CdcStageSrcPlugin().process_files(ctx, [files])
+
+    assert _read(out[0][0]) == [(-1, 0), (-1, 1)]
+    assert _cursor(ctx) == ("-1", "1")
+
+
+def test_changes_after_an_initial_load_filter_normally(tmp_path):
+    """Once the load has been published, ordinary changes above the load segment
+    obey the cursor as they always did."""
+    ctx = FakeCtx(tmp_path, _seed("-1", "1"))
+    files = [_write(tmp_path / "b.parquet", [(-1, 1, "replayed"), (7, 1, "new")])]
+
+    out = CdcStageSrcPlugin().process_files(ctx, [files])
+
+    # The load row republishes (a reload is always emitted), the real
+    # change publishes because it is above the cursor.
+    assert _read(out[0][0]) == [(-1, 1), (7, 1)]
+    assert _cursor(ctx) == ("7", "1")
+
+
 def test_entry_point_binding_shape():
     assert CDC_STAGE_SRC.type_ == ".cdc-stage"
     assert CDC_STAGE_SRC.src is CdcStageSrc

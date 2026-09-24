@@ -17,8 +17,10 @@ from pathlib import Path
 import pytest
 
 from tabsdatak.conn.common.sql.cdc import _runner
+from tabsdatak.conn.common.sql.cdc._ingester import CDC_INITIAL_LOAD_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._runner import (
     CdcRunConfig,
+    _initial_load_pending,
     _publish,
     _run_loop,
     _setup_signal_handlers,
@@ -27,13 +29,14 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
+    DEFAULT_FETCH_SIZE,
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
 )
-
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcException
 
 # --- fakes --------------------------------------------------------------
 
@@ -111,6 +114,14 @@ class FakeBuffer:
         self.flushed += 1
 
 
+class _FakeInitialLoadSession:
+    def __init__(self):
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
 class FakeIngester:
     def __init__(self, *, resume_value=None, poll_raises=False, open_raises=False):
         self._resume_value = resume_value
@@ -123,6 +134,7 @@ class FakeIngester:
         self.commit_state_arg = None
         self.commit_state_marker = object()
         self.committed_offsets: list = []
+        self.tracked_tables: dict = {"s.t": object()}
 
     def resume_offset(self, *, first_stage, stream_state):
         self.resume_args = (first_stage, stream_state)
@@ -135,6 +147,10 @@ class FakeIngester:
         if self._open_raises:
             raise RuntimeError("boom-open")
         return self.session
+
+    def open_initial_load(self):
+        self.initial_load_session = _FakeInitialLoadSession()
+        return self.initial_load_session
 
     def harvest_tables(self, *, session, cdc_format):
         return {"s.t": object()}
@@ -368,6 +384,159 @@ def test_setup_signal_handlers_off_main_thread_is_noop():
     assert result["is_set"] is False
 
 
+# --- initial load -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "initial_load,stream_state,pending",
+    [
+        (False, None, False),
+        (False, {CDC_INITIAL_LOAD_STATE_KEY: True}, False),
+        (True, None, True),
+        (True, {}, True),
+        (True, {"cdc.offset": "x"}, True),
+        (True, {CDC_INITIAL_LOAD_STATE_KEY: False}, False),
+        (True, {CDC_INITIAL_LOAD_STATE_KEY: True}, True),
+    ],
+)
+def test_initial_load_pending_decision(initial_load, stream_state, pending):
+    """A load is owed while the source asks for one and no earlier run has
+    recorded having staged it."""
+    ctx = FakeCtx(active_values=[], stream_state=stream_state)
+    cfg = _cfg(initial_load=initial_load)
+    assert _initial_load_pending(ctx, cfg) is pending
+
+
+def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False):
+    """Run ``_load_initially`` with the loader and sentinel faked out, so
+    only the runner's own orchestration is under test."""
+    manifest = [[tmp_path / "t0.parquet"], []]
+    disk = FakeDisk(manifest=manifest)
+    monkeypatch.setattr(_runner, "DiskSentinel", lambda **kw: disk)
+
+    offset = object()
+
+    class FakeLoader:
+        def __init__(self, **kw):
+            self.kw = kw
+
+        def load(self, session):
+            if loader_raises:
+                raise RuntimeError("boom-load")
+            return offset
+
+    monkeypatch.setattr(_runner, "InitialLoader", FakeLoader)
+    ingester = FakeIngester()
+    ingester.commit_state_marker = {"cdc.offset": "o"}
+    result = _runner._load_initially(
+        ctx=ctx,
+        ingester=ingester,
+        cfg=_cfg(initial_load=True),
+        large_column_policy=object(),
+    )
+    return result, offset, ingester, manifest
+
+
+def test_initial_load_stages_once_with_offset_and_flag(monkeypatch, tmp_path):
+    ctx = FakeCtx(active_values=[])
+    ctx.work_dir = tmp_path
+    result, offset, ingester, manifest = _loaded(monkeypatch, tmp_path, ctx=ctx)
+
+    assert result is offset
+    assert len(ctx.staged) == 1
+    staged_files, staged_state = ctx.staged[0]
+    assert staged_files == manifest
+    # The resume offset and the "load done" flag are persisted together,
+    # so a crash cannot leave one without the other.
+    assert staged_state == {"cdc.offset": "o", CDC_INITIAL_LOAD_STATE_KEY: False}
+    assert ingester.committed_offsets == [offset]
+
+
+def test_initial_load_failure_stages_nothing(monkeypatch, tmp_path):
+    ctx = FakeCtx(active_values=[])
+    ctx.work_dir = tmp_path
+    with pytest.raises(RuntimeError, match="boom-load"):
+        _loaded(monkeypatch, tmp_path, ctx=ctx, loader_raises=True)
+    assert ctx.staged == []
+
+
+def test_initial_load_closes_the_snapshot_session(monkeypatch, tmp_path):
+    ctx = FakeCtx(active_values=[])
+    ctx.work_dir = tmp_path
+    _, _, ingester, _ = _loaded(monkeypatch, tmp_path, ctx=ctx)
+    assert ingester.initial_load_session.closed is True
+
+
+def test_initial_load_requires_a_tabsdata_owned_offset(monkeypatch, tmp_path):
+    """An ingester whose offset the source owns hands back a callable
+    instead of a state dict; there is nowhere to record the load, so the
+    runner refuses rather than repeating the snapshot on every restart."""
+    ctx = FakeCtx(active_values=[])
+    ctx.work_dir = tmp_path
+    disk = FakeDisk(manifest=[[tmp_path / "t0.parquet"]])
+    monkeypatch.setattr(_runner, "DiskSentinel", lambda **kw: disk)
+    monkeypatch.setattr(
+        _runner,
+        "InitialLoader",
+        lambda **kw: type("L", (), {"load": lambda self, session: object()})(),
+    )
+    ingester = FakeIngester()
+    ingester.commit_state_marker = lambda: None
+
+    with pytest.raises(SqlCdcException):
+        _runner._load_initially(
+            ctx=ctx,
+            ingester=ingester,
+            cfg=_cfg(initial_load=True),
+            large_column_policy=object(),
+        )
+    assert ctx.staged == []
+
+
+def test_run_loop_seeds_the_mark_from_the_initial_load(monkeypatch, tmp_path):
+    """Capture resumes exactly where the snapshot ended, so the load's
+    offset seeds the mark instead of the persisted resume offset."""
+    disk = FakeDisk(manifest=[[]])
+    buffer = FakeBuffer()
+    _patch_sentinels(monkeypatch, disk, buffer)
+    load_offset = object()
+    monkeypatch.setattr(
+        _runner, "_load_initially", lambda **kw: load_offset
+    )
+    ingester = FakeIngester(resume_value=object())
+    ctx = FakeCtx(active_values=[False], stream_state=None)
+    ctx.work_dir = tmp_path
+
+    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg(initial_load=True))
+
+    assert ingester.seeded is load_offset
+    # The persisted-resume path is not consulted when a load just ran.
+    assert ingester.resume_args is None
+
+
+def test_run_loop_skips_a_completed_initial_load(monkeypatch, tmp_path):
+    disk = FakeDisk(manifest=[[]])
+    buffer = FakeBuffer()
+    _patch_sentinels(monkeypatch, disk, buffer)
+    calls: list = []
+    monkeypatch.setattr(
+        _runner, "_load_initially", lambda **kw: calls.append(kw) or object()
+    )
+    resume = object()
+    ingester = FakeIngester(resume_value=resume)
+    ctx = FakeCtx(
+        active_values=[False],
+        first_stage=False,
+        stream_state={CDC_INITIAL_LOAD_STATE_KEY: False, "cdc.offset": "o"},
+    )
+    ctx.work_dir = tmp_path
+
+    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg(initial_load=True))
+
+    assert calls == []
+    assert ingester.seeded is resume
+
+
 # --- CdcRunConfig defaults ----------------------------------------------
 
 
@@ -381,3 +550,5 @@ def test_cdc_run_config_uses_package_defaults():
     assert cfg.trigger_max_secs == DEFAULT_TRIGGER_MAX_SECS
     assert cfg.poll_interval_seconds == DEFAULT_POLL_INTERVAL_SECONDS
     assert cfg.max_large_text_length == DEFAULT_MAX_LARGE_TEXT_LENGTH
+    assert cfg.initial_load is False
+    assert cfg.fetch_size == DEFAULT_FETCH_SIZE

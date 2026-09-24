@@ -120,3 +120,16 @@ class MysqlErrorCode(ErrorCode):
         "MySQL URI must start with mysql:// or mariadb:// (optionally with a "
         "+driver suffix): {value!r}",
     )  # UriSpec
+    MYSQL_20 = ErrorDef(
+        MySQLRuntimeException,
+        "An initial load needs GTIDs to mark where change capture resumes, but "
+        "the server reports gtid_mode={mode!r}. Enable GTIDs, or run without "
+        "initial_load",
+    )  # open_initial_load
+    MYSQL_21 = ErrorDef(
+        MySQLRuntimeException,
+        "An initial load could not acquire the global read lock that pins the "
+        "snapshot to a binlog position, so no snapshot can be taken without "
+        "risking lost changes. Grant RELOAD to the connecting user; managed "
+        "services that withhold it cannot support initial_load. Cause: {reason}",
+    )  # open_initial_load

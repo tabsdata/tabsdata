@@ -450,6 +450,8 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.trigger.max_secs",
     "tabsdata.cdc.poll_interval_seconds",
     "tabsdata.cdc.max_large_text_length",
+    "tabsdata.cdc.fetch_size",
+    "tabsdata.cdc.chunk_size",
 ]
 
 CdcSrcCfgSpec: TypeAlias = Annotated[
@@ -517,6 +519,18 @@ class MySQLCdcStreamSrc(StreamSrc):
             preceded by a `LOAD` control row per table) and then captures
             changes from the exact position of that snapshot, so no
             `start_from` may be given. Defaults to `False`.
+
+            Beyond the privileges plain CDC needs, the connecting user
+            must hold `RELOAD` (to briefly take the global read lock
+            that pins the snapshot to a binlog position) and `SELECT` on
+            every tracked table, since the snapshot reads the tables
+            themselves rather than the binlog. The server must run with
+            `gtid_mode=ON`, and the tracked tables must be InnoDB. The
+            lock is held only while the position is read, not while the
+            tables are scanned. Managed services that withhold `RELOAD`
+            (such as Amazon RDS and Aurora) cannot support an initial
+            load, and the stream refuses to start rather than take a
+            snapshot that may lose changes.
         columns_format: Layout for the new (and old, when present)
             columns payload on each change row -- `"columns"`
             (default), `"struct"` or `"map"`.

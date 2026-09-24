@@ -6,10 +6,11 @@ from __future__ import annotations
 
 import sys
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Union
+from typing import Any, Union
 
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
@@ -105,6 +106,35 @@ class TrackedTable:
     @property
     def qualified(self) -> str:
         return self.data_table.qualified
+
+
+class InitialLoadSession(ABC):
+    """A consistent snapshot of the tracked tables plus the position
+    change capture resumes from, opened by
+    :meth:`~tabsdatak.conn.common.sql.cdc._ingester.CdcIngester.open_initial_load`.
+
+    :meth:`tables` yields each tracked table together with the SQLAlchemy
+    connection to read it through; the caller reads the table fully
+    before asking for the next one, so a per-table snapshot can be closed
+    when the generator resumes. :attr:`offset` is valid once every table
+    has been yielded.
+    """
+
+    @property
+    @abstractmethod
+    def engine(self) -> Any: ...
+
+    @abstractmethod
+    def tables(
+        self, tracked_tables: dict[str, TrackedTable]
+    ) -> Iterator[tuple[TrackedTable, Any]]: ...
+
+    @property
+    @abstractmethod
+    def offset(self) -> CdcOffset: ...
+
+    @abstractmethod
+    def close(self) -> None: ...
 
 
 class CdcArchitecture(StrEnum):

@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from datetime import datetime, timedelta, timezone, tzinfo
 from typing import Any, Literal, TypeAlias, Union
 
@@ -64,6 +64,7 @@ from sqlalchemy.dialects.mysql import (
     TINYTEXT,
     YEAR,
 )
+from sqlalchemy.pool import StaticPool
 from sqlalchemy.sql.elements import quoted_name
 from sqlalchemy.types import LargeBinary, Text
 
@@ -74,6 +75,8 @@ from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
     CdcOffset,
+    InitialLoadSession,
+    TrackedTable,
 )
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
@@ -392,6 +395,83 @@ class MySQLDialect(Dialect):
 # ---------------------------------------------------------------------
 
 
+class BinlogInitialLoadSession(InitialLoadSession):
+    """Snapshot pinned to a binlog position by holding the global read lock
+    just long enough to start a repeatable-read transaction and read the
+    executed GTID set. Writers are blocked only for those two statements,
+    not while the tables are scanned.
+
+    Reading the position without the lock would let a transaction commit
+    between the snapshot forming and the position being read, and those
+    changes would be in neither the snapshot nor the resumed stream.
+    """
+
+    def __init__(self, *, connection_settings: dict[str, Any]):
+        self._connection = pymysql.connect(**connection_settings)
+        self._require_gtid_mode()
+        cursor = self._connection.cursor()
+        try:
+            cursor.execute("flush tables with read lock")
+        except pymysql.Error as error:
+            self._connection.close()
+            raise MysqlErrorCode.MYSQL_21.exception(cause=error, reason=str(error))
+        try:
+            cursor.execute("start transaction with consistent snapshot")
+            cursor.execute("select @@global.gtid_executed")
+            gtid = cursor.fetchone()[0] or ""
+        finally:
+            cursor.execute("unlock tables")
+        self._offset = GtidOffset(gtid=gtid)
+        # Everything the load reads must come from the transaction opened
+        # above, so the engine wraps that one connection instead of opening
+        # its own, which would see current data rather than the snapshot.
+        self._engine = sqlalchemy_utils.create_engine(
+            "mysql+pymysql://",
+            creator=lambda: self._connection,
+            poolclass=StaticPool,
+        )
+        logger.info("Initial load snapshot is consistent at GTID set %r", gtid)
+
+    def _require_gtid_mode(self) -> None:
+        cursor = self._connection.cursor()
+        cursor.execute("select @@gtid_mode")
+        mode = cursor.fetchone()[0]
+        if str(mode).upper() != "ON":
+            self._connection.close()
+            raise MysqlErrorCode.MYSQL_20.exception(mode=mode)
+
+    @property
+    def engine(self) -> Any:
+        return self._engine
+
+    @property
+    def offset(self) -> CdcOffset:
+        return self._offset
+
+    def tables(
+        self, tracked_tables: dict[str, TrackedTable]
+    ) -> Iterator[tuple[TrackedTable, Any]]:
+        with self._engine.connect() as connection:
+            for tracked_table in tracked_tables.values():
+                yield tracked_table, connection
+
+    def close(self) -> None:
+        # Disposing the engine closes the connection it was built over, so
+        # the connection is only closed here when no engine took it.
+        engine, connection = self._engine, self._connection
+        self._engine = self._connection = None
+        if engine is not None:
+            try:
+                engine.dispose()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Failed to dispose initial-load engine: %s", exc)
+        elif connection is not None:
+            try:
+                connection.close()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Failed to close initial-load connection: %s", exc)
+
+
 class GtidOffset(CdcOffset):
     """MySQL CDC offset = the GTID set the binlog stream has
     consumed so far. Empty string is the cold-start marker."""
@@ -471,6 +551,18 @@ class BinlogIngester(CdcIngester):
         logger.info("MySQL server timezone: %s", self._server_tz)
         self.init_stream()
         return engine
+
+    def open_initial_load(self) -> BinlogInitialLoadSession:
+        settings = self._stream_connection_settings()
+        return BinlogInitialLoadSession(
+            connection_settings={
+                "host": settings["host"],
+                "port": settings["port"],
+                "user": settings.get("user"),
+                "password": settings.get("passwd"),
+                "database": settings.get("db"),
+            }
+        )
 
     def close_session(self, session: Any) -> None:
         if self._stream is not None:

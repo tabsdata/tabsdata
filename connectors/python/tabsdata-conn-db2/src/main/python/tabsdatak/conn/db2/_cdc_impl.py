@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone, tzinfo
 from typing import Any, Literal, TypeAlias, Union
@@ -50,11 +50,13 @@ from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
     CdcOffset,
+    InitialLoadSession,
     TableObject,
     TrackedTable,
 )
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+    DEFAULT_FETCH_SIZE,
     DOT,
     CdcOperation,
 )
@@ -84,10 +86,6 @@ logger = logging.getLogger(__name__)
 # Schema that hosts the IBM SQL Replication capture tables
 # (IBMSNAP_REGISTER, IBMSNAP_UOW, ...).
 ASN_SCHEMA = "ASN"
-
-# Default server-side fetch chunk for CD-table reads. Tunable via
-# ``db2.cdc.fetch_size`` on ``Db2CdcStreamSrc.src_cfg``.
-DEFAULT_FETCH_SIZE = 10000
 
 POLL_INTERVAL_SECONDS = 1.0
 
@@ -434,6 +432,80 @@ class CommitSeqOffset(CdcOffset):
 # ---------------------------------------------------------------------
 
 
+class SqlReplicaInitialLoadSession(InitialLoadSession):
+    """Snapshot pinned to a capture position by locking the source tables
+    in share mode, reading the highest commit sequence the capture program
+    has recorded, then releasing the locks and reading the rows under
+    repeatable read.
+
+    The share locks let readers through and block only writers, and only
+    while the position is read. The position is the global
+    ``max(IBMSNAP_COMMITSEQ)`` across units of work, so a change committed
+    after it is captured above the mark rather than lost; a change
+    committed just before it may be replayed, which is the safe direction.
+    """
+
+    def __init__(self, *, engine: Any, dialect: Db2Dialect):
+        self._engine = engine
+        self._dialect = dialect
+        self._offset: CommitSeqOffset | None = None
+        self._tracked_tables: dict[str, TrackedTable] = {}
+
+    @property
+    def engine(self) -> Any:
+        return self._engine
+
+    @property
+    def offset(self) -> CdcOffset:
+        if self._offset is None:
+            raise Db2ErrorCode.DB2_25.exception()
+        return self._offset
+
+    def tables(
+        self, tracked_tables: dict[str, TrackedTable]
+    ) -> Iterator[tuple[TrackedTable, Any]]:
+        with self._engine.connect().execution_options(
+            isolation_level="REPEATABLE READ"
+        ) as connection:
+            self._pin(connection, tracked_tables)
+            for tracked_table in tracked_tables.values():
+                yield tracked_table, connection
+
+    def _pin(self, connection: Any, tracked_tables: dict[str, TrackedTable]) -> None:
+        for tracked_table in tracked_tables.values():
+            data_table = tracked_table.data_table
+            qualified = (
+                f"{self._dialect.quote_identifier(data_table.schema)}"
+                f".{self._dialect.quote_identifier(data_table.table)}"
+            )
+            connection.execute(text(f"lock table {qualified} in share mode"))
+        commitseq = connection.execute(
+            text(
+                f"select max({IBMSNAP_COMMITSEQ.quoted}) from {ASN_SCHEMA}.IBMSNAP_UOW"
+            )
+        ).scalar()
+        commitseq = commitseq or COMMITSEQ_ORIGIN
+        self._offset = CommitSeqOffset(
+            commits={
+                tracked_table.cdc_table.qualified: commitseq
+                for tracked_table in tracked_tables.values()
+            }
+        )
+        connection.commit()
+        logger.info(
+            "Initial load snapshot is consistent at commit sequence %s",
+            commitseq.hex(),
+        )
+
+    def close(self) -> None:
+        if self._engine is not None:
+            try:
+                self._engine.dispose()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Failed to dispose initial-load engine: %s", exc)
+            self._engine = None
+
+
 class SqlReplicaIngester(CdcIngester):
     """``CdcIngester`` for Db2 via IBM SQL Replication.
 
@@ -482,6 +554,12 @@ class SqlReplicaIngester(CdcIngester):
         self._server_tz = self.dialect.server_timezone(engine)
         logger.info("Db2 server timezone: %s", self._server_tz)
         return engine
+
+    def open_initial_load(self) -> SqlReplicaInitialLoadSession:
+        return SqlReplicaInitialLoadSession(
+            engine=self._build_engine(),
+            dialect=self.dialect,
+        )
 
     def close_session(self, session: Any) -> None:
         if session is not None:

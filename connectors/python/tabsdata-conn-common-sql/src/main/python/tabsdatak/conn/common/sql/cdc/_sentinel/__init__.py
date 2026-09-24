@@ -7,11 +7,11 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import timezone
-from decimal import Decimal
 from typing import Any
 
 import orjson
 
+from tabsdatak.conn.common.sql.cdc._json import orjson_default
 from tabsdatak.conn.common.sql.cdc._model import CdcDataChange
 from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_DATA_COL_NEW_PREFIX,
@@ -35,12 +35,6 @@ from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-
-def _orjson_default(obj: Any) -> Any:
-    if isinstance(obj, Decimal):
-        return float(obj)
-    raise TypeError(f"Type is not JSON serializable: {type(obj)}")
 
 
 @dataclass
@@ -88,7 +82,7 @@ def row_to_record(
                         column.name: change.new_values.get(column.name)
                         for column in columns
                     },
-                    default=_orjson_default,
+                    default=orjson_default,
                 ).decode()
             case _:
                 raise ValueError(
@@ -109,7 +103,7 @@ def row_to_record(
         case "map":
             record[CDC_DATA_MAP_OLD] = orjson.dumps(
                 {column.name: change.old_values.get(column.name) for column in columns},
-                default=_orjson_default,
+                default=orjson_default,
             ).decode()
         case _:
             raise ValueError(

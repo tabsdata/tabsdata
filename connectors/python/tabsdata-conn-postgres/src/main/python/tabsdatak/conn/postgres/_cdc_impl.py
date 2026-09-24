@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Generator, Iterable
+from collections.abc import Generator, Iterable, Iterator
 from datetime import date, datetime, time as dt_time, timezone, tzinfo
 from decimal import Decimal
 from typing import Any, Literal, TypeAlias, Union
@@ -57,6 +57,7 @@ from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
     CdcOffset,
+    InitialLoadSession,
     TrackedTable,
 )
 from tabsdatak.conn.common.sql.cdc.constants import (
@@ -356,6 +357,92 @@ class PostgresDialect(Dialect):
 # ---------------------------------------------------------------------
 
 
+def lsn_to_int(lsn: str) -> int:
+    high, _, low = lsn.partition("/")
+    return (int(high, 16) << 32) | int(low, 16)
+
+
+class Wal2JsonInitialLoadSession(InitialLoadSession):
+    """Snapshot seeded by creating the replication slot with
+    ``EXPORT_SNAPSHOT``: one operation yields both the WAL position the
+    slot became consistent at and a snapshot holding exactly the state at
+    that position, so the tables can be read without locking and capture
+    resumes with no gap.
+
+    The exporting replication connection must stay idle until the load
+    ends: any further command on it drops the snapshot.
+    """
+
+    def __init__(
+        self,
+        *,
+        engine: Any,
+        replication_settings: dict[str, Any],
+        replication_slot: str,
+    ):
+        self._engine = engine
+        self._replicator = psycopg2.connect(**replication_settings)
+        self._cursor = self._replicator.cursor()
+        try:
+            self._cursor.execute(
+                f"CREATE_REPLICATION_SLOT {replication_slot} LOGICAL "
+                f"{WAL2JSON_PLUGIN} EXPORT_SNAPSHOT"
+            )
+            _, consistent_point, snapshot_name, _ = self._cursor.fetchone()
+        except psycopg2.errors.DuplicateObject as error:
+            raise PostgresErrorCode.POSTGRES_21.exception(
+                cause=error,
+                slot=replication_slot,
+            )
+        self._offset = LsnOffset(lsn=lsn_to_int(consistent_point))
+        self._snapshot_name = snapshot_name
+        logger.info(
+            "Initial load snapshot of slot %r is consistent at %s",
+            replication_slot,
+            consistent_point,
+        )
+
+    @property
+    def engine(self) -> Any:
+        return self._engine
+
+    @property
+    def offset(self) -> CdcOffset:
+        return self._offset
+
+    def tables(
+        self, tracked_tables: dict[str, TrackedTable]
+    ) -> Iterator[tuple[TrackedTable, Any]]:
+        with self._engine.connect().execution_options(
+            isolation_level="REPEATABLE READ"
+        ) as connection:
+            connection.execute(
+                text(f"set transaction snapshot '{self._snapshot_name}'")
+            )
+            for tracked_table in tracked_tables.values():
+                yield tracked_table, connection
+
+    def close(self) -> None:
+        for closeable, what in (
+            (self._cursor, "cursor"),
+            (self._replicator, "replication connection"),
+        ):
+            if closeable is None:
+                continue
+            try:
+                closeable.close()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Failed to close initial-load %s: %s", what, exc)
+        self._cursor = None
+        self._replicator = None
+        if self._engine is not None:
+            try:
+                self._engine.dispose()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Failed to dispose initial-load engine: %s", exc)
+            self._engine = None
+
+
 class LsnOffset(CdcOffset):
     """Postgres CDC offset = the WAL LSN the consumer has flushed
     so far. Zero is the cold-start marker (replay from the oldest
@@ -501,6 +588,13 @@ class Wal2JsonIngester(CdcIngester):
                     table,
                     text_columns,
                 )
+
+    def open_initial_load(self) -> Wal2JsonInitialLoadSession:
+        return Wal2JsonInitialLoadSession(
+            engine=self._build_engine(),
+            replication_settings=self._replication_connection_settings(),
+            replication_slot=self._replication_slot,
+        )
 
     def close_session(self, session: Any) -> None:
         if self._cursor is not None:

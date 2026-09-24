@@ -31,6 +31,7 @@ reaches into a particular replication protocol.
 from __future__ import annotations
 
 import logging
+import shutil
 import signal
 import sys
 import threading
@@ -39,22 +40,34 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from tabsdatak.api import StreamSrc
-from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
+from tabsdatak.conn.common.sql.cdc._ingester import (
+    CDC_INITIAL_LOAD_STATE_KEY,
+    CdcIngester,
+)
+from tabsdatak.conn.common.sql.cdc._initial_load import InitialLoader
 from tabsdatak.conn.common.sql.cdc._large import LargeColumnPolicy
+from tabsdatak.conn.common.sql.cdc._model import CdcOffset
 from tabsdatak.conn.common.sql.cdc._sentinel.buffer import BufferSentinel
 from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_FETCH_SIZE,
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
 )
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.spi import Conn, StreamSrcPlugin, StreamSrcPluginCtx
+
+# Work-dir subdirectory the initial load's parquet files land in, wiped
+# at the start of a load so a previous attempt leaves nothing behind.
+_INITIAL_LOAD_DIR = "_cdc_initial_load"
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +95,9 @@ class CdcRunConfig:
     trigger_max_secs: int = DEFAULT_TRIGGER_MAX_SECS
     poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS
     max_large_text_length: int = DEFAULT_MAX_LARGE_TEXT_LENGTH
+    initial_load: bool = False
+    fetch_size: int = DEFAULT_FETCH_SIZE
+    chunk_size: int = DEFAULT_CHUNK_SIZE
     logging_level: int = logging.ERROR
 
 
@@ -143,6 +159,69 @@ def _publish(
     return True
 
 
+def _initial_load_pending(ctx: StreamSrcPluginCtx, cfg: CdcRunConfig) -> bool:
+    """Whether this run owes an initial load: the source asks for one and
+    no previous run has staged it. The flag is written as ``False``
+    together with the load's own batch, so a run interrupted before that
+    batch is staged starts the load again."""
+    if not cfg.initial_load:
+        return False
+    state = ctx.stream_state or {}
+    return state.get(CDC_INITIAL_LOAD_STATE_KEY, True)
+
+
+def _load_initially(
+    *,
+    ctx: StreamSrcPluginCtx,
+    ingester: CdcIngester,
+    cfg: CdcRunConfig,
+    large_column_policy: LargeColumnPolicy,
+) -> CdcOffset:
+    """Snapshot the tracked tables and stage them as a single batch.
+
+    Returns the offset change capture resumes from. The whole load is one
+    ``ctx.stage`` call, so it is all-or-nothing: an error anywhere leaves
+    no manifest and no state, and the next run redoes it.
+    """
+    landing = ctx.work_dir / _INITIAL_LOAD_DIR
+    if landing.exists():
+        shutil.rmtree(landing)
+    landing.mkdir(parents=True)
+
+    session = ingester.open_initial_load()
+    try:
+        disk_sentinel = DiskSentinel(
+            landing=landing,
+            max_rows=cfg.trigger_max_rows,
+            max_bytes=cfg.trigger_max_bytes,
+            max_secs=cfg.trigger_max_secs,
+            tables=ingester.tracked_tables,
+            cdc_format=cfg.cdc_format,
+        )
+        loader = InitialLoader(
+            ingester=ingester,
+            disk_sentinel=disk_sentinel,
+            cdc_format=cfg.cdc_format,
+            large_column_policy=large_column_policy,
+            fetch_size=cfg.fetch_size,
+            chunk_size=cfg.chunk_size,
+        )
+        offset = loader.load(session)
+    finally:
+        session.close()
+
+    state = ingester.commit_state(offset)
+    if not isinstance(state, dict):
+        raise SqlCdcErrorCode.CDC_21.exception(ingester=type(ingester).__name__)
+    ctx.stage(
+        disk_sentinel.build_manifest(),
+        {**state, CDC_INITIAL_LOAD_STATE_KEY: False},
+    )
+    ingester.commit_offset(offset)
+    logger.info("Initial load staged")
+    return offset
+
+
 def _run_loop(
     *,
     ctx: StreamSrcPluginCtx,
@@ -152,13 +231,13 @@ def _run_loop(
     """Drive ``ingester`` until ``ctx.active`` flips to ``False`` or a
     termination signal arrives.
 
-    Opens the ingester session, harvests the tracked-table schema, then
-    polls for changes, buffering them in memory and spilling to the work
-    dir; a batch is staged through ``ctx`` when the disk sentinel's
-    row/byte/time thresholds fire **or** ``ctx.flush_interval_mins`` has
-    elapsed since the last stage. On a graceful end-of-stream the trailing
-    partial batch is flushed before returning. Invoked by
-    :meth:`CdcPlugin.run`.
+    Runs the initial load first when one is owed, then opens the ingester
+    session, harvests the tracked-table schema and polls for changes,
+    buffering them in memory and spilling to the work dir; a batch is
+    staged through ``ctx`` when the disk sentinel's row/byte/time
+    thresholds fire **or** ``ctx.flush_interval_mins`` has elapsed since
+    the last stage. On a graceful end-of-stream the trailing partial batch
+    is flushed before returning. Invoked by :meth:`CdcPlugin.run`.
     """
     buffer_sentinel: BufferSentinel | None = None
     disk_sentinel: DiskSentinel | None = None
@@ -168,25 +247,38 @@ def _run_loop(
 
     flush_interval_secs = max(ctx.flush_interval_mins, 0) * 60
 
+    large_column_policy = LargeColumnPolicy(
+        max_text_length=cfg.max_large_text_length,
+    )
+
     stop_signal = _setup_signal_handlers()
     try:
-        # Seed the resume position before the stream opens: from the
-        # persisted ``stream_state`` (Tabsdata-owned offset) or left to
-        # the source (external-owned / cold start). ``first_stage`` ->
-        # seed from the configured ``start_from``.
-        ingester.seed_offset(
-            ingester.resume_offset(
-                first_stage=ctx.first_stage,
-                stream_state=ctx.stream_state,
+        if _initial_load_pending(ctx, cfg):
+            # The load's own offset becomes the resume position, so the
+            # stream opens exactly where the snapshot ends.
+            ingester.seed_offset(
+                _load_initially(
+                    ctx=ctx,
+                    ingester=ingester,
+                    cfg=cfg,
+                    large_column_policy=large_column_policy,
+                )
             )
-        )
+        else:
+            # Seed the resume position before the stream opens: from the
+            # persisted ``stream_state`` (Tabsdata-owned offset) or left to
+            # the source (external-owned / cold start). ``first_stage`` ->
+            # seed from the configured ``start_from``.
+            ingester.seed_offset(
+                ingester.resume_offset(
+                    first_stage=ctx.first_stage,
+                    stream_state=ctx.stream_state,
+                )
+            )
         session = ingester.open_session()
         tracked_tables = ingester.harvest_tables(
             session=session,
             cdc_format=cfg.cdc_format,
-        )
-        large_column_policy = LargeColumnPolicy(
-            max_text_length=cfg.max_large_text_length,
         )
         disk_sentinel = DiskSentinel(
             landing=ctx.work_dir,

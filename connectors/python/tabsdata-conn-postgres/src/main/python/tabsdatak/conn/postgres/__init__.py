@@ -422,6 +422,8 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.trigger.max_secs",
     "tabsdata.cdc.poll_interval_seconds",
     "tabsdata.cdc.max_large_text_length",
+    "tabsdata.cdc.fetch_size",
+    "tabsdata.cdc.chunk_size",
 ]
 
 CdcSrcCfgSpec: TypeAlias = Annotated[
@@ -490,6 +492,15 @@ class PostgresCdcStreamSrc(StreamSrc):
             preceded by a `LOAD` control row per table) and then captures
             changes from the exact position of that snapshot, so no
             `start_from` may be given. Defaults to `False`.
+
+            Beyond the privileges plain CDC needs, the connecting role
+            must be able to create a replication slot that exports a
+            snapshot (the `REPLICATION` attribute already required, on a
+            server whose `max_replication_slots` leaves one free) and to
+            `SELECT` every tracked table, since the snapshot reads the
+            tables themselves rather than the write-ahead log. No table
+            is locked: the slot's exported snapshot fixes the position
+            without blocking writers.
         replication_slot_behavior: `"reuse"` (default, slot must
             exist) or `"create"` (create it, no-op if it exists).
         publication_name: Optional publication scoping the slot's output

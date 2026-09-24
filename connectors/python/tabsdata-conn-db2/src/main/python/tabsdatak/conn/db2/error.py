@@ -148,3 +148,8 @@ class Db2ErrorCode(ErrorCode):
         "DB2 URI must start with db2:// or ibm_db_sa:// (optionally with a "
         "+driver suffix): {value!r}",
     )  # UriSpec
+    DB2_25 = ErrorDef(
+        Db2RuntimeException,
+        "An initial load read its resume position before pinning the source "
+        "tables, so the position cannot be trusted",
+    )  # SqlReplicaInitialLoadSession.offset

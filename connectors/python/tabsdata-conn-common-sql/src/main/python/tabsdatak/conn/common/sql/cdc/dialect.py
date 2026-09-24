@@ -59,6 +59,12 @@ class Dialect(ABC):
     def default_case_fold(self, name: str) -> str:
         """Fold an unquoted identifier to the dialect's default case."""
 
+    def quote_identifier(self, name: str) -> str:
+        """Quote `name` verbatim for use in a statement, doubling any
+        embedded closing-quote character."""
+        escaped = name.replace(self.close_quote, self.close_quote * 2)
+        return f"{self.open_quote}{escaped}{self.close_quote}"
+
     @abstractmethod
     def get_catalog_columns(
         self,

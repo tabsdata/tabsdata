@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
 
+from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._model import CdcChange, CdcDataChange
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 
@@ -36,6 +37,26 @@ class LargeColumnPolicy:
                         raise ValueError(
                             f"Unsupported large column kind: {column.kind!r}"
                         )
+
+    def apply_to_columns(
+        self,
+        *,
+        table: str,
+        schema: SchemaVersion,
+        columns: dict[str, list],
+    ) -> None:
+        for column in schema.large_columns:
+            values = columns.get(column.name)
+            if values is None:
+                continue
+            match column.kind:
+                case "object":
+                    columns[column.name] = [None] * len(values)
+                case "text":
+                    for value in values:
+                        self.check_text_length(table, column.name, value)
+                case _:
+                    raise ValueError(f"Unsupported large column kind: {column.kind!r}")
 
     def check_text_length(self, table: str, column: str, value: object) -> None:
         if not isinstance(value, (str, bytes, bytearray)):

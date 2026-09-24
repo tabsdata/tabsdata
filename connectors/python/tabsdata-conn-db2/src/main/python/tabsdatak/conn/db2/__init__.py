@@ -432,7 +432,6 @@ Db2CdcStartFromSpec: TypeAlias = Union[
 # --- Db2CdcStreamSrc.src_cfg keys -----------------------------------
 CdcSrcCfgKey: TypeAlias = Literal[
     "db2.cdc.blocking_timeout_seconds",
-    "db2.cdc.fetch_size",
     "db2.cdc.logging_level",
     "tabsdata.cdc.buffer.max_rows",
     "tabsdata.cdc.buffer.max_bytes",
@@ -442,6 +441,8 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.trigger.max_secs",
     "tabsdata.cdc.poll_interval_seconds",
     "tabsdata.cdc.max_large_text_length",
+    "tabsdata.cdc.fetch_size",
+    "tabsdata.cdc.chunk_size",
 ]
 
 CdcSrcCfgSpec: TypeAlias = Annotated[
@@ -511,6 +512,14 @@ class Db2CdcStreamSrc(StreamSrc):
             inserts, preceded by a `LOAD` control row per table) and then
             captures changes from the exact position of that snapshot, so
             no `start_from` may be given. Defaults to `False`.
+
+            Beyond the privileges plain CDC needs, the connecting user
+            must be able to `SELECT` every tracked *source* table (plain
+            CDC only reads the CD tables) and to lock those tables
+            briefly while the capture position is read. The snapshot
+            reads the source tables themselves rather than the CD tables,
+            so the source tables must be readable even where only the CD
+            tables were needed before.
         columns_format: Layout for the new (and old) columns payload on
             each change row -- `"columns"` (default), `"struct"` or
             `"map"`.

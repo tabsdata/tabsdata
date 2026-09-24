@@ -18,6 +18,7 @@ from sqlalchemy.sql.elements import quoted_name
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcOffset,
+    InitialLoadSession,
     TableObject,
     TrackedColumn,
     TrackedTable,
@@ -38,6 +39,10 @@ logger.setLevel(logging.DEBUG)
 # state, for Tabsdata-owned-offset ingesters (read back via
 # ``ctx.stream_state[CDC_OFFSET_STATE_KEY]``).
 CDC_OFFSET_STATE_KEY = "cdc.offset"
+
+# Key under which the stream state records whether an initial load is
+# still owed: ``False`` once one has been staged.
+CDC_INITIAL_LOAD_STATE_KEY = "cdc.initial-load"
 
 
 class CdcIngester(ABC):
@@ -304,6 +309,14 @@ class CdcIngester(ABC):
 
     @abstractmethod
     def poll_changes(self, session: Any) -> Iterable[CdcChange]: ...
+
+    def open_initial_load(self) -> InitialLoadSession:
+        """Open the consistent snapshot an initial load reads the tracked
+        tables from (see :class:`InitialLoadSession`). Called before
+        :meth:`open_session`; the session's offset then seeds the mark."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support initial_load"
+        )
 
     # ------------------------------------------------------------------
     # Offset ownership: Tabsdata-owned (default) vs external-owned.

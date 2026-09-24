@@ -41,6 +41,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
+from tabsdatak.conn.common.sql.cdc._initial_load import INITIAL_LOAD_SEGMENT
 from tabsdatak.conn.common.sql.cdc.constants import CDC_META_ORD, CDC_META_SEG
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.spi import (
@@ -153,8 +154,14 @@ class CdcStageSrcPlugin(StreamStageSrcPlugin):
                 # ``(seg, ord)`` -- a lexicographic ``> (prior_seg,
                 # prior_ord)``. Filtering on seg alone would wrongly drop
                 # the unpublished tail of a partially published segment.
+                #
+                # Segment ``INITIAL_LOAD_SEGMENT`` is the exception: it is
+                # reserved for the initial load and sits below every real
+                # position, so the cursor never applies to it and a reload
+                # is published even on a slot that already streamed.
                 emitted = deduped.filter(
-                    (pl.col(CDC_META_SEG) > prior_seg)
+                    (pl.col(CDC_META_SEG) == INITIAL_LOAD_SEGMENT)
+                    | (pl.col(CDC_META_SEG) > prior_seg)
                     | (
                         (pl.col(CDC_META_SEG) == prior_seg)
                         & (pl.col(CDC_META_ORD) > prior_ord)

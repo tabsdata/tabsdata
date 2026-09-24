@@ -133,3 +133,8 @@ class SqlCdcErrorCode(ErrorCode):
         "characters, above the tabsdata.cdc.max_large_text_length limit of "
         "{limit}",
     )
+    CDC_21 = ErrorDef(
+        SqlCdcException,
+        "An initial load requires the resume offset to be kept in Tabsdata "
+        "stream state, but {ingester} commits it on the source",
+    )
