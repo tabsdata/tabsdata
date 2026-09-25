@@ -35,7 +35,7 @@ from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle.runner impo
 
 __all__ = ["_extract", "_fetch_via_transporter", "run", "main"]
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 INFO = (
     "localize-fn-bundle — fetch the function bundle via td_transporter and extract it"
 )

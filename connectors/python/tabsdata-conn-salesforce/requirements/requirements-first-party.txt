@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-tabsdata-api==2.1.0
-tabsdata-conn-common==2.1.0
-tabsdata-conn-common-file==2.1.0
-tabsdata-conn-common-sql==2.1.0
+tabsdata-api==2.2.0
+tabsdata-conn-common==2.2.0
+tabsdata-conn-common-file==2.2.0
+tabsdata-conn-common-sql==2.2.0

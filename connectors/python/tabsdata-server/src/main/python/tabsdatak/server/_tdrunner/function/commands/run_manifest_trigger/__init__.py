@@ -76,7 +76,7 @@ __all__ = [
     "main",
 ]
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 INFO = (
     "run-manifest-trigger — long-running sidecar; scans manifests/ and "
     "POSTs fn_trigger; cleans up between polls"

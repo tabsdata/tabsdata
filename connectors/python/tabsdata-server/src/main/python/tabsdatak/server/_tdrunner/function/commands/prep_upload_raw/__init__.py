@@ -34,7 +34,7 @@ __all__ = ["run", "main"]
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 INFO = (
     "prep-upload-raw — generate the transporter request that persists a "
     "publisher's ingested data"

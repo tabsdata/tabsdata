@@ -445,13 +445,12 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "encoding_rs"
-version = "0.8.41"
+version = "0.8.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b5ef0006ac9ab233c38522f5ae99cae3625151de8f706cacee1cba4b8e2832a"
+checksum = "8e985e0451871ad22fb8d2b6b076e2028a502a0d3950998c2c5c0a4f9b5d9679"
 dependencies = [
  "cfg-if",
  "core_detect",
- "multiversion",
  "multiversion_no_op",
  "rustversion",
  "scopeguard",
@@ -2502,27 +2501,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "multiversion"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4ca4bea16ffc3f443cf7d866912118196bfef4c6a1556ca00f9f9b00bb43f7c"
-dependencies = [
- "multiversion-macros",
-]
-
-[[package]]
-name = "multiversion-macros"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d416831a7317ef4b08bee00b69cbbb9c8763da7959a7026244d6266869f9c83"
-dependencies = [
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 3.0.6",
-]
-
-[[package]]
 name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3122,7 +3100,7 @@ dependencies = [
 
 [[package]]
 name = "td-apiforge"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3134,7 +3112,7 @@ dependencies = [
 
 [[package]]
 name = "td-attach"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3146,7 +3124,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3166,7 +3144,7 @@ dependencies = [
 
 [[package]]
 name = "td-macros"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -3245,7 +3223,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tm-error"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3254,7 +3232,7 @@ dependencies = [
 
 [[package]]
 name = "tm-objects"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "darling 0.23.0",
  "heck",
@@ -3267,7 +3245,7 @@ dependencies = [
 
 [[package]]
 name = "tm-pyo3"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "quote",
@@ -3276,7 +3254,7 @@ dependencies = [
 
 [[package]]
 name = "tm-services"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "proc-macro2",
@@ -3286,7 +3264,7 @@ dependencies = [
 
 [[package]]
 name = "tm-test"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -3297,7 +3275,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "quote",

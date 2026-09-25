@@ -19,7 +19,7 @@ from tabsdatak.server._tdrunner.function.commands.inspect_function.runner import
 
 __all__ = ["run", "main"]
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 INFO = "inspect-function — dump function-run execution information for troubleshooting"
 MAN = (
     "inspect-function\n"

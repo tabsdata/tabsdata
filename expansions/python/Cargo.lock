@@ -783,13 +783,12 @@ checksum = "34aa73646ffb006b8f5147f3dc182bd4bcb190227ce861fc4a4844bf8e3cb2c0"
 
 [[package]]
 name = "encoding_rs"
-version = "0.8.41"
+version = "0.8.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b5ef0006ac9ab233c38522f5ae99cae3625151de8f706cacee1cba4b8e2832a"
+checksum = "8e985e0451871ad22fb8d2b6b076e2028a502a0d3950998c2c5c0a4f9b5d9679"
 dependencies = [
  "cfg-if",
  "core_detect",
- "multiversion",
  "multiversion_no_op",
  "rustversion",
  "scopeguard",
@@ -3381,27 +3380,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "multiversion"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4ca4bea16ffc3f443cf7d866912118196bfef4c6a1556ca00f9f9b00bb43f7c"
-dependencies = [
- "multiversion-macros",
-]
-
-[[package]]
-name = "multiversion-macros"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d416831a7317ef4b08bee00b69cbbb9c8763da7959a7026244d6266869f9c83"
-dependencies = [
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 3.0.6",
-]
-
-[[package]]
 name = "multiversion_no_op"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4975,7 +4953,7 @@ dependencies = [
 
 [[package]]
 name = "ta-system"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "td-build",
@@ -4989,7 +4967,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "td-attach"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "darling 0.23.0",
  "openssl",
@@ -5001,7 +4979,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5021,7 +4999,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5078,7 +5056,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -5092,7 +5070,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -5103,7 +5081,7 @@ dependencies = [
 
 [[package]]
 name = "te-system"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "ta-system",
@@ -5211,7 +5189,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tm-error"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "quote",
@@ -5220,7 +5198,7 @@ dependencies = [
 
 [[package]]
 name = "tm-pyo3"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "quote",
@@ -5229,7 +5207,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "quote",
@@ -5241,7 +5219,7 @@ dependencies = [
 
 [[package]]
 name = "to-expansions"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "ta-system",
@@ -5252,7 +5230,7 @@ dependencies = [
 
 [[package]]
 name = "to-foundation"
-version = "2.1.0"
+version = "2.2.0"
 dependencies = [
  "openssl",
  "pyo3",
@@ -6272,18 +6250,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.57"
+version = "0.8.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d35102a9f36d089ccae9e4c6802bc118be4487b80aaffc0ab4e0cf5ce92d2873"
+checksum = "c17e8fafad82b542ff3717217ecdc736231b59e387768c9630123b4ce4d2db44"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.57"
+version = "0.8.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "146c01f5ab44258da43cf276c74a2763db2ff3969c9c652c3f2de07041d0b2bc"
+checksum = "595f56e044df4f46a0c9a626f65c3d99eb8488f7e8a8baa12dd76326d9710bf2"
 dependencies = [
  "proc-macro2",
  "quote",

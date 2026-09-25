@@ -47,7 +47,7 @@ __all__ = [
     "main",
 ]
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 INFO = (
     "run-destination-plugin — hand the function's output parquets to the "
     "subscriber's destination plugin"

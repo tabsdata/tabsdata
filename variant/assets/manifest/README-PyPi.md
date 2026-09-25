@@ -67,8 +67,8 @@ Copyright 2026 Tabsdata Inc.
 
 <div align="center">
     <a href="https://tabsdata.com">Tabsdata</a> |
-    <a href="https://docs.tabsdata.com/2.1.0/guide">User Guide</a> |
-    <a href="https://docs.tabsdata.com/2.1.0/api">API Reference</a>
+    <a href="https://docs.tabsdata.com/2.2.0/guide">User Guide</a> |
+    <a href="https://docs.tabsdata.com/2.2.0/api">API Reference</a>
 </div>
 
 # License
@@ -100,7 +100,7 @@ connectors.
 Tables can be populated with external data or using data from other tables already existing
 in the Tabsdata server.
 
-Tables can be manipulated using a [TableFrame API](https://docs.tabsdata.com/2.1.0/api/category/tableframe/)
+Tables can be manipulated using a [TableFrame API](https://docs.tabsdata.com/2.2.0/api/category/tableframe/)
 (internally Tabsdata uses [Polars](https://github.com/pola-rs/polars)) that enables selection,
 filtering, aggregation and joins operations.
 
@@ -155,10 +155,10 @@ $ tdkserver quickstart --anthropic-key $ANTHROPIC_API_KEY # integration with Ant
 $ tdkserver quickstart --openai-key $OPENAI_API_KEY       # integration with OpenAI
 ```
 
-## This version (2.1.0) Documentation
+## This version (2.2.0) Documentation
 
-* [User Guide](https://docs.tabsdata.com/2.1.0/guide)
-* [API Reference](https://docs.tabsdata.com/2.1.0/api)
+* [User Guide](https://docs.tabsdata.com/2.2.0/guide)
+* [API Reference](https://docs.tabsdata.com/2.2.0/api)
 
 ## How Does Tabsdata Work?
 
