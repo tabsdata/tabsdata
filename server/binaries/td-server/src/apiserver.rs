@@ -2,6 +2,8 @@
 // Copyright 2024 Tabsdata Inc.
 //
 
+#![allow(linker_messages)]
+
 use std::{env, process};
 use td_common::attach::attach;
 use td_common::crypto::install_crypto_provider;

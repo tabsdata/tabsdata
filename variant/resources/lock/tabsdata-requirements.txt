@@ -106,8 +106,8 @@ pillow==12.1.1
 pip==26.2.1
 pip-tools==7.5.3
 platformdirs==4.9.4
-polars==1.39.3
-polars-runtime-32==1.39.3
+polars==1.44.2
+polars-runtime-32==1.44.2
 prompt-toolkit==3.0.52
 propcache==0.5.4
 proto-plus==1.28.4

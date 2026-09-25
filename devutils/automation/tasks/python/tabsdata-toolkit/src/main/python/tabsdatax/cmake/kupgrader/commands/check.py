@@ -7,13 +7,14 @@ from pathlib import Path
 
 import rich_click as click
 
-from tabsdatax.cmake.kupgrader.common.commit import compare
+from tabsdatax.cmake.kupgrader.common.commit import Difference, compare
 from tabsdatax.cmake.kupgrader.common.pipeline import (
     generate,
     shipped_content_folder,
     shipped_spec_file,
 )
 from tabsdatax.cmake.kupgrader.common.rendering import display_comparison
+from tabsdatax.cmake.kupgrader.common.versions import declares_upgrader
 from tabsdatax.cmake.kupgrader.common.workflow import context_of, display_context
 
 log = logging.getLogger(__name__)
@@ -32,6 +33,14 @@ def perform_check(root_folder: Path) -> None:
         shipped_spec_file(context, generation.version),
         shipped_content_folder(context, generation.version),
     )
+    if not declares_upgrader(generation.preparation.resolution):
+        comparison.differences.append(
+            Difference(
+                path=context.upgrades_file.name,
+                reason="The upgrades inventory does not declare an upgrader for "
+                "this version",
+            )
+        )
     display_comparison(comparison)
 
     if not comparison.matched:

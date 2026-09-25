@@ -2,6 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+#![cfg_attr(test, allow(linker_messages))]
+
 use crate::execution::services::runtime_info::RuntimeContext;
 use crate::internal_api::InternalApi;
 use axum::extract::FromRef;

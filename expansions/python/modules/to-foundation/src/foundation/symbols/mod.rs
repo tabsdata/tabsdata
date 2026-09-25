@@ -39,7 +39,13 @@ This is a temporary development until we figure out a clean way to expose enums
 from other crates as PyO3 shared enums.
  */
 #[gen_stub_pyclass_enum]
-#[pyclass(eq, eq_int, mapping, module = "tabsdata.expansions.foundation.symbols")]
+#[pyclass(
+    eq,
+    eq_int,
+    mapping,
+    from_py_object,
+    module = "tabsdata.expansions.foundation.symbols"
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum TableType {
     Regular,

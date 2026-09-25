@@ -700,8 +700,7 @@ mod tests {
     use crate::transporter::args::{ToFormat, root_folder, slashed_tmp_file, tmp_file, tmp_path};
     use crate::transporter::error::TransporterError;
     use polars::prelude::{
-        ChildFieldOverwrites, KeyValueMetadata, MetadataKeyValue, ParquetCompression,
-        ParquetFieldOverwrites, ParquetWriteOptions, PlSmallStr, StatisticsOptions,
+        KeyValueMetadata, ParquetCompression, ParquetWriteOptions, StatisticsOptions,
     };
     use polars_parquet_format::KeyValue;
     use std::collections::HashMap;
@@ -833,6 +832,7 @@ mod tests {
                 max_value: true,
                 distinct_count: true,
                 null_count: true,
+                binary_statistics_truncate_length: None,
             },
             row_group_size: Some(1024),
             data_page_size: Some(64000),
@@ -846,48 +846,8 @@ mod tests {
                     value: Some("testing".to_string()),
                 },
             ])),
-            field_overwrites: vec![
-                ParquetFieldOverwrites {
-                    name: Some(PlSmallStr::from_str("kuro")),
-                    children: ChildFieldOverwrites::None,
-                    required: Some(true),
-                    field_id: Some(25),
-                    metadata: Some(vec![
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("english"),
-                            value: Some(PlSmallStr::from_str("black")),
-                        },
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("kanji"),
-                            value: Some(PlSmallStr::from_str("黒")),
-                        },
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("català"),
-                            value: Some(PlSmallStr::from_str("negre")),
-                        },
-                    ]),
-                },
-                ParquetFieldOverwrites {
-                    name: Some(PlSmallStr::from_str("shiro")),
-                    children: ChildFieldOverwrites::None,
-                    required: Some(false),
-                    field_id: Some(19),
-                    metadata: Some(vec![
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("english"),
-                            value: Some(PlSmallStr::from_str("white")),
-                        },
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("kanji"),
-                            value: Some(PlSmallStr::from_str("白")),
-                        },
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("català"),
-                            value: Some(PlSmallStr::from_str("blanc")),
-                        },
-                    ]),
-                },
-            ],
+            arrow_schema: None,
+            compat_level: None,
         };
         let _ = serde_yaml::to_string(&options).unwrap();
         let to_format = r#"
@@ -904,29 +864,6 @@ mod tests {
                 - tabsdata
               - - purpose
                 - testing
-            field_overwrites:
-              - name: kuro
-                children: None
-                required: true
-                field_id: 25
-                metadata:
-                  - key: english
-                    value: black
-                  - key: kanji
-                    value: 黒
-                  - key: català
-                    value: negre
-              - name: shiro
-                children: None
-                required: false
-                field_id: 19
-                metadata:
-                  - key: english
-                    value: white
-                  - key: kanji
-                    value: 白
-                  - key: català
-                    value: blanc
         "#;
         let params = super::Params {
             location: tmp_file().parse().unwrap(),
@@ -1058,6 +995,7 @@ mod tests {
                 max_value: true,
                 distinct_count: true,
                 null_count: true,
+                binary_statistics_truncate_length: None,
             },
             row_group_size: Some(1024),
             data_page_size: Some(64000),
@@ -1071,48 +1009,8 @@ mod tests {
                     value: Some("testing".to_string()),
                 },
             ])),
-            field_overwrites: vec![
-                ParquetFieldOverwrites {
-                    name: Some(PlSmallStr::from_str("kuro")),
-                    children: ChildFieldOverwrites::None,
-                    required: Some(true),
-                    field_id: Some(25),
-                    metadata: Some(vec![
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("english"),
-                            value: Some(PlSmallStr::from_str("black")),
-                        },
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("kanji"),
-                            value: Some(PlSmallStr::from_str("黒")),
-                        },
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("català"),
-                            value: Some(PlSmallStr::from_str("negre")),
-                        },
-                    ]),
-                },
-                ParquetFieldOverwrites {
-                    name: Some(PlSmallStr::from_str("shiro")),
-                    children: ChildFieldOverwrites::None,
-                    required: Some(false),
-                    field_id: Some(19),
-                    metadata: Some(vec![
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("english"),
-                            value: Some(PlSmallStr::from_str("white")),
-                        },
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("kanji"),
-                            value: Some(PlSmallStr::from_str("白")),
-                        },
-                        MetadataKeyValue {
-                            key: PlSmallStr::from_str("català"),
-                            value: Some(PlSmallStr::from_str("blanc")),
-                        },
-                    ]),
-                },
-            ],
+            arrow_schema: None,
+            compat_level: None,
         };
         let _ = serde_yaml::to_string(&options).unwrap();
         let to_format = r#"
@@ -1129,29 +1027,6 @@ mod tests {
                 - tabsdata
               - - purpose
                 - testing
-            field_overwrites:
-              - name: kuro
-                children: None
-                required: true
-                field_id: 25
-                metadata:
-                  - key: english
-                    value: black
-                  - key: kanji
-                    value: 黒
-                  - key: català
-                    value: negre
-              - name: shiro
-                children: None
-                required: false
-                field_id: 19
-                metadata:
-                  - key: english
-                    value: white
-                  - key: kanji
-                    value: 白
-                  - key: català
-                    value: blanc
         "#;
         let params = super::Params {
             location: "s3://test".parse().unwrap(),

@@ -78,12 +78,13 @@ mod tests {
     use polars::datatypes::{Int64Chunked, StringChunked};
     use polars::prelude::sync_on_close::SyncOnCloseType;
     use polars::prelude::{
-        DataFrame, IntoColumn, IntoLazy, NamedFrom, ParquetReader, ParquetWriteOptions, PlPath,
-        SerReader, SinkOptions, SinkTarget,
+        DataFrame, FileWriteFormat, IntoColumn, IntoLazy, NamedFrom, ParquetReader,
+        ParquetWriteOptions, PlRefPath, SerReader, SinkDestination, SinkTarget, UnifiedSinkArgs,
     };
     use std::io::Cursor;
     use std::path::Path;
     use std::str::FromStr;
+    use std::sync::Arc;
     use ta_services::service::Ctx;
     use td_common::absolute_path::AbsolutePath;
     use td_database::pool::TdPool;
@@ -221,11 +222,11 @@ mod tests {
                     std::fs::create_dir_all(Path::new(&path).parent().unwrap()).unwrap();
                     let a = Int64Chunked::new("i".into(), &[i, 1]).into_column();
                     let b = StringChunked::new("s".into(), &["a", "b"]).into_column();
-                    let lf = DataFrame::new(vec![a, b]).unwrap().lazy();
+                    let lf = DataFrame::new_infer_height(vec![a, b]).unwrap().lazy();
                     let sink_target = if url.scheme() == "file" {
                         #[cfg(not(windows))]
                         {
-                            SinkTarget::Path(PlPath::new(url.path().to_string().as_str()))
+                            SinkTarget::Path(PlRefPath::new(url.path().to_string().as_str()))
                         }
                         #[cfg(windows)]
                         {
@@ -233,19 +234,21 @@ mod tests {
                             if url_path.starts_with('/') || url_path.starts_with('\\') {
                                 url_path.remove(0);
                             }
-                            SinkTarget::Path(PlPath::new(url_path.as_str()))
+                            SinkTarget::Path(PlRefPath::new(url_path.as_str()))
                         }
                     } else {
-                        SinkTarget::Path(PlPath::new(url.as_str()))
+                        SinkTarget::Path(PlRefPath::new(url.as_str()))
                     };
-                    lf.sink_parquet(
-                        sink_target,
-                        ParquetWriteOptions::default(),
-                        None,
-                        SinkOptions {
+                    lf.sink(
+                        SinkDestination::File {
+                            target: sink_target,
+                        },
+                        FileWriteFormat::Parquet(Arc::new(ParquetWriteOptions::default())),
+                        UnifiedSinkArgs {
                             sync_on_close: SyncOnCloseType::All,
                             maintain_order: true,
                             mkdir: true,
+                            ..Default::default()
                         },
                     )
                     .unwrap()
@@ -380,7 +383,7 @@ mod tests {
         let df = ParquetReader::new(Cursor::new(&bytes_with_names))
             .finish()
             .unwrap();
-        let expected = DataFrame::new(vec![
+        let expected = DataFrame::new_infer_height(vec![
             Int64Chunked::new("i".into(), &[0, 1]).into_column(),
             StringChunked::new("s".into(), &["a", "b"]).into_column(),
         ])
@@ -416,7 +419,7 @@ mod tests {
         let df = ParquetReader::new(Cursor::new(&bytes_with_names))
             .finish()
             .unwrap();
-        let expected = DataFrame::new(vec![
+        let expected = DataFrame::new_infer_height(vec![
             Int64Chunked::new("i".into(), &[0, 1]).into_column(),
             StringChunked::new("s".into(), &["a", "b"]).into_column(),
         ])
@@ -452,7 +455,7 @@ mod tests {
         let df = ParquetReader::new(Cursor::new(&bytes_with_names))
             .finish()
             .unwrap();
-        let expected = DataFrame::new(vec![
+        let expected = DataFrame::new_infer_height(vec![
             Int64Chunked::new("i".into(), &[2, 1]).into_column(),
             StringChunked::new("s".into(), &["a", "b"]).into_column(),
         ])
@@ -471,7 +474,7 @@ mod tests {
         )
         .await?;
         let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
-        let expected = DataFrame::new(vec![
+        let expected = DataFrame::new_infer_height(vec![
             Int64Chunked::new("i".into(), &[1]).into_column(),
             StringChunked::new("s".into(), &["b"]).into_column(),
         ])
@@ -490,7 +493,7 @@ mod tests {
         )
         .await?;
         let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
-        let expected = DataFrame::new(vec![
+        let expected = DataFrame::new_infer_height(vec![
             Int64Chunked::new("i".into(), &[2]).into_column(),
             StringChunked::new("s".into(), &["a"]).into_column(),
         ])

@@ -13,8 +13,8 @@ use object_store::path::Path;
 use object_store::{ObjectMeta, ObjectStore, parse_url_opts};
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
-    LazyCsvReader, LazyFileListReader, LazyFrame, LazyJsonLineReader, PlPath, PolarsError,
-    SinkOptions, lit, nth,
+    FileWriteFormat, LazyCsvReader, LazyFileListReader, LazyFrame, LazyJsonLineReader, PlRefPath,
+    PolarsError, SinkDestination, UnifiedSinkArgs, lit, nth,
 };
 use polars_io::utils::sync_on_close::SyncOnCloseType;
 use serde::{Deserialize, Serialize};
@@ -358,12 +358,12 @@ fn importer_lazy_frame(
     td_common::troubleshoot_rs!(
         "[path] [importer_lazy_frame] Value of polars_source_path: {url_str:?}"
     );
-    let pl_path = PlPath::new(url_str.as_str());
+    let pl_path = PlRefPath::new(url_str.as_str());
     let cloud_config = if url.scheme() == "file" {
         None
     } else {
         Some(CloudOptions::from_untyped_config(
-            pl_path.cloud_scheme().as_ref(),
+            pl_path.scheme(),
             importer_options.location_configs(),
         )?)
     };
@@ -379,18 +379,18 @@ fn importer_lazy_frame(
         Format::Parquet(config) => {
             let mut parquet_config = config.scan_config();
             parquet_config.cloud_options = cloud_config;
-            LazyFrame::scan_parquet(PlPath::new(url_str.as_str()), parquet_config)?
+            LazyFrame::scan_parquet(PlRefPath::new(url_str.as_str()), parquet_config)?
         }
         // We force reading the whole file the avoid corner cases of columns data type inference.
         Format::Csv(options) => {
             let reader =
-                LazyCsvReader::new(PlPath::new(url_str.as_str())).with_infer_schema_length(None);
+                LazyCsvReader::new(PlRefPath::new(url_str.as_str())).with_infer_schema_length(None);
             let reader = options.apply_to(reader);
             reader.with_cloud_options(cloud_config).finish()?
         }
         // We force reading the whole file the avoid corner cases of columns data type inference.
         Format::NdJson(options) => {
-            let reader = LazyJsonLineReader::new(PlPath::new(url_str.as_str()))
+            let reader = LazyJsonLineReader::new(PlRefPath::new(url_str.as_str()))
                 .with_infer_schema_length(None);
             let reader = options.apply_to(reader);
             reader.with_cloud_options(cloud_config).finish()?
@@ -402,7 +402,7 @@ fn importer_lazy_frame(
                 .unwrap_or_else(|| panic!("URL {url} does not refer to a file"))
                 .next_back()
                 .unwrap_or_else(|| panic!("URL {url} does not refer to a file"));
-            let reader = LazyCsvReader::new(PlPath::new(url_str.as_str())).with_cache(false);
+            let reader = LazyCsvReader::new(PlRefPath::new(url_str.as_str())).with_cache(false);
             let reader = options.apply_to(reader);
             reader.with_cloud_options(cloud_config).finish()?.select([
                 lit(file_name).alias("file"),
@@ -532,20 +532,20 @@ fn write_imported_lazy_frame(
 ) -> Result<(), PolarsError> {
     td_common::troubleshoot_rs!("[path] [write_imported_lazy_frame] Value of url: {url}");
     td_common::troubleshoot_rs!(
-        "[path] [write_imported_lazy_frame] Value of PlPath input: {:?}",
+        "[path] [write_imported_lazy_frame] Value of PlRefPath input: {:?}",
         url.as_ref()
     );
-    let pl_path = PlPath::new(url.as_ref());
+    let pl_path = PlRefPath::new(url.as_ref());
     td_common::troubleshoot_rs!("[path] [write_imported_lazy_frame] Value of pl_path: {pl_path:?}");
     td_common::troubleshoot_rs!(
         "[path] [write_imported_lazy_frame] Value of pl_path cloud scheme: {:?}",
-        pl_path.cloud_scheme()
+        pl_path.scheme()
     );
     let cloud_options = if url.scheme() == "file" {
         None
     } else {
         Some(CloudOptions::from_untyped_config(
-            pl_path.cloud_scheme().as_ref(),
+            pl_path.scheme(),
             importer_options.to_configs(),
         )?)
     };
@@ -555,14 +555,17 @@ fn write_imported_lazy_frame(
     );
     match importer_options.to_format() {
         ToFormat::Parquet(parquet_write_options) => {
-            let sink = lazy_frame.sink_parquet(
-                create_sink_target(url, importer_options.to_configs())?,
-                parquet_write_options.clone(),
-                cloud_options,
-                SinkOptions {
+            let sink = lazy_frame.sink(
+                SinkDestination::File {
+                    target: create_sink_target(url, importer_options.to_configs())?,
+                },
+                FileWriteFormat::Parquet(Arc::new(parquet_write_options.clone())),
+                UnifiedSinkArgs {
                     sync_on_close: SyncOnCloseType::None,
                     maintain_order: true,
                     mkdir: true,
+                    cloud_options: cloud_options.map(Arc::new),
+                    ..Default::default()
                 },
             );
             match sink {

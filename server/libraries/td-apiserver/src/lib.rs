@@ -2,6 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+#![cfg_attr(test, allow(linker_messages))]
+
 use crate::apiserver::internal::InternalServer;
 use crate::apiserver::{ApiServer, ApiServerCtx};
 use crate::bridge::ServerBridgeFactory;

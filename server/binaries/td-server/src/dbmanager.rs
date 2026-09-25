@@ -12,6 +12,8 @@
 //! edition facade, aliased `dbm`); server lifecycle and config types come
 //! from `td_database` directly (edition-agnostic).
 
+#![allow(linker_messages)]
+
 use std::env;
 use std::process;
 use std::time::Instant;

@@ -156,7 +156,7 @@ fn _grok_impl(batch: &[Series], kwargs: GrokKwargs) -> PolarsResult<Series> {
         q_rows_in * fields_out.len(),
     );
 
-    for row_in in chunked_array_in.into_iter() {
+    for row_in in chunked_array_in.iter() {
         match row_in {
             Some(input) => {
                 let values_out: Vec<Option<String>> =

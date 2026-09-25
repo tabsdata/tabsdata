@@ -9,8 +9,7 @@ use bytes::Bytes;
 use object_store::path::{Path, Path as ObjectPath};
 use object_store::{ObjectStore, ObjectStoreExt, PutPayload};
 use polars::prelude::{PolarsError, PolarsResult, SinkTarget, SpecialEq};
-use polars_io::prelude::sync_on_close::SyncOnCloseType;
-use polars_io::utils::file::DynWriteable;
+use polars_io::utils::file::{Writable, WritableTrait};
 use std::collections::HashMap;
 use std::io;
 use std::io::{Error, Result as IoResult, Write};
@@ -85,24 +84,17 @@ impl Drop for ObjectStoreWriter {
     }
 }
 
-impl DynWriteable for ObjectStoreWriter {
-    fn as_dyn_write(&self) -> &(dyn Write + Send + 'static) {
-        self
-    }
-
-    fn as_mut_dyn_write(&mut self) -> &mut (dyn Write + Send + 'static) {
-        self
-    }
-
-    fn close(mut self: Box<Self>) -> io::Result<()> {
+impl WritableTrait for ObjectStoreWriter {
+    fn close(&mut self) -> io::Result<()> {
         self.flush_to_store()
     }
 
-    fn sync_on_close(&mut self, sync_on_close: SyncOnCloseType) -> io::Result<()> {
-        match sync_on_close {
-            SyncOnCloseType::None => Ok(()),
-            SyncOnCloseType::Data | SyncOnCloseType::All => self.flush_to_store(),
-        }
+    fn sync_all(&self) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn sync_data(&self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -112,7 +104,7 @@ pub fn create_sink_target(
 ) -> PolarsResult<SinkTarget> {
     let (store, path) = create_store(url, cloud_config)
         .map_err(|e| PolarsError::ComputeError(format!("Failed to parse URL: {e}").into()))?;
-    let writer: Box<dyn DynWriteable> = Box::new(ObjectStoreWriter::new(Arc::from(store), path));
+    let writer = Writable::Dyn(Box::new(ObjectStoreWriter::new(Arc::from(store), path)));
     let target = SinkTarget::Dyn(SpecialEq::new(Arc::new(Mutex::new(Some(writer)))));
     Ok(target)
 }

@@ -46,7 +46,7 @@ pg8000==1.31.5
 pillow==12.1.1
 pip-tools==7.5.3
 platformdirs==4.9.4
-polars==1.39.3
+polars==1.44.2
 prompt-toolkit==3.0.52
 protobuf==6.33.6
 pycountries==1.2.1

@@ -51,12 +51,13 @@ pub(crate) mod tests {
     use polars::datatypes::{Int64Chunked, StringChunked};
     use polars::prelude::sync_on_close::SyncOnCloseType;
     use polars::prelude::{
-        DataFrame, IntoColumn, IntoLazy, NamedFrom, ParquetReader, ParquetWriteOptions, PlPath,
-        SerReader, SinkOptions, SinkTarget,
+        DataFrame, FileWriteFormat, IntoColumn, IntoLazy, NamedFrom, ParquetReader,
+        ParquetWriteOptions, PlRefPath, SerReader, SinkDestination, SinkTarget, UnifiedSinkArgs,
     };
     use std::io::Cursor;
     use std::path::Path;
     use std::str::FromStr;
+    use std::sync::Arc;
     use td_common::absolute_path::AbsolutePath;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
@@ -259,11 +260,11 @@ pub(crate) mod tests {
                     std::fs::create_dir_all(Path::new(&path).parent().unwrap()).unwrap();
                     let a = Int64Chunked::new("i".into(), &[i, 1]).into_column();
                     let b = StringChunked::new("s".into(), &["a", "b"]).into_column();
-                    let lf = DataFrame::new(vec![a, b]).unwrap().lazy();
+                    let lf = DataFrame::new_infer_height(vec![a, b]).unwrap().lazy();
                     let sink_target = if url.scheme() == "file" {
                         #[cfg(not(windows))]
                         {
-                            SinkTarget::Path(PlPath::new(url.path().to_string().as_str()))
+                            SinkTarget::Path(PlRefPath::new(url.path().to_string().as_str()))
                         }
                         #[cfg(windows)]
                         {
@@ -271,19 +272,21 @@ pub(crate) mod tests {
                             if url_path.starts_with('/') || url_path.starts_with('\\') {
                                 url_path.remove(0);
                             }
-                            SinkTarget::Path(PlPath::new(url_path.as_str()))
+                            SinkTarget::Path(PlRefPath::new(url_path.as_str()))
                         }
                     } else {
-                        SinkTarget::Path(PlPath::new(url.as_str()))
+                        SinkTarget::Path(PlRefPath::new(url.as_str()))
                     };
-                    lf.sink_parquet(
-                        sink_target,
-                        ParquetWriteOptions::default(),
-                        None,
-                        SinkOptions {
+                    lf.sink(
+                        SinkDestination::File {
+                            target: sink_target,
+                        },
+                        FileWriteFormat::Parquet(Arc::new(ParquetWriteOptions::default())),
+                        UnifiedSinkArgs {
                             sync_on_close: SyncOnCloseType::All,
                             maintain_order: true,
                             mkdir: true,
+                            ..Default::default()
                         },
                     )
                     .unwrap()
@@ -310,7 +313,7 @@ pub(crate) mod tests {
 
         let bytes = get_download(context, tables[0].as_str(), &at_times[1]).await?;
         let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
-        let expected = DataFrame::new(vec![
+        let expected = DataFrame::new_infer_height(vec![
             Int64Chunked::new("i".into(), &[0, 1]).into_column(),
             StringChunked::new("s".into(), &["a", "b"]).into_column(),
         ])
@@ -320,7 +323,7 @@ pub(crate) mod tests {
         // Download named 0 at second function run (as it has no data, it doesn't change)
         let bytes = get_download(context, tables[0].as_str(), &at_times[2]).await?;
         let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
-        let expected = DataFrame::new(vec![
+        let expected = DataFrame::new_infer_height(vec![
             Int64Chunked::new("i".into(), &[0, 1]).into_column(),
             StringChunked::new("s".into(), &["a", "b"]).into_column(),
         ])
@@ -330,7 +333,7 @@ pub(crate) mod tests {
         // Download named 2 at third function run (skip 1 as second run had no data)
         let bytes = get_download(context, tables[0].as_str(), &at_times[3]).await?;
         let df = ParquetReader::new(Cursor::new(&bytes)).finish().unwrap();
-        let expected = DataFrame::new(vec![
+        let expected = DataFrame::new_infer_height(vec![
             Int64Chunked::new("i".into(), &[2, 1]).into_column(),
             StringChunked::new("s".into(), &["a", "b"]).into_column(),
         ])

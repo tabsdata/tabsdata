@@ -15,15 +15,10 @@ from tabsdatax.cmake.kupgrader.common.normalization import (
     NormalizationError,
     normalize,
 )
+from tabsdatax.cmake.kupgrader.common.versions import Entry, write_inventory
 
 UPGRADER_BINARY = "tdk_kupgrader"
 UPGRADER_PROFILE = "debug"
-
-INVENTORY = (
-    "#\n# Copyright 2026 Tabsdata Inc.\n#\n\nschema: 1\nversions:\n"
-    "  - version: {current}\n    upgrader: true\n"
-    "  - version: {previous}\n    upgrader: false\n"
-)
 
 
 class VerificationError(KupgraderError):
@@ -82,8 +77,12 @@ def stage(
             emission.content_folder,
             kupgrade_folder / "upgrades" / emission.content_folder.name,
         )
-    (kupgrade_folder / "upgrades.yaml").write_text(
-        INVENTORY.format(current=current, previous=previous)
+    write_inventory(
+        kupgrade_folder / "upgrades.yaml",
+        [
+            Entry(version=current, upgrader=True),
+            Entry(version=previous, upgrader=False),
+        ],
     )
 
     kprofile_folder = work_folder / "kprofile"

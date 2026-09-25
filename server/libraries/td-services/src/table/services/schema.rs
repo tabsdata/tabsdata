@@ -6,7 +6,7 @@ use crate::table::columns::drop_extra_columns;
 use crate::table::find_data_version_location_at;
 use crate::table::storage::StorageServiceError;
 use polars::prelude::cloud::CloudOptions;
-use polars::prelude::{Field, LazyFrame, PlPath, PolarsError, ScanArgsParquet, SchemaExt};
+use polars::prelude::{Field, LazyFrame, PlRefPath, PolarsError, ScanArgsParquet, SchemaExt};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -81,18 +81,18 @@ pub fn get_table_schema(
     if let Some(table_path) = table_path {
         let (url, mount_def) = storage.to_external_uri(table_path)?;
         let url_str = url.to_string();
-        let pl_path = PlPath::new(url_str.as_str());
-        let cloud_config =
-            CloudOptions::from_untyped_config(pl_path.cloud_scheme().as_ref(), mount_def.options())
-                .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
+        let pl_path = PlRefPath::new(url_str.as_str());
+        let cloud_config = CloudOptions::from_untyped_config(pl_path.scheme(), mount_def.options())
+            .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
         let parquet_config = ScanArgsParquet {
             cloud_options: Some(cloud_config),
             ..ScanArgsParquet::default()
         };
 
         tokio::task::block_in_place(move || {
-            let lazy_frame = LazyFrame::scan_parquet(PlPath::new(url_str.as_str()), parquet_config)
-                .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
+            let lazy_frame =
+                LazyFrame::scan_parquet(PlRefPath::new(url_str.as_str()), parquet_config)
+                    .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
 
             let lazy_frame = drop_extra_columns(lazy_frame, extra_cols)
                 .map_err(StorageServiceError::CouldNoCreateLazyFrameToGetSchema)?;
@@ -114,11 +114,12 @@ mod tests {
     use polars::datatypes::{Int64Chunked, StringChunked};
     use polars::prelude::sync_on_close::SyncOnCloseType;
     use polars::prelude::{
-        DataFrame, IntoColumn, IntoLazy, NamedFrom, ParquetWriteOptions, PlPath, SinkOptions,
-        SinkTarget,
+        DataFrame, FileWriteFormat, IntoColumn, IntoLazy, NamedFrom, ParquetWriteOptions,
+        PlRefPath, SinkDestination, SinkTarget, UnifiedSinkArgs,
     };
     use std::path::Path;
     use std::str::FromStr;
+    use std::sync::Arc;
     use td_common::absolute_path::AbsolutePath;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
@@ -251,11 +252,11 @@ mod tests {
                     std::fs::create_dir_all(Path::new(&path).parent().unwrap()).unwrap();
                     let a = Int64Chunked::new(format!("i{i}").into(), &[1, 2]).into_column();
                     let b = StringChunked::new("s".into(), &["a", "b"]).into_column();
-                    let lf = DataFrame::new(vec![a, b]).unwrap().lazy();
+                    let lf = DataFrame::new_infer_height(vec![a, b]).unwrap().lazy();
                     let sink_target = if url.scheme() == "file" {
                         #[cfg(not(windows))]
                         {
-                            SinkTarget::Path(PlPath::new(url.path().to_string().as_str()))
+                            SinkTarget::Path(PlRefPath::new(url.path().to_string().as_str()))
                         }
                         #[cfg(windows)]
                         {
@@ -263,19 +264,21 @@ mod tests {
                             if url_path.starts_with('/') || url_path.starts_with('\\') {
                                 url_path.remove(0);
                             }
-                            SinkTarget::Path(PlPath::new(url_path.as_str()))
+                            SinkTarget::Path(PlRefPath::new(url_path.as_str()))
                         }
                     } else {
-                        SinkTarget::Path(PlPath::new(url.as_str()))
+                        SinkTarget::Path(PlRefPath::new(url.as_str()))
                     };
-                    lf.sink_parquet(
-                        sink_target,
-                        ParquetWriteOptions::default(),
-                        None,
-                        SinkOptions {
+                    lf.sink(
+                        SinkDestination::File {
+                            target: sink_target,
+                        },
+                        FileWriteFormat::Parquet(Arc::new(ParquetWriteOptions::default())),
+                        UnifiedSinkArgs {
                             sync_on_close: SyncOnCloseType::All,
                             maintain_order: true,
                             mkdir: true,
+                            ..Default::default()
                         },
                     )
                     .unwrap()

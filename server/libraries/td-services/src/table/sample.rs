@@ -9,7 +9,7 @@ use futures_util::FutureExt;
 use polars::prelude::cloud::CloudOptions;
 use polars::prelude::{
     AnyValue, CsvWriter, DataFrame, IdxSize, IntoColumn, JsonWriter, LazyFrame, NewChunkedArray,
-    ParquetWriter, PlPath, PolarsError, ScanArgsParquet, SerWriter, StringChunked,
+    ParquetWriter, PlRefPath, PolarsError, ScanArgsParquet, SerWriter, StringChunked,
 };
 use polars::sql::SQLContext;
 use std::io::Cursor;
@@ -49,7 +49,7 @@ fn stringify_nested_columns(dataframe: DataFrame) -> Result<DataFrame, PolarsErr
         return Ok(dataframe);
     }
     let columns = dataframe
-        .get_columns()
+        .columns()
         .iter()
         .map(|column| {
             if !column.dtype().is_nested() {
@@ -62,7 +62,7 @@ fn stringify_nested_columns(dataframe: DataFrame) -> Result<DataFrame, PolarsErr
             StringChunked::from_iter_options(column.name().clone(), values).into_column()
         })
         .collect::<Vec<_>>();
-    DataFrame::new(columns)
+    DataFrame::new(dataframe.height(), columns)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -104,18 +104,18 @@ pub fn get_table_sample(
     let bytes = if let Some(table_path) = table_path {
         let (url, mount_def) = storage.to_external_uri(table_path)?;
         let url_str = url.to_string();
-        let pl_path = PlPath::new(url_str.as_str());
-        let cloud_config =
-            CloudOptions::from_untyped_config(pl_path.cloud_scheme().as_ref(), mount_def.options())
-                .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
+        let pl_path = PlRefPath::new(url_str.as_str());
+        let cloud_config = CloudOptions::from_untyped_config(pl_path.scheme(), mount_def.options())
+            .map_err(StorageServiceError::CouldNotCreateStorageConfig)?;
         let parquet_config = ScanArgsParquet {
             cloud_options: Some(cloud_config),
             ..ScanArgsParquet::default()
         };
 
         tokio::task::block_in_place(move || {
-            let lazy_frame = LazyFrame::scan_parquet(PlPath::new(url_str.as_str()), parquet_config)
-                .map_err(SampleError::LazyFrameError)?;
+            let lazy_frame =
+                LazyFrame::scan_parquet(PlRefPath::new(url_str.as_str()), parquet_config)
+                    .map_err(SampleError::LazyFrameError)?;
 
             let lazy_frame = drop_extra_columns(lazy_frame, extra_cols)
                 .map_err(SampleError::LazyFrameError)?
@@ -270,7 +270,10 @@ mod tests {
             test_get_table_sample(0, SampleLen::MAX as usize, FileFormat::Json, None).await?;
 
         let file = File::open(file).unwrap();
-        let df = JsonLineReader::new(file).finish().unwrap();
+        let df = JsonReader::new(file)
+            .with_json_format(JsonFormat::JsonLines)
+            .finish()
+            .unwrap();
         assert_eq!(df.get_column_names(), &["id", "name"]);
         assert_eq!(df.height(), 10);
         Ok(())
@@ -359,7 +362,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|v| v.unwrap().to_string())
             .collect();
         assert_eq!(names, vec!["b", "c", "d", "e", "f", "g", "h", "i", "j"]);
@@ -385,7 +388,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|v| v.unwrap().to_string())
             .collect();
         assert_eq!(names, vec!["a", "b", "c", "d", "e", "f", "g", "h", "i"]);
@@ -419,7 +422,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|v| v.unwrap().to_string())
             .collect();
         assert_eq!(names, vec!["f", "g"]);
@@ -453,7 +456,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|v| v.unwrap().to_string())
             .collect();
         assert_eq!(names, vec!["f", "g"]);
@@ -469,7 +472,7 @@ mod tests {
             None,
         ]);
         pk.rename("@td.medallion.pk".into());
-        let df = DataFrame::new(vec![
+        let df = DataFrame::new_infer_height(vec![
             StringChunked::new("tenant".into(), &["t1", "t2"]).into_column(),
             pk.into_column(),
         ])
@@ -495,7 +498,7 @@ mod tests {
             .unwrap()
             .str()
             .unwrap()
-            .into_iter()
+            .iter()
             .map(|v| v.map(str::to_string))
             .collect();
         let first = rendered[0].as_ref().unwrap();

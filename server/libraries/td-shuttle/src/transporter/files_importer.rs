@@ -304,15 +304,16 @@ mod tests {
     use polars::datatypes::{Float64Chunked, Int64Chunked, PlSmallStr, StringChunked};
     use polars::frame::DataFrame;
     use polars::prelude::{
-        Column, IntoLazy, IntoSeries, LazyCsvReader, LazyFileListReader, LazyFrame, PlPath,
-        ScanArgsParquet, SinkOptions, SinkTarget,
+        Column, FileWriteFormat, IntoLazy, IntoSeries, LazyCsvReader, LazyFileListReader,
+        LazyFrame, PlRefPath, ScanArgsParquet, SinkDestination, SinkTarget, UnifiedSinkArgs,
     };
     use polars_io::cloud::CloudOptions;
-    use polars_io::json::JsonWriterOptions;
+    use polars_io::ndjson::NDJsonWriterOptions;
     use polars_io::prelude::QuoteStyle::Never;
     use polars_io::prelude::{CsvWriterOptions, ParquetWriteOptions, SerializeOptions};
     use polars_io::utils::sync_on_close::SyncOnCloseType;
     use std::collections::HashMap;
+    use std::sync::Arc;
     use td_common::id::id;
 
     use crate::transporter::args::FileInfo;
@@ -332,7 +333,7 @@ mod tests {
         let col_string = StringChunked::from_iter((0..1000).map(|i| Some(i.to_string())))
             .into_series()
             .with_name(PlSmallStr::from("col_string"));
-        let df_out = DataFrame::new(vec![
+        let df_out = DataFrame::new_infer_height(vec![
             Column::from(col_int),
             Column::from(col_float),
             Column::from(col_string),
@@ -346,14 +347,18 @@ mod tests {
         let path_r = folder.join(file_r.clone());
         let url_r = Url::from_file_path(path_r.clone()).unwrap();
 
-        lf.sink_parquet(
-            SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
-            ParquetWriteOptions::default(),
-            None,
-            SinkOptions {
+        lf.sink(
+            SinkDestination::File {
+                target: SinkTarget::Path(PlRefPath::new(
+                    path_r.to_string_lossy().to_string().as_str(),
+                )),
+            },
+            FileWriteFormat::Parquet(Arc::new(ParquetWriteOptions::default())),
+            UnifiedSinkArgs {
                 sync_on_close: SyncOnCloseType::All,
                 maintain_order: true,
                 mkdir: true,
+                ..Default::default()
             },
         )
         .unwrap()
@@ -437,20 +442,19 @@ mod tests {
             domain_apiserver_s3.region.to_string(),
         );
         let e_config = config.clone();
-        let pl_path = PlPath::new(url_tf.as_str());
-        let cloud_options =
-            CloudOptions::from_untyped_config(pl_path.cloud_scheme().as_ref(), config)
-                .map_err(|e| {
-                    eprintln!("CloudOptions::from_untyped_config failed:");
-                    eprintln!("  URL: {}", url_tf.as_str());
-                    eprintln!("  Config: {:?}", e_config);
-                    eprintln!("  Error: {:?}", e);
-                    e
-                })
-                .unwrap();
+        let pl_path = PlRefPath::new(url_tf.as_str());
+        let cloud_options = CloudOptions::from_untyped_config(pl_path.scheme(), config)
+            .map_err(|e| {
+                eprintln!("CloudOptions::from_untyped_config failed:");
+                eprintln!("  URL: {}", url_tf.as_str());
+                eprintln!("  Config: {:?}", e_config);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
 
         let lf = LazyFrame::scan_parquet(
-            PlPath::new(url_tf.to_string().as_str()),
+            PlRefPath::new(url_tf.to_string().as_str()),
             ScanArgsParquet {
                 cloud_options: Some(cloud_options),
                 ..Default::default()
@@ -479,7 +483,7 @@ mod tests {
         let col_string = StringChunked::from_iter((0..1000).map(|i| Some(i.to_string())))
             .into_series()
             .with_name(PlSmallStr::from("col_string"));
-        let df_out = DataFrame::new(vec![
+        let df_out = DataFrame::new_infer_height(vec![
             Column::from(col_int),
             Column::from(col_float),
             Column::from(col_string),
@@ -493,14 +497,18 @@ mod tests {
         let path_r = folder.join(file_r.clone());
         let url_r = Url::from_file_path(path_r.clone()).unwrap();
 
-        lf.sink_parquet(
-            SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
-            ParquetWriteOptions::default(),
-            None,
-            SinkOptions {
+        lf.sink(
+            SinkDestination::File {
+                target: SinkTarget::Path(PlRefPath::new(
+                    path_r.to_string_lossy().to_string().as_str(),
+                )),
+            },
+            FileWriteFormat::Parquet(Arc::new(ParquetWriteOptions::default())),
+            UnifiedSinkArgs {
                 sync_on_close: SyncOnCloseType::All,
                 maintain_order: true,
                 mkdir: true,
+                ..Default::default()
             },
         )
         .unwrap()
@@ -583,20 +591,19 @@ mod tests {
             domain_apiserver_az.account_key.to_string(),
         );
         let e_config = config.clone();
-        let pl_path = PlPath::new(url_tf.as_str());
-        let cloud_options =
-            CloudOptions::from_untyped_config(pl_path.cloud_scheme().as_ref(), config)
-                .map_err(|e| {
-                    eprintln!("CloudOptions::from_untyped_config failed:");
-                    eprintln!("  URL: {}", url_tf.as_str());
-                    eprintln!("  Config: {:?}", e_config);
-                    eprintln!("  Error: {:?}", e);
-                    e
-                })
-                .unwrap();
+        let pl_path = PlRefPath::new(url_tf.as_str());
+        let cloud_options = CloudOptions::from_untyped_config(pl_path.scheme(), config)
+            .map_err(|e| {
+                eprintln!("CloudOptions::from_untyped_config failed:");
+                eprintln!("  URL: {}", url_tf.as_str());
+                eprintln!("  Config: {:?}", e_config);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
 
         let lf = LazyFrame::scan_parquet(
-            PlPath::new(url_tf.to_string().as_str()),
+            PlRefPath::new(url_tf.to_string().as_str()),
             ScanArgsParquet {
                 cloud_options: Some(cloud_options),
                 ..Default::default()
@@ -625,7 +632,7 @@ mod tests {
         let col_string = StringChunked::from_iter((0..1000).map(|i| Some(i.to_string())))
             .into_series()
             .with_name(PlSmallStr::from("col_string"));
-        let df_out = DataFrame::new(vec![
+        let df_out = DataFrame::new_infer_height(vec![
             Column::from(col_int),
             Column::from(col_float),
             Column::from(col_string),
@@ -639,14 +646,18 @@ mod tests {
         let path_r = folder.join(file_r.clone());
         let url_r = Url::from_file_path(path_r.clone()).unwrap();
 
-        lf.sink_parquet(
-            SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
-            ParquetWriteOptions::default(),
-            None,
-            SinkOptions {
+        lf.sink(
+            SinkDestination::File {
+                target: SinkTarget::Path(PlRefPath::new(
+                    path_r.to_string_lossy().to_string().as_str(),
+                )),
+            },
+            FileWriteFormat::Parquet(Arc::new(ParquetWriteOptions::default())),
+            UnifiedSinkArgs {
                 sync_on_close: SyncOnCloseType::All,
                 maintain_order: true,
                 mkdir: true,
+                ..Default::default()
             },
         )
         .unwrap()
@@ -723,20 +734,19 @@ mod tests {
         );
 
         let e_config = config.clone();
-        let pl_path = PlPath::new(url_tf.as_str());
-        let cloud_options =
-            CloudOptions::from_untyped_config(pl_path.cloud_scheme().as_ref(), config)
-                .map_err(|e| {
-                    eprintln!("CloudOptions::from_untyped_config failed:");
-                    eprintln!("  URL: {}", url_tf.as_str());
-                    eprintln!("  Config: {:?}", e_config);
-                    eprintln!("  Error: {:?}", e);
-                    e
-                })
-                .unwrap();
+        let pl_path = PlRefPath::new(url_tf.as_str());
+        let cloud_options = CloudOptions::from_untyped_config(pl_path.scheme(), config)
+            .map_err(|e| {
+                eprintln!("CloudOptions::from_untyped_config failed:");
+                eprintln!("  URL: {}", url_tf.as_str());
+                eprintln!("  Config: {:?}", e_config);
+                eprintln!("  Error: {:?}", e);
+                e
+            })
+            .unwrap();
 
         let lf = LazyFrame::scan_parquet(
-            PlPath::new(url_tf.to_string().as_str()),
+            PlRefPath::new(url_tf.to_string().as_str()),
             ScanArgsParquet {
                 cloud_options: Some(cloud_options),
                 ..Default::default()
@@ -764,7 +774,7 @@ mod tests {
         let col_string = StringChunked::from_iter((0..1000).map(|i| Some(i.to_string())))
             .into_series()
             .with_name(PlSmallStr::from("col_string"));
-        let df_out = DataFrame::new(vec![
+        let df_out = DataFrame::new_infer_height(vec![
             Column::from(col_int),
             Column::from(col_float),
             Column::from(col_string),
@@ -779,14 +789,18 @@ mod tests {
         let path_r_normalized = path_r.to_string_lossy().replace("\\", "/");
         let url_r = Url::parse(&format!("file:///{path_r_normalized}")).unwrap();
 
-        lf.sink_parquet(
-            SinkTarget::Path(PlPath::new(path_r.to_string_lossy().to_string().as_str())),
-            ParquetWriteOptions::default(),
-            None,
-            SinkOptions {
+        lf.sink(
+            SinkDestination::File {
+                target: SinkTarget::Path(PlRefPath::new(
+                    path_r.to_string_lossy().to_string().as_str(),
+                )),
+            },
+            FileWriteFormat::Parquet(Arc::new(ParquetWriteOptions::default())),
+            UnifiedSinkArgs {
                 sync_on_close: SyncOnCloseType::All,
                 maintain_order: true,
                 mkdir: true,
+                ..Default::default()
             },
         )
         .unwrap()
@@ -870,7 +884,7 @@ mod tests {
         };
 
         let lf = LazyFrame::scan_parquet(
-            PlPath::new(path_tf.as_str()),
+            PlRefPath::new(path_tf.as_str()),
             ScanArgsParquet {
                 ..Default::default()
             },
@@ -891,10 +905,11 @@ mod tests {
         to_base: &Location<BaseUrl>,
         format: &ImportFormat,
     ) {
-        let sink_options = SinkOptions {
+        let sink_options = UnifiedSinkArgs {
             sync_on_close: SyncOnCloseType::All,
             maintain_order: true,
             mkdir: true,
+            ..Default::default()
         };
 
         let from_file = from_base.set_file(&id().to_string()).unwrap();
@@ -905,71 +920,86 @@ mod tests {
         let col_string = StringChunked::from_iter((0..1000).map(|i| Some(format!("str_{}\"", i))))
             .into_series()
             .with_name(PlSmallStr::from("col_string"));
-        let df = DataFrame::new(vec![Column::from(col_int), Column::from(col_string)]).unwrap();
+        let df = DataFrame::new_infer_height(vec![Column::from(col_int), Column::from(col_string)])
+            .unwrap();
         let lf = df.clone().lazy();
 
         let _df = match format {
             ImportFormat::Csv(_) => lf
-                .sink_csv(
-                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
-                    CsvWriterOptions::default(),
-                    None,
+                .sink(
+                    SinkDestination::File {
+                        target: create_sink_target(&from_file.url(), &from_file.cloud_configs())
+                            .unwrap(),
+                    },
+                    FileWriteFormat::Csv(CsvWriterOptions::default()),
                     sink_options.clone(),
                 )
                 .unwrap()
                 .collect()
                 .unwrap(),
             ImportFormat::Json => lf
-                .sink_json(
-                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
-                    JsonWriterOptions::default(),
-                    None,
+                .sink(
+                    SinkDestination::File {
+                        target: create_sink_target(&from_file.url(), &from_file.cloud_configs())
+                            .unwrap(),
+                    },
+                    FileWriteFormat::NDJson(NDJsonWriterOptions::default()),
                     sink_options.clone(),
                 )
                 .unwrap()
                 .collect()
                 .unwrap(),
             ImportFormat::Log => lf
-                .sink_csv(
-                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
-                    CsvWriterOptions {
-                        serialize_options: SerializeOptions {
+                .sink(
+                    SinkDestination::File {
+                        target: create_sink_target(&from_file.url(), &from_file.cloud_configs())
+                            .unwrap(),
+                    },
+                    FileWriteFormat::Csv(CsvWriterOptions {
+                        serialize_options: Arc::new(SerializeOptions {
                             quote_style: Never,
                             ..Default::default()
-                        },
+                        }),
                         ..Default::default()
-                    },
-                    None,
+                    }),
                     sink_options.clone(),
                 )
                 .unwrap()
                 .collect()
                 .unwrap(),
             ImportFormat::Parquet => lf
-                .sink_parquet(
-                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
-                    ParquetWriteOptions::default(),
-                    None,
+                .sink(
+                    SinkDestination::File {
+                        target: create_sink_target(&from_file.url(), &from_file.cloud_configs())
+                            .unwrap(),
+                    },
+                    FileWriteFormat::Parquet(Arc::new(ParquetWriteOptions::default())),
                     sink_options.clone(),
                 )
                 .unwrap()
                 .collect()
                 .unwrap(),
             ImportFormat::Binary => lf
-                .sink_csv(
-                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
-                    CsvWriterOptions::default(),
-                    {
-                        let pl_path = PlPath::new(from_file.url().as_str());
-                        Some(
-                            CloudOptions::from_untyped_config(
-                                pl_path.cloud_scheme().as_ref(),
-                                from_file.cloud_configs(),
-                            )
+                .sink(
+                    SinkDestination::File {
+                        target: create_sink_target(&from_file.url(), &from_file.cloud_configs())
                             .unwrap(),
-                        )
                     },
-                    sink_options.clone(),
+                    FileWriteFormat::Csv(CsvWriterOptions::default()),
+                    UnifiedSinkArgs {
+                        cloud_options: {
+                            let pl_path = PlRefPath::new(from_file.url().as_str());
+                            Some(
+                                CloudOptions::from_untyped_config(
+                                    pl_path.scheme(),
+                                    from_file.cloud_configs(),
+                                )
+                                .unwrap(),
+                            )
+                        }
+                        .map(Arc::new),
+                        ..sink_options.clone()
+                    },
                 )
                 .unwrap()
                 .collect()
@@ -1028,25 +1058,22 @@ mod tests {
 
         let url_to = response.first().unwrap().to.clone();
         let e_cloud_configs = to_base.cloud_configs();
-        let pl_path = PlPath::new(url_to.as_str());
+        let pl_path = PlRefPath::new(url_to.as_str());
         let cloud_options = Some(
-            CloudOptions::from_untyped_config(
-                pl_path.cloud_scheme().as_ref(),
-                to_base.cloud_configs(),
-            )
-            .map_err(|e| {
-                eprintln!("CloudOptions::from_untyped_config failed in import function:");
-                eprintln!("  URL: {}", url_to.as_str());
-                eprintln!("  Config: {:?}", e_cloud_configs);
-                eprintln!("  Error: {:?}", e);
-                e
-            })
-            .unwrap(),
+            CloudOptions::from_untyped_config(pl_path.scheme(), to_base.cloud_configs())
+                .map_err(|e| {
+                    eprintln!("CloudOptions::from_untyped_config failed in import function:");
+                    eprintln!("  URL: {}", url_to.as_str());
+                    eprintln!("  Config: {:?}", e_cloud_configs);
+                    eprintln!("  Error: {:?}", e);
+                    e
+                })
+                .unwrap(),
         );
         let lf = match format {
             ImportFormat::Binary => {
-                let reader =
-                    LazyCsvReader::new(PlPath::new(url_to.as_str())).with_infer_schema_length(None);
+                let reader = LazyCsvReader::new(PlRefPath::new(url_to.as_str()))
+                    .with_infer_schema_length(None);
                 reader.with_cloud_options(cloud_options).finish().unwrap()
             }
             _ => {
@@ -1054,7 +1081,7 @@ mod tests {
                     cloud_options,
                     ..Default::default()
                 };
-                LazyFrame::scan_parquet(PlPath::new(url_to.as_str()), parquet_config).unwrap()
+                LazyFrame::scan_parquet(PlRefPath::new(url_to.as_str()), parquet_config).unwrap()
             }
         };
 
@@ -1232,10 +1259,11 @@ mod tests {
     async fn test_import_with_file_info(format: &ImportFormat, file_info: Option<FileInfo>) {
         use td_tableframe::constants::{TD_ORIGIN_FILE_LINE, TD_ORIGIN_FILE_PATH};
 
-        let sink_options = SinkOptions {
+        let sink_options = UnifiedSinkArgs {
             sync_on_close: SyncOnCloseType::All,
             maintain_order: true,
             mkdir: true,
+            ..Default::default()
         };
 
         let test_dir = td_common::tdtestdir!();
@@ -1273,16 +1301,19 @@ mod tests {
         let col_string = StringChunked::from_iter((0..10).map(|i| Some(format!("str_{}", i))))
             .into_series()
             .with_name(PlSmallStr::from("col_string"));
-        let df = DataFrame::new(vec![Column::from(col_int), Column::from(col_string)]).unwrap();
+        let df = DataFrame::new_infer_height(vec![Column::from(col_int), Column::from(col_string)])
+            .unwrap();
         let lf = df.clone().lazy();
         let num_rows = df.shape().0;
 
         match format {
             ImportFormat::Csv(_) => {
-                lf.sink_csv(
-                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
-                    CsvWriterOptions::default(),
-                    None,
+                lf.sink(
+                    SinkDestination::File {
+                        target: create_sink_target(&from_file.url(), &from_file.cloud_configs())
+                            .unwrap(),
+                    },
+                    FileWriteFormat::Csv(CsvWriterOptions::default()),
                     sink_options.clone(),
                 )
                 .unwrap()
@@ -1290,10 +1321,12 @@ mod tests {
                 .unwrap();
             }
             ImportFormat::Json => {
-                lf.sink_json(
-                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
-                    JsonWriterOptions::default(),
-                    None,
+                lf.sink(
+                    SinkDestination::File {
+                        target: create_sink_target(&from_file.url(), &from_file.cloud_configs())
+                            .unwrap(),
+                    },
+                    FileWriteFormat::NDJson(NDJsonWriterOptions::default()),
                     sink_options.clone(),
                 )
                 .unwrap()
@@ -1301,16 +1334,18 @@ mod tests {
                 .unwrap();
             }
             ImportFormat::Log => {
-                lf.sink_csv(
-                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
-                    CsvWriterOptions {
-                        serialize_options: SerializeOptions {
+                lf.sink(
+                    SinkDestination::File {
+                        target: create_sink_target(&from_file.url(), &from_file.cloud_configs())
+                            .unwrap(),
+                    },
+                    FileWriteFormat::Csv(CsvWriterOptions {
+                        serialize_options: Arc::new(SerializeOptions {
                             quote_style: Never,
                             ..Default::default()
-                        },
+                        }),
                         ..Default::default()
-                    },
-                    None,
+                    }),
                     sink_options.clone(),
                 )
                 .unwrap()
@@ -1318,10 +1353,12 @@ mod tests {
                 .unwrap();
             }
             ImportFormat::Parquet => {
-                lf.sink_parquet(
-                    create_sink_target(&from_file.url(), &from_file.cloud_configs()).unwrap(),
-                    ParquetWriteOptions::default(),
-                    None,
+                lf.sink(
+                    SinkDestination::File {
+                        target: create_sink_target(&from_file.url(), &from_file.cloud_configs())
+                            .unwrap(),
+                    },
+                    FileWriteFormat::Parquet(Arc::new(ParquetWriteOptions::default())),
                     sink_options.clone(),
                 )
                 .unwrap()
@@ -1384,8 +1421,9 @@ mod tests {
         assert_eq!(response.len(), 1);
 
         let url_to = response.first().unwrap().to.clone();
-        let lf = LazyFrame::scan_parquet(PlPath::new(url_to.as_str()), ScanArgsParquet::default())
-            .unwrap();
+        let lf =
+            LazyFrame::scan_parquet(PlRefPath::new(url_to.as_str()), ScanArgsParquet::default())
+                .unwrap();
 
         let df_out = tokio::task::spawn_blocking(move || lf.collect())
             .await

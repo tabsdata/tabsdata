@@ -15,6 +15,7 @@ from tabsdatax.cmake.kupgrader.common.pipeline import (
 )
 from tabsdatax.cmake.kupgrader.common.rendering import display_verification
 from tabsdatax.cmake.kupgrader.common.verification import verify
+from tabsdatax.cmake.kupgrader.common.versions import with_upgrader, write_inventory
 from tabsdatax.cmake.kupgrader.common.workflow import context_of, display_context
 
 log = logging.getLogger(__name__)
@@ -49,10 +50,13 @@ def perform_build(root_folder: Path) -> None:
     spec_file = shipped_spec_file(context, generation.version)
     content_folder = shipped_content_folder(context, generation.version)
     commit(generation.emission, spec_file, content_folder)
+    write_inventory(
+        context.upgrades_file, with_upgrader(generation.preparation.resolution)
+    )
 
     log.info(
         f"Wrote the upgrader of version '{generation.version}' to {spec_file} and "
-        f"{content_folder}."
+        f"{content_folder}, and declared it in {context.upgrades_file}."
     )
 
 

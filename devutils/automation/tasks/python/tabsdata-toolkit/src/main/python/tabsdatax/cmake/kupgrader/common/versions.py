@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from packaging.version import Version
 
+from tabsdatax.cmake.kupgrader.common.emission import header_of, render
 from tabsdatax.cmake.kupgrader.common.errors import KupgraderError
 
 INVENTORY_SCHEMA = 1
@@ -71,3 +73,31 @@ def resolve(current: str, entries: list[Entry]) -> Resolution:
     else:
         previous = newest.version
     return Resolution(current=current, previous=previous, entries=entries)
+
+
+def declares_upgrader(resolution: Resolution) -> bool:
+    return any(
+        entry.version == resolution.current and entry.upgrader
+        for entry in resolution.entries
+    )
+
+
+def with_upgrader(resolution: Resolution) -> list[Entry]:
+    older = [
+        entry for entry in resolution.entries if entry.version != resolution.current
+    ]
+    return [Entry(version=resolution.current, upgrader=True), *older]
+
+
+def write_inventory(upgrades_file: Path, entries: list[Entry]) -> None:
+    newest_first = sorted(
+        entries, key=lambda entry: Version(entry.version), reverse=True
+    )
+    document = {
+        "schema": INVENTORY_SCHEMA,
+        "versions": [
+            {"version": entry.version, "upgrader": entry.upgrader}
+            for entry in newest_first
+        ],
+    }
+    upgrades_file.write_text(render(document, header_of(upgrades_file)))

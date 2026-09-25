@@ -26,7 +26,7 @@ license = "Apache 2.0"
 publish = false
 readme = "README.md"
 repository = "https://github.com/tabsdata/tabsdata"
-rust-version = "1.94.1"
+rust-version = "1.98.1"
 version = "2.2.0"
 
 [workspace]
@@ -292,14 +292,14 @@ version = "0.5.3"
 features = ["std"]
 
 [workspace.dependencies.arrow]
-version = "59"
+version = "60.0.0"
 features = ["csv", "json"]
 
 [workspace.dependencies.arrow-avro]
-version = "59"
+version = "60.0.0"
 
 [workspace.dependencies.parquet]
-version = "59"
+version = "60.0.0"
 features = ["async"]
 
 [workspace.dependencies.async-compression]
@@ -553,11 +553,11 @@ version = "0.5.0"
 version = "0.2.17"
 
 [workspace.dependencies.polars]
-version = "0.52.0"
+version = "0.55.2"
 features = ["lazy", "polars-lazy", "async", "csv", "json", "parquet", "cloud", "aws", "azure", "gcp", "sql", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"]
 
 [workspace.dependencies.polars-io]
-version = "0.52.0"
+version = "0.55.2"
 features = ["cloud"]
 
 [workspace.dependencies.polars-parquet-format]

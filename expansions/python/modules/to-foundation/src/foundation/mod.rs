@@ -72,7 +72,7 @@ fn register_py_module<'a>(
     let module_path = format!("{parent_path}.{module_name}");
 
     if let Ok(module) = sys_modules.get_item(&module_path)
-        && let Ok(module) = module.downcast::<PyModule>()
+        && let Ok(module) = module.cast::<PyModule>()
     {
         // warn!("Module {module_path:?} already exists!");
 

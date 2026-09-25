@@ -35,7 +35,13 @@ pub const CONSTANT_I32: i32 = 19;
 pub const CONSTANT_F64: f64 = 6.5;
 
 #[gen_stub_pyclass_enum]
-#[pyclass(eq, eq_int, mapping, module = "tabsdata.expansions.foundation.watashi")]
+#[pyclass(
+    eq,
+    eq_int,
+    mapping,
+    from_py_object,
+    module = "tabsdata.expansions.foundation.watashi"
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum EnumAuto {
     Fuseki,
@@ -44,7 +50,13 @@ pub enum EnumAuto {
 }
 
 #[gen_stub_pyclass_enum]
-#[pyclass(eq, eq_int, mapping, module = "tabsdata.expansions.foundation.watashi")]
+#[pyclass(
+    eq,
+    eq_int,
+    mapping,
+    from_py_object,
+    module = "tabsdata.expansions.foundation.watashi"
+)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum EnumString {
     Fuseki,
@@ -74,7 +86,11 @@ impl EnumString {
 }
 
 #[gen_stub_pyclass]
-#[pyclass(mapping, module = "tabsdata.expansions.foundation.watashi")]
+#[pyclass(
+    mapping,
+    from_py_object,
+    module = "tabsdata.expansions.foundation.watashi"
+)]
 #[derive(Debug, Clone)]
 pub struct DataObject {
     #[pyo3(get, set)]
