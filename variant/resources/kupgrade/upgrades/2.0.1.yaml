@@ -41,32 +41,11 @@ configs:
           replacement: "secretAuto:postgres_apiserver_password"
   dbmanager.database.yaml:
     dbmanager.database_docker.yaml:
-      action: modify
-      changes:
-        - op: modify-text-if
-          pattern: "secret:postgres_system_user"
-          replacement: "secretAuto:postgres_system_user"
-        - op: modify-text-if
-          pattern: "secret:postgres_system_password"
-          replacement: "secretAuto:postgres_system_password"
+      action: retain
     dbmanager.database_eks.yaml:
-      action: modify
-      changes:
-        - op: modify-text-if
-          pattern: "secret:postgres_system_user"
-          replacement: "secretAuto:postgres_system_user"
-        - op: modify-text-if
-          pattern: "secret:postgres_system_password"
-          replacement: "secretAuto:postgres_system_password"
+      action: retain
     dbmanager.database_fargate.yaml:
-      action: modify
-      changes:
-        - op: modify-text-if
-          pattern: "secret:postgres_system_user"
-          replacement: "secretAuto:postgres_system_user"
-        - op: modify-text-if
-          pattern: "secret:postgres_system_password"
-          replacement: "secretAuto:postgres_system_password"
+      action: retain
     dbmanager.database_kminus.yaml:
       action: modify
       changes:

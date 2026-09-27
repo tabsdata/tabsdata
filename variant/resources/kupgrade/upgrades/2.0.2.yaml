@@ -22,28 +22,28 @@ pods:
       action: modify
       changes:
         - op: modify-leaf-value-if
-          leaf: spec.ttlSecondsAfterFinished
+          leaf: spec.jobTemplate.spec.ttlSecondsAfterFinished
           from: 1800
           to: 3600
     cron-publisher_eks.yaml:
       action: modify
       changes:
         - op: modify-leaf-value-if
-          leaf: spec.ttlSecondsAfterFinished
+          leaf: spec.jobTemplate.spec.ttlSecondsAfterFinished
           from: 1800
           to: 3600
     cron-publisher_fargate.yaml:
       action: modify
       changes:
         - op: modify-leaf-value-if
-          leaf: spec.ttlSecondsAfterFinished
+          leaf: spec.jobTemplate.spec.ttlSecondsAfterFinished
           from: 1800
           to: 3600
     cron-publisher_kminus.yaml:
       action: modify
       changes:
         - op: modify-leaf-value-if
-          leaf: spec.ttlSecondsAfterFinished
+          leaf: spec.jobTemplate.spec.ttlSecondsAfterFinished
           from: 1800
           to: 3600
   dbmanager.yaml:
