@@ -128,6 +128,14 @@ pub fn load_profile(provider: ClusterProvider, verbose: bool) -> Result<Profile,
     let root = resolve_kprofile_path(verbose)?;
     let tabsdata_version = tabsdata_version()
         .map_err(|error| ProfileError::TabsdataVersionResolveFailed(error.to_string()))?;
+    load_profile_from(&root, provider, &tabsdata_version)
+}
+
+pub fn load_profile_from(
+    root: &Path,
+    provider: ClusterProvider,
+    tabsdata_version: &str,
+) -> Result<Profile, ProfileError> {
     let axes = provider.axes();
     let preferred = provider.preferred_values();
 
@@ -155,7 +163,7 @@ pub fn load_profile(provider: ClusterProvider, verbose: bool) -> Result<Profile,
     }
 
     let now = Utc::now();
-    let manifest = Manifest::initial_install(&tabsdata_version, now, entries);
+    let manifest = Manifest::initial_install(tabsdata_version, now, entries);
     Ok(Profile {
         pods: maps.remove(KPROFILE_PODS_FAMILY.folder).unwrap_or_default(),
         assets: maps

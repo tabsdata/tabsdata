@@ -8,12 +8,19 @@ from pathlib import Path
 import rich_click as click
 
 from tabsdatax.cmake.kupgrader.common.commit import Difference, compare
+from tabsdatax.cmake.kupgrader.common.emission import Emission
 from tabsdatax.cmake.kupgrader.common.pipeline import (
     generate,
     shipped_content_folder,
     shipped_spec_file,
 )
-from tabsdatax.cmake.kupgrader.common.rendering import display_comparison
+from tabsdatax.cmake.kupgrader.common.rendering import (
+    display_comparison,
+    display_template_mismatches,
+    display_verification,
+)
+from tabsdatax.cmake.kupgrader.common.templates import replay, version_templates
+from tabsdatax.cmake.kupgrader.common.verification import locate_binary, verify
 from tabsdatax.cmake.kupgrader.common.versions import declares_upgrader
 from tabsdatax.cmake.kupgrader.common.workflow import context_of, display_context
 
@@ -48,6 +55,44 @@ def perform_check(root_folder: Path) -> None:
             f"The upgrader shipped for version '{generation.version}' is not the one "
             "this repository would generate. Run 'cargo make upgrader build' to "
             "regenerate it."
+        )
+        raise SystemExit(1)
+
+    shipped = Emission(
+        spec_file=shipped_spec_file(context, generation.version),
+        content_folder=shipped_content_folder(context, generation.version),
+        payloads=[],
+    )
+    verification = verify(
+        context.root_folder,
+        shipped,
+        generation.preparation.previous_kprofile_folder,
+        generation.preparation.current_kprofile_folder,
+        context.upgraded_folder,
+        generation.version,
+        generation.previous,
+    )
+    display_verification(verification)
+    if not verification.matched:
+        log.error(
+            f"The upgrader shipped for version '{generation.version}' does not turn "
+            f"the kprofile of '{generation.previous}' into the current one."
+        )
+        raise SystemExit(1)
+
+    binary = locate_binary(context.root_folder)
+    stale = version_templates(
+        binary, context.kprofile_folder, context, generation.version, write=False
+    )
+    display_template_mismatches("Stale Head Templates", stale)
+    diverged = replay(binary, context.kupgrade_folder, context)
+    display_template_mismatches("Replay Mismatches", diverged)
+    if stale or diverged:
+        log.error(
+            f"The templates of version '{generation.version}' are stale or the shipped "
+            "upgraders do not reproduce every version's templates. Run 'cargo make "
+            f"upgrader build' to regenerate them; diverging outcomes are kept in "
+            f"{context.diverged_folder}."
         )
         raise SystemExit(1)
 

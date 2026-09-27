@@ -27,7 +27,7 @@ CONSUMER_UITEST: Consumer = "uitest"
 Service = Literal[
     "apiserver_public_port",
     "apiserver_private_port",
-    "aiagent_public_port",
+    "aiagent_private_port",
     "database_port",
     "kminus_api_port",
 ]
@@ -43,7 +43,7 @@ PING_TIMEOUT_SECONDS = 10
 DEFAULT_INSTANCE: Consumer = CONSUMER_TDTEST
 SERVICE_APISERVER_PUBLIC_PORT: Service = "apiserver_public_port"
 SERVICE_APISERVER_PRIVATE_PORT: Service = "apiserver_private_port"
-SERVICE_AIAGENT_PUBLIC_PORT: Service = "aiagent_public_port"
+SERVICE_AIAGENT_PRIVATE_PORT: Service = "aiagent_private_port"
 SERVICE_DATABASE_PORT: Service = "database_port"
 SERVICE_KMINUS_API_PORT: Service = "kminus_api_port"
 
@@ -104,8 +104,8 @@ class Instance:
         return self.port_for_service(SERVICE_APISERVER_PRIVATE_PORT)
 
     @property
-    def aiagent_public_port(self) -> int | None:
-        return self.port_for_service(SERVICE_AIAGENT_PUBLIC_PORT)
+    def aiagent_private_port(self) -> int | None:
+        return self.port_for_service(SERVICE_AIAGENT_PRIVATE_PORT)
 
     @property
     def database_port(self) -> int | None:

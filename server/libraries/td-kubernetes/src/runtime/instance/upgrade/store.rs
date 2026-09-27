@@ -107,19 +107,38 @@ impl Store for ConfigmapStore<'_> {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum Keying {
+    Variant,
+    File,
+}
+
 pub struct FolderStore {
-    kprofile_folder: PathBuf,
+    folder: PathBuf,
+    keying: Keying,
 }
 
 impl FolderStore {
     pub fn new(kprofile_folder: &Path) -> Self {
         Self {
-            kprofile_folder: kprofile_folder.to_path_buf(),
+            folder: kprofile_folder.to_path_buf(),
+            keying: Keying::Variant,
+        }
+    }
+
+    pub fn resolved(folder: &Path) -> Self {
+        Self {
+            folder: folder.to_path_buf(),
+            keying: Keying::File,
         }
     }
 
     fn path_of(&self, step: &Step) -> PathBuf {
-        self.kprofile_folder.join(step.folder).join(&step.variant)
+        let name = match self.keying {
+            Keying::Variant => &step.variant,
+            Keying::File => &step.file,
+        };
+        self.folder.join(step.folder).join(name)
     }
 }
 

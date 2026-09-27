@@ -97,6 +97,7 @@ def apply_upgrader(
     completed = subprocess.run(
         [
             str(binary),
+            "upgrade",
             "--kupgrade",
             str(kupgrade_folder),
             "--kprofile",

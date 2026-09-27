@@ -9,6 +9,7 @@ import rich_click as click
 
 from tabsdatax.cmake.kupgrader.commands.build import build
 from tabsdatax.cmake.kupgrader.commands.check import check
+from tabsdatax.cmake.kupgrader.commands.templates import templates
 from tabsdatax.cmake.kupgrader.common.errors import KupgraderError
 from tabsdatax.cmake.kupgrader.common.group import OrderedGroup
 from tabsdatax.cmake.kupgrader.common.logging import configure
@@ -38,11 +39,13 @@ def main() -> None:
     \b
     The `check` command verifies the shipped upgrader is correct and complete.
     The `build` command regenerates the upgrader and verifies its outcome.
+    The `templates` command compares, or rewrites, the upgrade templates.
     """
 
 
 main.add_command(check)
 main.add_command(build)
+main.add_command(templates)
 
 
 if __name__ == "__main__":

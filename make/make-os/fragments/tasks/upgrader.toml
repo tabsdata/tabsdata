@@ -13,28 +13,35 @@ script = [
     !include_files ./make/make-os/libraries/log.ds
 
     command = set ""
-    arguments = split ${CARGO_MAKE_TASK_ARGS} " "
+    options = set ""
+    arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
         if not is_empty ${argument}
-            if not eq ${argument} "check"
-                if not eq ${argument} "build"
-                    error "Unknown argument '${argument}'. Expected 'check' or 'build'."
+            if is_empty ${command}
+                if not eq ${argument} "check"
+                    if not eq ${argument} "build"
+                        if not eq ${argument} "templates"
+                            error "Unknown command '${argument}'. Expected 'check', 'build' or 'templates'."
+                            exit 1
+                        end
+                    end
+                end
+                command = set ${argument}
+            else
+                if not eq ${command} "templates"
+                    error "The '${command}' command takes no arguments; only 'templates' does ('--write', '--version <version>')."
                     exit 1
                 end
+                options = set "${options} ${argument}"
             end
-            if not is_empty ${command}
-                error "Too many commands. Pass exactly one of 'check' or 'build'."
-                exit 1
-            end
-            command = set ${argument}
         end
     end
 
     if is_empty ${command}
-        error "Missing command. Run 'cargo make upgrader check' or 'cargo make upgrader build'."
+        error "Missing command. Run 'cargo make upgrader check', 'cargo make upgrader build' or 'cargo make upgrader templates [--write] [--version <version>]'."
         exit 1
     end
 
-    debug "🚀 tdx-kupgrader ${command} --root ${PROJECT_TABSDATA_ROOT_FOLDER}"
-    exec --fail-on-error tdx-kupgrader ${command} --root ${PROJECT_TABSDATA_ROOT_FOLDER}
+    debug "🚀 tdx-kupgrader ${command} --root ${PROJECT_TABSDATA_ROOT_FOLDER}${options}"
+    exec --fail-on-error tdx-kupgrader ${command} --root ${PROJECT_TABSDATA_ROOT_FOLDER} %{options}
     ''']

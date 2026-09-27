@@ -394,6 +394,29 @@ def display_verification(verification) -> None:
     console.print()
 
 
+def display_template_mismatches(title: str, mismatches: list) -> None:
+    if not mismatches:
+        return
+    console = Console(width=RENDER_WIDTH)
+    failures = Table(
+        title=title,
+        show_header=True,
+        header_style="bold red",
+        border_style="red",
+    )
+    failures.add_column("Provider", style="cyan", no_wrap=True)
+    failures.add_column("Version", no_wrap=True)
+    failures.add_column("File", justify="right")
+    failures.add_column("Reason", style="yellow")
+    for mismatch in mismatches:
+        failures.add_row(
+            mismatch.provider, mismatch.version, colored(mismatch.file), mismatch.reason
+        )
+    console.print()
+    console.print(failures)
+    console.print()
+
+
 def display_comparison(comparison) -> None:
     console = Console(width=RENDER_WIDTH)
 

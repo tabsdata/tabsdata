@@ -13,8 +13,16 @@ from tabsdatax.cmake.kupgrader.common.pipeline import (
     shipped_content_folder,
     shipped_spec_file,
 )
-from tabsdatax.cmake.kupgrader.common.rendering import display_verification
-from tabsdatax.cmake.kupgrader.common.verification import verify
+from tabsdatax.cmake.kupgrader.common.rendering import (
+    display_template_mismatches,
+    display_verification,
+)
+from tabsdatax.cmake.kupgrader.common.templates import (
+    replay,
+    stage_kupgrade,
+    version_templates,
+)
+from tabsdatax.cmake.kupgrader.common.verification import locate_binary, verify
 from tabsdatax.cmake.kupgrader.common.versions import with_upgrader, write_inventory
 from tabsdatax.cmake.kupgrader.common.workflow import context_of, display_context
 
@@ -47,6 +55,23 @@ def perform_build(root_folder: Path) -> None:
         )
         raise SystemExit(1)
 
+    binary = locate_binary(context.root_folder)
+    version_templates(
+        binary, context.kprofile_folder, context, generation.version, write=True
+    )
+    staged = stage_kupgrade(
+        context, generation.emission, generation.preparation.resolution
+    )
+    diverged = replay(binary, staged, context)
+    display_template_mismatches("Replay Mismatches", diverged)
+    if diverged:
+        log.error(
+            f"Upgrading the templates hop by hop does not reproduce the templates of "
+            f"every version up to '{generation.version}'. The diverging outcomes are "
+            f"kept in {context.diverged_folder}. Only the head templates were written."
+        )
+        raise SystemExit(1)
+
     spec_file = shipped_spec_file(context, generation.version)
     content_folder = shipped_content_folder(context, generation.version)
     commit(generation.emission, spec_file, content_folder)
@@ -56,7 +81,9 @@ def perform_build(root_folder: Path) -> None:
 
     log.info(
         f"Wrote the upgrader of version '{generation.version}' to {spec_file} and "
-        f"{content_folder}, and declared it in {context.upgrades_file}."
+        f"{content_folder}, declared it in {context.upgrades_file}, and refreshed "
+        f"the templates of version '{generation.version}' in "
+        f"{context.templates_folder}."
     )
 
 
