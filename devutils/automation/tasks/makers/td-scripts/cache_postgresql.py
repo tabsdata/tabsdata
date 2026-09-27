@@ -474,7 +474,9 @@ def is_bundled(archive_path: Path) -> bool:
                         return False
                 return False
     except (tarfile.TarError, OSError) as error:
-        logger.debug(f"♻️ Cannot inspect {archive_path} ({error}); treating as unbundled.")
+        logger.debug(
+            f"♻️ Cannot inspect {archive_path} ({error}); treating as unbundled."
+        )
     return False
 
 
