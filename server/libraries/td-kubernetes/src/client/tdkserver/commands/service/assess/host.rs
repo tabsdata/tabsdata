@@ -5,7 +5,9 @@
 use fslock::LockFile;
 use std::time::Instant;
 
-use crate::base::constants::{FOLDER_RUNTIMES, KMINUS_MIN_NOFILE, RUNTIMES_LOCK_FILE};
+#[cfg(unix)]
+use crate::base::constants::KMINUS_MIN_NOFILE;
+use crate::base::constants::{FOLDER_RUNTIMES, RUNTIMES_LOCK_FILE};
 use crate::client::registry::InstanceSettings;
 use crate::client::tdkserver::render::report::helper::assess::{AssessCheck, AssessHelp};
 use crate::core::system::exit::CommandResult;
@@ -21,10 +23,12 @@ pub const OPEN_FILES: &str = "Open files";
 pub const RUNTIMES_LOCK: &str = "Runtimes lock";
 
 const CODE_PORTS: &str = "assess::host::ports";
+#[cfg(unix)]
 const CODE_NOFILE: &str = "assess::host::nofile";
 const CODE_LOCK: &str = "assess::host::lock";
 
 pub fn assess_open_files(provider: ClusterProvider) -> CommandResult<AssessCheck> {
+    #[cfg(unix)]
     let started = Instant::now();
 
     if provider != ClusterProvider::Kminus {

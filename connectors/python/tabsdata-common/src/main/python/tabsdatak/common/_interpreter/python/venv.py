@@ -625,11 +625,11 @@ class PythonEnvironment:
     @staticmethod
     def install(python_version: str, *, verbose: bool = False) -> None:
         PythonEnvironment.uv(
-            ["python", "install", python_version],
+            ["python", "install", "--managed-python", python_version],
             verbose=verbose,
         )
         PythonEnvironment.uv(
-            ["python", "find", python_version],
+            ["python", "find", "--managed-python", python_version],
             verbose=verbose,
         )
 
