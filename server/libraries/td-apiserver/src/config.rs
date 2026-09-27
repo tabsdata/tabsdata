@@ -680,7 +680,17 @@ storage:
         assert!(config.database.is_empty());
         assert_eq!(
             *config.addresses,
-            NonEmptyAddresses::new(nonempty![SocketAddr::from(([0, 0, 0, 0], 2457))])
+            NonEmptyAddresses::new(nonempty![
+                SocketAddr::from(([0, 0, 0, 0], 2457)),
+                SocketAddr::from(([0u16; 8], 2457)),
+            ])
+        );
+        assert_eq!(
+            *config.internal_addresses,
+            NonEmptyAddresses::new(nonempty![
+                SocketAddr::from(([0, 0, 0, 0], 2458)),
+                SocketAddr::from(([0u16; 8], 2458)),
+            ])
         );
         id::Id::try_from(config.jwt.secret.as_ref().unwrap()).unwrap();
         assert!(config.storage.is_some());

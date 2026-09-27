@@ -52,6 +52,16 @@ fn a_port_held_on_the_wildcard_address_is_not_available() {
 }
 
 #[test]
+fn a_port_held_on_the_ipv6_wildcard_address_is_not_available() {
+    let Ok(listener) = TcpListener::bind((std::net::Ipv6Addr::UNSPECIFIED, 0)) else {
+        eprintln!("IPv6 is not available on this host, skipping");
+        return;
+    };
+    let taken = listener.local_addr().unwrap().port();
+    assert!(!port_available(taken));
+}
+
+#[test]
 fn a_released_port_becomes_available() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let released = listener.local_addr().unwrap().port();

@@ -13,6 +13,7 @@ use axum_server::tls_rustls::RustlsConfig;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use http::uri::Scheme;
+use socket2::{Domain, Protocol, Socket, Type};
 use std::error::Error;
 use std::fmt::Debug;
 use std::net::SocketAddr;
@@ -99,15 +100,64 @@ impl ServerRunnable for dyn Server {
     }
 }
 
+const LISTEN_BACKLOG: i32 = 1024;
+
+enum BindFailure {
+    FamilyUnavailable(std::io::Error),
+    Other(std::io::Error),
+}
+
+/// IPv6 sockets are made IPv6-only so a `[::]` listener can sit next to a
+/// `0.0.0.0` one on the same port: on Linux a dual-stack `[::]` would claim
+/// the IPv4 port too and fail the second bind.
+fn bind_one(addr: &SocketAddr) -> Result<TcpListener, BindFailure> {
+    let socket = Socket::new(
+        Domain::for_address(*addr),
+        Type::STREAM,
+        Some(Protocol::TCP),
+    )
+    .map_err(BindFailure::FamilyUnavailable)?;
+    let configure = || -> std::io::Result<()> {
+        if addr.is_ipv6() {
+            socket.set_only_v6(true)?;
+        }
+        #[cfg(not(windows))]
+        socket.set_reuse_address(true)?;
+        socket.set_nonblocking(true)
+    };
+    configure().map_err(BindFailure::Other)?;
+    socket.bind(&(*addr).into()).map_err(|e| {
+        if addr.is_ipv6() && e.kind() == std::io::ErrorKind::AddrNotAvailable {
+            BindFailure::FamilyUnavailable(e)
+        } else {
+            BindFailure::Other(e)
+        }
+    })?;
+    socket.listen(LISTEN_BACKLOG).map_err(BindFailure::Other)?;
+    TcpListener::from_std(socket.into()).map_err(BindFailure::Other)
+}
+
+/// Binds every address. An address whose IP family the host lacks (IPv6
+/// disabled in a container, say) is skipped with a warning, so the default
+/// dual-stack addresses still boot there; any other failure, or skipping all
+/// of them, is an error.
 pub(crate) async fn bind(addresses: &NonEmptyAddresses) -> Result<Vec<TcpListener>, ServerError> {
     let mut listeners = Vec::new();
+    let mut skipped = None;
     for addr in addresses.iter() {
-        match TcpListener::bind(addr).await {
+        match bind_one(addr) {
             Ok(listener) => listeners.push(listener),
-            Err(e) => Err(ServerError::Bind(*addr, e))?,
+            Err(BindFailure::FamilyUnavailable(e)) => {
+                warn!("Skipping address [{addr}], its IP family is not available: {e}");
+                skipped.get_or_insert((*addr, e));
+            }
+            Err(BindFailure::Other(e)) => Err(ServerError::Bind(*addr, e))?,
         }
     }
-    Ok(listeners)
+    match (listeners.is_empty(), skipped) {
+        (true, Some((addr, e))) => Err(ServerError::Bind(addr, e)),
+        _ => Ok(listeners),
+    }
 }
 
 #[derive(Debug)]
@@ -262,6 +312,39 @@ mod tests {
 
         shutdown_tx.send(()).unwrap();
         server_handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_bind_ipv4_and_ipv6_on_the_same_port() {
+        let ipv4 = bind(&NonEmptyAddresses::new(nonempty![SocketAddr::new(
+            Ipv4Addr::UNSPECIFIED.into(),
+            0
+        )]))
+        .await
+        .unwrap();
+        let port = ipv4[0].local_addr().unwrap().port();
+
+        let ipv6 = SocketAddr::new(std::net::Ipv6Addr::UNSPECIFIED.into(), port);
+        match bind_one(&ipv6) {
+            Ok(listener) => assert_eq!(listener.local_addr().unwrap(), ipv6),
+            Err(BindFailure::FamilyUnavailable(e)) => {
+                eprintln!("IPv6 is not available on this host, skipping: {e}")
+            }
+            Err(BindFailure::Other(e)) => panic!("IPv6 bind clashed with IPv4: {e}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_bind_fails_on_a_taken_port() {
+        let taken = bind(&NonEmptyAddresses::new(nonempty![SocketAddr::new(
+            Ipv4Addr::LOCALHOST.into(),
+            0
+        )]))
+        .await
+        .unwrap();
+        let addr = taken[0].local_addr().unwrap();
+        let result = bind(&NonEmptyAddresses::new(nonempty![addr])).await;
+        assert!(matches!(result, Err(ServerError::Bind(failed, _)) if failed == addr));
     }
 
     #[tokio::test]

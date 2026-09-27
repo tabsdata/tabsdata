@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::net::{Ipv4Addr, TcpListener};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -32,7 +32,7 @@ enum PortRole {
     ApiserverPublic,
     ApiserverPrivate,
     #[cfg(feature = "enterprise")]
-    AiagentPublic,
+    AiagentPrivate,
     Database,
     KminusApi,
 }
@@ -43,7 +43,7 @@ impl PortRole {
             Self::ApiserverPublic => "apiserver_public_port",
             Self::ApiserverPrivate => "apiserver_private_port",
             #[cfg(feature = "enterprise")]
-            Self::AiagentPublic => "aiagent_public_port",
+            Self::AiagentPrivate => "aiagent_private_port",
             Self::Database => "database_port",
             Self::KminusApi => "kminus_api_port",
         }
@@ -61,7 +61,7 @@ impl PortRole {
             Self::ApiserverPublic => "apiserver public port",
             Self::ApiserverPrivate => "apiserver private port",
             #[cfg(feature = "enterprise")]
-            Self::AiagentPublic => "aiagent public port",
+            Self::AiagentPrivate => "aiagent private port",
             Self::Database => "database port",
             Self::KminusApi => "kminus api port",
         }
@@ -72,7 +72,7 @@ const PORT_CATALOG: &[PortRole] = &[
     PortRole::ApiserverPublic,
     PortRole::ApiserverPrivate,
     #[cfg(feature = "enterprise")]
-    PortRole::AiagentPublic,
+    PortRole::AiagentPrivate,
     PortRole::Database,
     PortRole::KminusApi,
 ];
@@ -97,8 +97,14 @@ pub fn assign_ports(base: u16) -> Vec<AssignedPort> {
 }
 
 pub fn port_available(port: u16) -> bool {
-    TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok()
-        && TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).is_ok()
+    let free = |ip: IpAddr| match TcpListener::bind(SocketAddr::new(ip, port)) {
+        Ok(_) => true,
+        Err(error) => ip.is_ipv6() && error.kind() != std::io::ErrorKind::AddrInUse,
+    };
+    free(Ipv4Addr::LOCALHOST.into())
+        && free(Ipv4Addr::UNSPECIFIED.into())
+        && free(Ipv6Addr::LOCALHOST.into())
+        && free(Ipv6Addr::UNSPECIFIED.into())
 }
 
 pub fn ensure_ports_free(
@@ -123,7 +129,7 @@ pub const REPORT_ONLY_SERVED_PORTS_FILTER: &[&str] = &[
     PortRole::ApiserverPublic.as_str(),
     PortRole::ApiserverPrivate.as_str(),
     #[cfg(feature = "enterprise")]
-    PortRole::AiagentPublic.as_str(),
+    PortRole::AiagentPrivate.as_str(),
 ];
 
 pub const REPORT_ALL_PORTS_FILTER: &[&str] = &[];
@@ -390,7 +396,7 @@ pub fn apply_ports(values: &mut SystemValues, assigned: &[AssignedPort]) {
             PortRole::ApiserverPublic => values.apiserver_public_port = Some(port),
             PortRole::ApiserverPrivate => values.apiserver_private_port = Some(port),
             #[cfg(feature = "enterprise")]
-            PortRole::AiagentPublic => values.aiagent_public_port = Some(port),
+            PortRole::AiagentPrivate => values.aiagent_private_port = Some(port),
             PortRole::Database => values.database_port = Some(port),
             PortRole::KminusApi => values.kminus_api_port = Some(port),
         }

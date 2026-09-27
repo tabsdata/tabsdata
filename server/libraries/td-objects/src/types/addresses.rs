@@ -5,7 +5,7 @@
 use http::uri::Authority;
 use nonempty::{NonEmpty, nonempty};
 use serde::{Deserialize, Serialize};
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::ops::Deref;
 use std::str::FromStr;
 use td_error::{ApiError, TdError, api_error};
@@ -29,6 +29,14 @@ impl NonEmptyAddresses {
             ))
         }
     }
+
+    /// The IPv4 and IPv6 wildcards on `port`.
+    pub fn dual_stack(port: u16) -> Self {
+        Self(nonempty![
+            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), port),
+            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), port),
+        ])
+    }
 }
 
 impl Deref for NonEmptyAddresses {
@@ -45,10 +53,7 @@ pub struct ApiServerAddresses(pub NonEmptyAddresses);
 impl Default for ApiServerAddresses {
     fn default() -> Self {
         const DEFAULT_PORT: u16 = 2457;
-        ApiServerAddresses(NonEmptyAddresses::new(nonempty![SocketAddr::new(
-            Ipv4Addr::UNSPECIFIED.into(),
-            DEFAULT_PORT
-        )]))
+        ApiServerAddresses(NonEmptyAddresses::dual_stack(DEFAULT_PORT))
     }
 }
 
@@ -86,10 +91,7 @@ impl From<InternalServerAddresses> for NonEmptyAddresses {
 impl Default for InternalServerAddresses {
     fn default() -> Self {
         const DEFAULT_PORT: u16 = 2458;
-        InternalServerAddresses(NonEmptyAddresses::new(nonempty![SocketAddr::new(
-            Ipv4Addr::UNSPECIFIED.into(),
-            DEFAULT_PORT
-        )]))
+        InternalServerAddresses(NonEmptyAddresses::dual_stack(DEFAULT_PORT))
     }
 }
 
@@ -162,14 +164,15 @@ pub struct InternalServerEndpoint {
 impl InternalServerEndpoint {
     /// The port always comes from the bound address, so an advertised authority
     /// carrying its own is overridden rather than silently disagreeing with the
-    /// listener.
+    /// listener. Without an advertised host a wildcard bind becomes the loopback
+    /// of its family: a wildcard is where to listen, never where to dial.
     pub fn new(
         addresses: InternalServerAddresses,
         advertised: Option<&Authority>,
     ) -> Result<Self, TdError> {
         let bound = addresses.first();
         let authority = match advertised {
-            None => bound.to_string(),
+            None => dialable(bound).to_string(),
             Some(advertised) => format!("{}:{}", advertised.host(), bound.port()),
         };
         let authority = Authority::from_str(&authority).map_err(|error| {
@@ -195,6 +198,15 @@ impl InternalServerEndpoint {
     }
 }
 
+fn dialable(bound: &SocketAddr) -> SocketAddr {
+    let ip: IpAddr = match bound.ip() {
+        IpAddr::V4(ip) if ip.is_unspecified() => Ipv4Addr::LOCALHOST.into(),
+        IpAddr::V6(ip) if ip.is_unspecified() => Ipv6Addr::LOCALHOST.into(),
+        ip => ip,
+    };
+    SocketAddr::new(ip, bound.port())
+}
+
 impl Default for InternalServerEndpoint {
     fn default() -> Self {
         let addresses = InternalServerAddresses::default();
@@ -206,11 +218,40 @@ impl Default for InternalServerEndpoint {
 mod endpoint_tests {
     use super::*;
 
+    fn internal(addresses: &[&str]) -> InternalServerAddresses {
+        InternalServerAddresses(
+            NonEmptyAddresses::from_vec(addresses.iter().map(|a| a.parse().unwrap()).collect())
+                .unwrap(),
+        )
+    }
+
     #[test]
-    fn unset_advertised_keeps_the_bound_address() {
+    fn defaults_are_dual_stack() {
+        let rendered: Vec<String> = InternalServerAddresses::default()
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(rendered, ["0.0.0.0:2458", "[::]:2458"]);
+        let rendered: Vec<String> = ApiServerAddresses::default()
+            .iter()
+            .map(ToString::to_string)
+            .collect();
+        assert_eq!(rendered, ["0.0.0.0:2457", "[::]:2457"]);
+    }
+
+    #[test]
+    fn unset_advertised_dials_loopback_for_a_wildcard() {
         let endpoint =
             InternalServerEndpoint::new(InternalServerAddresses::default(), None).unwrap();
-        assert_eq!(endpoint.authority().as_str(), "0.0.0.0:2458");
+        assert_eq!(endpoint.authority().as_str(), "127.0.0.1:2458");
+        let endpoint = InternalServerEndpoint::new(internal(&["[::]:2458"]), None).unwrap();
+        assert_eq!(endpoint.authority().as_str(), "[::1]:2458");
+    }
+
+    #[test]
+    fn unset_advertised_keeps_a_specific_bound_address() {
+        let endpoint = InternalServerEndpoint::new(internal(&["10.0.0.7:2458"]), None).unwrap();
+        assert_eq!(endpoint.authority().as_str(), "10.0.0.7:2458");
     }
 
     #[test]

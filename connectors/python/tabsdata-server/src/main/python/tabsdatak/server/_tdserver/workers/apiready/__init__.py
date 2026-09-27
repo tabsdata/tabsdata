@@ -21,7 +21,7 @@ from tabsdatak.server._tdserver.workers.apiready.error import ApiReadyErrorCode
 logger = logging.getLogger(__name__)
 
 ADDRESSES_KEY = "addresses"
-WILDCARD_HOSTS = ("0.0.0.0", "", "::")
+WILDCARD_HOSTS = ("0.0.0.0", "", "::", "[::]")
 LOCAL_HOST = "localhost"
 PING_URL_TEMPLATE = "http://{host}:{port}/api/v1/ping"
 
