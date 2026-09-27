@@ -244,7 +244,7 @@ jobs:
       - permit-job
       - describe-job
     if: ${{ needs.permit-job.outputs.permit_workflow == 'true' }}
-    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@2.2.0
+    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@main
     secrets:
       ANTHROPIC__API_KEY: ${{ secrets.ANTHROPIC__API_KEY }}
       AZ0__AZ_ACCOUNT_KEY: ${{ secrets.AZ0__AZ_ACCOUNT_KEY }}
