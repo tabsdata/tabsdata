@@ -4,7 +4,11 @@
 
 """Tests for report comparison."""
 
-from tabsdatax.generator.tableframe.engine.compare import compute_diff
+from tabsdatax.generator.tableframe.engine.compare import (
+    ParameterChange,
+    compute_diff,
+    parameter_changes,
+)
 from tabsdatax.generator.tableframe.model.model import Report, Symbol
 
 
@@ -66,3 +70,34 @@ def test_diff_json_roundtrips_structurally():
     data = json.loads(diff.to_json())
     assert data["removed"] == ["Expr.a"]
     assert data["new_polars_version"] == "1.42.0"
+
+
+def test_parameter_changes_report_added_removed_and_changed():
+    old = "(self, a: 'int' = 1, b: 'str' = 'x') -> 'Expr' -> Expr"
+    new = "(self, a: 'int | None' = None, *, c: 'bool' = False) -> 'Expr' -> Expr"
+    assert parameter_changes(old, new) == [
+        ParameterChange("-", "b: str = 'x'"),
+        ParameterChange("~", "a: int = 1  →  int | None = None"),
+        ParameterChange("+", "c: bool = False"),
+    ]
+
+
+def test_parameter_changes_report_return_type():
+    old = "(self) -> 'Iterator[DataFrame]' -> Iterator[DataFrame]"
+    new = "(self) -> '_CollectBatches' -> _CollectBatches"
+    assert parameter_changes(old, new) == [
+        ParameterChange("~", "returns Iterator[DataFrame]  →  _CollectBatches"),
+    ]
+
+
+def test_parameter_changes_cover_varargs_and_kwargs():
+    old = "(self, *columns: 'str') -> 'Expr' -> Expr"
+    new = "(self, *columns: 'str', **named: 'Expr') -> 'Expr' -> Expr"
+    assert parameter_changes(old, new) == [ParameterChange("+", "**named: Expr")]
+
+
+def test_unparsable_signature_yields_none():
+    assert parameter_changes("(self, ) -> Expr", "(self, a) -> Expr") == [
+        ParameterChange("+", "a"),
+    ]
+    assert parameter_changes("not a signature -> X", "(self) -> X") is None

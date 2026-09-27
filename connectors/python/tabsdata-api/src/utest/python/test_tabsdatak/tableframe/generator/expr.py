@@ -1753,19 +1753,3 @@ def test_log1p_runs():
             raise  # a real leak, not an argument problem
         pytest.skip(f"not callable with simple args: {type(exc).__name__}")
     assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
-def test_shrink_dtype_delegates():
-    inner = MagicMock()
-    getattr(Expr._wrap(inner), "shrink_dtype")()
-    getattr(inner, "shrink_dtype").assert_called()
-
-
-def test_shrink_dtype_runs():
-    try:
-        result = Expr._wrap(pl.col("a")).shrink_dtype()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"

@@ -7,6 +7,7 @@ removed / changed), and the curated whitelist and hook edits."""
 
 from __future__ import annotations
 
+import ast
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -81,6 +82,73 @@ def compute_diff(old: Report, new: Report) -> Diff:
                 Change(symbol_id, old_symbol.hook_name, new_symbol.hook_name)
             )
     return diff
+
+
+@dataclass(frozen=True)
+class ParameterChange:
+    marker: str  # "+" added, "-" removed, "~" changed
+    text: str
+
+
+def parameter_changes(old: str, new: str) -> list[ParameterChange] | None:
+    """What changed between two ``Change`` signatures (``(params) -> ann ->
+    returns``), parameter by parameter; ``None`` if either cannot be parsed."""
+    old_parameters, old_returns = _parse(old)
+    new_parameters, new_returns = _parse(new)
+    if old_parameters is None or new_parameters is None:
+        return None
+    changes = [
+        ParameterChange("-", text)
+        for name, text in old_parameters.items()
+        if name not in new_parameters
+    ]
+    for name, text in new_parameters.items():
+        if name not in old_parameters:
+            changes.append(ParameterChange("+", text))
+        elif old_parameters[name] != text:
+            new_part = text.removeprefix(name).removeprefix(": ").strip()
+            changes.append(
+                ParameterChange("~", f"{old_parameters[name]}  →  {new_part}")
+            )
+    if old_returns != new_returns:
+        changes.append(ParameterChange("~", f"returns {old_returns}  →  {new_returns}"))
+    return changes
+
+
+def _parse(signature: str) -> tuple[dict[str, str] | None, str]:
+    parameters, _, returns = signature.rpartition(" -> ")
+    try:
+        function = ast.parse(f"def _f{parameters}: ...").body[0]
+    except SyntaxError:
+        return None, returns
+    arguments = function.args  # type: ignore[attr-defined]
+    positional = arguments.posonlyargs + arguments.args
+    defaults = [None] * (len(positional) - len(arguments.defaults))
+    defaults += arguments.defaults
+    texts: dict[str, str] = {}
+    for argument, default in zip(positional, defaults):
+        texts[argument.arg] = _parameter(argument, default)
+    if arguments.vararg is not None:
+        texts[arguments.vararg.arg] = "*" + _parameter(arguments.vararg, None)
+    for argument, default in zip(arguments.kwonlyargs, arguments.kw_defaults):
+        texts[argument.arg] = _parameter(argument, default)
+    if arguments.kwarg is not None:
+        texts[arguments.kwarg.arg] = "**" + _parameter(arguments.kwarg, None)
+    return texts, returns
+
+
+def _parameter(argument: ast.arg, default: ast.expr | None) -> str:
+    text = argument.arg
+    annotation = argument.annotation
+    if annotation is not None:
+        # Polars signatures quote their annotations; show them unquoted.
+        if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+            text += f": {annotation.value}"
+        else:
+            text += f": {ast.unparse(annotation)}"
+    if default is not None:
+        text += f" = {ast.unparse(default)}"
+    return text
 
 
 def perform(old: Path, new: Path, output: Path) -> tuple[Diff, str]:

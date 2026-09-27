@@ -25,6 +25,7 @@ consumer registers via ``set_hook``/``chain``.
 
 from __future__ import annotations
 
+import ast
 import datetime
 import subprocess
 import sys
@@ -183,6 +184,8 @@ def perform(
     annotation_rewriter = AnnotationRewriter(our_types, class_module, module)
     all_aliases: set[str] = set()
 
+    engine_members = _engine_frame_members(base)
+
     written: list[Path] = []
     base.mkdir(parents=True, exist_ok=True)
     written += _write_core(base, module, _render_hook_types(hook_specs))
@@ -208,14 +211,23 @@ def perform(
             finally:
                 ori_path.unlink()
         text, aliases = _render_pyi(
-            symbols, previous, annotation_rewriter, module_name, module
+            symbols, previous, annotation_rewriter, module_name, module, engine_members
         )
         pyi_path.write_text(text)
         written.append(pyi_path)
         all_aliases |= aliases
         if previous is not None:
             current = {(symbol.target_class, _member(symbol)) for symbol in symbols}
-            dropped = sorted(name for (_, name) in set(previous.functions) - current)
+            current |= {
+                (symbol.target_class, "__init__")
+                for symbol in symbols
+                if symbol.target_class in _SCAFFOLD_CONSTRUCTORS
+            }
+            dropped = sorted(
+                name
+                for (class_name, name) in set(previous.functions) - current
+                if not _carried(class_name, name, engine_members)
+            )
             if dropped:
                 # noinspection PyTypeChecker
                 result.dropped[module_name] = dropped
@@ -224,8 +236,12 @@ def perform(
         result.symbol_count += len(symbols)
 
     typing_pyi = base / "_typing.pyi"
+    typing_doc = parse_pyi(typing_pyi.read_text()) if typing_pyi.exists() else None
+    typing_head = _pyi_head(typing_doc, engine_base=False, root=module)[:-2]
     typing_pyi.write_text(
-        _pyi_header() + "\n" + annotation_rewriter.render_typing_pyi(all_aliases)
+        "\n".join(typing_head)
+        + "\n\n"
+        + annotation_rewriter.render_typing_pyi(all_aliases)
     )
     written.append(typing_pyi)
 
@@ -239,6 +255,30 @@ def perform(
 
 
 _CORE_MODULES = ("base", "translate", "hooks")
+
+# Handwritten engine frame that TableFrame subclasses; members it defines that the
+# manifest does not emit are declared by hand in the TableFrame stub.
+_ENGINE_FRAME_FILE = Path("_engine", "frame", "frame.py")
+_ENGINE_FRAME_CLASS = "EngineFrame"
+_ENGINE_FRAME_SUBCLASS = "TableFrame"
+
+
+def _engine_frame_members(base: Path) -> set[str]:
+    path = base / _ENGINE_FRAME_FILE
+    if not path.is_file():
+        return set()
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, ast.ClassDef) and node.name == _ENGINE_FRAME_CLASS:
+            return {
+                member.name
+                for member in node.body
+                if isinstance(member, (ast.FunctionDef, ast.AsyncFunctionDef))
+            }
+    return set()
+
+
+def _carried(class_name: str | None, name: str, engine_members: set[str]) -> bool:
+    return class_name == _ENGINE_FRAME_SUBCLASS and name in engine_members
 
 
 def _write_core(base: Path, module: str, hook_types: str) -> list[Path]:
@@ -715,12 +755,19 @@ _API_SPEC_TYPES = ("TableFrameSpec", "TableFramesSpec")
 
 # .pyi signature overrides keyed by symbol id, for stubs whose public type is
 # ours rather than the polars signature the manifest records. concat takes the
-# TableFrame None/empty contract, so it is typed with our table specs.
+# TableFrame None/empty contract, so it is typed with our table specs. join only
+# accepts the parameters its hook forwards (see _HOOK_SHAPES["join"]).
 _SIGNATURE_OVERRIDES = {
     "functions.concat": (
         "(items: TableFramesSpec, *, how: ConcatMethod = 'vertical') -> TableFrameSpec"
     ),
     "Schema.to_frame": "(self) -> TableFrame",
+    "LazyFrame.join": (
+        "(self, other: 'LazyFrame', on: 'str | Expr | Sequence[str | Expr] | None' ="
+        " None, how: 'JoinStrategy' = 'inner', *, left_on: 'str | Expr |"
+        " Sequence[str | Expr] | None' = None, right_on: 'str | Expr | Sequence[str |"
+        " Expr] | None' = None, suffix: 'str' = '_right') -> 'LazyFrame'"
+    ),
 }
 
 # Value-class members with a custom generated body, keyed by symbol id.
@@ -1254,7 +1301,7 @@ def _agg_body() -> list[str]:
 
 
 # --------------------------------------------------------------------------- #
-# .pyi rendering (first cut; merge/preserve comes next).
+# .pyi rendering, preserving the handwritten content of the previous stub.
 # --------------------------------------------------------------------------- #
 def _render_pyi(
     symbols: list[Symbol],
@@ -1262,15 +1309,12 @@ def _render_pyi(
     annotation_rewriter: AnnotationRewriter,
     module: str,
     root: str,
+    engine_members: set[str],
 ) -> tuple[str, set[str]]:
     body: list[str] = []
     used_our: set[str] = set()
     used_aliases: set[str] = set()
     engine_base = False
-    # The module docstring placeholder is preserved if the user filled it.
-    module_doc = previous.module_doc if previous is not None else None
-    body += _docstring_lines(_preserved(module_doc), body_indent="")
-    body.append("")
     if symbols[0].target_class is None:
         for symbol in symbols:
             entry, our, aliases = _pyi_entry(
@@ -1284,14 +1328,17 @@ def _render_pyi(
             class_doc = _preserved(
                 previous.class_docs.get(class_name) if previous else None
             )
+            body.append("")
+            if previous is not None:
+                body += previous.class_comments.get(class_name, [])
             # TableFrame subclasses EngineFrame so the engine API (the gated
             # constructor plus _state / _lf / _ACCESS_*) resolves through the real
             # base instead of looking unbound on the stubbed class.
             if class_name == "TableFrame":
                 engine_base = True
-                body += ["", f"class {class_name}(EngineFrame):"]
+                body += [f"class {class_name}(EngineFrame):"]
             else:
-                body += ["", f"class {class_name}:"]
+                body += [f"class {class_name}:"]
             body += _docstring_lines(class_doc, body_indent="    ")
             constructor_parameters = _SCAFFOLD_CONSTRUCTORS.get(class_name)
             if constructor_parameters is not None:
@@ -1314,13 +1361,64 @@ def _render_pyi(
                 body += entry
                 used_our |= our
                 used_aliases |= aliases
+            if previous is not None:
+                emitted = {_member(symbol) for symbol in class_symbols}
+                body += _carried_members(previous, class_name, emitted, engine_members)
+                body += previous.class_trailing.get(class_name, [])
 
-    head = [_pyi_header(), "from __future__ import annotations", ""]
-    if engine_base:
-        head.append(f"from {root}._engine.frame.frame import EngineFrame")
+    head = _pyi_head(previous, engine_base, root)
     head += annotation_rewriter.imports_for(used_our, used_aliases, in_module=module)
+    if previous is not None:
+        head += _missing_imports(head, body, previous)
     head.append("")
     return "\n".join(head + body) + "\n", used_aliases
+
+
+def _pyi_head(previous: PyiDoc | None, engine_base: bool, root: str) -> list[str]:
+    # The module docstring placeholder is preserved if the user filled it. It must
+    # precede the imports for Python (and the next regeneration) to read it back.
+    module_doc = previous.module_doc if previous is not None else None
+    head = [_pyi_header()]
+    head += _docstring_lines(_preserved(module_doc), body_indent="")
+    head += ["", "from __future__ import annotations", ""]
+    if engine_base:
+        head.append(f"from {root}._engine.frame.frame import EngineFrame")
+    return head
+
+
+def _carried_members(
+    previous: PyiDoc, class_name: str, emitted: set[str], engine_members: set[str]
+) -> list[str]:
+    lines: list[str] = []
+    for (owner, name), existing in previous.functions.items():
+        if (
+            owner == class_name
+            and name not in emitted
+            and _carried(owner, name, engine_members)
+        ):
+            lines += existing.comments + existing.source + existing.trailing + [""]
+    return lines
+
+
+def _missing_imports(head: list[str], body: list[str], previous: PyiDoc) -> list[str]:
+    """Imports from the previous stub for names the stub uses but does not bind,
+    e.g. types in carried members or datatypes used as parameter defaults."""
+    bound: set[str] = set()
+    for node in ast.parse("\n".join(head)).body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            bound |= {alias.asname or alias.name.split(".")[0] for alias in node.names}
+    tree = ast.parse("\n".join(body))
+    defined = {
+        node.name
+        for node in tree.body
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef))
+    }
+    used = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    return sorted({
+        previous.imports[name]
+        for name in used - bound - defined
+        if name in previous.imports
+    })
 
 
 def _pyi_entry(
@@ -1359,8 +1457,11 @@ def _pyi_def(
     docstring: str | None = None
     lines: list[str] = []
 
+    existing = None
     if previous is not None:
         existing = previous.functions.get((class_name, name))
+        if existing is not None:
+            lines += existing.comments
         if existing is None:
             lines.append(f"{indent}{_PYI_NEW}")
         elif existing.canonical_signature != canonical_signature(signature):
@@ -1374,6 +1475,8 @@ def _pyi_def(
     # Every entity gets a docstring placeholder to fill in (preserved if present).
     lines.append(f"{indent}def {name}{signature}:")
     lines += _docstring_lines(_preserved(docstring), indent + "    ")
+    if existing is not None:
+        lines += existing.trailing
     lines.append("")
     return lines
 
@@ -1385,8 +1488,9 @@ def _preserved(docstring: str | None) -> str:
 def _docstring_lines(docstring: str, body_indent: str) -> list[str]:
     if "\n" not in docstring:
         return [f'{body_indent}"""{docstring}"""']
-    out = [f'{body_indent}"""']
-    out += [f"{body_indent}{line}" if line else "" for line in docstring.split("\n")]
+    first, *rest = docstring.split("\n")
+    out = [f'{body_indent}"""{first}']
+    out += [f"{body_indent}{line}" if line else "" for line in rest]
     out.append(f'{body_indent}"""')
     return out
 

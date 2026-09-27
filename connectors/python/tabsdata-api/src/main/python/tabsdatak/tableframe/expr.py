@@ -339,6 +339,3 @@ class Expr(BaseWrapper):
 
     def log1p(self, *args, **kwargs):
         return wrap(self._inner.log1p(*unwrap(args), **unwrap(kwargs)))
-
-    def shrink_dtype(self, *args, **kwargs):
-        return wrap(self._inner.shrink_dtype(*unwrap(args), **unwrap(kwargs)))

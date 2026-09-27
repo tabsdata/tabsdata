@@ -10,26 +10,18 @@ from typing import TYPE_CHECKING
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.rule import Rule
-from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
 
 if TYPE_CHECKING:
-    from tabsdatax.generator.tableframe.engine.compare import Diff
+    from tabsdatax.generator.tableframe.engine.compare import Change, Diff
     from tabsdatax.generator.tableframe.engine.generate import GenResult
     from tabsdatax.generator.tableframe.model.model import Report
 
-THEME = "gruvbox-dark"
-DELIMITER_STYLE = "bold #2f7fd1"
-RENDER_WIDTH = 1024
+# Width follows the terminal (80 columns when not attached to one).
+console = Console()
 
-console = Console(width=RENDER_WIDTH)
-
-
-def show_json(title: str, content: str) -> None:
-    console.print(Rule(title=title, style=DELIMITER_STYLE, align="left"))
-    console.print(Syntax(content, "json", theme=THEME, background_color="default"))
-    console.print(Rule(style=DELIMITER_STYLE))
+_MARKER_STYLES = {"+": "green", "-": "red", "~": "yellow"}
 
 
 def render_inspect(report: "Report", *, skipped: list[str] | None = None) -> None:
@@ -96,14 +88,17 @@ def render_compare(diff: "Diff") -> None:
             for sid in ids:
                 console.print(f"  [{color}]{marker}[/] {sid}")
 
+    if diff.signature_changed:
+        console.print()
+        console.print(_signature_table(diff.signature_changed))
+
     for title, changes in [
-        ("Signature Changes", diff.signature_changed),
         ("Whitelist Changes", diff.whitelist_changed),
         ("Hook Changes", diff.hook_changed),
     ]:
         if changes:
             table = Table(title=f"{title}: {len(changes)}", box=box.SQUARE)
-            table.add_column("Symbol", style="cyan")
+            table.add_column("Symbol", style="cyan", overflow="fold")
             table.add_column("Old")
             table.add_column("New")
             for change in changes:
@@ -111,6 +106,43 @@ def render_compare(diff: "Diff") -> None:
             console.print()
             console.print(table)
     console.print()
+
+
+def _signature_table(changes: list["Change"]) -> Table:
+    """One row per distinct change: symbols whose parameters changed the same
+    way (e.g. Expr / Then / ChainedThen) share a row."""
+    from tabsdatax.generator.tableframe.engine.compare import (
+        ParameterChange,
+        parameter_changes,
+    )
+
+    grouped: dict[tuple[ParameterChange, ...], list[str]] = defaultdict(list)
+    for change in changes:
+        parameters = parameter_changes(change.old, change.new)
+        if parameters is None:
+            parameters = [
+                ParameterChange("-", change.old),
+                ParameterChange("+", change.new),
+            ]
+        grouped[tuple(parameters)].append(change.id)
+
+    table = Table(
+        title=f"Signature Changes: {len(changes)}",
+        box=box.SQUARE,
+        show_lines=True,
+    )
+    table.add_column("Symbols", style="cyan", overflow="fold")
+    table.add_column("Changes", overflow="fold")
+    for parameters, ids in sorted(grouped.items(), key=lambda item: item[1][0]):
+        text = Text()
+        for index, parameter in enumerate(parameters):
+            if index:
+                text.append("\n")
+            style = _MARKER_STYLES[parameter.marker]
+            text.append(f"{parameter.marker} ", style=f"bold {style}")
+            text.append(parameter.text, style=style)
+        table.add_row("\n".join(ids), text)
+    return table
 
 
 def render_generate(result: "GenResult") -> None:

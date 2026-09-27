@@ -8,8 +8,12 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import rich_click as click
+
+if TYPE_CHECKING:
+    from packaging.version import Version
 
 log = logging.getLogger(__name__)
 
@@ -56,11 +60,12 @@ def resolve_manifest_file(given: Path) -> Path:
     return folder / given if folder is not None else given
 
 
-def greatest_tabsdata_manifest(folder: Path) -> Path | None:
+def versioned_manifests(folder: Path, kind: str) -> "list[tuple[Version, Path]]":
+    """Manifests of ``kind`` in ``folder`` as ``(version, path)``, oldest first."""
     from packaging.version import InvalidVersion, Version
 
     candidates: list[tuple[Version, Path]] = []
-    for path in folder.glob(f"manifest_*_{TABSDATA_KIND}.json"):
+    for path in folder.glob(f"manifest_*_{kind}.json"):
         name = ManifestName.of(path.name)
         if name is None:
             continue
@@ -68,9 +73,45 @@ def greatest_tabsdata_manifest(folder: Path) -> Path | None:
             candidates.append((Version(name.version), path))
         except InvalidVersion:
             continue
-    if not candidates:
-        return None
-    return max(candidates, key=lambda candidate: candidate[0])[1]
+    return sorted(candidates, key=lambda candidate: candidate[0])
+
+
+def greatest_tabsdata_manifest(folder: Path) -> Path | None:
+    candidates = versioned_manifests(folder, TABSDATA_KIND)
+    return candidates[-1][1] if candidates else None
+
+
+def previous_and_current_manifests(
+    folder: Path, kind: str, current: str
+) -> tuple[Path, Path]:
+    """The ``kind`` manifests of the greatest version below ``current`` and of
+    ``current`` itself. Exits with an error if either is missing."""
+    from packaging.version import Version
+
+    current_file = folder / ManifestName(version=current, kind=kind).filename()
+    if not current_file.is_file():
+        hint = (
+            "Run inspect first."
+            if kind == POLARS_KIND
+            else "Create it from the previous tabsdata manifest first."
+        )
+        log.error(
+            f"No '{current_file.name}' in {folder} for the installed Polars "
+            f"version {current}. {hint}"
+        )
+        sys.exit(1)
+    older = [
+        path
+        for version, path in versioned_manifests(folder, kind)
+        if version < Version(current)
+    ]
+    if not older:
+        log.error(
+            f"No '{kind}' manifest older than version {current} in {folder} to "
+            "compare against."
+        )
+        sys.exit(1)
+    return older[-1], current_file
 
 
 def default_package() -> Path | None:

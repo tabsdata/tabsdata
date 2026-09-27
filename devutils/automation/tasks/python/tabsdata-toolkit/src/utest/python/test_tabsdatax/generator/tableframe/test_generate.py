@@ -4,6 +4,8 @@
 
 """Tests for code/.pyi generation."""
 
+import ast
+
 import pytest
 
 from tabsdatax.generator.tableframe.engine.generate import perform
@@ -360,3 +362,59 @@ def test_generate_tests_into_test_root(tmp_path):
     assert (
         'getattr(inner, "alias").assert_called()' in expr_test
     )  # spies the polars call
+
+
+def _regenerate_with_handwritten_stub(main_root, engine_frame: str) -> str:
+    perform(_report(), ROOT, str(main_root))
+    base = main_root / "pkg" / "wrap"
+    engine = base / "_engine" / "frame" / "frame.py"
+    engine.parent.mkdir(parents=True)
+    engine.write_text(engine_frame)
+    stub = base / "__init__.pyi"
+    text = stub.read_text().replace(
+        "class TableFrame(EngineFrame):",
+        "# devguide-ref: frames\nclass TableFrame(EngineFrame):",
+    )
+    text = text.replace('"""', '"""Module doc.', 1)
+    text += (
+        "\n    # MANUAL CHANGE POST GEN: declared by hand.\n"
+        "    def grok(self, schema: ColumnDefinition) -> TableFrame:\n"
+        '        """Grok doc."""\n'
+        "\n    def gone(self) -> TableFrame:\n"
+        '        """Not on the engine frame."""\n'
+    )
+    text = text.replace(
+        "from __future__ import annotations\n",
+        "from __future__ import annotations\n\nfrom pkg.grok import ColumnDefinition\n",
+    )
+    stub.write_text(text)
+    perform(_report(), ROOT, str(main_root))
+    return stub.read_text()
+
+
+def test_regeneration_keeps_module_docstring_first(main_root):
+    text = _regenerate_with_handwritten_stub(main_root, "class EngineFrame: ...\n")
+    assert ast.get_docstring(ast.parse(text)) == "Module doc."
+
+
+def test_regeneration_keeps_comments(main_root):
+    text = _regenerate_with_handwritten_stub(main_root, "class EngineFrame: ...\n")
+    assert "# devguide-ref: frames\nclass TableFrame(EngineFrame):" in text
+
+
+def test_regeneration_carries_engine_frame_members_with_imports(main_root):
+    text = _regenerate_with_handwritten_stub(
+        main_root, "class EngineFrame:\n    def grok(self, schema): ...\n"
+    )
+    assert "# MANUAL CHANGE POST GEN: declared by hand." in text
+    assert "def grok(self, schema: ColumnDefinition) -> TableFrame:" in text
+    assert "from pkg.grok import ColumnDefinition" in text
+    assert "def gone(" not in text
+
+
+def test_multiline_docstring_summary_stays_on_the_opening_line(main_root):
+    perform(_report(), ROOT, str(main_root))
+    stub = main_root / "pkg" / "wrap" / "expr.pyi"
+    stub.write_text(stub.read_text().replace('""" """', '"""Summary.\n\n    Body.\n    """', 1))
+    perform(_report(), ROOT, str(main_root))
+    assert '"""Summary.\n' in stub.read_text()
