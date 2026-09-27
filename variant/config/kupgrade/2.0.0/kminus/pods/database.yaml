@@ -1,0 +1,113 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: srv-database
+  namespace: ${{system:tdk_namespace_name}}
+  annotations:
+    tabsdata.com/description: "Tabsdata database service"
+    kubernetes.io/change-cause: ""
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: database
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: server
+spec:
+  replicas: 1
+  # Recreate: the pod holds the database host directory and a fixed host port, so two generations must never overlap.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tabsdata
+      app.kubernetes.io/instance: tabsdata
+      app.kubernetes.io/component: database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tabsdata
+        app.kubernetes.io/instance: tabsdata
+        app.kubernetes.io/version: "2.0.0"
+        app.kubernetes.io/component: database
+        app.kubernetes.io/part-of: tabsdata
+        app.kubernetes.io/managed-by: tdkserver
+        tabsdata.com/tier: server
+    spec:
+      restartPolicy: Always
+      nodeName: tdknode
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: 1000-database
+        image: /dev/null
+        imagePullPolicy: IfNotPresent
+        command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_dbmanager${{system:tdk_exe_suffix}}"]
+        args:
+        - server
+        - serve
+        - --config-file
+        - $(CONTAINER_ROOT)/tabsdata/config/dbmanager.database.yaml
+        ports:
+        - name: postgres
+          containerPort: ${{system:tdk_database_port}}
+          protocol: TCP
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        env:
+        - name: CONTAINER_ROOT
+          value: "$(KM_CONTAINER_ROOT)"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_TABSDATA_INSTANCE
+          value: "${{system:tdk_instance_name}}"
+        - name: TD_DATABASE_DIR
+          value: "${{system:tdk_database_path}}"
+        - name: TD_LOG_CONFIG
+          value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+        - name: TD_BEFORE_PATH
+          value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+        - name: TD_AFTER_PATH
+          value: ""
+        volumeMounts:
+        - name: config
+          mountPath: /tabsdata/config
+          readOnly: true
+        - name: pyenv
+          mountPath: /tabsdata/pyenv
+          readOnly: true
+        - name: database
+          mountPath: /tabsdata/database
+      volumes:
+      - name: config
+        projected:
+          sources:
+          - configMap:
+              name: td-app-dbmanager-config-dbmanager.database.yaml
+          - configMap:
+              name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+      - name: pyenv
+        hostPath:
+          path: "${{system:tdk_pyenv_td_root}}"
+      - name: database
+        hostPath:
+          path: "${{system:tdk_database_path}}"

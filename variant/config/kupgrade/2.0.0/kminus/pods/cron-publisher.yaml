@@ -1,0 +1,140 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: td-cron-publisher
+  namespace: ${{system:tdk_namespace_name}}
+  annotations:
+    tabsdata.com/description: "Tabsdata cron publisher worker"
+    kubernetes.io/change-cause: ""
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "2.0.0"
+    app.kubernetes.io/component: cron-publisher
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: ephemeral
+    tabsdata.com/decorator: cron_publisher
+    tabsdata.com/worker: function
+spec:
+  schedule: "${{system:tdk_cron_schedule}}"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 100
+  suspend: false
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tabsdata
+        app.kubernetes.io/instance: tabsdata
+        app.kubernetes.io/version: "2.0.0"
+        app.kubernetes.io/component: cron-publisher
+        app.kubernetes.io/part-of: tabsdata
+        app.kubernetes.io/managed-by: tdkserver
+        tabsdata.com/tier: ephemeral
+        tabsdata.com/decorator: cron_publisher
+        tabsdata.com/worker: function
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 1800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: tabsdata
+            app.kubernetes.io/instance: tabsdata
+            app.kubernetes.io/version: "2.0.0"
+            app.kubernetes.io/component: cron-publisher
+            app.kubernetes.io/part-of: tabsdata
+            app.kubernetes.io/managed-by: tdkserver
+            tabsdata.com/tier: ephemeral
+            tabsdata.com/decorator: cron_publisher
+            tabsdata.com/worker: function
+        spec:
+          restartPolicy: Never
+          nodeName: tdknode
+          serviceAccountName: default
+          automountServiceAccountToken: false
+          terminationGracePeriodSeconds: 60
+          dnsPolicy: ClusterFirst
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: 1000-cron-publisher
+              image: function
+              imagePullPolicy: IfNotPresent
+              command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_cron_trigger${{system:tdk_exe_suffix}}"]
+              args:
+                - --shared-dir
+                - $(CONTAINER_ROOT)/tabsdata/shared
+                - --work-dir
+                - $(CONTAINER_ROOT)/tabsdata/work
+                - --log-config
+                - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+                - --liveness
+                - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+                - --responder-url
+                - env:SECRET__TD_RESPONDER_URL
+                - --responder-method
+                - env:SECRET__TD_RESPONDER_METHOD
+                - --responder-authorization
+                - env:SECRET__TD_RESPONDER_AUTHORIZATION
+                - --journal-file
+                - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+                - --trigger-url
+                - env:SECRET__TD_TRIGGER_URL
+                - --trigger-method
+                - env:SECRET__TD_TRIGGER_METHOD
+                - --trigger-authorization
+                - env:SECRET__TD_TRIGGER_AUTHORIZATION
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              env:
+                - name: CONTAINER_ROOT
+                  value: "$(KM_CONTAINER_ROOT)"
+                - name: POD_NAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+                - name: POD_NAMESPACE
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.namespace
+                - name: POD_TABSDATA_INSTANCE
+                  value: "${{system:tdk_instance_name}}"
+                - name: TD_LOG_CONFIG
+                  value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+                - name: TD_BEFORE_PATH
+                  value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+                - name: TD_AFTER_PATH
+                  value: ""
+              volumeMounts:
+                - name: config-cron-publisher
+                  mountPath: /tabsdata/config
+                  readOnly: true
+                - name: pyenv
+                  mountPath: /tabsdata/pyenv
+                  readOnly: true
+                - name: shared
+                  mountPath: /tabsdata/shared
+          volumes:
+            - name: config-cron-publisher
+              projected:
+                sources:
+                  - configMap:
+                      name: td-app-tabsdata-config-tabsdata.log.py.yaml
+                  - configMap:
+                      name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+            - name: pyenv
+              hostPath:
+                path: "${{system:tdk_pyenv_fn_root}}"
+            - name: shared
+              emptyDir: {}

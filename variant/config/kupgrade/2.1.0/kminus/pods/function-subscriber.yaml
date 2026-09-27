@@ -1,0 +1,878 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: td-function-subscriber
+  namespace: ${{system:tdk_namespace_name}}
+  annotations:
+    tabsdata.com/description: "Tabsdata subscriber function worker"
+    kubernetes.io/change-cause: ""
+  labels:
+    app.kubernetes.io/name: tabsdata
+    app.kubernetes.io/instance: tabsdata
+    app.kubernetes.io/version: "${{system:tdk_tabsdata_version}}"
+    app.kubernetes.io/component: function-subscriber
+    app.kubernetes.io/part-of: tabsdata
+    app.kubernetes.io/managed-by: tdkserver
+    tabsdata.com/tier: ephemeral
+    tabsdata.com/decorator: subscriber
+    tabsdata.com/worker: function
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tabsdata
+        app.kubernetes.io/instance: tabsdata
+        app.kubernetes.io/version: "${{system:tdk_tabsdata_version}}"
+        app.kubernetes.io/component: function-subscriber
+        app.kubernetes.io/part-of: tabsdata
+        app.kubernetes.io/managed-by: tdkserver
+        tabsdata.com/tier: ephemeral
+        tabsdata.com/decorator: subscriber
+        tabsdata.com/worker: function
+    spec:
+      restartPolicy: Never
+      nodeName: tdknode
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: 0000-inspect-function
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_inspect_function${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          volumeMounts:
+            - name: config-inspect-function
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0010-apiready
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_apiready${{system:tdk_exe_suffix}}"]
+          args:
+            - --config-file
+            - $(CONTAINER_ROOT)/tabsdata/config/apiserver.service.yaml
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --timeout
+            - "600"
+            - --interval
+            - "2"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          volumeMounts:
+            - name: config-apiready
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+        - name: 0020-begin-execution
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_begin_execution${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          volumeMounts:
+            - name: config-begin-execution
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0030-fetch-request
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_fetch_request${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --resolver-url
+            - env:SECRET__TD_RESOLVER_URL
+            - --resolver-method
+            - env:SECRET__TD_RESOLVER_METHOD
+            - --resolver-authorization
+            - env:SECRET__TD_RESOLVER_AUTHORIZATION
+            - --request-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          volumeMounts:
+            - name: config-fetch-request
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0040-localize-fn-bundle
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_localize_fn_bundle${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - --bundle-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
+            - --bundle-archive
+            - $(CONTAINER_ROOT)/tabsdata/shared/bundle/archive/bundle.tar.zst
+            - --transporter-request
+            - $(CONTAINER_ROOT)/tabsdata/shuttle/request/bundle-fetch.yaml
+            - --transporter-response
+            - $(CONTAINER_ROOT)/tabsdata/shuttle/response/bundle-fetch.yaml
+            - --storage-config
+            - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          envFrom:
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
+          volumeMounts:
+            - name: config-localize-fn-bundle
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0050-prep-localize-state
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_prep_localize_state${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - --in-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/in
+            - --state-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/state
+            - --out
+            - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-download.yaml
+            - --inputs-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/inputs-manifest.yaml
+            - --state-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/state-manifest.yaml
+            - --storage-config
+            - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          volumeMounts:
+            - name: config-prep-localize-state
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0060-run-transporter-localize
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_transporter${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-download.yaml
+            - --report
+            - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/response/state-download.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          envFrom:
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
+          volumeMounts:
+            - name: config-run-transporter-localize
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0070-run-function
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_function${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - --bundle-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
+            - --inputs-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/in/inputs-manifest.yaml
+            - --out-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/out
+            - --outputs-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
+            - --state-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/state
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          volumeMounts:
+            - name: config-run-function
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0080-run-destination-plugin
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_destination_plugin${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --connection-file
+            - $(CONTAINER_ROOT)/tabsdata/connection/connection.yaml
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - --bundle-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
+            - --outputs-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          envFrom:
+            - secretRef:
+                name: ${{system:tdk_connection_secret_name}}
+          volumeMounts:
+            - name: config-run-destination-plugin
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: connection
+              mountPath: /tabsdata/connection
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0090-prep-upload-state
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_prep_upload_state${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - --state-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/state
+            - --out
+            - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-upload.yaml
+            - --storage-config
+            - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          volumeMounts:
+            - name: config-prep-upload-state
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+        - name: 0100-run-transporter-state-upload
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_run_transporter${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/request/state-upload.yaml
+            - --report
+            - $(CONTAINER_ROOT)/tabsdata/shared/shuttle/response/state-upload.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          envFrom:
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
+          volumeMounts:
+            - name: config-run-transporter-state-upload
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+      containers:
+        - name: 1000-report-completion
+          image: function
+          imagePullPolicy: IfNotPresent
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_report_completion${{system:tdk_exe_suffix}}"]
+          args:
+            - --shared-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared
+            - --work-dir
+            - $(CONTAINER_ROOT)/tabsdata/work
+            - --log-config
+            - $(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.py.yaml
+            - --liveness
+            - $(CONTAINER_ROOT)/tabsdata/liveness/liveness
+            - --responder-url
+            - env:SECRET__TD_RESPONDER_URL
+            - --responder-method
+            - env:SECRET__TD_RESPONDER_METHOD
+            - --responder-authorization
+            - env:SECRET__TD_RESPONDER_AUTHORIZATION
+            - --journal-file
+            - $(CONTAINER_ROOT)/tabsdata/shared/journal/journal.yaml
+            - --request
+            - $(CONTAINER_ROOT)/tabsdata/shared/request/request.yaml
+            - --outputs-manifest
+            - $(CONTAINER_ROOT)/tabsdata/shared/fn/out/outputs-manifest.yaml
+            - --state-dir
+            - $(CONTAINER_ROOT)/tabsdata/shared/state
+            - --out
+            - $(CONTAINER_ROOT)/tabsdata/shared/response/response.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: CONTAINER_ROOT
+              value: "$(KM_CONTAINER_ROOT)"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_TABSDATA_INSTANCE
+              value: "${{system:tdk_instance_name}}"
+            - name: TD_LOG_CONFIG
+              value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+            - name: TD_BEFORE_PATH
+              value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
+            - name: TD_AFTER_PATH
+              value: ""
+          volumeMounts:
+            - name: config-report-completion
+              mountPath: /tabsdata/config
+              readOnly: true
+            - name: pyenv
+              mountPath: /tabsdata/pyenv
+              readOnly: true
+            - name: shared
+              mountPath: /tabsdata/shared
+      volumes:
+        - name: config-apiready
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.service.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+        - name: config-begin-execution
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-fetch-request
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-inspect-function
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-localize-fn-bundle
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-prep-localize-state
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-prep-upload-state
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-report-completion
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-destination-plugin
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-function
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-transporter-localize
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: config-run-transporter-state-upload
+          projected:
+            sources:
+              - configMap:
+                  name: td-app-apiserver-config-apiserver.storage.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.py.yaml
+              - configMap:
+                  name: td-app-tabsdata-config-tabsdata.log.rs.yaml
+        - name: connection
+          projected:
+            sources:
+              - configMap:
+                  name: ${{system:tdk_connection_configmap_name}}
+                  items:
+                    - key: connection.yaml
+                      path: connection.yaml
+        - name: pyenv
+          hostPath:
+            path: "${{system:tdk_pyenv_fn_root}}"
+        - name: shared
+          emptyDir: {}

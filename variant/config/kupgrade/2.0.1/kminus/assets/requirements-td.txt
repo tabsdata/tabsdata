@@ -1,0 +1,6 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+# Complementary packages for the td virtual environment.
+# One requirement specifier per line, in pip requirements format.

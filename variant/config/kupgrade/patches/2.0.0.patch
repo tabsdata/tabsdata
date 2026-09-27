@@ -1,0 +1,125 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+# What the published 2.0.0 package holds on top of the 2.0.0 tag kprofile.
+
+diff -ruN --color=never a/assets/venvbuilder.py b/assets/venvbuilder.py
+--- a/assets/venvbuilder.py	2026-09-25 23:03:11
++++ b/assets/venvbuilder.py	2026-09-25 23:03:11
+@@ -58,11 +58,11 @@
+ UV_EXECUTABLE: str = "uv"
+ 
+ ENV_UV_DEFAULT_INDEX: str = "UV_DEFAULT_INDEX"
+-ENV_UV_INDEX: str = "UV_INDEX"
++ENV_UV_EXTRA_INDEX_URL: str = "UV_EXTRA_INDEX_URL"
+ ENV_UV_INDEX_STRATEGY: str = "UV_INDEX_STRATEGY"
+-ENV_UV_INDEXES: tuple[str, ...] = (
++ENV_UV_INDEX: tuple[str, ...] = (
+     ENV_UV_DEFAULT_INDEX,
+-    ENV_UV_INDEX,
++    ENV_UV_EXTRA_INDEX_URL,
+     ENV_UV_INDEX_STRATEGY,
+ )
+ UNSET_INDEX: str = "<unset>"
+@@ -389,8 +389,8 @@
+ 
+ 
+ def report_indexes() -> None:
+-    width = max(len(variable) for variable in ENV_UV_INDEXES)
+-    for variable in ENV_UV_INDEXES:
++    width = max(len(variable) for variable in ENV_UV_INDEX)
++    for variable in ENV_UV_INDEX:
+         value = os.environ.get(variable, "").strip()
+         print(f">> {variable:<{width}} = {value if value else UNSET_INDEX}")
+ 
+@@ -459,7 +459,7 @@
+ 
+ 
+ def clean_cache(workspace: dict[str, str]) -> None:
+-    index_url = os.environ.get(ENV_UV_INDEX, "").strip()
++    index_url = os.environ.get(ENV_UV_EXTRA_INDEX_URL, "").strip()
+     if not index_url:
+         print(">> Skipping the cache clean; no extra index in use")
+         return
+diff -ruN --color=never a/assets/venvbuilder.sh b/assets/venvbuilder.sh
+--- a/assets/venvbuilder.sh	2026-09-25 23:03:11
++++ b/assets/venvbuilder.sh	2026-09-25 23:03:11
+@@ -258,7 +258,7 @@
+ 
+ report_indexes() {
+    local variable
+-   for variable in UV_DEFAULT_INDEX UV_INDEX UV_INDEX_STRATEGY; do
++   for variable in UV_DEFAULT_INDEX UV_EXTRA_INDEX_URL UV_INDEX_STRATEGY; do
+       printf ">> %-18s = %s\n" "$variable" "${!variable:-<unset>}"
+    done
+ }
+diff -ruN --color=never a/configs/tabsdata_eks.yaml b/configs/tabsdata_eks.yaml
+--- a/configs/tabsdata_eks.yaml	2026-09-25 23:03:11
++++ b/configs/tabsdata_eks.yaml	2026-09-25 23:03:11
+@@ -8,8 +8,8 @@
+     # container of every pod. A variable a container declares itself is left
+     # alone, so these are defaults rather than overrides.
+     envs:
+-      UV_DEFAULT_INDEX: https://pypi.org/simple/
+       UV_INDEX: ""
++      UV_DEFAULT_INDEX: https://pypi.org/simple/
+       UV_INDEX_STRATEGY: unsafe-best-match
+ 
+   # Sizing and placement. These values are what tabsdata applies: the pod
+diff -ruN --color=never a/pods/pymanager_docker.yaml b/pods/pymanager_docker.yaml
+--- a/pods/pymanager_docker.yaml	2026-09-25 23:03:11
++++ b/pods/pymanager_docker.yaml	2026-09-25 23:03:11
+@@ -76,8 +76,8 @@
+           value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+         - name: UV_DEFAULT_INDEX
+           value: "${{system:tdk_uv_default_index}}"
+-        - name: UV_INDEX
+-          value: "${{system:tdk_uv_index}}"
++        - name: UV_EXTRA_INDEX_URL
++          value: "${{system:tdk_uv_extra_index_url}}"
+         - name: UV_INDEX_STRATEGY
+           value: "${{system:tdk_uv_index_strategy}}"
+         envFrom:
+diff -ruN --color=never a/pods/pymanager_eks.yaml b/pods/pymanager_eks.yaml
+--- a/pods/pymanager_eks.yaml	2026-09-25 23:03:11
++++ b/pods/pymanager_eks.yaml	2026-09-25 23:03:11
+@@ -78,8 +78,8 @@
+           value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+         - name: UV_DEFAULT_INDEX
+           value: "${{system:tdk_uv_default_index}}"
+-        - name: UV_INDEX
+-          value: "${{system:tdk_uv_index}}"
++        - name: UV_EXTRA_INDEX_URL
++          value: "${{system:tdk_uv_extra_index_url}}"
+         - name: UV_INDEX_STRATEGY
+           value: "${{system:tdk_uv_index_strategy}}"
+         envFrom:
+diff -ruN --color=never a/pods/pymanager_fargate.yaml b/pods/pymanager_fargate.yaml
+--- a/pods/pymanager_fargate.yaml	2026-09-25 23:03:11
++++ b/pods/pymanager_fargate.yaml	2026-09-25 23:03:11
+@@ -78,8 +78,8 @@
+           value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+         - name: UV_DEFAULT_INDEX
+           value: "${{system:tdk_uv_default_index}}"
+-        - name: UV_INDEX
+-          value: "${{system:tdk_uv_index}}"
++        - name: UV_EXTRA_INDEX_URL
++          value: "${{system:tdk_uv_extra_index_url}}"
+         - name: UV_INDEX_STRATEGY
+           value: "${{system:tdk_uv_index_strategy}}"
+         envFrom:
+diff -ruN --color=never a/pods/pymanager_kminus.yaml b/pods/pymanager_kminus.yaml
+--- a/pods/pymanager_kminus.yaml	2026-09-25 23:03:11
++++ b/pods/pymanager_kminus.yaml	2026-09-25 23:03:11
+@@ -82,8 +82,8 @@
+           value: "$(CONTAINER_ROOT)/tabsdata/config/tabsdata.log.rs.yaml"
+         - name: UV_DEFAULT_INDEX
+           value: "${{system:tdk_uv_default_index}}"
+-        - name: UV_INDEX
+-          value: "${{system:tdk_uv_index}}"
++        - name: UV_EXTRA_INDEX_URL
++          value: "${{system:tdk_uv_extra_index_url}}"
+         - name: UV_INDEX_STRATEGY
+           value: "${{system:tdk_uv_index_strategy}}"
+         envFrom:

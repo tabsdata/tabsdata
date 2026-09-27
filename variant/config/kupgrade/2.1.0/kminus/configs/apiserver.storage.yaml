@@ -1,0 +1,15 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+storage:
+  mounts:
+  - id: ROOT
+    path: /
+    uri: ${{system:tdk_storage_url}}data/
+  - id: BUNDLES
+    path: /bundles
+    uri: ${{system:tdk_storage_url}}bundles/
+  - id: IMAGES
+    path: /images
+    uri: ${{system:tdk_storage_url}}images/

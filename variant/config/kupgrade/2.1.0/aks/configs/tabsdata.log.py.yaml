@@ -1,0 +1,45 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  plain:
+    (): tabsdatak._logging.NoFormatFormatter
+    format: '%(asctime)s.%(msecs)03dZ %(levelname)s %(name)s: %(message)s'
+    datefmt: '%Y-%m-%dT%H:%M:%S'
+
+filters:
+  stdout_only:
+    (): tabsdatak._logging.StdoutLevelFilter
+  stderr_only:
+    (): tabsdatak._logging.StderrLevelFilter
+
+handlers:
+  stdout:
+    class: logging.StreamHandler
+    level: DEBUG
+    formatter: plain
+    filters:
+    - stdout_only
+    stream: ext://sys.stdout
+  stderr:
+    class: logging.StreamHandler
+    level: WARNING
+    formatter: plain
+    filters:
+    - stderr_only
+    stream: ext://sys.stderr
+
+loggers:
+  filelock:
+    level: WARNING
+    propagate: false
+
+root:
+  level: INFO
+  handlers:
+  - stdout
+  - stderr

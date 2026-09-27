@@ -1,0 +1,27 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+storage:
+  mounts:
+  - id: ROOT
+    path: /
+    uri: ${{secret}}
+    options:
+      aws_region: ${{secret}}
+      aws_access_key_id: ${{secret}}
+      aws_secret_access_key: ${{secret}}
+  - id: BUNDLES
+    path: /bundles
+    uri: ${{secret}}
+    options:
+      aws_region: ${{secret}}
+      aws_access_key_id: ${{secret}}
+      aws_secret_access_key: ${{secret}}
+  - id: IMAGES
+    path: /images
+    uri: ${{secret}}
+    options:
+      aws_region: ${{secret}}
+      aws_access_key_id: ${{secret}}
+      aws_secret_access_key: ${{secret}}
