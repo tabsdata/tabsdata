@@ -25,7 +25,7 @@ use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
 use crate::core::system::exit::CommandResult;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
-use crate::runtime::instance::ports::AssignedPort;
+use crate::runtime::instance::ports::{AssignedPort, rename_roles};
 use crate::runtime::provider::ClusterProvider;
 use crate::runtime::provider::axes::Locality;
 
@@ -198,12 +198,13 @@ impl InstanceSettings {
                 cause: error.to_string(),
             })
         })?;
-        let settings = serde_json::from_str(&data).map_err(|error| {
+        let mut settings: Self = serde_json::from_str(&data).map_err(|error| {
             TdError::from(CliError::FileParseFailed {
                 file: path.display().to_string(),
                 cause: error.to_string(),
             })
         })?;
+        rename_roles(&mut settings.ports);
         Ok(settings)
     }
 
@@ -214,12 +215,13 @@ impl InstanceSettings {
                 cause: error.to_string(),
             })
         })?;
-        let settings = serde_json::from_str(&data).map_err(|error| {
+        let mut settings: Self = serde_json::from_str(&data).map_err(|error| {
             TdError::from(CliError::FileParseFailed {
                 file: path.display().to_string(),
                 cause: error.to_string(),
             })
         })?;
+        rename_roles(&mut settings.ports);
         Ok(settings)
     }
 

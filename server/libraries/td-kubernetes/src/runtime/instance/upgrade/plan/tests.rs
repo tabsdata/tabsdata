@@ -170,3 +170,50 @@ assets:
     let steps = planned(yaml, ClusterProvider::Kminus);
     assert_eq!(steps.len(), 1);
 }
+
+#[test]
+fn a_resolved_entry_replaces_the_variant_actions_of_its_bundle() {
+    let yaml = "\
+schema: 1
+configs:
+  aiagent.yaml:
+    aiagent.yaml:
+      action: delete
+    aiagent_eks.yaml:
+      action: create
+resolved:
+  configs:
+    aiagent.yaml:
+      aiagent_eks.yaml:
+        action: modify
+        changes:
+          - op: remove-leaf-if
+            leaf: port
+";
+    let steps = planned(yaml, ClusterProvider::Eks);
+    assert_eq!(steps.len(), 1);
+    assert_eq!(steps[0].file, "aiagent.yaml");
+    assert_eq!(steps[0].variant, "aiagent_eks.yaml");
+    assert!(matches!(steps[0].action, Action::Modify { .. }));
+}
+
+#[test]
+fn a_resolved_entry_leaves_the_other_bundles_alone() {
+    let yaml = "\
+schema: 1
+configs:
+  tabsdata.yaml:
+    tabsdata.yaml:
+      action: replace
+resolved:
+  configs:
+    aiagent.yaml:
+      aiagent.yaml:
+        action: retain
+";
+    let files: Vec<String> = planned(yaml, ClusterProvider::Kminus)
+        .into_iter()
+        .map(|step| step.file)
+        .collect();
+    assert_eq!(files, ["aiagent.yaml", "tabsdata.yaml"]);
+}

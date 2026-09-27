@@ -3,3 +3,71 @@
 #
 
 schema: 1
+configs:
+  apiserver.service.yaml:
+    apiserver.service_aks.yaml:
+      action: modify
+      changes:
+        - op: derive-item-if-missing
+          leaf: addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+        - op: derive-item-if-missing
+          leaf: internal_addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+    apiserver.service_docker.yaml:
+      action: modify
+      changes:
+        - op: derive-item-if-missing
+          leaf: addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+        - op: derive-item-if-missing
+          leaf: internal_addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+    apiserver.service_eks.yaml:
+      action: modify
+      changes:
+        - op: derive-item-if-missing
+          leaf: addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+        - op: derive-item-if-missing
+          leaf: internal_addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+    apiserver.service_fargate.yaml:
+      action: modify
+      changes:
+        - op: derive-item-if-missing
+          leaf: addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+        - op: derive-item-if-missing
+          leaf: internal_addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+    apiserver.service_gke.yaml:
+      action: modify
+      changes:
+        - op: derive-item-if-missing
+          leaf: addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+        - op: derive-item-if-missing
+          leaf: internal_addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+    apiserver.service_kminus.yaml:
+      action: modify
+      changes:
+        - op: derive-item-if-missing
+          leaf: addresses
+          pattern: ^0\.0\.0\.0:(?<port>.+)$
+          item: '[::]:${port}'
+        - op: derive-item-if-missing
+          leaf: internal_addresses
+          pattern: ^127\.0\.0\.1:(?<port>.+)$
+          item: '[::1]:${port}'

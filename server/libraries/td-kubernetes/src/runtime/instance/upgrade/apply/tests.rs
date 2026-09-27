@@ -6,7 +6,10 @@ use super::*;
 use crate::base::constants::{
     KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, TABSDATA_REQUIREMENTS_LOCK_ASSET,
 };
-use crate::runtime::instance::upgrade::spec::{InsertChildIfMissing, NestChildrenIfFlat};
+use crate::runtime::instance::upgrade::spec::{
+    DeriveItemIfMissing, DeriveSiblingIfExisting, InsertChildIfMissing, NestChildrenIfFlat,
+    RemoveLeafIf,
+};
 use crate::runtime::instance::upgrade::store::family_of;
 
 fn operation(leaf: &str, from: serde_yaml::Value, to: serde_yaml::Value) -> Operation {
@@ -1012,4 +1015,157 @@ fn an_unset_value_renders_as_an_empty_key() {
     );
     assert!(touched);
     assert!(rendered.contains("UV_INDEX: null") || rendered.contains("UV_INDEX:"));
+}
+
+fn derive_item(leaf: &str, pattern: &str, item: &str) -> Operation {
+    Operation::DeriveItemIfMissing(DeriveItemIfMissing {
+        leaf: leaf.to_owned(),
+        pattern: pattern.to_owned(),
+        item: item.to_owned(),
+    })
+}
+
+fn ipv6_twin(leaf: &str) -> Operation {
+    derive_item(leaf, r"^0\.0\.0\.0:(?<port>.+)$", "[::]:${port}")
+}
+
+fn document(text: &str) -> serde_yaml::Value {
+    serde_yaml::from_str(text).expect("parses")
+}
+
+#[test]
+fn a_derived_item_follows_the_item_it_comes_from_and_keeps_its_port() {
+    let (rendered, touched) = applied(
+        "addresses:\n- 0.0.0.0:${{system:tdk_apiserver_public_port}}\n- 10.0.0.7:2457\n",
+        &[ipv6_twin("addresses")],
+    );
+    assert!(touched);
+    assert_eq!(
+        document(&rendered),
+        document(
+            "addresses:\n- 0.0.0.0:${{system:tdk_apiserver_public_port}}\n\
+             - '[::]:${{system:tdk_apiserver_public_port}}'\n- 10.0.0.7:2457\n"
+        )
+    );
+}
+
+#[test]
+fn a_customized_port_is_carried_to_the_derived_item() {
+    let (rendered, _) = applied("addresses:\n- 0.0.0.0:3457\n", &[ipv6_twin("addresses")]);
+    assert_eq!(
+        document(&rendered),
+        document("addresses:\n- 0.0.0.0:3457\n- '[::]:3457'\n")
+    );
+}
+
+#[test]
+fn an_item_already_derived_is_not_derived_again() {
+    let current = "addresses:\n- 0.0.0.0:2457\n- '[::]:2457'\n";
+    let (rendered, touched) = applied(current, &[ipv6_twin("addresses")]);
+    assert!(!touched);
+    assert_eq!(rendered, current);
+}
+
+#[test]
+fn a_customized_bind_that_does_not_match_is_left_alone() {
+    let current = "addresses:\n- 10.0.0.7:2457\n";
+    let (rendered, touched) = applied(current, &[ipv6_twin("addresses")]);
+    assert!(!touched);
+    assert_eq!(rendered, current);
+}
+
+#[test]
+fn a_loopback_bind_derives_its_ipv6_loopback() {
+    let (rendered, _) = applied(
+        "internal_addresses:\n- 127.0.0.1:2458\n",
+        &[derive_item(
+            "internal_addresses",
+            r"^127\.0\.0\.1:(?<port>.+)$",
+            "[::1]:${port}",
+        )],
+    );
+    assert_eq!(
+        document(&rendered),
+        document("internal_addresses:\n- 127.0.0.1:2458\n- '[::1]:2458'\n")
+    );
+}
+
+#[test]
+fn a_missing_sequence_is_left_alone() {
+    let current = "password: {}\n";
+    let (_, touched) = applied(current, &[ipv6_twin("addresses")]);
+    assert!(!touched);
+}
+
+fn port_to_internal_addresses() -> Vec<Operation> {
+    vec![
+        Operation::DeriveSiblingIfExisting(DeriveSiblingIfExisting {
+            leaf: "port".to_owned(),
+            pattern: "^(?<value>.+)$".to_owned(),
+            sibling: "internal_addresses".to_owned(),
+            value: document("['0.0.0.0:${value}', '[::]:${value}']"),
+            placement: Placement::Before,
+        }),
+        Operation::RemoveLeafIf(RemoveLeafIf {
+            leaf: "port".to_owned(),
+        }),
+    ]
+}
+
+#[test]
+fn a_scalar_becomes_a_derived_sibling_and_is_removed() {
+    let (rendered, touched) = applied(
+        "port: ${{system:tdk_aiagent_private_port}}\nallow_writes: true\n",
+        &port_to_internal_addresses(),
+    );
+    assert!(touched);
+    assert_eq!(
+        document(&rendered),
+        document(
+            "internal_addresses:\n- 0.0.0.0:${{system:tdk_aiagent_private_port}}\n\
+             - '[::]:${{system:tdk_aiagent_private_port}}'\nallow_writes: true\n"
+        )
+    );
+    let keys: Vec<String> = document(&rendered)
+        .as_mapping()
+        .expect("a mapping")
+        .keys()
+        .filter_map(|key| key.as_str().map(str::to_owned))
+        .collect();
+    assert_eq!(keys, ["internal_addresses", "allow_writes"]);
+}
+
+#[test]
+fn a_numeric_scalar_is_derived_as_text() {
+    let (rendered, _) = applied("port: 2459\n", &port_to_internal_addresses());
+    assert_eq!(
+        document(&rendered),
+        document("internal_addresses:\n- 0.0.0.0:2459\n- '[::]:2459'\n")
+    );
+}
+
+#[test]
+fn a_converted_scalar_is_left_alone_on_a_second_run() {
+    let (once, _) = applied("port: 2459\n", &port_to_internal_addresses());
+    let (twice, touched) = applied(&once, &port_to_internal_addresses());
+    assert!(!touched);
+    assert_eq!(once, twice);
+}
+
+#[test]
+fn an_existing_sibling_is_never_overwritten() {
+    let current = "port: 2459\ninternal_addresses:\n- 10.0.0.7:2459\n";
+    let (rendered, _) = applied(current, &port_to_internal_addresses()[..1]);
+    assert_eq!(rendered, current);
+}
+
+#[test]
+fn an_invalid_derivation_pattern_is_an_error() {
+    let outcome = modify(
+        "2.2.0",
+        "configs/a.yaml",
+        "addresses: []\n",
+        &[derive_item("addresses", "(", "x")],
+    );
+    assert!(outcome.is_err());
 }

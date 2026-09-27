@@ -77,6 +77,23 @@ const PORT_CATALOG: &[PortRole] = &[
     PortRole::KminusApi,
 ];
 
+const RENAMED_ROLES: &[(&str, PortRole)] = &[
+    #[cfg(feature = "enterprise")]
+    ("aiagent_public_port", PortRole::AiagentPrivate),
+];
+
+pub fn rename_roles(assigned: &mut [AssignedPort]) {
+    for entry in assigned {
+        if let Some((_, role)) = RENAMED_ROLES
+            .iter()
+            .find(|(former, _)| *former == entry.role)
+        {
+            entry.role = role.as_str().to_owned();
+            entry.caption = role.caption().to_owned();
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssignedPort {
     pub role: String,

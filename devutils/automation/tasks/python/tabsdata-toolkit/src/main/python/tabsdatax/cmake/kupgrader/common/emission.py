@@ -64,7 +64,22 @@ def entry_of(
     return {"action": action.value, "changes": changes_of(changes, family, name)}
 
 
-def document_of(plans: list[Plan], changes: list[Change]) -> dict[str, Any]:
+def resolved_of(resolved: list[Change]) -> dict[str, Any]:
+    groups: dict[str, dict[str, Any]] = {}
+    for change in sorted(resolved, key=lambda change: (change.bundle, change.name)):
+        operations = [operation.rendered() for operation in change.synthesis.operations]
+        entry = (
+            {"action": Action.MODIFY.value, "changes": operations}
+            if operations
+            else {"action": Action.RETAIN.value}
+        )
+        groups.setdefault(change.bundle, {})[change.name] = entry
+    return {"configs": groups} if groups else {}
+
+
+def document_of(
+    plans: list[Plan], changes: list[Change], resolved: list[Change]
+) -> dict[str, Any]:
     document: dict[str, Any] = {"schema": SPEC_SCHEMA}
 
     for family in FAMILIES:
@@ -88,6 +103,10 @@ def document_of(plans: list[Plan], changes: list[Change]) -> dict[str, Any]:
         if groups:
             document[family] = groups
 
+    resolved_section = resolved_of(resolved)
+    if resolved_section:
+        document["resolved"] = resolved_section
+
     return document
 
 
@@ -105,6 +124,7 @@ def render(document: dict[str, Any], header: str) -> str:
 def emit(
     plans: list[Plan],
     changes: list[Change],
+    resolved: list[Change],
     version: str,
     target_folder: Path,
     existing_spec_file: Path | None,
@@ -113,7 +133,7 @@ def emit(
         shutil.rmtree(target_folder)
     target_folder.mkdir(parents=True)
 
-    document = document_of(plans, changes)
+    document = document_of(plans, changes, resolved)
     spec_file = target_folder / f"{version}.yaml"
     spec_file.write_text(render(document, header_of(existing_spec_file)))
 

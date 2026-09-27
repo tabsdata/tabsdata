@@ -23,9 +23,11 @@ pub struct Step {
 }
 
 pub fn plan(spec: &Spec, axes: &[Axis], preferred: &[&'static str]) -> Vec<Step> {
+    let mut configs = spec.configs.clone();
+    configs.extend(spec.resolved.configs.clone());
     let families: [(&'static Family, &BTreeMap<String, Group>); 3] = [
         (&KPROFILE_ASSETS_FAMILY, &spec.assets),
-        (&KPROFILE_CONFIGS_FAMILY, &spec.configs),
+        (&KPROFILE_CONFIGS_FAMILY, &configs),
         (&KPROFILE_PODS_FAMILY, &spec.pods),
     ];
     let mut steps = Vec::new();

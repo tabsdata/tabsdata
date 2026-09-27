@@ -255,4 +255,13 @@ pub enum UpgradeError {
     DigestsReadFailed { path: String, cause: String } = 5361,
     #[error("Could not write the template digests at '{path}': {cause}.")]
     DigestsWriteFailed { path: String, cause: String } = 5362,
+    #[error(
+        "The upgrade to '{version}' gives '{entry}' the action '{action}', but a resolved \
+         entry edits the file an instance holds, so it can only be 'modify' or 'retain'."
+    )]
+    ResolvedActionUnsupported {
+        version: String,
+        entry: String,
+        action: String,
+    } = 5363,
 }

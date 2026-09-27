@@ -20,6 +20,21 @@ pub struct Spec {
     pub configs: BTreeMap<String, Group>,
     #[serde(default)]
     pub pods: BTreeMap<String, Group>,
+    #[serde(default, skip_serializing_if = "Resolved::is_empty")]
+    pub resolved: Resolved,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Resolved {
+    #[serde(default)]
+    pub configs: BTreeMap<String, Group>,
+}
+
+impl Resolved {
+    pub fn is_empty(&self) -> bool {
+        self.configs.is_empty()
+    }
 }
 
 pub type Group = BTreeMap<String, Action>;
@@ -71,6 +86,9 @@ pub enum Operation {
     InsertSiblingIfExisting(InsertSiblingIfExisting),
     InsertChildIfMissing(InsertChildIfMissing),
     NestChildrenIfFlat(NestChildrenIfFlat),
+    DeriveItemIfMissing(DeriveItemIfMissing),
+    DeriveSiblingIfExisting(DeriveSiblingIfExisting),
+    RemoveLeafIf(RemoveLeafIf),
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -139,6 +157,32 @@ pub struct InsertSiblingIfExisting {
     pub scope: Scope,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeriveItemIfMissing {
+    pub leaf: String,
+    pub pattern: String,
+    pub item: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeriveSiblingIfExisting {
+    pub leaf: String,
+    pub pattern: String,
+    pub sibling: String,
+    #[serde(default)]
+    pub value: serde_yaml::Value,
+    #[serde(default)]
+    pub placement: Placement,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RemoveLeafIf {
+    pub leaf: String,
+}
+
 impl Spec {
     pub fn families(&self) -> [(&'static str, &BTreeMap<String, Group>); 3] {
         [
@@ -186,6 +230,17 @@ fn validate(version: &str, spec: &Spec, yaml: &str) -> Result<(), UpgradeError> 
                         entry: format!("{family}/{file}/{variant}"),
                     });
                 }
+            }
+        }
+    }
+    for (file, group) in &spec.resolved.configs {
+        for (variant, action) in group {
+            if !matches!(action, Action::Modify { .. } | Action::Retain(_)) {
+                return Err(UpgradeError::ResolvedActionUnsupported {
+                    version: version.to_owned(),
+                    entry: format!("resolved/configs/{file}/{variant}"),
+                    action: action.as_ref().to_owned(),
+                });
             }
         }
     }

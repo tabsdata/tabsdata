@@ -2,10 +2,14 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
 QUOTED = '"'
+DERIVED_PORT = "port"
+DERIVED_VALUE = "value"
+MINIMUM_DERIVED_LENGTH = 4
 
 
 @dataclass
@@ -129,7 +133,11 @@ def walk(
         return
 
     if is_sequence(previous) or is_sequence(current):
-        synthesis.gaps.append(sequence_gap(path, previous, current))
+        derived = derived_items(path, previous, current)
+        if derived is None:
+            synthesis.gaps.append(sequence_gap(path, previous, current))
+            return
+        synthesis.operations.extend(derived)
         return
 
     synthesis.operations.append(
@@ -138,6 +146,94 @@ def walk(
             fields={"leaf": render_leaf(path), "from": previous, "to": current},
         )
     )
+
+
+def split_authority(text: str) -> tuple[str, str] | None:
+    if text.startswith("["):
+        end = text.find("]")
+        if end < 0 or text[end + 1 : end + 2] != ":":
+            return None
+        return text[: end + 1], text[end + 2 :]
+    host, separator, port = text.partition(":")
+    return (host, port) if separator else None
+
+
+def derivation_of(path: tuple[str, ...], previous: list, item: Any) -> Operation | None:
+    if not isinstance(item, str):
+        return None
+    authority = split_authority(item)
+    if authority is None:
+        return None
+    host, port = authority
+    for source in previous:
+        if not isinstance(source, str):
+            continue
+        origin = split_authority(source)
+        if origin is None or origin[1] != port or origin[0] == host:
+            continue
+        return Operation(
+            op="derive-item-if-missing",
+            fields={
+                "leaf": render_leaf(path),
+                "pattern": f"^{re.escape(origin[0])}:(?<{DERIVED_PORT}>.+)$",
+                "item": f"{host}:${{{DERIVED_PORT}}}",
+            },
+        )
+    return None
+
+
+def derived_items(
+    path: tuple[str, ...], previous: Any, current: Any
+) -> list[Operation] | None:
+    if not is_sequence(previous) or not is_sequence(current):
+        return None
+    if len(current) <= len(previous) or current[: len(previous)] != previous:
+        return None
+    operations = []
+    for item in current[len(previous) :]:
+        operation = derivation_of(path, previous, item)
+        if operation is None:
+            return None
+        operations.append(operation)
+    return operations
+
+
+def scalar_text(value: Any) -> str | None:
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
+        return None
+    return str(value)
+
+
+def holds(value: Any, text: str) -> bool:
+    if isinstance(value, str):
+        return text in value
+    if is_sequence(value):
+        return any(holds(item, text) for item in value)
+    if is_mapping(value):
+        return any(holds(item, text) for item in value.values())
+    return False
+
+
+def templated(value: Any, text: str) -> Any:
+    if isinstance(value, str):
+        return value.replace(text, f"${{{DERIVED_VALUE}}}")
+    if is_sequence(value):
+        return [templated(item, text) for item in value]
+    if is_mapping(value):
+        return {key: templated(item, text) for key, item in value.items()}
+    return value
+
+
+def moved_from(previous: dict, removed: list, value: Any) -> Any | None:
+    for key in removed:
+        text = scalar_text(previous[key])
+        if (
+            text is not None
+            and len(text) >= MINIMUM_DERIVED_LENGTH
+            and holds(value, text)
+        ):
+            return key
+    return None
 
 
 def walk_mapping(
@@ -156,23 +252,30 @@ def walk_mapping(
         )
         previous = {under: previous}
 
-    for key in previous:
-        if key not in current:
-            synthesis.gaps.append(
-                Gap(
-                    leaf=render_leaf((*path, str(key))),
-                    shape="Key removed",
-                    detail=(
-                        "No operation removes a mapping key. An operation able to "
-                        "drop a key is required."
-                    ),
-                )
-            )
+    removed = [key for key in previous if key not in current]
 
     keys = list(current)
     for position, key in enumerate(keys):
         if key in previous:
             walk(synthesis, (*path, str(key)), previous[key], current[key])
+            continue
+
+        source = moved_from(previous, removed, current[key])
+        if source is not None:
+            synthesis.operations.append(
+                Operation(
+                    op="derive-sibling-if-existing",
+                    fields={
+                        "leaf": render_leaf((*path, str(source))),
+                        "pattern": f"^(?<{DERIVED_VALUE}>.+)$",
+                        "sibling": str(key),
+                        "placement": "before",
+                        "value": templated(
+                            current[key], scalar_text(previous[source]) or ""
+                        ),
+                    },
+                )
+            )
             continue
 
         anchor = anchor_of(keys, position, previous)
@@ -199,6 +302,13 @@ def walk_mapping(
                     "placement": placement,
                     "value": current[key],
                 },
+            )
+        )
+
+    for key in removed:
+        synthesis.operations.append(
+            Operation(
+                op="remove-leaf-if", fields={"leaf": render_leaf((*path, str(key)))}
             )
         )
 

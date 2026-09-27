@@ -134,3 +134,22 @@ fn kminus_reports_every_assigned_port() {
     let reported = ports_matching(&ports, ClusterProvider::Kminus.ports_to_report());
     assert_eq!(reported.len(), ports.len());
 }
+
+#[cfg(feature = "enterprise")]
+#[test]
+fn a_renamed_role_keeps_its_port() {
+    let mut ports = vec![AssignedPort {
+        role: "aiagent_public_port".to_owned(),
+        caption: "aiagent public port".to_owned(),
+        port: 3659,
+    }];
+    rename_roles(&mut ports);
+    assert_eq!(ports, assigned(&[(PortRole::AiagentPrivate, 3659)]));
+}
+
+#[test]
+fn a_current_role_is_left_alone() {
+    let mut ports = assigned(&[(PortRole::ApiserverPublic, 2457)]);
+    rename_roles(&mut ports);
+    assert_eq!(ports, assigned(&[(PortRole::ApiserverPublic, 2457)]));
+}

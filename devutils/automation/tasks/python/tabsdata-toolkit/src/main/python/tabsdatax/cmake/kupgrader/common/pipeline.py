@@ -7,10 +7,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from tabsdatax.cmake.kupgrader.common.actions import Plan, plan_bundles
-from tabsdatax.cmake.kupgrader.common.changes import Change, synthesize_plans
+from tabsdatax.cmake.kupgrader.common.changes import (
+    Change,
+    settle_forms,
+    synthesize_plans,
+    synthesize_resolved,
+)
 from tabsdatax.cmake.kupgrader.common.emission import Emission, emit
 from tabsdatax.cmake.kupgrader.common.inventory import Bundle, collect
 from tabsdatax.cmake.kupgrader.common.preparation import Preparation, prepare
+from tabsdatax.cmake.kupgrader.common.renames import read_renames
 from tabsdatax.cmake.kupgrader.common.rendering import (
     display_actions,
     display_bundles,
@@ -33,6 +39,7 @@ class Generation:
     bundles: list[Bundle]
     plans: list[Plan]
     changes: list[Change]
+    resolved: list[Change]
     emission: Emission
 
     @property
@@ -75,11 +82,17 @@ def generate(context: Context) -> Generation | None:
     display_plans(plans)
     display_actions(plans, bundles)
 
-    changes = synthesize_plans(plans)
-    display_synthesis(changes)
-    display_gaps(changes)
+    version = preparation.resolution.current
+    renames = read_renames(context.renames_file, version)
+    changes = synthesize_plans(plans, renames)
+    resolved = synthesize_resolved(bundles, renames)
+    settle_forms(plans, changes)
+    display_synthesis([*changes, *resolved])
+    display_gaps([*changes, *resolved])
 
-    failing = [change for change in changes if not change.synthesis.expressible]
+    failing = [
+        change for change in [*changes, *resolved] if not change.synthesis.expressible
+    ]
     if failing:
         log.error(
             f"{len(failing)} file(s) hold changes that no current operation can "
@@ -87,10 +100,10 @@ def generate(context: Context) -> Generation | None:
         )
         raise SystemExit(1)
 
-    version = preparation.resolution.current
     emission = emit(
         plans,
         changes,
+        resolved,
         version,
         context.generated_folder,
         shipped_spec_file(context, version),
@@ -102,5 +115,6 @@ def generate(context: Context) -> Generation | None:
         bundles=bundles,
         plans=plans,
         changes=changes,
+        resolved=resolved,
         emission=emission,
     )

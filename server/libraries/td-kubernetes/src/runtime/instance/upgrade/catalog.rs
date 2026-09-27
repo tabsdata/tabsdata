@@ -78,7 +78,8 @@ pub fn read_content(
 }
 
 fn ensure_grouping(version: &str, spec: &Spec) -> CommandResult {
-    for (family, groups) in spec.families() {
+    let resolved = ("resolved/configs", &spec.resolved.configs);
+    for (family, groups) in spec.families().into_iter().chain([resolved]) {
         for (file, group) in groups {
             for variant in group.keys() {
                 let stripped = parse_filename(variant).render_stripped();

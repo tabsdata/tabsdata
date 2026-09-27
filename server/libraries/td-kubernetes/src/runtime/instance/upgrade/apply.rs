@@ -20,8 +20,9 @@ use crate::runtime::instance::profile::resolve_foreign_path;
 use crate::runtime::instance::upgrade::catalog::read_content;
 use crate::runtime::instance::upgrade::plan::Step;
 use crate::runtime::instance::upgrade::spec::{
-    Action, InsertChildIfMissing, InsertSiblingIfExisting, ModifyLeafValueIf, ModifyTextIf,
-    NestChildrenIfFlat, Operation, Placement, Scope,
+    Action, DeriveItemIfMissing, DeriveSiblingIfExisting, InsertChildIfMissing,
+    InsertSiblingIfExisting, ModifyLeafValueIf, ModifyTextIf, NestChildrenIfFlat, Operation,
+    Placement, RemoveLeafIf, Scope,
 };
 use crate::runtime::instance::upgrade::store::Store;
 
@@ -165,7 +166,231 @@ impl Operation {
             Self::InsertSiblingIfExisting(operation) => operation.replace(version, entry, current),
             Self::InsertChildIfMissing(operation) => operation.replace(version, entry, current),
             Self::NestChildrenIfFlat(operation) => operation.replace(version, entry, current),
+            Self::DeriveItemIfMissing(operation) => operation.replace(version, entry, current),
+            Self::DeriveSiblingIfExisting(operation) => operation.replace(version, entry, current),
+            Self::RemoveLeafIf(operation) => operation.replace(version, entry, current),
         }
+    }
+}
+
+fn parse_document(version: &str, entry: &str, current: &str) -> CommandResult<serde_yaml::Value> {
+    Ok(
+        serde_yaml::from_str(current).map_err(|error| UpgradeError::ModifyParseFailed {
+            version: version.to_owned(),
+            entry: entry.to_owned(),
+            cause: error.to_string(),
+        })?,
+    )
+}
+
+fn render_document(
+    version: &str,
+    entry: &str,
+    document: &serde_yaml::Value,
+) -> CommandResult<String> {
+    Ok(
+        serde_yaml::to_string(document).map_err(|error| UpgradeError::ModifyRenderFailed {
+            version: version.to_owned(),
+            entry: entry.to_owned(),
+            cause: error.to_string(),
+        })?,
+    )
+}
+
+fn compile_pattern(version: &str, entry: &str, pattern: &str) -> CommandResult<Regex> {
+    Ok(
+        Regex::new(pattern).map_err(|error| UpgradeError::ModifyPatternInvalid {
+            version: version.to_owned(),
+            entry: entry.to_owned(),
+            pattern: pattern.to_owned(),
+            cause: error.to_string(),
+        })?,
+    )
+}
+
+fn locate<'a>(
+    document: &'a mut serde_yaml::Value,
+    leaf: &str,
+) -> Option<&'a mut serde_yaml::Value> {
+    let mut cursor = document;
+    for segment in split_leaf(leaf) {
+        cursor = cursor.get_mut(serde_yaml::Value::from(segment.as_str()))?;
+    }
+    Some(cursor)
+}
+
+fn scalar_text(value: &serde_yaml::Value) -> Option<String> {
+    match value {
+        serde_yaml::Value::String(text) => Some(text.clone()),
+        serde_yaml::Value::Number(number) => Some(number.to_string()),
+        serde_yaml::Value::Bool(flag) => Some(flag.to_string()),
+        _ => None,
+    }
+}
+
+fn render_template(template: &str, captures: &regex::Captures) -> String {
+    let reference = Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}").expect("a valid expression");
+    reference
+        .replace_all(template, |found: &regex::Captures| {
+            captures
+                .name(&found[1])
+                .map_or_else(|| found[0].to_owned(), |group| group.as_str().to_owned())
+        })
+        .into_owned()
+}
+
+fn render_value(value: &serde_yaml::Value, captures: &regex::Captures) -> serde_yaml::Value {
+    match value {
+        serde_yaml::Value::String(text) => {
+            serde_yaml::Value::String(render_template(text, captures))
+        }
+        serde_yaml::Value::Sequence(items) => serde_yaml::Value::Sequence(
+            items
+                .iter()
+                .map(|item| render_value(item, captures))
+                .collect(),
+        ),
+        serde_yaml::Value::Mapping(entries) => serde_yaml::Value::Mapping(
+            entries
+                .iter()
+                .map(|(key, item)| (key.clone(), render_value(item, captures)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+impl DeriveItemIfMissing {
+    fn replace(&self, version: &str, entry: &str, current: &str) -> CommandResult<(String, bool)> {
+        let pattern = compile_pattern(version, entry, &self.pattern)?;
+        let mut document = parse_document(version, entry, current)?;
+        if !self.derive(&pattern, &mut document) {
+            info!(
+                "Upgrade to '{version}' left '{entry}' alone; no item of '{}' matches '{}' \
+                 without its derived item.",
+                self.leaf, self.pattern
+            );
+            return Ok((current.to_owned(), false));
+        }
+        Ok((render_document(version, entry, &document)?, true))
+    }
+
+    fn derive(&self, pattern: &Regex, document: &mut serde_yaml::Value) -> bool {
+        let Some(serde_yaml::Value::Sequence(items)) = locate(document, &self.leaf) else {
+            return false;
+        };
+        let derived: Vec<(usize, serde_yaml::Value)> = items
+            .iter()
+            .enumerate()
+            .filter_map(|(position, item)| {
+                let text = scalar_text(item)?;
+                let captures = pattern.captures(&text)?;
+                Some((
+                    position,
+                    serde_yaml::Value::String(render_template(&self.item, &captures)),
+                ))
+            })
+            .collect();
+        let mut inserted = false;
+        for (position, item) in derived.into_iter().rev() {
+            if items.contains(&item) {
+                continue;
+            }
+            items.insert(position + 1, item);
+            inserted = true;
+        }
+        inserted
+    }
+}
+
+impl DeriveSiblingIfExisting {
+    fn replace(&self, version: &str, entry: &str, current: &str) -> CommandResult<(String, bool)> {
+        let pattern = compile_pattern(version, entry, &self.pattern)?;
+        let mut document = parse_document(version, entry, current)?;
+        if !self.derive(&pattern, &mut document) {
+            info!(
+                "Upgrade to '{version}' left '{entry}' alone; leaf '{}' is absent, does not \
+                 match '{}', or already has sibling '{}'.",
+                self.leaf, self.pattern, self.sibling
+            );
+            return Ok((current.to_owned(), false));
+        }
+        Ok((render_document(version, entry, &document)?, true))
+    }
+
+    fn derive(&self, pattern: &Regex, document: &mut serde_yaml::Value) -> bool {
+        let segments = split_leaf(&self.leaf);
+        let Some((anchor, parents)) = segments.split_last() else {
+            return false;
+        };
+        let mut cursor = document;
+        for segment in parents {
+            let Some(next) = cursor.get_mut(serde_yaml::Value::from(segment.as_str())) else {
+                return false;
+            };
+            cursor = next;
+        }
+        let serde_yaml::Value::Mapping(holder) = cursor else {
+            return false;
+        };
+        let anchor = serde_yaml::Value::from(anchor.as_str());
+        let sibling = serde_yaml::Value::from(self.sibling.as_str());
+        if holder.contains_key(&sibling) {
+            return false;
+        }
+        let Some(text) = holder.get(&anchor).and_then(scalar_text) else {
+            return false;
+        };
+        let Some(captures) = pattern.captures(&text) else {
+            return false;
+        };
+        let value = render_value(&self.value, &captures);
+        let mut rebuilt = serde_yaml::Mapping::with_capacity(holder.len() + 1);
+        for (key, item) in holder.iter() {
+            if *key == anchor && self.placement == Placement::Before {
+                rebuilt.insert(sibling.clone(), value.clone());
+            }
+            rebuilt.insert(key.clone(), item.clone());
+            if *key == anchor && self.placement == Placement::After {
+                rebuilt.insert(sibling.clone(), value.clone());
+            }
+        }
+        *holder = rebuilt;
+        true
+    }
+}
+
+impl RemoveLeafIf {
+    fn replace(&self, version: &str, entry: &str, current: &str) -> CommandResult<(String, bool)> {
+        let mut document = parse_document(version, entry, current)?;
+        if !self.remove(&mut document) {
+            info!(
+                "Upgrade to '{version}' left '{entry}' alone; leaf '{}' is absent.",
+                self.leaf
+            );
+            return Ok((current.to_owned(), false));
+        }
+        Ok((render_document(version, entry, &document)?, true))
+    }
+
+    fn remove(&self, document: &mut serde_yaml::Value) -> bool {
+        let segments = split_leaf(&self.leaf);
+        let Some((last, parents)) = segments.split_last() else {
+            return false;
+        };
+        let mut cursor = document;
+        for segment in parents {
+            let Some(next) = cursor.get_mut(serde_yaml::Value::from(segment.as_str())) else {
+                return false;
+            };
+            cursor = next;
+        }
+        let serde_yaml::Value::Mapping(holder) = cursor else {
+            return false;
+        };
+        holder
+            .remove(serde_yaml::Value::from(last.as_str()))
+            .is_some()
     }
 }
 

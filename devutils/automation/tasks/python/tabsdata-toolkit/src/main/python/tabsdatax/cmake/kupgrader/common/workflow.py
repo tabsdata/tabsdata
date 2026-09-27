@@ -16,6 +16,8 @@ RESOURCES_FOLDER = Path("variant") / "resources"
 KPROFILE_FOLDER = RESOURCES_FOLDER / "kprofile"
 KUPGRADE_FOLDER = RESOURCES_FOLDER / "kupgrade"
 
+RENAMES_FILE = Path("variant") / "config" / "kupgrade" / "renames.yaml"
+
 UPGRADES_FILE = KUPGRADE_FOLDER / "upgrades.yaml"
 UPGRADES_FOLDER = KUPGRADE_FOLDER / "upgrades"
 
@@ -49,6 +51,10 @@ class Context:
     @property
     def kupgrade_folder(self) -> Path:
         return self.root_folder / KUPGRADE_FOLDER
+
+    @property
+    def renames_file(self) -> Path:
+        return self.root_folder / RENAMES_FILE
 
     @property
     def upgrades_file(self) -> Path:
@@ -108,6 +114,7 @@ def display_context(context: Context) -> None:
     table.add_row("Kprofile folder", str(context.kprofile_folder))
     table.add_row("Kupgrade folder", str(context.kupgrade_folder))
     table.add_row("Upgrades file", str(context.upgrades_file))
+    table.add_row("Renames file", str(context.renames_file))
     table.add_row("Upgrades folder", str(context.upgrades_folder))
     table.add_row("Version file", str(context.version_file))
 
