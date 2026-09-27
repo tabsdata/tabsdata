@@ -159,9 +159,7 @@ class Report:
         elif self.bundled:
             lines.append(row("libraries bundled", "yes (self-contained)"))
         else:
-            lines.append(
-                row("libraries bundled", f"no ({self.bundle_skipped_reason})")
-            )
+            lines.append(row("libraries bundled", f"no ({self.bundle_skipped_reason})"))
         lines.append(
             row("version marker path", self.version_marker_path or "<not provided>")
         )
@@ -526,12 +524,18 @@ def bundle_archive(archive_path: Path, target: str, report: Report) -> None:
 
         shutil.copy2(script, work / script.name)
         command = [
-            "docker", "run", "--rm",
-            "--platform", platform,
-            "-v", f"{work}:/work",
-            "-w", "/work",
+            "docker",
+            "run",
+            "--rm",
+            "--platform",
+            platform,
+            "-v",
+            f"{work}:/work",
+            "-w",
+            "/work",
             ALMALINUX_IMAGE,
-            "sh", "-c",
+            "sh",
+            "-c",
             f"set -e; dnf install -y -q epel-release;"
             f" dnf install -y -q {BUNDLE_PACKAGES};"
             f" sh /work/{script.name} /work/{root.name}",
