@@ -43,7 +43,7 @@ test_logging = []
 test-utils = ["td-bridge/test-utils"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "td-services", "thiserror"]
+ignored = ["strum", "td-services", "thiserror"]
 
 [dependencies]
 
@@ -109,5 +109,3 @@ td-test = { workspace = true }
 
 temp-env = { workspace = true, features = ["async_closure"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

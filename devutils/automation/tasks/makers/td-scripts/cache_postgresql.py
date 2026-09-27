@@ -52,7 +52,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 THESEUS_REPOSITORY = "theseus-rs/postgresql-binaries"
 RELEASES_API = f"https://api.github.com/repos/{THESEUS_REPOSITORY}/releases/latest"
 
-PINNED_VERSION = "18.4.0"
+PINNED_VERSION = "18.6.0"
 RELEASE_DOWNLOAD = (
     f"https://github.com/{THESEUS_REPOSITORY}/releases/download"
     "/{version}/postgresql-{version}-{target}.tar.gz"

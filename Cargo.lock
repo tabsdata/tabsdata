@@ -2375,21 +2375,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
-name = "foreign-types"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1"
-dependencies = [
- "foreign-types-shared",
-]
-
-[[package]]
-name = "foreign-types-shared"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
-
-[[package]]
 name = "form_urlencoded"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6126,57 +6111,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "openssl"
-version = "0.10.81"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77823a27f0babb03091cb9ed9ef80af3b39dbc82f97e8fa530374b7dafd87a45"
-dependencies = [
- "bitflags 2.13.2",
- "cfg-if",
- "foreign-types",
- "libc",
- "openssl-macros",
- "openssl-sys",
-]
-
-[[package]]
-name = "openssl-macros"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.119",
-]
-
-[[package]]
 name = "openssl-probe"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c87def4c32ab89d880effc9e097653c8da5d6ef28e6b539d313baaacfbafcbe"
-
-[[package]]
-name = "openssl-src"
-version = "300.6.1+3.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46eb8fb9fb3b61ce1c0f8a026c4c1a0714d3a9e138e7fbde78753ce2babc3846"
-dependencies = [
- "cc",
-]
-
-[[package]]
-name = "openssl-sys"
-version = "0.9.117"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b47e7e6bb2c38cd930d25a23b40fa52e068c10e85f3e03a7f5ba5aaca5713695"
-dependencies = [
- "cc",
- "libc",
- "openssl-src",
- "pkg-config",
- "vcpkg",
-]
 
 [[package]]
 name = "opentelemetry"
@@ -7258,8 +7196,9 @@ dependencies = [
 
 [[package]]
 name = "postgresql_archive"
-version = "0.20.4"
-source = "git+https://github.com/tabsdata/postgresql-embedded.git?branch=main#ddf973fe3b2ade6e95d3bb853c02cbc17c4d02a2"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "274b4eeb875f1196cc577a69b17c3018a3b189d4017122648b1465066b8b08c1"
 dependencies = [
  "async-trait",
  "flate2",
@@ -7270,6 +7209,7 @@ dependencies = [
  "reqwest-middleware",
  "reqwest-retry",
  "reqwest-tracing",
+ "rustls",
  "semver",
  "serde",
  "serde_json",
@@ -7283,8 +7223,9 @@ dependencies = [
 
 [[package]]
 name = "postgresql_commands"
-version = "0.20.4"
-source = "git+https://github.com/tabsdata/postgresql-embedded.git?branch=main#ddf973fe3b2ade6e95d3bb853c02cbc17c4d02a2"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66e1f10f6246287203d57775b1be7a9050c6d3f45c9021853eda3cfee3bf95e9"
 dependencies = [
  "tokio",
  "tracing",
@@ -7292,8 +7233,9 @@ dependencies = [
 
 [[package]]
 name = "postgresql_embedded"
-version = "0.20.4"
-source = "git+https://github.com/tabsdata/postgresql-embedded.git?branch=main#ddf973fe3b2ade6e95d3bb853c02cbc17c4d02a2"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87673b35bc80ddcc8eb54072d90290c6d2e3777493fd2d0de46cf2e0d6677fe5"
 dependencies = [
  "anyhow",
  "postgresql_archive",
@@ -9377,7 +9319,6 @@ dependencies = [
  "axum",
  "http",
  "inventory",
- "openssl",
  "serde",
  "serde_json",
  "strum 0.28.0",
@@ -9399,7 +9340,6 @@ version = "2.2.0"
 dependencies = [
  "chrono",
  "inventory",
- "openssl",
  "paste",
  "regex",
  "sea-query",
@@ -9424,7 +9364,6 @@ dependencies = [
 name = "ta-services"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "serde",
  "strum 0.28.0",
  "ta-services",
@@ -9440,7 +9379,6 @@ dependencies = [
 name = "ta-system"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "ta-system",
  "td-build",
 ]
@@ -9449,7 +9387,6 @@ dependencies = [
 name = "ta-tableframe"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "ta-tableframe",
  "td-build",
  "td-common",
@@ -9486,7 +9423,6 @@ dependencies = [
 name = "tabsdata"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "td-apiserver",
  "td-build",
  "te-system",
@@ -9515,7 +9451,6 @@ name = "td-apiforge"
 version = "2.2.0"
 dependencies = [
  "darling 0.23.0",
- "openssl",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -9540,7 +9475,6 @@ dependencies = [
  "http",
  "itertools 0.14.0",
  "nonempty",
- "openssl",
  "reqwest 0.13.5",
  "serde",
  "serde_json",
@@ -9586,7 +9520,6 @@ name = "td-attach"
 version = "2.2.0"
 dependencies = [
  "darling 0.23.0",
- "openssl",
  "proc-macro-crate",
  "proc-macro2",
  "quote",
@@ -9598,7 +9531,6 @@ name = "td-authz"
 version = "2.2.0"
 dependencies = [
  "chrono",
- "openssl",
  "strum 0.28.0",
  "td-authz",
  "td-common",
@@ -9623,7 +9555,6 @@ dependencies = [
  "futures",
  "glob",
  "http",
- "openssl",
  "pico-args",
  "regex",
  "serde",
@@ -9649,7 +9580,6 @@ dependencies = [
  "gix 0.83.0",
  "hostname",
  "iana-time-zone",
- "openssl",
  "serde",
  "serde_yaml 0.9.34+deprecated",
  "sysinfo 0.38.4",
@@ -9680,7 +9610,6 @@ dependencies = [
  "libc",
  "nix 0.31.3",
  "once_cell",
- "openssl",
  "opentelemetry-stdout",
  "opentelemetry_sdk",
  "pico-args",
@@ -9726,7 +9655,6 @@ dependencies = [
  "chrono",
  "croner",
  "http",
- "openssl",
  "reqwest 0.13.5",
  "serde",
  "serde_json",
@@ -9752,7 +9680,6 @@ dependencies = [
  "async-trait",
  "futures-util",
  "inventory",
- "openssl",
  "postgresql_embedded",
  "sea-query",
  "sea-query-sqlx",
@@ -9782,7 +9709,6 @@ dependencies = [
  "anyhow",
  "derive_builder",
  "itertools 0.14.0",
- "openssl",
  "strum 0.28.0",
  "td-build",
  "td-error",
@@ -9797,7 +9723,6 @@ version = "2.2.0"
 dependencies = [
  "derive_builder",
  "itertools 0.14.0",
- "openssl",
  "petgraph",
  "serde",
  "strum 0.28.0",
@@ -9839,7 +9764,6 @@ dependencies = [
  "kube",
  "libc",
  "once_cell",
- "openssl",
  "pep440_rs",
  "pep508_rs",
  "reedline",
@@ -9893,7 +9817,6 @@ dependencies = [
  "http",
  "itertools 0.14.0",
  "nonempty",
- "openssl",
  "petgraph",
  "polars",
  "regex",
@@ -9931,7 +9854,6 @@ dependencies = [
  "ignore",
  "indexmap 2.14.2",
  "num-format",
- "openssl",
  "serde",
  "serde_yaml 0.9.34+deprecated",
  "strum 0.28.0",
@@ -9955,7 +9877,6 @@ dependencies = [
 name = "td-python"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "rand 0.10.3",
  "semver",
  "strum 0.28.0",
@@ -9974,7 +9895,6 @@ name = "td-queries"
 version = "2.2.0"
 dependencies = [
  "chrono",
- "openssl",
  "regex",
  "sea-query",
  "serde",
@@ -10002,7 +9922,6 @@ dependencies = [
 name = "td-schema"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "sea-query",
  "strum 0.28.0",
  "td-common",
@@ -10018,7 +9937,6 @@ dependencies = [
  "argon2",
  "derive_builder",
  "getset",
- "openssl",
  "serde",
  "td-security",
 ]
@@ -10028,7 +9946,6 @@ name = "td-server"
 version = "2.2.0"
 dependencies = [
  "clap 4.6.7",
- "openssl",
  "path-slash",
  "serde",
  "serde_json",
@@ -10066,7 +9983,6 @@ dependencies = [
  "hex",
  "http",
  "itertools 0.14.0",
- "openssl",
  "petgraph",
  "polars",
  "sea-query",
@@ -10124,7 +10040,6 @@ dependencies = [
  "libflate",
  "liblzma-sys",
  "object_store",
- "openssl",
  "parquet",
  "pin-project-lite",
  "polars",
@@ -10165,7 +10080,6 @@ dependencies = [
  "futures-util",
  "itertools 0.14.0",
  "object_store",
- "openssl",
  "regex",
  "serde",
  "serde_json",
@@ -10206,7 +10120,6 @@ dependencies = [
  "linemux",
  "netstat2",
  "num-format",
- "openssl",
  "path-slash",
  "regex",
  "reqwest 0.13.5",
@@ -10243,7 +10156,6 @@ dependencies = [
 name = "td-tableframe"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "polars",
  "ta-tableframe",
  "td-build",
@@ -10261,7 +10173,6 @@ dependencies = [
  "hex",
  "homedir",
  "object_store",
- "openssl",
  "ring",
  "serde",
  "serde_json",
@@ -10292,7 +10203,6 @@ version = "2.2.0"
 dependencies = [
  "clap 4.6.7",
  "getset",
- "openssl",
  "serde",
  "ta-services",
  "td-build",
@@ -10304,7 +10214,6 @@ dependencies = [
 name = "te-authz"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "strum 0.28.0",
  "td-authz",
  "td-database",
@@ -10327,7 +10236,6 @@ dependencies = [
 name = "te-execution"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "serde",
  "strum 0.28.0",
  "td-database",
@@ -10344,7 +10252,6 @@ dependencies = [
 name = "te-services"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "td-build",
  "td-database",
  "td-error",
@@ -10355,7 +10262,6 @@ dependencies = [
 name = "te-system"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "ta-system",
  "td-build",
  "te-system",
@@ -10365,7 +10271,6 @@ dependencies = [
 name = "te-tableframe"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "ta-tableframe",
  "te-tableframe",
 ]
@@ -10566,7 +10471,6 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 name = "tm-error"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "quote",
  "syn 2.0.119",
 ]
@@ -10577,7 +10481,6 @@ version = "2.2.0"
 dependencies = [
  "darling 0.23.0",
  "heck 0.5.0",
- "openssl",
  "proc-macro2",
  "quote",
  "regex",
@@ -10588,7 +10491,6 @@ dependencies = [
 name = "tm-services"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -10599,7 +10501,6 @@ name = "tm-test"
 version = "2.2.0"
 dependencies = [
  "darling 0.23.0",
- "openssl",
  "proc-macro2",
  "quote",
  "syn 2.0.119",
@@ -10609,7 +10510,6 @@ dependencies = [
 name = "tm-workspace"
 version = "2.2.0"
 dependencies = [
- "openssl",
  "quote",
  "rand 0.10.3",
  "serde",

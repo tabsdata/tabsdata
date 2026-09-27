@@ -41,7 +41,7 @@ dummy = []
 extension-module = ["pyo3/extension-module"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "td-common", "td-error", "ta-tableframe", "te-tableframe", "toml", "polars", "polars-arrow", "polars-mem-engine", "polars-plan", "rayon", "tracing"]
+ignored = ["td-build", "td-common", "td-error", "ta-tableframe", "te-tableframe", "toml", "polars", "polars-arrow", "polars-mem-engine", "polars-plan", "rayon", "tracing"]
 
 # Build dependencies
 
@@ -75,5 +75,3 @@ rayon = { workspace = true }
 tracing = { workspace = true }
 
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

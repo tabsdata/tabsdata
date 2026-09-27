@@ -103,7 +103,7 @@ test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "paste", "td-server", "toml", "utoipa", "utoipa-axum", "windows"]
+ignored = ["paste", "td-server", "toml", "utoipa", "utoipa-axum", "windows"]
 
 # Build dependencies
 
@@ -151,8 +151,6 @@ tracing = { workspace = true }
 [dev-dependencies]
 td-server = { workspace = true, features = ["td-test"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_Security", "Win32_System_Threading"] }

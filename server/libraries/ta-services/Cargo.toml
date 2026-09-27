@@ -32,7 +32,7 @@ test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "ta-services", "thiserror"]
+ignored = ["strum", "ta-services", "thiserror"]
 
 # Build dependencies
 
@@ -69,5 +69,3 @@ utoipa = { workspace = true }
 ta-services = { workspace = true, features = ["td-test"] }
 tokio = { workspace = true, features = ["full"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

@@ -35,7 +35,7 @@ test-utils = []
 tokio_console = ["console-subscriber"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-common", "tm-workspace", "toml"]
+ignored = ["td-common", "tm-workspace", "toml"]
 
 # Build dependencies
 
@@ -111,8 +111,6 @@ whoami = { workspace = true }
 [dev-dependencies]
 td-common = { workspace = true, features = ["td-test"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = ["Win32", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_Security", "Win32_System_Threading"] }

@@ -33,7 +33,7 @@ test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "ta-tableframe", "td-build", "td-common", "toml"]
+ignored = ["ta-tableframe", "td-build", "td-common", "toml"]
 
 # Build dependencies
 
@@ -60,5 +60,3 @@ td-common = { workspace = true }
 [dev-dependencies]
 ta-tableframe = { workspace = true, features = ["td-test"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

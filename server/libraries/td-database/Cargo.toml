@@ -44,7 +44,7 @@ test-utils = []
 embedded-postgres = ["dep:postgresql_embedded"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "td-build", "td-database", "thiserror", "toml"]
+ignored = ["strum", "td-build", "td-database", "thiserror", "toml"]
 
 # Build dependencies
 
@@ -92,5 +92,3 @@ serde_yaml = { workspace = true }
 serial_test = { workspace = true }
 td-database = { workspace = true, features = ["td-test"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

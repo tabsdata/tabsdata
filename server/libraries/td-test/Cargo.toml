@@ -38,7 +38,7 @@ test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "td-schema", "toml"]
+ignored = ["td-build", "td-schema", "toml"]
 
 # Build dependencies
 
@@ -81,5 +81,3 @@ uuid = { workspace = true, features = ["v4"] }
 td-test = { workspace = true, features = ["td-test"] }
 temp-env = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

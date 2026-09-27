@@ -33,7 +33,7 @@ mock-env = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "te-execution", "tokio"]
+ignored = ["te-execution", "tokio"]
 
 [dependencies]
 
@@ -61,5 +61,3 @@ te-execution = { workspace = true, features = ["td-test"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

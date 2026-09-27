@@ -36,7 +36,7 @@ test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "strum", "td-execution", "thiserror"]
+ignored = ["strum", "td-execution", "thiserror"]
 
 # Build dependencies
 
@@ -77,5 +77,3 @@ tracing = { workspace = true }
 td-execution = { workspace = true, features = ["td-test"] }
 td-test = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

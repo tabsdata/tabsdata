@@ -20,7 +20,7 @@ version = { workspace = true }
 [lib]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "tinyvec"]
+ignored = ["tinyvec"]
 
 [features]
 enterprise = []
@@ -50,8 +50,6 @@ tinyvec = { workspace = true }
 toml = { workspace = true }
 vergen-gix = { workspace = true, features = ["build", "cargo", "emit_and_set", "rustc", "si"] }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }
 
 [build-dependencies]
 tm-workspace = { workspace = true }

@@ -79,6 +79,8 @@ deny = [
         "wiremock",
         "zopfli"] },
     { crate = "testdir", reason = "Use 'td_common::testdir::tdtestdir!()' macro instead — testdir's global numbered-dir cleanup races under nextest, deleting dirs still in use" },
+    { crate = "openssl", reason = "Use rustls instead — openssl needs a C toolchain and system libs per target, which is what pins Linux builds to a container. Portable builds link no OpenSSL at all" },
+    { crate = "openssl-sys", reason = "Native OpenSSL bindings — see the 'openssl' entry" },
 ]
 
 [licenses]

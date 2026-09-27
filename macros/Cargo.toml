@@ -75,7 +75,7 @@ panic = "abort"
 strip = "debuginfo"
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "ta-tableframe", "toml"]
+ignored = ["ta-tableframe", "toml"]
 
 [features]
 
@@ -96,10 +96,6 @@ version = "0.23.0"
 
 [workspace.dependencies.heck]
 version = "0.5.0"
-
-[workspace.dependencies.openssl]
-version = "0.10.76"
-features = ["vendored"]
 
 [workspace.dependencies.proc-macro-crate]
 version = "3.5.0"
@@ -146,5 +142,3 @@ td-build = { workspace = true }
 
 # External dependencies
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

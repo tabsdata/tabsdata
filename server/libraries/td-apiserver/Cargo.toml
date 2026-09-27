@@ -56,7 +56,7 @@ test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-apiserver"]
+ignored = ["td-apiserver"]
 
 # Build dependencies
 
@@ -136,5 +136,3 @@ td-test = { workspace = true }
 config = { workspace = true, features = ["yaml"] }
 tracing-subscriber = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

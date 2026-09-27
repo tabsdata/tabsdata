@@ -34,7 +34,7 @@ test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "regex", "strum", "td-build", "thiserror"]
+ignored = ["regex", "strum", "td-build", "thiserror"]
 
 # Build dependencies
 
@@ -82,5 +82,3 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }

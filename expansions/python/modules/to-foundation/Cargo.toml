@@ -43,7 +43,7 @@ dummy = []
 extension-module = ["pyo3/extension-module"]
 
 [package.metadata.cargo-machete]
-ignored = ["openssl", "td-build", "td-error", "td-common", "toml"]
+ignored = ["td-build", "td-error", "td-common", "toml"]
 
 # Build dependencies
 
@@ -73,5 +73,3 @@ pyo3-stub-gen = { workspace = true }
 tracing = { workspace = true }
 
 
-[target.'cfg(target_os = "linux")'.dependencies]
-openssl = { workspace = true, features = ["vendored"] }
