@@ -17,8 +17,6 @@ from tabsdatax.cmake.kupgrader.common.versions import (
 )
 from tabsdatax.cmake.kupgrader.common.workflow import Context
 
-PATCHES_FOLDER = "patches"
-
 
 class TemplatesError(KupgraderError):
     pass
@@ -46,62 +44,56 @@ def run_upgrader(binary: Path, arguments: list[str]) -> dict:
     return json.loads(completed.stdout)
 
 
-def patch_file(context: Context, version: str) -> Path:
-    return context.templates_folder / PATCHES_FOLDER / f"{version}.patch"
-
-
-def apply_patch(kprofile_folder: Path, patch: Path) -> None:
-    """A release whose package differs from its tag gets that difference as a
-    patch, so its templates hold what was really published."""
-    completed = subprocess.run(
-        ["git", "apply", "--unsafe-paths", "-p1", str(patch)],
-        cwd=kprofile_folder,
-        capture_output=True,
-        text=True,
-    )
-    if completed.returncode != 0:
-        raise TemplatesError(
-            f"The patch '{patch}' does not apply to '{kprofile_folder}': "
-            f"{completed.stderr.strip()[:400]}"
-        )
-
-
 def mismatches_of(report: dict) -> list[Mismatch]:
     return [Mismatch(**mismatch) for mismatch in report.get("mismatches", [])]
 
 
-def version_templates(
-    binary: Path, kprofile_folder: Path, context: Context, version: str, write: bool
-) -> list[Mismatch]:
-    arguments = [
-        "templates",
-        "--kprofile",
-        str(kprofile_folder),
-        "--templates",
-        str(context.templates_folder),
-        "--version",
-        version,
+def repository_arguments(context: Context, kupgrade_folder: Path) -> list[str]:
+    return [
+        "--repository",
+        str(context.root_folder),
+        "--kupgrade",
+        str(kupgrade_folder),
     ]
-    if write:
-        arguments.append("--write")
-    return mismatches_of(run_upgrader(binary, arguments))
 
 
-def replay(binary: Path, kupgrade_folder: Path, context: Context) -> list[Mismatch]:
+def replay(binary: Path, context: Context, kupgrade_folder: Path) -> list[Mismatch]:
     return mismatches_of(
         run_upgrader(
             binary,
             [
                 "replay",
-                "--kupgrade",
-                str(kupgrade_folder),
-                "--templates",
-                str(context.templates_folder),
+                *repository_arguments(context, kupgrade_folder),
                 "--diverged",
                 str(context.diverged_folder),
             ],
         )
     )
+
+
+def digests(
+    binary: Path, context: Context, kupgrade_folder: Path, record: bool
+) -> tuple[int, list[Mismatch]]:
+    arguments = ["digests", *repository_arguments(context, kupgrade_folder)]
+    if record:
+        arguments.append("--record")
+    report = run_upgrader(binary, arguments)
+    return report.get("recorded", 0), mismatches_of(report)
+
+
+def materialize(binary: Path, context: Context, output_folder: Path) -> Path:
+    if output_folder.exists():
+        shutil.rmtree(output_folder)
+    report = run_upgrader(
+        binary,
+        [
+            "templates",
+            *repository_arguments(context, context.kupgrade_folder),
+            "--output",
+            str(output_folder),
+        ],
+    )
+    return Path(report["folder"])
 
 
 def stage_kupgrade(

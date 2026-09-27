@@ -236,4 +236,23 @@ pub enum UpgradeError {
         entry: String,
         path: String,
     } = 5358,
+    #[error(
+        "Could not read the kprofile of tag '{tag}' from '{repository}': {cause}. Every \
+         released version needs its tag; fetch them with 'git fetch --tags'."
+    )]
+    TagKprofileReadFailed {
+        repository: String,
+        tag: String,
+        cause: String,
+    } = 5359,
+    #[error("The patch '{patch}' does not apply to the kprofile of tag '{tag}': {cause}.")]
+    PatchApplyFailed {
+        patch: String,
+        tag: String,
+        cause: String,
+    } = 5360,
+    #[error("Could not read the template digests at '{path}': {cause}.")]
+    DigestsReadFailed { path: String, cause: String } = 5361,
+    #[error("Could not write the template digests at '{path}': {cause}.")]
+    DigestsWriteFailed { path: String, cause: String } = 5362,
 }

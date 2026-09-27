@@ -18,9 +18,9 @@ from tabsdatax.cmake.kupgrader.common.rendering import (
     display_verification,
 )
 from tabsdatax.cmake.kupgrader.common.templates import (
+    digests,
     replay,
     stage_kupgrade,
-    version_templates,
 )
 from tabsdatax.cmake.kupgrader.common.verification import locate_binary, verify
 from tabsdatax.cmake.kupgrader.common.versions import with_upgrader, write_inventory
@@ -56,19 +56,25 @@ def perform_build(root_folder: Path) -> None:
         raise SystemExit(1)
 
     binary = locate_binary(context.root_folder)
-    version_templates(
-        binary, context.kprofile_folder, context, generation.version, write=True
-    )
     staged = stage_kupgrade(
         context, generation.emission, generation.preparation.resolution
     )
-    diverged = replay(binary, staged, context)
+    diverged = replay(binary, context, staged)
     display_template_mismatches("Replay Mismatches", diverged)
     if diverged:
         log.error(
             f"Upgrading the templates hop by hop does not reproduce the templates of "
             f"every version up to '{generation.version}'. The diverging outcomes are "
-            f"kept in {context.diverged_folder}. Only the head templates were written."
+            f"kept in {context.diverged_folder}. Nothing was written to the repository."
+        )
+        raise SystemExit(1)
+
+    recorded, drifted = digests(binary, context, staged, record=True)
+    display_template_mismatches("Template Digest Mismatches", drifted)
+    if drifted:
+        log.error(
+            "Released templates no longer resolve as their recorded digests say. "
+            "Explain the drift before touching the digests."
         )
         raise SystemExit(1)
 
@@ -81,9 +87,8 @@ def perform_build(root_folder: Path) -> None:
 
     log.info(
         f"Wrote the upgrader of version '{generation.version}' to {spec_file} and "
-        f"{content_folder}, declared it in {context.upgrades_file}, and refreshed "
-        f"the templates of version '{generation.version}' in "
-        f"{context.templates_folder}."
+        f"{content_folder}, declared it in {context.upgrades_file}, and recorded "
+        f"{recorded} new template digest(s)."
     )
 
 

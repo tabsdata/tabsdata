@@ -1730,7 +1730,7 @@ run_task = [
 [tasks.upgrader]
 plugin = "td-task-tracker"
 category = "05 - Inspect"
-description = "Task 'upgrader' to check or build the kupgrade upgraders, or compare or rewrite their templates"
+description = "Task 'upgrader' to check or build the kupgrade upgraders, or write the templates they are verified against"
 run_task = [
     { name = [
         "__os__upgrader"

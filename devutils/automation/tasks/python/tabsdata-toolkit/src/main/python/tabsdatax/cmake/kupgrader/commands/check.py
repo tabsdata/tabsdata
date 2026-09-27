@@ -19,7 +19,7 @@ from tabsdatax.cmake.kupgrader.common.rendering import (
     display_template_mismatches,
     display_verification,
 )
-from tabsdatax.cmake.kupgrader.common.templates import replay, version_templates
+from tabsdatax.cmake.kupgrader.common.templates import digests, replay
 from tabsdatax.cmake.kupgrader.common.verification import locate_binary, verify
 from tabsdatax.cmake.kupgrader.common.versions import declares_upgrader
 from tabsdatax.cmake.kupgrader.common.workflow import context_of, display_context
@@ -81,18 +81,15 @@ def perform_check(root_folder: Path) -> None:
         raise SystemExit(1)
 
     binary = locate_binary(context.root_folder)
-    stale = version_templates(
-        binary, context.kprofile_folder, context, generation.version, write=False
-    )
-    display_template_mismatches("Stale Head Templates", stale)
-    diverged = replay(binary, context.kupgrade_folder, context)
+    _, drifted = digests(binary, context, context.kupgrade_folder, record=False)
+    display_template_mismatches("Template Digest Mismatches", drifted)
+    diverged = replay(binary, context, context.kupgrade_folder)
     display_template_mismatches("Replay Mismatches", diverged)
-    if stale or diverged:
+    if drifted or diverged:
         log.error(
-            f"The templates of version '{generation.version}' are stale or the shipped "
-            "upgraders do not reproduce every version's templates. Run 'cargo make "
-            f"upgrader build' to regenerate them; diverging outcomes are kept in "
-            f"{context.diverged_folder}."
+            "Released templates no longer resolve as their recorded digests say, or "
+            "the shipped upgraders do not reproduce every version's templates; "
+            f"diverging outcomes are kept in {context.diverged_folder}."
         )
         raise SystemExit(1)
 

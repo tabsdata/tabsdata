@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.table import Table
 
 from tabsdatax.cmake.kupgrader.common.sources import (
+    apply_published_patch,
     copy_kprofile,
     extract_kprofile,
     reset_folder,
@@ -115,6 +116,7 @@ def prepare(context: Context) -> Preparation | None:
     previous_kprofile_folder = extract_kprofile(
         context.root_folder, previous, context.previous_folder
     )
+    apply_published_patch(context.root_folder, previous, previous_kprofile_folder)
     current_kprofile_folder = copy_kprofile(context.root_folder, context.current_folder)
 
     preparation = Preparation(

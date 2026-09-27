@@ -39,7 +39,7 @@ def main() -> None:
     \b
     The `check` command verifies the shipped upgrader is correct and complete.
     The `build` command regenerates the upgrader and verifies its outcome.
-    The `templates` command compares, or rewrites, the upgrade templates.
+    The `templates` command writes the templates of every version.
     """
 
 

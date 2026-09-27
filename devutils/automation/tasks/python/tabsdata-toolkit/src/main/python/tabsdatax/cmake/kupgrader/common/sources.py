@@ -3,6 +3,7 @@
 #
 
 import shutil
+import subprocess
 from pathlib import Path
 
 from git import BadName, InvalidGitRepositoryError, NoSuchPathError, Repo
@@ -10,6 +11,7 @@ from git import BadName, InvalidGitRepositoryError, NoSuchPathError, Repo
 from tabsdatax.cmake.kupgrader.common.errors import KupgraderError
 
 KPROFILE_SUBPATH = Path("variant") / "resources" / "kprofile"
+PATCHES_SUBPATH = Path("variant") / "config" / "kupgrade" / "patches"
 
 
 class SourceError(KupgraderError):
@@ -64,6 +66,23 @@ def extract_kprofile(root_folder: Path, tag: str, target_folder: Path) -> Path:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(blob.data_stream.read())
     return target_folder
+
+
+def apply_published_patch(root_folder: Path, tag: str, kprofile_folder: Path) -> None:
+    patch = root_folder / PATCHES_SUBPATH / f"{tag}.patch"
+    if not patch.is_file():
+        return
+    completed = subprocess.run(
+        ["git", "apply", "--unsafe-paths", "-p1", str(patch)],
+        cwd=kprofile_folder,
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise SourceError(
+            f"The patch '{patch}' does not apply to the kprofile of tag '{tag}': "
+            f"{completed.stderr.strip()[:400]}"
+        )
 
 
 def copy_kprofile(root_folder: Path, target_folder: Path) -> Path:

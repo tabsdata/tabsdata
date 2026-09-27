@@ -16,8 +16,6 @@ RESOURCES_FOLDER = Path("variant") / "resources"
 KPROFILE_FOLDER = RESOURCES_FOLDER / "kprofile"
 KUPGRADE_FOLDER = RESOURCES_FOLDER / "kupgrade"
 
-TEMPLATES_FOLDER = Path("variant") / "config" / "kupgrade"
-
 UPGRADES_FILE = KUPGRADE_FOLDER / "upgrades.yaml"
 UPGRADES_FOLDER = KUPGRADE_FOLDER / "upgrades"
 
@@ -53,10 +51,6 @@ class Context:
         return self.root_folder / KUPGRADE_FOLDER
 
     @property
-    def templates_folder(self) -> Path:
-        return self.root_folder / TEMPLATES_FOLDER
-
-    @property
     def upgrades_file(self) -> Path:
         return self.root_folder / UPGRADES_FILE
 
@@ -85,6 +79,10 @@ class Context:
         return self.work_folder / "upgraded"
 
     @property
+    def resolved_folder(self) -> Path:
+        return self.work_folder / "resolved"
+
+    @property
     def diverged_folder(self) -> Path:
         return self.work_folder / "replay" / "diverged"
 
@@ -109,7 +107,6 @@ def display_context(context: Context) -> None:
     table.add_row("Work folder", str(context.work_folder))
     table.add_row("Kprofile folder", str(context.kprofile_folder))
     table.add_row("Kupgrade folder", str(context.kupgrade_folder))
-    table.add_row("Templates folder", str(context.templates_folder))
     table.add_row("Upgrades file", str(context.upgrades_file))
     table.add_row("Upgrades folder", str(context.upgrades_folder))
     table.add_row("Version file", str(context.version_file))
