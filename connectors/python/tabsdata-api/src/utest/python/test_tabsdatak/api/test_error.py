@@ -34,11 +34,12 @@ class _SpecimenCode(ErrorCode):
     INTERNAL = ErrorDef(ApiInternalException, "Thing {name}, missing resolution")
 
 
-# `_capture_user_source` reports the frame filename verbatim, which is the
-# path the module was loaded under -- not a symlink-resolved one. `tabsdata-ee`
-# reaches this tree through a committed symlink, so resolving here would yield
-# the os path and never match the captured ee one.
-_THIS_FILE = str(pathlib.Path(__file__))
+# `_capture_user_source` reports the frame's `co_filename`, fixed when the
+# module was compiled, while `__file__` is the path it was loaded under.
+# `tabsdata-ee` reaches this tree through a committed symlink, so both roots
+# share one `__pycache__` and a run from either can see a filename rooted at
+# the other. Only the basename is stable.
+_THIS_FILE = pathlib.Path(__file__).name
 
 # ---------------------------------------------------------------------------
 # 1. ``ErrorCodeMeta`` invariants
