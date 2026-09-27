@@ -198,7 +198,7 @@ jobs:
     needs:
       - cap-job
       - describe-job
-    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@main
+    uses: tabsdata/tabsdata-ci/.github/workflows/make.yml@2.2.0
     secrets:
       ANTHROPIC__API_KEY: ${{ secrets.ANTHROPIC__API_KEY }}
       AZ0__AZ_ACCOUNT_KEY: ${{ secrets.AZ0__AZ_ACCOUNT_KEY }}

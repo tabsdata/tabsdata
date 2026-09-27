@@ -267,8 +267,6 @@ mod tests {
     use nonempty::nonempty;
     use reqwest::Client;
     use std::net::{Ipv4Addr, SocketAddr};
-    const TD_CROSS_BUILD: &str = "TD_CROSS_BUILD";
-    use td_common::env::check_flag_env;
 
     use td_objects::types::addresses::NonEmptyAddresses;
     use tokio::fs;
@@ -437,13 +435,6 @@ vRcg70teydPmY1fiAURFk3gl/g==
         eprintln!("Builder is {builder:?}");
         let config = builder.load_tls().await;
         eprintln!("Config is {config:?}");
-        if check_flag_env(TD_CROSS_BUILD) {
-            eprintln!("Identified a cross runtime.");
-            eprintln!("Skipping tls load validation as execution runtime is cross.");
-        } else {
-            eprintln!("Identified a non-cross runtime.");
-            eprintln!("Proceeding the run tls load validation.");
-            assert!(config.is_some());
-        }
+        assert!(config.is_some());
     }
 }

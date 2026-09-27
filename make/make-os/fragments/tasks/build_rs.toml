@@ -24,8 +24,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --all-features --lib --bins --examples
 
     td_check_build_folder = set ${td-profile}
     is_dev = eq ${td_check_build_folder} "dev"
@@ -70,8 +70,8 @@ script = [
         info "   <cache folder does not exist>"
     end
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --all-features --lib --bins --examples
 
     info "♻️ PostgreSQL cache contents after build: ${postgresql_cache_folder}"
     postgresql_cache_exists = is_path_exists ${postgresql_cache_folder}
@@ -134,8 +134,8 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_MACROS_CARGO_TOML} --lib --bins
 
     td_check_build_folder = set ${td-profile}
     is_dev = eq ${td_check_build_folder} "dev"
@@ -180,8 +180,8 @@ script = [
         info "   <cache folder does not exist>"
     end
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --lib --bins
 
     info "♻️ PostgreSQL cache contents after build: ${postgresql_cache_folder}"
     postgresql_cache_exists = is_path_exists ${postgresql_cache_folder}
@@ -686,47 +686,9 @@ script = [
 
     cd "${PROJECT_RS_TO_FOUNDATION_FOLDER}"
 
-    td_target = get_env TD_TARGET
-    is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
-    is_aarch64-unknown-linux-musl = eq ${td_target} "aarch64-unknown-linux-musl"
-    if ${is_x86_64-unknown-linux-musl}
-        td_docker_platform = set "linux/amd64"
-        td_manylinux_image = set "quay.io/pypa/manylinux2014_x86_64"
-    else
-        td_docker_platform = set "linux/arm64"
-        td_manylinux_image = set "quay.io/pypa/manylinux2014_aarch64"
-    end
-    if ${is_x86_64-unknown-linux-musl} or ${is_aarch64-unknown-linux-musl}
-        debug "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
-        cd ${PROJECT_TABSDATA_ROOT_FOLDER}
-
-        td_profile = set ${td-profile}
-        td_rust_quiet = set ${td-rust-quiet}
-
-        debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc ..."
-        td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
-        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.98.1"
-        td_script = set "${td_script} && . $HOME/.cargo/env"
-        td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
-        td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.15.0 --root-user-action=ignore"
-        td_script = set "${td_script} && export OPENSSL_STATIC=1"
-        td_script = set "${td_script} && export PKG_CONFIG_ALL_STATIC=1"
-        td_script = set "${td_script} && export ZLIB_STATIC=1"
-        td_script = set "${td_script} && export RUSTFLAGS='-C link-arg=-static-libgcc -C link-arg=-static-libstdc++'"
-        td_script = set "${td_script} && python3.12 --version"
-        td_script = set "${td_script} && python3.12 -m pip --version"
-        td_script = set "${td_script} && rustc --version"
-        td_script = set "${td_script} && cargo --version"
-        td_script = set "${td_script} && python3.12 -m maturin --version"
-        td_script = set "${td_script} && patchelf --version"
-        td_script = set "${td_script} && python3.12 -m maturin build ${td_rust_quiet} --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/python/modules/to-foundation/Cargo.toml --features extension-module"
-        exec --fail-on-error docker run --platform ${td_docker_platform} --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc "${td_script}"
-
-        debug "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER}/target"
-        exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_RS_TO_EXPANSIONS_PYTHON_FOLDER}/target
-
-        debug "🚀 cd ${PROJECT_RS_TO_FOUNDATION_FOLDER}"
-        cd "${PROJECT_RS_TO_FOUNDATION_FOLDER}"
+    if eq ${TD_PORTABLE_LINUX} "true"
+        debug "🚀 maturin build %{td-rust-quiet} --locked --zig %{td-target-token} %{td-target} --compatibility ${td-manylinux-tag} --profile ${td-profile} --features extension-module"
+        exec --fail-on-error maturin build %{td-rust-quiet} --locked --zig %{td-target-token} %{td-target} --compatibility ${td-manylinux-tag} --profile ${td-profile} --features extension-module
     else
         debug "🚀 maturin build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module"
         exec --fail-on-error maturin build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
@@ -834,47 +796,9 @@ script = [
 
     cd "${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
 
-    td_target = get_env TD_TARGET
-    is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
-    is_aarch64-unknown-linux-musl = eq ${td_target} "aarch64-unknown-linux-musl"
-    if ${is_x86_64-unknown-linux-musl}
-        td_docker_platform = set "linux/amd64"
-        td_manylinux_image = set "quay.io/pypa/manylinux2014_x86_64"
-    else
-        td_docker_platform = set "linux/arm64"
-        td_manylinux_image = set "quay.io/pypa/manylinux2014_aarch64"
-    end
-    if ${is_x86_64-unknown-linux-musl} or ${is_aarch64-unknown-linux-musl}
-        debug "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
-        cd ${PROJECT_TABSDATA_ROOT_FOLDER}
-
-        td_profile = set ${td-profile}
-        td_rust_quiet = set ${td-rust-quiet}
-
-        debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc ..."
-        td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
-        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.98.1"
-        td_script = set "${td_script} && . $HOME/.cargo/env"
-        td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
-        td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.15.0 --root-user-action=ignore"
-        td_script = set "${td_script} && export OPENSSL_STATIC=1"
-        td_script = set "${td_script} && export PKG_CONFIG_ALL_STATIC=1"
-        td_script = set "${td_script} && export ZLIB_STATIC=1"
-        td_script = set "${td_script} && export RUSTFLAGS='-C link-arg=-static-libgcc -C link-arg=-static-libstdc++'"
-        td_script = set "${td_script} && python3.12 --version"
-        td_script = set "${td_script} && python3.12 -m pip --version"
-        td_script = set "${td_script} && rustc --version"
-        td_script = set "${td_script} && cargo --version"
-        td_script = set "${td_script} && python3.12 -m maturin --version"
-        td_script = set "${td_script} && patchelf --version"
-        td_script = set "${td_script} && python3.12 -m maturin build ${td_rust_quiet} --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/modules/ty-tableframe/Cargo.toml --features extension-module"
-        exec --fail-on-error docker run --platform ${td_docker_platform} --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc "${td_script}"
-
-        debug "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/target"
-        exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/target
-
-        debug "🚀 cd ${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
-        cd "${PROJECT_RS_TY_TABLEFRAME_FOLDER}"
+    if eq ${TD_PORTABLE_LINUX} "true"
+        debug "🚀 maturin build %{td-rust-quiet} --locked --zig %{td-target-token} %{td-target} --compatibility ${td-manylinux-tag} --profile ${td-profile} --features extension-module"
+        exec --fail-on-error maturin build %{td-rust-quiet} --locked --zig %{td-target-token} %{td-target} --compatibility ${td-manylinux-tag} --profile ${td-profile} --features extension-module
     else
         debug "🚀 maturin build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module"
         exec --fail-on-error maturin build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module
@@ -982,47 +906,9 @@ script = [
 
     cd "${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
 
-    td_target = get_env TD_TARGET
-    is_x86_64-unknown-linux-musl = eq ${td_target} "x86_64-unknown-linux-musl"
-    is_aarch64-unknown-linux-musl = eq ${td_target} "aarch64-unknown-linux-musl"
-    if ${is_x86_64-unknown-linux-musl}
-        td_docker_platform = set "linux/amd64"
-        td_manylinux_image = set "quay.io/pypa/manylinux2014_x86_64"
-    else
-        td_docker_platform = set "linux/arm64"
-        td_manylinux_image = set "quay.io/pypa/manylinux2014_aarch64"
-    end
-    if ${is_x86_64-unknown-linux-musl} or ${is_aarch64-unknown-linux-musl}
-        debug "🚀 cd ${PROJECT_TABSDATA_ROOT_FOLDER}"
-        cd ${PROJECT_TABSDATA_ROOT_FOLDER}
-
-        td_profile = set ${td-profile}
-        td_rust_quiet = set ${td-rust-quiet}
-
-        debug "🚀 docker run --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc ..."
-        td_script = set "yum -y install perl perl-IPC-Cmd perl-Time-Piece"
-        td_script = set "${td_script} && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.98.1"
-        td_script = set "${td_script} && . $HOME/.cargo/env"
-        td_script = set "${td_script} && python3.12 -m pip install --upgrade pip"
-        td_script = set "${td_script} && python3.12 -m pip install maturin[patchelf]==1.15.0 --root-user-action=ignore"
-        td_script = set "${td_script} && export OPENSSL_STATIC=1"
-        td_script = set "${td_script} && export PKG_CONFIG_ALL_STATIC=1"
-        td_script = set "${td_script} && export ZLIB_STATIC=1"
-        td_script = set "${td_script} && export RUSTFLAGS='-C link-arg=-static-libgcc -C link-arg=-static-libstdc++'"
-        td_script = set "${td_script} && python3.12 --version"
-        td_script = set "${td_script} && python3.12 -m pip --version"
-        td_script = set "${td_script} && rustc --version"
-        td_script = set "${td_script} && cargo --version"
-        td_script = set "${td_script} && python3.12 -m maturin --version"
-        td_script = set "${td_script} && patchelf --version"
-        td_script = set "${td_script} && python3.12 -m maturin build ${td_rust_quiet} --locked --compatibility manylinux2014 --profile ${td-profile} --manifest-path /tabsdata/expansions/polars/extensions/tz-tableframe/Cargo.toml --features extension-module"
-        exec --fail-on-error docker run --platform ${td_docker_platform} --rm --mount=type=bind,src=${PROJECT_TABSDATA_ROOT_FOLDER},target=/tabsdata -w /tabsdata --env TD_PROFILE=${td_profile} ${td_manylinux_image} bash -lc "${td_script}"
-
-        debug "🚀 sudo chown -R ${USER}:${USER} ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/target"
-        exec --fail-on-error sudo chown -R ${USER}:${USER} ${PROJECT_RS_TY_EXPANSIONS_POLARS_FOLDER}/target
-
-        debug "🚀 cd ${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
-        cd "${PROJECT_RS_TZ_TABLEFRAME_FOLDER}"
+    if eq ${TD_PORTABLE_LINUX} "true"
+        debug "🚀 maturin build %{td-rust-quiet} --locked --zig %{td-target-token} %{td-target} --compatibility ${td-manylinux-tag} --profile ${td-profile} --features extension-module"
+        exec --fail-on-error maturin build %{td-rust-quiet} --locked --zig %{td-target-token} %{td-target} --compatibility ${td-manylinux-tag} --profile ${td-profile} --features extension-module
     else
         debug "🚀 maturin build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module"
         exec --fail-on-error maturin build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --features extension-module

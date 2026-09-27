@@ -39,6 +39,24 @@ script = [
         assert_fail
     end
 
+    td_portable_linux = get_env TD_PORTABLE_LINUX
+    if eq ${td_portable_linux} "true"
+        debug "♻️️ Checking if zig is installed..."
+        zig = which zig
+        if equals ${zig} ""
+            error "🚫🚫🚫🚫🚫 Zig is not available, and portable Linux builds link through it. Install it from https://ziglang.org/download or with your package manager. Make aborted."
+            assert_fail
+        end
+        result = exec zig version
+        code = set ${result.code}
+        if not equals ${code} "0"
+            error "🚫🚫🚫🚫🚫 Zig is available but unusable. Make aborted."
+            assert_fail
+        end
+        zig_version = trim ${result.stdout}
+        debug "❇️ Zig version: ${zig_version}"
+    end
+
     pg_script = set "${PROJECT_TABSDATA_ROOT_FOLDER}devutils/automation/tasks/makers/td-scripts/cache_postgresql.py"
     pg_marker_dir = set "${PROJECT_TABSDATA_ROOT_FOLDER}target"
     mkdir ${pg_marker_dir}
@@ -90,7 +108,7 @@ script = [
         array_push ${crates_array} "cargo-update"
         array_push ${crates_array} "cargo-upgrades"
         array_push ${crates_array} "cargo-workspaces"
-        array_push ${crates_array} "cross"
+        array_push ${crates_array} "cargo-zigbuild"
         array_push ${crates_array} "mdbook"
         array_push ${crates_array} "mdbook-d2"
         array_push ${crates_array} "mdbook-mermaid"

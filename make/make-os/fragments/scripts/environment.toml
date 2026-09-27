@@ -103,10 +103,12 @@ env_scripts = [
     if not is_empty ${td-target}
         set_env td-target ${td-target}
         set_env td-target-token "--target"
+        set_env td-build-target-token "--target"
         td-target-token = set "--target"
     else
         unset_env td-target
         unset_env td-target-token
+        unset_env td-build-target-token
         td-target-token = set ""
     end
     debug "🔅 Using td target: '${td-target}'"
@@ -122,26 +124,50 @@ env_scripts = [
     debug "🔅 Using td toolchain: '${td-toolchain}'"
     debug "🔅 Using td toolchain (token): '${td-toolchain-token}'"
 
-    if not is_empty ${td-cross}
-        use_cross = eq ${td-cross} "true"
-        if ${use_cross}
-            set_env td-cargo "cross"
+    if not is_empty ${td-portable-linux}
+        portable = eq ${td-portable-linux} "true"
+    else
+        portable = set false
+    end
+
+    set_env td-cargo "cargo"
+    td-cargo = get_env td-cargo
+    if ${portable}
+        set_env td-cargo-build-verb "zigbuild"
+    else
+        set_env td-cargo-build-verb "build"
+    end
+    td-cargo-build-verb = get_env td-cargo-build-verb
+    debug "🔅 Using Cargo tool: '${td-cargo}'"
+    debug "🔅 Using Cargo build verb: '${td-cargo-build-verb}'"
+
+    td-glibc-floor = get_env TABSDATA_GLIBC_FLOOR
+    debug "🔅 Using glibc floor: '${td-glibc-floor}'"
+
+    glibc-floor-tag = replace ${td-glibc-floor} "." "_"
+    set_env td-manylinux-tag "manylinux_${glibc-floor-tag}"
+    td-manylinux-tag = get_env td-manylinux-tag
+    debug "🔅 Using manylinux tag: '${td-manylinux-tag}'"
+
+    if not is_empty ${td-target}
+        if ${portable}
+            set_env td-build-target "${td-target}.${td-glibc-floor}"
         else
-            set_env td-cargo "cargo"
+            set_env td-build-target ${td-target}
         end
     else
-        set_env td-cargo "cargo"
+        unset_env td-build-target
     end
-    td-cargo = get_env td-cargo
-    debug "🔅 Using Cargo tool: '${td-cargo}'"
+    td-build-target = get_env td-build-target
+    debug "🔅 Using build target: '${td-build-target}'"
 
-    if eq ${td-cargo} "cross"
-        set_env TD_BUILD_ON_CROSS "true"
+    if ${portable}
+        set_env TD_PORTABLE_LINUX "true"
     else
-        set_env TD_BUILD_ON_CROSS "false"
+        set_env TD_PORTABLE_LINUX "false"
     end
-    td_build_on_cross = get_env TD_BUILD_ON_CROSS
-    debug "🤞 Building on cross: '${td_build_on_cross}'"
+    td_portable_linux = get_env TD_PORTABLE_LINUX
+    debug "🤞 Building portable Linux artifacts: '${td_portable_linux}'"
 
     set_env RUSTFLAGS ""
     os_family = os_family
@@ -208,11 +234,6 @@ env_scripts = [
     if ${td_nextest_test_threads_is_empty}
         td_nextest_test_threads = set "32"
     end
-    td_cross_test_jobs = get_env TD_CROSS_TEST_JOBS
-    td_cross_test_jobs_is_empty = is_empty ${td_cross_test_jobs}
-    if ${td_cross_test_jobs_is_empty}
-        td_cross_test_jobs = set "16"
-    end
     os_family = os_family
     debug "👾 Current os family: ${os_family}"
     is_mac = eq ${os_family} "mac"
@@ -243,7 +264,6 @@ env_scripts = [
 
     set_env td-nextest-build-jobs ${td_nextest_build_jobs}
     set_env td-nextest-test-threads ${td_nextest_test_threads}
-    set_env td-cross-test-jobs ${td_cross_test_jobs}
 
     enable_sccache = set false
     if ${on_ga_true}
@@ -321,14 +341,6 @@ env_scripts = [
     set_path = get_env PATH
     debug "✅ System PATH: ${set_path}"
 
-    is_musl_x86_64 = eq ${td-target} "x86_64-unknown-linux-musl"
-    is_musl_aarch64 = eq ${td-target} "aarch64-unknown-linux-musl"
-    if ${is_musl_x86_64} or ${is_musl_aarch64}
-        PROJECT_RS_TABSDATA_CARGO_TOML = set "./Cargo.toml"
-        PROJECT_RS_TD_MACROS_CARGO_TOML = set "./macros/Cargo.toml"
-        set_env PROJECT_RS_TABSDATA_CARGO_TOML ${PROJECT_RS_TABSDATA_CARGO_TOML}
-        set_env PROJECT_RS_TD_MACROS_CARGO_TOML ${PROJECT_RS_TD_MACROS_CARGO_TOML}
-    end
     PROJECT_RS_TABSDATA_CARGO_TOML = get_env PROJECT_RS_TABSDATA_CARGO_TOML
     PROJECT_RS_TD_MACROS_CARGO_TOML = get_env PROJECT_RS_TD_MACROS_CARGO_TOML
     debug "✅ Materialized PROJECT_RS_TABSDATA_CARGO_TOML: ${PROJECT_RS_TABSDATA_CARGO_TOML}"

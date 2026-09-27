@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import platform
+import re
 import subprocess
 import sys
 from types import ModuleType
@@ -46,20 +47,17 @@ WHITE = "\033[1;37m"
 
 RENDER_WIDTH = 1024
 
-# macOS system library prefixes - any dylib under these paths is acceptable
 MACOS_SYSTEM_PREFIXES = (
     "/usr/lib/",
     "/System/",
 )
 
-# macOS relative reference prefixes - these are acceptable internal references
 MACOS_RELATIVE_PREFIXES = (
     "@executable_path",
     "@loader_path",
     "@rpath",
 )
 
-# Linux system shared libraries - these are always present on any Linux system
 LINUX_SYSTEM_LIBS = {
     "ld-linux",
     "libc.so",
@@ -77,11 +75,6 @@ LINUX_SYSTEM_LIBS = {
     "linux-vdso",
 }
 
-# manylinux2014 (PEP 599) guaranteed libraries. Only these dynamic
-# dependencies are acceptable in cross-compiled. The policy's library set is
-# common to every architecture; only the dynamic loader name differs, so both
-# the x86_64 and the aarch64 loaders are listed.
-# See: https://peps.python.org/pep-0599/#the-manylinux2014-policy
 MANYLINUX2014_ALLOWED_LIBS = {
     "ld-linux-x86-64.so.2",
     "ld-linux-aarch64.so.1",
@@ -98,7 +91,6 @@ MANYLINUX2014_ALLOWED_LIBS = {
     "libutil.so.1",
 }
 
-# Windows system DLLs (case-insensitive matching)
 WINDOWS_SYSTEM_DLLS = {
     "advapi32.dll",
     "bcrypt.dll",
@@ -126,11 +118,18 @@ WINDOWS_SYSTEM_DLLS = {
     "ws2_32.dll",
 }
 
-# Windows system DLL prefixes (case-insensitive)
 WINDOWS_SYSTEM_PREFIXES = ("api-ms-win-",)
 
 
-TD_CROSS = os.getenv("TD_CROSS", "") == "true"
+TD_PORTABLE_LINUX = os.getenv("TD_PORTABLE_LINUX", "") == "true"
+
+TABSDATA_GLIBC_FLOOR = os.getenv("TABSDATA_GLIBC_FLOOR", "2.28")
+
+GLIBCXX_BY_GLIBC = {
+    "2.17": "3.4.19",
+    "2.28": "3.4.25",
+    "2.34": "3.4.29",
+}
 
 
 class LibInfo:
@@ -141,7 +140,7 @@ class LibInfo:
 
     @property
     def is_ok(self) -> bool:
-        if TD_CROSS:
+        if TD_PORTABLE_LINUX:
             return self.is_static or self.name in MANYLINUX2014_ALLOWED_LIBS
         return self.is_static or self.is_system
 
@@ -256,11 +255,59 @@ def check_elf(filepath: str) -> list[LibInfo]:
     return libs
 
 
+def parse_version(version: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in version.split(".") if part.isdigit())
+
+
+def required_symbol_versions(filepath: str, prefix: str) -> list[str]:
+    try:
+        result = subprocess.run(
+            ["readelf", "--version-info", filepath],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return []
+    versions = []
+    for match in re.finditer(rf"Name: {prefix}([0-9.]+)", result.stdout):
+        versions.append(match.group(1).rstrip("."))
+    return versions
+
+
+class FloorViolation:
+    def __init__(self, kind: str, required: str, floor: str):
+        self.kind = kind
+        self.required = required
+        self.floor = floor
+
+
+def check_floors(filepath: str) -> list[FloorViolation]:
+    if not TD_PORTABLE_LINUX:
+        return []
+    if detect_file_type(filepath) != "elf":
+        return []
+
+    violations = []
+    checks = [("GLIBC_", "GLIBC_", TABSDATA_GLIBC_FLOOR)]
+    cxx_floor = GLIBCXX_BY_GLIBC.get(TABSDATA_GLIBC_FLOOR)
+    if cxx_floor:
+        checks.append(("GLIBCXX_", "GLIBCXX_", cxx_floor))
+
+    for kind, prefix, floor in checks:
+        required = required_symbol_versions(filepath, prefix)
+        if not required:
+            continue
+        highest = max(required, key=parse_version)
+        if parse_version(highest) > parse_version(floor):
+            violations.append(FloorViolation(kind, highest, floor))
+    return violations
+
+
 def check_pe(filepath: str) -> list[LibInfo]:
     libs = []
     dll_names = set()
 
-    # Try dumpbin first (MSVC)
     try:
         result = subprocess.run(
             [
@@ -286,7 +333,6 @@ def check_pe(filepath: str) -> list[LibInfo]:
     except (subprocess.TimeoutExpired, FileNotFoundError):
         pass
 
-    # Fallback to objdump (MinGW)
     if not dll_names:
         try:
             result = subprocess.run(
@@ -338,7 +384,9 @@ def get_libs(filepath: str) -> list[LibInfo] | None:
     return None
 
 
-def print_report(results: list[tuple[str, list[LibInfo]]]) -> bool:
+def print_report(
+    results: list[tuple[str, list[LibInfo], list[FloorViolation]]],
+) -> bool:
     all_ok = True
 
     console = Console(
@@ -377,9 +425,9 @@ def print_report(results: list[tuple[str, list[LibInfo]]]) -> bool:
     table.add_column("Status", no_wrap=True)
 
     first = True
-    for filepath, libs in results:
+    for filepath, libs, violations in results:
         binary_name = os.path.basename(filepath)
-        binary_ok = all(lib.is_ok for lib in libs)
+        binary_ok = all(lib.is_ok for lib in libs) and not violations
         if not binary_ok:
             all_ok = False
 
@@ -397,6 +445,14 @@ def print_report(results: list[tuple[str, list[LibInfo]]]) -> bool:
             "",
             status_text,
         )
+
+        for violation in violations:
+            table.add_row(
+                f"[lib.reject]  {violation.kind}{violation.required}[/]",
+                "[link.dynamic]symbol[/]",
+                "[type.external]above floor[/]",
+                f"[status.reject]exceeds {violation.floor}[/]",
+            )
 
         if not libs:
             table.add_row(
@@ -493,13 +549,13 @@ def find_binaries_from_cargo(manifest_path: str, target_folder: str) -> list[str
 
 
 def run_check(files: list[str]) -> None:
-    results: list[tuple[str, list[LibInfo]]] = []
+    results: list[tuple[str, list[LibInfo], list[FloorViolation]]] = []
     for filepath in sorted(files):
         filepath = os.path.abspath(filepath)
         libs = get_libs(filepath)
         if libs is None:
             continue
-        results.append((filepath, libs))
+        results.append((filepath, libs, check_floors(filepath)))
 
     if not results:
         logger.info("No native binaries to check.")
@@ -513,12 +569,17 @@ def run_check(files: list[str]) -> None:
     else:
         print(
             f"  {RED}Failed: some binaries have unacceptable "
-            f"dynamic dependencies.{RESET}"
+            f"dynamic dependencies or exceed the portability floor.{RESET}"
         )
         print(
             f"  {ORANGE}All external libraries must be statically linked "
             f"to avoid runtime failures on target machines.{RESET}"
         )
+        if any(violations for _, _, violations in results):
+            print(
+                f"  {ORANGE}Symbols above the floor fail at load time on the "
+                f"oldest supported distro, not at build time.{RESET}"
+            )
     print()
 
     sys.exit(0 if all_ok else 1)

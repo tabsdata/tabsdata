@@ -10,13 +10,14 @@ import platform
 from sysconfig import get_path, get_platform
 
 from tabsdatax.setup.common.config import (
-    TD_USE_MUSLLINUX,
-    TRUE_VALUES,
+    TABSDATA_GLIBC_FLOOR,
     get_build_profile,
     get_td_target,
 )
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_GLIBC_FLOOR = "2.28"
 
 
 def check_cpython() -> None:
@@ -26,38 +27,24 @@ def check_cpython() -> None:
         )
 
 
-# PEP-513: A Platform Tag for Portable Linux Built Distributions
-#     https://peps.python.org/pep-0513/
+# PEP-600: Future manylinux Platform Tags
+#     https://peps.python.org/pep-0600/
 #
-# PEP-599: The manylinux2014 Platform Tag
-#     https://peps.python.org/pep-0599/
-#
-# PEP-656: Platform Tag for Linux Distributions Using Musl
-#     https://peps.python.org/pep-0656/
 def get_platname() -> str:
     system = platform.system()
     architecture = platform.machine().lower()
-    use_musllinux = os.getenv(TD_USE_MUSLLINUX, "False").lower() in TRUE_VALUES
 
     # Linux
     if system == "Linux":
+        floor = os.getenv(TABSDATA_GLIBC_FLOOR, DEFAULT_GLIBC_FLOOR)
+        manylinux = f"manylinux_{floor.replace('.', '_')}"
         if architecture in ["x86_64", "amd64"]:
-            if use_musllinux:
-                return "musllinux_1_1_x86_64"
-            else:
-                return "manylinux1_x86_64"
+            return f"{manylinux}_x86_64"
         elif architecture in ["aarch64", "arm64"]:
-            if use_musllinux:
-                return "musllinux_1_1_aarch64"
-            else:
-                return "manylinux2014_aarch64"
+            return f"{manylinux}_aarch64"
         else:
-            if use_musllinux:
-                platname = f"musllinux_1_1_{architecture}"
-                return platname.replace("-", "_").replace(".", "_")
-            else:
-                platname = f"manylinux1_{architecture}"
-                return platname.replace("-", "_").replace(".", "_")
+            platname = f"{manylinux}_{architecture}"
+            return platname.replace("-", "_").replace(".", "_")
     # macOS
     elif system == "Darwin":
         if architecture in ["aarch64", "arm64"]:

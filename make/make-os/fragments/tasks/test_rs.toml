@@ -25,16 +25,10 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets --tests"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets --tests
-
-    if eq ${td-cargo} "cross"
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features}"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features}
-    else
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets
-    end
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets --tests"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets --tests
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets"
+    exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features} --all-targets
 
     is_zero = eq ${exit_code} "0"
     if ${is_zero}
@@ -69,16 +63,10 @@ script = [
         code = exit 0
     end
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets --tests"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets --tests
-
-    if eq ${td-cargo} "cross"
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logging"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --all-targets --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} -- test_logginge
-    else
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging
-    end
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets --tests"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets --tests
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging"
+    exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads ${td-nextest-test-threads} --cargo-profile ${td-profile} --workspace --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} --features ${modules-test-features-test_logging} --all-targets -- test_logging
 
     is_zero = eq ${exit_code} "0"
     if ${is_zero}
@@ -192,16 +180,10 @@ script = [
         code = exit 0
     end
 
-    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --tests"
-    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} build %{td-rust-quiet} --locked %{td-target-token} %{td-target} --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --tests
-
-    if eq ${td-cargo} "cross"
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load -- --ignored --test-threads 1 report_scaling"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} test --locked --no-fail-fast %{td-target-token} %{td-target} --jobs ${td-cross-test-jobs} --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load -- --ignored --test-threads 1 report_scaling
-    else
-        debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 1 --cargo-profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --run-ignored ignored-only report_scaling"
-        exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 1 --cargo-profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --run-ignored ignored-only report_scaling
-    end
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --tests"
+    exec --fail-on-error ${td-cargo} %{td-toolchain-token}%{td-toolchain} %{td-cargo-build-verb} %{td-rust-quiet} --locked %{td-build-target-token} %{td-build-target} --profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --tests
+    debug "🚀 ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 1 --cargo-profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --run-ignored ignored-only report_scaling"
+    exit_code = exec --get-exit-code ${td-cargo} %{td-toolchain-token}%{td-toolchain} nextest run %{td-rust-cargo-quiet} --build-jobs ${td-nextest-build-jobs} --locked --no-fail-fast %{td-target-token} %{td-target} --test-threads 1 --cargo-profile ${td-profile} --manifest-path ${PROJECT_RS_TD_TABSDATA_CARGO_TOML} -p td-queries --test load --run-ignored ignored-only report_scaling
 
     is_zero = eq ${exit_code} "0"
     if ${is_zero}

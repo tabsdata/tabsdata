@@ -7,9 +7,12 @@ import importlib.util
 import json
 import os
 import shlex
+import shutil
 import ssl
 import subprocess
 import sys
+import tarfile
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -85,6 +88,8 @@ class Report:
     download_attempts_used: int = 0
     version_marker_path: Path | None = None
     version_marker_written: bool = False
+    bundled: bool | None = None
+    bundle_skipped_reason: str | None = None
     outcome: str = "not started"
     error: str | None = None
     warnings: list[str] = field(default_factory=list)
@@ -148,6 +153,14 @@ class Report:
                     "download attempts used",
                     f"{self.download_attempts_used}/{DOWNLOAD_ATTEMPTS}",
                 )
+            )
+        if self.bundled is None:
+            lines.append(row("libraries bundled", "<not attempted>"))
+        elif self.bundled:
+            lines.append(row("libraries bundled", "yes (self-contained)"))
+        else:
+            lines.append(
+                row("libraries bundled", f"no ({self.bundle_skipped_reason})")
             )
         lines.append(
             row("version marker path", self.version_marker_path or "<not provided>")
@@ -411,6 +424,135 @@ def download(url: str, destination: Path, report: Report) -> None:
     )
 
 
+ALMALINUX_IMAGE = "almalinux:9.6"
+
+BUNDLE_PACKAGES = (
+    "patchelf binutils openssl-libs libxml2 libxslt krb5-libs libzstd"
+    " lz4-libs zlib uuid"
+)
+
+
+BUNDLE_MARKER = ".td-bundled"
+
+
+def portable_linux_required() -> bool:
+    return os.getenv("TD_PORTABLE_LINUX", "").lower() in {"1", "true", "yes", "y", "on"}
+
+
+def bundler_script() -> Path:
+    return Path(__file__).resolve().parent / "bundle_postgresql.sh"
+
+
+def expected_bundler_version() -> str | None:
+    try:
+        for line in bundler_script().read_text().splitlines():
+            if line.startswith("BUNDLER_VERSION="):
+                return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
+def is_bundled(archive_path: Path) -> bool:
+    expected = expected_bundler_version()
+    try:
+        with tarfile.open(archive_path, "r:gz") as tar:
+            for member in tar.getmembers():
+                if Path(member.name).name != BUNDLE_MARKER:
+                    continue
+                handle = tar.extractfile(member)
+                content = handle.read().decode() if handle else ""
+                for line in content.splitlines():
+                    if line.startswith("bundler-version="):
+                        found = line.split("=", 1)[1].strip()
+                        if found == expected:
+                            return True
+                        logger.debug(
+                            f"♻️ Cached bundle was built by bundler {found},"
+                            f" current is {expected}; rebundling."
+                        )
+                        return False
+                return False
+    except (tarfile.TarError, OSError) as error:
+        logger.debug(f"♻️ Cannot inspect {archive_path} ({error}); treating as unbundled.")
+    return False
+
+
+def bundle_archive(archive_path: Path, target: str, report: Report) -> None:
+    if "linux" not in target:
+        report.bundled = False
+        report.bundle_skipped_reason = f"not a linux target ({target})"
+        return
+
+    script = bundler_script()
+    if not script.is_file():
+        report.bundled = False
+        report.bundle_skipped_reason = f"bundler not found: {script}"
+        report.warn(f"PostgreSQL archive left unbundled: {script} is missing.")
+        return
+
+    if not shutil.which("docker"):
+        if portable_linux_required():
+            raise RuntimeError(
+                "TD_PORTABLE_LINUX is set but docker is not available."
+                f" Bundling needs it to collect libraries from {ALMALINUX_IMAGE},"
+                " and an unbundled PostgreSQL is not portable."
+            )
+        report.bundled = False
+        report.bundle_skipped_reason = "docker not available"
+        report.warn(
+            "PostgreSQL archive left unbundled: docker is required to collect"
+            f" libraries from {ALMALINUX_IMAGE}. The archive works on this"
+            " machine but is NOT portable; a release build must bundle it."
+        )
+        return
+
+    platform = "linux/arm64" if target.startswith("aarch64") else "linux/amd64"
+    with tempfile.TemporaryDirectory(prefix="td-pg-bundle-") as workspace:
+        work = Path(workspace)
+        with tarfile.open(archive_path, "r:gz") as tar:
+            tar.extractall(work, filter="data")
+        roots = [entry for entry in work.iterdir() if entry.is_dir()]
+        if len(roots) != 1:
+            report.bundled = False
+            report.bundle_skipped_reason = (
+                f"unexpected archive layout: {len(roots)} top-level directories"
+            )
+            report.warn("PostgreSQL archive left unbundled: unexpected layout.")
+            return
+        root = roots[0]
+
+        shutil.copy2(script, work / script.name)
+        command = [
+            "docker", "run", "--rm",
+            "--platform", platform,
+            "-v", f"{work}:/work",
+            "-w", "/work",
+            ALMALINUX_IMAGE,
+            "sh", "-c",
+            f"set -e; dnf install -y -q epel-release;"
+            f" dnf install -y -q {BUNDLE_PACKAGES};"
+            f" sh /work/{script.name} /work/{root.name}",
+        ]
+        logger.debug(f"♻️ Bundling PostgreSQL libraries: {shlex.join(command)}")
+        completed = subprocess.run(command, capture_output=True, text=True)
+        for line in (completed.stdout or "").splitlines():
+            logger.debug(f"  {line}")
+        if completed.returncode != 0:
+            for line in (completed.stderr or "").splitlines()[-20:]:
+                logger.error(f"  {line}")
+            raise RuntimeError(
+                "Bundling the PostgreSQL archive failed with exit code"
+                f" {completed.returncode}. The archive would not be portable."
+            )
+
+        with tarfile.open(archive_path, "w:gz") as tar:
+            tar.add(root, arcname=root.name)
+
+    report.bundled = True
+    report.archive_size_bytes = archive_path.stat().st_size
+
+
 def cache_directory() -> Path:
     return Path.home() / ".theseus" / "postgresql"
 
@@ -432,14 +574,16 @@ def cache_archive(
         report.download_url = url
         download(url, archive_path, report)
 
+    if not is_bundled(archive_path):
+        bundle_archive(archive_path, target, report)
+    else:
+        report.bundled = True
+        report.bundle_skipped_reason = "already bundled"
+
 
 def run(report: Report) -> None:
-    resolve_target_triple(report)
+    target = resolve_target_triple(report)
     version = resolve_version(report)
-
-    target = report.target_triple_rustc or report.target_triple
-    report.target_triple = target
-    report.target_triple_source = "rustc"
 
     cache_directory_path = cache_directory()
     report.cache_directory = cache_directory_path
