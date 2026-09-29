@@ -1138,11 +1138,17 @@ script = [
         end
     end
 
+    db2_cdc = get_env TD_TEST_DB2_CDC
     existing_markers = get_env MARKERS
-    if is_empty ${existing_markers}
-        markers = set "not cdc_db2 and not db2_seq"
+    if equals ${db2_cdc} "true"
+        info "🧪 Including Db2 CDC tests (TD_TEST_DB2_CDC=true)"
+        markers = set "${existing_markers}"
     else
-        markers = set "(${existing_markers}) and not cdc_db2 and not db2_seq"
+        if is_empty ${existing_markers}
+            markers = set "not cdc_db2 and not db2_seq"
+        else
+            markers = set "(${existing_markers}) and not cdc_db2 and not db2_seq"
+        end
     end
     set_env MARKERS ${markers}
 
@@ -1591,11 +1597,17 @@ script = [
         end
     end
 
+    db2_cdc = get_env TD_TEST_DB2_CDC
     existing_markers = get_env MARKERS
-    if is_empty ${existing_markers}
-        markers = set "not cdc_db2 and not db2_seq"
+    if equals ${db2_cdc} "true"
+        info "🧪 Including Db2 CDC tests (TD_TEST_DB2_CDC=true)"
+        markers = set "${existing_markers}"
     else
-        markers = set "(${existing_markers}) and not cdc_db2 and not db2_seq"
+        if is_empty ${existing_markers}
+            markers = set "not cdc_db2 and not db2_seq"
+        else
+            markers = set "(${existing_markers}) and not cdc_db2 and not db2_seq"
+        end
     end
     set_env MARKERS ${markers}
 

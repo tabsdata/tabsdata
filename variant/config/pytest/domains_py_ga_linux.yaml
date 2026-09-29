@@ -30,6 +30,10 @@
   sys: db2
   model: world
   size: 200
+- name: db2cdc_employees_xs
+  sys: db2cdc
+  model: employees
+  size: 1
 - name: druid
   sys: druid
 - name: fs
