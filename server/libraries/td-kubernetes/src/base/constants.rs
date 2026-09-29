@@ -567,6 +567,8 @@ pub const LOG_POD_POLL_INTERVAL: Duration = Duration::from_millis(500);
 
 pub const KMINUS_MIN_NOFILE: u64 = 65535;
 
+pub const KMINUS_TZDATA_PROBE: &str = "/usr/share/zoneinfo/UTC";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[value(rename_all = "lower")]

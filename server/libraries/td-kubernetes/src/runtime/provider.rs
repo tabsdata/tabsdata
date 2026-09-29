@@ -693,6 +693,7 @@ pub async fn provider_for(
     match provider {
         ClusterProvider::Kminus => {
             check_kminus_ulimit()?;
+            check_kminus_tzdata()?;
             let provider = KminusProvider::build(cluster, instance, verbose, portstart, loglevel)?;
             Ok(Box::new(provider))
         }
@@ -738,6 +739,27 @@ fn check_kminus_ulimit() -> CommandResult {
 
 #[cfg(not(unix))]
 fn check_kminus_ulimit() -> CommandResult {
+    Ok(())
+}
+
+// The bundled PostgreSQL is built with --with-system-tzdata, so on Linux it
+// cannot resolve any time zone (not even the UTC every connection asks for)
+// unless the host provides the IANA database at this compiled-in path.
+#[cfg(target_os = "linux")]
+fn check_kminus_tzdata() -> CommandResult {
+    use crate::base::constants::KMINUS_TZDATA_PROBE;
+
+    if std::path::Path::new(KMINUS_TZDATA_PROBE).is_file() {
+        return Ok(());
+    }
+    Err(ProviderError::TzdataMissing {
+        probe: KMINUS_TZDATA_PROBE.to_owned(),
+    }
+    .into())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn check_kminus_tzdata() -> CommandResult {
     Ok(())
 }
 

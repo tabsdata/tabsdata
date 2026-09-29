@@ -202,6 +202,11 @@ pub enum ProviderError {
          `ulimit -n {required}` and rerun this command."
     )]
     NofileLimitTooLow { required: u64, soft: u64, hard: u64 } = 12,
+    #[error(
+        "The kminus provider needs the host time zone database, but '{probe}' does not exist. \
+         Install the 'tzdata' package ('timezone' on SUSE) and rerun this command."
+    )]
+    TzdataMissing { probe: String } = 15,
     #[error("Provider '{0}' is not yet implemented.")]
     NotImplemented(String) = 6000,
     #[error("Command '{0}' is not yet implemented.")]
