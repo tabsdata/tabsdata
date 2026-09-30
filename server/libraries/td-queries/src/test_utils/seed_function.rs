@@ -28,9 +28,27 @@ use td_objects::types::basic::{
 /// (`db.scoped(p)`), the field-less rows (function, tables, dependencies,
 /// triggers) default their `project_id` from that scope.
 pub(crate) async fn seed_function(
+    executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    collection: &ActiveCollectionDB,
+    function_create: &FunctionRegister,
+) -> Result<FunctionDB, TdError> {
+    seed_function_of_class(
+        executor,
+        collection,
+        function_create,
+        FunctionType::default(),
+    )
+    .await
+}
+
+/// A function row of a given class. A request cannot express a class, so a
+/// test needing a platform-owned row states it here rather than going through
+/// the reconcile that would normally create one.
+pub(crate) async fn seed_function_of_class(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     collection: &ActiveCollectionDB,
     function_create: &FunctionRegister,
+    function_type: FunctionType,
 ) -> Result<FunctionDB, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
     let at = LockInstant::asserted(*request_context.time);
@@ -42,7 +60,7 @@ pub(crate) async fn seed_function(
         name: function_create.name.clone(),
         description: function_create.description.clone(),
         decorator: function_create.decorator.clone(),
-        function_type: FunctionType::default(),
+        function_type,
         connector: function_create.connector.clone(),
         connection: function_create.connection.clone(),
         runtime_values: function_create.runtime_values.clone(),
@@ -216,13 +234,12 @@ mod tests {
         let tables = None;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "joaquin".try_into().unwrap(),
             description: "function_foo description".try_into().unwrap(),
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into().unwrap(),
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

@@ -307,13 +307,12 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_1".try_into()?,
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -539,13 +538,12 @@ mod tests {
             .collection(&CollectionName::try_from("c_replay")?, &UserId::admin())
             .await?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "fr_replay".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -684,13 +682,12 @@ mod tests {
             .collection(&CollectionName::try_from("c_k8s")?, &UserId::admin())
             .await?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_1".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -794,13 +791,12 @@ mod tests {
                 )
                 .await?;
             let create = FunctionRegister {
-                parent_function: None,
+                child_functions: None,
                 name: function_name.try_into()?,
                 description: "d".try_into()?,
                 bundle_id: BundleId::default(),
                 snippet: "s".try_into()?,
                 decorator: Decorator::Publisher,
-                function_type: None,
                 connector: None,
                 connection: None,
                 base_path: None,
@@ -965,13 +961,12 @@ mod tests {
             )
             .await?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_1".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1130,13 +1125,12 @@ mod tests {
         let mut executions = Vec::new();
         for (name, table) in [("function_1", "table_1"), ("function_2", "table_2")] {
             let create = FunctionRegister {
-                parent_function: None,
+                child_functions: None,
                 name: name.try_into()?,
                 description: "d".try_into()?,
                 bundle_id: BundleId::default(),
                 snippet: "s".try_into()?,
                 decorator: Decorator::Publisher,
-                function_type: None,
                 connector: None,
                 connection: None,
                 base_path: None,
@@ -1261,13 +1255,12 @@ mod tests {
         let mut executions = Vec::new();
         for (name, table) in [("function_1", "table_1"), ("function_2", "table_2")] {
             let create = FunctionRegister {
-                parent_function: None,
+                child_functions: None,
                 name: name.try_into()?,
                 description: "d".try_into()?,
                 bundle_id: BundleId::default(),
                 snippet: "s".try_into()?,
                 decorator: Decorator::Publisher,
-                function_type: None,
                 connector: None,
                 connection: None,
                 base_path: None,

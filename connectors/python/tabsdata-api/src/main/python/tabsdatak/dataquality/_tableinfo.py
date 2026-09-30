@@ -33,6 +33,11 @@ class TableKind(Enum):
         "_dq_summary",
         "From Data Quality Summary operation",
     )
+    DQ_SUMMARY_TRENDS = (
+        TableType.DQSummaryTrends,
+        "_dq_summary_trends",
+        "From Data Quality Summary Trends",
+    )
 
     def __init__(self, value: str, suffix: str, description: str):
         self._value_ = value

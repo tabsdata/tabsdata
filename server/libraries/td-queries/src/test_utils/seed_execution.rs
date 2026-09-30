@@ -81,13 +81,12 @@ mod tests {
         let tables = None;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "joaquin".try_into().unwrap(),
             description: "function_foo description".try_into().unwrap(),
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into().unwrap(),
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

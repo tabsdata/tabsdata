@@ -115,13 +115,12 @@ mod tests {
             )
             .await?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "f0".try_into()?,
             description: "f0".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "f0".try_into()?,
             decorator,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

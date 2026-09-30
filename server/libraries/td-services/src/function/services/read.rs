@@ -186,13 +186,12 @@ mod tests {
         let tables = Some(vec![TableNameDto::try_from("table")?]);
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -300,13 +299,12 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "publisher".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

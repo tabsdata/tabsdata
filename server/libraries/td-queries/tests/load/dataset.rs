@@ -176,13 +176,12 @@ async fn make_function(
         )
     };
     let create = FunctionRegister {
-        parent_function: None,
+        child_functions: None,
         name: name.try_into()?,
         description: "load fn".try_into()?,
         bundle_id: BundleId::default(),
         snippet: "snippet".try_into()?,
         decorator: Decorator::Publisher,
-        function_type: None,
         connector: None,
         connection: None,
         base_path: None,

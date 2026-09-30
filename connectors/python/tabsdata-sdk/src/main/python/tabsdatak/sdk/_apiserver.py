@@ -705,6 +705,7 @@ class APIServer:
         connection: str = None,
         workers: dict = None,
         base_path: str = None,
+        child_functions: list[dict] = None,
         raise_for_status: bool = True,
     ):
         endpoint = self._scoped(f"/collections/{collection_name}/functions")
@@ -726,6 +727,7 @@ class APIServer:
             "connection",
             "workers",
             "base_path",
+            "child_functions",
         ]
         values = [
             function_name,
@@ -744,6 +746,7 @@ class APIServer:
             connection,
             workers,
             base_path,
+            child_functions,
         ]
         data = self.get_params_dict(names, values)
         response = self.post(endpoint, json=data)
@@ -868,6 +871,7 @@ class APIServer:
         base_path: str = None,
         reset_state: bool = None,
         reset_stage: bool = None,
+        child_functions: list[dict] = None,
         raise_for_status: bool = True,
     ):
         endpoint = self._scoped(
@@ -894,6 +898,7 @@ class APIServer:
                 "base_path",
                 "reset_state",
                 "reset_stage",
+                "child_functions",
             ],
             [
                 new_function_name,
@@ -914,6 +919,7 @@ class APIServer:
                 base_path,
                 reset_state,
                 reset_stage,
+                child_functions,
             ],
         )
         response = self.post(endpoint, json=data)

@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Generator, List, Union
+from typing import TYPE_CHECKING, Generator, List, Union
 
 import polars as pl
 import requests
@@ -51,6 +51,9 @@ from tabsdatak._info import (
 )
 from tabsdatak.api import CronTrigger, TablesTrigger
 from tabsdatak.common._archive.bundle import build_bundle, capture_source_snippet
+
+if TYPE_CHECKING:
+    from tabsdatak.common._actions.dataquality.processor import TrendTransformerInfo
 
 # noinspection PyProtectedMember
 from tabsdatak.common._datetime import _convert_timestamp_to_string
@@ -437,6 +440,36 @@ class Collection:
         bundle_id = response.json().get("data").get("id")
         return archive, bundle_id
 
+    def _trend_child_functions(
+        self,
+        trend_transformers: list[TrendTransformerInfo],
+        local_packages: list[str] | None = None,
+        requirements: str | Path | None = None,
+        raise_for_status: bool = True,
+    ) -> list[dict]:
+        """Build and upload a bundle per declared trend transformer, and
+        return the specs the owner's registration carries them in.
+        """
+        from tabsdatak.dataquality._symbols import FunctionType
+
+        children = []
+        for trend in trend_transformers:
+            archive, bundle_id = self._build_and_upload_bundle(
+                trend.info,
+                Path(trend.project_root.name),
+                local_packages,
+                raise_for_status,
+                requirements,
+            )
+            children.append({
+                "function_type": FunctionType.DQSummaryTrends.value,
+                "bundle_id": bundle_id,
+                "snippet": archive.function_snippet,
+                "dependencies": archive.string_dependencies,
+                "tables": archive.tables,
+            })
+        return children
+
     def register_function(
         self,
         info: FunctionInfo,
@@ -487,35 +520,51 @@ class Collection:
             APIServerError: If the function could not be created.
         """
         archive, bundle_id = self._build_and_upload_bundle(
-            info, project_root, local_packages, raise_for_status, requirements
+            info,
+            project_root,
+            local_packages,
+            raise_for_status,
+            requirements,
         )
-        function_name = function_name or archive.function_name
-        description = description or function_name
+        try:
+            function_name = function_name or archive.function_name
+            description = description or function_name
 
-        # TODO: Remove this once the parameter is optional
-        runtime_values = "{}"
+            # TODO: Remove this once the parameter is optional
+            runtime_values = "{}"
 
-        self.connection.function_register(
-            collection_name=self.name,
-            function_name=function_name,
-            description=description,
-            tables=archive.tables,
-            table_types=archive.table_types,
-            dependencies=archive.string_dependencies,
-            trigger_by=archive.trigger_string_list,
-            function_snippet=archive.function_snippet,
-            bundle_id=bundle_id,
-            runtime_values=runtime_values,
-            reuse_frozen_tables=reuse_tables,
-            decorator=archive.function_type,
-            connector=archive.connector,
-            connection=archive.connection,
-            workers=archive.workers,
-            enabled=enabled,
-            base_path=base_path,
-            raise_for_status=raise_for_status,
-        )
-        return Function(self.connection, self, function_name)
+            child_functions = self._trend_child_functions(
+                archive.trend_transformers_info or [],
+                local_packages,
+                requirements,
+                raise_for_status,
+            )
+
+            self.connection.function_register(
+                collection_name=self.name,
+                function_name=function_name,
+                description=description,
+                tables=archive.tables,
+                table_types=archive.table_types,
+                dependencies=archive.string_dependencies,
+                trigger_by=archive.trigger_string_list,
+                function_snippet=archive.function_snippet,
+                bundle_id=bundle_id,
+                runtime_values=runtime_values,
+                reuse_frozen_tables=reuse_tables,
+                decorator=archive.function_type,
+                connector=archive.connector,
+                connection=archive.connection,
+                workers=archive.workers,
+                enabled=enabled,
+                base_path=base_path,
+                child_functions=child_functions,
+                raise_for_status=raise_for_status,
+            )
+
+            return Function(self.connection, self, function_name)
+        finally:
+            _cleanup_trend_roots(archive.trend_transformers_info)
 
     def patch_function(
         self,
@@ -561,6 +610,7 @@ class Collection:
         archive, bundle_id = self._build_and_upload_bundle(
             info, project_root, local_packages, raise_for_status, requirements
         )
+        _cleanup_trend_roots(archive.trend_transformers_info)
 
         # TODO: Remove this once the parameter is optional
         runtime_values = "{}"
@@ -713,38 +763,53 @@ class Collection:
             APIServerError: If the function could not be updated.
         """
         archive, bundle_id = self._build_and_upload_bundle(
-            info, project_root, local_packages, raise_for_status, requirements
+            info,
+            project_root,
+            local_packages,
+            raise_for_status,
+            requirements,
         )
-        new_function_name = new_function_name or archive.function_name
+        try:
+            new_function_name = new_function_name or archive.function_name
 
-        # TODO: Remove this once the parameter is optional
-        runtime_values = "{}"
+            # TODO: Remove this once the parameter is optional
+            runtime_values = "{}"
 
-        self.connection.function_update(
-            collection_name=self.name,
-            function_name=function_name,
-            new_function_name=new_function_name,
-            description=description,
-            tables=archive.tables,
-            table_types=archive.table_types,
-            dependencies=archive.string_dependencies,
-            trigger_by=archive.trigger_string_list,
-            function_snippet=archive.function_snippet,
-            decorator=archive.function_type,
-            bundle_id=bundle_id,
-            runtime_values=runtime_values,
-            reuse_frozen_tables=reuse_tables,
-            connector=archive.connector,
-            connection=archive.connection,
-            workers=archive.workers,
-            enabled=enabled,
-            base_path=base_path,
-            reset_state=reset_state,
-            reset_stage=reset_stage,
-            raise_for_status=raise_for_status,
-        )
+            child_functions = self._trend_child_functions(
+                archive.trend_transformers_info or [],
+                local_packages,
+                requirements,
+                raise_for_status,
+            )
 
-        return Function(self.connection, self, new_function_name)
+            self.connection.function_update(
+                collection_name=self.name,
+                function_name=function_name,
+                new_function_name=new_function_name,
+                description=description,
+                tables=archive.tables,
+                table_types=archive.table_types,
+                dependencies=archive.string_dependencies,
+                trigger_by=archive.trigger_string_list,
+                function_snippet=archive.function_snippet,
+                decorator=archive.function_type,
+                bundle_id=bundle_id,
+                runtime_values=runtime_values,
+                reuse_frozen_tables=reuse_tables,
+                connector=archive.connector,
+                connection=archive.connection,
+                workers=archive.workers,
+                enabled=enabled,
+                base_path=base_path,
+                reset_state=reset_state,
+                reset_stage=reset_stage,
+                child_functions=child_functions,
+                raise_for_status=raise_for_status,
+            )
+
+            return Function(self.connection, self, new_function_name)
+        finally:
+            _cleanup_trend_roots(archive.trend_transformers_info)
 
     def __eq__(self, other) -> bool:
         if not isinstance(other, Collection):
@@ -1242,6 +1307,7 @@ class Function:
         self.id = kwargs.get("id")
         self.triggers = kwargs.get("triggers")
         self.tables = kwargs.get("tables")
+        self.function_type = kwargs.get("function_type")
         self.dependencies = kwargs.get("dependencies")
         self.description = kwargs.get("description")
         self.defined_on = kwargs.get("defined_on")
@@ -1341,6 +1407,16 @@ class Function:
                 "Tables must be a list of strings or Table objects, or None; got"
                 f"{type(tables)} instead."
             )
+
+    @property
+    def function_type(self) -> str:
+        if self._function_type is None:
+            self.function_type = self._data.get("function_type")
+        return self._function_type
+
+    @function_type.setter
+    def function_type(self, function_type: str):
+        self._function_type = function_type
 
     @property
     def triggers(self) -> List[str]:
@@ -5574,6 +5650,7 @@ class _FunctionArchive:
     connector: str | None
     connection: str | None
     workers: dict[str, str] | None
+    trend_transformers_info: list[TrendTransformerInfo] | None = None
 
 
 # Maps each ``FunctionInfo.__kind__`` to the API discriminator the
@@ -5710,12 +5787,18 @@ def _output_tables(info: FunctionInfo) -> list[str]:
     return list(getattr(info, "output_tables", []) or [])
 
 
-def _dq_tables(collection: str, info: FunctionInfo) -> tuple[list[str], dict[str, str]]:
-    """Derive the data-quality output tables a function declares.
+def _dq_derived(
+    collection: str, info: FunctionInfo
+) -> tuple[list[str], dict[str, str], list[TrendTransformerInfo]]:
+    """Derive everything a function's data-quality actions imply.
 
-    Returns the derived table names and their catalog type codes, so
-    registration records each derived table under its ``TableType``. Empty when
-    the function declares no data-quality action.
+    Returns the derived table names, their catalog type codes (so
+    registration records each derived table under its ``TableType``), and the
+    system transformers that maintain the summary trend tables. All three are
+    empty when the function declares no data-quality action.
+
+    One :class:`DataQualityProcessor` serves all three, so the action set is
+    resolved and validated exactly once per registration.
     """
     from tabsdatak.common._actions.dataquality.processor import (
         DataQualityProcessor,
@@ -5725,7 +5808,7 @@ def _dq_tables(collection: str, info: FunctionInfo) -> tuple[list[str], dict[str
     on_tables = getattr(info, "on_tables", None) or []
     actions = [action for action in on_tables if isinstance(action, DataQuality)]
     if not actions:
-        return [], {}
+        return [], {}, []
 
     processor = DataQualityProcessor.from_actions(
         collection=collection,
@@ -5738,7 +5821,21 @@ def _dq_tables(collection: str, info: FunctionInfo) -> tuple[list[str], dict[str
         table_info.table: table_info.kind.type.value
         for table_info in output_table_infos
     }
-    return names, types
+    return names, types, processor.build_trend_transformers_info()
+
+
+def _cleanup_trend_roots(trend_transformers) -> None:
+    """Discard the generated-module directories built for trend transformers.
+
+    ``build_bundle`` copies each generated module into its bundle's
+    ``user_code/`` during registration, so once registration has been attempted
+    the directories are dead weight. Called from a ``finally`` so a failed
+    registration leaves nothing behind either.
+    """
+    from tabsdatak.common._actions.dataquality.trend import cleanup_trend_tfr_mod
+
+    for trend in trend_transformers or []:
+        cleanup_trend_tfr_mod(trend.project_root)
 
 
 def _create_archive(
@@ -5797,7 +5894,7 @@ def _create_archive(
     function_type = _KIND_TO_API_TYPE.get(info.__kind__, "U")
     function_snippet = capture_source_snippet(info)
 
-    dq_names, dq_types = _dq_tables(collection, info)
+    dq_names, dq_types, trend_transformers = _dq_derived(collection, info)
 
     return _FunctionArchive(
         tables=_output_tables(info) + dq_names,
@@ -5817,6 +5914,7 @@ def _create_archive(
         # the orchestrator's ``StageTriggersToSchedule`` filter found
         # nothing and the stream-publisher pod never spawned.
         workers=_workers(info),
+        trend_transformers_info=trend_transformers,
     )
 
 

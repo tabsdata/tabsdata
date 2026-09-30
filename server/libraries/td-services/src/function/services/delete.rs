@@ -2,9 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::engine::{Changes, FunctionState, apply};
-use crate::function::workers::register_workers;
-use std::collections::HashMap;
+use crate::function::lifecycle::delete_one;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -15,9 +13,8 @@ use td_execution::SchedulerNotify;
 use td_objects::and;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
+use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::function::FunctionParam;
-use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
-use td_objects::types::basic::{WorkerConfig, WorkerTypeDto};
 use td_queries::Queries;
 
 #[service_factory]
@@ -48,22 +45,7 @@ async fn delete_function(
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
 
-    let previous_version_id = Some(current.base.base.id.clone());
-    let state = FunctionState::load(conn, &current.base.base.function_id).await?;
-    let changes = Changes::for_delete(&state, &ctx);
-    apply(conn, &changes, at).await?;
-    // An empty workers map so all the previous workers get deleted.
-    let empty_workers = Some(HashMap::<WorkerTypeDto, WorkerConfig>::default());
-    register_workers(
-        conn,
-        &current.base.base,
-        &previous_version_id,
-        &empty_workers,
-    )
-    .await?;
-    conn.scd2()
-        .close::<FunctionDB>(&current.base.base.function_id, at)
-        .await?;
+    delete_one(conn, &ctx, &current.base.base, at).await?;
     gated_trx.commit().await?;
 
     // Wake the scheduler so cron/stage workers stop immediately instead of at
@@ -78,6 +60,7 @@ mod tests {
     use super::*;
     use crate::Services;
     use crate::function::services::tests::{assert_delete, assert_register};
+    use std::collections::HashMap;
     use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
@@ -89,8 +72,8 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, UserId, WorkerMessageStatus,
-        WorkerStatus, WorkerType,
+        AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, UserId, WorkerConfig,
+        WorkerMessageStatus, WorkerStatus, WorkerType, WorkerTypeDto,
     };
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
     use td_objects::types::basic::{CollectionName, TableNameDto};
@@ -109,13 +92,12 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -170,13 +152,12 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -234,13 +215,12 @@ mod tests {
             .await?;
 
         let trigger_create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "the_trigger".try_into()?,
             description: "wanted".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "the_trigger snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -261,13 +241,12 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -322,13 +301,12 @@ mod tests {
             .await?;
 
         let trigger_create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "the_trigger".try_into()?,
             description: "wanted".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "the_trigger snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -349,13 +327,12 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -410,13 +387,12 @@ mod tests {
             .await?;
 
         let trigger_create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "the_trigger".try_into()?,
             description: "wanted".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "the_trigger snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -437,13 +413,12 @@ mod tests {
             .await?;
 
         let create_1 = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "joaquin_workout_1".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -471,13 +446,12 @@ mod tests {
         let created_function_version_1 = response?;
 
         let create_2 = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "joaquin_workout_2".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -546,13 +520,12 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_1".try_into()?,
             description: "wanted".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "the_trigger snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

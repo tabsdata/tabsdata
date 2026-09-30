@@ -3,10 +3,12 @@
 #
 
 import logging
-from typing import Callable, Dict, Tuple, TypeAlias
+from tempfile import TemporaryDirectory
+from typing import Callable, Dict, NamedTuple, Tuple, TypeAlias
 
 # noinspection PyProtectedMember
 import tabsdatak.tableframe.schema as td_typing
+from tabsdatak._info import TransformerInfo
 from tabsdatak.api import OnTablesAction
 from tabsdatak.common._actions.dataquality.engine import (
     ColumnInfo,
@@ -17,6 +19,7 @@ from tabsdatak.common._actions.dataquality.record import (
     DerivedTableFrameStatus,
     Harvest,
 )
+from tabsdatak.common._actions.dataquality.trend import build_trend_tfr_mod
 from tabsdatak.dataquality import DataQuality, Filter, Select, Summary
 from tabsdatak.dataquality._error import DataQualityErrorCode
 from tabsdatak.dataquality._operator import Enrich, Fail, Operator
@@ -31,6 +34,17 @@ OutputTableSpec: TypeAlias = list
 DerivedTableFrameSpec: TypeAlias = list
 
 logger = logging.getLogger(__name__)
+
+
+class TrendTransformerInfo(NamedTuple):
+    """A trend transformer paired with the directory holding its module.
+
+    ``project_root`` is the temporary directory holding the module that implements the
+    trend tfr.
+    """
+
+    info: TransformerInfo
+    project_root: TemporaryDirectory
 
 
 class ExtendedTable:
@@ -207,10 +221,94 @@ class DataQualityProcessor:
         )
 
         self.validate_no_duplicate_table_names(
-            input_actions_tables, output_actions_tables
+            input_actions_tables, output_actions_tables + self.trend_table_names()
         )
 
         return input_actions_tables, output_actions_tables
+
+    def trend_table_names(self) -> list[TableInfo]:
+        """The trend tables the output actions' ``Summary`` operators derive.
+
+        Kept apart from :meth:`table_names` because a trend table is the output
+        of the system transformer that maintains it, not of the function whose
+        summaries it reads -- it is registered with that transformer, not here.
+        """
+        names: list[TableInfo] = []
+        for action in self._output_actions:
+            collection, table, position = self.resolve_output_table(action.table)
+            for operator in action.operators or []:
+                if not isinstance(operator, Summary):
+                    continue
+                trend = operator.trend
+                if trend is None:
+                    continue
+                names.append(
+                    self.table_name_for_trends(
+                        self._collection,
+                        trend.table if trend.table is not None else table,
+                        position,
+                        trend.table is not None,
+                        collection,
+                        table,
+                    )
+                )
+        return names
+
+    def build_trend_transformers_info(self) -> list[TrendTransformerInfo]:
+        """Build the system transformers that maintain the DQ summary trend tables.
+
+        One :class:`TransformerInfo` per ``Summary`` operator declared on an
+        output action. Each reads that operator's summary table plus its own
+        previous version, and writes the trend table named by
+        ``SummaryTrend.table``, falling back to ``<target>_dq_summary_trends``
+        when it is ``None``. A ``Summary`` whose ``trend`` is ``None``
+        contributes nothing.
+        """
+        transformers: list[TrendTransformerInfo] = []
+        for action in self._output_actions:
+            collection, table, position = self.resolve_output_table(action.table)
+            for operator in action.operators or []:
+                if not isinstance(operator, Summary):
+                    continue
+                trend = operator.trend
+                if trend is None:
+                    continue
+                summary_table = self.table_name_for_summary(
+                    self._collection,
+                    operator.table if operator.table is not None else table,
+                    position,
+                    operator.table is not None,
+                    collection,
+                    table,
+                )
+                trend_table = self.table_name_for_trends(
+                    self._collection,
+                    trend.table if trend.table is not None else table,
+                    position,
+                    trend.table is not None,
+                    collection,
+                    table,
+                )
+                dq_trend_fn, project_root = build_trend_tfr_mod(
+                    days=trend.days, weeks=trend.weeks, months=trend.months
+                )
+                transformers.append(
+                    TrendTransformerInfo(
+                        info=TransformerInfo(
+                            func=dq_trend_fn,
+                            input_tables=[
+                                f"{summary_table.collection}/"
+                                f"{summary_table.table}@HEAD",
+                                f"{trend_table.table}@HEAD",
+                            ],
+                            output_tables=[trend_table.table],
+                            trigger_by=None,
+                            on_tables=None,
+                        ),
+                        project_root=project_root,
+                    )
+                )
+        return transformers
 
     def resolve_input_table(self, action_table: str) -> tuple[str, str, int]:
         if action_table in self.input_tables:
@@ -382,6 +480,26 @@ class DataQualityProcessor:
             table=table,
             position=position,
             kind=TableKind.DQ_SUMMARY,
+            is_custom=is_custom,
+            from_table=from_table,
+            from_collection=from_collection,
+        )
+
+    @classmethod
+    def table_name_for_trends(
+        cls,
+        collection: str,
+        table: str,
+        position: int,
+        is_custom: bool,
+        from_collection: str,
+        from_table: str,
+    ) -> TableInfo:
+        return cls.derived_table_name(
+            collection=collection,
+            table=table,
+            position=position,
+            kind=TableKind.DQ_SUMMARY_TRENDS,
             is_custom=is_custom,
             from_table=from_table,
             from_collection=from_collection,

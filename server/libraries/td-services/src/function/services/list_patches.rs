@@ -75,13 +75,12 @@ mod tests {
             .await
             .unwrap();
         let register = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "f0".try_into().unwrap(),
             description: "d".try_into().unwrap(),
             bundle_id: BundleId::default(),
             snippet: "s".try_into().unwrap(),
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -169,13 +168,12 @@ mod tests {
 
         // A patched sibling function, to prove per-function scoping.
         let register = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "f1".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

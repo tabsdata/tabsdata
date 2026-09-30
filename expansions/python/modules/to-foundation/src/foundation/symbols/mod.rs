@@ -51,6 +51,7 @@ pub enum TableType {
     Regular,
     DQData,
     DQSummary,
+    DQSummaryTrends,
 }
 
 #[gen_stub_pymethods]
@@ -62,6 +63,7 @@ impl TableType {
             TableType::Regular => "R",
             TableType::DQData => "DQD",
             TableType::DQSummary => "DQS",
+            TableType::DQSummaryTrends => "DQST",
         }
     }
 

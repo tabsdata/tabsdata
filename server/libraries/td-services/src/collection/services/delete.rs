@@ -217,13 +217,12 @@ mod tests {
 
         for i in 0..3 {
             let create = FunctionRegister {
-                parent_function: None,
+                child_functions: None,
                 name: format!("function_{i}").try_into()?,
                 description: "description".try_into()?,
                 bundle_id: BundleId::default(),
                 snippet: "snippet".try_into()?,
                 decorator: Decorator::Publisher,
-                function_type: None,
                 connector: None,
                 connection: None,
                 base_path: None,
@@ -244,13 +243,12 @@ mod tests {
         }
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_3".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -387,13 +385,12 @@ mod tests {
             .collection(&name_c_0, &UserId::admin())
             .await?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_0".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -419,13 +416,12 @@ mod tests {
             .collection(&name_c_1, &UserId::admin())
             .await?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_1".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

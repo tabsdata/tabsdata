@@ -2,8 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::engine::{FunctionSpec, FunctionState, register_version};
-use crate::function::register::{RegisterFunctionError, ensure_connection_kind_matches};
+use crate::function::lifecycle::{reconcile_dq_summary_trend_children, register_one};
+use crate::function::register::ensure_no_dq_summary_trends_table_types;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -12,13 +12,11 @@ use td_bridge::BridgeProviderHandle;
 use td_database::access::{DbPool, InProject};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::bundle::BundleStatusUpdateDB;
+use td_objects::FromDao;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB};
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function::{Function, FunctionDBWithNames, FunctionRegister};
-use td_objects::types::basic::FunctionIdName;
-use td_objects::{FromDao, and};
 use td_queries::Queries;
 
 #[service_factory]
@@ -45,53 +43,17 @@ async fn register_function(
         .await?;
     let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
-    // Stage/checkpoint storage prefix: the collection's effective base_path (its
-    // own, else the project's — already resolved by the collections_active view).
-    let base_path = collection.effective_base_path.clone();
-
-    conn.scd2()
-        .assert_not_exists::<FunctionDBWithNames>(and!(&collection.id, &register.name))
-        .await?;
-
-    let mut function = register.to_dao(&ctx, collection.id, base_path.clone())?;
-    // Resolved here rather than in `to_dao`, which has no connection. The
-    // logical id is stored, so the link outlives a rename of either function.
-    if let Some(parent_name) = &register.parent_function {
-        let parent: FunctionDBWithNames = conn
-            .scd2()
-            .fetch_optional(and!(
-                &FunctionIdName::Name(parent_name.clone()),
-                &collection.id
-            ))
-            .await?
-            .ok_or_else(|| {
-                RegisterFunctionError::ParentFunctionDoesNotExist(
-                    parent_name.clone(),
-                    collection.name.clone(),
-                )
-            })?;
-        function.parent_function_id = Some(parent.base.base.function_id.into());
-    }
-    ensure_connection_kind_matches(conn, &bridge, &function, &collection).await?;
-    conn.scd2().open(&function, at).await?;
-
-    // Mark the uploaded bundle as Registered (kept as a durable record, not deleted).
-    let bundle_registered = BundleStatusUpdateDB::registered();
-    conn.update::<BundleStatusUpdateDB>(&bundle_registered, function.bundle_id)
-        .await?;
-
-    let state = FunctionState::empty();
-    let spec = FunctionSpec::from(&register);
-    register_version(
+    ensure_no_dq_summary_trends_table_types(&register.table_types)?;
+    let function = register_one(conn, &ctx, &bridge, &collection, &register, None, at).await?;
+    reconcile_dq_summary_trend_children(
         conn,
         &ctx,
-        at,
+        &bridge,
         &collection,
         &function,
-        &state,
-        &spec,
-        &None,
-        &register.workers,
+        &register.child_functions,
+        register.reuse_frozen_tables,
+        at,
     )
     .await?;
 
@@ -111,6 +73,7 @@ mod tests {
     use super::*;
     use crate::Services;
     use crate::collection::services::connection::test_support::create_collection;
+    use crate::function::register::RegisterFunctionError;
     use crate::function::services::tests::assert_register;
     use std::collections::HashMap;
     use std::str::FromStr;
@@ -118,19 +81,21 @@ mod tests {
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
     use td_execution::VersionResolverError;
+    use td_objects::and;
     use td_objects::dxo::bundle::BundleDB;
     use td_objects::dxo::collection::CollectionUpdate;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionUpdate};
+    use td_objects::dxo::function::DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX;
+    use td_objects::dxo::function::{ChildFunction, FunctionDB, FunctionParam, FunctionUpdate};
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::trigger::TriggerDB;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
-        AccessTokenId, BasePath, BundleStatus, CollectionType, ConnectionKind, Decorator,
-        FunctionIdName, FunctionName, FunctionRuntimeValues, FunctionStatus, GroupName, Parent,
-        ProjectId, SNIPPET_MAX_LEN, TableName, TableStatus, TriggerStatus, UserId,
-        WorkerMessageStatus, WorkerStatus, WorkerType,
+        AccessTokenId, BasePath, BundleStatus, CollectionType, ConnectionKind, Decorator, Enabled,
+        FunctionIdName, FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionType,
+        GroupName, Parent, ProjectId, SNIPPET_MAX_LEN, TableName, TableStatus, TableType,
+        TriggerStatus, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::basic::{
         BundleId, CollectionIdName, CollectionName, ReuseFrozen, TableNameDto, WorkerConfig,
@@ -194,13 +159,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -245,13 +209,12 @@ mod tests {
             "# padding\n".repeat(2000)
         );
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: module.as_str().try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -304,13 +267,12 @@ mod tests {
         assert!(module.len() > SNIPPET_MAX_LEN);
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: module.as_str().try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -360,13 +322,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -412,13 +373,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -461,13 +421,12 @@ mod tests {
             .await?;
 
         let producer = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "producer".try_into()?,
             description: "producer description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "producer snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -486,13 +445,12 @@ mod tests {
             .await?;
 
         let consumer = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "consumer".try_into()?,
             description: "consumer description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "consumer snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -539,7 +497,7 @@ mod tests {
         assert_eq!(triggers[0].base.status, TriggerStatus::Frozen);
 
         let successor = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "successor".try_into()?,
             ..producer.clone()
         };
@@ -558,7 +516,7 @@ mod tests {
         ));
 
         let successor = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             reuse_frozen_tables: ReuseFrozen::TRUE,
             ..successor
         };
@@ -614,13 +572,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -675,13 +632,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -752,13 +708,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_1".try_into()?,
             description: "function_1 description".try_into()?,
             bundle_id,
             snippet: "function_1 snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -795,13 +750,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_2".try_into()?,
             description: "function_2 description".try_into()?,
             bundle_id,
             snippet: "function_2 snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -850,13 +804,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_1".try_into()?,
             description: "function_1 description".try_into()?,
             bundle_id,
             snippet: "function_1 snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -897,13 +850,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_2".try_into()?,
             description: "function_2 description".try_into()?,
             bundle_id,
             snippet: "function_2 snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -977,13 +929,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_1".try_into()?,
             description: "function_1 description".try_into()?,
             bundle_id,
             snippet: "function_1 snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1018,13 +969,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_3".try_into()?,
             description: "function_3 description".try_into()?,
             bundle_id,
             snippet: "function_3 snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1078,13 +1028,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_2".try_into()?,
             description: "function_2 description".try_into()?,
             bundle_id,
             snippet: "function_2 snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1130,13 +1079,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1220,13 +1168,12 @@ mod tests {
 
             let bundle_id = BundleId::default();
             let create = FunctionRegister {
-                parent_function: None,
+                child_functions: None,
                 name: "function_1".try_into()?,
                 description: "function_1 description".try_into()?,
                 bundle_id,
                 snippet: "function_1 snippet".try_into()?,
                 decorator: Decorator::Transformer,
-                function_type: None,
                 connector: None,
                 connection: None,
                 base_path: None,
@@ -1265,13 +1212,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function_2".try_into()?,
             description: "function_2 description".try_into()?,
             bundle_id,
             snippet: "function_2 snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1322,13 +1268,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1379,13 +1324,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1422,13 +1366,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1477,13 +1420,12 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1527,13 +1469,12 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1587,13 +1528,12 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1641,13 +1581,12 @@ mod tests {
         let prod = set_collection_base_path(&db, p.id, &collection_name, "/prod").await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "stamped_fn".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1716,13 +1655,12 @@ mod tests {
         );
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "flip_fn".try_into()?,
             description: "description".try_into()?,
             bundle_id: bundle.id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1767,13 +1705,12 @@ mod tests {
         let prod = set_collection_base_path(&db, p.id, &collection_name, "/prod").await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "override_fn".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: Some(BasePath::try_from("/fn")?),
@@ -1816,13 +1753,12 @@ mod tests {
         connection: Option<&str>,
     ) -> Result<FunctionRegister, TdError> {
         let mut create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: name.try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -2056,6 +1992,114 @@ mod tests {
         Ok(())
     }
 
+    const OWNER: &str = "trend_owner_fn";
+
+    /// An owner declaring one trend child, registered under Kubernetes where
+    /// the admission contract actually runs. A request cannot name a class or
+    /// a parent, so the reconcile is the only way a trend function is born.
+    async fn register_owner_with_trend(
+        db: &TdPool,
+        project: ProjectId,
+        collection: &str,
+        group: Option<GroupName>,
+        decorator: Decorator,
+        connection: Option<&str>,
+    ) -> Result<Function, TdError> {
+        create_collection(db, project, collection, group).await;
+        let mut create = pubsub_register(OWNER, decorator, connection)?;
+        create.tables = Some(vec![TableNameDto::try_from("owned")?]);
+        create.child_functions = Some(vec![child("trend")?]);
+        register_in_kubernetes(db, project, collection, create).await
+    }
+
+    #[td_test::test(db)]
+    async fn test_dq_trend_transformer_in_data_factory_ok(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let owner =
+            register_owner_with_trend(&db, p.id, "fct_trend", None, Decorator::Transformer, None)
+                .await?;
+
+        let trend = live_by_name(&db, &child_name("trend"))
+            .await?
+            .expect("registered");
+        assert_eq!(trend.base.function_type, FunctionType::DQSummaryTrends);
+        assert_eq!(
+            trend.base.parent_function_id,
+            Some(Parent::from(owner.function_id))
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_dq_trend_transformer_in_source_collection_ok(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        register_owner_with_trend(
+            &db,
+            p.id,
+            "src_trend",
+            Some(GroupName::source()),
+            Decorator::Publisher,
+            Some("mysqlSrcConn"),
+        )
+        .await?;
+
+        let trend = live_by_name(&db, &child_name("trend"))
+            .await?
+            .expect("registered");
+        assert_eq!(trend.base.function_type, FunctionType::DQSummaryTrends);
+        Ok(())
+    }
+
+    /// The exemption is for sources only: a trend transformer follows the
+    /// publisher whose summaries it reads, and no publisher lives here.
+    #[td_test::test(db)]
+    async fn test_dq_trend_transformer_in_destination_collection_err(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let err = register_owner_with_trend(
+            &db,
+            p.id,
+            "dst_trend",
+            Some(GroupName::destination()),
+            Decorator::Subscriber,
+            Some("mysqlDestConn"),
+        )
+        .await
+        .unwrap_err();
+
+        let err = err.domain_err::<RegisterFunctionError>();
+        assert!(matches!(
+            err,
+            RegisterFunctionError::TrendChildInUnsupportedCollection(
+                _,
+                CollectionType::Destination
+            )
+        ));
+        assert!(live_by_name(&db, &child_name("trend")).await?.is_none());
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_a_regular_transformer_in_a_source_collection_is_still_refused(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "src_regular", Some(GroupName::source())).await;
+        let mut create = pubsub_register("plain_tfr", Decorator::Transformer, None)?;
+        create.tables = Some(vec![TableNameDto::try_from("plain")?]);
+
+        let err = register_in_kubernetes(&db, p.id, "src_regular", create)
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            err.domain_err::<RegisterFunctionError>(),
+            RegisterFunctionError::TransformerInConnectedCollection(_, CollectionType::Source)
+        ));
+        Ok(())
+    }
+
     async fn register_err(
         db: &TdPool,
         project: ProjectId,
@@ -2072,30 +2116,6 @@ mod tests {
             .in_project(project);
         let service = Services::with_defaults(db.clone());
         Ok(service.register_function(request).await.unwrap_err())
-    }
-
-    #[td_test::test(db)]
-    async fn test_register_parent_function_does_not_exist_err(db: TdPool) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?;
-        let collection_name = CollectionName::try_from("parent_fn_missing")?;
-        let _collection = db
-            .scoped(p.id)
-            .seed()
-            .collection(&collection_name, &UserId::admin())
-            .await?;
-
-        let mut create = pubsub_register("child_fn", Decorator::Transformer, None)?;
-        create.parent_function = Some(FunctionName::try_from("no_such_function")?);
-
-        let err = register_err(&db, p.id, collection_name.as_str(), create).await?;
-        let err = err.domain_err::<RegisterFunctionError>();
-        if let RegisterFunctionError::ParentFunctionDoesNotExist(parent, collection) = err {
-            assert_eq!(*parent, FunctionName::try_from("no_such_function")?);
-            assert_eq!(*collection, collection_name);
-        } else {
-            panic!("Unexpected error: {:?}", err);
-        }
-        Ok(())
     }
 
     async fn register_ok(
@@ -2116,107 +2136,449 @@ mod tests {
         Ok(service.register_function(request).await?.data)
     }
 
+    /// The link is stored as the parent's *logical* id, so renaming the owner
+    /// does not break it and the child's next version carries it forward.
     #[td_test::test(db)]
-    async fn test_register_parent_function_stores_logical_id(db: TdPool) -> Result<(), TdError> {
+    async fn test_parent_function_id_is_stable_across_writes(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection_name = CollectionName::try_from("parent_logical")?;
-        let _collection = db
-            .scoped(p.id)
-            .seed()
-            .collection(&collection_name, &UserId::admin())
+        create_collection(&db, p.id, "parent_stable", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        let owner = register_ok(&db, p.id, "parent_stable", create).await?;
+        let expected = Some(Parent::from(owner.function_id));
+        let before = live_by_name(&db, &child_name("a"))
+            .await?
+            .expect("child registered");
+        assert_eq!(before.base.parent_function_id, expected);
+
+        let mut update = owner_update(Some(vec![child("a")?]));
+        update.name = Some("owner_renamed".try_into()?);
+        update_ok(&db, p.id, "parent_stable", CHILD_OWNER, update).await?;
+
+        let after = live_by_name(&db, &child_name("a"))
+            .await?
+            .expect("child still registered");
+        assert_ne!(after.base.id, before.base.id);
+        assert_eq!(after.base.parent_function_id, expected);
+        Ok(())
+    }
+
+    const CHILD_OWNER: &str = "child_owner";
+
+    fn child(table: &str) -> Result<ChildFunction, TdError> {
+        Ok(ChildFunction {
+            function_type: FunctionType::DQSummaryTrends,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            dependencies: None,
+            tables: Some(vec![TableNameDto::try_from(table)?]),
+        })
+    }
+
+    fn child_name(table: &str) -> String {
+        format!("{table}{DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX}")
+    }
+
+    fn owner_register(
+        tables: &[&str],
+        child_functions: Option<Vec<ChildFunction>>,
+    ) -> Result<FunctionRegister, TdError> {
+        let mut create = pubsub_register(CHILD_OWNER, Decorator::Transformer, None)?;
+        create.tables = Some(
+            tables
+                .iter()
+                .map(|t| TableNameDto::try_from(*t))
+                .collect::<Result<Vec<_>, _>>()?,
+        );
+        create.child_functions = child_functions;
+        Ok(create)
+    }
+
+    async fn update_ok(
+        db: &TdPool,
+        project: ProjectId,
+        collection: &str,
+        function: &str,
+        update: FunctionUpdate,
+    ) -> Result<Function, TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(collection)?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str(function)?,
+                    },
+                ),
+                update,
+            )
+            .in_project(project);
+        Ok(Services::with_defaults(db.clone())
+            .update_function(request)
+            .await?
+            .data)
+    }
+
+    async fn update_err(
+        db: &TdPool,
+        project: ProjectId,
+        collection: &str,
+        function: &str,
+        update: FunctionUpdate,
+    ) -> Result<TdError, TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(collection)?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str(function)?,
+                    },
+                ),
+                update,
+            )
+            .in_project(project);
+        Ok(Services::with_defaults(db.clone())
+            .update_function(request)
+            .await
+            .expect_err("update should have been refused"))
+    }
+
+    async fn live_by_name(db: &TdPool, name: &str) -> Result<Option<FunctionDB>, TdError> {
+        let rows: Vec<FunctionDB> = db
+            .scd2()
+            .fetch_all::<FunctionDB>(&FunctionName::try_from(name)?)
             .await?;
+        Ok(rows.into_iter().next())
+    }
 
-        let parent = pubsub_register("parent_fn", Decorator::Transformer, None)?;
-        let parent = register_ok(&db, p.id, collection_name.as_str(), parent).await?;
+    fn owner_update(child_functions: Option<Vec<ChildFunction>>) -> FunctionUpdate {
+        owner_update_reusing(child_functions, ReuseFrozen::TRUE)
+    }
 
-        let mut create = pubsub_register("child_fn", Decorator::Transformer, None)?;
-        create.parent_function = Some(FunctionName::try_from("parent_fn")?);
-        let child = register_ok(&db, p.id, collection_name.as_str(), create).await?;
+    fn owner_update_reusing(
+        child_functions: Option<Vec<ChildFunction>>,
+        reuse_frozen_tables: ReuseFrozen,
+    ) -> FunctionUpdate {
+        FunctionUpdate {
+            child_functions,
+            reuse_frozen_tables,
+            ..Default::default()
+        }
+    }
 
+    #[td_test::test(db)]
+    async fn test_register_with_a_child_function_registers_it(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("m")?]))?;
+        let owner = register_ok(&db, p.id, "mgd", create).await?;
+
+        let child = live_by_name(&db, &child_name("m"))
+            .await?
+            .expect("child registered");
+        assert_eq!(child.base.function_type, FunctionType::DQSummaryTrends);
         assert_eq!(
-            child.parent_function_id,
-            Some(Parent::from(parent.function_id))
-        );
-        // The logical id, not the version id: the two are distinct values, and
-        // storing the version id would break the link on the parent's next write.
-        assert_ne!(
-            child.parent_function_id.as_ref().map(|id| id.to_string()),
-            Some(parent.id.to_string())
-        );
-
-        let stored: FunctionDB = db.timeline().fetch_one(&child.id).await?;
-        assert_eq!(
-            stored.base.parent_function_id,
-            Some(Parent::from(parent.function_id))
+            child.base.parent_function_id,
+            Some(Parent::from(owner.function_id))
         );
         Ok(())
     }
 
     #[td_test::test(db)]
-    async fn test_parent_function_id_is_stable_across_writes(db: TdPool) -> Result<(), TdError> {
+    async fn test_register_with_two_child_functions(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection_name = CollectionName::try_from("parent_stable")?;
-        let _collection = db
-            .scoped(p.id)
-            .seed()
-            .collection(&collection_name, &UserId::admin())
+        create_collection(&db, p.id, "mgd2", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?, child("b")?]))?;
+        register_ok(&db, p.id, "mgd2", create).await?;
+
+        assert!(live_by_name(&db, &child_name("a")).await?.is_some());
+        assert!(live_by_name(&db, &child_name("b")).await?.is_some());
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_a_table_too_long_to_name_a_trend_function_is_refused(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "tt_long", None).await;
+        let table = "t".repeat(100 - DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX.len() + 1);
+        let create = owner_register(&["owned"], Some(vec![child(&table)?]))?;
+
+        let err = register_err(&db, p.id, "tt_long", create).await?;
+        assert!(matches!(
+            err.domain_err::<RegisterFunctionError>(),
+            RegisterFunctionError::ChildFunctionNameTooLong(_, _)
+        ));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_a_trend_function_name_already_taken_is_refused(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "tt_taken", None).await;
+        let mut squatter = pubsub_register(&child_name("a"), Decorator::Transformer, None)?;
+        squatter.tables = Some(vec![TableNameDto::try_from("squatted")?]);
+        register_ok(&db, p.id, "tt_taken", squatter).await?;
+
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        let err = register_err(&db, p.id, "tt_taken", create).await?;
+        assert!(matches!(
+            err.domain_err::<RegisterFunctionError>(),
+            RegisterFunctionError::ChildFunctionNameTaken(_, _, _)
+        ));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_a_function_cannot_type_its_own_table_as_a_trend(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "tt_dqst", None).await;
+        let mut create = owner_register(&["owned"], None)?;
+        create.table_types = Some(HashMap::from([(
+            TableNameDto::try_from("owned")?,
+            TableType::DQSummaryTrends,
+        )]));
+
+        let err = register_err(&db, p.id, "tt_dqst", create).await?;
+        assert!(matches!(
+            err.domain_err::<RegisterFunctionError>(),
+            RegisterFunctionError::DQSummaryTrendsTableTypeNotAllowed(_, _)
+        ));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_a_function_may_type_its_own_data_quality_tables(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "tt_dqs", None).await;
+        let mut create = owner_register(&["owned"], None)?;
+        create.table_types = Some(HashMap::from([(
+            TableNameDto::try_from("owned")?,
+            TableType::DQSummary,
+        )]));
+
+        register_ok(&db, p.id, "tt_dqs", create).await?;
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_a_trend_childs_tables_are_typed_as_trends(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "tt_child", None).await;
+        let declared = child("t")?;
+        let create = owner_register(&["owned"], Some(vec![declared]))?;
+        register_ok(&db, p.id, "tt_child", create).await?;
+
+        let child = live_by_name(&db, &child_name("t"))
+            .await?
+            .expect("child registered");
+        let tables: Vec<TableDB> = db
+            .scd2()
+            .fetch_all::<TableDB>(and!(
+                &child.base.function_id,
+                TableName::try_from("t")?,
+                TableDB::active()
+            ))
             .await?;
+        assert_eq!(tables.len(), 1);
+        assert_eq!(tables[0].base.table_type, TableType::DQSummaryTrends);
+        Ok(())
+    }
 
-        let parent = pubsub_register("parent_fn", Decorator::Transformer, None)?;
-        let parent = register_ok(&db, p.id, collection_name.as_str(), parent).await?;
+    #[td_test::test(db)]
+    async fn test_a_child_of_a_disabled_owner_is_registered_disabled(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_off", None).await;
+        let mut create = owner_register(&["owned"], Some(vec![child("d")?]))?;
+        create.enabled = Some(Enabled::FALSE);
+        register_ok(&db, p.id, "mgd_off", create).await?;
 
-        let mut create = pubsub_register("child_fn", Decorator::Transformer, None)?;
-        create.parent_function = Some(FunctionName::try_from("parent_fn")?);
-        let child = register_ok(&db, p.id, collection_name.as_str(), create).await?;
-        let expected = Some(Parent::from(parent.function_id));
+        let child = live_by_name(&db, &child_name("d"))
+            .await?
+            .expect("child registered");
+        assert_eq!(child.base.enabled, Enabled::FALSE);
+        Ok(())
+    }
 
-        // A new version of the parent: the logical id it is linked by does not
-        // change, so the child keeps pointing at it.
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .update(
-                (
-                    CollectionParam {
-                        collection: CollectionIdName::from_str(collection_name.as_str())?,
-                    },
-                    FunctionParam {
-                        function: FunctionIdName::from_str("parent_fn")?,
-                    },
-                ),
-                FunctionUpdate {
-                    name: Some("parent_fn_renamed".try_into()?),
-                    ..Default::default()
-                },
-            )
-            .in_project(p.id);
-        let service = Services::with_defaults(db.clone());
-        let reparented = service.update_function(request).await?.data;
-        assert_eq!(reparented.function_id, parent.function_id);
-        assert_ne!(reparented.id, parent.id);
+    #[td_test::test(db)]
+    async fn test_updating_the_owner_re_enables_its_child(db: TdPool) -> Result<(), TdError> {
+        // The child cannot be toggled directly, so an owner that came back on
+        // without carrying its child would strand it disabled for good.
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_back", None).await;
+        let mut create = owner_register(&["owned"], Some(vec![child("r")?]))?;
+        create.enabled = Some(Enabled::FALSE);
+        register_ok(&db, p.id, "mgd_back", create).await?;
+        assert_eq!(
+            live_by_name(&db, &child_name("r"))
+                .await?
+                .expect("child")
+                .base
+                .enabled,
+            Enabled::FALSE
+        );
 
-        // A new version of the child: `..previous.base.clone()` has to carry the
-        // link forward rather than reset it.
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .update(
-                (
-                    CollectionParam {
-                        collection: CollectionIdName::from_str(collection_name.as_str())?,
-                    },
-                    FunctionParam {
-                        function: FunctionIdName::from_str("child_fn")?,
-                    },
-                ),
-                FunctionUpdate {
-                    description: Some("child_fn description updated".try_into()?),
-                    ..Default::default()
-                },
-            )
-            .in_project(p.id);
-        let updated = service.update_function(request).await?.data;
-        assert_ne!(updated.id, child.id);
-        assert_eq!(updated.parent_function_id, expected);
+        let update = FunctionUpdate {
+            enabled: Some(Enabled::TRUE),
+            ..owner_update(Some(vec![child("r")?]))
+        };
+        update_ok(&db, p.id, "mgd_back", CHILD_OWNER, update).await?;
 
-        let stored: FunctionDB = db.timeline().fetch_one(&updated.id).await?;
-        assert_eq!(stored.base.parent_function_id, expected);
+        assert_eq!(
+            live_by_name(&db, &child_name("r"))
+                .await?
+                .expect("child")
+                .base
+                .enabled,
+            Enabled::TRUE
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_disabling_the_owner_through_an_update_disables_its_child(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_down", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("x")?]))?;
+        register_ok(&db, p.id, "mgd_down", create).await?;
+        assert_eq!(
+            live_by_name(&db, &child_name("x"))
+                .await?
+                .expect("child")
+                .base
+                .enabled,
+            Enabled::TRUE
+        );
+
+        let update = FunctionUpdate {
+            enabled: Some(Enabled::FALSE),
+            ..owner_update(Some(vec![child("x")?]))
+        };
+        update_ok(&db, p.id, "mgd_down", CHILD_OWNER, update).await?;
+
+        assert_eq!(
+            live_by_name(&db, &child_name("x"))
+                .await?
+                .expect("child")
+                .base
+                .enabled,
+            Enabled::FALSE
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_dropping_a_child_function_deletes_it(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_drop", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?, child("b")?]))?;
+        register_ok(&db, p.id, "mgd_drop", create).await?;
+
+        let update = owner_update(Some(vec![child("a")?]));
+        update_ok(&db, p.id, "mgd_drop", CHILD_OWNER, update).await?;
+
+        assert!(live_by_name(&db, &child_name("a")).await?.is_some());
+        assert!(live_by_name(&db, &child_name("b")).await?.is_none());
+        Ok(())
+    }
+
+    /// The trend table survives the trend being dropped, so re-declaring it
+    /// lands on a frozen table the caller never named.
+    #[td_test::test(db)]
+    async fn test_re_adding_a_trend_without_reuse_tables_names_the_trend_table(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_refrozen", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        register_ok(&db, p.id, "mgd_refrozen", create).await?;
+        update_ok(
+            &db,
+            p.id,
+            "mgd_refrozen",
+            CHILD_OWNER,
+            owner_update(Some(vec![])),
+        )
+        .await?;
+
+        let update = owner_update_reusing(Some(vec![child("a")?]), ReuseFrozen::FALSE);
+        let err = update_err(&db, p.id, "mgd_refrozen", CHILD_OWNER, update).await?;
+
+        assert!(matches!(
+            err.domain_err::<RegisterFunctionError>(),
+            RegisterFunctionError::TrendChildTableFrozen(_, _)
+        ));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_re_adding_a_trend_with_reuse_tables_adopts_its_table(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_readopt", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        register_ok(&db, p.id, "mgd_readopt", create).await?;
+        update_ok(
+            &db,
+            p.id,
+            "mgd_readopt",
+            CHILD_OWNER,
+            owner_update(Some(vec![])),
+        )
+        .await?;
+        assert!(live_by_name(&db, &child_name("a")).await?.is_none());
+
+        let update = owner_update_reusing(Some(vec![child("a")?]), ReuseFrozen::TRUE);
+        update_ok(&db, p.id, "mgd_readopt", CHILD_OWNER, update).await?;
+
+        assert!(live_by_name(&db, &child_name("a")).await?.is_some());
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_without_child_functions_deletes_them(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_none", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        register_ok(&db, p.id, "mgd_none", create).await?;
+
+        let mut update = owner_update(None);
+        update.description = Some("touched".try_into()?);
+        update_ok(&db, p.id, "mgd_none", CHILD_OWNER, update).await?;
+
+        assert!(live_by_name(&db, &child_name("a")).await?.is_none());
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_a_child_function_declaring_a_regular_class_is_refused(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_class", None).await;
+        let mut child = child("plain_table")?;
+        child.function_type = FunctionType::Regular;
+        let create = owner_register(&["owned"], Some(vec![child]))?;
+
+        let err = register_err(&db, p.id, "mgd_class", create).await?;
+        assert!(matches!(
+            err.domain_err::<RegisterFunctionError>(),
+            RegisterFunctionError::ChildFunctionTypeNotAllowed(FunctionType::Regular)
+        ));
         Ok(())
     }
 }

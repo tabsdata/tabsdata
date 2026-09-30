@@ -645,13 +645,12 @@ pub(crate) mod tests {
                     .collect::<Vec<_>>();
 
                 let create = FunctionRegister {
-                    parent_function: None,
+                    child_functions: None,
                     name: test_function.name.clone(),
                     description: "foo description".try_into()?,
                     bundle_id: BundleId::default(),
                     snippet: "foo snippet".try_into()?,
                     decorator: Decorator::Publisher,
-                    function_type: None,
                     connector: None,
                     connection: None,
                     base_path: None,

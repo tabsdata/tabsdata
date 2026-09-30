@@ -173,13 +173,12 @@ mod tests {
 
         // dummy to allow for triggers and dependencies to exist
         let dummy = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "dummy_foo".try_into()?,
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -199,13 +198,12 @@ mod tests {
         let _dummy_function = db.scoped(p.id).seed().function(&collection, &dummy).await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "foo".try_into()?,
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

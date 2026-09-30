@@ -206,13 +206,12 @@ mod tests {
             )
             .await?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "f".try_into()?,
             description: "F".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "S".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -272,13 +271,12 @@ mod tests {
 
         let table_name = TableNameDto::try_from("t")?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "f".try_into()?,
             description: "F".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "S".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

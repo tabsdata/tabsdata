@@ -594,6 +594,8 @@ pub enum TableType {
     DQData,
     #[typed_enum(rename = "DQS")]
     DQSummary,
+    #[typed_enum(rename = "DQST")]
+    DQSummaryTrends,
 }
 
 /// Represents the status of a transaction. Note transactions are atomic status wise.

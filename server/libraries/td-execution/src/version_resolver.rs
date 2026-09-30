@@ -446,13 +446,12 @@ mod tests {
 
         let table_name = TableNameDto::try_from("t0").unwrap();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "f0".try_into().unwrap(),
             description: "d".try_into().unwrap(),
             bundle_id: BundleId::default(),
             snippet: "s".try_into().unwrap(),
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -727,13 +726,12 @@ mod tests {
         let (collection, _publisher, table_id, ltdvs) = seed_ftdv_timeline(&db, 2).await;
 
         let consumer_create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "c0".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -801,13 +799,12 @@ mod tests {
 
         let table_b_name = TableNameDto::try_from("table_b")?;
         let table_b_create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "f_b".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

@@ -25,10 +25,6 @@ pub struct FunctionRegister {
     pub bundle_id: BundleId,
     pub snippet: RawSnippet,
     pub decorator: Decorator,
-    #[serde(default)]
-    pub function_type: Option<FunctionType>,
-    #[serde(default)]
-    pub parent_function: Option<FunctionName>,
     pub connector: Option<Connector>,
     pub connection: Option<ConnectionKind>,
     #[serde(default)]
@@ -45,6 +41,120 @@ pub struct FunctionRegister {
     pub enabled: Option<Enabled>,
     #[serde(default)]
     pub workers: Option<HashMap<WorkerTypeDto, WorkerConfig>>,
+    #[serde(default)]
+    pub child_functions: Option<Vec<ChildFunction>>,
+}
+
+#[ta_objects::Dto]
+pub struct ChildFunction {
+    #[serde(deserialize_with = "deserialize_child_function_type")]
+    pub function_type: FunctionType,
+    pub bundle_id: BundleId,
+    pub snippet: RawSnippet,
+    #[serde(default)]
+    pub dependencies: Option<Vec<TableDependencyDto>>,
+    #[serde(default)]
+    pub tables: Option<Vec<TableNameDto>>,
+}
+
+pub(crate) fn deserialize_child_function_type<'de, D>(
+    deserializer: D,
+) -> Result<FunctionType, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    let function_type = FunctionType::deserialize(deserializer)?;
+    if matches!(function_type, FunctionType::Regular) {
+        return Err(serde::de::Error::custom(
+            "a child function cannot declare a Regular function_type",
+        ));
+    }
+    Ok(function_type)
+}
+
+pub const DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX: &str = "_trend";
+
+impl ChildFunction {
+    pub fn output_table(&self) -> Option<&TableNameDto> {
+        match self.tables.as_deref() {
+            Some([table]) => Some(table),
+            _ => None,
+        }
+    }
+
+    pub fn platform_name(&self, table: &TableNameDto) -> Option<FunctionName> {
+        let suffix = match self.function_type {
+            FunctionType::DQSummaryTrends => DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX,
+            FunctionType::Regular => return None,
+        };
+        FunctionName::try_from(format!("{table}{suffix}")).ok()
+    }
+
+    fn platform_table_types(&self) -> Option<HashMap<TableNameDto, TableType>> {
+        let table_type = match self.function_type {
+            FunctionType::DQSummaryTrends => TableType::DQSummaryTrends,
+            FunctionType::Regular => return None,
+        };
+        Some(
+            self.tables
+                .iter()
+                .flatten()
+                .map(|table| (table.clone(), table_type.clone()))
+                .collect(),
+        )
+    }
+
+    pub fn to_register(
+        &self,
+        name: &FunctionName,
+        reuse_frozen_tables: ReuseFrozen,
+        enabled: Enabled,
+    ) -> Result<FunctionRegister, TdError> {
+        Ok(FunctionRegister {
+            name: name.clone(),
+            description: Description::try_from(name.to_string())?,
+            bundle_id: self.bundle_id,
+            snippet: self.snippet.clone(),
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: self.dependencies.clone(),
+            triggers: None,
+            tables: self.tables.clone(),
+            table_types: self.platform_table_types(),
+            runtime_values: FunctionRuntimeValues::default(),
+            reuse_frozen_tables,
+            enabled: Some(enabled),
+            workers: None,
+            child_functions: None,
+        })
+    }
+
+    pub fn to_update(
+        &self,
+        name: &FunctionName,
+        reuse_frozen_tables: ReuseFrozen,
+        enabled: Enabled,
+    ) -> Result<FunctionUpdate, TdError> {
+        Ok(FunctionUpdate {
+            name: Some(name.clone()),
+            description: Some(Description::try_from(name.to_string())?),
+            bundle_id: Some(self.bundle_id),
+            snippet: Some(self.snippet.clone()),
+            decorator: Some(Decorator::Transformer),
+            dependencies: self.dependencies.clone(),
+            triggers: None,
+            tables: self.tables.clone(),
+            table_types: self.platform_table_types(),
+            runtime_values: Some(FunctionRuntimeValues::default()),
+            reuse_frozen_tables,
+            enabled: Some(enabled),
+            child_functions: None,
+            ..Default::default()
+        })
+    }
 }
 
 impl FunctionRegister {
@@ -61,7 +171,7 @@ impl FunctionRegister {
             name: self.name.clone(),
             description: self.description.clone(),
             decorator: self.decorator.clone(),
-            function_type: self.function_type.clone().unwrap_or_default(),
+            function_type: FunctionType::default(),
             connector: self.connector.clone(),
             connection: self.connection.clone(),
             runtime_values: self.runtime_values.clone(),
@@ -107,6 +217,7 @@ pub struct FunctionUpdate {
     /// When true, regenerate the function's stage id (a fresh stage/checkpoint
     /// dir) instead of carrying it forward, discarding accumulated stage state.
     pub reset_stage: ResetStage,
+    pub child_functions: Option<Vec<ChildFunction>>,
 }
 
 impl FunctionUpdate {
@@ -616,4 +727,24 @@ pub struct FunctionParam {
 #[ta_objects::UrlParam]
 pub struct FunctionVersionParam {
     pub function_version: FunctionVersionId,
+}
+
+#[cfg(test)]
+mod child_function_type_tests {
+    use super::ChildFunction;
+    use crate::types::basic::FunctionType;
+
+    #[test]
+    fn test_a_child_function_cannot_declare_the_regular_class() {
+        let json = r#"{"function_type":"R","bundle_id":"00000000000000000000000000","snippet":"s","tables":["t"]}"#;
+        let err = serde_json::from_str::<ChildFunction>(json).unwrap_err();
+        assert!(err.to_string().contains("Regular"));
+    }
+
+    #[test]
+    fn test_a_child_function_may_declare_the_trends_class() {
+        let json = r#"{"function_type":"DQST","bundle_id":"00000000000000000000000000","snippet":"s","tables":["t"]}"#;
+        let child: ChildFunction = serde_json::from_str(json).unwrap();
+        assert!(matches!(child.function_type, FunctionType::DQSummaryTrends));
+    }
 }

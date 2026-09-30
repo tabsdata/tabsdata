@@ -24,13 +24,12 @@ use td_queries::test_utils::SeedEntry;
 /// `base_path` becomes the function-version override.
 pub(crate) fn register(name: &str, base_path: Option<BasePath>) -> FunctionRegister {
     FunctionRegister {
-        parent_function: None,
+        child_functions: None,
         name: name.try_into().unwrap(),
         description: "d".try_into().unwrap(),
         bundle_id: BundleId::default(),
         snippet: "s".try_into().unwrap(),
         decorator: Decorator::Publisher,
-        function_type: None,
         connector: None,
         connection: None,
         base_path,

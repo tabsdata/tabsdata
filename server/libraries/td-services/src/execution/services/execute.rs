@@ -186,13 +186,12 @@ pub(crate) mod tests {
 
         // Every run-level row must inherit the project's group.
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FunctionName::try_from("grp_fn")?,
             description: "grp fn".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "grp snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -253,13 +252,12 @@ pub(crate) mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FunctionName::try_from("producer")?,
             description: "producer".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "producer snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -328,13 +326,12 @@ pub(crate) mod tests {
         trigger: Option<&str>,
     ) -> Result<ExecutionResponse, TdError> {
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FunctionName::try_from("consumer")?,
             description: "consumer".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "consumer snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -533,13 +530,12 @@ pub(crate) mod tests {
 
         // `table_q` belongs to a publisher that never ran: no LTDV timeline.
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FunctionName::try_from("producer_q")?,
             description: "producer_q".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "producer_q snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -796,13 +792,12 @@ pub(crate) mod tests {
         // collection_0/function_0 triggers function_1 and function_2, which
         // may trigger function_3 depending on the test.
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FUNCTION_NAMES[0].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -823,13 +818,12 @@ pub(crate) mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FUNCTION_NAMES[1].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -859,13 +853,12 @@ pub(crate) mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FUNCTION_NAMES[2].clone(),
             description: "function_3 description".try_into()?,
             bundle_id,
             snippet: "function_3 snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -904,13 +897,12 @@ pub(crate) mod tests {
         };
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FUNCTION_NAMES[3].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1177,13 +1169,12 @@ pub(crate) mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FUNCTION_NAMES[0].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1204,13 +1195,12 @@ pub(crate) mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FUNCTION_NAMES[1].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1231,13 +1221,12 @@ pub(crate) mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FUNCTION_NAMES[2].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1471,13 +1460,12 @@ pub(crate) mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FUNCTION_NAMES[0].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1497,13 +1485,12 @@ pub(crate) mod tests {
             .await?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FUNCTION_NAMES[1].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1561,13 +1548,12 @@ pub(crate) mod tests {
             .collection(&COLLECTION_NAMES[0], &UserId::admin())
             .await?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FUNCTION_NAMES[0].clone(),
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

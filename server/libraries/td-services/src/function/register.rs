@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use std::collections::HashMap;
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
@@ -11,7 +12,8 @@ use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::connection::ConnectionDB;
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::types::basic::{
-    CollectionName, CollectionType, ConnectionKind, Decorator, FunctionName, TableName,
+    CollectionName, CollectionType, ConnectionKind, Decorator, FunctionName, FunctionType,
+    TableName, TableNameDto, TableType,
 };
 use td_objects::types::composed::{TableDependency, TableTrigger};
 use td_queries::Queries;
@@ -42,13 +44,54 @@ pub enum RegisterFunctionError {
     ConnectionKindMismatch(ConnectionKind, ConnectionKind, CollectionName) = 10,
     #[error("A transformer function cannot be registered in collection '{0}', a {1:?} collection")]
     TransformerInConnectedCollection(CollectionName, CollectionType) = 11,
-    #[error("Parent function '{0}' does not exist in collection '{1}'")]
-    ParentFunctionDoesNotExist(FunctionName, CollectionName) = 13,
+    #[error(
+        "A child function declares class {0:?}; only a DQSummaryTrends function can be a child"
+    )]
+    ChildFunctionTypeNotAllowed(FunctionType) = 12,
+    #[error("Table '{0}' cannot be declared as a {1:?} table")]
+    DQSummaryTrendsTableTypeNotAllowed(TableNameDto, TableType) = 13,
+    #[error("A {0:?} child function must declare exactly one output table")]
+    ChildFunctionMustDeclareOneTable(FunctionType) = 14,
+    #[error(
+        "Table '{0}' is too long to derive a trend function name from: '{0}{1}' is not a valid function name"
+    )]
+    ChildFunctionNameTooLong(TableNameDto, &'static str) = 15,
+    #[error(
+        "The trend function for table '{0}' would be named '{1}', but a function with that name already exists in collection '{2}'"
+    )]
+    ChildFunctionNameTaken(TableNameDto, FunctionName, CollectionName) = 16,
+    #[error(
+        "A DQSummaryTrends function cannot be declared in collection '{0}', a {1:?} collection"
+    )]
+    TrendChildInUnsupportedCollection(CollectionName, CollectionType) = 17,
+    #[error(
+        "Trend table '{0}' in collection '{1}' is frozen from a trend function that was removed; re-register with reuse_tables to adopt it back"
+    )]
+    TrendChildTableFrozen(TableName, CollectionName) = 18,
+}
+
+pub fn ensure_no_dq_summary_trends_table_types(
+    table_types: &Option<HashMap<TableNameDto, TableType>>,
+) -> Result<(), TdError> {
+    let Some(table_types) = table_types else {
+        return Ok(());
+    };
+    for (table, table_type) in table_types {
+        if matches!(table_type, TableType::DQSummaryTrends) {
+            Err(RegisterFunctionError::DQSummaryTrendsTableTypeNotAllowed(
+                table.clone(),
+                table_type.clone(),
+            ))?
+        }
+    }
+    Ok(())
 }
 
 /// A publisher/subscriber must declare the connection kind it uses, its
 /// collection must carry a connection, and the two kinds must match. A
-/// transformer must declare none and live in a `DataFactory` collection.
+/// transformer must declare none. A `Regular` transformer must be in a `DataFactory`
+/// collection, and a
+/// `DQSummaryTrends` transformer must be in a `DataFactory` or `Source` collection.
 ///
 /// TODO FOR 2.0: this contract is enforced only under the Kubernetes
 /// orchestrator (the 2.x deployment). The 1.x local Supervisor still runs
@@ -90,11 +133,26 @@ pub async fn ensure_connection_kind_matches<S: SeesProjectRows, M: AccessMode>(
                 ))?
             }
 
-            if !matches!(collection.collection_type, CollectionType::DataFactory) {
-                Err(RegisterFunctionError::TransformerInConnectedCollection(
-                    collection.name.clone(),
-                    collection.collection_type.clone(),
-                ))?
+            match function.function_type {
+                FunctionType::DQSummaryTrends => {
+                    if !matches!(
+                        collection.collection_type,
+                        CollectionType::DataFactory | CollectionType::Source
+                    ) {
+                        Err(RegisterFunctionError::TrendChildInUnsupportedCollection(
+                            collection.name.clone(),
+                            collection.collection_type.clone(),
+                        ))?
+                    }
+                }
+                FunctionType::Regular => {
+                    if !matches!(collection.collection_type, CollectionType::DataFactory) {
+                        Err(RegisterFunctionError::TransformerInConnectedCollection(
+                            collection.name.clone(),
+                            collection.collection_type.clone(),
+                        ))?
+                    }
+                }
             }
         }
     }

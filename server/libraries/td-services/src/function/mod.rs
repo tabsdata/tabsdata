@@ -3,6 +3,7 @@
 //
 
 pub mod engine;
+pub mod lifecycle;
 pub mod services;
 pub mod workers;
 

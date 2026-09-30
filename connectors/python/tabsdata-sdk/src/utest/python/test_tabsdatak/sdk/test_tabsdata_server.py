@@ -744,9 +744,7 @@ class _PageResponse:
         self._rows = rows
 
     def json(self):
-        return {
-            "data": {"data": self._rows, "next_pagination_id": None, "next": None}
-        }
+        return {"data": {"data": self._rows, "next_pagination_id": None, "next": None}}
 
 
 def _connection_recording_project(monkeypatch, endpoint, rows):
@@ -777,3 +775,112 @@ def test_lazy_data_refetch_spans_projects(monkeypatch, entity, endpoint, row):
     assert entity(connection, row["id"])._data["status"] == "R"
     assert seen == [None]
     assert connection.project == "acme"
+
+
+# ---------------------------------------------------------------------------
+# _trend_child_functions
+#
+# The reconcile itself is the server's now; what is left here is turning each
+# declared trend transformer into a bundle and the spec that carries it.
+# ---------------------------------------------------------------------------
+class _FakeInfo:
+    def __init__(self, output_table: str):
+        self.output_tables = [output_table]
+
+
+class _FakeRoot:
+    """Stands in for the `TemporaryDirectory` the generated module lives in."""
+
+    name = "/tmp/td_dq_trend_fake"
+
+
+class _FakeArchive:
+    def __init__(self, table: str):
+        self.function_type = "T"
+        self.function_snippet = f"dq_trend_mod:{table}"
+        self.string_dependencies = [f"summary_of_{table}@HEAD"]
+        self.trigger_string_list = None
+        self.tables = [table]
+        self.table_types = {}
+
+
+def _trend(output_table: str):
+    from tabsdatak.common._actions.dataquality.processor import TrendTransformerInfo
+
+    return TrendTransformerInfo(
+        info=_FakeInfo(output_table),
+        project_root=_FakeRoot(),
+    )
+
+
+class _BundleHarness(ts.Collection):
+    def __init__(self):
+        super().__init__(object(), "coll")
+        self.bundled: list[dict] = []
+
+    def _build_and_upload_bundle(
+        self,
+        info,
+        project_root,
+        local_packages,
+        raise_for_status,
+        requirements=None,
+    ):
+        table = info.output_tables[0]
+        self.bundled.append({
+            "table": table,
+            "project_root": project_root,
+            "local_packages": local_packages,
+            "requirements": requirements,
+        })
+        return _FakeArchive(table), f"B-{table}"
+
+
+def test_child_functions_of_nothing_declared_is_empty():
+    harness = _BundleHarness()
+    assert harness._trend_child_functions([]) == []
+    assert harness.bundled == []
+
+
+def test_child_function_carries_only_what_the_server_cannot_derive():
+    harness = _BundleHarness()
+    [spec] = harness._trend_child_functions([_trend("a")])
+    assert spec["function_type"] == "DQST"
+    assert set(spec) == {
+        "function_type",
+        "bundle_id",
+        "snippet",
+        "dependencies",
+        "tables",
+    }
+
+
+def test_child_function_carries_its_own_bundle_and_snippet():
+    harness = _BundleHarness()
+    [spec] = harness._trend_child_functions([_trend("a")])
+    assert spec["bundle_id"] == "B-a"
+    assert spec["snippet"] == "dq_trend_mod:a"
+    assert spec["tables"] == ["a"]
+    assert spec["dependencies"] == ["summary_of_a@HEAD"]
+
+
+def test_child_function_bundles_from_the_generated_module_directory():
+    # The trend module lives in the temporary directory the archive holds
+    # open; the bundle has to be built from there, not the user's project.
+    harness = _BundleHarness()
+    harness._trend_child_functions([_trend("a")])
+    assert harness.bundled[0]["project_root"] == Path(_FakeRoot.name)
+
+
+def test_every_declared_trend_becomes_one_spec():
+    harness = _BundleHarness()
+    specs = harness._trend_child_functions([_trend("a"), _trend("b")])
+    assert [s["tables"] for s in specs] == [["a"], ["b"]]
+    assert [b["table"] for b in harness.bundled] == ["a", "b"]
+
+
+def test_child_functions_pass_packaging_options_through():
+    harness = _BundleHarness()
+    harness._trend_child_functions([_trend("a")], ["pkg"], "requirements.txt", False)
+    assert harness.bundled[0]["local_packages"] == ["pkg"]
+    assert harness.bundled[0]["requirements"] == "requirements.txt"

@@ -277,13 +277,12 @@ mod tests {
         let function_0 = FunctionName::try_from("function_0")?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: function_0.clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -362,13 +361,12 @@ mod tests {
         let function_0 = FunctionName::try_from("function_0")?;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: function_0.clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -446,13 +444,12 @@ mod tests {
             .collection(&CollectionName::try_from("dedup_coll")?, &UserId::admin())
             .await?;
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: FunctionName::try_from("dedup_fn")?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

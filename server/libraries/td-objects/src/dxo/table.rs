@@ -121,6 +121,7 @@ pub struct Table {
     pub defined_on: AtTime,
     pub defined_by_id: UserId,
     pub status: TableStatus,
+    #[dto(list(filter, order_by))]
     pub table_type: TableType,
     pub system: System,
     pub defined_by: UserName,

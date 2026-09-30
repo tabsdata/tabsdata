@@ -463,13 +463,12 @@ mod tests {
         let bundle = context.clone().upload_function(request).await?.data;
 
         let create = FunctionRegister {
-            parent_function: None,
+            child_functions: None,
             name: "artifact_fn".try_into()?,
             description: "description".try_into()?,
             bundle_id: bundle.id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
-            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
