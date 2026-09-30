@@ -45,6 +45,7 @@
 use crate::schema::source::Delta;
 use crate::schema::version::SchemaDelta;
 
+pub(crate) mod v10_to_v11;
 pub(crate) mod v1_to_v2;
 pub(crate) mod v2_to_v3;
 pub(crate) mod v3_to_v4;
@@ -89,6 +90,7 @@ pub fn get(target_version: usize) -> Delta {
         8 => rung::<v7_to_v8::Migration>(),
         9 => rung::<v8_to_v9::Migration>(),
         10 => rung::<v9_to_v10::Migration>(),
+        11 => rung::<v10_to_v11::Migration>(),
         _ => panic!("No delta migration for version {target_version}"),
     }
 }

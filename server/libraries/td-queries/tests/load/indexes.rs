@@ -184,6 +184,10 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Queries(TIMELINE),
     },
     IndexCase {
+        index: "functions___parent_function_id___current_idx",
+        served_by: Path("child functions of a parent"),
+    },
+    IndexCase {
         index: "functions___project_id__id___idx",
         served_by: Path(KEYSET),
     },

@@ -66,6 +66,8 @@ impl Entity for Defs {
             .expr(Expr::col((parent.clone(), Functions::Connection)))
             .expr(Expr::col((parent.clone(), Functions::Enabled)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::ValidTo)))
+            .expr(Expr::col((parent.clone(), Functions::FunctionType)))
+            .expr(Expr::col((parent.clone(), Functions::ParentFunctionId)))
             .expr(Expr::col((CollectionsResolved, Collections::Name)))
             .expr(name_or_id((Users::Table, Users::Name), (FunctionPatches::Table, FunctionPatches::DefinedById)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::ParentFunctionVersionId)))

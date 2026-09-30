@@ -139,6 +139,7 @@ async fn assert_indices(db: &TdPool) {
         "functions___collection_id__name___idx",
         "functions___function_id___current_uidx",
         "functions___function_id__valid_from__id___idx",
+        "functions___parent_function_id___current_idx",
         "functions___project_id__id___idx",
         "functions___project_id__status___current_idx",
         "groups___name___idx",

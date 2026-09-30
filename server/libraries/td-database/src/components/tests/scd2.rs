@@ -39,9 +39,9 @@ fn insert_function_version(counter: usize, function_id: &str, valid_from: &str) 
     let id = at_rest(counter);
     format!(
         "INSERT INTO functions (id, project_id, collection_id, name, description, decorator, \
-           runtime_values, function_id, stage_id, stage_base_path, storage_version, bundle_id, \
-           snippet, valid_from, defined_by_id, status) \
-         VALUES ({id}, 'p0', 'c0', 'f0', '', 'P', '', '{function_id}', 's0', '/s', 'V1', \
+           function_type, runtime_values, function_id, stage_id, stage_base_path, \
+           storage_version, bundle_id, snippet, valid_from, defined_by_id, status) \
+         VALUES ({id}, 'p0', 'c0', 'f0', '', 'P', 'R', '', '{function_id}', 's0', '/s', 'V1', \
            'b0', '', '{valid_from}', 'u0', 'A')"
     )
 }

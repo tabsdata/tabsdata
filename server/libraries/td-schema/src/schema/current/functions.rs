@@ -44,6 +44,8 @@ pub enum Functions {
     Connection,
     Enabled,
     ValidTo,
+    FunctionType,
+    ParentFunctionId,
 }
 
 pub(super) struct Defs;
@@ -80,6 +82,8 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Functions::Connection).text().null())
                 .col(ColumnDef::new(Functions::Enabled).boolean().default(true))
                 .col(ColumnDef::new(Functions::ValidTo).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(Functions::FunctionType).text().not_null())
+                .col(id_column(Functions::ParentFunctionId).null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Functions::Table, Functions::CollectionId)
@@ -132,6 +136,13 @@ impl Entity for Defs {
                 .col(Functions::FunctionId)
                 .col(Functions::ValidFrom)
                 .col(Functions::Id)
+                .to_owned(),
+            Index::create()
+                .name("functions___parent_function_id___current_idx")
+                .table(Functions::Table)
+                .col(Functions::ParentFunctionId)
+                .and_where(open_interval(Functions::ValidTo))
+                .and_where(Expr::col(Functions::ParentFunctionId).is_not_null())
                 .to_owned(),
             // One open interval per partition — the SCD2 invariant, and the
             // at-now lookup path.

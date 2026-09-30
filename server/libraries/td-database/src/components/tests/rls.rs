@@ -300,9 +300,9 @@ async fn test_rls_scd2_close_out_trigger_under_role() {
         ] {
             sqlx::query(sqlx::AssertSqlSafe(format!(
                 "INSERT INTO functions \
-                 (id, collection_id, name, description, decorator, runtime_values, function_id, \
+                 (id, collection_id, name, description, decorator, function_type, runtime_values, function_id, \
                   stage_id, stage_base_path, storage_version, bundle_id, snippet, valid_from, defined_by_id, status) \
-                 VALUES ({id}, 'col', 'f', 'd', 'dec', '{{}}', 'fid', 'stg', '/', '1', 'bun', 'snip', '{on}', 'u', 'active')",
+                 VALUES ({id}, 'col', 'f', 'd', 'dec', 'R', '{{}}', 'fid', 'stg', '/', '1', 'bun', 'snip', '{on}', 'u', 'active')",
             )))
             .execute(&mut *c)
             .await

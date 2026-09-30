@@ -36,6 +36,7 @@ use crate::schema::source::{SchemaSource, install_script};
 
 pub(crate) mod sql;
 pub(crate) mod v1;
+pub(crate) mod v10;
 pub(crate) mod v2;
 pub(crate) mod v3;
 pub(crate) mod v4;
@@ -60,6 +61,7 @@ pub(crate) const ARCHIVES: [&'static dyn SchemaSource; ARCHIVED] = [
     &v7::Source,
     &v8::Source,
     &v9::Source,
+    &v10::Source,
 ];
 
 /// The [`SchemaSource`] for an archived version.
