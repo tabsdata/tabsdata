@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use crate::function::ensure_user_managed;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -44,6 +45,7 @@ async fn create_function_patch(
     let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
     let parent: FunctionDB = conn.timeline().fetch_one(&body.patch_of).await?;
+    ensure_user_managed(&parent.base.name, &parent.base.function_type)?;
     assert_patch_parent_matches_url(conn, &parent, &collection.id, &function_id_name).await?;
     let patch: FunctionPatchInsertDB = body.to_dao(parent, &ctx)?;
     conn.scd2().open(&patch, at).await?;
@@ -107,6 +109,7 @@ pub async fn assert_patch_parent_matches_url<S: SeesProjectRows, M: AccessMode>(
 mod tests {
     use super::*;
     use crate::Services;
+    use crate::function::PlatformFunctionError;
     use std::str::FromStr;
     use td_database::access::LockInstant;
     use td_database::pool::TdPool;
@@ -116,6 +119,7 @@ mod tests {
     use td_objects::dxo::function::FunctionDB;
     use td_objects::dxo::function::FunctionPatchDB;
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::types::basic::FunctionType;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, ProjectId,
         TableNameDto, UserId,
@@ -473,6 +477,57 @@ mod tests {
             .fetch_all::<FunctionPatchDB>(&parent.base.function_id)
             .await?;
         assert_eq!(all.len(), 2, "both patches retained in base table");
+        Ok(())
+    }
+
+    /// A patch is a code override, so it is a mutation like any other: the
+    /// platform maintains its own functions.
+    #[td_test::test(db)]
+    async fn test_patch_of_a_platform_function_rejected(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = seed_collection_helper(&db, p.id, "c0").await;
+        let register = FunctionRegister {
+            child_functions: None,
+            name: "a_dqst_tfr".try_into()?,
+            description: "seed".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "seed snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("a")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        let parent = db
+            .scoped(p.id)
+            .seed()
+            .function_of_class(&collection, &register, FunctionType::DQSummaryTrends)
+            .await?;
+
+        let body = FunctionPatch {
+            patch_of: parent.base.id.clone(),
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            runtime_values: None,
+            description: None,
+        };
+
+        let err = Services::with_defaults(db.clone())
+            .create_function_patch(patch_request(p.id, "c0", "a_dqst_tfr", body))
+            .await
+            .expect_err("a platform function must not be patchable");
+
+        assert!(matches!(
+            err.domain_err::<PlatformFunctionError>(),
+            PlatformFunctionError::NotUserManaged(_, FunctionType::DQSummaryTrends)
+        ));
         Ok(())
     }
 }

@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::function::ensure_user_managed;
 use crate::function::workers::register_workers;
 use std::collections::HashMap;
 use ta_services::factory::service_factory;
@@ -48,6 +49,8 @@ async fn enable_function(
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
 
+    ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
+
     let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
     let function = previous.re_registered(&ctx, enable.enabled);
     conn.scd2().open(&function, at).await?;
@@ -85,6 +88,7 @@ async fn enable_function(
 mod tests {
     use super::*;
     use crate::Services;
+    use crate::function::PlatformFunctionError;
     use std::collections::HashMap;
     use std::str::FromStr;
     use td_database::pool::TdPool;
@@ -515,30 +519,64 @@ mod tests {
         Ok(())
     }
 
+    /// Toggling a platform function directly is refused; it follows its
+    /// owner, which is what the cascade above is for.
     #[td_test::test(db)]
-    async fn test_disabling_a_child_leaves_its_parent_enabled(db: TdPool) -> Result<(), TdError> {
+    async fn test_toggling_a_platform_function_directly_is_refused(
+        db: TdPool,
+    ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = a_collection(&db, p.id, "endis_up").await?;
+        let collection = a_collection(&db, p.id, "endis_guard").await?;
         let owner = register_fn(
             &db,
             p.id,
             &collection,
-            cascade_dto(OWNER, Some(vec![trend_child("child")?]), Enabled::TRUE)?,
+            cascade_dto(OWNER, Some(vec![trend_child("trend_tfr")?]), Enabled::TRUE)?,
         )
         .await?;
+        let child = live_child(&db, &owner.function_id).await?;
 
-        set_enabled(
+        let err = set_enabled(
             &db,
             p.id,
             &collection,
-            &trend_child_name("child"),
+            &trend_child_name("trend_tfr"),
             Enabled::FALSE,
         )
-        .await?;
+        .await
+        .expect_err("a platform function must not be toggled directly");
 
-        let current = current_version(&db, &owner.function_id).await?;
+        assert!(matches!(
+            err.domain_err::<PlatformFunctionError>(),
+            PlatformFunctionError::NotUserManaged(_, FunctionType::DQSummaryTrends)
+        ));
+        let current = current_version(&db, &child.base.function_id).await?;
         assert_eq!(current.base.enabled, Enabled::TRUE);
-        assert_eq!(current.base.id, owner.id);
+        assert_eq!(current.base.id, child.base.id);
+        let owner_now = current_version(&db, &owner.function_id).await?;
+        assert_eq!(owner_now.base.enabled, Enabled::TRUE);
+        Ok(())
+    }
+
+    /// The owner's toggle still reaches it: the cascade writes the child's
+    /// version itself rather than re-entering this service.
+    #[td_test::test(db)]
+    async fn test_the_cascade_still_reaches_a_platform_function(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = a_collection(&db, p.id, "endis_cascade").await?;
+        let owner = register_fn(
+            &db,
+            p.id,
+            &collection,
+            cascade_dto(OWNER, Some(vec![trend_child("trend_tfr")?]), Enabled::TRUE)?,
+        )
+        .await?;
+        let child = live_child(&db, &owner.function_id).await?;
+
+        set_enabled(&db, p.id, &collection, OWNER, Enabled::FALSE).await?;
+
+        let current = current_version(&db, &child.base.function_id).await?;
+        assert_eq!(current.base.enabled, Enabled::FALSE);
         Ok(())
     }
 }

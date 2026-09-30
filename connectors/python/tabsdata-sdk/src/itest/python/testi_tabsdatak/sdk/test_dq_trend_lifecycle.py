@@ -12,9 +12,11 @@ assert what the server actually stored: the derived name, the ``DQST`` class,
 the parent links, and what a later update or removal does to it.
 
 The owning publishers live in ``functions/``, checked in as a user project
-would have them; that directory is the ``project_root`` they bundle from. They
-are registered but never triggered -- what is under test is what registration
-derives, not what an execution computes.
+would have them; that directory is the ``project_root`` they bundle from.
+Almost all of these assert what registration derives rather than what an
+execution computes, so they register without triggering; the exception is the
+execution test at the end, which checks the owner's run still reaches its
+trend function.
 
 The collections are ``sources`` collections on purpose: a transformer is
 normally refused there, and the trend transformer's ``DQSummaryTrends`` class
@@ -27,11 +29,17 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from tabsdatax.itest.fixture.functions.harness import CollectionFactory
+from tabsdatax.itest.fixture.functions.harness import (
+    CollectionFactory,
+    wait_for_completion,
+)
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
 
 from tabsdatak.conn.dev import DataGenSrcConn
 from tabsdatak.dataquality._symbols import FunctionType, TableType
+from tabsdatak.sdk.status_utils.execution import (
+    EXECUTION_SUCCESSFUL_FINAL_STATUSES,
+)
 from tabsdatak.sdk.tabsdata_server import Collection
 from testi_tabsdatak.conn.common.function_project import function_module
 
@@ -49,6 +57,8 @@ TREND_SUFFIX = "_trend"
 
 # `TableStatus::Frozen` on the wire; the SDK exposes no symbol for it.
 FROZEN = "F"
+
+NOT_USER_MANAGED = "PlatformFunctionError::2000"
 DEFAULT_TREND_FUNCTION = f"{publisher.DEFAULT_TREND_TABLE}{TREND_SUFFIX}"
 CUSTOM_TREND_FUNCTION = f"{publisher.CUSTOM_TREND_TABLE}{TREND_SUFFIX}"
 
@@ -337,18 +347,39 @@ def test_deleting_the_owner_leaves_no_orphan_behind(
 
 
 @tabsdata_instance(consumer="tdtest")
-def test_deleting_a_trend_function_directly_is_allowed(
+def test_deleting_a_trend_function_directly_is_refused(
     instance_tdtest: Instance,
     collection_factory: CollectionFactory,
 ) -> None:
-    # A trend function has no children of its own, so the cascade terminates
-    # rather than recursing -- and the owner is left standing.
+    # A trend function goes when its owner goes, or when the declaration that
+    # produced it does. Naming it directly is refused, so it is still there.
     collection = source_collection(collection_factory)
     register(collection, publisher.pub_with_default_trend)
 
-    collection.get_function(DEFAULT_TREND_FUNCTION).delete()
+    with pytest.raises(Exception) as refused:
+        collection.get_function(DEFAULT_TREND_FUNCTION).delete()
+    assert refused.value.code == NOT_USER_MANAGED
 
-    assert function_names(collection) == {OWNER}
+    assert function_names(collection) == {OWNER, DEFAULT_TREND_FUNCTION}
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_updating_a_trend_function_directly_is_refused(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    collection = source_collection(collection_factory)
+    register(collection, publisher.pub_with_default_trend)
+
+    with pytest.raises(Exception) as refused:
+        update(
+            collection,
+            publisher.pub_without_data_quality,
+            name=DEFAULT_TREND_FUNCTION,
+        )
+    assert refused.value.code == NOT_USER_MANAGED
+
+    assert DEFAULT_TREND_FUNCTION in function_names(collection)
 
 
 @tabsdata_instance(consumer="tdtest")
@@ -423,35 +454,20 @@ def test_enabling_the_owner_enables_its_trend_function_again(
 
 
 @tabsdata_instance(consumer="tdtest")
-def test_disabling_a_trend_function_leaves_its_owner_enabled(
+def test_disabling_a_trend_function_directly_is_refused(
     instance_tdtest: Instance,
     collection_factory: CollectionFactory,
 ) -> None:
-    # The walk is downward only: a child never decides its parent's state.
+    # A trend function has no enabled state of its own to set: it follows the
+    # owner, so the owner is the only thing to toggle.
     collection = source_collection(collection_factory)
     register(collection, publisher.pub_with_default_trend)
 
-    collection.get_function(DEFAULT_TREND_FUNCTION).enable(False)
+    with pytest.raises(Exception) as refused:
+        collection.get_function(DEFAULT_TREND_FUNCTION).enable(False)
+    assert refused.value.code == NOT_USER_MANAGED
 
     assert is_enabled(collection, OWNER) is True
-    assert is_enabled(collection, DEFAULT_TREND_FUNCTION) is False
-
-
-@tabsdata_instance(consumer="tdtest")
-def test_enabling_the_owner_overrides_a_separately_disabled_trend_function(
-    instance_tdtest: Instance,
-    collection_factory: CollectionFactory,
-) -> None:
-    # The owner's state wins. A trend function switched off on its own is
-    # brought back by the next enable of its owner -- it has no enabled state
-    # of its own to preserve -- so disabling the owner, not the trend
-    # function, is what keeps one off.
-    collection = source_collection(collection_factory)
-    owner = register(collection, publisher.pub_with_default_trend)
-    collection.get_function(DEFAULT_TREND_FUNCTION).enable(False)
-
-    owner.enable(True)
-
     assert is_enabled(collection, DEFAULT_TREND_FUNCTION) is True
 
 
@@ -467,3 +483,24 @@ def test_disabling_an_owner_without_a_trend_function_is_unaffected(
 
     assert is_enabled(collection, OWNER) is False
     assert function_names(collection) == {OWNER}
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_executing_the_owner_runs_its_trend_function(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    # The guard is on the direct door only. A trend function cannot be
+    # triggered by name, but the owner's execution must still plan and run it,
+    # since that is the only way the trend table is ever maintained.
+    collection = source_collection(collection_factory)
+    owner = register(collection, publisher.pub_with_default_trend)
+
+    execution = owner.trigger()
+    status = wait_for_completion(execution)
+
+    assert status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+    assert {run.function.name for run in execution.function_runs} == {
+        OWNER,
+        DEFAULT_TREND_FUNCTION,
+    }

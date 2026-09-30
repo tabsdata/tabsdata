@@ -3,6 +3,7 @@
 //
 
 use crate::execution::execute;
+use crate::function::ensure_user_managed;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -48,6 +49,8 @@ async fn execute_function(
         .as_of(&ctx.time)
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
+
+    ensure_user_managed(&function.base.base.name, &function.base.base.function_type)?;
     let response = execute(
         conn,
         msgs,
@@ -69,6 +72,7 @@ async fn execute_function(
 pub(crate) mod tests {
     use super::*;
     use crate::Services;
+    use crate::function::PlatformFunctionError;
     use std::collections::HashSet;
     use std::error::Error;
     use std::str::FromStr;
@@ -100,6 +104,7 @@ pub(crate) mod tests {
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::dxo::transaction::TransactionDBWithNames;
     use td_objects::types::basic::AtTime;
+    use td_objects::types::basic::FunctionType;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, AllowDisabled, BundleId, CollectionName, Decorator, Depth, Description,
@@ -1602,6 +1607,75 @@ pub(crate) mod tests {
             .await
             .unwrap_err();
         assert_eq!(err.api_error(), ApiError::Any(409));
+        Ok(())
+    }
+
+    /// A platform function runs as part of its owner's plan; naming it
+    /// directly is refused.
+    #[td_test::test(db)]
+    async fn test_triggering_a_platform_function_is_refused(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("trigger_guard")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let create = FunctionRegister {
+            child_functions: None,
+            name: FunctionName::try_from("a_dqst_tfr")?,
+            description: "a trend function".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "trend snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("a")?].into(),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rt")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        let _ = db
+            .scoped(p.id)
+            .seed()
+            .function_of_class(&collection, &create, FunctionType::DQSummaryTrends)
+            .await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("a_dqst_tfr")?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: None,
+                    function_only: FunctionOnly::FALSE,
+                    override_disabled_trigger: OverrideDisabledTrigger::default(),
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
+            )
+            .in_project(p.id);
+
+        let err = Services::with_defaults(db.clone())
+            .execute_function(request)
+            .await
+            .expect_err("a platform function must not be triggerable");
+
+        assert!(matches!(
+            err.domain_err::<PlatformFunctionError>(),
+            PlatformFunctionError::NotUserManaged(_, FunctionType::DQSummaryTrends)
+        ));
         Ok(())
     }
 }

@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::function::ensure_user_managed;
 use crate::function::lifecycle::delete_one;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -45,6 +46,8 @@ async fn delete_function(
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
 
+    ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
+
     let children: Vec<FunctionDB> = conn
         .scd2()
         .fetch_all(FunctionDB::children_of(&current.base.base.function_id))
@@ -66,6 +69,7 @@ async fn delete_function(
 mod tests {
     use super::*;
     use crate::Services;
+    use crate::function::PlatformFunctionError;
     use crate::function::services::tests::{assert_delete, assert_register};
     use std::collections::HashMap;
     use std::str::FromStr;
@@ -763,20 +767,28 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_deleting_a_trend_function_leaves_its_owner(db: TdPool) -> Result<(), TdError> {
+    async fn test_deleting_a_trend_function_directly_is_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = a_collection(&db, p.id, "cascade_child").await?;
         seed_owner_and_trend(&db, p.id, &collection.name).await?;
 
-        delete(
+        let err = delete(
             &db,
             p.id,
             &collection.name,
             &trend_child_name("trend_table"),
         )
-        .await?;
+        .await
+        .expect_err("a platform function must not be deletable directly");
 
-        assert_eq!(live_names(&db, &collection.id).await?, [OWNER]);
+        assert!(matches!(
+            err.domain_err::<PlatformFunctionError>(),
+            PlatformFunctionError::NotUserManaged(_, FunctionType::DQSummaryTrends)
+        ));
+        assert_eq!(
+            live_names(&db, &collection.id).await?,
+            [OWNER, trend_child_name("trend_table").as_str()]
+        );
         Ok(())
     }
 

@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::function::ensure_user_managed;
 use crate::function::lifecycle::{reconcile_dq_summary_trend_children, update_one};
 use crate::function::register::ensure_no_dq_summary_trends_table_types;
 use ta_services::factory::service_factory;
@@ -53,6 +54,7 @@ async fn update_function(
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
 
+    ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
     ensure_no_dq_summary_trends_table_types(&update.table_types)?;
     let function = update_one(conn, &ctx, &bridge, &collection, &current, &update, at).await?;
     reconcile_dq_summary_trend_children(

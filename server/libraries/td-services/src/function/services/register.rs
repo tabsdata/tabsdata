@@ -73,6 +73,7 @@ mod tests {
     use super::*;
     use crate::Services;
     use crate::collection::services::connection::test_support::create_collection;
+    use crate::function::PlatformFunctionError;
     use crate::function::register::RegisterFunctionError;
     use crate::function::services::tests::assert_register;
     use std::collections::HashMap;
@@ -2579,6 +2580,68 @@ mod tests {
             err.domain_err::<RegisterFunctionError>(),
             RegisterFunctionError::ChildFunctionTypeNotAllowed(FunctionType::Regular)
         ));
+        Ok(())
+    }
+
+    /// A trend function is the reconcile's to maintain, not the caller's.
+    #[td_test::test(db)]
+    async fn test_updating_a_platform_function_is_refused(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "usr_upd", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        register_ok(&db, p.id, "usr_upd", create).await?;
+        let before = live_by_name(&db, &child_name("a"))
+            .await?
+            .expect("registered");
+
+        let err = update_err(&db, p.id, "usr_upd", &child_name("a"), owner_update(None)).await?;
+
+        assert!(matches!(
+            err.domain_err::<PlatformFunctionError>(),
+            PlatformFunctionError::NotUserManaged(_, FunctionType::DQSummaryTrends)
+        ));
+        // Refused before the write: the version it had is the version it has.
+        let after = live_by_name(&db, &child_name("a"))
+            .await?
+            .expect("still registered");
+        assert_eq!(after.base.id, before.base.id);
+        Ok(())
+    }
+
+    /// The guard is on the service, so the reconcile -- which lands children
+    /// through the lifecycle primitives -- still updates them.
+    #[td_test::test(db)]
+    async fn test_the_reconcile_still_updates_its_children(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "usr_recon", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        register_ok(&db, p.id, "usr_recon", create).await?;
+        let before = live_by_name(&db, &child_name("a"))
+            .await?
+            .expect("registered");
+
+        let update = owner_update(Some(vec![child("a")?]));
+        update_ok(&db, p.id, "usr_recon", CHILD_OWNER, update).await?;
+
+        let after = live_by_name(&db, &child_name("a"))
+            .await?
+            .expect("still registered");
+        assert_eq!(after.base.function_id, before.base.function_id);
+        assert_ne!(after.base.id, before.base.id);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_updating_a_regular_function_is_still_allowed(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "usr_reg", None).await;
+        register_ok(&db, p.id, "usr_reg", owner_register(&["owned"], None)?).await?;
+
+        let mut update = owner_update(None);
+        update.description = Some("touched".try_into()?);
+        update_ok(&db, p.id, "usr_reg", CHILD_OWNER, update).await?;
+
+        assert!(live_by_name(&db, CHILD_OWNER).await?.is_some());
         Ok(())
     }
 }
