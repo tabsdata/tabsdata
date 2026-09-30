@@ -8,9 +8,9 @@ use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionIdName, CollectionName, ConnectionKind,
     Connector, Decorator, Description, Enabled, FunctionId, FunctionIdName, FunctionName,
-    FunctionRuntimeValues, FunctionStatus, FunctionVersionId, GroupId, Parent, ProjectId,
-    RawSnippet, ResetStage, ResetState, ReuseFrozen, Snippet, StageId, StorageVersion, TableName,
-    TableNameDto, TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
+    FunctionRuntimeValues, FunctionStatus, FunctionType, FunctionVersionId, GroupId, Parent,
+    ProjectId, RawSnippet, ResetStage, ResetState, ReuseFrozen, Snippet, StageId, StorageVersion,
+    TableName, TableNameDto, TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
 };
 use crate::types::composed::{TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto};
 use std::collections::HashMap;
@@ -25,6 +25,10 @@ pub struct FunctionRegister {
     pub bundle_id: BundleId,
     pub snippet: RawSnippet,
     pub decorator: Decorator,
+    #[serde(default)]
+    pub function_type: Option<FunctionType>,
+    #[serde(default)]
+    pub parent_function: Option<FunctionName>,
     pub connector: Option<Connector>,
     pub connection: Option<ConnectionKind>,
     #[serde(default)]
@@ -52,10 +56,12 @@ impl FunctionRegister {
     ) -> Result<FunctionInsertDB, TdError> {
         Ok(FunctionInsertDB {
             id: FunctionVersionId::new(),
+            parent_function_id: None,
             collection_id,
             name: self.name.clone(),
             description: self.description.clone(),
             decorator: self.decorator.clone(),
+            function_type: self.function_type.clone().unwrap_or_default(),
             connector: self.connector.clone(),
             connection: self.connection.clone(),
             runtime_values: self.runtime_values.clone(),
@@ -202,10 +208,12 @@ impl FunctionPatch {
 pub struct FunctionInsertDB {
     #[dao(pk)]
     pub id: FunctionVersionId,
+    pub parent_function_id: Option<Parent<FunctionId>>,
     pub collection_id: CollectionId,
     pub name: FunctionName,
     pub description: Description,
     pub decorator: Decorator,
+    pub function_type: FunctionType,
     pub connector: Option<Connector>,
     pub connection: Option<ConnectionKind>,
     pub runtime_values: FunctionRuntimeValues,
@@ -416,6 +424,8 @@ pub struct FunctionVersionDBWithNames {
     pub defined_by_id: UserId,
     pub status: FunctionStatus,
     pub enabled: Enabled,
+    pub function_type: FunctionType,
+    pub parent_function_id: Option<Parent<FunctionId>>,
     pub collection: CollectionName,
     pub defined_by: UserName,
     pub patch_of: Option<FunctionVersionId>,
@@ -437,6 +447,10 @@ pub struct FunctionVersion {
     pub description: Description,
     #[dto(list(filter, order_by))]
     pub decorator: Decorator,
+    #[dto(list(filter, order_by))]
+    pub function_type: FunctionType,
+    #[dto(list(filter, order_by))]
+    pub parent_function_id: Option<Parent<FunctionId>>,
     #[dto(list(filter, filter_like, order_by))]
     pub connector: Option<Connector>,
     #[dto(list(filter, filter_like, order_by))]
@@ -474,6 +488,8 @@ impl FromDao for FunctionVersion {
             name: dao.name,
             description: dao.description,
             decorator: dao.decorator,
+            function_type: dao.function_type,
+            parent_function_id: dao.parent_function_id,
             connector: dao.connector,
             connection: dao.connection,
             runtime_values: dao.runtime_values,
@@ -519,6 +535,10 @@ pub struct Function {
     pub description: Description,
     #[dto(list(filter, order_by))]
     pub decorator: Decorator,
+    #[dto(list(filter, order_by))]
+    pub function_type: FunctionType,
+    #[dto(list(filter, order_by))]
+    pub parent_function_id: Option<Parent<FunctionId>>,
     #[dto(list(filter, filter_like, order_by))]
     pub connector: Option<Connector>,
     #[dto(list(filter, filter_like, order_by))]
@@ -555,6 +575,8 @@ impl FromDao for Function {
             name: dao.base.base.name,
             description: dao.base.base.description,
             decorator: dao.base.base.decorator,
+            function_type: dao.base.base.function_type,
+            parent_function_id: dao.base.base.parent_function_id,
             connector: dao.base.base.connector,
             connection: dao.base.base.connection,
             runtime_values: dao.base.base.runtime_values,

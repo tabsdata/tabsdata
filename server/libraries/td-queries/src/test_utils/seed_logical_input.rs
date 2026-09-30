@@ -93,11 +93,13 @@ mod tests {
             .unwrap();
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin".try_into().unwrap(),
             description: "function_foo description".try_into().unwrap(),
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into().unwrap(),
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -161,11 +163,13 @@ mod tests {
             .unwrap();
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_2".try_into().unwrap(),
             description: "function_foo description".try_into().unwrap(),
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into().unwrap(),
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

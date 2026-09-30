@@ -18,10 +18,10 @@ use td_objects::dxo::trigger::TriggerInsertDB;
 use td_objects::dxo::worker::WorkerInsertDB;
 use td_objects::types::basic::{
     AccessTokenId, BasePath, DependencyId, DependencyPos, DependencyVersionId, FunctionId,
-    FunctionStatus, FunctionVersionId, Partitioned, Private, Snippet, StageId, StorageVersion,
-    System, TableFunctionParamPos, TableId, TableName, TableStatus, TableType, TableVersionId,
-    TriggerId, TriggerStatus, TriggerVersionId, UserId, WorkerId, WorkerMessageStatus,
-    WorkerStatus,
+    FunctionStatus, FunctionType, FunctionVersionId, Partitioned, Private, Snippet, StageId,
+    StorageVersion, System, TableFunctionParamPos, TableId, TableName, TableStatus, TableType,
+    TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, WorkerId,
+    WorkerMessageStatus, WorkerStatus,
 };
 
 /// Runs every statement on the caller's executor; if it is project-scoped
@@ -37,10 +37,12 @@ pub(crate) async fn seed_function(
 
     let function_db = FunctionInsertDB {
         id: FunctionVersionId::new(),
+        parent_function_id: None,
         collection_id: collection.id,
         name: function_create.name.clone(),
         description: function_create.description.clone(),
         decorator: function_create.decorator.clone(),
+        function_type: FunctionType::default(),
         connector: function_create.connector.clone(),
         connection: function_create.connection.clone(),
         runtime_values: function_create.runtime_values.clone(),
@@ -214,11 +216,13 @@ mod tests {
         let tables = None;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin".try_into().unwrap(),
             description: "function_foo description".try_into().unwrap(),
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into().unwrap(),
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

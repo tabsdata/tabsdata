@@ -144,11 +144,13 @@ mod tests {
         function_name: &str,
     ) -> FunctionDB {
         let register = FunctionRegister {
+            parent_function: None,
             name: function_name.try_into().unwrap(),
             description: "seed".try_into().unwrap(),
             bundle_id: BundleId::default(),
             snippet: "seed snippet".try_into().unwrap(),
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

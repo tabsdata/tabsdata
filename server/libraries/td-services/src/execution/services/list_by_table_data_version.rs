@@ -65,11 +65,13 @@ mod tests {
 
         let tables = vec![TableNameDto::try_from("output_table")?];
         let create = FunctionRegister {
+            parent_function: None,
             name: "producer_fn".try_into()?,
             description: "produces data".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -131,11 +133,13 @@ mod tests {
 
         // Create a second function that consumes the TDV.
         let create_consumer = FunctionRegister {
+            parent_function: None,
             name: "consumer_fn".try_into()?,
             description: "consumes data".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -225,11 +229,13 @@ mod tests {
 
         let tables = vec![TableNameDto::try_from("some_table")?];
         let create = FunctionRegister {
+            parent_function: None,
             name: "some_fn".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

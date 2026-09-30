@@ -84,11 +84,13 @@ mod tests {
 
         let tables = vec![TableNameDto::try_from("output_table")?];
         let create = FunctionRegister {
+            parent_function: None,
             name: "fn_a".try_into()?,
             description: "function A".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -168,11 +170,13 @@ mod tests {
 
         // Create a second function and execution that does NOT use function_version_a.
         let create_b = FunctionRegister {
+            parent_function: None,
             name: "fn_b".try_into()?,
             description: "function B".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -322,11 +326,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "some_fn".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

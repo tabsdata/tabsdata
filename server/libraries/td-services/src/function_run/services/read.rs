@@ -93,11 +93,13 @@ mod tests {
             .collection(&CollectionName::try_from(COLLECTION)?, &UserId::admin())
             .await?;
         let create = FunctionRegister {
+            parent_function: None,
             name: FUNCTION.try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

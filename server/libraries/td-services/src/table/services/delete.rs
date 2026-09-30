@@ -101,11 +101,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -191,11 +193,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -253,11 +257,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -281,11 +287,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_dependant_function".try_into()?,
             description: "joaquin_dependant_function description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "joaquin_dependant_function snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

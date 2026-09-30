@@ -3,7 +3,7 @@
 //
 
 use crate::function::engine::{FunctionSpec, FunctionState, register_version};
-use crate::function::register::ensure_connection_kind_matches;
+use crate::function::register::{RegisterFunctionError, ensure_connection_kind_matches};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -17,6 +17,7 @@ use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB};
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function::{Function, FunctionDBWithNames, FunctionRegister};
+use td_objects::types::basic::FunctionIdName;
 use td_objects::{FromDao, and};
 use td_queries::Queries;
 
@@ -52,7 +53,25 @@ async fn register_function(
         .assert_not_exists::<FunctionDBWithNames>(and!(&collection.id, &register.name))
         .await?;
 
-    let function = register.to_dao(&ctx, collection.id, base_path.clone())?;
+    let mut function = register.to_dao(&ctx, collection.id, base_path.clone())?;
+    // Resolved here rather than in `to_dao`, which has no connection. The
+    // logical id is stored, so the link outlives a rename of either function.
+    if let Some(parent_name) = &register.parent_function {
+        let parent: FunctionDBWithNames = conn
+            .scd2()
+            .fetch_optional(and!(
+                &FunctionIdName::Name(parent_name.clone()),
+                &collection.id
+            ))
+            .await?
+            .ok_or_else(|| {
+                RegisterFunctionError::ParentFunctionDoesNotExist(
+                    parent_name.clone(),
+                    collection.name.clone(),
+                )
+            })?;
+        function.parent_function_id = Some(parent.base.base.function_id.into());
+    }
     ensure_connection_kind_matches(conn, &bridge, &function, &collection).await?;
     conn.scd2().open(&function, at).await?;
 
@@ -92,7 +111,6 @@ mod tests {
     use super::*;
     use crate::Services;
     use crate::collection::services::connection::test_support::create_collection;
-    use crate::function::register::RegisterFunctionError;
     use crate::function::services::tests::assert_register;
     use std::collections::HashMap;
     use std::str::FromStr;
@@ -103,16 +121,16 @@ mod tests {
     use td_objects::dxo::bundle::BundleDB;
     use td_objects::dxo::collection::CollectionUpdate;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::{FunctionDB, FunctionParam};
+    use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionUpdate};
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::trigger::TriggerDB;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::errors::SqlError;
     use td_objects::types::basic::{
         AccessTokenId, BasePath, BundleStatus, CollectionType, ConnectionKind, Decorator,
-        FunctionIdName, FunctionName, FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId,
-        SNIPPET_MAX_LEN, TableName, TableStatus, TriggerStatus, UserId, WorkerMessageStatus,
-        WorkerStatus, WorkerType,
+        FunctionIdName, FunctionName, FunctionRuntimeValues, FunctionStatus, GroupName, Parent,
+        ProjectId, SNIPPET_MAX_LEN, TableName, TableStatus, TriggerStatus, UserId,
+        WorkerMessageStatus, WorkerStatus, WorkerType,
     };
     use td_objects::types::basic::{
         BundleId, CollectionIdName, CollectionName, ReuseFrozen, TableNameDto, WorkerConfig,
@@ -176,11 +194,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -225,11 +245,13 @@ mod tests {
             "# padding\n".repeat(2000)
         );
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: module.as_str().try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -282,11 +304,13 @@ mod tests {
         assert!(module.len() > SNIPPET_MAX_LEN);
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: module.as_str().try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -336,11 +360,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -386,11 +412,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -433,11 +461,13 @@ mod tests {
             .await?;
 
         let producer = FunctionRegister {
+            parent_function: None,
             name: "producer".try_into()?,
             description: "producer description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "producer snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -456,11 +486,13 @@ mod tests {
             .await?;
 
         let consumer = FunctionRegister {
+            parent_function: None,
             name: "consumer".try_into()?,
             description: "consumer description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "consumer snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -507,6 +539,7 @@ mod tests {
         assert_eq!(triggers[0].base.status, TriggerStatus::Frozen);
 
         let successor = FunctionRegister {
+            parent_function: None,
             name: "successor".try_into()?,
             ..producer.clone()
         };
@@ -525,6 +558,7 @@ mod tests {
         ));
 
         let successor = FunctionRegister {
+            parent_function: None,
             reuse_frozen_tables: ReuseFrozen::TRUE,
             ..successor
         };
@@ -580,11 +614,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -639,11 +675,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -714,11 +752,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_1".try_into()?,
             description: "function_1 description".try_into()?,
             bundle_id,
             snippet: "function_1 snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -755,11 +795,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_2".try_into()?,
             description: "function_2 description".try_into()?,
             bundle_id,
             snippet: "function_2 snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -808,11 +850,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_1".try_into()?,
             description: "function_1 description".try_into()?,
             bundle_id,
             snippet: "function_1 snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -853,11 +897,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_2".try_into()?,
             description: "function_2 description".try_into()?,
             bundle_id,
             snippet: "function_2 snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -931,11 +977,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_1".try_into()?,
             description: "function_1 description".try_into()?,
             bundle_id,
             snippet: "function_1 snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -970,11 +1018,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_3".try_into()?,
             description: "function_3 description".try_into()?,
             bundle_id,
             snippet: "function_3 snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1028,11 +1078,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_2".try_into()?,
             description: "function_2 description".try_into()?,
             bundle_id,
             snippet: "function_2 snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1078,11 +1130,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1166,11 +1220,13 @@ mod tests {
 
             let bundle_id = BundleId::default();
             let create = FunctionRegister {
+                parent_function: None,
                 name: "function_1".try_into()?,
                 description: "function_1 description".try_into()?,
                 bundle_id,
                 snippet: "function_1 snippet".try_into()?,
                 decorator: Decorator::Transformer,
+                function_type: None,
                 connector: None,
                 connection: None,
                 base_path: None,
@@ -1209,11 +1265,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_2".try_into()?,
             description: "function_2 description".try_into()?,
             bundle_id,
             snippet: "function_2 snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1264,11 +1322,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1319,11 +1379,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1360,11 +1422,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1413,11 +1477,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1461,11 +1527,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1519,11 +1587,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1571,11 +1641,13 @@ mod tests {
         let prod = set_collection_base_path(&db, p.id, &collection_name, "/prod").await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "stamped_fn".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1644,11 +1716,13 @@ mod tests {
         );
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "flip_fn".try_into()?,
             description: "description".try_into()?,
             bundle_id: bundle.id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1693,11 +1767,13 @@ mod tests {
         let prod = set_collection_base_path(&db, p.id, &collection_name, "/prod").await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "override_fn".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: Some(BasePath::try_from("/fn")?),
@@ -1740,11 +1816,13 @@ mod tests {
         connection: Option<&str>,
     ) -> Result<FunctionRegister, TdError> {
         let mut create = FunctionRegister {
+            parent_function: None,
             name: name.try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1975,6 +2053,170 @@ mod tests {
             err,
             RegisterFunctionError::TransformerInConnectedCollection(_, CollectionType::Destination)
         ));
+        Ok(())
+    }
+
+    async fn register_err(
+        db: &TdPool,
+        project: ProjectId,
+        collection: &str,
+        create: FunctionRegister,
+    ) -> Result<TdError, TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection)?,
+                },
+                create,
+            )
+            .in_project(project);
+        let service = Services::with_defaults(db.clone());
+        Ok(service.register_function(request).await.unwrap_err())
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_parent_function_does_not_exist_err(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("parent_fn_missing")?;
+        let _collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let mut create = pubsub_register("child_fn", Decorator::Transformer, None)?;
+        create.parent_function = Some(FunctionName::try_from("no_such_function")?);
+
+        let err = register_err(&db, p.id, collection_name.as_str(), create).await?;
+        let err = err.domain_err::<RegisterFunctionError>();
+        if let RegisterFunctionError::ParentFunctionDoesNotExist(parent, collection) = err {
+            assert_eq!(*parent, FunctionName::try_from("no_such_function")?);
+            assert_eq!(*collection, collection_name);
+        } else {
+            panic!("Unexpected error: {:?}", err);
+        }
+        Ok(())
+    }
+
+    async fn register_ok(
+        db: &TdPool,
+        project: ProjectId,
+        collection: &str,
+        create: FunctionRegister,
+    ) -> Result<Function, TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection)?,
+                },
+                create,
+            )
+            .in_project(project);
+        let service = Services::with_defaults(db.clone());
+        Ok(service.register_function(request).await?.data)
+    }
+
+    #[td_test::test(db)]
+    async fn test_register_parent_function_stores_logical_id(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("parent_logical")?;
+        let _collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let parent = pubsub_register("parent_fn", Decorator::Transformer, None)?;
+        let parent = register_ok(&db, p.id, collection_name.as_str(), parent).await?;
+
+        let mut create = pubsub_register("child_fn", Decorator::Transformer, None)?;
+        create.parent_function = Some(FunctionName::try_from("parent_fn")?);
+        let child = register_ok(&db, p.id, collection_name.as_str(), create).await?;
+
+        assert_eq!(
+            child.parent_function_id,
+            Some(Parent::from(parent.function_id))
+        );
+        // The logical id, not the version id: the two are distinct values, and
+        // storing the version id would break the link on the parent's next write.
+        assert_ne!(
+            child.parent_function_id.as_ref().map(|id| id.to_string()),
+            Some(parent.id.to_string())
+        );
+
+        let stored: FunctionDB = db.timeline().fetch_one(&child.id).await?;
+        assert_eq!(
+            stored.base.parent_function_id,
+            Some(Parent::from(parent.function_id))
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_parent_function_id_is_stable_across_writes(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("parent_stable")?;
+        let _collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let parent = pubsub_register("parent_fn", Decorator::Transformer, None)?;
+        let parent = register_ok(&db, p.id, collection_name.as_str(), parent).await?;
+
+        let mut create = pubsub_register("child_fn", Decorator::Transformer, None)?;
+        create.parent_function = Some(FunctionName::try_from("parent_fn")?);
+        let child = register_ok(&db, p.id, collection_name.as_str(), create).await?;
+        let expected = Some(Parent::from(parent.function_id));
+
+        // A new version of the parent: the logical id it is linked by does not
+        // change, so the child keeps pointing at it.
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(collection_name.as_str())?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("parent_fn")?,
+                    },
+                ),
+                FunctionUpdate {
+                    name: Some("parent_fn_renamed".try_into()?),
+                    ..Default::default()
+                },
+            )
+            .in_project(p.id);
+        let service = Services::with_defaults(db.clone());
+        let reparented = service.update_function(request).await?.data;
+        assert_eq!(reparented.function_id, parent.function_id);
+        assert_ne!(reparented.id, parent.id);
+
+        // A new version of the child: `..previous.base.clone()` has to carry the
+        // link forward rather than reset it.
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(collection_name.as_str())?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("child_fn")?,
+                    },
+                ),
+                FunctionUpdate {
+                    description: Some("child_fn description updated".try_into()?),
+                    ..Default::default()
+                },
+            )
+            .in_project(p.id);
+        let updated = service.update_function(request).await?.data;
+        assert_ne!(updated.id, child.id);
+        assert_eq!(updated.parent_function_id, expected);
+
+        let stored: FunctionDB = db.timeline().fetch_one(&updated.id).await?;
+        assert_eq!(stored.base.parent_function_id, expected);
         Ok(())
     }
 }

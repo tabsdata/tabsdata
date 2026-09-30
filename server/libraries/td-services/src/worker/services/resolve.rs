@@ -172,11 +172,13 @@ mod tests {
             .collection(&CollectionName::try_from("c_resolve")?, &UserId::admin())
             .await?;
         let create = FunctionRegister {
+            parent_function: None,
             name: "fr_resolve".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

@@ -361,11 +361,13 @@ pub(crate) mod tests {
         let create = create.clone();
         let update = update.clone();
         let update_as_register = FunctionRegister {
+            parent_function: None,
             name: update.name.unwrap_or(create.name),
             description: update.description.unwrap_or(create.description),
             bundle_id: update.bundle_id.unwrap_or(create.bundle_id),
             snippet: update.snippet.unwrap_or(create.snippet),
             decorator: update.decorator.unwrap_or(create.decorator),
+            function_type: None,
             connector: update.connector.unwrap_or(create.connector),
             connection: update.connection.unwrap_or(create.connection),
             dependencies: update.dependencies,

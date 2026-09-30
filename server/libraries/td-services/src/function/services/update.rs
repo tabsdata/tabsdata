@@ -155,11 +155,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "foo".try_into()?,
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -229,11 +231,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "foo".try_into()?,
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -301,11 +305,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -377,11 +383,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -452,11 +460,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -542,11 +552,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "reset_fn".try_into()?,
             description: "desc".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -622,11 +634,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "noreset_fn".try_into()?,
             description: "desc".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -704,11 +718,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "stage_fn".try_into()?,
             description: "desc".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -781,11 +797,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "nostage_fn".try_into()?,
             description: "desc".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -856,11 +874,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "override_fn".try_into()?,
             description: "desc".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -955,11 +975,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1032,11 +1054,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1108,11 +1132,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1185,11 +1211,13 @@ mod tests {
             .await?;
 
         let trigger_create = FunctionRegister {
+            parent_function: None,
             name: "the_trigger".try_into()?,
             description: "wanted".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "the_trigger snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1210,11 +1238,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1286,11 +1316,13 @@ mod tests {
             .await?;
 
         let trigger_create = FunctionRegister {
+            parent_function: None,
             name: "the_trigger".try_into()?,
             description: "wanted".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "the_trigger snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1311,11 +1343,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1386,11 +1420,13 @@ mod tests {
             .await?;
 
         let trigger_create = FunctionRegister {
+            parent_function: None,
             name: "the_trigger".try_into()?,
             description: "wanted".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "the_trigger snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1411,11 +1447,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1487,11 +1525,13 @@ mod tests {
             .await?;
 
         let trigger_create = FunctionRegister {
+            parent_function: None,
             name: "the_trigger".try_into()?,
             description: "wanted".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "the_trigger snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1515,11 +1555,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1602,11 +1644,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin_workout".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1748,11 +1792,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_foo".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id,
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -1873,11 +1919,13 @@ mod tests {
 
             let bundle_id = BundleId::default();
             let create = FunctionRegister {
+                parent_function: None,
                 name: "function_1".try_into()?,
                 description: "function_1 description".try_into()?,
                 bundle_id,
                 snippet: "function_1 snippet".try_into()?,
                 decorator: Decorator::Transformer,
+                function_type: None,
                 connector: None,
                 connection: None,
                 base_path: None,
@@ -1905,11 +1953,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_2".try_into()?,
             description: "function_2 description".try_into()?,
             bundle_id,
             snippet: "function_2 snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -2002,11 +2052,13 @@ mod tests {
 
         let bundle_id = BundleId::default();
         let create = FunctionRegister {
+            parent_function: None,
             name: "function".try_into()?,
             description: "description".try_into()?,
             bundle_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -2078,11 +2130,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_1".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -2103,11 +2157,13 @@ mod tests {
             .await?;
 
         let dependant = FunctionRegister {
+            parent_function: None,
             name: "function_2".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -2211,11 +2267,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_1".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -2236,11 +2294,13 @@ mod tests {
             .await?;
 
         let dependant = FunctionRegister {
+            parent_function: None,
             name: "function_2".try_into()?,
             description: "description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -2329,11 +2389,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_1".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -2569,11 +2631,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_1".try_into()?,
             description: "function_foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "function_foo snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -2639,11 +2703,13 @@ mod tests {
         create_collection(&db, p.id, "src_upd", Some(GroupName::source())).await;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: "upd_pub".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: Some(ConnectionKind::try_from("mysqlSrcConn")?),
             base_path: None,
@@ -2722,11 +2788,13 @@ mod tests {
             .collection(&CollectionName::try_from("defs_coll")?, &UserId::admin())
             .await?;
         let create = FunctionRegister {
+            parent_function: None,
             name: "defs_fn".try_into()?,
             description: "desc".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

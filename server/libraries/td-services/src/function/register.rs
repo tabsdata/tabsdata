@@ -11,7 +11,7 @@ use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::connection::ConnectionDB;
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::types::basic::{
-    CollectionName, CollectionType, ConnectionKind, Decorator, TableName,
+    CollectionName, CollectionType, ConnectionKind, Decorator, FunctionName, TableName,
 };
 use td_objects::types::composed::{TableDependency, TableTrigger};
 use td_queries::Queries;
@@ -42,6 +42,8 @@ pub enum RegisterFunctionError {
     ConnectionKindMismatch(ConnectionKind, ConnectionKind, CollectionName) = 10,
     #[error("A transformer function cannot be registered in collection '{0}', a {1:?} collection")]
     TransformerInConnectedCollection(CollectionName, CollectionType) = 11,
+    #[error("Parent function '{0}' does not exist in collection '{1}'")]
+    ParentFunctionDoesNotExist(FunctionName, CollectionName) = 13,
 }
 
 /// A publisher/subscriber must declare the connection kind it uses, its
@@ -87,6 +89,7 @@ pub async fn ensure_connection_kind_matches<S: SeesProjectRows, M: AccessMode>(
                     connection.clone(),
                 ))?
             }
+
             if !matches!(collection.collection_type, CollectionType::DataFactory) {
                 Err(RegisterFunctionError::TransformerInConnectedCollection(
                     collection.name.clone(),

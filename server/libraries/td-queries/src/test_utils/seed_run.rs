@@ -31,11 +31,13 @@ pub async fn seed_run(db: &TdPool, project: ProjectId) -> Result<SeededRun, TdEr
         .collection(&CollectionName::try_from("collection")?, &UserId::admin())
         .await?;
     let create = FunctionRegister {
+        parent_function: None,
         name: "joaquin".try_into()?,
         description: "f".try_into()?,
         bundle_id: BundleId::default(),
         snippet: "s".try_into()?,
         decorator: Decorator::Publisher,
+        function_type: None,
         connector: None,
         connection: None,
         base_path: None,

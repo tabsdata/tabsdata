@@ -13,9 +13,9 @@ use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
     BasePath, BundleId, CollectionId, CollectionName, Decorator, DependencyId, DependencyPos,
     DependencyVersionId, Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues,
-    FunctionStatus, FunctionVersionId, GroupId, Partitioned, Private, ProjectId, RawSnippet,
-    Snippet, StageId, StorageVersion, System, TableId, TableName, TableStatus, TableType,
-    TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
+    FunctionStatus, FunctionType, FunctionVersionId, GroupId, Partitioned, Private, ProjectId,
+    RawSnippet, Snippet, StageId, StorageVersion, System, TableId, TableName, TableStatus,
+    TableType, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
 };
 use crate::types::composed::TableVersions;
 use std::collections::HashMap;
@@ -209,10 +209,12 @@ pub fn function(function: &FunctionName) -> FunctionDBWithNames {
         base: FunctionDB {
             base: FunctionInsertDB {
                 id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
+                parent_function_id: None,
                 collection_id: *COLLECTION_ID,
                 name: function.clone(),
                 description: Description::default(),
                 decorator: Decorator::Publisher,
+                function_type: FunctionType::default(),
                 connector: None,
                 connection: None,
                 runtime_values: FunctionRuntimeValues::default(),

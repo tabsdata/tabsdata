@@ -209,11 +209,13 @@ mod tests {
             .collection(&CollectionName::try_from("c_stuck")?, &UserId::admin())
             .await?;
         let create = FunctionRegister {
+            parent_function: None,
             name: "f_stuck".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -366,11 +368,13 @@ mod tests {
             .collection(&CollectionName::try_from("c_stuck_rp")?, &UserId::admin())
             .await?;
         let create = FunctionRegister {
+            parent_function: None,
             name: "f_stuck_rp".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -484,11 +488,13 @@ mod tests {
             )
             .await?;
         let create = FunctionRegister {
+            parent_function: None,
             name: "function_1".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -528,6 +534,7 @@ mod tests {
     ) -> Result<(), TdError> {
         let newer = FunctionInsertDB {
             id: FunctionVersionId::new(),
+            parent_function_id: None,
             defined_by_id: UserId::admin(),
             ..function.base.clone()
         };
@@ -612,11 +619,13 @@ mod tests {
             )
             .await?;
         let create = FunctionRegister {
+            parent_function: None,
             name: "f_run_missing".try_into()?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

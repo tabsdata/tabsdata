@@ -31,11 +31,13 @@ fn register(
     trigger: Option<&str>,
 ) -> Result<FunctionRegister, TdError> {
     Ok(FunctionRegister {
+        parent_function: None,
         name: FunctionName::try_from(name)?,
         description: "d".try_into()?,
         bundle_id: BundleId::default(),
         snippet: "s".try_into()?,
         decorator: Decorator::Publisher,
+        function_type: None,
         connector: None,
         connection: None,
         base_path: None,

@@ -104,11 +104,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: FUNCTION_NAMES[0].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -207,11 +209,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: FUNCTION_NAMES[0].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -232,11 +236,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: FUNCTION_NAMES[1].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -261,11 +267,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: FUNCTION_NAMES[2].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -381,11 +389,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: FUNCTION_NAMES[0].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -406,11 +416,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: FUNCTION_NAMES[1].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -435,11 +447,13 @@ mod tests {
             .await?;
 
         let create = FunctionRegister {
+            parent_function: None,
             name: FUNCTION_NAMES[2].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -539,11 +553,13 @@ mod tests {
             .collection(&collection_name, &UserId::admin())
             .await?;
         let create = FunctionRegister {
+            parent_function: None,
             name: FUNCTION_NAMES[0].clone(),
             description: "foo description".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "foo snippet".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

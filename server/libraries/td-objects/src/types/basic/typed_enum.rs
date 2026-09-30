@@ -6,6 +6,15 @@ use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_common::execution_status::WorkerCallbackStatus;
 use td_error::{ApiError, TdError, api_error};
 
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Default, Eq, PartialEq)]
+pub enum FunctionType {
+    #[default]
+    #[typed_enum(rename = "R")]
+    Regular,
+    #[typed_enum(rename = "DQST")]
+    DQSummaryTrends,
+}
+
 #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum Decorator {
     #[typed_enum(rename = "P")]

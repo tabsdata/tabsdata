@@ -167,11 +167,13 @@ mod tests {
             upload_bundle(&context, p.id, &collection.name, payload_a.clone()).await?;
 
         let create_v1 = FunctionRegister {
+            parent_function: None,
             name: "joaquin".try_into()?,
             description: "desc".try_into()?,
             bundle_id: bundle_a_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -200,6 +202,7 @@ mod tests {
 
         let v2 = FunctionInsertDB {
             id: FunctionVersionId::new(),
+            parent_function_id: None,
             bundle_id: bundle_b_id,
             ..v1.base.clone()
         };
@@ -362,11 +365,13 @@ mod tests {
         let payload = b"BUNDLE-PAYLOAD".to_vec();
         let bundle_id = upload_bundle(&context, p.id, &collection.name, payload).await?;
         let create = FunctionRegister {
+            parent_function: None,
             name: "joaquin".try_into()?,
             description: "desc".try_into()?,
             bundle_id,
             snippet: "snippet".try_into()?,
             decorator: Decorator::Transformer,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

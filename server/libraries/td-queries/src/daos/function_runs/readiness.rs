@@ -402,11 +402,13 @@ mod tests {
             .await?;
         let register = |name: &str, dependencies, tables| -> Result<FunctionRegister, TdError> {
             Ok(FunctionRegister {
+                parent_function: None,
                 name: name.try_into()?,
                 description: "d".try_into()?,
                 bundle_id: BundleId::default(),
                 snippet: "s".try_into()?,
                 decorator: Decorator::Publisher,
+                function_type: None,
                 connector: None,
                 connection: None,
                 base_path: None,

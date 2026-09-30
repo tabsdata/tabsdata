@@ -112,11 +112,13 @@ mod tests {
             )
             .await?;
         let create = FunctionRegister {
+            parent_function: None,
             name: FunctionName::try_from("inflight_iso_fn")?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,
@@ -196,11 +198,13 @@ mod tests {
         collection: &ActiveCollectionDB,
     ) -> Result<(), TdError> {
         let create = FunctionRegister {
+            parent_function: None,
             name: FunctionName::try_from("g_inflight_fn")?,
             description: "d".try_into()?,
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             decorator: Decorator::Publisher,
+            function_type: None,
             connector: None,
             connection: None,
             base_path: None,

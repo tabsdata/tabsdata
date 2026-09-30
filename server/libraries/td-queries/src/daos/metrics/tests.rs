@@ -90,11 +90,13 @@ async fn make_function(
         .map(|t| TableNameDto::try_from(*t))
         .collect::<Result<Vec<_>, _>>()?;
     let create = FunctionRegister {
+        parent_function: None,
         name: name.try_into()?,
         description: "test fn".try_into()?,
         bundle_id: BundleId::default(),
         snippet: "snippet".try_into()?,
         decorator,
+        function_type: None,
         connector: None,
         connection: None,
         base_path: None,
