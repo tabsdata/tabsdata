@@ -56,6 +56,20 @@ async fn enable_function(
     let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
     register_workers(conn, &function, &previous_version_id, &no_workers).await?;
 
+    let children: Vec<FunctionDB> = conn
+        .scd2()
+        .fetch_all(FunctionDB::children_of(&current.base.base.function_id))
+        .await?;
+    for child in children {
+        if child.base.enabled == enable.enabled {
+            continue;
+        }
+        let previous_version_id = Some(child.base.id.clone());
+        let updated = child.re_registered(&ctx, enable.enabled);
+        conn.scd2().open(&updated, at).await?;
+        register_workers(conn, &updated, &previous_version_id, &no_workers).await?;
+    }
+
     let with_names: FunctionDBWithNames = conn.timeline().fetch_one(&function.id).await?;
     let read = Function::from_dao(with_names)?;
     gated_trx.commit().await?;
@@ -78,7 +92,9 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::dependency::DependencyDB;
-    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::function::{
+        ChildFunction, DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX, FunctionRegister,
+    };
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::trigger::TriggerDB;
     use td_objects::dxo::worker::WorkerDB;
@@ -87,6 +103,7 @@ mod tests {
     };
     use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
     use td_objects::types::basic::{BundleId, CollectionName, ReuseFrozen};
+    use td_objects::types::basic::{FunctionId, FunctionName, FunctionType, ProjectId};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -311,6 +328,217 @@ mod tests {
             db.fetch_all::<WorkerDB>(&current_function.base.id).await?;
         assert_eq!(current_workers.len(), workers.unwrap_or_default().len());
 
+        Ok(())
+    }
+
+    const OWNER: &str = "cascade_owner";
+
+    fn trend_child(name: &str) -> Result<ChildFunction, TdError> {
+        let table = format!("{name}_table");
+        Ok(ChildFunction {
+            function_type: FunctionType::DQSummaryTrends,
+            bundle_id: BundleId::default(),
+            snippet: "a snippet".try_into()?,
+            dependencies: None,
+            tables: Some(vec![TableNameDto::try_from(table.as_str())?]),
+        })
+    }
+
+    fn trend_child_name(name: &str) -> String {
+        format!("{name}_table{DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX}")
+    }
+
+    fn cascade_dto(
+        name: &str,
+        children: Option<Vec<ChildFunction>>,
+        enabled: Enabled,
+    ) -> Result<FunctionRegister, TdError> {
+        let table = format!("{name}_table");
+        Ok(FunctionRegister {
+            child_functions: children,
+            name: name.try_into()?,
+            description: "a function".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "a snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from(table.as_str())?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: Some(enabled),
+            workers: None,
+        })
+    }
+
+    async fn register_fn(
+        db: &TdPool,
+        project: ProjectId,
+        collection: &CollectionName,
+        create: FunctionRegister,
+    ) -> Result<Function, TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection.as_str())?,
+                },
+                create,
+            )
+            .in_project(project);
+        Ok(Services::with_defaults(db.clone())
+            .register_function(request)
+            .await?
+            .data)
+    }
+
+    async fn set_enabled(
+        db: &TdPool,
+        project: ProjectId,
+        collection: &CollectionName,
+        function: &str,
+        enabled: Enabled,
+    ) -> Result<Function, TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(collection.as_str())?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str(function)?,
+                    },
+                ),
+                FunctionEnable { enabled },
+            )
+            .in_project(project);
+        Ok(Services::with_defaults(db.clone())
+            .enable_function(request)
+            .await?
+            .data)
+    }
+
+    async fn current_version(db: &TdPool, function_id: &FunctionId) -> Result<FunctionDB, TdError> {
+        let rows: Vec<FunctionDB> = db.scd2().fetch_all::<FunctionDB>(function_id).await?;
+        assert_eq!(rows.len(), 1);
+        Ok(rows.into_iter().next().unwrap())
+    }
+
+    async fn a_collection(
+        db: &TdPool,
+        project: ProjectId,
+        name: &str,
+    ) -> Result<CollectionName, TdError> {
+        let name = CollectionName::try_from(name)?;
+        db.scoped(project)
+            .seed()
+            .collection(&name, &UserId::admin())
+            .await?;
+        Ok(name)
+    }
+
+    #[td_test::test(db)]
+    async fn test_disable_cascades_to_a_child(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = a_collection(&db, p.id, "endis").await?;
+        let owner = register_fn(
+            &db,
+            p.id,
+            &collection,
+            cascade_dto(OWNER, Some(vec![trend_child("child")?]), Enabled::TRUE)?,
+        )
+        .await?;
+        let child = live_child(&db, &owner.function_id).await?;
+
+        let response = set_enabled(&db, p.id, &collection, OWNER, Enabled::FALSE).await?;
+
+        assert_eq!(response.name, FunctionName::try_from(OWNER)?);
+        assert_eq!(response.enabled, Enabled::FALSE);
+        let child = current_version(&db, &child.base.function_id).await?;
+        assert_eq!(child.base.enabled, Enabled::FALSE);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_enable_cascades_back_to_the_subtree(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = a_collection(&db, p.id, "endis_back").await?;
+        let owner = register_fn(
+            &db,
+            p.id,
+            &collection,
+            cascade_dto(OWNER, Some(vec![trend_child("child")?]), Enabled::TRUE)?,
+        )
+        .await?;
+        let child = live_child(&db, &owner.function_id).await?;
+
+        set_enabled(&db, p.id, &collection, OWNER, Enabled::FALSE).await?;
+        set_enabled(&db, p.id, &collection, OWNER, Enabled::TRUE).await?;
+
+        let child = current_version(&db, &child.base.function_id).await?;
+        assert_eq!(child.base.enabled, Enabled::TRUE);
+        Ok(())
+    }
+
+    async fn live_child(db: &TdPool, owner: &FunctionId) -> Result<FunctionDB, TdError> {
+        let rows: Vec<FunctionDB> = db
+            .scd2()
+            .fetch_all::<FunctionDB>(FunctionDB::children_of(owner))
+            .await?;
+        assert_eq!(rows.len(), 1);
+        Ok(rows.into_iter().next().unwrap())
+    }
+
+    #[td_test::test(db)]
+    async fn test_a_child_already_at_the_target_is_not_versioned(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = a_collection(&db, p.id, "endis_skip").await?;
+        let owner = register_fn(
+            &db,
+            p.id,
+            &collection,
+            cascade_dto(OWNER, Some(vec![trend_child("child")?]), Enabled::TRUE)?,
+        )
+        .await?;
+        set_enabled(&db, p.id, &collection, OWNER, Enabled::FALSE).await?;
+        let disabled = live_child(&db, &owner.function_id).await?;
+
+        set_enabled(&db, p.id, &collection, OWNER, Enabled::FALSE).await?;
+
+        let current = current_version(&db, &disabled.base.function_id).await?;
+        assert_eq!(current.base.id, disabled.base.id);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_disabling_a_child_leaves_its_parent_enabled(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = a_collection(&db, p.id, "endis_up").await?;
+        let owner = register_fn(
+            &db,
+            p.id,
+            &collection,
+            cascade_dto(OWNER, Some(vec![trend_child("child")?]), Enabled::TRUE)?,
+        )
+        .await?;
+
+        set_enabled(
+            &db,
+            p.id,
+            &collection,
+            &trend_child_name("child"),
+            Enabled::FALSE,
+        )
+        .await?;
+
+        let current = current_version(&db, &owner.function_id).await?;
+        assert_eq!(current.base.enabled, Enabled::TRUE);
+        assert_eq!(current.base.id, owner.id);
         Ok(())
     }
 }

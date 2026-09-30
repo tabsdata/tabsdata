@@ -1449,6 +1449,12 @@ class Function:
         ]
 
     def delete(self, raise_for_status: bool = True) -> None:
+        """Delete this function.
+
+        The server deletes the functions declaring this one as their parent --
+        the trend transformers among them -- along with it, in the same
+        transaction.
+        """
         self.connection.function_delete(
             self.collection.name, self.name, raise_for_status=raise_for_status
         )

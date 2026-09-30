@@ -363,6 +363,10 @@ impl FunctionDB {
         FunctionStatus::Active
     }
 
+    pub fn children_of(parent: &FunctionId) -> impl SqlCondition<Self> {
+        Some(Parent::from(*parent))
+    }
+
     pub fn frozen_version(&self, ctx: &RequestContext) -> FunctionInsertDB {
         FunctionInsertDB {
             id: FunctionVersionId::new(),
