@@ -157,6 +157,14 @@ A type alias for a percentage value, which can be an integer or a float between
 0 and 100.
 """
 
+RetentionSpec: TypeAlias = Annotated[StrictInt, Field(ge=0)]
+"""
+A type alias for how long one `SummaryTrend` tier keeps a row, counted in that
+tier's own unit of days, weeks or months. A value of zero disables the tier; a
+trend with every tier disabled is refused.
+"""
+
+
 # --- Scale Specifications ---
 
 ScaleIdentityLimitSpec: TypeAlias = StrictInt

@@ -62,6 +62,7 @@ from tabsdatak.dataquality._operator import (
     RowCountThreshold as RowCountThreshold,
     Select as Select,
     Summary as Summary,
+    SummaryTrend as SummaryTrend,
     TagOperator as TagOperator,
     Threshold as Threshold,
 )

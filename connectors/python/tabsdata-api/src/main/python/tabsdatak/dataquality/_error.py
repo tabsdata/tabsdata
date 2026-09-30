@@ -88,6 +88,15 @@ class DataQualityErrorCode(ErrorCode):
     DQC_31 = ErrorDef(
         ParameterValidationError, "Invalid parameters for the 'Summary' operator."
     )
+    DQC_32 = ErrorDef(
+        ParameterValidationError, "Invalid parameters for the 'SummaryTrend' operator."
+    )
+    DQC_33 = ErrorDef(
+        ParameterValidationError,
+        "'SummaryTrend' operator cannot have 'days', 'weeks' and 'months' all "
+        "zero. Either set at least one tier to a positive value or pass "
+        "'trend=None' to opt out of the trend table.",
+    )
 
     # Scales and classifiers (_classifier.py)
     DQC_101 = ErrorDef(ParameterValidationError, "{message}")

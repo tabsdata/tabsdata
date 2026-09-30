@@ -26,6 +26,7 @@ from tabsdatak.dataquality._typing import (
     ColumnNameSpec,
     IncludeQualityColumnsSpec,
     PercentSpec,
+    RetentionSpec,
     RowCountSpec,
     TagsSpec,
 )
@@ -392,6 +393,71 @@ class Enrich(TagOperator):
     to_table: TableNameSpec | None = None
 
 
+@_api.dataclass(DataQualityErrorCode.DQC_32)
+class SummaryTrend(_api.JsonSerde):
+    """The rolling trend derived from DQ Summary runs.
+
+    :categories: dq-operator
+
+    Each run rewrites the whole table: the previous version is read back,
+    merged with the new summary and re-tiered. Every run counts towards its
+    week and month bucket from its first execution, so the three tiers cover
+    overlapping spans of the same history. Run rows are dropped after `days`,
+    week rows after `weeks` and month rows after `months`, each tier expiring
+    independently -- a week that falls out of the `weeks` window survives in
+    its month.
+
+    Buckets are UTC: a week truncates to the Monday that starts it, a month to
+    the 1st. Beside the three tiers the table carries `folded` rows, one per
+    transaction already counted. They hold no tallies; they are what lets a
+    re-run of a transaction be recognised and not counted a second time, and
+    they are kept for as long as either coarse tier could still be carrying
+    that run.
+
+    Args:
+        table: Table to write the trend report to; a valid table name. If
+            `None` (default), a table named `<target>_dq_summary_trends` is
+            used.
+        days: Days a row is kept as an exact run row. It is folded into the week
+            and month tiers from its first run regardless. Defaults to 7.
+        weeks: Weeks a folded week row is kept after its bucket start.
+            Defaults to 12.
+        months: Months a folded month row is kept after its bucket start.
+            Defaults to 24.
+
+    Examples:
+        .. code-block:: python
+
+            Summary()
+
+        Keep exact rows for a week, weeks for a quarter, and no month tier:
+
+        .. code-block:: python
+
+            Summary(trend=SummaryTrend(days=7, weeks=13, months=0))
+
+        Opt out of the trend table entirely:
+
+        .. code-block:: python
+
+            Summary(trend=None)
+    """
+
+    __kind__ = "dqSummaryTrend"
+
+    table: TableNameSpec | None = None
+    days: RetentionSpec = 7
+    weeks: RetentionSpec = 12
+    months: RetentionSpec = 24
+
+    @model_validator(mode="after")
+    def validate_retention_tiers(self) -> "SummaryTrend":
+        # At least 1 tier has to be non-zero
+        if not (self.days or self.weeks or self.months):
+            raise DataQualityErrorCode.DQC_33.exception()
+        return self
+
+
 @_api.dataclass(DataQualityErrorCode.DQC_31)
 class Summary(TagOperator):
     """An operator that writes a data quality summary (one row per classifier:
@@ -405,6 +471,9 @@ class Summary(TagOperator):
         table: Table to write the report to; a valid table name. If
             `None` (default), a table named `<target>_dq_summary` is
             used.
+        trend: The rolling trend table derived from this report. A
+            default `SummaryTrend()` is used when omitted; pass `None` to
+            opt out of the trend table entirely.
 
     Examples:
         .. code-block:: python
@@ -422,6 +491,7 @@ class Summary(TagOperator):
     __kind__ = "dqSummary"
 
     table: TableNameSpec | None = None
+    trend: SummaryTrend | None = field(default_factory=SummaryTrend)
 
 
 @_api.dataclass(DataQualityErrorCode.DQC_20)
