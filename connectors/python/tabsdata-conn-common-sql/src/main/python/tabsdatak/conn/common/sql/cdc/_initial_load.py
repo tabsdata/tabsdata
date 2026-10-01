@@ -73,15 +73,15 @@ class InitialLoader:
         offset change capture resumes from. The caller stages the
         accumulated files; nothing is published from here, so a failure
         mid-load leaves no manifest behind."""
-        # Taken before the first table is read. The session fixes it when
-        # it opens; a position read after the scan would sit ahead of the
-        # snapshot and skip whatever committed in between.
-        offset = session.offset
+        # Read after the scan, per the session contract: the position is
+        # valid once every table has been yielded. Sessions fix it when
+        # they pin, which for some is at open and for others on the first
+        # yield, and reading it earlier sees whatever preceded the pin.
         tracked_tables = self._ingester.tracked_tables
         timestamp = datetime.now(tz=timezone.utc)
         for tracked_table, connection in session.tables(tracked_tables):
             self._load_table(tracked_table, connection, timestamp)
-        return offset
+        return session.offset
 
     def _load_table(
         self,
