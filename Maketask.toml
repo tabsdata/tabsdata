@@ -1138,19 +1138,7 @@ script = [
         end
     end
 
-    db2_cdc = get_env TD_TEST_DB2_CDC
-    existing_markers = get_env MARKERS
-    if equals ${db2_cdc} "true"
-        info "🧪 Including Db2 CDC tests (TD_TEST_DB2_CDC=true)"
-        markers = set "${existing_markers}"
-    else
-        if is_empty ${existing_markers}
-            markers = set "not cdc_db2 and not db2_seq"
-        else
-            markers = set "(${existing_markers}) and not cdc_db2 and not db2_seq"
-        end
-    end
-    set_env MARKERS ${markers}
+    markers = get_env MARKERS
 
     if is_empty ${packages_filter}
         cov_args = set "--cov-config=.coveragerc --cov --cov-report=html:.coveragex/html --cov-report=json:.coveragex/json/coverage.json --cov-report=lcov:.coveragex/lcov/coverage.lcov"
@@ -1597,19 +1585,7 @@ script = [
         end
     end
 
-    db2_cdc = get_env TD_TEST_DB2_CDC
-    existing_markers = get_env MARKERS
-    if equals ${db2_cdc} "true"
-        info "🧪 Including Db2 CDC tests (TD_TEST_DB2_CDC=true)"
-        markers = set "${existing_markers}"
-    else
-        if is_empty ${existing_markers}
-            markers = set "not cdc_db2 and not db2_seq"
-        else
-            markers = set "(${existing_markers}) and not cdc_db2 and not db2_seq"
-        end
-    end
-    set_env MARKERS ${markers}
+    markers = get_env MARKERS
 
     if is_empty ${packages_filter}
         cov_args = set "--cov-config=.coveragerc --cov --cov-report=html:.coveragex/html --cov-report=json:.coveragex/json/coverage.json --cov-report=lcov:.coveragex/lcov/coverage.lcov"
