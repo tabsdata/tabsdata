@@ -426,7 +426,7 @@ def test_resetting_the_flag_reloads_every_row_including_the_new_ones(
         carried = first.persisted_state()
 
         cdc_insert(domain, table, [{"id": 3, "name": "added-while-stopped", "age": 3}])
-        cdc_wait_cd_count(domain, cd_table, expected=1)
+        cdc_wait_cd_count(domain, cd_table, expected=3)
 
         reset = dict(carried) | {"cdc.initial-load": True}
         second = _CdcCtx(tmp_path / "run2", active_polls=12, initial_state=reset)
@@ -454,7 +454,7 @@ def test_a_reset_reload_does_not_also_replay_the_rows_as_changes(
         carried = first.persisted_state()
 
         cdc_insert(domain, table, [{"id": 2, "name": "between-runs", "age": 2}])
-        cdc_wait_cd_count(domain, cd_table, expected=1)
+        cdc_wait_cd_count(domain, cd_table, expected=2)
 
         reset = dict(carried) | {"cdc.initial-load": True}
         second = _CdcCtx(tmp_path / "run2", active_polls=12, initial_state=reset)
@@ -533,7 +533,7 @@ def test_two_consecutive_restarts_each_resume_without_replaying(
         state = first.persisted_state()
 
         cdc_insert(domain, table, [{"id": 2, "name": "between-one-and-two", "age": 2}])
-        cdc_wait_cd_count(domain, cd_table, expected=1)
+        cdc_wait_cd_count(domain, cd_table, expected=2)
 
         second = _CdcCtx(tmp_path / "run2", active_polls=12, initial_state=state)
         second.work_dir.mkdir()
@@ -544,7 +544,7 @@ def test_two_consecutive_restarts_each_resume_without_replaying(
         cdc_insert(
             domain, table, [{"id": 3, "name": "between-two-and-three", "age": 3}]
         )
-        cdc_wait_cd_count(domain, cd_table, expected=2)
+        cdc_wait_cd_count(domain, cd_table, expected=3)
 
         third = _CdcCtx(tmp_path / "run3", active_polls=12, initial_state=state)
         third.work_dir.mkdir()

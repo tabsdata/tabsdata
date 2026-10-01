@@ -15,6 +15,18 @@ apparatus set up at TWO points:
   ``DATA CAPTURE CHANGES``, ``asnclp create registration`` to materialise its CD
   staging table, add the ``IBMSNAP_LOGMARKER`` column + trigger the ingester
   needs, then signal CAPSTART and wait for the registration to go Active.
+  First, for all tables at once, the CD table names are claimed
+  (:meth:`Db2Cdc._claim_cd_tables`): an earlier install of this domain's own is
+  re-registered, a leftover no live registration holds is reclaimed.
+
+A CD table is ``ASN.TD_<TAG>__<TABLE>``, <TAG> 8 hex of the domain's schema, and
+the domain records ``CD_TABLE_PREFIX`` (``ASN.TD_<TAG>__``) in its meta for a
+function to name its tables by (``${D0__CD_TABLE_PREFIX}EMPLOYEES``). The CD
+tables live in the one shared ``ASN`` schema, so a name of the table alone --
+``ASN.TD_T__<TABLE>``, as it was -- let only one db2cdc domain per model use a
+system: a second domain of the model, or any leftover of one, was refused. A
+registration made under that old name is still found, and removed, through
+``IBMSNAP_REGISTER``, which records each registration's CD table.
 
 Everything runs as ``db2inst1`` inside the container via the CLP (``db2`` /
 ``asnclp`` / ``asncap``); the command sequence mirrors the tabsdata-conn-db2 CDC
@@ -23,9 +35,11 @@ test fixture.
 
 from __future__ import annotations
 
+import hashlib
 import random
 import time
 
+from tabsdatax.itest.tdksystems2 import descriptor, store
 from tabsdatax.itest.tdksystems2.errors import TdxError
 from tabsdatax.itest.tdksystems2.shell import docker_exec
 from tabsdatax.itest.tdksystems2.systems.db2.backend import _XP_DB, Db2
@@ -36,7 +50,8 @@ _ARCHIVE_DIR = "archive"
 # asnccmd reports a stopped capture program with this code, on a zero exit.
 _ASNCAP_DOWN = "ASN0506E"
 _BACKUP_DIR = "backup"
-_STAGING_PREFIX = "TD_T__"
+#: The domain meta key naming the CD tables' qualified prefix.
+CD_TABLE_PREFIX_KEY = "CD_TABLE_PREFIX"
 _OLD_VALUES_PREFIX = "_"
 _WAIT_TIMEOUT_S = 300
 _WAIT_POLL_S = 3
@@ -226,7 +241,7 @@ class Db2Cdc(Db2):
         -- but both setup steps are guarded, so re-running them costs nothing.
         """
         result = super().restart_system(meta)
-        container = meta.get("CONTAINER") or meta.get("SYS_CONTAINER", "")
+        container = meta.get("DOCKER_CONTAINER_NAME") or meta.get("SYS_CONTAINER", "")
         if not container:
             return result
         self._wait_ready(container, meta.get("PASSWORD", ""), self.ready_timeout)
@@ -257,9 +272,29 @@ class Db2Cdc(Db2):
     # ---- per-table registration (public: used by after_install_schema and
     # ---- by tests that need a source table of their own) ----------------
 
-    def cd_table(self, table: str) -> str:
-        """The qualified CD table ASN capture writes `table`'s changes into."""
-        return f"{_ASN}.{_STAGING_PREFIX}{table.upper()}"
+    @staticmethod
+    def staging_prefix(schema: str) -> str:
+        """The CD table name prefix of the domain whose schema is `schema`:
+        ``TD_<8 hex of the schema>__``, short enough to leave any table name
+        room under Db2's 128, and a domain's own so no two domains share one."""
+        tag = hashlib.sha256(schema.upper().encode()).hexdigest()[:8].upper()
+        return f"TD_{tag}__"
+
+    def _staging(self, schema: str, table: str) -> str:
+        return f"{self.staging_prefix(schema)}{table.upper()}"
+
+    def cd_table(self, schema: str, table: str) -> str:
+        """The qualified CD table ASN capture writes `schema.table`'s changes into."""
+        return f"{_ASN}.{self._staging(schema, table)}"
+
+    def domain_meta(
+        self, sys_meta: dict[str, str], entity_name: str, password: str
+    ) -> dict[str, str]:
+        meta = super().domain_meta(sys_meta, entity_name, password)
+        meta[CD_TABLE_PREFIX_KEY] = (
+            f"{_ASN}.{self.staging_prefix(self._schema(meta['DB']))}"
+        )
+        return meta
 
     def register_table(
         self, meta: dict[str, str], table: str, *, ddl: str | None = None
@@ -278,7 +313,7 @@ class Db2Cdc(Db2):
         if ddl:
             self._clp(container, ddl)
         self._register_table(container, schema, table.upper())
-        return self.cd_table(table)
+        return self.cd_table(schema, table)
 
     def deregister_table(
         self, meta: dict[str, str], table: str, *, drop: bool = False
@@ -296,7 +331,22 @@ class Db2Cdc(Db2):
         """
         container, schema = self._container_and_schema(meta)
         table = table.upper()
-        staging = f"{_STAGING_PREFIX}{table}"
+        self._remove_registration(container, schema, table)
+        self._clp(
+            container,
+            f"alter table {schema}.{table} data capture none",
+            ignore_failure=True,
+        )
+        if drop:
+            self._clp(container, f"drop table {schema}.{table}", ignore_failure=True)
+
+    def _remove_registration(self, container: str, schema: str, table: str) -> None:
+        """CAPSTOP, then the registration's rows, its trigger and its CD table:
+        what a deregistration and a reclaim both take away. The source table's
+        own ``DATA CAPTURE`` flag is the deregistration's to clear -- a reclaim
+        has no source table left to alter. The CD table is the one the
+        registration records, so one made under an older naming goes too."""
+        staging = self._registered_staging(container, schema, table)
         self._send_capstop(container, schema, table)
         self._clp(
             container,
@@ -310,15 +360,42 @@ class Db2Cdc(Db2):
             f"'{schema}' and source_table = '{table}'",
             ignore_failure=True,
         )
+        self._drop_cd_table(container, staging)
+
+    def _registered_staging(self, container: str, schema: str, table: str) -> str:
+        """The CD table the registration of ``schema.table`` writes to, as
+        ``IBMSNAP_REGISTER`` records it; this naming's when there is none."""
+        recorded = self._clp_scalar(
+            container,
+            f"select coalesce(min(cd_table), '') from {_ASN}.ibmsnap_register "
+            f"where source_owner = '{schema}' and source_table = '{table}'",
+        ).strip()
+        return recorded or self._staging(schema, table)
+
+    def _drop_cd_table(self, container: str, staging: str) -> None:
+        """Drop ``ASN.<staging>`` and its trigger, and make sure it is gone.
+
+        Each drop may fail on its own -- a trigger already removed, a table
+        never made -- so neither is fatal by itself; what matters is the
+        table. One that survives is the name the next registration of this
+        model collides on (ASN1705E), with no registration row left to say who
+        holds it, so it is an error here rather than a silent orphan later.
+        """
         self._clp(container, f"drop trigger {_ASN}.LM_{staging}", ignore_failure=True)
         self._clp(container, f"drop table {_ASN}.{staging}", ignore_failure=True)
-        self._clp(
+        if self._cd_table_exists(container, staging):
+            raise TdxError(
+                f"CDC: {_ASN}.{staging} could not be dropped in {container}; "
+                f"drop it by hand (db2 drop table {_ASN}.{staging}) or "
+                f"recreate the system"
+            )
+
+    def _cd_table_exists(self, container: str, staging: str) -> bool:
+        return self._clp_scalar(
             container,
-            f"alter table {schema}.{table} data capture none",
-            ignore_failure=True,
-        )
-        if drop:
-            self._clp(container, f"drop table {schema}.{table}", ignore_failure=True)
+            f"select count(*) from syscat.tables where tabschema = '{_ASN}' "
+            f"and tabname = '{staging}'",
+        ).strip() not in ("", "0")
 
     def _send_capstop(self, container: str, schema: str, table: str) -> None:
         """Tell asncap to stop capturing ``schema.table`` and wait for it to
@@ -365,44 +442,80 @@ class Db2Cdc(Db2):
         The inherited teardown only drops the schema, which is not enough here:
         a registration lives in the SHARED ``ASN`` schema, not in the domain's,
         so dropping the domain leaves its ``ASN.IBMSNAP_REGISTER`` /
-        ``IBMSNAP_PRUNCNTL`` rows, ``ASN.LM_TD_T__<T>`` triggers and
-        ``ASN.TD_T__<T>`` CD tables behind — still ``STATE='A'``, pointing at a
+        ``IBMSNAP_PRUNCNTL`` rows, ``ASN.LM_TD_<TAG>__<T>`` triggers and
+        ``ASN.TD_<TAG>__<T>`` CD tables behind — still ``STATE='A'``, pointing at a
         schema that no longer exists.
 
-        That is not merely untidy. A CD table is named ``ASN.TD_T__<TABLE>``
-        with NO domain qualifier, so the orphans collide with the NEXT db2cdc
-        domain carrying the same model, whose create then fails before it starts:
-
-            ASN1705E The change data "table", "ASN.TD_T__DEPARTMENTS"
-                     already exists in the server.
+        That is not merely untidy: a registration still ``STATE='A'`` holds its
+        source table and CD table names, and a later domain given the same
+        schema name -- a re-created domain, a forced re-create -- is refused by
+        asnclp before it starts (ASN1703E, ASN1705E).
 
         Deregistering first is what keeps the system reusable. It has to happen
         BEFORE the schema goes: :meth:`deregister_table` sends CAPSTOP for
         ``schema.table`` and clears the source table's ``DATA CAPTURE`` flag,
         neither of which is possible once the table is gone.
 
-        Best-effort per table — a teardown must not strand the schema because
-        one registration was already half-removed.
         """
+        self._deregister_schema(domain_meta)
+        super().destroy_domain(domain_meta)
+
+    def provision_domain(
+        self,
+        sys_meta: dict[str, str],
+        entity_name: str,
+        domain_meta: dict[str, str],
+        *,
+        force: bool = False,
+    ) -> None:
+        """``create --force`` over an existing domain drops its schema and makes
+        it again, under the same name. The registrations are in ``ASN``, not in
+        the schema, so without this they outlive their tables still held by
+        that name, and the next model install onto it is refused table by table
+        (ASN1703E, reason code 4: already registered). Deregistered first, for
+        the same reason as :meth:`install_schema`."""
+        if force:
+            self._deregister_schema(domain_meta)
+        super().provision_domain(sys_meta, entity_name, domain_meta, force=force)
+
+    def install_schema(
+        self, meta: dict[str, str], model: str, *, force: bool = False
+    ) -> None:
+        """``--force`` drops every table and installs the model again; the
+        registrations live in ``ASN``, not in the schema, and survive that.
+        Deregistered first, while the tables still exist: CAPSTOP names the
+        source table, and one that is already gone is never acknowledged, so
+        each stop would wait out the full timeout."""
+        if force:
+            self._deregister_schema(meta)
+        super().install_schema(meta, model, force=force)
+
+    def uninstall_schema(self, meta: dict[str, str], model: str) -> None:
+        """Deregistered before the drop, for the reason :meth:`install_schema`
+        gives -- and because a registration outliving its table keeps the CD
+        table name, so the next model install would be refused."""
+        self._deregister_schema(meta)
+        super().uninstall_schema(meta, model)
+
+    def _deregister_schema(self, meta: dict[str, str]) -> None:
+        """Deregister every table ASN still holds under the domain's schema.
+        Best-effort per table -- a teardown must not strand the schema because
+        one registration was already half-removed."""
         try:
-            container, schema = self._container_and_schema(domain_meta)
+            container, schema = self._container_and_schema(meta)
         except TdxError:
             # An older descriptor with no back-reference: nothing to deregister,
-            # and the schema drop below does not need the container.
-            super().destroy_domain(domain_meta)
+            # and the schema drop does not need the container.
             return
-
         tables = self._registered_tables(container, schema)
-        if tables:
-            print(f">>> CDC: deregistering {len(tables)} table(s) from ASN capture …")
-            for table in tables:
-                try:
-                    self.deregister_table(domain_meta, table)
-                except TdxError as exc:  # noqa: PERF203 -- per-table isolation
-                    print(
-                        f"    WARNING: {schema}.{table} not fully deregistered: {exc}"
-                    )
-        super().destroy_domain(domain_meta)
+        if not tables:
+            return
+        print(f">>> CDC: deregistering {len(tables)} table(s) from ASN capture …")
+        for table in tables:
+            try:
+                self.deregister_table(meta, table)
+            except TdxError as exc:  # noqa: PERF203 -- per-table isolation
+                print(f"    WARNING: {schema}.{table} not fully deregistered: {exc}")
 
     def _registered_tables(self, container: str, schema: str) -> list[str]:
         """The tables ASN still holds a registration for under `schema`.
@@ -434,10 +547,138 @@ class Db2Cdc(Db2):
         if not tables:
             print(">>> CDC: no tables to register")
             return
+        self._claim_cd_tables(container, schema, tables)
         print(f">>> CDC: registering {len(tables)} table(s) for ASN capture …")
         for table in tables:
             self._register_table(container, schema, table)
         print(">>> CDC: all tables registered and active")
+
+    # ---- CD table names: this domain's own, left over or not --------------
+
+    def _claim_cd_tables(self, container: str, schema: str, tables: list[str]) -> None:
+        """Before the first registration: every CD table this model needs is
+        free, or is freed here, or the create is refused with the holder named.
+
+        A CD table's name is the domain's (see :meth:`staging_prefix`), so what
+        can hold one is this domain's own earlier install, or a leftover of a
+        domain that had this schema before. Left to asnclp, that surfaces one
+        table in, after the schema is installed, as ``ASN1705E The change data
+        "table" ... already exists``: a table named and no cause. Every table is
+        checked first, so a refusal leaves nothing half-registered.
+
+        A registration whose source table is gone -- a schema dropped without
+        deregistering, by hand or from a descriptor that predates the
+        back-reference -- captures nothing and is reclaimed. So is a CD table
+        no registration holds at all: a removal whose drop failed left it. And
+        this domain's own registration from an earlier install of the model is
+        removed and made again, since asnclp refuses a table already registered. One
+        whose source table still exists is a live domain, kept on purpose or
+        not, and is not touched: the refusal names its schema and, when this
+        store has a descriptor with that schema, the domain and the command
+        that frees it.
+        """
+        blockers: dict[str, list[str]] = {}
+        for table in tables:
+            owner = self._cd_table_owner(container, schema, table)
+            if owner == schema:
+                # This domain's own registration from an earlier install: the
+                # model installed again over tables that were kept. asnclp
+                # refuses a table that is already registered (ASN1703E, reason
+                # code 4), so it goes and is made again.
+                print(
+                    f"    {schema}.{table} is still registered from an earlier "
+                    f"install; re-registering …"
+                )
+                self._remove_registration(container, schema, table)
+                continue
+            if not owner:
+                # No registration holds the name, but the table can still be
+                # there: a removal whose drop failed took the rows and left the
+                # table, and asnclp refuses on the table, not on the rows.
+                if self._cd_table_exists(container, self._staging(schema, table)):
+                    print(
+                        f"    reclaiming {self.cd_table(schema, table)}, which no "
+                        f"registration holds …"
+                    )
+                    self._drop_cd_table(container, self._staging(schema, table))
+                continue
+            if self._source_table_exists(container, owner, table):
+                blockers.setdefault(owner, []).append(table)
+                continue
+            print(
+                f"    reclaiming {self.cd_table(schema, table)} from {owner}.{table}, "
+                f"whose source table is gone …"
+            )
+            self._remove_registration(container, owner, table)
+        if not blockers:
+            return
+        held = ", ".join(
+            self.cd_table(schema, t) for tables_ in blockers.values() for t in tables_
+        )
+        owners = []
+        fixes = []
+        for owner in sorted(blockers):
+            named = self._domain_with_schema(owner, container)
+            if named:
+                owners.append(f"schema {owner} -- domain '{named}'")
+                fixes.append(f"tdd domain destroy --domain {named}")
+            else:
+                owners.append(
+                    f"schema {owner} -- no domain in this store has that schema "
+                    f"(its descriptor is gone, or unreadable here)"
+                )
+        fix = (
+            f"destroy that domain first ({'; '.join(fixes)})"
+            if fixes
+            else "deregister those tables in the container by hand, or "
+            "recreate the system"
+        )
+        raise TdxError(
+            f"CDC: {held} held by the live registrations of {'; '.join(owners)} in "
+            f"{container}: {fix}, or create this one on another db2cdc system."
+        )
+
+    def _cd_table_owner(self, container: str, schema: str, table: str) -> str:
+        """The schema whose registration holds this domain's CD table for
+        `table`, or ''."""
+        # coalesce over min(): one row always comes back, so an empty result is
+        # a blank and not whatever the CLP prints for no rows
+        return self._clp_scalar(
+            container,
+            f"select coalesce(min(source_owner), '') from {_ASN}.ibmsnap_register "
+            f"where cd_owner = '{_ASN}' and "
+            f"cd_table = '{self._staging(schema, table)}'",
+        ).strip()
+
+    def _source_table_exists(self, container: str, schema: str, table: str) -> bool:
+        return self._clp_scalar(
+            container,
+            f"select count(*) from syscat.tables where tabschema = '{schema}' "
+            f"and tabname = '{table}'",
+        ).strip() not in ("", "0")
+
+    def _domain_with_schema(self, schema: str, container: str) -> str:
+        """This store's name for the db2cdc domain whose schema is `schema` in
+        `container`, or ''. Best effort: a descriptor that cannot be read here
+        (no key in this shell, a legacy format, a stray file) is no reason to
+        fail a message that is already explaining a failure."""
+        try:
+            paths = sorted(store.domain_dir().iterdir())
+        except OSError:
+            return ""
+        for path in paths:
+            try:
+                info = descriptor.load(path)
+            except Exception:  # noqa: BLE001 -- best effort, see above
+                continue
+            meta = getattr(info, "meta", {}) or {}
+            if (
+                getattr(info, "system", "") == self.slug
+                and self._schema(meta.get("DB", "")) == schema
+                and meta.get("SYS_CONTAINER", container) == container
+            ):
+                return info.name
+        return ""
 
     def _list_schema_tables(self, container: str, schema: str) -> list[str]:
         out = self._run(
@@ -456,8 +697,10 @@ class Db2Cdc(Db2):
 
     def _register_table(self, container: str, schema: str, table: str) -> None:
         source = f"{schema}.{table}"
-        staging = f"{_STAGING_PREFIX}{table}"
-        script = f"TD_ASN_REGISTER_{table}".upper()
+        staging = self._staging(schema, table)
+        # The domain's own, as the CD table is: two domains of one model may
+        # register at the same moment, and share the container's home dir.
+        script = f"TD_ASN_REGISTER_{staging}".upper()
         print(f"    registering {source} …")
         self._clp(container, f"alter table {source} data capture changes")
         self._run(
