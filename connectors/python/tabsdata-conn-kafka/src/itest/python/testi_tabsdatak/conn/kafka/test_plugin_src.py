@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import threading
+import time
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -45,6 +47,7 @@ pytestmark = [
 SCHEMAS = Path(__file__).parents[4] / "resources/testi_tabsdatak/conn/kafka/schemas"
 PROTOBUF_MESSAGE = "PersonV1"
 PLUGIN_TIMEOUT_SECONDS = 60.0
+CAPTURE_TIMEOUT_SECONDS = 45.0
 ROLLOVER_CFG = {"kafka.consume_timeout_seconds": 2, "kafka.time_rollover_seconds": 1}
 
 
@@ -55,12 +58,15 @@ class _StagedManifest:
 
 
 class _KafkaCtx(StreamSrcPluginCtx):
-    """``active_polls`` caps how many times the plugin reads ``active`` before it
-    returns ``False`` -- the test's exit lever for the otherwise-infinite loop."""
+    """``active`` holds the plugin's poll loop open until ``until`` holds for what
+    has been staged, or the capture deadline passes -- the test's exit lever for the
+    otherwise-infinite loop. ``satisfied`` tells the two apart."""
 
-    def __init__(self, work: Path, *, active_polls: int) -> None:
+    def __init__(self, work: Path, *, until: Callable[[_KafkaCtx], bool]) -> None:
         self._work_dir = work
-        self._active_left = active_polls
+        self._until = until
+        self._deadline = time.monotonic() + CAPTURE_TIMEOUT_SECONDS
+        self.satisfied = False
         self._state: dict[str, Any] = {}
         self._tabsdata_owns_state = False
         self.staged: list[_StagedManifest] = []
@@ -109,11 +115,10 @@ class _KafkaCtx(StreamSrcPluginCtx):
 
     @property
     def active(self) -> bool:
-        with self._lock:
-            if self._active_left <= 0:
-                return False
-            self._active_left -= 1
-            return True
+        if self._until(self):
+            self.satisfied = True
+            return False
+        return time.monotonic() < self._deadline
 
     @property
     def first_stage(self) -> bool:
@@ -371,6 +376,18 @@ def _staged_frames(ctx: _KafkaCtx) -> list[pl.DataFrame]:
     ]
 
 
+def _staged_rows(ctx: _KafkaCtx) -> int:
+    return sum(frame.height for frame in _staged_frames(ctx))
+
+
+def _staged_at_least(count: int) -> Callable[[_KafkaCtx], bool]:
+    return lambda ctx: _staged_rows(ctx) >= count
+
+
+def _staged_names(ctx: _KafkaCtx) -> list[str]:
+    return sorted(name for frame in _staged_frames(ctx) for name in frame["name"])
+
+
 @pytest.mark.parametrize("variant", _variant_params())
 @redpanda_domain("redpanda")
 def test_stream_src_plugin_round_trips_each_serde_variant(
@@ -379,7 +396,7 @@ def test_stream_src_plugin_round_trips_each_serde_variant(
     domain = domain_redpanda
     messages = variant.messages(8)
     bus = broker(domain)
-    ctx = _KafkaCtx(work_dir(tmp_path), active_polls=12)
+    ctx = _KafkaCtx(work_dir(tmp_path), until=_staged_at_least(len(messages)))
     with bus.fresh_topic() as topic:
         bus.produce(
             topic, messages, variant.producer_serde(bus, work_dir(tmp_path, "proto"))
@@ -396,7 +413,7 @@ def test_stream_src_plugin_round_trips_each_serde_variant(
     assert frames, f"no committed manifest files produced for {variant.id}"
     frame = pl.concat(frames)
     assert variant.columns <= set(frame.columns)
-    assert frame.height == len(messages)
+    assert _staged_names(ctx) == sorted(message["name"] for message in messages)
 
 
 @redpanda_domain("redpanda")
@@ -406,7 +423,7 @@ def test_stream_src_plugin_output_table_is_topic(
     domain = domain_redpanda
     messages = _user_messages(3)
     bus = broker(domain)
-    ctx = _KafkaCtx(work_dir(tmp_path), active_polls=12)
+    ctx = _KafkaCtx(work_dir(tmp_path), until=_staged_at_least(len(messages)))
     with bus.fresh_topic() as topic:
         bus.produce(topic, messages, JSON_VARIANT.producer_serde(bus, tmp_path))
         conn, src = _stream_src(
@@ -418,28 +435,36 @@ def test_stream_src_plugin_output_table_is_topic(
         _run_plugin(ctx, conn, src)
         assert src.output_table() == topic
 
-    assert [staged for staged in _committed(ctx) if any(staged.manifest)]
+    manifests = [staged.manifest for staged in _committed(ctx)]
+    assert manifests
+    assert all(len(manifest) == 1 for manifest in manifests)
+    assert _staged_rows(ctx) == len(messages)
 
 
 @redpanda_domain("redpanda")
-def test_stream_src_plugin_messages_rollover_stages_several_batches(
+def test_stream_src_plugin_messages_rollover_stages_while_running(
     domain_redpanda: RedpandaDomain, tmp_path: Path
 ):
     domain = domain_redpanda
     messages = _user_messages(8)
     bus = broker(domain)
-    ctx = _KafkaCtx(work_dir(tmp_path), active_polls=20)
+    ctx = _KafkaCtx(work_dir(tmp_path), until=_staged_at_least(len(messages)))
     with bus.fresh_topic() as topic:
         bus.produce(topic, messages, JSON_VARIANT.producer_serde(bus, tmp_path))
         conn, src = _stream_src(
             domain,
             topic=topic,
             variant=JSON_VARIANT,
-            src_cfg=ROLLOVER_CFG | {"kafka.messages_rollover": len(messages) // 2},
+            src_cfg=ROLLOVER_CFG
+            | {
+                "kafka.time_rollover_seconds": 3600,
+                "kafka.messages_rollover": len(messages) // 2,
+            },
         )
         _run_plugin(ctx, conn, src)
 
-    assert len(_committed(ctx)) >= 2
+    assert ctx.satisfied
+    assert _staged_names(ctx) == sorted(message["name"] for message in messages)
 
 
 @redpanda_domain("redpanda")
@@ -447,7 +472,7 @@ def test_stream_src_plugin_schema_change_rollover_segregates_buffers(
     domain_redpanda: RedpandaDomain, tmp_path: Path
 ):
     domain = domain_redpanda
-    ctx = _KafkaCtx(work_dir(tmp_path), active_polls=20)
+    ctx = _KafkaCtx(work_dir(tmp_path), until=_staged_at_least(3))
     # No schema enforcement either side, so the two message shapes reach the plugin
     # as they are and each one closes the buffer the other cannot join.
     unschemad = _Variant(
@@ -469,7 +494,10 @@ def test_stream_src_plugin_schema_change_rollover_segregates_buffers(
         )
         _run_plugin(ctx, conn, src)
 
-    assert len(_committed(ctx)) >= 2
-    shapes = [set(frame.columns) for frame in _staged_frames(ctx)]
-    assert {KAFKA_META_TOPIC, "name", "age"} in shapes
-    assert {KAFKA_META_TOPIC, "name", "city"} in shapes
+    names_by_shape: dict[frozenset[str], list[str]] = {}
+    for frame in _staged_frames(ctx):
+        names_by_shape.setdefault(frozenset(frame.columns), []).extend(frame["name"])
+    assert {shape: sorted(names) for shape, names in names_by_shape.items()} == {
+        frozenset({KAFKA_META_TOPIC, "name", "age"}): ["alice", "bob"],
+        frozenset({KAFKA_META_TOPIC, "name", "city"}): ["carol"],
+    }
