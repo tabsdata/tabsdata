@@ -61,6 +61,61 @@ class Postgrescdc(Postgres):
                 f"could not install {pkg} (needed for Postgres CDC): "
                 f"{cp.stderr.strip() or cp.stdout.strip()}"
             )
+        self._allow_wal2json(container)
+
+    def provision_domain(
+        self,
+        sys_meta: dict[str, str],
+        entity_name: str,
+        domain_meta: dict[str, str],
+        *,
+        force: bool = False,
+    ) -> None:
+        """A system created before :meth:`_allow_wal2json` existed is allowed
+        here, so every domain of it can open a wal2json slot."""
+        container = sys_meta.get("CONTAINER", "")
+        if container:
+            self._allow_wal2json(container)
+        super().provision_domain(sys_meta, entity_name, domain_meta, force=force)
+
+    def _psql(self, container: str, sql: str) -> str:
+        cp = docker_exec(container, "psql", "-U", self.root_user, "-qAtX", "-c", sql)
+        if cp.returncode != 0:
+            raise TdxError(
+                f"psql failed in {container}: {cp.stderr.strip() or cp.stdout.strip()}"
+            )
+        return cp.stdout.strip()
+
+    def _allow_wal2json(self, container: str) -> None:
+        """Let replication slots use wal2json.
+
+        Since the August 2026 minor releases (18.6, 17.11, 16.15, 15.19, 14.24)
+        a slot may only use the output plugins ``output_plugin_libraries``
+        lists, by default only PostgreSQL's own (``pgoutput``,
+        ``test_decoding``). An older server has no such setting and allows any
+        installed plugin, so it is left alone."""
+        present, value = self._psql(
+            container,
+            "select current_setting('output_plugin_libraries', true) is not null, "
+            "coalesce(current_setting('output_plugin_libraries', true), '')",
+        ).split("|", 1)
+        if present != "t":
+            return
+        allowed = [name.strip().strip('"') for name in value.split(",") if name.strip()]
+        if "wal2json" in allowed:
+            return
+        print(">>> allowing wal2json as a logical decoding output plugin …")
+        # A list setting takes one quoted value per element: a single quoted
+        # string would be one library named after the whole list.
+        elements = ", ".join(f"'{name}'" for name in [*allowed, "wal2json"])
+        self._psql(container, f"alter system set output_plugin_libraries = {elements}")
+        self._psql(container, "select pg_reload_conf()")
+        shown = self._psql(container, "show output_plugin_libraries")
+        if "wal2json" not in [name.strip().strip('"') for name in shown.split(",")]:
+            raise TdxError(
+                f"wal2json is still not allowed as an output plugin in {container} "
+                f"(output_plugin_libraries = {shown})"
+            )
 
     def create_domain_sql(self, db: str, user: str, password: str) -> list[str]:
         # The owner role needs REPLICATION to open a logical-replication connection.
