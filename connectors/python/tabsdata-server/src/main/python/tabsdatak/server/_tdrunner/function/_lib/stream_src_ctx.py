@@ -316,9 +316,12 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         exits at its next ``ctx.active`` check.
 
         Called by the streamer command's signal handler (SIGTERM /
-        SIGINT) so the pod can shut down cleanly: the plugin may
-        emit one last :meth:`stage` to flush its buffer, then
-        ``run()`` returns and the streamer container exits 0.
+        SIGINT) so the pod can shut down cleanly: ``run()`` returns and
+        the streamer container exits 0. Whether the plugin stages its
+        buffer one last time first is the plugin's choice. The SQL CDC
+        plugins do not: they install their own handler and return
+        without staging, leaving the buffered changes to be read again
+        from the committed offset.
         """
         self._active = False
 

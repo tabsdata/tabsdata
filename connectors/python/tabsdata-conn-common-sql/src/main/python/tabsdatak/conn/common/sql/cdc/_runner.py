@@ -107,7 +107,11 @@ class CdcRunConfig:
 def _setup_signal_handlers() -> threading.Event:
     """Install SIGINT / SIGTERM (and SIGBREAK on Windows) handlers that
     set a stop event, so the poll loop unwinds cleanly. No-op off the
-    main thread (the runtime / tests drive shutdown via ``ctx.active``)."""
+    main thread (the runtime / tests drive shutdown via ``ctx.active``).
+
+    They replace the streamer's own handler on purpose: a signalled stop
+    ends the run without the trailing stage the streamer's handler would
+    lead to (see :func:`_run_loop`)."""
     stop_event = threading.Event()
 
     if threading.current_thread() is not threading.main_thread():
@@ -344,7 +348,11 @@ def _run_loop(
         # On a graceful end-of-stream (``ctx.active`` flipped to ``False``
         # with no signal and no error) publish the trailing partial batch
         # before exiting. A signalled or errored exit leaves the buffer
-        # for the next run to resume from the offset.
+        # for the next run to resume from the offset. A signal asks for a
+        # prompt stop, and staging writes and uploads files, which can
+        # outlast the pod's termination grace period and be killed half
+        # way. Skipping it loses nothing: the offset covers only what was
+        # staged, so the next run reads the buffered changes again.
         if not interrupted and not errored:
             if buffer_sentinel is not None:
                 buffer_sentinel.flush()
