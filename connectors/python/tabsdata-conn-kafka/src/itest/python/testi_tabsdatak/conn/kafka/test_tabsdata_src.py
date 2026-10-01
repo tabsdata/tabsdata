@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import tempfile
 import time
 from pathlib import Path
 
@@ -15,7 +16,6 @@ from tabsdatax.itest.fixture.backends.redpanda import RedpandaDomain, redpanda_d
 from tabsdatax.itest.fixture.functions.harness import (
     CollectionFactory,
     assert_frames_match,
-    table_frame,
 )
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
 from testi_tabsdatak.conn.common.function_project import function_module
@@ -35,18 +35,33 @@ POLL_INTERVAL_SECONDS = 3
 POLL_TIMEOUT_SECONDS = 120
 
 
+def _published_rows(collection: Collection, table: str) -> pl.DataFrame | None:
+    """Every row the committed data versions of `table` hold, across all of them:
+    a stream stages its rows in as many batches as its triggers decide, so HEAD
+    alone holds only the last one. A version that holds no data downloads nothing
+    and is skipped."""
+    handle = collection.get_table(table)
+    if handle is None:
+        return None
+    frames = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for index, version in enumerate(handle.dataversions):
+            path = handle.download(str(Path(tmp) / f"{index}.parquet"), version=version)
+            if path is not None:
+                frames.append(pl.read_parquet(path))
+    if not frames:
+        return None
+    return pl.concat(frames, how="diagonal_relaxed")
+
+
 def _await_rows(collection: Collection, table: str, rows: int) -> pl.DataFrame:
     """A streamer stages a batch whenever a trigger is due while it keeps running, so
-    the output table is polled until the batch lands rather than read once."""
+    the published rows are polled until they all land rather than read once."""
     deadline = time.time() + POLL_TIMEOUT_SECONDS
     while time.time() < deadline:
-        handle = collection.get_table(table)
-        # Registering the function creates the table itself; only a committed data
-        # version means a staged batch is downloadable.
-        if handle is not None and handle.dataversions:
-            frame = table_frame(collection, table)
-            if frame.height >= rows:
-                return frame
+        published = _published_rows(collection, table)
+        if published is not None and published.height >= rows:
+            return published
         time.sleep(POLL_INTERVAL_SECONDS)
     raise AssertionError(
         f"table {table!r} did not reach {rows} rows within {POLL_TIMEOUT_SECONDS}s"

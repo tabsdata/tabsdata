@@ -166,7 +166,7 @@ def download(
     click.echo("-" * 10)
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
-        server.download_table(
+        downloaded = server.download_table(
             coll,
             name,
             file,
@@ -175,7 +175,10 @@ def download(
             version=version,
         )
 
-        click.echo("Table downloaded successfully")
+        if downloaded is None:
+            click.echo("The table holds no data at that version; no file was written")
+        else:
+            click.echo("Table downloaded successfully")
 
     except Exception as e:
         hint_common_solutions(ctx, e)

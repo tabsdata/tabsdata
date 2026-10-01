@@ -75,21 +75,26 @@ def run_function(
     )
 
 
-def table_frame(collection: Collection, table: str) -> pl.DataFrame:
-    """Everything ``collection``'s `table` holds at HEAD. ``Table.sample`` is what
-    its name says (an ``offset`` / ``len`` window), so a test asserting on a
-    published table downloads it instead."""
+def table_frame(collection: Collection, table: str) -> pl.DataFrame | None:
+    """Everything ``collection``'s `table` holds at HEAD, or ``None`` when HEAD is
+    a version that holds no data. ``Table.sample`` is what its name says (an
+    ``offset`` / ``len`` window), so a test asserting on a published table
+    downloads it instead."""
     handle = collection.get_table(table)
-    assert handle is not None, f"table {table!r} not found in {collection.name!r}"
+    assert handle is not None, (
+        f"The table {table!r} was not found in {collection.name!r}"
+    )
     with tempfile.TemporaryDirectory() as tmp:
-        parquet = Path(tmp) / f"{table}.parquet"
-        handle.download(str(parquet))
+        parquet = handle.download(str(Path(tmp) / f"{table}.parquet"))
+        if parquet is None:
+            return None
         return pl.read_parquet(parquet)
 
 
-def assert_frames_match(got: pl.DataFrame, expected: pl.DataFrame) -> None:
+def assert_frames_match(got: pl.DataFrame | None, expected: pl.DataFrame) -> None:
     """Order- and dtype-agnostic content equality on ``expected``'s columns
     (transporter format inference may differ from polars' own read)."""
+    assert got is not None, "The table holds no data at the version read"
     columns = expected.columns
     assert (
         got.select(columns).cast(pl.String).sort(by=columns).to_dicts()

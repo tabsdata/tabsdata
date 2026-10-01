@@ -638,7 +638,7 @@ def _boom(module) -> None:
     raise RuntimeError("module body failed")
 
 
-def test_a_module_that_fails_to_load_leaves_nothing_behind(monkeypatch):
+def test_a_module_that_fails_to_load_leaves_nothing_behind(monkeypatch, tmp_path):
     # Half a build is worse than none: a registered-but-unexecuted module would
     # shadow every later build of the same name, and the directory would linger.
     real_spec_from = importlib.util.spec_from_file_location
@@ -649,15 +649,15 @@ def test_a_module_that_fails_to_load_leaves_nothing_behind(monkeypatch):
         return spec
 
     monkeypatch.setattr(importlib.util, "spec_from_file_location", exploding)
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
 
     before_modules = {n for n in sys.modules if n.startswith("dq_trend_")}
-    before_dirs = set(Path(tempfile.gettempdir()).glob("td_dq_trend_*"))
 
     with pytest.raises(RuntimeError):
         build_trend_tfr_mod(DAYS, WEEKS, MONTHS)
 
     assert {n for n in sys.modules if n.startswith("dq_trend_")} == before_modules
-    assert set(Path(tempfile.gettempdir()).glob("td_dq_trend_*")) == before_dirs
+    assert list(tmp_path.glob("td_dq_trend_*")) == []
 
 
 def test_the_built_function_is_serializable_as_module_and_qualname(build):

@@ -2761,7 +2761,7 @@ class Table:
         at_trx: Transaction | str | None = None,
         version: DataVersion | str | None = None,
         raise_for_status: bool = True,
-    ):
+    ) -> Path | None:
         """
         Download a table for a given version as a parquet file. The version can
             be a fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
@@ -2776,6 +2776,10 @@ class Table:
                 and HEAD~## syntax). Defaults to "HEAD".
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
+
+        Returns:
+            Path | None: The path of the downloaded file, or None when the version
+                holds no data, in which case no file is written.
 
         Raises:
             APIServerError: If the table could not be downloaded.
@@ -2810,8 +2814,11 @@ class Table:
             at=at,
             raise_for_status=raise_for_status,
         )
+        if not response.content:
+            return None
         with open(destination_file, "wb") as file:
             file.write(response.content)
+        return Path(destination_file)
 
     def list_dataversions(
         self,
@@ -5147,7 +5154,7 @@ class TabsdataServer:
         at_trx: Transaction | str | None = None,
         version: DataVersion | str | None = None,
         raise_for_status: bool = True,
-    ):
+    ) -> Path | None:
         """
         Download a table for a given version as a parquet file. The version can
             be a fixed version or a relative one (HEAD, HEAD^, and HEAD~## syntax).
@@ -5159,11 +5166,15 @@ class TabsdataServer:
             raise_for_status (bool, optional): Whether to raise an exception if the
                 request was not successful. Defaults to True.
 
+        Returns:
+            Path | None: The path of the downloaded file, or None when the version
+                holds no data, in which case no file is written.
+
         Raises:
             APIServerError: If the table could not be downloaded.
         """
         table = Table(self.connection, collection_name, table_name)
-        table.download(
+        return table.download(
             destination_file,
             at=at,
             at_trx=at_trx,

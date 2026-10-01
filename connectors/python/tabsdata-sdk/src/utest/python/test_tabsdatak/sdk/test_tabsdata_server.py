@@ -884,3 +884,41 @@ def test_child_functions_pass_packaging_options_through():
     harness._trend_child_functions([_trend("a")], ["pkg"], "requirements.txt", False)
     assert harness.bundled[0]["local_packages"] == ["pkg"]
     assert harness.bundled[0]["requirements"] == "requirements.txt"
+
+
+# ---------------------------------------------------------------------------
+# Table.download
+# ---------------------------------------------------------------------------
+
+
+def _table_downloading(content: bytes):
+    from unittest.mock import MagicMock
+
+    connection = MagicMock()
+    connection.table_download.return_value = MagicMock(content=content)
+    return ts.Table(connection, "coll", "orders"), connection
+
+
+def test_download_writes_the_table_and_returns_its_path(tmp_path):
+    table, _ = _table_downloading(b"PAR1-data-PAR1")
+    destination = tmp_path / "orders.parquet"
+    assert table.download(str(destination)) == destination
+    assert destination.read_bytes() == b"PAR1-data-PAR1"
+
+
+def test_download_of_a_version_without_data_writes_nothing(tmp_path):
+    table, _ = _table_downloading(b"")
+    destination = tmp_path / "orders.parquet"
+    assert table.download(str(destination)) is None
+    assert not destination.exists()
+
+
+def test_download_table_forwards_what_the_table_download_returns(tmp_path):
+    from unittest.mock import MagicMock
+
+    connection = MagicMock()
+    connection.table_download.return_value = MagicMock(content=b"")
+    server = ts.TabsdataServer.__new__(ts.TabsdataServer)
+    server.connection = connection
+    destination = tmp_path / "orders.parquet"
+    assert server.download_table("coll", "orders", str(destination)) is None
