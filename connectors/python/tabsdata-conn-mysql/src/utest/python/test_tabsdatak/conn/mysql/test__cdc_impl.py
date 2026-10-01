@@ -218,6 +218,60 @@ def test_binlog_string_uses_max_length(d):
     assert t.length == 255
 
 
+@pytest.mark.parametrize(
+    ("column", "reflected"),
+    [
+        (
+            {"code": "FLOAT", "size": 4},
+            lambda mysql: mysql.FLOAT(),
+        ),
+        (
+            {"code": "FLOAT", "size": 4},
+            lambda mysql: mysql.FLOAT(precision=7, scale=4),
+        ),
+        (
+            {"code": "DOUBLE", "size": 8},
+            lambda mysql: mysql.DOUBLE(),
+        ),
+        (
+            {"code": "VARCHAR", "max_length": 8, "character_set_name": "binary"},
+            lambda mysql: mysql.VARBINARY(length=8),
+        ),
+        (
+            {"code": "STRING", "max_length": 3, "character_set_name": "binary"},
+            lambda mysql: mysql.BINARY(length=3),
+        ),
+        (
+            {"code": "VARCHAR", "max_length": 80, "character_set_name": "utf8mb4"},
+            lambda mysql: mysql.VARCHAR(length=20),
+        ),
+        (
+            {"code": "STRING", "max_length": 20, "character_set_name": "utf8mb4"},
+            lambda mysql: mysql.CHAR(length=5),
+        ),
+    ],
+    ids=[
+        "float",
+        "float-with-precision",
+        "double",
+        "varbinary",
+        "binary",
+        "varchar",
+        "char",
+    ],
+)
+def test_binlog_and_catalog_columns_normalize_alike(d, column, reflected):
+    import pymysqlreplication.constants.FIELD_TYPE as FT
+    from sqlalchemy.dialects import mysql
+
+    from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow
+
+    attributes = dict(column)
+    code = getattr(FT, attributes.pop("code"))
+    logged = d.cdc_to_sa("binlog", _Col(code, **attributes))
+    assert sqlalchemy_to_arrow(logged) == sqlalchemy_to_arrow(reflected(mysql))
+
+
 def test_binlog_datetime_carries_fsp(d):
     import pymysqlreplication.constants.FIELD_TYPE as FT
     t = d.cdc_to_sa("binlog", _Col(FT.DATETIME, fsp=3))

@@ -49,10 +49,12 @@ from pymysqlreplication.row_event import (
 from sqlalchemy import URL, make_url, text
 from sqlalchemy.dialects.mysql import (
     BIGINT,
+    BINARY,
     BIT,
     DATETIME,
     DOUBLE,
     ENUM,
+    FLOAT,
     INTEGER,
     LONGBLOB,
     LONGTEXT,
@@ -66,6 +68,7 @@ from sqlalchemy.dialects.mysql import (
     TINYBLOB,
     TINYINT,
     TINYTEXT,
+    VARBINARY,
     YEAR,
 )
 from sqlalchemy.pool import StaticPool
@@ -198,7 +201,7 @@ _FIELD_TYPE_MAP: dict[int, type] = {
     FIELD_TYPE.TINY: TINYINT,
     FIELD_TYPE.SHORT: SMALLINT,
     FIELD_TYPE.LONG: INTEGER,
-    FIELD_TYPE.FLOAT: sa_types.Float,
+    FIELD_TYPE.FLOAT: FLOAT,
     FIELD_TYPE.DOUBLE: DOUBLE,
     FIELD_TYPE.NULL: sa_types.NullType,
     FIELD_TYPE.TIMESTAMP: TIMESTAMP,
@@ -393,10 +396,13 @@ class MySQLDialect(Dialect):
                 kw["scale"] = decimals
             return sa_types.Numeric(**kw)
         if column_class is sa_types.String:
-            max_length = getattr(cdc_type, "max_length", None)
-            if max_length:
-                return sa_types.String(length=max_length)
-            return sa_types.String()
+            max_length = getattr(cdc_type, "max_length", None) or None
+            charset = getattr(cdc_type, "character_set_name", None)
+            if charset is not None and charset.lower() == _BINARY_CHARSET:
+                if column_type == FIELD_TYPE.STRING:
+                    return BINARY(length=max_length)
+                return VARBINARY(length=max_length)
+            return sa_types.String(length=max_length)
         if column_class in (DATETIME, TIME, TIMESTAMP):
             fsp = getattr(cdc_type, "fsp", None)
             if fsp is not None:
@@ -412,11 +418,6 @@ class MySQLDialect(Dialect):
             if set_values:
                 return SET(*set_values)
             return SET()
-        if column_class is sa_types.Float:
-            size = getattr(cdc_type, "size", None)
-            if size:
-                return sa_types.Float(precision=size)
-            return sa_types.Float()
         return column_class()
 
 

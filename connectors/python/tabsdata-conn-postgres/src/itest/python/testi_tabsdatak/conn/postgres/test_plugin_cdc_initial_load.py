@@ -1073,7 +1073,9 @@ def test_the_server_reports_its_decoded_position_with_nothing_to_send(
     (``sentPtr``), and psycopg2 exposes it as ``cursor.wal_end``. A logical
     message wal2json filters out is WAL with no output, so only a keepalive
     can report past it. Should a server, wal2json or psycopg2 upgrade change
-    this, the window's read would no longer end on a quiet stream."""
+    this, the window's read would no longer end on a quiet stream. Any other
+    transaction committing in the database meanwhile is framed by BEGIN and
+    COMMIT objects even with no change to send, so those are left out."""
     domain = domain_postgrescdc_employees_xs
     url = make_url(domain.sqlalchemy_uri)
     settings = {
@@ -1098,6 +1100,7 @@ def test_the_server_reports_its_decoded_position_with_nothing_to_send(
                 options={
                     "format-version": "2",
                     "include-lsn": "true",
+                    "include-transaction": "false",
                     "filter-msg-prefixes": "tdx.keepalive",
                 },
             )

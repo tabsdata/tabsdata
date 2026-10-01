@@ -63,6 +63,19 @@ def test_a_time_maps_to_what_its_database_means_by_it(sa_type, expected):
     assert sqlalchemy_to_arrow(sa_type) == expected
 
 
+@pytest.mark.parametrize(
+    ("sa_type", "expected"),
+    [
+        (sa_types.Float(precision=4), pa.float32()),
+        (mysql.FLOAT(), pa.float64()),
+        (mysql.FLOAT(precision=7, scale=4), pa.float64()),
+    ],
+    ids=["generic", "mysql", "mysql-precision"],
+)
+def test_a_float_maps_to_what_its_database_means_by_it(sa_type, expected):
+    assert sqlalchemy_to_arrow(sa_type) == expected
+
+
 def test_a_mysql_time_holds_its_whole_range_as_read():
     values = [
         timedelta(hours=9, minutes=30),

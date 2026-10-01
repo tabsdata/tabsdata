@@ -13,9 +13,13 @@ from sqlalchemy.dialects import mysql
 # Types whose meaning differs from the generic type they reflect as. A MySQL
 # TIME is an interval of up to 838 hours either way, read as a timedelta by
 # both its driver and its binlog reader, so it is a duration as batch reads
-# publish it, not a time of day.
+# publish it, not a time of day. A MySQL FLOAT is single precision, but
+# neither its binlog description (a byte length) nor its catalog one (a
+# precision only when declared) tells that apart reliably, so it is a double,
+# as batch reads publish it.
 DIALECT_TYPES: dict[type, pa.DataType] = {
     mysql.TIME: pa.duration("us"),
+    mysql.FLOAT: pa.float64(),
 }
 
 
