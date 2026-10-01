@@ -47,7 +47,11 @@ from tabsdatak.api import StreamSrc
 from tabsdatak.conn.common._stream._ledger import FileLedger
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._sentinels import ChunkSentinel, DiskSentinel
+from tabsdatak.conn.common._stream._sentinels import (
+    BufferSentinel,
+    ChunkSentinel,
+    DiskSentinel,
+)
 from tabsdatak.conn.common.sql.cdc._deduplicator import (
     deduplicate_initial_load_files,
 )
@@ -59,7 +63,6 @@ from tabsdatak.conn.common.sql.cdc._ingester import (
 from tabsdatak.conn.common.sql.cdc._initial_load import InitialLoader
 from tabsdatak.conn.common.sql.cdc._large import LargeColumnPolicy
 from tabsdatak.conn.common.sql.cdc._model import CdcOffset
-from tabsdatak.conn.common.sql.cdc._sentinel.buffer import BufferSentinel
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
@@ -332,11 +335,11 @@ def _read_window(
     )
     buffer_sentinel = BufferSentinel(
         ledger=ledger,
-        encoder=CdcEncoder(cfg.cdc_format),
+        encoder=CdcEncoder(cfg.cdc_format, tracked_tables),
+        slots=tracked_tables,
         max_rows=cfg.buffer_max_rows,
         max_bytes=cfg.buffer_max_bytes,
         max_secs=NO_TIME_LIMIT,
-        tables=tracked_tables,
         offset=ingester.base_offset(),
     )
     limit = cfg.initial_load_max_window_changes
@@ -349,7 +352,7 @@ def _read_window(
             read += 1
             if read > limit:
                 raise SqlCdcErrorCode.CDC_29.exception(limit=limit)
-            buffer_sentinel.process_changes([change])
+            buffer_sentinel.add(change)
     buffer_sentinel.flush()
     logger.info("Initial load window read: %d change(s)", read)
     return ledger.manifest()
@@ -486,11 +489,11 @@ def _run_loop(
         )
         buffer_sentinel = BufferSentinel(
             ledger=ledger,
-            encoder=CdcEncoder(cfg.cdc_format),
+            encoder=CdcEncoder(cfg.cdc_format, tracked_tables),
+            slots=tracked_tables,
             max_rows=cfg.buffer_max_rows,
             max_bytes=cfg.buffer_max_bytes,
             max_secs=cfg.buffer_max_secs,
-            tables=tracked_tables,
             offset=ingester.base_offset(),
         )
 
@@ -499,10 +502,11 @@ def _run_loop(
         last_flush = time.time()
 
         while not stop_signal.is_set() and ctx.active:
-            buffer_sentinel.process_changes(
-                changes=large_column_policy.apply(ingester.poll_changes(session)),
+            buffer_sentinel.add_all(
+                large_column_policy.apply(ingester.poll_changes(session)),
             )
-            buffer_sentinel.expire()
+            if buffer_sentinel.due():
+                buffer_sentinel.flush()
             # Stage on the sentinel's own thresholds, or once the
             # runtime-imposed flush interval has elapsed (and we have
             # something buffered to stage).

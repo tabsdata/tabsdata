@@ -81,11 +81,6 @@ class SqlCdcErrorCode(ErrorCode):
         SqlCdcException,
         "Staged file not found for {file!r} in table {table!r}",
     )
-    CDC_10 = ErrorDef(
-        SqlCdcException,
-        "Buffer sentinel has no base offset; ingester must provide a "
-        "base offset at initialization",
-    )
     CDC_11 = ErrorDef(
         SqlCdcException,
         "Received change with no offset for table {table!r}",

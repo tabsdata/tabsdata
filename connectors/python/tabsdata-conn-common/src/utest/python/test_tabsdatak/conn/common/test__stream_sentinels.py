@@ -5,17 +5,30 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Self
 
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._encoder import StreamEncoder
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._ledger import FileLedger
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._sentinels import ChunkSentinel, DiskSentinel
+from tabsdatak.conn.common._stream._offset import StreamOffset
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._sentinels import (
+    BufferSentinel,
+    ChunkSentinel,
+    DiskSentinel,
+)
+from tabsdatak.conn.common.error import ConnErrorCode, ConnStreamException
 
 
 class Clock:
@@ -182,3 +195,210 @@ def test_flushing_with_nothing_held_writes_nothing(ledger: FileLedger):
     sentinel.flush("s.a")
     sentinel.flush("s.a")
     assert ids(ledger) == [[[1]], []]
+
+
+@dataclass
+class Record:
+    slot: str | None
+    value: int
+    size: int = 1
+
+
+class Trail(StreamOffset):
+    def __init__(self, values: list[int] | None = None) -> None:
+        self.values = values or []
+
+    def update(self, other: Self) -> None:
+        self.values.extend(other.values)
+
+    def write(self) -> str:
+        return ",".join(str(value) for value in self.values)
+
+    @classmethod
+    def read(cls, data: str) -> Self:
+        return cls([int(value) for value in data.split(",")])
+
+
+class RecordEncoder(StreamEncoder[Record, Trail]):
+    def __init__(self, split: bool = False) -> None:
+        self.sized = 0
+        self.split = split
+
+    def slot(self, record: Record) -> str | None:
+        return record.slot
+
+    def size(self, record: Record) -> int:
+        self.sized += 1
+        return record.size
+
+    def offset(self, record: Record) -> Trail:
+        return Trail([record.value])
+
+    def encode(self, slot: str, records: list[Record]):
+        values = [record.value for record in records]
+        if self.split:
+            for value in values:
+                yield table(value)
+        else:
+            yield table(*values)
+
+
+def buffer(
+    ledger: FileLedger,
+    clock: Clock,
+    *,
+    encoder: RecordEncoder | None = None,
+    offset: Trail | None = None,
+    max_rows: int | None = None,
+    max_bytes: int | None = None,
+    max_secs: float = math.inf,
+) -> BufferSentinel:
+    return BufferSentinel(
+        ledger=ledger,
+        encoder=encoder or RecordEncoder(),
+        slots=["s.a", "s.b"],
+        max_rows=max_rows,
+        max_bytes=max_bytes,
+        max_secs=max_secs,
+        offset=Trail() if offset is None else offset,
+        clock=clock,
+    )
+
+
+def test_a_record_without_a_slot_is_skipped(ledger: FileLedger):
+    sentinel = buffer(ledger, Clock(), max_rows=1)
+    sentinel.add(Record(None, 1))
+    assert sentinel.has_data is False
+    assert ids(ledger) == [[], []]
+
+
+def test_records_stay_in_memory_below_every_threshold(ledger: FileLedger):
+    sentinel = buffer(ledger, Clock(), max_rows=3)
+    sentinel.add_all([Record("s.a", 1), Record("s.b", 2)])
+    assert sentinel.has_data is True
+    assert sentinel.due() is False
+    assert ids(ledger) == [[], []]
+
+
+def test_the_row_threshold_writes_every_slot_out(ledger: FileLedger):
+    sentinel = buffer(ledger, Clock(), max_rows=3)
+    sentinel.add_all([Record("s.a", 1), Record("s.b", 2), Record("s.a", 3)])
+    assert sentinel.has_data is False
+    assert ids(ledger) == [[[1, 3]], [[2]]]
+
+
+def test_the_byte_threshold_writes_the_records_out(ledger: FileLedger):
+    sentinel = buffer(ledger, Clock(), max_bytes=10)
+    sentinel.add(Record("s.a", 1, size=6))
+    assert ids(ledger) == [[], []]
+    sentinel.add(Record("s.a", 2, size=4))
+    assert ids(ledger) == [[[1, 2]], []]
+
+
+def test_sizes_are_measured_only_under_a_byte_threshold(ledger: FileLedger):
+    encoder = RecordEncoder()
+    sentinel = buffer(ledger, Clock(), encoder=encoder, max_rows=10)
+    sentinel.add(Record("s.a", 1))
+    assert encoder.sized == 0
+
+
+def test_the_buffer_is_due_once_the_time_threshold_elapses(ledger: FileLedger):
+    clock = Clock()
+    sentinel = buffer(ledger, clock, max_secs=60)
+    sentinel.add(Record("s.a", 1))
+    clock.now += 59.9
+    assert sentinel.due() is False
+    clock.now += 0.1
+    assert sentinel.due() is True
+    assert ids(ledger) == [[], []]
+
+
+def test_a_record_arriving_past_the_time_threshold_writes_out(ledger: FileLedger):
+    clock = Clock()
+    sentinel = buffer(ledger, clock, max_secs=60)
+    sentinel.add(Record("s.a", 1))
+    clock.now += 60
+    sentinel.add(Record("s.a", 2))
+    assert ids(ledger) == [[[1, 2]], []]
+
+
+def test_an_empty_buffer_is_never_due(ledger: FileLedger):
+    clock = Clock()
+    sentinel = buffer(ledger, clock, max_rows=0, max_bytes=0, max_secs=0)
+    clock.now += 1_000
+    assert sentinel.due() is False
+
+
+def test_resetting_the_timer_restarts_the_time_threshold(ledger: FileLedger):
+    clock = Clock()
+    sentinel = buffer(ledger, clock, max_secs=60)
+    sentinel.add(Record("s.a", 1))
+    clock.now += 60
+    sentinel.reset_timer()
+    assert sentinel.due() is False
+
+
+def test_a_flush_restarts_the_time_threshold(ledger: FileLedger):
+    clock = Clock()
+    sentinel = buffer(ledger, clock, max_secs=60)
+    sentinel.add(Record("s.a", 1))
+    clock.now += 30
+    sentinel.flush()
+    sentinel.add(Record("s.a", 2))
+    clock.now += 59
+    assert sentinel.due() is False
+
+
+def test_every_table_an_encoding_yields_lands_as_its_own_file(ledger: FileLedger):
+    sentinel = buffer(ledger, Clock(), encoder=RecordEncoder(split=True))
+    sentinel.add_all([Record("s.a", 1), Record("s.a", 2)])
+    sentinel.flush()
+    assert ids(ledger) == [[[1], [2]], []]
+
+
+def test_flushing_an_empty_buffer_writes_nothing(ledger: FileLedger):
+    sentinel = buffer(ledger, Clock())
+    sentinel.flush()
+    assert ids(ledger) == [[], []]
+
+
+def test_the_offset_moves_only_when_its_records_reach_disk(ledger: FileLedger):
+    offset = Trail()
+    sentinel = buffer(ledger, Clock(), offset=offset)
+    sentinel.add(Record("s.a", 1))
+    assert offset.values == []
+    sentinel.flush()
+    assert offset.values == [1]
+    assert sentinel.offset is offset
+
+
+def test_offsets_are_applied_in_the_order_their_records_arrived(ledger: FileLedger):
+    offset = Trail()
+    sentinel = buffer(ledger, Clock(), offset=offset)
+    sentinel.add_all([Record("s.b", 1), Record("s.a", 2), Record("s.b", 3)])
+    sentinel.flush()
+    assert offset.values == [1, 2, 3]
+
+
+def test_a_skipped_record_does_not_move_the_offset(ledger: FileLedger):
+    offset = Trail()
+    sentinel = buffer(ledger, Clock(), offset=offset)
+    sentinel.add(Record(None, 1))
+    sentinel.flush()
+    assert offset.values == []
+
+
+def test_a_buffer_without_a_base_offset_rejects_its_first_record(ledger: FileLedger):
+    sentinel = BufferSentinel(
+        ledger=ledger,
+        encoder=RecordEncoder(),
+        slots=["s.a"],
+        max_rows=None,
+        max_bytes=None,
+        max_secs=math.inf,
+        offset=None,
+        clock=Clock(),
+    )
+    with pytest.raises(ConnStreamException) as raised:
+        sentinel.add(Record("s.a", 1))
+    assert raised.value.api_error is ConnErrorCode.CONN_33

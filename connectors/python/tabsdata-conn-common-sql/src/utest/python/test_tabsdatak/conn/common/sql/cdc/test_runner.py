@@ -109,11 +109,14 @@ class FakeBuffer:
     def reset_timer(self) -> None:
         pass
 
-    def process_changes(self, changes) -> None:
+    def add_all(self, changes) -> None:
         self.processed += 1
 
-    def expire(self) -> None:
-        pass
+    def add(self, change) -> None:
+        self.processed += 1
+
+    def due(self) -> bool:
+        return False
 
     def flush(self) -> None:
         self.flushed += 1
@@ -250,8 +253,11 @@ def test_a_stage_does_not_cover_changes_still_in_memory():
     disk, or a stop before the next stage loses those changes."""
     from datetime import datetime
 
+    # noinspection PyProtectedMember
+    from tabsdatak.conn.common._stream._sentinels import BufferSentinel
+    from tabsdatak.conn.common.sql.cdc._encoder import CdcEncoder
     from tabsdatak.conn.common.sql.cdc._model import CdcDataChange
-    from tabsdatak.conn.common.sql.cdc._sentinel.buffer import BufferSentinel
+    from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 
     class Positions:
         def __init__(self, applied=()):
@@ -273,23 +279,23 @@ def test_a_stage_does_not_cover_changes_still_in_memory():
             offset=Positions([position]),
         )
 
-    class SilentEncoder:
-        def encode(self, table, rows):
+    class SilentEncoder(CdcEncoder):
+        def encode(self, slot, records):
             return []
 
     disk = FakeDisk(manifest=[[Path("t0.parquet")]])
     buffer = BufferSentinel(
         ledger=disk,
-        encoder=SilentEncoder(),
+        encoder=SilentEncoder(CdcFormat(), {"s.t": None}),
+        slots=["s.t"],
         max_rows=1_000,
         max_bytes=None,
         max_secs=10_000,
-        tables={"s.t": None},
         offset=Positions(),
     )
-    buffer.process_data_change(change("written"))
+    buffer.add(change("written"))
     buffer.flush()
-    buffer.process_data_change(change("in-memory"))
+    buffer.add(change("in-memory"))
     ingester = FakeIngester()
 
     assert _publish(FakeCtx(active_values=[]), disk, disk, buffer, ingester) is True

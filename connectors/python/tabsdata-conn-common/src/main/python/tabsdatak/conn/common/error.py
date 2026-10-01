@@ -33,6 +33,16 @@ class ConnInitException(ConnException):
     pass
 
 
+class ConnStreamException(ConnException):
+    """A stream source broke a contract of the shared stream machinery
+    while it ran.
+
+    :categories: error
+    """
+
+    pass
+
+
 class ConnErrorCode(ErrorCode):
     """Error codes shared across the connector-common layer.
 
@@ -162,3 +172,8 @@ class ConnErrorCode(ErrorCode):
         "cfg value at {path} must be a string, number, boolean, null, list or "
         "dict, got {type}",
     )  # check_basic -- non-basic value
+    CONN_33 = ErrorDef(
+        ConnStreamException,
+        "Buffer sentinel has no base offset; ingester must provide a "
+        "base offset at initialization",
+    )

@@ -11,9 +11,9 @@ import pyarrow as pa
 import pytest
 import sqlalchemy.types as sa_types
 
+from tabsdatak.conn.common.sql.cdc._encoder import row_to_record
 from tabsdatak.conn.common.sql.cdc._model import CdcDataChange
 from tabsdatak.conn.common.sql.cdc._schema import SchemaRegistry
-from tabsdatak.conn.common.sql.cdc._sentinel import row_to_record
 from tabsdatak.conn.common.sql.cdc._shaper import CdcRowShaper
 from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_INITIAL_LOAD_TX,

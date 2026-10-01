@@ -9,6 +9,7 @@ from tabsdatak.conn.common.error import (
     ConnErrorCode,
     ConnException,
     ConnInitException,
+    ConnStreamException,
 )
 
 
@@ -25,19 +26,20 @@ def test_conn_init_exception_is_a_conn_exception():
     assert issubclass(ConnInitException, ConnException)
 
 
+def test_conn_stream_exception_is_a_conn_exception():
+    assert issubclass(ConnStreamException, ConnException)
+
+
 # ---------------------------------------------------------------------------
 # Error codes
 # ---------------------------------------------------------------------------
 
 
-def test_every_code_constructs_a_conn_init_exception(monkeypatch):
+def test_every_code_constructs_its_conn_exception(monkeypatch):
     monkeypatch.setenv(DEBUG_FRAMES_ENV_VAR, "0")
     for code in ConnErrorCode:
         exc = code.exception()
-        # Every code in conn-common is currently tagged with
-        # ConnInitException (none of the validators raise typed
-        # exceptions; cross-field hooks moved to per-connector codes).
-        assert isinstance(exc, ConnInitException)
+        assert isinstance(exc, ConnException)
         assert type(exc) is code.value.exception
 
 
@@ -67,8 +69,9 @@ def test_codes_have_expected_names_with_intentional_gap():
     # ReportingConnMetaModel, ObjectsConnMetaModel, Property), and
     # CONN_17..CONN_30 for the shared field-value rules -- one code per
     # spec in ``types.py`` plus the two FQN rules ``name_validate``
-    # builds -- and CONN_31 / CONN_32 for the two ways a cfg tree can
-    # break the JSON-like value rule.
+    # builds -- CONN_31 / CONN_32 for the two ways a cfg tree can
+    # break the JSON-like value rule, and CONN_33 for the stream buffer
+    # sentinel.
     # CONN_5..CONN_7 were intentionally retired with the CloudLocation
     # move into the per-connector packages; the gap is preserved so
     # callers that still imported the conn-common variants surface
@@ -104,4 +107,5 @@ def test_codes_have_expected_names_with_intentional_gap():
         "CONN_30",
         "CONN_31",
         "CONN_32",
+        "CONN_33",
     ]
