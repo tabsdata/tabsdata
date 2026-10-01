@@ -51,6 +51,13 @@ _ARCHIVE_DIR = "archive"
 # asnccmd reports a stopped capture program with this code, on a zero exit.
 _ASNCAP_DOWN = "ASN0506E"
 _BACKUP_DIR = "backup"
+# A create-data seed is ONE transaction, and a transaction must fit the active
+# log: LOGFILSIZ (4KB pages) x (LOGPRIMARY + LOGSECOND) files. The default 1024
+# pages hold ~100MB, which a million-row seed (the performance suites') overflows
+# with SQL0964C; 16384 hold ~1.6GB. The primary files are allocated up front
+# (~830MB), and archive logging keeps every file it fills -- nothing prunes them
+# without backups -- so a big run costs disk until the system is recreated.
+_LOGFILSIZ = 16384
 #: The domain meta key naming the CD tables' qualified prefix.
 CD_TABLE_PREFIX_KEY = "CD_TABLE_PREFIX"
 _OLD_VALUES_PREFIX = "_"
@@ -265,10 +272,29 @@ class Db2Cdc(Db2):
     def post_provision(self, container: str, password: str) -> None:
         super().post_provision(container, password)  # creates the shared XP database
         print(">>> CDC: configuring Db2 SQL Replication (archive log + asncap) …")
+        # Before the archive setup: its deactivate and backup are the restart a
+        # new log file size waits for.
+        self._setup_log_size(container)
         self._setup_archive(container)
         self._setup_asn_control_tables(container)
         self._ensure_asncap(container, tune=True)
         print(">>> CDC: asncap capture program is running")
+
+    def _setup_log_size(self, container: str) -> None:
+        size = self._clp_scalar(
+            container,
+            "select value from sysibmadm.dbcfg where name = 'logfilsiz'",
+        )
+        if size.isdigit() and int(size) >= _LOGFILSIZ:
+            print(f">>> CDC: log file size already {size} pages")
+            return
+        print(f">>> CDC: log file size {size or '?'} -> {_LOGFILSIZ} pages …")
+        self._run(
+            container,
+            f"db2w connect to {_XP_DB} >/dev/null\n"
+            f"db2w update db cfg for {_XP_DB} using logfilsiz {_LOGFILSIZ}\n"
+            f"db2 connect reset >/dev/null 2>&1\n",
+        )
 
     def _archive_configured(self, container: str) -> bool:
         val = self._clp_scalar(
