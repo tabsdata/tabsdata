@@ -362,6 +362,18 @@ def lsn_to_int(lsn: str) -> int:
     return (int(high, 16) << 32) | int(low, 16)
 
 
+def lsn_to_text(lsn: int) -> str:
+    return f"{lsn >> 32:X}/{lsn & 0xFFFFFFFF:X}"
+
+
+def identify_system(cursor: Any) -> tuple[str, int]:
+    """The database cluster's system identifier and current timeline, read
+    with ``IDENTIFY_SYSTEM`` on a replication connection's `cursor`."""
+    cursor.execute("IDENTIFY_SYSTEM")
+    system_identifier, timeline, _, _ = cursor.fetchone()
+    return str(system_identifier), int(timeline)
+
+
 class Wal2JsonInitialLoadSession(InitialLoadSession):
     def __init__(self, *, engine: Any):
         self._engine = engine
@@ -408,6 +420,9 @@ class SlotSnapshotSession(Wal2JsonInitialLoadSession):
         super().__init__(engine=engine)
         self._replicator = psycopg2.connect(**replication_settings)
         self._cursor = self._replicator.cursor()
+        # Before the slot: its exported snapshot lasts only until the next
+        # command on this connection.
+        system_identifier, timeline = identify_system(self._cursor)
         try:
             self._cursor.execute(
                 f"CREATE_REPLICATION_SLOT {replication_slot} LOGICAL "
@@ -419,7 +434,11 @@ class SlotSnapshotSession(Wal2JsonInitialLoadSession):
                 cause=error,
                 slot=replication_slot,
             )
-        self._offset = LsnOffset(lsn=lsn_to_int(consistent_point))
+        self._offset = LsnOffset(
+            lsn=lsn_to_int(consistent_point),
+            system_identifier=system_identifier,
+            timeline=timeline,
+        )
         self._snapshot_name = snapshot_name
         logger.info(
             "Initial load snapshot of slot %r is consistent at %s",
@@ -444,8 +463,19 @@ class SlotSnapshotSession(Wal2JsonInitialLoadSession):
 
 
 class TransactionSnapshotSession(Wal2JsonInitialLoadSession):
-    def __init__(self, *, engine: Any, replication_slot: str):
+    def __init__(
+        self,
+        *,
+        engine: Any,
+        replication_settings: dict[str, Any],
+        replication_slot: str,
+    ):
         super().__init__(engine=engine)
+        replicator = psycopg2.connect(**replication_settings)
+        try:
+            system_identifier, timeline = identify_system(replicator.cursor())
+        finally:
+            replicator.close()
         with engine.connect() as connection:
             exists = connection.execute(
                 text("select 1 from pg_replication_slots where slot_name = :slot"),
@@ -464,7 +494,11 @@ class TransactionSnapshotSession(Wal2JsonInitialLoadSession):
         self._snapshot_name = self._holder.execute(
             text("select pg_export_snapshot()")
         ).scalar()
-        self._offset = LsnOffset(lsn=int(lsn))
+        self._offset = LsnOffset(
+            lsn=int(lsn),
+            system_identifier=system_identifier,
+            timeline=timeline,
+        )
         logger.info(
             "Initial load exported snapshot %r at WAL position %s",
             self._snapshot_name,
@@ -484,10 +518,21 @@ class TransactionSnapshotSession(Wal2JsonInitialLoadSession):
 class LsnOffset(CdcOffset):
     """Postgres CDC offset = the WAL LSN the consumer has flushed
     so far. Zero is the cold-start marker (replay from the oldest
-    WAL the slot retains)."""
+    WAL the slot retains).
 
-    def __init__(self, lsn: int = 0):
+    It also records the server whose WAL the LSN belongs to -- its system
+    identifier and timeline -- so a resume can tell that server from a
+    restore of it or from another cluster."""
+
+    def __init__(
+        self,
+        lsn: int = 0,
+        system_identifier: str | None = None,
+        timeline: int | None = None,
+    ):
         self.lsn = lsn
+        self.system_identifier = system_identifier
+        self.timeline = timeline
 
     def update(self, other: CdcOffset) -> None:
         if not isinstance(other, LsnOffset):
@@ -495,17 +540,40 @@ class LsnOffset(CdcOffset):
                 actual=type(other).__name__,
             )
         self.lsn = other.lsn
+        if other.system_identifier is not None:
+            self.system_identifier = other.system_identifier
+            self.timeline = other.timeline
 
     def write(self) -> str:
-        return json.dumps({"lsn": self.lsn})
+        return json.dumps({
+            "lsn": self.lsn,
+            "system_identifier": self.system_identifier,
+            "timeline": self.timeline,
+        })
 
     @classmethod
     def read(cls, data: str) -> "LsnOffset":
-        payload = json.loads(data) if data else {}
-        return cls(lsn=int(payload.get("lsn", 0)))
+        try:
+            payload = json.loads(data)
+            lsn = payload["lsn"]
+            system_identifier = payload["system_identifier"]
+            timeline = payload["timeline"]
+            if not (
+                isinstance(lsn, int)
+                and isinstance(system_identifier, str)
+                and isinstance(timeline, int)
+            ):
+                raise TypeError("lsn, system_identifier or timeline mistyped")
+        except (TypeError, ValueError, KeyError) as error:
+            raise PostgresErrorCode.POSTGRES_29.exception(cause=error, state=data)
+        return cls(lsn=lsn, system_identifier=system_identifier, timeline=timeline)
 
     def copy(self) -> "LsnOffset":
-        return LsnOffset(lsn=self.lsn)
+        return LsnOffset(
+            lsn=self.lsn,
+            system_identifier=self.system_identifier,
+            timeline=self.timeline,
+        )
 
 
 # ---------------------------------------------------------------------
@@ -636,6 +704,7 @@ class Wal2JsonIngester(CdcIngester):
             )
         return TransactionSnapshotSession(
             engine=self._build_engine(),
+            replication_settings=self._replication_connection_settings(),
             replication_slot=self._replication_slot,
         )
 
@@ -725,6 +794,11 @@ class Wal2JsonIngester(CdcIngester):
                         start_from=self._start_from,
                     )
 
+        system_identifier, timeline = identify_system(self._cursor)
+        self._verify_resume(system_identifier, timeline)
+        self._mark.system_identifier = system_identifier
+        self._mark.timeline = timeline
+
         options: dict[str, str] = {
             "format-version": str(self._wal2json_format_version),
             "include-transaction": "true",
@@ -745,6 +819,96 @@ class Wal2JsonIngester(CdcIngester):
         logger.info("Replication slot %r attached", self._replication_slot)
         if self._mark.lsn:
             self.commit_offset(self._mark)
+
+    def _verify_resume(self, system_identifier: str, timeline: int) -> None:
+        """Fail unless the server still holds every change after the stream's
+        position: the same cluster, on a timeline whose history contains
+        that position, with the slot retaining the WAL from it. Asking the
+        slot to start before its confirmed position is not an error on the
+        server's side: it silently starts from that position instead."""
+        mark = self._mark
+        if mark.system_identifier is not None:
+            if mark.system_identifier != system_identifier:
+                raise PostgresErrorCode.POSTGRES_27.exception(
+                    recorded=mark.system_identifier,
+                    actual=system_identifier,
+                )
+            if mark.timeline != timeline:
+                switch = self._timeline_switch(mark.timeline, timeline)
+                if switch is None or mark.lsn > switch:
+                    raise PostgresErrorCode.POSTGRES_28.exception(
+                        lsn=lsn_to_text(mark.lsn),
+                        recorded=mark.timeline,
+                        actual=timeline,
+                        where=(
+                            f"at LSN {lsn_to_text(switch)}"
+                            if switch is not None
+                            else "at no point its history records"
+                        ),
+                    )
+        if not mark.lsn:
+            return
+        positions = self._slot_positions()
+        if positions is None:
+            raise PostgresErrorCode.POSTGRES_23.exception(
+                slot=self._replication_slot,
+                lsn=lsn_to_text(mark.lsn),
+            )
+        confirmed, wal_status, current = positions
+        if wal_status == "lost":
+            raise PostgresErrorCode.POSTGRES_24.exception(
+                slot=self._replication_slot,
+                lsn=lsn_to_text(mark.lsn),
+            )
+        if confirmed is None or int(confirmed) > mark.lsn:
+            raise PostgresErrorCode.POSTGRES_25.exception(
+                slot=self._replication_slot,
+                confirmed=(
+                    lsn_to_text(int(confirmed)) if confirmed is not None else "none"
+                ),
+                lsn=lsn_to_text(mark.lsn),
+            )
+        if int(current) < mark.lsn:
+            raise PostgresErrorCode.POSTGRES_26.exception(
+                current=lsn_to_text(int(current)),
+                lsn=lsn_to_text(mark.lsn),
+            )
+
+    def _timeline_switch(self, recorded: int, current: int) -> int | None:
+        """The LSN at which the server's history left timeline `recorded`, or
+        ``None`` when that history does not pass through it."""
+        try:
+            self._cursor.execute(f"TIMELINE_HISTORY {current}")
+            _, content = self._cursor.fetchone()
+        except psycopg2.Error:
+            return None
+        if isinstance(content, (bytes, memoryview)):
+            content = bytes(content).decode()
+        for line in content.splitlines():
+            fields = line.split()
+            if len(fields) >= 2 and fields[0].isdigit() and int(fields[0]) == recorded:
+                return lsn_to_int(fields[1])
+        return None
+
+    def _slot_positions(self) -> tuple[Any, str | None, Any] | None:
+        """The slot's confirmed LSN and WAL status with the server's current
+        LSN, or ``None`` when the slot does not exist. ``to_jsonb`` reads
+        ``wal_status`` without failing on a server too old to have it."""
+        settings = dict(self._replication_connection_settings())
+        settings.pop("connection_factory", None)
+        conn = psycopg2.connect(**settings)
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "select confirmed_flush_lsn - '0/0'::pg_lsn, "
+                    "to_jsonb(slot) ->> 'wal_status', "
+                    "pg_current_wal_lsn() - '0/0'::pg_lsn "
+                    "from pg_replication_slots slot where slot_name = %s",
+                    (self._replication_slot,),
+                )
+                return cursor.fetchone()
+        finally:
+            conn.close()
 
     def _current_wal_lsn(self) -> int:
         # Open a regular psycopg2 connection (not a logical

@@ -499,7 +499,8 @@ def test_initial_load_requires_a_tabsdata_owned_offset(monkeypatch, tmp_path):
 
 def test_run_loop_seeds_the_mark_from_the_initial_load(monkeypatch, tmp_path):
     """Capture resumes exactly where the snapshot ended, so the load's
-    offset seeds the mark instead of the persisted resume offset."""
+    offset seeds the mark last. The previous offset is seeded before it,
+    so what it recorded outlives the reload."""
     disk = FakeDisk(manifest=[[]])
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
@@ -507,15 +508,16 @@ def test_run_loop_seeds_the_mark_from_the_initial_load(monkeypatch, tmp_path):
     monkeypatch.setattr(
         _runner, "_load_initially", lambda **kw: load_offset
     )
-    ingester = FakeIngester(resume_value=object())
+    previous = object()
+    ingester = FakeIngester(resume_value=previous)
+    seeds: list = []
+    ingester.seed_offset = seeds.append
     ctx = FakeCtx(active_values=[False], stream_state=None)
     ctx.work_dir = tmp_path
 
     _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg(initial_load=True))
 
-    assert ingester.seeded is load_offset
-    # The persisted-resume path is not consulted when a load just ran.
-    assert ingester.resume_args is None
+    assert seeds == [previous, load_offset]
 
 
 def test_run_loop_skips_a_completed_initial_load(monkeypatch, tmp_path):

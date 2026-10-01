@@ -165,3 +165,46 @@ class Db2ErrorCode(ErrorCode):
         "MON_GET_TRANSACTION_LOG: {reason}. The connection user needs EXECUTE "
         "on SYSPROC.MON_GET_TRANSACTION_LOG or SYSMON authority",
     )  # SqlReplicaInitialLoadSession._current_lsn
+    DB2_28 = ErrorDef(
+        Db2RuntimeException,
+        "The stream state holds an offset this connector cannot read (it needs "
+        "a map of CD tables to 16-byte hex commit sequences): {state!r}. Run "
+        "the initial load again",
+    )  # CommitSeqOffset.read
+    DB2_29 = ErrorDef(
+        Db2RuntimeException,
+        "CD table {table!r} has no registration in IBMSNAP_REGISTER: it was "
+        "deregistered, so the changes since are lost to this stream. Register "
+        "it again and run the initial load again",
+    )  # verify_positions
+    DB2_30 = ErrorDef(
+        Db2RuntimeException,
+        "The registration of CD table {table!r} is not active (state {state!r}, "
+        "info {info!r}), so Capture is not recording its changes. Reactivate it "
+        "and run the initial load again",
+    )  # verify_positions
+    DB2_31 = ErrorDef(
+        Db2RuntimeException,
+        "Capture has captured CD table {table!r} without a break only from "
+        "{start}, past the stream's position {position}: the registration was "
+        "restarted, Capture cold-started, or retention-limit pruning removed "
+        "rows the stream had not read. Run the initial load again",
+    )  # verify_positions
+    DB2_32 = ErrorDef(
+        Db2RuntimeException,
+        "The subscriptions to CD table {table!r} let Capture prune it up to "
+        "{bound}, past the stream's position {position}, so rows the stream had "
+        "not read may be gone. Run the initial load again",
+    )  # verify_positions
+    DB2_33 = ErrorDef(
+        Db2RuntimeException,
+        "The stream has no position for CD table {table!r}: it was added after "
+        "the stream started, or left out of start_from. Run the initial load "
+        "again",
+    )  # verify_positions
+    DB2_34 = ErrorDef(
+        Db2RuntimeException,
+        "Capture started capturing CD table {table!r} at {start}, after the "
+        "initial load's log position {lsn}: the changes in between are in "
+        "neither the load nor the change stream. Run the initial load again",
+    )  # SqlReplicaInitialLoadSession._pin

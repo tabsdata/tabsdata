@@ -133,3 +133,39 @@ class MysqlErrorCode(ErrorCode):
         "risking lost changes. Grant RELOAD to the connecting user; managed "
         "services that withhold it cannot support initial_load. Cause: {reason}",
     )  # open_initial_load
+    MYSQL_22 = ErrorDef(
+        MySQLRuntimeException,
+        "The server purged binary logs holding transactions the stream has not "
+        "read, so the changes in them are lost to it (purged {purged!r}, "
+        "consumed {consumed!r}). Run the initial load again",
+    )  # BinlogIngester._verify_gtids
+    MYSQL_23 = ErrorDef(
+        MySQLRuntimeException,
+        "The stream has consumed transactions this server never executed "
+        "(consumed {consumed!r}, executed {executed!r}): it is another server, "
+        "or one restored to an earlier point. Run the initial load again",
+    )  # BinlogIngester._verify_gtids
+    MYSQL_24 = ErrorDef(
+        MySQLRuntimeException,
+        "The stream state holds an offset this connector cannot read (it needs "
+        "a gtid string and a source string or null): {state!r}. Run the "
+        "initial load again",
+    )  # GtidOffset.read
+    MYSQL_25 = ErrorDef(
+        MySQLRuntimeException,
+        "Transaction {gtid!r} comes from source {actual!r}, but the stream reads "
+        "source {recorded!r}. A stream follows one source server: switching to "
+        "another (a failover) or being fed by several is not supported, since "
+        "the new source's changes would be dropped as already published. Do "
+        "not run the initial load again on this stream, which would drop them "
+        "too: start the stream again as a new function",
+    )  # BinlogIngester._begin_transaction
+    MYSQL_26 = ErrorDef(
+        MySQLRuntimeException,
+        "The server applies replicated transactions in parallel "
+        "(replica_parallel_workers {workers}) without keeping their commit "
+        "order (replica_preserve_commit_order {preserved}), so its binlog may "
+        "hold a transaction before an earlier one of the same source, which "
+        "would be dropped as already published. Set "
+        "replica_preserve_commit_order to ON",
+    )  # BinlogIngester._verify_commit_order

@@ -143,3 +143,49 @@ class PostgresErrorCode(ErrorCode):
         "load starts or the changes made during the load are not retained. "
         "Create the slot, or set replication_slot_behavior to create",
     )  # open_initial_load
+    POSTGRES_23 = ErrorDef(
+        PostgresRuntimeException,
+        "Replication slot {slot!r} does not exist, so the WAL after the "
+        "stream's position {lsn} was not retained for it and the changes in it "
+        "are lost to this stream. Recreate the slot and run the initial load "
+        "again",
+    )  # Wal2JsonIngester._verify_resume
+    POSTGRES_24 = ErrorDef(
+        PostgresRuntimeException,
+        "Replication slot {slot!r} is invalidated (wal_status lost): the server "
+        "removed WAL it needed after the stream's position {lsn}, so the "
+        "changes in it are lost to this stream. Recreate the slot and run the "
+        "initial load again",
+    )  # Wal2JsonIngester._verify_resume
+    POSTGRES_25 = ErrorDef(
+        PostgresRuntimeException,
+        "Replication slot {slot!r} has confirmed LSN {confirmed}, past the "
+        "stream's position {lsn}: the server would skip the changes in between. "
+        "The slot was recreated, or advanced by another consumer. Run the "
+        "initial load again",
+    )  # Wal2JsonIngester._verify_resume
+    POSTGRES_26 = ErrorDef(
+        PostgresRuntimeException,
+        "The server's WAL ends at LSN {current}, before the stream's position "
+        "{lsn}: the server was restored to an earlier point, and the changes "
+        "the stream delivered after it no longer exist there. Run the initial "
+        "load again",
+    )  # Wal2JsonIngester._verify_resume
+    POSTGRES_27 = ErrorDef(
+        PostgresRuntimeException,
+        "The stream's position was read from database cluster {recorded}, but "
+        "the server is cluster {actual}, where that position means nothing. "
+        "Run the initial load again",
+    )  # Wal2JsonIngester._verify_resume
+    POSTGRES_28 = ErrorDef(
+        PostgresRuntimeException,
+        "The stream's position {lsn} is on timeline {recorded}, which the "
+        "server's timeline {actual} left {where}: the WAL the stream read past "
+        "that point is not in the server's history. Run the initial load again",
+    )  # Wal2JsonIngester._verify_resume
+    POSTGRES_29 = ErrorDef(
+        PostgresRuntimeException,
+        "The stream state holds an offset this connector cannot read (it needs "
+        "lsn, system_identifier and timeline): {state!r}. Run the initial load "
+        "again",
+    )  # LsnOffset.read

@@ -273,8 +273,17 @@ def _run_loop(
     stop_signal = _setup_signal_handlers()
     try:
         if _initial_load_pending(ctx, cfg):
-            # The load's own offset becomes the resume position, so the
-            # stream opens exactly where the snapshot ends.
+            # A reload replaces the persisted offset, so the previous one is
+            # seeded first: what it recorded about the source it was read
+            # from outlives the reload. The load's own offset then becomes
+            # the resume position, so the stream opens exactly where the
+            # snapshot ends.
+            ingester.seed_offset(
+                ingester.resume_offset(
+                    first_stage=ctx.first_stage,
+                    stream_state=ctx.stream_state,
+                )
+            )
             ingester.seed_offset(
                 _load_initially(
                     ctx=ctx,

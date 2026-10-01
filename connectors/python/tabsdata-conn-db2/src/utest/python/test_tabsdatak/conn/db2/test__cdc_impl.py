@@ -33,9 +33,11 @@ from tabsdatak.conn.db2._cdc_impl import (
     Db2Dialect,
     MatchedColumns,
     SqlReplicaIngester,
+    RegistrationPositions,
     SqlReplicaInitialLoadSession,
     commitseq_lsn,
     match_cd_columns,
+    verify_positions,
 )
 from tabsdatak.conn.db2.error import Db2ErrorCode
 from tabsdatak.error import TabsdataException
@@ -237,13 +239,13 @@ def test_commitseq_offset_round_trip():
     assert back.commits == raw
 
 
-def test_commitseq_offset_read_empty_string():
-    assert CommitSeqOffset.read("{}").commits == {}
-    assert CommitSeqOffset.read("").commits == {}
-
-
-def test_commitseq_offset_read_none_is_safe():
-    assert CommitSeqOffset.read(None).commits == {}
+@pytest.mark.parametrize(
+    "state", ["", None, "[]", '{"S.T": "zz"}', '{"S.T": "0102"}', '{"S.T": 5}']
+)
+def test_commitseq_offset_read_rejects_an_unexpected_format(state):
+    with pytest.raises(TabsdataException) as ei:
+        CommitSeqOffset.read(state)
+    assert ei.value.api_error is Db2ErrorCode.DB2_28
 
 
 def test_commitseq_offset_update_merges_per_table_keys():
@@ -475,8 +477,21 @@ def _tracked(cd_table: str) -> TrackedTable:
     )
 
 
+CAPTURE_START = b"\x00" * 7 + b"\x01" + b"\x00" * 7 + b"\x10"
+
+
+def _registrations(*tables, state="A", start=CAPTURE_START, bound=CAPTURE_START):
+    return [("ASN", table, state, None, start, bound) for table in tables]
+
+
 def _session(answers: dict) -> tuple[SqlReplicaInitialLoadSession, _Engine]:
-    engine = _Engine({"cur_commit": "ON"} | answers)
+    engine = _Engine(
+        {
+            "cur_commit": "ON",
+            "ibmsnap_register r": _registrations("T_CD", "A_CD", "B_CD"),
+        }
+        | answers
+    )
     return SqlReplicaInitialLoadSession(engine=engine), engine
 
 
@@ -537,7 +552,7 @@ def test_the_pin_resumes_each_table_from_its_last_commit_before_it():
     list(session.tables({"ASN.A_CD": _tracked("A_CD"), "ASN.B_CD": _tracked("B_CD")}))
     assert session.offset.commits == {
         "ASN.A_CD": before,
-        "ASN.B_CD": COMMITSEQ_ORIGIN,
+        "ASN.B_CD": CAPTURE_START,
     }
 
 
@@ -640,3 +655,178 @@ def test_cur_commit_on_is_not_warned_about(caplog):
     with caplog.at_level(logging.WARNING, logger=_cdc_impl.__name__):
         list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
     assert "cur_commit" not in caplog.text
+
+
+def test_the_pin_fails_when_capture_started_after_the_load_position():
+    late = _commitseq(1, 0x100)
+    session, _ = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+        "ibmsnap_register r": _registrations("T_CD", start=late, bound=late),
+    })
+    with pytest.raises(TabsdataException) as ei:
+        list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert ei.value.api_error is Db2ErrorCode.DB2_34
+
+
+def test_the_pin_fails_when_a_table_has_no_registration():
+    session, _ = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+        "ibmsnap_register r": [],
+    })
+    with pytest.raises(TabsdataException) as ei:
+        list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert ei.value.api_error is Db2ErrorCode.DB2_33
+
+
+# --- verify_positions ------------------------------------------------
+
+
+POSITION = _commitseq(5, 0x500)
+
+
+def _verify(position=POSITION, **registration):
+    verify_positions(
+        {
+            "ASN.T_CD": RegistrationPositions(
+                **{
+                    "state": "A",
+                    "state_info": None,
+                    "capture_start": _commitseq(1, 0x100),
+                    "prune_bound": _commitseq(1, 0x100),
+                }
+                | registration
+            )
+        },
+        {"ASN.T_CD": position} if position is not None else {},
+        [TableObject(schema="ASN", table="T_CD")],
+    )
+
+
+def test_a_position_capture_still_covers_passes():
+    _verify()
+    _verify(capture_start=POSITION, prune_bound=POSITION)
+    _verify(prune_bound=None)
+
+
+@pytest.mark.parametrize(
+    ("change", "code"),
+    [
+        ({"state": "I"}, Db2ErrorCode.DB2_30),
+        ({"capture_start": None}, Db2ErrorCode.DB2_31),
+        ({"capture_start": _commitseq(6, 0x600)}, Db2ErrorCode.DB2_31),
+        ({"prune_bound": _commitseq(6, 0x600)}, Db2ErrorCode.DB2_32),
+    ],
+)
+def test_a_position_capture_no_longer_covers_fails(change, code):
+    with pytest.raises(TabsdataException) as ei:
+        _verify(**change)
+    assert ei.value.api_error is code
+
+
+def test_a_table_without_a_position_fails():
+    with pytest.raises(TabsdataException) as ei:
+        _verify(position=None)
+    assert ei.value.api_error is Db2ErrorCode.DB2_33
+
+
+def test_a_table_without_a_registration_fails():
+    with pytest.raises(TabsdataException) as ei:
+        verify_positions(
+            {}, {"ASN.T_CD": POSITION}, [TableObject(schema="ASN", table="T_CD")]
+        )
+    assert ei.value.api_error is Db2ErrorCode.DB2_29
+
+
+def test_the_floor_is_the_higher_of_the_two_positions():
+    registration = RegistrationPositions(
+        state="A",
+        state_info=None,
+        capture_start=_commitseq(1, 0x100),
+        prune_bound=_commitseq(2, 0x200),
+    )
+    assert registration.floor == _commitseq(2, 0x200)
+
+
+# --- Resume and poll ---------------------------------------------------
+
+
+class _Session:
+    def __init__(self, answers: dict):
+        self.engine = _Engine(answers)
+
+    def connect(self):
+        return self.engine.connect()
+
+
+def _resumed(monkeypatch, commits, registrations):
+    monkeypatch.setattr(_cdc_impl.time, "sleep", lambda seconds: None)
+    bi = _ingester_with_tables(["ASN.T_CD"])
+    bi.seed_offset(CommitSeqOffset(commits=commits))
+    pending = list(registrations)
+    session = _Session({
+        "ibmsnap_register r": lambda: pending.pop(0) if len(pending) > 1 else pending[0]
+    })
+    return bi, session
+
+
+def test_a_resume_capture_still_covers_starts(monkeypatch):
+    bi, session = _resumed(monkeypatch, {"ASN.T_CD": POSITION}, [_registrations("T_CD")])
+    bi._init_reader(session)
+    assert bi.base_offset().commits == {"ASN.T_CD": POSITION}
+
+
+def test_a_resume_past_a_retention_prune_fails(monkeypatch):
+    moved = _commitseq(6, 0x600)
+    bi, session = _resumed(
+        monkeypatch, {"ASN.T_CD": POSITION}, [_registrations("T_CD", start=moved)]
+    )
+    with pytest.raises(TabsdataException) as ei:
+        bi._init_reader(session)
+    assert ei.value.api_error is Db2ErrorCode.DB2_31
+
+
+def test_a_head_start_begins_at_the_registration_floor(monkeypatch):
+    bi = _ingester_with_tables(["ASN.T_CD"])
+    bi._start_from = "head"
+    bound = _commitseq(2, 0x200)
+    session = _Session({"ibmsnap_register r": _registrations("T_CD", bound=bound)})
+    bi._init_reader(session)
+    assert bi.base_offset().commits == {"ASN.T_CD": bound}
+
+
+def test_rows_pruned_while_a_poll_reads_them_fail_the_poll(monkeypatch):
+    bi, session = _resumed(
+        monkeypatch,
+        {"ASN.T_CD": POSITION},
+        [
+            _registrations("T_CD"),
+            _registrations("T_CD", bound=_commitseq(6, 0x600)),
+        ],
+    )
+    watermark = _commitseq(9, 0x900)
+    monkeypatch.setattr(bi, "_query_table_watermarks", lambda c: {"ASN.T_CD": watermark})
+    monkeypatch.setattr(bi, "_extract_raw_schema", lambda *a: ())
+    bi._schema_registry = MagicMock()
+    read = []
+    monkeypatch.setattr(
+        bi,
+        "_query_table_changes",
+        lambda **kwargs: iter([read.append(kwargs["commitseq"]) or "change"]),
+    )
+    bi._blocking_timeout_seconds = 60
+    with pytest.raises(TabsdataException) as ei:
+        list(bi.poll_changes(session))
+    assert ei.value.api_error is Db2ErrorCode.DB2_32
+    assert read == [POSITION]
+
+
+def test_a_poll_capture_still_covers_yields_its_changes(monkeypatch):
+    bi, session = _resumed(monkeypatch, {"ASN.T_CD": POSITION}, [_registrations("T_CD")])
+    monkeypatch.setattr(bi, "_query_table_watermarks", lambda c: {})
+    bi._blocking_timeout_seconds = 0.05
+    assert list(bi.poll_changes(session)) == []
+    assert any("ibmsnap_register r" in sql for sql in session.engine.executed())

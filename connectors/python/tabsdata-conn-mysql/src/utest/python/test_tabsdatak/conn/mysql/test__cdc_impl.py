@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import sqlalchemy.types as sa_types
-from pymysqlreplication.event import GtidEvent
+from pymysqlreplication.event import GtidEvent, HeartbeatLogEvent
 from sqlalchemy.dialects.mysql import (
     DATETIME,
     ENUM,
@@ -43,6 +43,7 @@ from tabsdatak.conn.mysql._cdc_impl import (
     BinlogIngester,
     BinlogInitialLoadSession,
     GtidOffset,
+    GtidSet,
     MySQLDialect,
 )
 from tabsdatak.conn.mysql.error import MysqlErrorCode
@@ -254,9 +255,27 @@ def test_gtid_offset_round_trip():
     assert GtidOffset.read(serialised).gtid == "uuid:42"
 
 
-def test_gtid_offset_read_missing_gtid_defaults_to_empty():
-    assert GtidOffset.read("{}").gtid == ""
-    assert GtidOffset.read("").gtid == ""
+@pytest.mark.parametrize("state", ["", "{}", '{"gtid": null}', '{"gtid": 5}', "x"])
+def test_gtid_offset_read_rejects_an_unexpected_format(state):
+    with pytest.raises(TabsdataException) as ei:
+        GtidOffset.read(state)
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_24
+
+
+def test_gtid_offset_reads_an_empty_position():
+    offset = GtidOffset.read('{"gtid": "", "source": null}')
+    assert (offset.gtid, offset.source) == ("", None)
+
+
+def test_gtid_offset_round_trips_its_source():
+    offset = GtidOffset.read(GtidOffset(gtid="u:1-5", source="u").write())
+    assert (offset.gtid, offset.source) == ("u:1-5", "u")
+
+
+def test_gtid_offset_update_keeps_a_recorded_source():
+    offset = GtidOffset(gtid="u:1-5", source="u")
+    offset.update(GtidOffset(gtid="u:1-6"))
+    assert (offset.gtid, offset.source) == ("u:1-6", "u")
 
 
 def test_gtid_offset_update_with_another_gtid_offset():
@@ -389,7 +408,7 @@ def test_truncate_statement_forms_are_recognized(statement):
     spelling of it has to resolve to the same tracked table."""
     bi = _truncate_ready()
 
-    change = bi._truncate_change(_query_event(statement), "uuid:7")
+    change = bi._truncate_change(_query_event(statement), "uuid:7", GtidOffset(gtid="uuid:1-7"))
 
     assert change is not None
     assert change.table == "app.users"
@@ -403,7 +422,7 @@ def test_truncate_statement_forms_are_recognized(statement):
 def test_non_truncate_statements_are_ignored(statement):
     bi = _truncate_ready()
 
-    assert bi._truncate_change(_query_event(statement), "uuid:7") is None
+    assert bi._truncate_change(_query_event(statement), "uuid:7", GtidOffset(gtid="uuid:1-7")) is None
 
 
 def test_truncate_is_emitted_with_the_known_table_definition():
@@ -412,7 +431,7 @@ def test_truncate_is_emitted_with_the_known_table_definition():
         "app.users", (("id", "int", _Col(3)), ("name", "str", _Col(15, max_length=50)))
     )
 
-    change = bi._truncate_change(_query_event("truncate table users"), "uuid:7")
+    change = bi._truncate_change(_query_event("truncate table users"), "uuid:7", GtidOffset(gtid="uuid:1-7"))
 
     assert [column.name for column in change.schema.columns] == ["id", "name"]
     assert change.new_values == {"id": None, "name": None}
@@ -423,7 +442,7 @@ def test_truncate_of_a_never_captured_table_is_still_emitted():
     unknown definition rather than being skipped."""
     bi = _truncate_ready()
 
-    change = bi._truncate_change(_query_event("truncate table users"), "uuid:7")
+    change = bi._truncate_change(_query_event("truncate table users"), "uuid:7", GtidOffset(gtid="uuid:1-7"))
 
     assert change is not None
     assert change.schema.columns == ()
@@ -435,17 +454,17 @@ def test_truncate_stands_alone_in_its_own_transaction():
     surrounding transaction and carries that transaction's own GTID."""
     bi = _truncate_ready()
 
-    change = bi._truncate_change(_query_event("truncate table users"), "uuid:42")
+    change = bi._truncate_change(_query_event("truncate table users"), "uuid:42", GtidOffset(gtid="uuid:1-42"))
 
     assert change.transaction == "uuid:42"
-    assert change.offset.gtid == "uuid:42"
+    assert change.offset.gtid == "uuid:1-42"
     assert change.segment == 42
 
 
 def test_truncate_of_an_untracked_table_is_ignored():
     bi = _truncate_ready()
 
-    assert bi._truncate_change(_query_event("truncate table other"), "uuid:7") is None
+    assert bi._truncate_change(_query_event("truncate table other"), "uuid:7", GtidOffset(gtid="uuid:1-7")) is None
 
 
 def test_schema_table_filter_empty_when_no_tables():
@@ -730,3 +749,286 @@ def test_the_position_is_read_under_the_global_read_lock(initial_load_log):
         < log.index("unlock tables")
     )
     assert session.offset.gtid == "uuid:1-5"
+
+
+# =====================================================================
+# Resume continuity
+# =====================================================================
+
+
+class _GtidServer:
+    def __init__(self, row):
+        self.row = row
+        self.queries = []
+
+    def cursor(self):
+        server = self
+
+        class _Cursor:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc_info):
+                return False
+
+            def execute(self, sql, parameters=None):
+                server.queries.append((sql, parameters))
+
+            def fetchone(self):
+                return server.row
+
+        return _Cursor()
+
+    def close(self):
+        pass
+
+
+def _gtid_ingester(monkeypatch, row) -> tuple[BinlogIngester, _GtidServer]:
+    bi = BinlogIngester(
+        conn=MagicMock(),
+        tables=["db.t"],
+        start_from="head",
+        server_id=1,
+    )
+    server = _GtidServer(row)
+    monkeypatch.setattr(_cdc_impl.pymysql, "connect", lambda **settings: server)
+    monkeypatch.setattr(
+        bi,
+        "_stream_connection_settings",
+        lambda: {"host": "h", "port": 1, "user": "u", "passwd": "p", "db": "d"},
+    )
+    return bi, server
+
+
+def test_a_resume_the_server_can_serve_passes(monkeypatch):
+    bi, server = _gtid_ingester(monkeypatch, ("u:1-5", "u:1-90", 1, 1))
+    bi._verify_gtids("u:1-40")
+    sql, parameters = server.queries[0]
+    assert "gtid_subset(@@global.gtid_purged, %s)" in sql
+    assert parameters == ("u:1-40", "u:1-40")
+
+
+def test_a_resume_after_unread_transactions_were_purged_fails(monkeypatch):
+    bi, _ = _gtid_ingester(monkeypatch, ("u:1-60", "u:1-90", 0, 1))
+    with pytest.raises(TabsdataException) as ei:
+        bi._verify_gtids("u:1-40")
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_22
+
+
+def test_a_resume_on_a_server_missing_consumed_transactions_fails(monkeypatch):
+    bi, _ = _gtid_ingester(monkeypatch, ("u:1-5", "u:1-30", 1, 0))
+    with pytest.raises(TabsdataException) as ei:
+        bi._verify_gtids("u:1-40")
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_23
+
+
+# =====================================================================
+# GtidSet and the offset of every transaction read
+# =====================================================================
+
+
+def test_a_gtid_set_parses_and_prints_canonically():
+    parsed = GtidSet.parse("B:3,\n a:7:1-5 , a:6")
+    assert str(parsed) == "a:1-7,b:3"
+
+
+def test_a_gtid_set_keeps_tagged_sources_apart():
+    parsed = GtidSet.parse("u:1-3:tag:1-2")
+    parsed.add("u:tag:3")
+    parsed.add("u:9")
+    assert str(parsed) == "u:1-3:9,u:tag:1-3"
+
+
+def test_a_gtid_set_adds_up_to_a_gtid():
+    gtid_set = GtidSet.parse("u:5-6")
+    gtid_set.add_up_to("u:9")
+    assert str(gtid_set) == "u:1-9"
+
+
+def _event(kind, **attributes):
+    event = MagicMock(spec=kind)
+    for name, value in attributes.items():
+        setattr(event, name, value)
+    return event
+
+
+def _transactions(*gtids_and_bodies):
+    from pymysqlreplication.event import QueryEvent, XidEvent
+    from pymysqlreplication.row_event import WriteRowsEvent
+
+    events = []
+    for gtid, body in gtids_and_bodies:
+        events.append(_event(GtidEvent, gtid=gtid))
+        if body == "dml":
+            events.append(_event(QueryEvent, query="BEGIN", timestamp=0))
+            events.append(_event(WriteRowsEvent, schema="other", table="t", rows=[]))
+            events.append(_event(XidEvent, timestamp=0))
+        else:
+            events.append(_event(QueryEvent, query=body, timestamp=0))
+    return events
+
+
+@pytest.mark.parametrize("loop", ["_poll_changes_buffered", "_poll_changes_unbuffered"])
+def test_every_transaction_read_enters_the_offset(loop):
+    bi = _ingester_with_tables(["app.users"])
+    bi._blocking_timeout_seconds = 60
+    bi._executed = GtidSet.parse("u:1-10")
+    bi._stream = iter(
+        _transactions(
+            ("u:11", "dml"),
+            ("u:12", "create table other.x (id int)"),
+            ("u:13", "dml"),
+        )
+    )
+    list(getattr(bi, loop)(session=None))
+    assert str(bi._executed) == "u:1-13"
+    assert (bi._mark.gtid, bi._mark.source) == ("u:1-13", "u")
+
+
+@pytest.mark.parametrize("loop", ["_poll_changes_buffered", "_poll_changes_unbuffered"])
+def test_a_transaction_from_another_source_fails_the_poll(loop):
+    bi = _ingester_with_tables(["app.users"])
+    bi._blocking_timeout_seconds = 60
+    bi._executed = GtidSet.parse("u:1-10")
+    bi._stream = iter(_transactions(("u:11", "dml"), ("v:1", "dml")))
+    with pytest.raises(TabsdataException) as ei:
+        list(getattr(bi, loop)(session=None))
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_25
+    assert str(bi._executed) == "u:1-11"
+
+
+@pytest.mark.parametrize("loop", ["_poll_changes_buffered", "_poll_changes_unbuffered"])
+def test_a_poll_ending_on_a_heartbeat_carries_its_open_transaction(loop):
+    bi = _ingester_with_tables(["app.users"])
+    bi._blocking_timeout_seconds = 0
+    bi._carry_gtid = "u:5"
+    bi._stream = iter([_event(HeartbeatLogEvent)])
+    list(getattr(bi, loop)(session=None))
+    assert bi._carry_gtid == "u:5"
+
+
+def _init_stream(monkeypatch, bi):
+    captured = {}
+    monkeypatch.setattr(
+        _cdc_impl, "BinLogStreamReader", lambda **kwargs: captured.update(kwargs)
+    )
+    monkeypatch.setattr(bi, "_stream_connection_settings", lambda: {})
+    monkeypatch.setattr(bi, "_schema_table_filter", lambda: (None, None))
+    monkeypatch.setattr(bi, "_verify_gtids", lambda consumed: None)
+    monkeypatch.setattr(bi, "_verify_commit_order", lambda: None)
+    monkeypatch.setattr(bi, "_first_binlog_file", lambda: ("binlog.000003", "u:1-40"))
+    monkeypatch.setattr(
+        bi, "_last_binlog_position", lambda: ("binlog.000009", 812, "u:1-90,v:1-4")
+    )
+    bi.init_stream()
+    return captured
+
+
+def test_a_resume_asks_for_everything_after_the_full_set(monkeypatch):
+    bi = _ingester_with_tables(["app.users"])
+    bi.seed_offset(GtidOffset(gtid="u:1-50,v:1-7"))
+    captured = _init_stream(monkeypatch, bi)
+    assert captured["auto_position"] == "u:1-50,v:1-7"
+    assert bi.base_offset().gtid == "u:1-50,v:1-7"
+
+
+@pytest.mark.parametrize(
+    ("start_from", "seed", "log_file"),
+    [
+        ("tail", "u:1-90,v:1-4", "binlog.000009"),
+        ("head", "u:1-40", "binlog.000003"),
+    ],
+)
+def test_a_start_by_position_seeds_the_transactions_before_it(
+    monkeypatch, start_from, seed, log_file
+):
+    bi = _ingester_with_tables(["app.users"])
+    bi._start_from = start_from
+    captured = _init_stream(monkeypatch, bi)
+    assert captured["log_file"] == log_file
+    assert bi.base_offset().gtid == seed
+
+
+def test_a_start_by_binlog_position_counts_each_sources_earlier_transactions(
+    monkeypatch,
+):
+    from tabsdatak.conn.mysql import BinlogPosition
+
+    bi = _ingester_with_tables(["app.users"])
+    bi._start_from = BinlogPosition(file="binlog.000004", pos=4)
+    _init_stream(monkeypatch, bi)
+    assert bi._begin_transaction("u:10").gtid == "u:1-10"
+    bi._complete_transaction("u:10")
+    assert bi._begin_transaction("u:11").gtid == "u:1-11"
+
+
+def test_a_resume_follows_the_source_it_recorded(monkeypatch):
+    bi = _ingester_with_tables(["app.users"])
+    bi.seed_offset(GtidOffset(gtid="u:1-50,w:1-9", source="u"))
+    _init_stream(monkeypatch, bi)
+    assert bi._begin_transaction("u:51").gtid == "u:1-51,w:1-9"
+    with pytest.raises(TabsdataException) as ei:
+        bi._begin_transaction("w:10")
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_25
+
+
+def test_a_reload_keeps_the_source_the_previous_stream_recorded(monkeypatch):
+    bi = _ingester_with_tables(["app.users"])
+    bi.seed_offset(GtidOffset(gtid="u:1-50", source="u"))
+    bi.seed_offset(GtidOffset(gtid="u:1-60,v:1-2"))
+    _init_stream(monkeypatch, bi)
+    assert bi.base_offset().source == "u"
+    with pytest.raises(TabsdataException) as ei:
+        bi._begin_transaction("v:3")
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_25
+
+
+def test_a_tag_is_a_source_of_its_own():
+    bi = _ingester_with_tables(["app.users"])
+    bi._begin_transaction("u:5")
+    with pytest.raises(TabsdataException) as ei:
+        bi._begin_transaction("u:batch:1")
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_25
+
+
+@pytest.mark.parametrize(
+    ("variables", "fails"),
+    [
+        ([("replica_parallel_workers", "4"), ("replica_preserve_commit_order", "ON")], False),
+        ([("replica_parallel_workers", "4"), ("replica_preserve_commit_order", "OFF")], True),
+        ([("replica_parallel_workers", "1"), ("replica_preserve_commit_order", "OFF")], False),
+        ([("slave_parallel_workers", "8"), ("slave_preserve_commit_order", "OFF")], True),
+        ([], False),
+    ],
+)
+def test_parallel_apply_without_commit_order_is_refused(monkeypatch, variables, fails):
+    bi, server = _gtid_ingester(monkeypatch, None)
+    server.cursor = lambda: _Rows(variables)
+    if fails:
+        with pytest.raises(TabsdataException) as ei:
+            bi._verify_commit_order()
+        assert ei.value.api_error is MysqlErrorCode.MYSQL_26
+    else:
+        bi._verify_commit_order()
+
+
+class _Rows:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def execute(self, sql, parameters=None):
+        assert "replica_preserve_commit_order" in sql
+
+    def fetchall(self):
+        return self._rows
+
+
+def test_a_user_gtid_set_is_not_flattened():
+    assert BinlogIngester._as_gtid_set("u:1-5,v:7") == "u:1-5,v:7"
+    assert BinlogIngester._as_gtid_set("u:42") == "u:1-42"

@@ -502,12 +502,109 @@ class BinlogInitialLoadSession(InitialLoadSession):
                 logger.warning("Failed to close initial-load connection: %s", exc)
 
 
+_GTID_INTERVAL = re.compile(r"^(\d+)(?:-(\d+))?$")
+
+
+def _opens_transaction(event: Any) -> bool:
+    return (
+        isinstance(event, QueryEvent) and (event.query or "").strip().upper() == "BEGIN"
+    )
+
+
+def _commits_transaction(event: Any) -> bool:
+    return isinstance(event, XidEvent) or (
+        (event.query or "").strip().upper() == "COMMIT"
+    )
+
+
+class GtidSet:
+    """A MySQL GTID set: for each source -- a server UUID, or a UUID and a
+    tag -- the transaction numbers it holds, as disjoint closed intervals.
+
+    Every transaction the stream reads goes in, whether or not it touched a
+    tracked table, so a resume asks the server for exactly the transactions
+    it does not hold, and one whose history spans several server UUIDs
+    keeps all of them."""
+
+    def __init__(self) -> None:
+        self._intervals: dict[str, list[tuple[int, int]]] = {}
+
+    @classmethod
+    def parse(cls, text: str) -> "GtidSet":
+        gtid_set = cls()
+        for element in "".join(text.split()).split(","):
+            if not element:
+                continue
+            uuid, _, rest = element.partition(":")
+            source = uuid.lower()
+            for part in rest.split(":"):
+                match = _GTID_INTERVAL.match(part)
+                if match is None:
+                    source = f"{uuid.lower()}:{part}"
+                    continue
+                first = int(match.group(1))
+                last = int(match.group(2) or first)
+                gtid_set._add(source, first, last)
+        return gtid_set
+
+    @staticmethod
+    def split(gtid: str) -> tuple[str, int]:
+        """A single GTID as its source and transaction number."""
+        source, _, number = gtid.rpartition(":")
+        uuid, colon, tag = source.partition(":")
+        return f"{uuid.lower()}{colon}{tag}", int(number)
+
+    def holds(self, source: str) -> bool:
+        return source in self._intervals
+
+    def add(self, gtid: str) -> None:
+        source, number = self.split(gtid)
+        self._add(source, number, number)
+
+    def add_up_to(self, gtid: str) -> None:
+        """Hold every transaction of the GTID's source up to and including it."""
+        source, number = self.split(gtid)
+        self._add(source, 1, number)
+
+    def with_gtid(self, gtid: str) -> "GtidSet":
+        copy = GtidSet()
+        copy._intervals = {k: list(v) for k, v in self._intervals.items()}
+        copy.add(gtid)
+        return copy
+
+    def _add(self, source: str, first: int, last: int) -> None:
+        merged: list[tuple[int, int]] = []
+        for start, end in sorted([*self._intervals.get(source, []), (first, last)]):
+            if merged and start <= merged[-1][1] + 1:
+                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+            else:
+                merged.append((start, end))
+        self._intervals[source] = merged
+
+    def __str__(self) -> str:
+        return ",".join(
+            source
+            + "".join(
+                f":{start}" if start == end else f":{start}-{end}"
+                for start, end in intervals
+            )
+            for source, intervals in sorted(self._intervals.items())
+        )
+
+
 class GtidOffset(CdcOffset):
     """MySQL CDC offset = the GTID set the binlog stream has
-    consumed so far. Empty string is the cold-start marker."""
+    consumed so far (see :class:`GtidSet`). Empty string is the
+    cold-start marker.
 
-    def __init__(self, gtid: str = ""):
+    It also records the stream's source: the server UUID (and tag) its
+    transactions come from, once the first one has been read. Transaction
+    numbers only order the changes of one source, so a stream reads one
+    source only (see :meth:`BinlogIngester._begin_transaction`)."""
+
+    def __init__(self, gtid: str = "", source: str | None = None):
         self.gtid = gtid
+        self.source = source
 
     def update(self, other: CdcOffset) -> None:
         if not isinstance(other, GtidOffset):
@@ -515,17 +612,27 @@ class GtidOffset(CdcOffset):
                 actual=type(other).__name__,
             )
         self.gtid = other.gtid
+        if other.source is not None:
+            self.source = other.source
 
     def write(self) -> str:
-        return json.dumps({"gtid": self.gtid})
+        return json.dumps({"gtid": self.gtid, "source": self.source})
 
     @classmethod
     def read(cls, data: str) -> "GtidOffset":
-        payload = json.loads(data) if data else {}
-        return cls(gtid=payload.get("gtid", ""))
+        try:
+            payload = json.loads(data)
+            gtid, source = payload["gtid"], payload["source"]
+            if not isinstance(gtid, str) or not (
+                source is None or isinstance(source, str)
+            ):
+                raise TypeError("gtid or source mistyped")
+        except (TypeError, ValueError, KeyError) as error:
+            raise MysqlErrorCode.MYSQL_24.exception(cause=error, state=data)
+        return cls(gtid=gtid, source=source)
 
     def copy(self) -> "GtidOffset":
-        return GtidOffset(gtid=self.gtid)
+        return GtidOffset(gtid=self.gtid, source=self.source)
 
 
 # ---------------------------------------------------------------------
@@ -562,11 +669,20 @@ class BinlogIngester(CdcIngester):
         self._mark: GtidOffset | None = None
         self._base_offset: GtidOffset | None = None
         self._stream: BinLogStreamReader | None = None
-        # A poll that runs out of time on the event opening a transaction has
-        # already taken that event off the stream, so its GTID is held here for
-        # the next poll to adopt. Losing it would tag the whole transaction
-        # with an empty GTID, and segment 0 sits below every real one.
+        # A poll that runs out of time on the event opening a transaction, or
+        # while one is still open, has already taken that event off the
+        # stream, so its GTID is held here for the next poll to adopt. Losing
+        # it would tag the whole transaction with an empty GTID, and segment 0
+        # sits below every real one, and would leave it out of the offset.
         self._carry_gtid: str | None = None
+        # Every transaction read so far, seeded with those before the start.
+        self._executed = GtidSet()
+        # A start by binlog position or timestamp has no set to seed from, so
+        # a source's first transaction stands for all its earlier ones.
+        self._seed_on_first_sight = False
+        # The server UUID (and tag) every transaction must come from, once
+        # known: recorded by the first one, and kept across a reload.
+        self._source: str | None = None
 
     @property
     def ingester_type(self) -> CdcIngesterType:
@@ -672,52 +788,132 @@ class BinlogIngester(CdcIngester):
         if stream_tables:
             stream_kwargs["only_tables"] = stream_tables
 
-        start_from = self._start_from
-        # When restarting from a persisted offset, override the
-        # user's ``start_from`` so we don't replay events.
+        self._seed_on_first_sight = False
+        self._verify_commit_order()
         if self._mark is not None and self._mark.gtid:
-            start_from = GtidPosition(gtid=self._mark.gtid)
+            # A persisted or initial-load offset is already the full set.
+            self._executed = GtidSet.parse(self._mark.gtid)
+            start_from = None
+        else:
+            start_from = self._start_from
 
         match start_from:
+            case None:
+                pass
             case GtidPosition(gtid=gtid):
-                stream_kwargs["auto_position"] = self._as_gtid_set(gtid)
-                if self._mark is None:
-                    self._mark = GtidOffset(gtid=gtid)
+                self._executed = GtidSet.parse(self._as_gtid_set(gtid))
             case BinlogPosition(file=file, pos=pos):
                 stream_kwargs["log_file"] = file
                 stream_kwargs["log_pos"] = pos
-                if self._mark is None:
-                    self._mark = GtidOffset()
+                self._executed = GtidSet()
+                self._seed_on_first_sight = True
             case TimestampPosition(ts=ts):
                 stream_kwargs["skip_to_timestamp"] = ts
-                if self._mark is None:
-                    self._mark = GtidOffset()
+                self._executed = GtidSet()
+                self._seed_on_first_sight = True
             case "head":
-                stream_kwargs["log_file"] = self._first_binlog_file()
+                file, purged = self._first_binlog_file()
+                stream_kwargs["log_file"] = file
                 stream_kwargs["log_pos"] = BINLOG_START_POSITION
-                self._mark = GtidOffset()
+                self._executed = GtidSet.parse(purged)
             case "tail":
-                file, pos = self._last_binlog_position()
+                file, pos, executed = self._last_binlog_position()
                 stream_kwargs["log_file"] = file
                 stream_kwargs["log_pos"] = pos
-                self._mark = GtidOffset()
+                self._executed = GtidSet.parse(executed)
             case _:
                 raise MysqlErrorCode.MYSQL_14.exception(start_from=start_from)
 
+        if "log_file" not in stream_kwargs and "skip_to_timestamp" not in stream_kwargs:
+            consumed = str(self._executed)
+            self._verify_gtids(consumed)
+            stream_kwargs["auto_position"] = consumed
+        self._mark = self._offset_of(self._executed)
         self._base_offset = self._mark.copy()
         self._stream = BinLogStreamReader(**stream_kwargs)
         logger.info("BinLogStreamReader initialised")
 
     @staticmethod
     def _as_gtid_set(gtid: str) -> str:
-        # pymysqlreplication's ``auto_position`` wants a GTID *set*
-        # (``uuid:1-N``), not a single position (``uuid:N``).
-        if not gtid:
+        # A user's ``start_from`` may name one GTID (``uuid:N``), meaning
+        # everything of that source up to it; a set is taken as it is.
+        if not gtid or "," in gtid:
             return gtid
         uuid, _, seq = gtid.rpartition(":")
         if not uuid or "-" in seq:
             return gtid
         return f"{uuid}:1-{seq}"
+
+    def seed_offset(self, offset: CdcOffset | None) -> None:
+        # A reload seeds the previous stream's offset before the load's own,
+        # which has no source yet: the one recorded is kept.
+        if isinstance(offset, GtidOffset) and offset.source is not None:
+            self._source = offset.source
+        super().seed_offset(offset)
+
+    def _offset_of(self, executed: GtidSet) -> GtidOffset:
+        return GtidOffset(gtid=str(executed), source=self._source)
+
+    def _begin_transaction(self, gtid: str) -> GtidOffset:
+        """The offset of the transaction `gtid` opens: every one read before
+        it, and it.
+
+        Fails when it comes from another source than the stream's. The
+        stage publisher keeps only rows past the highest transaction number
+        it has published, and numbers are per source: a new source's
+        restart low, so its changes would be dropped without a word -- a
+        failover to another server, or a stream fed by several."""
+        source, number = GtidSet.split(gtid)
+        if self._source is None:
+            self._source = source
+        elif source != self._source:
+            raise MysqlErrorCode.MYSQL_25.exception(
+                recorded=self._source, actual=source, gtid=gtid
+            )
+        if self._seed_on_first_sight and not self._executed.holds(source):
+            if number > 1:
+                self._executed.add_up_to(f"{source}:{number - 1}")
+        return self._offset_of(self._executed.with_gtid(gtid))
+
+    def _complete_transaction(self, gtid: str) -> None:
+        self._executed.add(gtid)
+        self._mark = self._offset_of(self._executed)
+
+    def _verify_commit_order(self) -> None:
+        """Fail on a server that applies replicated transactions in parallel
+        without keeping their commit order: its binlog may then hold a
+        source's transaction before an earlier-numbered one, which the stage
+        publisher would drop as already published."""
+        settings = self._stream_connection_settings()
+        conn = pymysql.connect(
+            host=settings["host"],
+            port=settings["port"],
+            user=settings.get("user"),
+            passwd=settings.get("passwd"),
+            db=settings.get("db"),
+        )
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "show global variables where variable_name in ("
+                    "'replica_parallel_workers', 'slave_parallel_workers', "
+                    "'replica_preserve_commit_order', "
+                    "'slave_preserve_commit_order')"
+                )
+                values = {name.lower(): value for name, value in cursor.fetchall()}
+        finally:
+            conn.close()
+        workers = values.get(
+            "replica_parallel_workers", values.get("slave_parallel_workers", "0")
+        )
+        preserved = values.get(
+            "replica_preserve_commit_order",
+            values.get("slave_preserve_commit_order", "OFF"),
+        )
+        if int(workers or 0) > 1 and str(preserved).upper() != "ON":
+            raise MysqlErrorCode.MYSQL_26.exception(
+                workers=workers, preserved=preserved
+            )
 
     @staticmethod
     def _transaction_number(gtid: str | None) -> int:
@@ -726,7 +922,37 @@ class BinlogIngester(CdcIngester):
         _, _, number = gtid.rpartition(":")
         return int(number)
 
-    def _first_binlog_file(self) -> str:
+    def _verify_gtids(self, consumed: str) -> None:
+        """Fail unless the server can send every transaction after
+        `consumed`: it has purged none that the stream has not read, and it
+        has executed every one the stream has."""
+        settings = self._stream_connection_settings()
+        conn = pymysql.connect(
+            host=settings["host"],
+            port=settings["port"],
+            user=settings.get("user"),
+            passwd=settings.get("passwd"),
+            db=settings.get("db"),
+        )
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "select @@global.gtid_purged, @@global.gtid_executed, "
+                    "gtid_subset(@@global.gtid_purged, %s), "
+                    "gtid_subset(%s, @@global.gtid_executed)",
+                    (consumed, consumed),
+                )
+                purged, executed, purged_read, consumed_executed = cursor.fetchone()
+        finally:
+            conn.close()
+        if not purged_read:
+            raise MysqlErrorCode.MYSQL_22.exception(purged=purged, consumed=consumed)
+        if not consumed_executed:
+            raise MysqlErrorCode.MYSQL_23.exception(
+                consumed=consumed, executed=executed
+            )
+
+    def _first_binlog_file(self) -> tuple[str, str]:
         settings = self._stream_connection_settings()
         conn = pymysql.connect(
             host=settings["host"],
@@ -741,11 +967,14 @@ class BinlogIngester(CdcIngester):
                 row = cursor.fetchone()
                 if not row:
                     raise MysqlErrorCode.MYSQL_15.exception(position="head")
-                return row[0]
+                # Transactions before the first binlog still held are exactly
+                # the purged ones.
+                cursor.execute("select @@global.gtid_purged")
+                return row[0], cursor.fetchone()[0] or ""
         finally:
             conn.close()
 
-    def _last_binlog_position(self) -> tuple[str, int]:
+    def _last_binlog_position(self) -> tuple[str, int, str]:
         settings = self._stream_connection_settings()
         conn = pymysql.connect(
             host=settings["host"],
@@ -759,7 +988,8 @@ class BinlogIngester(CdcIngester):
                 row = self._query_binlog_status(cursor)
                 if not row:
                     raise MysqlErrorCode.MYSQL_15.exception(position="tail")
-                return row[0], row[1]
+                # Executed_Gtid_Set, read with the position it belongs to.
+                return row[0], row[1], row[4] or ""
         finally:
             conn.close()
 
@@ -824,7 +1054,9 @@ class BinlogIngester(CdcIngester):
     # Schema extraction
     # ------------------------------------------------------------------
 
-    def _truncate_change(self, event: Any, gtid: str) -> CdcDataChange | None:
+    def _truncate_change(
+        self, event: Any, gtid: str, offset: GtidOffset
+    ) -> CdcDataChange | None:
         match = _TRUNCATE_STATEMENT.match((event.query or "").strip())
         if match is None:
             return None
@@ -847,7 +1079,7 @@ class BinlogIngester(CdcIngester):
             table=qualified,
             new_values=dict(null_row),
             old_values=dict(null_row),
-            offset=GtidOffset(gtid=gtid),
+            offset=offset,
             segment=self._transaction_number(gtid),
             ordinal=0,
             schema=schema_version,
@@ -907,6 +1139,7 @@ class BinlogIngester(CdcIngester):
         deadline = time.monotonic() + self._blocking_timeout_seconds
         gtid: str | None = self._carry_gtid
         self._carry_gtid = None
+        offset = self._begin_transaction(gtid) if gtid is not None else None
         seq: int = 0
         if self._stream is None:
             return
@@ -915,14 +1148,24 @@ class BinlogIngester(CdcIngester):
                 if gtid is not None:
                     # Advance the mark to the last completed GTID
                     # before adopting the new one.
-                    self._mark = GtidOffset(gtid=gtid)
+                    self._complete_transaction(gtid)
+                    gtid = offset = None
                 if time.monotonic() > deadline:
                     self._carry_gtid = event.gtid
                     return
                 gtid = event.gtid
+                offset = self._begin_transaction(gtid)
+                seq = 0
+            elif isinstance(event, (XidEvent, QueryEvent)):
+                if _opens_transaction(event):
+                    continue
+                if gtid is not None:
+                    self._complete_transaction(gtid)
+                gtid = offset = None
                 seq = 0
             elif isinstance(event, HeartbeatLogEvent):
                 if time.monotonic() > deadline:
+                    self._carry_gtid = gtid
                     return
             elif isinstance(event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)):
                 qualified = self._as_qualified_table(event.schema, event.table)
@@ -961,7 +1204,7 @@ class BinlogIngester(CdcIngester):
                         table=qualified,
                         new_values=new_values,
                         old_values=old_values,
-                        offset=GtidOffset(gtid=gtid or ""),
+                        offset=offset or self._offset_of(self._executed),
                         segment=self._transaction_number(gtid),
                         ordinal=seq,
                         schema=schema_version,
@@ -978,33 +1221,49 @@ class BinlogIngester(CdcIngester):
         deadline = time.monotonic() + self._blocking_timeout_seconds
         gtid: str | None = self._carry_gtid
         self._carry_gtid = None
+        offset = self._begin_transaction(gtid) if gtid is not None else None
         seq: int = 0
         pending: list[CdcDataChange] = []
         if self._stream is None:
             return
         for event in self._stream:
             if isinstance(event, GtidEvent):
+                if gtid is not None and not pending:
+                    # The transaction before ended with no commit event of its
+                    # own, which a statement the stream does not see does.
+                    self._complete_transaction(gtid)
+                    gtid = offset = None
                 if not pending and time.monotonic() > deadline:
                     self._carry_gtid = event.gtid
                     return
                 gtid = event.gtid
+                offset = self._begin_transaction(gtid)
                 seq = 0
             elif isinstance(event, (XidEvent, QueryEvent)):
                 if isinstance(event, QueryEvent):
-                    truncated = self._truncate_change(event, gtid or "")
+                    truncated = self._truncate_change(
+                        event,
+                        gtid or "",
+                        offset or self._offset_of(self._executed),
+                    )
                     if truncated is not None:
                         seq += 1
                         truncated.sequence = truncated.ordinal = seq
                         yield truncated
                         if gtid is not None:
-                            self._mark = GtidOffset(gtid=gtid)
-                        gtid = None
+                            self._complete_transaction(gtid)
+                        gtid = offset = None
                         seq = 0
                         continue
-                if (
-                    isinstance(event, QueryEvent)
-                    and (event.query or "").strip().upper() != "COMMIT"
-                ):
+                if _opens_transaction(event):
+                    continue
+                if not _commits_transaction(event):
+                    # A statement that commits by itself (DDL): its transaction
+                    # holds no rows, so it is complete.
+                    if gtid is not None and not pending:
+                        self._complete_transaction(gtid)
+                        gtid = offset = None
+                        seq = 0
                     continue
                 commit_timestamp = datetime.fromtimestamp(
                     event.timestamp,
@@ -1014,12 +1273,13 @@ class BinlogIngester(CdcIngester):
                     change.timestamp = commit_timestamp
                     yield change
                 if gtid is not None:
-                    self._mark = GtidOffset(gtid=gtid)
+                    self._complete_transaction(gtid)
                 pending = []
-                gtid = None
+                gtid = offset = None
                 seq = 0
             elif isinstance(event, HeartbeatLogEvent):
                 if not pending and time.monotonic() > deadline:
+                    self._carry_gtid = gtid
                     return
             elif isinstance(event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)):
                 qualified = self._as_qualified_table(event.schema, event.table)
@@ -1058,7 +1318,7 @@ class BinlogIngester(CdcIngester):
                             table=qualified,
                             new_values=new_values,
                             old_values=old_values,
-                            offset=GtidOffset(gtid=gtid or ""),
+                            offset=offset or self._offset_of(self._executed),
                             segment=self._transaction_number(gtid),
                             ordinal=seq,
                             schema=schema_version,

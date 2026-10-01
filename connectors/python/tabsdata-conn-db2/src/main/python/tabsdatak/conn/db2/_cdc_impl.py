@@ -411,7 +411,12 @@ class CommitSeqOffset(CdcOffset):
     """Db2 CDC offset = the per-CD-table IBMSNAP_COMMITSEQ value the
     ingester has emitted up to. Each tracked CD table has its own
     advancing watermark; the offset state is therefore a dict
-    keyed by qualified CD-table name."""
+    keyed by qualified CD-table name.
+
+    A table nothing has been read from yet holds its registration's capture
+    start (``CD_OLD_SYNCHPOINT``) rather than the zero origin: no CD row sits
+    at or below it, so it reads the same, and it stays verifiable against
+    what Capture records (see :func:`verify_positions`)."""
 
     def __init__(self, commits: dict[str, bytes] | None = None):
         self.commits: dict[str, bytes] = dict(commits) if commits else {}
@@ -431,13 +436,121 @@ class CommitSeqOffset(CdcOffset):
 
     @classmethod
     def read(cls, data: str) -> "CommitSeqOffset":
-        payload = json.loads(data) if data else {}
-        return cls(
-            commits={table: bytes.fromhex(seq) for table, seq in payload.items()}
-        )
+        try:
+            payload = json.loads(data)
+            if not isinstance(payload, dict):
+                raise TypeError("the offset is not a table map")
+            commits = {table: bytes.fromhex(seq) for table, seq in payload.items()}
+            if any(
+                len(commitseq) != len(COMMITSEQ_ORIGIN)
+                for commitseq in commits.values()
+            ):
+                raise ValueError("a commit sequence is not 16 bytes")
+        except (TypeError, ValueError) as error:
+            raise Db2ErrorCode.DB2_28.exception(cause=error, state=data)
+        return cls(commits=commits)
 
     def copy(self) -> "CommitSeqOffset":
         return CommitSeqOffset(commits=self.commits)
+
+
+@dataclass(frozen=True)
+class RegistrationPositions:
+    """What Capture records of one CD table's registration: its state, the
+    log position it has captured from without a break (``CD_OLD_SYNCHPOINT``,
+    moved up by a restart of the registration, a cold start or
+    retention-limit pruning), and the lowest position the Apply
+    subscriptions to it have read (``IBMSNAP_PRUNCNTL.SYNCHPOINT``), up to
+    which normal pruning deletes its rows."""
+
+    state: str
+    state_info: str | None
+    capture_start: bytes | None
+    prune_bound: bytes | None
+
+    @property
+    def floor(self) -> bytes | None:
+        """The lowest position every retained row sits above."""
+        if self.capture_start is None:
+            return None
+        if self.prune_bound is None:
+            return self.capture_start
+        return max(self.capture_start, self.prune_bound)
+
+
+def registration_positions(
+    connection: Any, cd_tables: list[TableObject]
+) -> dict[str, RegistrationPositions]:
+    """Every one of `cd_tables`' registration positions, in one statement."""
+    if not cd_tables:
+        return {}
+    matches = " or ".join(
+        f"(r.cd_owner = '{cd_table.schema}' and r.cd_table = '{cd_table.table}')"
+        for cd_table in cd_tables
+    )
+    rows = connection.execute(
+        text(
+            "select r.cd_owner, r.cd_table, r.state, r.state_info, "
+            "r.cd_old_synchpoint, (select min(p.synchpoint) "
+            f"from {ASN_SCHEMA}.ibmsnap_pruncntl p "
+            "where p.phys_change_owner = r.cd_owner "
+            "and p.phys_change_table = r.cd_table) "
+            f"from {ASN_SCHEMA}.ibmsnap_register r where {matches}"
+        )
+    ).fetchall()
+    return {
+        TableObject(schema=owner.strip(), table=table.strip()).qualified: (
+            RegistrationPositions(
+                state=(state or "").strip(),
+                state_info=state_info.strip() if state_info else None,
+                capture_start=capture_start,
+                prune_bound=prune_bound,
+            )
+        )
+        for owner, table, state, state_info, capture_start, prune_bound in rows
+    }
+
+
+def verify_positions(
+    positions: dict[str, RegistrationPositions],
+    commits: dict[str, bytes],
+    cd_tables: list[TableObject],
+) -> None:
+    """Fail unless every row after each table's position is still there.
+
+    Capture only removes rows from the oldest up, and only at or below one
+    of the two positions it records: the capture start of the registration
+    or the prune bound of its subscriptions. With both at or below a
+    table's position, nothing after it can have been removed; with either
+    past it, rows after it may have been, so the stream cannot continue."""
+    for cd_table in cd_tables:
+        qualified = cd_table.qualified
+        position = commits.get(qualified)
+        if position is None:
+            raise Db2ErrorCode.DB2_33.exception(table=qualified)
+        registration = positions.get(qualified)
+        if registration is None:
+            raise Db2ErrorCode.DB2_29.exception(table=qualified)
+        if registration.state != "A":
+            raise Db2ErrorCode.DB2_30.exception(
+                table=qualified,
+                state=registration.state,
+                info=registration.state_info or "none",
+            )
+        if registration.capture_start is None or registration.capture_start > position:
+            raise Db2ErrorCode.DB2_31.exception(
+                table=qualified,
+                start=registration.capture_start.hex()
+                if registration.capture_start is not None
+                else "none",
+                position=position.hex(),
+            )
+        if registration.prune_bound is not None and registration.prune_bound > position:
+            raise Db2ErrorCode.DB2_32.exception(
+                table=qualified,
+                bound=registration.prune_bound.hex(),
+                position=position.hex(),
+            )
 
 
 def commitseq_lsn(commitseq: bytes) -> int:
@@ -573,10 +686,11 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
     ) -> None:
         # Within one member the log flush sequence grows with the log sequence
         # number, so the rows before the pin are exactly those at or below the
-        # returned commit sequence. A table with none resumes from the origin,
-        # since every row it holds is at or after the pin.
+        # returned commit sequence. A table with none resumes from its
+        # registration's floor, since every row it holds is at or after the pin.
         commits: dict[str, bytes] = {}
         cd_tables = [tracked.cdc_table for tracked in tracked_tables.values()]
+        positions = registration_positions(connection, cd_tables)
         if cd_tables:
             blocks = [
                 f"select {index} as idx, max({IBMSNAP_COMMITSEQ.quoted}) as mcs "
@@ -591,7 +705,22 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
             ).fetchall()
             before = {index: commitseq for index, commitseq in rows}
             for index, cd_table in enumerate(cd_tables):
-                commits[cd_table.qualified] = before.get(index) or COMMITSEQ_ORIGIN
+                registration = positions.get(cd_table.qualified)
+                floor = registration.floor if registration else None
+                commitseq = before.get(index) or floor
+                if commitseq is not None:
+                    commits[cd_table.qualified] = commitseq
+        verify_positions(positions, commits, cd_tables)
+        for cd_table in cd_tables:
+            # Capture must have been capturing the table since before the
+            # load read it, or the changes in between are in neither.
+            start = positions[cd_table.qualified].capture_start
+            if commitseq_lsn(start) >= lsn:
+                raise Db2ErrorCode.DB2_34.exception(
+                    table=cd_table.qualified,
+                    start=start.hex(),
+                    lsn=f"{lsn:x}",
+                )
         connection.commit()
         self._offset = CommitSeqOffset(commits=commits)
         logger.info(
@@ -909,9 +1038,25 @@ class SqlReplicaIngester(CdcIngester):
     # ------------------------------------------------------------------
 
     def _init_reader(self, session: Any) -> None:
-        if self._mark is not None:
-            self._base_offset = self._mark.copy()
-            return
+        with session.connect() as connection:
+            positions = registration_positions(connection, self._cd_tables())
+        if self._mark is None:
+            self._mark = CommitSeqOffset(
+                commits=self._start_commits(session, positions)
+            )
+        verify_positions(positions, self._mark.commits, self._cd_tables())
+        self._base_offset = self._mark.copy()
+
+    def _cd_tables(self) -> list[TableObject]:
+        return [tracked.cdc_table for tracked in self._tracked_tables.values()]
+
+    def _start_commits(
+        self, session: Any, positions: dict[str, RegistrationPositions]
+    ) -> dict[str, bytes]:
+        def floor(qualified: str) -> bytes:
+            registration = positions.get(qualified)
+            return (registration.floor if registration else None) or COMMITSEQ_ORIGIN
+
         commits: dict[str, bytes] = {}
         match self._start_from:
             case CommitSeqPosition(seq=seq):
@@ -935,7 +1080,8 @@ class SqlReplicaIngester(CdcIngester):
                     commits[tracked.cdc_table.qualified] = seq
             case "head":
                 for tracked in self._tracked_tables.values():
-                    commits[tracked.cdc_table.qualified] = COMMITSEQ_ORIGIN
+                    qualified = tracked.cdc_table.qualified
+                    commits[qualified] = floor(qualified)
             case "tail":
                 with session.connect() as connection:
                     watermarks = self._query_table_watermarks(connection)
@@ -948,13 +1094,14 @@ class SqlReplicaIngester(CdcIngester):
                 globalseq = row[0] if row and row[0] else COMMITSEQ_ORIGIN
                 for tracked in self._tracked_tables.values():
                     qualified = tracked.cdc_table.qualified
-                    commits[qualified] = watermarks.get(qualified, globalseq)
+                    commits[qualified] = max(
+                        watermarks.get(qualified, globalseq), floor(qualified)
+                    )
             case _:
                 raise Db2ErrorCode.DB2_15.exception(
                     start_from=self._start_from,
                 )
-        self._mark = CommitSeqOffset(commits=commits)
-        self._base_offset = self._mark.copy()
+        return commits
 
     # ------------------------------------------------------------------
     # Poll loop
@@ -1097,6 +1244,7 @@ class SqlReplicaIngester(CdcIngester):
                 if remaining <= 0:
                     return
                 watermarks = self._query_table_watermarks(connection)
+                read_from = dict(self._mark.commits)
                 for tracked in self._tracked_tables.values():
                     qualified = tracked.cdc_table.qualified
                     commit = self._mark.commits.get(
@@ -1128,6 +1276,14 @@ class SqlReplicaIngester(CdcIngester):
                         schema_version=schema_version,
                     )
                     self._mark.commits[qualified] = watermark
+                # Checked after the read, against where it started: Capture's
+                # positions only move up, so with both still at or below it
+                # nothing the read needed was pruned while it ran.
+                verify_positions(
+                    registration_positions(connection, self._cd_tables()),
+                    read_from,
+                    self._cd_tables(),
+                )
                 sleep = min(
                     POLL_INTERVAL_SECONDS,
                     max(deadline - time.monotonic(), 0.0),

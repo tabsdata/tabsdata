@@ -10,6 +10,7 @@ domain and live in the integration tests (``test_plugin_cdc.py``)."""
 
 from __future__ import annotations
 
+
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
@@ -26,6 +27,7 @@ from tabsdatak.conn.postgres._cdc_impl import (
     DEFAULT_WAL2JSON_FORMAT_VERSION,
     LsnOffset,
     PostgresDialect,
+    SlotSnapshotSession,
     TransactionSnapshotSession,
     Wal2JsonIngester,
 )
@@ -212,16 +214,47 @@ def test_wal2json_jsonb_and_json(d):
 # =====================================================================
 
 
+SYSTEM_ID = "7412345678901234567"
+
+
+def _identified(lsn: int, timeline: int = 1) -> LsnOffset:
+    return LsnOffset(lsn=lsn, system_identifier=SYSTEM_ID, timeline=timeline)
+
+
 def test_lsn_offset_round_trip():
-    a = LsnOffset(lsn=12345)
+    a = _identified(12345, timeline=3)
     serialised = a.write()
     assert isinstance(serialised, str)
-    assert LsnOffset.read(serialised).lsn == 12345
+    b = LsnOffset.read(serialised)
+    assert (b.lsn, b.system_identifier, b.timeline) == (12345, SYSTEM_ID, 3)
 
 
-def test_lsn_offset_read_missing_lsn_defaults_to_zero():
-    assert LsnOffset.read("{}").lsn == 0
-    assert LsnOffset.read("").lsn == 0
+@pytest.mark.parametrize(
+    "state",
+    [
+        "",
+        "{}",
+        '{"lsn": 5}',
+        '{"lsn": 5, "system_identifier": null, "timeline": null}',
+        '{"lsn": "5", "system_identifier": "1", "timeline": 1}',
+        "not json",
+    ],
+)
+def test_lsn_offset_read_rejects_an_unexpected_format(state):
+    with pytest.raises(TabsdataException) as ei:
+        LsnOffset.read(state)
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_29
+
+
+def test_lsn_offset_update_keeps_the_server_it_was_read_from():
+    a = _identified(1, timeline=2)
+    a.update(LsnOffset(lsn=999))
+    assert (a.lsn, a.system_identifier, a.timeline) == (999, SYSTEM_ID, 2)
+
+
+def test_lsn_offset_copy_keeps_the_server_it_was_read_from():
+    b = _identified(1, timeline=2).copy()
+    assert (b.system_identifier, b.timeline) == (SYSTEM_ID, 2)
 
 
 def test_lsn_offset_update_with_another_lsn_offset():
@@ -664,21 +697,21 @@ def test_ingester_default_format_version_is_v2():
 
 def test_commit_state_persists_lsn_in_stream_state():
     bi = _ingester_with_tables(["public.users"])
-    spec = bi.commit_state(LsnOffset(lsn=5))
+    spec = bi.commit_state(_identified(5))
     assert isinstance(spec, dict)
     assert LsnOffset.read(spec[CDC_OFFSET_STATE_KEY]).lsn == 5
 
 
 def test_offset_from_state_reconstructs_lsn_offset():
     bi = _ingester_with_tables(["public.users"])
-    offset = bi.offset_from_state(LsnOffset(lsn=9).write())
+    offset = bi.offset_from_state(_identified(9).write())
     assert isinstance(offset, LsnOffset)
     assert offset.lsn == 9
 
 
 def test_resume_offset_round_trips_persisted_lsn():
     bi = _ingester_with_tables(["public.users"])
-    state = bi.commit_state(LsnOffset(lsn=11))
+    state = bi.commit_state(_identified(11))
     resumed = bi.resume_offset(first_stage=False, stream_state=state)
     assert isinstance(resumed, LsnOffset)
     assert resumed.lsn == 11
@@ -686,7 +719,7 @@ def test_resume_offset_round_trips_persisted_lsn():
 
 def test_resume_offset_first_stage_ignores_persisted_state():
     bi = _ingester_with_tables(["public.users"])
-    state = bi.commit_state(LsnOffset(lsn=11))
+    state = bi.commit_state(_identified(11))
     assert bi.resume_offset(first_stage=True, stream_state=state) is None
     assert bi.resume_offset(first_stage=False, stream_state=None) is None
 
@@ -706,12 +739,14 @@ def _replication_cursor(monkeypatch, bi: Wal2JsonIngester) -> MagicMock:
     bi._conn.credentials.user = "u"
     bi._conn.credentials.password = "p"
     cursor = MagicMock()
+    cursor.fetchone.return_value = (SYSTEM_ID, 1, "0/0", "d")
     replicator = MagicMock()
     replicator.cursor.return_value = cursor
     monkeypatch.setattr(
         "tabsdatak.conn.postgres._cdc_impl.psycopg2.connect",
         lambda **settings: replicator,
     )
+    monkeypatch.setattr(bi, "_slot_positions", lambda: (0, "reserved", 10**6))
     return cursor
 
 
@@ -735,6 +770,90 @@ def test_init_stream_does_not_acknowledge_a_cold_head_start(monkeypatch):
 
     assert cursor.start_replication.call_args.kwargs["start_lsn"] == 0
     cursor.send_feedback.assert_not_called()
+
+
+def test_init_stream_records_the_server_in_the_mark(monkeypatch):
+    bi = _ingester_with_tables(["public.users"])
+    _replication_cursor(monkeypatch, bi)
+    bi.seed_offset(LsnOffset(lsn=42))
+
+    bi.init_stream()
+
+    assert (bi._mark.system_identifier, bi._mark.timeline) == (SYSTEM_ID, 1)
+    assert bi.base_offset().system_identifier == SYSTEM_ID
+
+
+def _resume(monkeypatch, mark, *, slot=(0, "reserved", 10**6), timeline=1, history=""):
+    bi = _ingester_with_tables(["public.users"])
+    cursor = _replication_cursor(monkeypatch, bi)
+    answers = {
+        "IDENTIFY_SYSTEM": (SYSTEM_ID, timeline, "0/0", "d"),
+        "TIMELINE_HISTORY": (f"0000000{timeline}.history", history.encode()),
+    }
+    cursor.execute.side_effect = lambda sql: setattr(
+        cursor, "_last", next(v for k, v in answers.items() if sql.startswith(k))
+    )
+    cursor.fetchone.side_effect = lambda: cursor._last
+    monkeypatch.setattr(bi, "_slot_positions", lambda: slot)
+    bi.seed_offset(mark)
+    return bi, cursor
+
+
+def test_a_resume_the_server_can_serve_starts_replication(monkeypatch):
+    bi, cursor = _resume(monkeypatch, _identified(500), slot=(400, "reserved", 900))
+    bi.init_stream()
+    assert cursor.start_replication.call_args.kwargs["start_lsn"] == 500
+
+
+@pytest.mark.parametrize(
+    ("slot", "code"),
+    [
+        (None, PostgresErrorCode.POSTGRES_23),
+        ((400, "lost", 900), PostgresErrorCode.POSTGRES_24),
+        ((600, "reserved", 900), PostgresErrorCode.POSTGRES_25),
+        ((None, "reserved", 900), PostgresErrorCode.POSTGRES_25),
+        ((400, "reserved", 450), PostgresErrorCode.POSTGRES_26),
+    ],
+)
+def test_a_resume_the_server_cannot_serve_fails(monkeypatch, slot, code):
+    bi, cursor = _resume(monkeypatch, _identified(500), slot=slot)
+    with pytest.raises(TabsdataException) as ei:
+        bi.init_stream()
+    assert ei.value.api_error is code
+    cursor.start_replication.assert_not_called()
+
+
+def test_a_resume_on_another_cluster_fails(monkeypatch):
+    mark = LsnOffset(lsn=500, system_identifier="1", timeline=1)
+    bi, _ = _resume(monkeypatch, mark)
+    with pytest.raises(TabsdataException) as ei:
+        bi.init_stream()
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_27
+
+
+def test_a_resume_before_the_timeline_switch_continues(monkeypatch):
+    history = "1\t0/2000\tno recovery target specified\n"
+    bi, cursor = _resume(monkeypatch, _identified(0x1000), timeline=2, history=history)
+    bi.init_stream()
+    assert bi._mark.timeline == 2
+    cursor.start_replication.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "history",
+    ["1\t0/800\tno recovery target specified\n", "3\t0/9000\tother\n", ""],
+)
+def test_a_resume_past_the_timeline_switch_fails(monkeypatch, history):
+    bi, _ = _resume(monkeypatch, _identified(0x1000), timeline=2, history=history)
+    with pytest.raises(TabsdataException) as ei:
+        bi.init_stream()
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_28
+
+
+def test_a_head_start_checks_no_slot_position(monkeypatch):
+    bi, cursor = _resume(monkeypatch, _identified(0), slot=None)
+    bi.init_stream()
+    assert cursor.start_replication.call_args.kwargs["start_lsn"] == 0
 
 
 # =====================================================================
@@ -781,9 +900,20 @@ class _Connection:
 
 
 class _Engine:
-    def __init__(self):
+    def __init__(self, monkeypatch):
         self.log: list[tuple] = []
         self._connections = 0
+        replicator = MagicMock()
+        replicator.cursor.return_value.fetchone.return_value = (
+            SYSTEM_ID,
+            4,
+            "0/0",
+            "d",
+        )
+        monkeypatch.setattr(
+            "tabsdatak.conn.postgres._cdc_impl.psycopg2.connect",
+            lambda **settings: replicator,
+        )
 
     def connect(self):
         self._connections += 1
@@ -801,9 +931,15 @@ def _executed(engine: _Engine, fragment: str) -> tuple[int, int]:
     )
 
 
-def test_the_wal_position_is_read_before_the_snapshot_is_exported():
-    engine = _Engine()
-    session = TransactionSnapshotSession(engine=engine, replication_slot="slot")
+def _transaction_session(engine: _Engine) -> TransactionSnapshotSession:
+    return TransactionSnapshotSession(
+        engine=engine, replication_settings={}, replication_slot="slot"
+    )
+
+
+def test_the_wal_position_is_read_before_the_snapshot_is_exported(monkeypatch):
+    engine = _Engine(monkeypatch)
+    session = _transaction_session(engine)
     lsn_at, lsn_connection = _executed(engine, "pg_current_wal_lsn")
     export_at, holder_connection = _executed(engine, "pg_export_snapshot")
     assert lsn_at < export_at
@@ -811,12 +947,44 @@ def test_the_wal_position_is_read_before_the_snapshot_is_exported():
     assert session.offset.lsn == 4096
 
 
-def test_the_snapshot_holder_is_a_read_only_repeatable_read_transaction():
-    engine = _Engine()
-    TransactionSnapshotSession(engine=engine, replication_slot="slot")
+def test_the_snapshot_holder_is_a_read_only_repeatable_read_transaction(monkeypatch):
+    engine = _Engine(monkeypatch)
+    _transaction_session(engine)
     _, holder_connection = _executed(engine, "pg_export_snapshot")
     assert (
         holder_connection,
         "options",
         {"isolation_level": "REPEATABLE READ", "postgresql_readonly": True},
     ) in engine.log
+
+
+def test_the_load_offset_records_the_server_it_was_read_from(monkeypatch):
+    session = _transaction_session(_Engine(monkeypatch))
+    assert (session.offset.system_identifier, session.offset.timeline) == (
+        SYSTEM_ID,
+        4,
+    )
+    assert LsnOffset.read(session.offset.write()).timeline == 4
+
+
+def test_a_created_slot_is_identified_before_it_exports_its_snapshot(monkeypatch):
+    commands = []
+    cursor = MagicMock()
+    cursor.execute.side_effect = commands.append
+    cursor.fetchone.side_effect = [
+        (SYSTEM_ID, 5, "0/0", "d"),
+        ("slot", "0/3000", "00000003-00000002-1", "wal2json"),
+    ]
+    replicator = MagicMock()
+    replicator.cursor.return_value = cursor
+    monkeypatch.setattr(
+        "tabsdatak.conn.postgres._cdc_impl.psycopg2.connect",
+        lambda **settings: replicator,
+    )
+    session = SlotSnapshotSession(
+        engine=MagicMock(), replication_settings={}, replication_slot="slot"
+    )
+    assert commands[0] == "IDENTIFY_SYSTEM"
+    assert commands[1].startswith("CREATE_REPLICATION_SLOT slot LOGICAL")
+    assert (session.offset.lsn, session.offset.timeline) == (0x3000, 5)
+
