@@ -97,6 +97,11 @@ POLL_INTERVAL_SECONDS = 1.0
 # area. Mirrors the legacy ``Wal2JsonIngester``.
 PENDING_TIMEOUT_MULTIPLIER = 16
 
+# A stream restarted right after a stop can find its slot still held: the
+# previous pod's walsender releases it only once it notices the connection
+# is gone. Attaching is retried on the same connection for this long.
+SLOT_ATTACH_TIMEOUT_SECONDS = 30.0
+
 DEFAULT_WAL2JSON_FORMAT_VERSION: int = 2
 
 REPLICA_IDENTITY_FULL = "f"
@@ -315,6 +320,40 @@ class PostgresDialect(Dialect):
             {"schema": schema, "table": table},
         ).scalar()
 
+    def logs_row_identity(self, connection: Any, schema: str, table: str) -> bool:
+        """Whether an UPDATE or DELETE of the table is logged with the row it
+        applies to. Without one, wal2json sends neither, with only a warning
+        in the server log: ``REPLICA IDENTITY NOTHING``, the default with no
+        primary key or a ``DEFERRABLE`` one (which cannot serve as identity),
+        and ``USING INDEX`` once that index is gone."""
+        row = connection.execute(
+            text(
+                "select c.relreplident, "
+                "exists (select 1 from pg_catalog.pg_index i "
+                "join pg_catalog.pg_constraint k on k.conindid = i.indexrelid "
+                "where i.indrelid = c.oid and i.indisprimary "
+                "and not k.condeferrable), "
+                "exists (select 1 from pg_catalog.pg_index i "
+                "where i.indrelid = c.oid and i.indisreplident) "
+                "from pg_catalog.pg_class c "
+                "join pg_catalog.pg_namespace n on c.relnamespace = n.oid "
+                "where n.nspname = :schema and c.relname = :table"
+            ),
+            {"schema": schema, "table": table},
+        ).fetchone()
+        if row is None:
+            return False
+        identity, primary_key, identity_index = row
+        match identity:
+            case "f":
+                return True
+            case "d":
+                return bool(primary_key)
+            case "i":
+                return bool(identity_index)
+            case _:
+                return False
+
     def get_catalog_columns(
         self,
         connection: Any,
@@ -494,16 +533,33 @@ class TransactionSnapshotSession(Wal2JsonInitialLoadSession):
         self._snapshot_name = self._holder.execute(
             text("select pg_export_snapshot()")
         ).scalar()
+        # Read once the snapshot is exported: every commit it can see is
+        # before this position, so the changes up to it are the window the
+        # load is deduplicated against.
+        with engine.connect() as connection:
+            end = connection.execute(
+                text("select pg_current_wal_lsn() - '0/0'::pg_lsn")
+            ).scalar()
         self._offset = LsnOffset(
             lsn=int(lsn),
             system_identifier=system_identifier,
             timeline=timeline,
         )
+        self._window_end = LsnOffset(
+            lsn=int(end),
+            system_identifier=system_identifier,
+            timeline=timeline,
+        )
         logger.info(
-            "Initial load exported snapshot %r at WAL position %s",
+            "Initial load exported snapshot %r between WAL positions %s and %s",
             self._snapshot_name,
             lsn,
+            end,
         )
+
+    @property
+    def window_end(self) -> CdcOffset | None:
+        return self._window_end
 
     def close(self) -> None:
         if self._holder is not None:
@@ -626,6 +682,9 @@ class Wal2JsonIngester(CdcIngester):
         self._base_offset: LsnOffset | None = None
         self._replicator: Any | None = None
         self._cursor: Any | None = None
+        self._bound: int | None = None
+        self._bound_reached = False
+        self._held: list[Any] = []
 
     @property
     def ingester_type(self) -> CdcIngesterType:
@@ -652,8 +711,23 @@ class Wal2JsonIngester(CdcIngester):
         cdc_format: CdcFormat = CdcFormat(),
     ) -> dict[str, TrackedTable]:
         tracked_tables = super().harvest_tables(session=session, cdc_format=cdc_format)
+        self._check_row_identity(session, tracked_tables)
         self._check_partial_text_capture(session, tracked_tables)
         return tracked_tables
+
+    def _check_row_identity(
+        self,
+        engine: Any,
+        tracked_tables: dict[str, TrackedTable],
+    ) -> None:
+        with engine.connect() as connection:
+            for tracked in tracked_tables.values():
+                schema = tracked.data_table.schema
+                table = tracked.data_table.table
+                if not self.dialect.logs_row_identity(connection, schema, table):
+                    raise PostgresErrorCode.POSTGRES_31.exception(
+                        schema=schema, table=table
+                    )
 
     def _check_partial_text_capture(
         self,
@@ -813,15 +887,36 @@ class Wal2JsonIngester(CdcIngester):
             options["publication_names"] = self._publication_name
 
         self._base_offset = self._mark.copy()
-        self._cursor.start_replication(
-            slot_name=self._replication_slot,
-            decode=True,
-            start_lsn=self._mark.lsn,
-            options=options,
-        )
+        self._attach(options)
         logger.info("Replication slot %r attached", self._replication_slot)
         if self._mark.lsn:
             self.commit_offset(self._mark)
+
+    def _attach(self, options: dict[str, str]) -> None:
+        deadline = time.monotonic() + SLOT_ATTACH_TIMEOUT_SECONDS
+        while True:
+            try:
+                self._cursor.start_replication(
+                    slot_name=self._replication_slot,
+                    decode=True,
+                    start_lsn=self._mark.lsn,
+                    options=options,
+                )
+                return
+            except psycopg2.errors.ObjectInUse as error:
+                if time.monotonic() >= deadline:
+                    raise PostgresErrorCode.POSTGRES_32.exception(
+                        cause=error,
+                        slot=self._replication_slot,
+                        timeout=SLOT_ATTACH_TIMEOUT_SECONDS,
+                        reason=str(error).strip(),
+                    )
+                logger.info(
+                    "Replication slot %r is still held; retrying: %s",
+                    self._replication_slot,
+                    str(error).strip(),
+                )
+                time.sleep(POLL_INTERVAL_SECONDS)
 
     def _verify_resume(self, system_identifier: str, timeline: int) -> None:
         """Fail unless the server still holds every change after the stream's
@@ -1086,6 +1181,40 @@ class Wal2JsonIngester(CdcIngester):
     # Poll loop body
     # ------------------------------------------------------------------
 
+    def bound_stream(self, end: CdcOffset) -> None:
+        if not isinstance(end, LsnOffset):
+            raise PostgresErrorCode.POSTGRES_16.exception(actual=type(end).__name__)
+        self._bound = end.lsn
+        self._bound_reached = False
+
+    def stream_bound_reached(self) -> bool:
+        return self._bound_reached
+
+    def _past_bound(self, commit: int, message: Any) -> bool:
+        """Whether a transaction committing at `commit` is past the bound:
+        then its opening `message` is held for the next poll, which reads on
+        unbounded, and the bound is reached."""
+        if self._bound is None or commit <= self._bound:
+            return False
+        self._held.append(message)
+        self._reach_bound()
+        return True
+
+    def _bound_passed_quietly(self) -> bool:
+        """Whether the server has sent everything up to the bound with no
+        transaction past it to say so: its keepalives report how far it
+        has decoded."""
+        if self._bound is None or self._cursor is None:
+            return False
+        if self._cursor.wal_end < self._bound:
+            return False
+        self._reach_bound()
+        return True
+
+    def _reach_bound(self) -> None:
+        self._bound = None
+        self._bound_reached = True
+
     def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
         match self._wal2json_format_version:
             case 1:
@@ -1107,6 +1236,8 @@ class Wal2JsonIngester(CdcIngester):
         # ``pending`` extends the deadline -- when a v2 BEGIN has
         # arrived but COMMIT hasn't, give the source more time so
         # we don't synthesize a torn transaction.
+        if self._held:
+            return self._held.pop(0)
         effective = pending_timeout if pending else deadline
         while True:
             remaining = effective - time.monotonic()
@@ -1143,6 +1274,9 @@ class Wal2JsonIngester(CdcIngester):
                 pending_timeout=deadline,
             )
             if message is None:
+                self._bound_passed_quietly()
+                break
+            if self._past_bound(message.data_start, message):
                 break
             payload = orjson.loads(message.payload)
             xid = str(payload.get("xid", ""))
@@ -1253,21 +1387,27 @@ class Wal2JsonIngester(CdcIngester):
             if message is None:
                 if pending:
                     raise PostgresErrorCode.POSTGRES_18.exception(xid=xid)
+                self._bound_passed_quietly()
                 break
             payload = orjson.loads(message.payload)
             action = payload.get("action")
             if action == _V2Actions.BEGIN:
                 xid = str(payload.get("xid", ""))
+                commit = self._commit_lsn(payload, xid)
+                if self._past_bound(commit, message):
+                    break
                 timestamp = datetime.fromisoformat(payload["timestamp"]).astimezone(
                     timezone.utc
                 )
-                commit = self._commit_lsn(payload, xid)
                 sequence = 0
                 continue
             if action == _V2Actions.COMMIT:
                 self._mark = LsnOffset(lsn=message.wal_end)
                 xid = None
                 timestamp = None
+                if self._bound is not None and commit == self._bound:
+                    self._reach_bound()
+                    break
                 continue
             if action == _V2Actions.TRUNCATE:
                 sequence += 1

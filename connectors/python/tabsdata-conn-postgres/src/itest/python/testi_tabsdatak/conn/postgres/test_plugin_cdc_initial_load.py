@@ -12,8 +12,12 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
+import psycopg2
+import psycopg2.extras
 import pyarrow.parquet as pq
 import pytest
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from tabsdatax.itest.fixture.backends.postgrescdc import (
     PostgrescdcDomain,
     postgrescdc_domain,
@@ -45,6 +49,7 @@ POLL_SECONDS = 0.25
 
 OP_COLUMN_SUFFIX = "cdc.meta.op"
 SEG_COLUMN_SUFFIX = "cdc.meta.seg"
+SCH_COLUMN_SUFFIX = "cdc.meta.sch"
 INSERT, UPDATE, DELETE, LOAD, TRUNCATE = "i", "u", "d", "l", "t"
 
 INITIAL_LOAD_SEG = -1
@@ -872,3 +877,264 @@ def test_a_reusing_load_refuses_a_slot_that_does_not_exist(
 
     assert ctx.manifests() == []
     assert ctx.persisted_state() == {}
+
+
+# One column per common type, so that a type whose catalog and change-stream
+# descriptions normalize differently gives the loaded rows and the captured
+# changes two schema hashes.
+TYPE_ZOO_COLUMNS = (
+    "id INTEGER PRIMARY KEY, c_small SMALLINT, c_big BIGINT, c_num NUMERIC(10, 2), "
+    "c_real REAL, c_double DOUBLE PRECISION, c_bool BOOLEAN, c_varchar VARCHAR(20), "
+    "c_char CHAR(5), c_text TEXT, c_date DATE, c_time TIME, c_ts TIMESTAMP, "
+    "c_tstz TIMESTAMPTZ, c_bytea BYTEA"
+)
+TYPE_ZOO_VALUES = (
+    "{id}, 7, 9000000000, 12.34, 1.5, 2.25, true, 'varchar', 'chr', 'text', "
+    "'2026-01-02', '03:04:05', '2026-01-02 03:04:05', '2026-01-02 03:04:05+00', "
+    "'\\x0001'"
+)
+
+
+@contextmanager
+def _type_zoo(domain: PostgrescdcDomain, table: str) -> Iterator[str]:
+    engine = create_engine(domain.sqlalchemy_uri)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(f'DROP TABLE IF EXISTS "{table}"'))
+            conn.execute(text(f'CREATE TABLE "{table}" ({TYPE_ZOO_COLUMNS})'))
+            conn.execute(text(f'ALTER TABLE "{table}" REPLICA IDENTITY FULL'))
+        yield table
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f'DROP TABLE IF EXISTS "{table}"'))
+        engine.dispose()
+
+
+def _insert_zoo_row(domain: PostgrescdcDomain, table: str, id_: int) -> None:
+    engine = create_engine(domain.sqlalchemy_uri)
+    try:
+        with engine.begin() as conn:
+            values = TYPE_ZOO_VALUES.format(id=id_)
+            conn.execute(text(f'INSERT INTO "{table}" VALUES ({values})'))
+    finally:
+        engine.dispose()
+
+
+@postgrescdc_domain("postgrescdc_employees_xs")
+def test_loaded_rows_and_changes_share_one_schema_hash(
+    domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
+):
+    domain = domain_postgrescdc_employees_xs
+    with _type_zoo(domain, "td_il_types") as table:
+        _insert_zoo_row(domain, table, 1)
+
+        with replication_slot(domain, "td_il_types_slot") as slot:
+            src = _stream_src([cdc_table(table)], slot)
+            ctx = _CdcCtx(work_dir(tmp_path))
+            with _running(ctx, cdc_src_conn(domain), src):
+                _await(ctx, "the snapshot", lambda f: _loaded_ids(f) == [1])
+                _insert_zoo_row(domain, table, 2)
+                frame = _await(ctx, "the change", lambda f: 2 in _captured_ids(f))
+
+    hashes = frame[_column(frame, SCH_COLUMN_SUFFIX)].unique().to_list()
+    assert len(hashes) == 1, (
+        f"the load and the stream normalized the schema differently: {hashes}"
+    )
+
+
+def _replay_strictly(ctx: _CdcCtx) -> dict[int, str] | None:
+    """Apply every change `ctx` staged, in the order it staged it, the way a
+    strict consumer does: an insert on an existing row, or an update or
+    delete of a missing one, is a duplicate or a gap and fails. ``None``
+    until something is staged."""
+    manifests = ctx.manifests()
+    if not manifests:
+        return None
+    rows: dict[int, str] = {}
+    for manifest in manifests:
+        for files in manifest:
+            for path in files:
+                frame = pl.from_arrow(pq.read_table(path))
+                op_column = _column(frame, OP_COLUMN_SUFFIX)
+                old_id = _column(frame, "old.id")
+                for change in frame.iter_rows(named=True):
+                    op = change[op_column]
+                    key = change["id"] if change["id"] is not None else change[old_id]
+                    if op == LOAD:
+                        rows.clear()
+                    elif op == INSERT:
+                        assert key not in rows, f"insert of existing row {key}"
+                        rows[key] = change["name"]
+                    elif op == UPDATE:
+                        assert key in rows, f"update of missing row {key}"
+                        rows[key] = change["name"]
+                    elif op == DELETE:
+                        assert key in rows, f"delete of missing row {key}"
+                        del rows[key]
+    return rows
+
+
+@postgrescdc_domain("postgrescdc_employees_xs")
+def test_changes_during_a_reused_slot_load_are_applied_exactly_once(
+    domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
+):
+    """A load on a reused slot reads the WAL position before exporting its
+    snapshot, so a commit in between is both loaded and streamed: the stage
+    carries each change exactly once, so a consumer that refuses duplicates
+    and gaps ends at the table's contents."""
+    domain = domain_postgrescdc_employees_xs
+    seeded = 2000
+    with cdc_probe(domain, "td_il_exactly_once") as probe:
+        engine = create_engine(domain.sqlalchemy_uri)
+        try:
+            with engine.begin() as conn:
+                conn.execute(
+                    text(
+                        f'INSERT INTO "{probe.name}" (id, name) '
+                        f"SELECT g, 'seed-' || g FROM generate_series(1, {seeded}) g"
+                    )
+                )
+        finally:
+            engine.dispose()
+        stop = threading.Event()
+
+        def churn() -> None:
+            # Several changes per row: updated, updated to the same contents,
+            # back to its seeded contents, deleted and reinserted with the
+            # same or other contents; and rows born, changed and killed.
+            step = 0
+            while not stop.is_set():
+                step += 1
+                key = step % seeded + 1
+                probe.update(key, f"upd-{step}")
+                probe.update(key, f"upd-{step}")
+                probe.update(key, f"seed-{key}")
+                born = seeded + step
+                probe.insert(born, "new")
+                probe.update(born, "changed")
+                if step % 2 == 0:
+                    probe.delete(born)
+                if step % 3 == 0:
+                    probe.delete(key)
+                    probe.insert(key, f"seed-{key}")
+                if step % 5 == 0:
+                    probe.delete(key)
+                    probe.insert(key, f"re-{step}")
+
+        with replication_slot(domain, "td_il_exactly_once_slot") as slot:
+            src = _stream_src(
+                [cdc_table(probe.name)], slot, **{"tabsdata.cdc.fetch_size": 5}
+            )
+            ctx = _CdcCtx(work_dir(tmp_path))
+            churner = threading.Thread(target=churn, name="pg-churn", daemon=True)
+            churner.start()
+            with _running(ctx, cdc_src_conn(domain), src):
+                try:
+                    _await(ctx, "the snapshot", lambda f: len(_loaded_ids(f)) >= seeded)
+                finally:
+                    stop.set()
+                    churner.join(timeout=60)
+                engine = create_engine(domain.sqlalchemy_uri)
+                try:
+                    with engine.connect() as conn:
+                        expected = dict(
+                            conn
+                            .execute(text(f'SELECT id, name FROM "{probe.name}"'))
+                            .tuples()
+                            .all()
+                        )
+                finally:
+                    engine.dispose()
+                _await(
+                    ctx,
+                    "every change the churn made",
+                    lambda f: _replay_strictly(ctx) == expected,
+                )
+
+    assert _replay_strictly(ctx) == expected
+
+
+KEEPALIVE_TIMEOUT_SECONDS = 30.0
+
+
+@postgrescdc_domain("postgrescdc_employees_xs")
+def test_the_server_reports_its_decoded_position_with_nothing_to_send(
+    domain_postgrescdc_employees_xs: PostgrescdcDomain,
+):
+    """The quiet end of a reused-slot load's window rests on this: with no
+    change to send, the server's keepalives carry how far it has decoded
+    (``sentPtr``), and psycopg2 exposes it as ``cursor.wal_end``. A logical
+    message wal2json filters out is WAL with no output, so only a keepalive
+    can report past it. Should a server, wal2json or psycopg2 upgrade change
+    this, the window's read would no longer end on a quiet stream."""
+    domain = domain_postgrescdc_employees_xs
+    url = make_url(domain.sqlalchemy_uri)
+    settings = {
+        "host": url.host,
+        "port": url.port,
+        "dbname": url.database,
+        "user": url.username,
+        "password": url.password,
+    }
+    with replication_slot(domain, "td_il_keepalive_slot") as slot:
+        replicator = psycopg2.connect(
+            connection_factory=psycopg2.extras.LogicalReplicationConnection,
+            **settings,
+        )
+        writer = psycopg2.connect(**settings)
+        writer.autocommit = True
+        try:
+            cursor = replicator.cursor()
+            cursor.start_replication(
+                slot_name=slot,
+                decode=False,
+                options={
+                    "format-version": "2",
+                    "include-lsn": "true",
+                    "filter-msg-prefixes": "tdx.keepalive",
+                },
+            )
+            with writer.cursor() as statement:
+                statement.execute(
+                    "select pg_logical_emit_message(false, 'tdx.keepalive', 'x')"
+                )
+                statement.execute("select pg_current_wal_insert_lsn() - '0/0'::pg_lsn")
+                end = int(statement.fetchone()[0])
+            sent = []
+            deadline = time.monotonic() + KEEPALIVE_TIMEOUT_SECONDS
+            while time.monotonic() < deadline and cursor.wal_end < end:
+                message = cursor.read_message()
+                if message is not None:
+                    sent.append(message.payload)
+                else:
+                    time.sleep(POLL_SECONDS)
+        finally:
+            writer.close()
+            replicator.close()
+
+    assert sent == [], f"the filtered message produced output: {sent}"
+    assert cursor.wal_end >= end, (
+        f"no keepalive reported the decoded position {end:X} within "
+        f"{KEEPALIVE_TIMEOUT_SECONDS:.0f}s (wal_end {cursor.wal_end:X})"
+    )
+
+
+@postgrescdc_domain("postgrescdc_employees_xs")
+def test_a_reused_slot_load_with_nothing_committed_after_it_stages(
+    domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
+):
+    """Nothing commits after the load, so no transaction past the window's
+    end says it is over: only the server's reported position can end the
+    window's read, and without it the load would never stage."""
+    domain = domain_postgrescdc_employees_xs
+    with cdc_probe(domain, "td_il_quiet") as probe:
+        for identifier in (1, 2, 3):
+            probe.insert(identifier, f"row-{identifier}")
+
+        with replication_slot(domain, "td_il_quiet_slot") as slot:
+            src = _stream_src([cdc_table(probe.name)], slot)
+            ctx = _CdcCtx(work_dir(tmp_path))
+            with _running(ctx, cdc_src_conn(domain), src):
+                frame = _await(ctx, "the load", lambda f: _loaded_ids(f) == [1, 2, 3])
+
+    assert _captured_ids(frame) == []

@@ -16,12 +16,15 @@ def sqlalchemy_to_arrow(sa_type: Any) -> pa.DataType:
     except (NotImplementedError, AttributeError):
         gt = sa_type
 
+    # An unsigned integer (MySQL) holds twice the signed range, so it takes
+    # the next wider type, or the unsigned one past 64 bits.
+    unsigned = bool(getattr(sa_type, "unsigned", False))
     if isinstance(gt, sa.types.SmallInteger):
-        return pa.int16()
+        return pa.int32() if unsigned else pa.int16()
     if isinstance(gt, sa.types.BigInteger):
-        return pa.int64()
+        return pa.uint64() if unsigned else pa.int64()
     if isinstance(gt, sa.types.Integer):
-        return pa.int32()
+        return pa.int64() if unsigned else pa.int32()
 
     if isinstance(gt, sa.types.Double):
         return pa.float64()

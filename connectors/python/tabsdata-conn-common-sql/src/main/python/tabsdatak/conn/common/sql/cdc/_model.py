@@ -133,6 +133,15 @@ class InitialLoadSession(ABC):
     @abstractmethod
     def offset(self) -> CdcOffset: ...
 
+    @property
+    def window_end(self) -> CdcOffset | None:
+        """Where the changes committed while the load read the tables end,
+        once every table has been yielded; ``None`` for a point-in-time
+        snapshot, which holds no such changes. The changes from
+        :attr:`offset` up to it are read and deduplicated against the load
+        before anything is staged."""
+        return None
+
     @abstractmethod
     def close(self) -> None: ...
 

@@ -195,3 +195,16 @@ class PostgresErrorCode(ErrorCode):
         "position, which every row of the transaction is positioned by. The "
         "include-lsn option needs wal2json 2.0 or later",
     )  # Wal2JsonIngester._commit_lsn
+    POSTGRES_31 = ErrorDef(
+        PostgresRuntimeException,
+        "Table {schema}.{table} has no replica identity to log its rows by, so "
+        "wal2json would drop its updates and deletes with only a warning in the "
+        "server log. Give it a primary key that is not DEFERRABLE, or set "
+        "REPLICA IDENTITY FULL or USING INDEX on a unique index",
+    )  # Wal2JsonIngester._check_row_identity
+    POSTGRES_32 = ErrorDef(
+        PostgresRuntimeException,
+        "Replication slot {slot!r} is still held by another connection after "
+        "{timeout:.0f}s ({reason}): another stream reads it, or a previous one "
+        "has not let it go",
+    )  # Wal2JsonIngester._attach

@@ -77,6 +77,7 @@ from tabsdatak.conn.db2 import (
     TableCommitSeqPosition,
 )
 from tabsdatak.conn.db2.error import Db2ErrorCode
+from tabsdatak.spi import StreamStateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -467,6 +468,7 @@ class RegistrationPositions:
     state_info: str | None
     capture_start: bytes | None
     prune_bound: bytes | None
+    splits_updates: bool = False
 
     @property
     def floor(self) -> bytes | None:
@@ -491,7 +493,7 @@ def registration_positions(
     rows = connection.execute(
         text(
             "select r.cd_owner, r.cd_table, r.state, r.state_info, "
-            "r.cd_old_synchpoint, (select min(p.synchpoint) "
+            "r.cd_old_synchpoint, r.chg_upd_to_del_ins, (select min(p.synchpoint) "
             f"from {ASN_SCHEMA}.ibmsnap_pruncntl p "
             "where p.phys_change_owner = r.cd_owner "
             "and p.phys_change_table = r.cd_table) "
@@ -505,9 +507,10 @@ def registration_positions(
                 state_info=state_info.strip() if state_info else None,
                 capture_start=capture_start,
                 prune_bound=prune_bound,
+                splits_updates=(splits or "").strip().upper() == "Y",
             )
         )
-        for owner, table, state, state_info, capture_start, prune_bound in rows
+        for owner, table, state, state_info, capture_start, splits, prune_bound in rows
     }
 
 
@@ -582,6 +585,7 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
     def __init__(self, *, engine: Any):
         self._engine = engine
         self._offset: CommitSeqOffset | None = None
+        self._window_end: CommitSeqOffset | None = None
         self._tracked_tables: dict[str, TrackedTable] = {}
 
     @property
@@ -594,6 +598,12 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
             raise Db2ErrorCode.DB2_25.exception()
         return self._offset
 
+    @property
+    def window_end(self) -> CdcOffset | None:
+        if self._window_end is None:
+            raise Db2ErrorCode.DB2_25.exception()
+        return self._window_end
+
     def tables(
         self, tracked_tables: dict[str, TrackedTable]
     ) -> Iterator[tuple[TrackedTable, Any]]:
@@ -604,11 +614,26 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
             isolation_level=INITIAL_LOAD_ISOLATION_LEVEL
         ) as connection:
             lsn = self._current_lsn(connection)
+            logger.info("Initial load snapshot starts at log position %x", lsn)
             for tracked_table in tracked_tables.values():
                 yield tracked_table, connection
             connection.commit()
             self._wait_for_capture(connection, lsn)
             self._pin(connection, tracked_tables, lsn)
+            # A commit at or before this position may be in what the load
+            # read, so the window ends at it inclusively: one more change in
+            # the window is deduplicated, one fewer would be replayed.
+            end = self._current_lsn(connection)
+            logger.info("Initial load snapshot ends at log position %x", end)
+            self._wait_for_capture(connection, end)
+            _, commits = self._positions_before(
+                connection, tracked_tables, end, inclusive=True
+            )
+            self._window_end = CommitSeqOffset(commits=commits)
+            logger.info(
+                "Initial load window ends for each CD table at: %s",
+                {table: commitseq.hex() for table, commitseq in commits.items()},
+            )
 
     def _check_currently_committed(self) -> None:
         # Without currently committed semantics the read still sees only
@@ -641,9 +666,7 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
             ).scalar()
         except sa.exc.DBAPIError as error:
             raise Db2ErrorCode.DB2_27.exception(cause=error, reason=str(error))
-        lsn = int(lsn)
-        logger.info("Initial load snapshot starts at log position %x", lsn)
-        return lsn
+        return int(lsn)
 
     def _wait_for_capture(self, connection: Any, lsn: int) -> None:
         # Capture reads the log in order, so once either position reaches the
@@ -684,19 +707,57 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
         tracked_tables: dict[str, TrackedTable],
         lsn: int,
     ) -> None:
-        # Within one member the log flush sequence grows with the log sequence
-        # number, so the rows before the pin are exactly those at or below the
-        # returned commit sequence. A table with none resumes from its
-        # registration's floor, since every row it holds is at or after the pin.
+        positions, commits = self._positions_before(
+            connection, tracked_tables, lsn, inclusive=False
+        )
+        for tracked in tracked_tables.values():
+            qualified = tracked.cdc_table.qualified
+            if positions[qualified].splits_updates:
+                raise Db2ErrorCode.DB2_35.exception(table=qualified)
+            # Capture must have been capturing the table since before the
+            # load read it, or the changes in between are in neither.
+            start = positions[qualified].capture_start
+            if commitseq_lsn(start) >= lsn:
+                raise Db2ErrorCode.DB2_34.exception(
+                    table=qualified,
+                    start=start.hex(),
+                    lsn=f"{lsn:x}",
+                )
+        self._offset = CommitSeqOffset(commits=commits)
+        logger.info(
+            "Initial load resumes each CD table from its last commit before log "
+            "position %x: %s",
+            lsn,
+            {table: commitseq.hex() for table, commitseq in commits.items()},
+        )
+
+    def _positions_before(
+        self,
+        connection: Any,
+        tracked_tables: dict[str, TrackedTable],
+        lsn: int,
+        *,
+        inclusive: bool,
+    ) -> tuple[dict[str, RegistrationPositions], dict[str, bytes]]:
+        """Each CD table's registration positions, and its last commit before
+        `lsn` (or at it, when `inclusive`), verified to be servable.
+
+        Within one member the log flush sequence grows with the log sequence
+        number, so the rows before the position are exactly those at or below
+        the returned commit sequence. A table with none is at its
+        registration's floor, since every row it holds is after the position.
+        """
         commits: dict[str, bytes] = {}
         cd_tables = [tracked.cdc_table for tracked in tracked_tables.values()]
         positions = registration_positions(connection, cd_tables)
         if cd_tables:
+            comparison = "<=" if inclusive else "<"
             blocks = [
                 f"select {index} as idx, max({IBMSNAP_COMMITSEQ.quoted}) as mcs "
                 f'from "{cd_table.schema}"."{cd_table.table}" '
                 f"where substr({IBMSNAP_COMMITSEQ.quoted}, "
-                f"{COMMITSEQ_LSN_OFFSET + 1}, {COMMITSEQ_LSN_LENGTH}) < :bound"
+                f"{COMMITSEQ_LSN_OFFSET + 1}, {COMMITSEQ_LSN_LENGTH}) "
+                f"{comparison} :bound"
                 for index, cd_table in enumerate(cd_tables)
             ]
             rows = connection.execute(
@@ -711,24 +772,8 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
                 if commitseq is not None:
                     commits[cd_table.qualified] = commitseq
         verify_positions(positions, commits, cd_tables)
-        for cd_table in cd_tables:
-            # Capture must have been capturing the table since before the
-            # load read it, or the changes in between are in neither.
-            start = positions[cd_table.qualified].capture_start
-            if commitseq_lsn(start) >= lsn:
-                raise Db2ErrorCode.DB2_34.exception(
-                    table=cd_table.qualified,
-                    start=start.hex(),
-                    lsn=f"{lsn:x}",
-                )
         connection.commit()
-        self._offset = CommitSeqOffset(commits=commits)
-        logger.info(
-            "Initial load resumes each CD table from its last commit before log "
-            "position %x: %s",
-            lsn,
-            {table: commitseq.hex() for table, commitseq in commits.items()},
-        )
+        return positions, commits
 
     def close(self) -> None:
         if self._engine is not None:
@@ -768,6 +813,11 @@ class SqlReplicaIngester(CdcIngester):
         self._fetch_size = fetch_size
         self._mark: CommitSeqOffset | None = None
         self._base_offset: CommitSeqOffset | None = None
+        self._bound: CommitSeqOffset | None = None
+        self._bound_reached = False
+        # Per quiet CD table: the position of the last row read from it, and
+        # the position it has been moved on to, with no row in between.
+        self._quiet: dict[str, tuple[bytes, bytes]] = {}
         self._before_img_prefixes: dict[str, str | None] = {}
 
     @property
@@ -1231,11 +1281,65 @@ class SqlReplicaIngester(CdcIngester):
                 schema=schema_version,
             )
 
+    def bound_stream(self, end: CdcOffset) -> None:
+        if not isinstance(end, CommitSeqOffset):
+            raise Db2ErrorCode.DB2_21.exception(actual=type(end).__name__)
+        self._bound = end
+        self._bound_reached = False
+
+    def stream_bound_reached(self) -> bool:
+        return self._bound_reached
+
+    @staticmethod
+    def _captured_position(connection: Any) -> bytes | None:
+        """How far Capture has captured and committed to the CD tables
+        (``IBMSNAP_RESTART.MAX_COMMITSEQ``), read before the tables are: every
+        CD row at or below it is then visible to the read that follows."""
+        position = connection.execute(
+            text(f"select max_commitseq from {ASN_SCHEMA}.IBMSNAP_RESTART")
+        ).scalar()
+        return bytes(position) if position is not None else None
+
+    def _advance_quiet_tables(self, captured: bytes | None, read: set[str]) -> None:
+        """Move each table that had no row to read on to Capture's position.
+        Every row of it up to that position was committed before the read,
+        which found none, and the check after the read shows none of them was
+        pruned: so there is none, and the table can stand there. Otherwise a
+        quiet table would stand still while Apply subscriptions let Capture
+        prune past it, and fail the stream although it missed nothing."""
+        if captured is None:
+            return
+        for cd_table in self._cd_tables():
+            qualified = cd_table.qualified
+            if qualified in read:
+                self._quiet.pop(qualified, None)
+                continue
+            position = self._mark.commits.get(qualified, COMMITSEQ_ORIGIN)
+            if captured <= position:
+                continue
+            last_row = self._quiet.get(qualified, (position, position))[0]
+            self._quiet[qualified] = (last_row, captured)
+            self._mark.commits[qualified] = captured
+
+    def commit_state(self, offset: CdcOffset) -> StreamStateSpec:
+        """The staged state, with each quiet table at the position it was
+        moved on to, once the stage covers the last row read from it: a
+        stage short of that row cannot skip it."""
+        if isinstance(offset, CommitSeqOffset) and self._quiet:
+            commits = dict(offset.commits)
+            for table, (last_row, moved_to) in self._quiet.items():
+                staged = commits.get(table)
+                if staged is not None and staged >= last_row and moved_to > staged:
+                    commits[table] = moved_to
+            offset = CommitSeqOffset(commits=commits)
+        return super().commit_state(offset)
+
     def poll_changes(self, session: Any) -> Iterable[CdcChange]:
         # Lazy init_reader on the first poll -- collect_tables
         # populates ``_tracked_tables`` first.
         if self._base_offset is None:
             self._init_reader(session)
+        bound = self._bound
         qualified: str | None = None
         deadline = time.monotonic() + self._blocking_timeout_seconds
         with session.connect() as connection:
@@ -1243,8 +1347,10 @@ class SqlReplicaIngester(CdcIngester):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     return
+                captured = self._captured_position(connection)
                 watermarks = self._query_table_watermarks(connection)
                 read_from = dict(self._mark.commits)
+                read: set[str] = set()
                 for tracked in self._tracked_tables.values():
                     qualified = tracked.cdc_table.qualified
                     commit = self._mark.commits.get(
@@ -1252,6 +1358,9 @@ class SqlReplicaIngester(CdcIngester):
                         COMMITSEQ_ORIGIN,
                     )
                     watermark = watermarks.get(qualified)
+                    end = bound.commits.get(qualified) if bound else None
+                    if watermark is not None and end is not None and watermark > end:
+                        watermark = end
                     if watermark is None or watermark <= commit:
                         continue
                     before_prefix = self._before_img_prefixes[
@@ -1276,6 +1385,7 @@ class SqlReplicaIngester(CdcIngester):
                         schema_version=schema_version,
                     )
                     self._mark.commits[qualified] = watermark
+                    read.add(qualified)
                 # Checked after the read, against where it started: Capture's
                 # positions only move up, so with both still at or below it
                 # nothing the read needed was pruned while it ran.
@@ -1284,6 +1394,17 @@ class SqlReplicaIngester(CdcIngester):
                     read_from,
                     self._cd_tables(),
                 )
+                if bound is not None:
+                    # Capture has passed the bound, so one pass read every
+                    # row up to it; a table with none there stands at it too.
+                    for table, end in bound.commits.items():
+                        self._mark.commits[table] = max(
+                            self._mark.commits.get(table, COMMITSEQ_ORIGIN), end
+                        )
+                    self._bound = None
+                    self._bound_reached = True
+                    return
+                self._advance_quiet_tables(captured, read)
                 sleep = min(
                     POLL_INTERVAL_SECONDS,
                     max(deadline - time.monotonic(), 0.0),

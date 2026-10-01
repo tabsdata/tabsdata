@@ -15,6 +15,7 @@ from tabsdatak.conn.common.sql.cdc._dictionary import (
     SchemaVersion,
     build_pa_schema,
     raw_schema_hash,
+    schema_hash,
 )
 from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow
 from tabsdatak.conn.common.sql.cdc._model import TrackedTable
@@ -41,6 +42,8 @@ class SchemaRegistry:
         self._cdc_format = cdc_format
         self._versions: dict[str, list[SchemaVersion]] = {}
         self._hashes: dict[str, dict[str, SchemaVersion]] = {}
+        self._raw_hashes: dict[str, dict[str, SchemaVersion]] = {}
+        self._primary_keys: dict[str, tuple[str, ...]] = {}
         self._unknown: SchemaVersion | None = None
 
     def version(self, table: str, ordinal: int) -> SchemaVersion:
@@ -55,7 +58,7 @@ class SchemaRegistry:
             self._unknown = SchemaVersion(
                 version=INITIAL_SCHEMA_VERSION,
                 raw=(),
-                hash=raw_schema_hash(()),
+                hash=schema_hash((), ()),
                 columns=(),
                 pa_schema=build_pa_schema((), self._cdc_format),
                 large_columns=(),
@@ -76,9 +79,8 @@ class SchemaRegistry:
         table: str,
         raw_schema: RawSchema,
     ) -> SchemaVersion:
-        sch = raw_schema_hash(raw_schema)
-
-        if (hashes := self._hashes.get(table)) and (sv := hashes.get(sch)):
+        raw = raw_schema_hash(raw_schema)
+        if (known := self._raw_hashes.get(table)) and (sv := known.get(raw)):
             return sv
 
         columns = tuple(
@@ -89,6 +91,12 @@ class SchemaRegistry:
             )
             for raw_column_name, _, raw_column_type in raw_schema
         )
+        primary_key = self._primary_keys.get(table, ())
+        sch = schema_hash(columns, primary_key)
+        if sv := self._hashes.get(table, {}).get(sch):
+            self._raw_hashes.setdefault(table, {})[raw] = sv
+            return sv
+
         pa_schema = build_pa_schema(columns, self._cdc_format)
         table_versions = self._versions.get(table)
         version_ordinal = (
@@ -103,10 +111,12 @@ class SchemaRegistry:
             columns=columns,
             pa_schema=pa_schema,
             large_columns=self.large_columns(columns),
+            primary_key=primary_key,
         )
 
         self._versions.setdefault(table, []).append(sv)
         self._hashes.setdefault(table, {})[sch] = sv
+        self._raw_hashes.setdefault(table, {})[raw] = sv
 
         logger.info(
             f"Registered schema version {version_ordinal} for table {table} "
@@ -123,7 +133,6 @@ class SchemaRegistry:
         raw_schema = tuple(
             (col.name, repr(col.satype), col.satype) for col in tracked_table.columns
         )
-        sch = raw_schema_hash(raw_schema)
 
         columns = tuple(
             TrackedColumn(
@@ -137,6 +146,8 @@ class SchemaRegistry:
             for catalog_column in tracked_table.columns
         )
         pa_schema = build_pa_schema(columns, self._cdc_format)
+        self._primary_keys[table] = tuple(tracked_table.pk)
+        sch = schema_hash(columns, self._primary_keys[table])
         sv = SchemaVersion(
             version=INITIAL_SCHEMA_VERSION,
             raw=raw_schema,
@@ -144,10 +155,12 @@ class SchemaRegistry:
             columns=columns,
             pa_schema=pa_schema,
             large_columns=self.large_columns(columns),
+            primary_key=self._primary_keys[table],
         )
 
         self._versions[table] = [sv]
         self._hashes[table] = {sch: sv}
+        self._raw_hashes[table] = {raw_schema_hash(raw_schema): sv}
 
         logger.info(
             f"Registered catalog schema version 0 for table {table} "

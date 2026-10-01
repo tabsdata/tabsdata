@@ -138,3 +138,49 @@ class SqlCdcErrorCode(ErrorCode):
         "An initial load requires the resume offset to be kept in Tabsdata "
         "stream state, but {ingester} commits it on the source",
     )
+    CDC_22 = ErrorDef(
+        SqlCdcException,
+        "Primary key column {column!r} of table {table!r} is not in the schema of "
+        "the changes committed during its initial load. Run the initial load "
+        "again",
+    )  # deduplicate_initial_load
+    CDC_23 = ErrorDef(
+        SqlCdcException,
+        "Key {key} of table {table!r} would hold two rows while applying the "
+        "changes committed during its initial load: a key swap, or a row the "
+        "load read before and after its key changed. Run the initial load "
+        "again at a time without key changes",
+    )  # deduplicate_initial_load
+    CDC_24 = ErrorDef(
+        SqlCdcException,
+        "Table {table!r} was truncated during its initial load. Run the initial "
+        "load again",
+    )  # deduplicate_initial_load
+    CDC_25 = ErrorDef(
+        SqlCdcException,
+        "The schema of table {table!r} changed during its initial load. Run the "
+        "initial load again",
+    )  # deduplicate_initial_load
+    CDC_26 = ErrorDef(
+        SqlCdcException,
+        "An initial load cannot be deduplicated with columns_format='map', whose "
+        "values carry no types to compare by. Use 'columns' or 'struct'",
+    )  # deduplicate_initial_load
+    CDC_27 = ErrorDef(
+        SqlCdcException,
+        "Change operation {op!r} of table {table!r} is not one the initial-load "
+        "deduplicator handles",
+    )  # deduplicate_initial_load
+    CDC_28 = ErrorDef(
+        SqlCdcException,
+        "The changes of table {table!r} committed during its initial load are not "
+        "in the order the stream delivered them: position {position} comes after "
+        "{previous}",
+    )  # deduplicate_initial_load
+    CDC_29 = ErrorDef(
+        SqlCdcException,
+        "More than {limit} changes were committed to the tracked tables while the "
+        "initial load read them (tabsdata.cdc.initial_load.max_window_changes). "
+        "Run the initial load again at a time with fewer changes, or raise the "
+        "limit",
+    )  # _read_window

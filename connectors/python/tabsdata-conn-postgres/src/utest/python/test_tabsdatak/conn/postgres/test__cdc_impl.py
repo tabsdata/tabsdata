@@ -138,6 +138,59 @@ def test_large_column_kind_none_for_regular_types(d):
     assert d.large_column_kind(sa_types.String(length=100_000)) is None
 
 
+@pytest.mark.parametrize(
+    ("row", "logged"),
+    [
+        (("f", False, False), True),
+        (("d", True, False), True),
+        (("d", False, False), False),
+        (("i", False, True), True),
+        (("i", False, False), False),
+        (("n", True, False), False),
+        (None, False),
+    ],
+    ids=[
+        "full",
+        "default-with-primary-key",
+        "default-without-usable-primary-key",
+        "using-index",
+        "using-a-dropped-index",
+        "nothing",
+        "no-such-table",
+    ],
+)
+def test_logs_row_identity_decides_from_the_catalog(d, row, logged):
+    connection = MagicMock()
+    connection.execute.return_value.fetchone.return_value = row
+    assert d.logs_row_identity(connection, "public", "orders") is logged
+    statement, params = connection.execute.call_args.args
+    assert "condeferrable" in str(statement)
+    assert params == {"schema": "public", "table": "orders"}
+
+
+def test_a_table_without_a_logged_row_identity_fails_the_stream(monkeypatch):
+    bi = _ingester_with_tables(["public.docs"])
+    monkeypatch.setattr(
+        PostgresDialect,
+        "logs_row_identity",
+        lambda self, connection, schema, table: False,
+    )
+    with pytest.raises(TabsdataException) as ei:
+        bi._check_row_identity(MagicMock(), bi._tracked_tables)
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_31
+    assert "public.docs" in str(ei.value)
+
+
+def test_a_table_with_a_logged_row_identity_passes(monkeypatch):
+    bi = _ingester_with_tables(["public.docs"])
+    monkeypatch.setattr(
+        PostgresDialect,
+        "logs_row_identity",
+        lambda self, connection, schema, table: True,
+    )
+    bi._check_row_identity(MagicMock(), bi._tracked_tables)
+
+
 def test_replica_identity_reads_relreplident_for_schema_and_table(d):
     connection = MagicMock()
     connection.execute.return_value.scalar.return_value = "f"
@@ -901,15 +954,17 @@ class _Connection:
         if "pg_replication_slots" in sql:
             return _Result(1)
         if "pg_current_wal_lsn" in sql:
-            return _Result(4096)
+            positions = self._engine.positions
+            return _Result(positions.pop(0) if positions else 4096)
         if "pg_export_snapshot" in sql:
             return _Result("00000003-0000001B-1")
         raise AssertionError(f"unexpected statement: {sql}")
 
 
 class _Engine:
-    def __init__(self, monkeypatch):
+    def __init__(self, monkeypatch, positions: list[int] | None = None):
         self.log: list[tuple] = []
+        self.positions = list(positions or [])
         self._connections = 0
         replicator = MagicMock()
         replicator.cursor.return_value.fetchone.return_value = (
@@ -955,6 +1010,24 @@ def test_the_wal_position_is_read_before_the_snapshot_is_exported(monkeypatch):
     assert session.offset.lsn == 4096
 
 
+def test_the_window_ends_at_the_wal_position_read_after_the_export(monkeypatch):
+    engine = _Engine(monkeypatch, positions=[4096, 8192])
+    session = _transaction_session(engine)
+    export_at, _ = _executed(engine, "pg_export_snapshot")
+    lsn_reads = [
+        index
+        for index, entry in enumerate(engine.log)
+        if entry[1] == "execute" and "pg_current_wal_lsn" in entry[2]
+    ]
+    assert lsn_reads[0] < export_at < lsn_reads[1]
+    assert session.offset.lsn == 4096
+    assert session.window_end.lsn == 8192
+    assert (session.window_end.system_identifier, session.window_end.timeline) == (
+        SYSTEM_ID,
+        4,
+    )
+
+
 def test_the_snapshot_holder_is_a_read_only_repeatable_read_transaction(monkeypatch):
     engine = _Engine(monkeypatch)
     _transaction_session(engine)
@@ -995,6 +1068,9 @@ def test_a_created_slot_is_identified_before_it_exports_its_snapshot(monkeypatch
     assert commands[0] == "IDENTIFY_SYSTEM"
     assert commands[1].startswith("CREATE_REPLICATION_SLOT slot LOGICAL")
     assert (session.offset.lsn, session.offset.timeline) == (0x3000, 5)
+    # The slot's exported snapshot is exact: no change is both loaded and
+    # streamed, so there is no window to deduplicate.
+    assert session.window_end is None
 
 
 # =====================================================================
@@ -1084,3 +1160,120 @@ def test_the_stream_asks_wal2json_for_commit_positions(monkeypatch):
     cursor = _replication_cursor(monkeypatch, bi)
     bi.init_stream()
     assert cursor.start_replication.call_args.kwargs["options"]["include-lsn"] == "true"
+
+
+# =====================================================================
+# The initial load's window: polls bounded at its end
+# =====================================================================
+
+
+def _bounded(messages, end: str, wal_end: str = "0/0") -> Wal2JsonIngester:
+    bi = _format_2_ingester(messages)
+    bi._cursor.wal_end = lsn_to_int(wal_end)
+    bi.bound_stream(LsnOffset(lsn=lsn_to_int(end)))
+    return bi
+
+
+def test_a_bounded_poll_stops_before_the_first_transaction_past_the_bound():
+    inside = _transaction(10, "0/100", [("0/90", 1)], "0/120")
+    past = _transaction(11, "0/300", [("0/280", 2)], "0/320")
+    bi = _bounded(inside + past, end="0/200")
+
+    window = list(bi._poll_changes_v2(None))
+    assert [change.new_values["id"] for change in window] == [1]
+    assert bi.stream_bound_reached()
+
+    after = list(bi._poll_changes_v2(None))
+    assert [change.new_values["id"] for change in after] == [2]
+
+
+def test_a_bounded_format_1_poll_holds_the_transaction_past_the_bound():
+    def message(start: str, xid: int, row_id: int) -> _Message:
+        return _Message(
+            start,
+            {
+                "xid": xid,
+                "timestamp": "2026-09-29 19:15:18+00",
+                "change": [
+                    {
+                        "kind": "insert",
+                        "schema": "public",
+                        "table": "t",
+                        "columnnames": ["id"],
+                        "columntypes": ["integer"],
+                        "columnvalues": [row_id],
+                    }
+                ],
+            },
+        )
+
+    bi = _bounded([message("0/100", 10, 1), message("0/300", 11, 2)], end="0/200")
+    bi._wal2json_format_version = 1
+
+    assert [c.new_values["id"] for c in bi._poll_changes_v1(None)] == [1]
+    assert bi.stream_bound_reached()
+    assert [c.new_values["id"] for c in bi._poll_changes_v1(None)] == [2]
+
+
+def test_a_quiet_stream_reaches_the_bound_once_the_server_has_passed_it():
+    bi = _bounded([], end="0/200", wal_end="0/250")
+    assert list(bi._poll_changes_v2(None)) == []
+    assert bi.stream_bound_reached()
+
+
+def test_a_quiet_stream_short_of_the_bound_keeps_reading():
+    bi = _bounded([], end="0/200", wal_end="0/150")
+    assert list(bi._poll_changes_v2(None)) == []
+    assert not bi.stream_bound_reached()
+
+
+def test_an_unbounded_poll_holds_nothing_back():
+    past = _transaction(11, "0/300", [("0/280", 2)], "0/320")
+    bi = _format_2_ingester(past)
+    assert [c.new_values["id"] for c in bi._poll_changes_v2(None)] == [2]
+    assert not bi.stream_bound_reached()
+
+
+# =====================================================================
+# Attaching to a slot the previous stream still holds
+# =====================================================================
+
+
+class _HeldSlotCursor:
+    def __init__(self, held_for: int):
+        self.held_for = held_for
+        self.attempts = 0
+
+    def start_replication(self, **kwargs):
+        from tabsdatak.conn.postgres import _cdc_impl
+
+        self.attempts += 1
+        if self.attempts <= self.held_for:
+            raise _cdc_impl.psycopg2.errors.ObjectInUse(
+                'replication slot "slot" is active for PID 4079'
+            )
+
+
+def test_a_slot_released_in_time_is_attached(monkeypatch):
+    from tabsdatak.conn.postgres import _cdc_impl
+
+    monkeypatch.setattr(_cdc_impl.time, "sleep", lambda seconds: None)
+    bi = _ingester_with_tables(["public.t"])
+    bi._mark = LsnOffset(lsn=0)
+    bi._cursor = _HeldSlotCursor(held_for=2)
+    bi._attach({})
+    assert bi._cursor.attempts == 3
+
+
+def test_a_slot_held_past_the_timeout_fails(monkeypatch):
+    from tabsdatak.conn.postgres import _cdc_impl
+
+    monkeypatch.setattr(_cdc_impl.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(_cdc_impl, "SLOT_ATTACH_TIMEOUT_SECONDS", 0)
+    bi = _ingester_with_tables(["public.t"])
+    bi._mark = LsnOffset(lsn=0)
+    bi._cursor = _HeldSlotCursor(held_for=100)
+    with pytest.raises(TabsdataException) as ei:
+        bi._attach({})
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_32
+    assert "PID 4079" in str(ei.value)

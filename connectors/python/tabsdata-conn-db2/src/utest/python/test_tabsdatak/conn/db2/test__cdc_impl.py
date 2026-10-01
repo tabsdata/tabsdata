@@ -480,8 +480,10 @@ def _tracked(cd_table: str) -> TrackedTable:
 CAPTURE_START = b"\x00" * 7 + b"\x01" + b"\x00" * 7 + b"\x10"
 
 
-def _registrations(*tables, state="A", start=CAPTURE_START, bound=CAPTURE_START):
-    return [("ASN", table, state, None, start, bound) for table in tables]
+def _registrations(
+    *tables, state="A", start=CAPTURE_START, bound=CAPTURE_START, splits="N"
+):
+    return [("ASN", table, state, None, start, splits, bound) for table in tables]
 
 
 def _session(answers: dict) -> tuple[SqlReplicaInitialLoadSession, _Engine]:
@@ -563,7 +565,7 @@ def test_the_pin_bounds_the_commit_sequence_strictly_below_it():
         "as idx": [],
     })
     list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
-    [(sql, parameters)] = [
+    (sql, parameters), _ = [
         (entry[1], entry[2])
         for entry in engine.log
         if entry[0] == "execute" and "as idx" in entry[1]
@@ -579,10 +581,11 @@ def test_every_table_is_pinned_in_one_statement():
         "as idx": [],
     })
     list(session.tables({"ASN.A_CD": _tracked("A_CD"), "ASN.B_CD": _tracked("B_CD")}))
-    [sql] = [sql for sql in engine.executed() if "as idx" in sql]
-    assert '"ASN"."A_CD"' in sql
-    assert '"ASN"."B_CD"' in sql
-    assert " union all " in sql
+    start, end = [sql for sql in engine.executed() if "as idx" in sql]
+    for sql in (start, end):
+        assert '"ASN"."A_CD"' in sql
+        assert '"ASN"."B_CD"' in sql
+        assert " union all " in sql
 
 
 def test_the_pin_waits_until_capture_passes_the_log_position(monkeypatch):
@@ -597,7 +600,8 @@ def test_the_pin_waits_until_capture_passes_the_log_position(monkeypatch):
         "as idx": [],
     })
     list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
-    assert len([sql for sql in engine.executed() if "IBMSNAP_RESTART" in sql]) == 3
+    # Three waiting for the start, one for the window's end.
+    assert len([sql for sql in engine.executed() if "IBMSNAP_RESTART" in sql]) == 4
 
 
 def test_a_capture_commit_past_the_log_position_is_enough_while_one_is_in_flight():
@@ -607,7 +611,8 @@ def test_a_capture_commit_past_the_log_position_is_enough_while_one_is_in_flight
         "as idx": [],
     })
     list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
-    assert len([sql for sql in engine.executed() if "IBMSNAP_RESTART" in sql]) == 1
+    # One for the start, one for the window's end.
+    assert len([sql for sql in engine.executed() if "IBMSNAP_RESTART" in sql]) == 2
 
 
 def test_the_pin_fails_when_capture_never_passes_the_log_position(
@@ -655,6 +660,46 @@ def test_cur_commit_on_is_not_warned_about(caplog):
     with caplog.at_level(logging.WARNING, logger=_cdc_impl.__name__):
         list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
     assert "cur_commit" not in caplog.text
+
+
+def test_the_window_ends_at_the_log_position_read_after_the_rows():
+    before, after = _commitseq(7, 0x0FF), _commitseq(8, 0x1FF)
+    positions = [0x100, 0x200]
+    pins = [[(0, before)], [(0, after)]]
+    session, engine = _session({
+        "mon_get_transaction_log": lambda: positions.pop(0),
+        "IBMSNAP_RESTART": (_commitseq(9, 0x300), None),
+        "as idx": lambda: pins.pop(0),
+    })
+    list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert session.offset.commits == {"ASN.T_CD": before}
+    assert session.window_end.commits == {"ASN.T_CD": after}
+    _, (sql, parameters) = [
+        (entry[1], entry[2])
+        for entry in engine.log
+        if entry[0] == "execute" and "as idx" in entry[1]
+    ]
+    assert "substr(\"IBMSNAP_COMMITSEQ\", 9, 8) <= :bound" in sql
+    assert parameters == {"bound": (0x200).to_bytes(8, byteorder="big")}
+
+
+def test_the_window_end_is_unknown_before_the_rows_are_read():
+    session, _ = _session({})
+    with pytest.raises(TabsdataException) as ei:
+        _ = session.window_end
+    assert ei.value.api_error is Db2ErrorCode.DB2_25
+
+
+def test_a_registration_that_splits_updates_fails_the_load():
+    session, _ = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+        "ibmsnap_register r": _registrations("T_CD", splits="Y"),
+    })
+    with pytest.raises(TabsdataException) as ei:
+        list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert ei.value.api_error is Db2ErrorCode.DB2_35
 
 
 def test_the_pin_fails_when_capture_started_after_the_load_position():
@@ -762,13 +807,14 @@ class _Session:
         return self.engine.connect()
 
 
-def _resumed(monkeypatch, commits, registrations):
+def _resumed(monkeypatch, commits, registrations, captured=None):
     monkeypatch.setattr(_cdc_impl.time, "sleep", lambda seconds: None)
     bi = _ingester_with_tables(["ASN.T_CD"])
     bi.seed_offset(CommitSeqOffset(commits=commits))
     pending = list(registrations)
     session = _Session({
-        "ibmsnap_register r": lambda: pending.pop(0) if len(pending) > 1 else pending[0]
+        "ibmsnap_register r": lambda: pending.pop(0) if len(pending) > 1 else pending[0],
+        "IBMSNAP_RESTART": (captured,),
     })
     return bi, session
 
@@ -824,9 +870,160 @@ def test_rows_pruned_while_a_poll_reads_them_fail_the_poll(monkeypatch):
     assert read == [POSITION]
 
 
+def test_a_bounded_poll_reads_up_to_the_bound_once_and_stands_at_it(monkeypatch):
+    end = _commitseq(7, 0x700)
+    quiet_end = _commitseq(8, 0x800)
+    bi, session = _resumed(
+        monkeypatch,
+        {"ASN.T_CD": POSITION, "ASN.Q_CD": POSITION},
+        [_registrations("T_CD", "Q_CD")],
+    )
+    bi._tracked_tables = {"SRC.T": _tracked("T_CD"), "SRC.Q": _tracked("Q_CD")}
+    bi._before_img_prefixes = {"SRC.T": None, "SRC.Q": None}
+    watermark = _commitseq(9, 0x900)
+    monkeypatch.setattr(
+        bi, "_query_table_watermarks", lambda c: {"ASN.T_CD": watermark}
+    )
+    monkeypatch.setattr(bi, "_extract_raw_schema", lambda *a: ())
+    bi._schema_registry = MagicMock()
+    read = []
+    monkeypatch.setattr(
+        bi,
+        "_query_table_changes",
+        lambda **kwargs: iter(
+            [read.append((kwargs["commitseq"], kwargs["watermark"])) or "change"]
+        ),
+    )
+    bi._blocking_timeout_seconds = 60
+    bound = CommitSeqOffset(commits={"ASN.T_CD": end, "ASN.Q_CD": quiet_end})
+    bi.bound_stream(bound)
+    assert not bi.stream_bound_reached()
+
+    assert list(bi.poll_changes(session)) == ["change"]
+
+    assert read == [(POSITION, end)]
+    assert bi.stream_bound_reached()
+    assert bi._mark.commits == {"ASN.T_CD": end, "ASN.Q_CD": quiet_end}
+
+
 def test_a_poll_capture_still_covers_yields_its_changes(monkeypatch):
     bi, session = _resumed(monkeypatch, {"ASN.T_CD": POSITION}, [_registrations("T_CD")])
     monkeypatch.setattr(bi, "_query_table_watermarks", lambda c: {})
     bi._blocking_timeout_seconds = 0.05
     assert list(bi.poll_changes(session)) == []
     assert any("ibmsnap_register r" in sql for sql in session.engine.executed())
+
+
+# =====================================================================
+# Quiet tables follow Capture's position
+# =====================================================================
+
+
+def _two_tables(monkeypatch, *, captured, watermarks):
+    bi, session = _resumed(
+        monkeypatch,
+        {"ASN.T_CD": POSITION, "ASN.Q_CD": POSITION},
+        [_registrations("T_CD", "Q_CD")],
+        captured=captured,
+    )
+    bi._tracked_tables = {"SRC.T": _tracked("T_CD"), "SRC.Q": _tracked("Q_CD")}
+    bi._before_img_prefixes = {"SRC.T": None, "SRC.Q": None}
+    monkeypatch.setattr(bi, "_query_table_watermarks", lambda c: watermarks)
+    monkeypatch.setattr(bi, "_extract_raw_schema", lambda *a: ())
+    bi._schema_registry = MagicMock()
+    monkeypatch.setattr(bi, "_query_table_changes", lambda **kwargs: iter(["change"]))
+    bi._blocking_timeout_seconds = 0.05
+    return bi, session
+
+
+def _quiet_ingester() -> SqlReplicaIngester:
+    bi = _ingester_with_tables(["ASN.T_CD", "ASN.Q_CD"])
+    bi.seed_offset(
+        CommitSeqOffset(commits={"ASN.T_CD": POSITION, "ASN.Q_CD": POSITION})
+    )
+    return bi
+
+
+def test_a_table_with_nothing_to_read_moves_on_to_capture_s_position():
+    bi = _quiet_ingester()
+    captured = _commitseq(9, 0x900)
+    bi._advance_quiet_tables(captured, read={"ASN.T_CD"})
+    assert bi._mark.commits == {"ASN.T_CD": POSITION, "ASN.Q_CD": captured}
+    assert bi._quiet == {"ASN.Q_CD": (POSITION, captured)}
+
+
+def test_a_quiet_table_keeps_its_last_row_as_it_moves_on():
+    bi = _quiet_ingester()
+    first, later = _commitseq(8, 0x800), _commitseq(9, 0x900)
+    bi._advance_quiet_tables(first, read=set())
+    bi._advance_quiet_tables(later, read=set())
+    assert bi._quiet["ASN.Q_CD"] == (POSITION, later)
+
+
+def test_no_table_moves_without_a_capture_position(monkeypatch):
+    bi, session = _two_tables(monkeypatch, captured=None, watermarks={})
+    list(bi.poll_changes(session))
+    assert bi._mark.commits == {"ASN.T_CD": POSITION, "ASN.Q_CD": POSITION}
+
+
+def test_a_capture_position_behind_a_table_does_not_move_it_back(monkeypatch):
+    bi, session = _two_tables(
+        monkeypatch, captured=_commitseq(1, 0x100), watermarks={}
+    )
+    list(bi.poll_changes(session))
+    assert bi._mark.commits == {"ASN.T_CD": POSITION, "ASN.Q_CD": POSITION}
+
+
+def test_capture_s_position_is_read_before_the_tables_are(monkeypatch):
+    bi, session = _two_tables(monkeypatch, captured=_commitseq(9, 0x900), watermarks={})
+    order = []
+    monkeypatch.setattr(
+        bi, "_captured_position", lambda c: order.append("captured") or None
+    )
+    monkeypatch.setattr(
+        bi, "_query_table_watermarks", lambda c: order.append("watermarks") or {}
+    )
+    list(bi.poll_changes(session))
+    assert order[:2] == ["captured", "watermarks"]
+
+
+def test_a_moved_position_is_staged_once_the_last_row_is():
+    bi = _ingester_with_tables(["ASN.Q_CD"])
+    last_row, moved_to = _commitseq(5, 0x500), _commitseq(9, 0x900)
+    bi._quiet = {"ASN.Q_CD": (last_row, moved_to)}
+    staged = bi.commit_state(CommitSeqOffset(commits={"ASN.Q_CD": last_row}))
+    assert CommitSeqOffset.read(staged["cdc.offset"]).commits == {
+        "ASN.Q_CD": moved_to
+    }
+
+
+def test_a_moved_position_waits_for_a_row_not_staged_yet():
+    """The last row read from the table is not in this stage: saving the
+    moved position would skip it."""
+    bi = _ingester_with_tables(["ASN.Q_CD"])
+    staged_row = _commitseq(3, 0x300)
+    last_row, moved_to = _commitseq(5, 0x500), _commitseq(9, 0x900)
+    bi._quiet = {"ASN.Q_CD": (last_row, moved_to)}
+    staged = bi.commit_state(CommitSeqOffset(commits={"ASN.Q_CD": staged_row}))
+    assert CommitSeqOffset.read(staged["cdc.offset"]).commits == {
+        "ASN.Q_CD": staged_row
+    }
+
+
+def test_a_table_read_again_is_no_longer_quiet():
+    bi = _quiet_ingester()
+    bi._quiet = {"ASN.Q_CD": (POSITION, _commitseq(6, 0x600))}
+    bi._advance_quiet_tables(_commitseq(9, 0x900), read={"ASN.Q_CD"})
+    assert "ASN.Q_CD" not in bi._quiet
+
+
+def test_a_poll_moves_a_table_on_once_its_rows_are_read(monkeypatch):
+    captured = _commitseq(9, 0x900)
+    row = _commitseq(7, 0x700)
+    bi, session = _two_tables(
+        monkeypatch, captured=captured, watermarks={"ASN.T_CD": row}
+    )
+    list(bi.poll_changes(session))
+    # The first pass reads T up to its row; the next ones find it quiet.
+    assert bi._mark.commits == {"ASN.T_CD": captured, "ASN.Q_CD": captured}
+    assert bi._quiet["ASN.T_CD"] == (row, captured)

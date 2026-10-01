@@ -48,16 +48,19 @@ from pymysqlreplication.row_event import (
 )
 from sqlalchemy import URL, make_url, text
 from sqlalchemy.dialects.mysql import (
+    BIGINT,
     BIT,
     DATETIME,
     DOUBLE,
     ENUM,
+    INTEGER,
     LONGBLOB,
     LONGTEXT,
     MEDIUMBLOB,
     MEDIUMINT,
     MEDIUMTEXT,
     SET,
+    SMALLINT,
     TIME,
     TIMESTAMP,
     TINYBLOB,
@@ -193,13 +196,13 @@ def _unquote_identifier(name: str) -> str:
 # registry can build a PyArrow schema for downstream consumers.
 _FIELD_TYPE_MAP: dict[int, type] = {
     FIELD_TYPE.TINY: TINYINT,
-    FIELD_TYPE.SHORT: sa_types.SmallInteger,
-    FIELD_TYPE.LONG: sa_types.Integer,
+    FIELD_TYPE.SHORT: SMALLINT,
+    FIELD_TYPE.LONG: INTEGER,
     FIELD_TYPE.FLOAT: sa_types.Float,
     FIELD_TYPE.DOUBLE: DOUBLE,
     FIELD_TYPE.NULL: sa_types.NullType,
     FIELD_TYPE.TIMESTAMP: TIMESTAMP,
-    FIELD_TYPE.LONGLONG: sa_types.BigInteger,
+    FIELD_TYPE.LONGLONG: BIGINT,
     FIELD_TYPE.INT24: MEDIUMINT,
     FIELD_TYPE.DATE: sa_types.Date,
     FIELD_TYPE.TIME: TIME,
@@ -219,6 +222,8 @@ _FIELD_TYPE_MAP: dict[int, type] = {
     FIELD_TYPE.STRING: sa_types.String,
     FIELD_TYPE.GEOMETRY: sa_types.LargeBinary,
 }
+
+_INTEGER_TYPES = (TINYINT, SMALLINT, MEDIUMINT, INTEGER, BIGINT)
 
 # Some MySQL versions distinguish ``TIMESTAMP2`` / ``DATETIME2`` /
 # ``TIME2`` (fractional-second variants). Alias them to the same
@@ -374,6 +379,10 @@ class MySQLDialect(Dialect):
                 f"Unsupported MySQL binlog cdc type: {cdc_type!r}"
                 f" (code={column_type!r})"
             )
+        if column_class in _INTEGER_TYPES:
+            # The catalog reflects the same flag, so both describe the column
+            # alike; an unsigned one needs a wider type for its upper half.
+            return column_class(unsigned=bool(getattr(cdc_type, "unsigned", False)))
         if column_class is sa_types.Numeric:
             precision = getattr(cdc_type, "precision", None)
             decimals = getattr(cdc_type, "decimals", None)
@@ -640,6 +649,17 @@ class GtidOffset(CdcOffset):
 # ---------------------------------------------------------------------
 
 
+# What the stream reads from the binlog: row changes (a statement-based binlog
+# has no rows), every column of them (MINIMAL and NOBLOB leave out columns an
+# update did not change), and a GTID for each transaction, which the offset is.
+REQUIRED_BINLOG_SETTINGS = {
+    "log_bin": {"ON", "1"},
+    "binlog_format": {"ROW"},
+    "binlog_row_image": {"FULL"},
+    "gtid_mode": {"ON"},
+}
+
+
 class BinlogIngester(CdcIngester):
     """``CdcIngester`` for MySQL via ``pymysqlreplication``.
 
@@ -789,7 +809,7 @@ class BinlogIngester(CdcIngester):
             stream_kwargs["only_tables"] = stream_tables
 
         self._seed_on_first_sight = False
-        self._verify_commit_order()
+        self._verify_server_settings()
         if self._mark is not None and self._mark.gtid:
             # A persisted or initial-load offset is already the full set.
             self._executed = GtidSet.parse(self._mark.gtid)
@@ -879,11 +899,14 @@ class BinlogIngester(CdcIngester):
         self._executed.add(gtid)
         self._mark = self._offset_of(self._executed)
 
-    def _verify_commit_order(self) -> None:
-        """Fail on a server that applies replicated transactions in parallel
-        without keeping their commit order: its binlog may then hold a
-        source's transaction before an earlier-numbered one, which the stage
-        publisher would drop as already published."""
+    def _verify_server_settings(self) -> None:
+        """Fail on a server whose binlog the stream cannot rely on: one
+        without a row-based binlog carrying full row images and GTIDs; a
+        replica that does not log what it replicates, whose binlog then holds
+        none of the changes its source makes; or one that applies replicated
+        transactions in parallel without keeping their commit order, whose
+        binlog may then hold a source's transaction before an earlier-numbered
+        one, which the stage publisher would drop as already published."""
         settings = self._stream_connection_settings()
         conn = pymysql.connect(
             host=settings["host"],
@@ -896,13 +919,28 @@ class BinlogIngester(CdcIngester):
             with conn.cursor() as cursor:
                 cursor.execute(
                     "show global variables where variable_name in ("
+                    "'log_bin', 'binlog_format', 'binlog_row_image', 'gtid_mode', "
+                    "'log_replica_updates', 'log_slave_updates', "
                     "'replica_parallel_workers', 'slave_parallel_workers', "
                     "'replica_preserve_commit_order', "
                     "'slave_preserve_commit_order')"
                 )
                 values = {name.lower(): value for name, value in cursor.fetchall()}
+                replica = self._is_replica(cursor)
         finally:
             conn.close()
+        wrong = [
+            f"{name} {values.get(name, 'unset')}"
+            for name, accepted in REQUIRED_BINLOG_SETTINGS.items()
+            if str(values.get(name, "")).upper() not in accepted
+        ]
+        if wrong:
+            raise MysqlErrorCode.MYSQL_27.exception(settings=", ".join(wrong))
+        logged = values.get(
+            "log_replica_updates", values.get("log_slave_updates", "OFF")
+        )
+        if replica and str(logged).upper() not in {"ON", "1"}:
+            raise MysqlErrorCode.MYSQL_28.exception(logged=logged)
         workers = values.get(
             "replica_parallel_workers", values.get("slave_parallel_workers", "0")
         )
@@ -914,6 +952,18 @@ class BinlogIngester(CdcIngester):
             raise MysqlErrorCode.MYSQL_26.exception(
                 workers=workers, preserved=preserved
             )
+
+    @staticmethod
+    def _is_replica(cursor: Any) -> bool:
+        """Whether the server has a replication source configured: from
+        CHANGE REPLICATION SOURCE TO on, running or not, the status holds a
+        row per channel, and none before. MySQL before 8.0.22 knows the
+        statement only by its older name."""
+        try:
+            cursor.execute("show replica status")
+        except pymysql.err.ProgrammingError:
+            cursor.execute("show slave status")
+        return bool(cursor.fetchall())
 
     @staticmethod
     def _transaction_number(gtid: str | None) -> int:

@@ -35,6 +35,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BUFFER_MAX_SECS,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_FETCH_SIZE,
+    DEFAULT_INITIAL_LOAD_MAX_WINDOW_CHANGES,
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
@@ -76,6 +77,9 @@ _KEY_CDC_TRIGGER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_bytes"
 _KEY_CDC_TRIGGER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_secs"
 _KEY_CDC_POLL_INTERVAL: CdcSrcCfgKey = "tabsdata.cdc.poll_interval_seconds"
 _KEY_CDC_MAX_LARGE_TEXT_LENGTH: CdcSrcCfgKey = "tabsdata.cdc.max_large_text_length"
+_KEY_CDC_INITIAL_LOAD_MAX_WINDOW_CHANGES: CdcSrcCfgKey = (
+    "tabsdata.cdc.initial_load.max_window_changes"
+)
 _KEY_CDC_FETCH_SIZE: CdcSrcCfgKey = "tabsdata.cdc.fetch_size"
 _KEY_CDC_CHUNK_SIZE: CdcSrcCfgKey = "tabsdata.cdc.chunk_size"
 
@@ -119,6 +123,12 @@ def _build_cdc_run_config(
         initial_load=src.initial_load,
         fetch_size=int(cfg.get(_KEY_CDC_FETCH_SIZE, DEFAULT_FETCH_SIZE)),
         chunk_size=int(cfg.get(_KEY_CDC_CHUNK_SIZE, DEFAULT_CHUNK_SIZE)),
+        initial_load_max_window_changes=int(
+            cfg.get(
+                _KEY_CDC_INITIAL_LOAD_MAX_WINDOW_CHANGES,
+                DEFAULT_INITIAL_LOAD_MAX_WINDOW_CHANGES,
+            )
+        ),
         logging_level=int(cfg.get(_KEY_CDC_LOGGING_LEVEL, logging.ERROR)),
     )
 

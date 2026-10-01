@@ -59,9 +59,12 @@ def cdc_engine(domain: Db2CdcDomain) -> Engine:
     return create_engine(domain.sqlalchemy_uri)
 
 
+CDC_SOURCE_COLUMNS = "ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR(64), AGE INTEGER"
+
+
 @contextmanager
 def cdc_source_table(
-    domain: Db2CdcDomain, name: str | None = None
+    domain: Db2CdcDomain, name: str | None = None, columns: str = CDC_SOURCE_COLUMNS
 ) -> Iterator[tuple[str, str]]:
     """A freshly registered CDC source table, yielded as ``(table, cd_table)``.
 
@@ -76,13 +79,7 @@ def cdc_source_table(
     meta = {"SYS_CONTAINER": domain.sys_container or "", "DB": domain.db}
     table = (name or f"TD_CDC_{uuid.uuid4().hex[:12]}").upper()
     schema = domain.schema.upper()
-    ddl = (
-        f"create table {schema}.{table} ("
-        f"  ID INTEGER NOT NULL PRIMARY KEY,"
-        f"  NAME VARCHAR(64),"
-        f"  AGE INTEGER"
-        f")"
-    )
+    ddl = f"create table {schema}.{table} ({columns})"
     if name:
         # A generated name is new every time, but a fixed one may survive a run
         # that died before its teardown.

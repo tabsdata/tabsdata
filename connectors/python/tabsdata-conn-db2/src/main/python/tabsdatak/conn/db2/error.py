@@ -208,3 +208,9 @@ class Db2ErrorCode(ErrorCode):
         "initial load's log position {lsn}: the changes in between are in "
         "neither the load nor the change stream. Run the initial load again",
     )  # SqlReplicaInitialLoadSession._pin
+    DB2_35 = ErrorDef(
+        Db2RuntimeException,
+        "CD table {table!r} is registered to capture every update as a delete and "
+        "an insert (CHG_UPD_TO_DEL_INS = 'Y'), which an initial load cannot "
+        "deduplicate: a key swap in one statement would lose a row",
+    )  # SqlReplicaInitialLoadSession._pin

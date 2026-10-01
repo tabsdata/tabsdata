@@ -22,9 +22,11 @@ from unittest.mock import patch
 import polars as pl
 import pyarrow.parquet as pq
 import pytest
+from sqlalchemy import text
 from tabsdatax.itest.fixture.backends.db2cdc import Db2CdcDomain, db2cdc_domain
 from testi_tabsdatak.conn.db2.backend import (
     cdc_delete,
+    cdc_engine,
     cdc_insert,
     cdc_source_table,
     cdc_src_conn,
@@ -47,6 +49,7 @@ pytestmark = [
 
 OP_COLUMN_SUFFIX = "cdc.meta.op"
 SEG_COLUMN_SUFFIX = "cdc.meta.seg"
+SCH_COLUMN_SUFFIX = "cdc.meta.sch"
 INSERT, UPDATE, DELETE, LOAD = "i", "u", "d", "l"
 
 INITIAL_LOAD_SEG = -1
@@ -729,3 +732,305 @@ def test_per_table_offsets_advance_independently_after_the_load(
                 _files(second, slot=0) == []
                 or _loaded_ids(_frame(second, slot=0)) == set()
             )
+
+
+# One column per common type, so that a type whose catalog and CD-table
+# descriptions normalize differently gives the loaded rows and the captured
+# changes two schema hashes.
+# No BOOLEAN: SQL Replication cannot register a table with one (ASN1571E).
+TYPE_ZOO_COLUMNS = (
+    "ID INTEGER NOT NULL PRIMARY KEY, C_SMALL SMALLINT, C_BIG BIGINT, "
+    "C_NUM DECIMAL(10, 2), C_REAL REAL, C_DOUBLE DOUBLE, "
+    "C_VARCHAR VARCHAR(20), C_CHAR CHAR(5), C_DATE DATE, C_TIME TIME, "
+    "C_TS TIMESTAMP, C_VARBINARY VARBINARY(8)"
+)
+TYPE_ZOO_VALUES = (
+    "{id}, 7, 9000000000, 12.34, 1.5, 2.25, 'varchar', 'chr', '2026-01-02', "
+    "'03:04:05', '2026-01-02-03.04.05', bx'0001'"
+)
+
+
+def _insert_zoo_row(domain: Db2CdcDomain, table: str, id_: int) -> None:
+    engine = cdc_engine(domain)
+    try:
+        with engine.begin() as conn:
+            values = TYPE_ZOO_VALUES.format(id=id_)
+            conn.execute(
+                text(f"insert into {domain.schema.upper()}.{table} values ({values})")
+            )
+    finally:
+        engine.dispose()
+
+
+@db2cdc_domain("db2cdc_employees_xs")
+def test_loaded_rows_and_changes_share_one_schema_hash(
+    domain_db2cdc_employees_xs: Db2CdcDomain, tmp_path: Path
+):
+    domain = domain_db2cdc_employees_xs
+    with cdc_source_table(domain, columns=TYPE_ZOO_COLUMNS) as (table, cd_table):
+        _insert_zoo_row(domain, table, 1)
+
+        first = _CdcCtx(tmp_path / "run1", until=_loaded({1}))
+        first.work_dir.mkdir()
+        _run_plugin(first, cdc_src_conn(domain), _src([cd_table]))
+
+        _insert_zoo_row(domain, table, 2)
+        cdc_wait_cd_count(domain, cd_table, expected=2)
+
+        state = first.persisted_state()
+        second = _CdcCtx(tmp_path / "run2", until=_captured({2}), initial_state=state)
+        second.work_dir.mkdir()
+        _run_plugin(second, cdc_src_conn(domain), _src([cd_table]))
+
+    hashes = set(_frame(first)[_column(_frame(first), SCH_COLUMN_SUFFIX)].to_list())
+    hashes |= set(_frame(second)[_column(_frame(second), SCH_COLUMN_SUFFIX)].to_list())
+    assert len(hashes) == 1, (
+        f"the load and the stream normalized the schema differently: {hashes}"
+    )
+
+
+def _replay_strictly(ctxs: list[_CdcCtx], slot: int | None = None) -> dict[int, tuple]:
+    """Apply every change `ctxs` staged for `slot` (every slot when none), in
+    the order they staged it, the way a strict consumer does: an insert on
+    an existing row, an update or delete of a missing one, or a key change
+    onto a held key is a duplicate or a gap and fails."""
+    rows: dict[int, tuple] = {}
+    for ctx in ctxs:
+        for staged in ctx.staged:
+            for index, files in enumerate(staged.manifest):
+                if slot is not None and index != slot:
+                    continue
+                for path in files:
+                    frame = pl.from_arrow(pq.read_table(path))
+                    op_column = _column(frame, OP_COLUMN_SUFFIX)
+                    old_id = _column(frame, "old.ID")
+                    for change in frame.iter_rows(named=True):
+                        op, key = change[op_column], change["ID"]
+                        old = change[old_id]
+                        if op == LOAD:
+                            rows.clear()
+                        elif op == INSERT:
+                            assert key not in rows, f"insert of existing row {key}"
+                            rows[key] = (change["NAME"], change["AGE"])
+                        elif op == UPDATE and old is not None and old != key:
+                            rows.pop(old, None)
+                            assert key not in rows, f"key change onto held row {key}"
+                            rows[key] = (change["NAME"], change["AGE"])
+                        elif op == UPDATE:
+                            assert key in rows, f"update of missing row {key}"
+                            rows[key] = (change["NAME"], change["AGE"])
+                        elif op == DELETE:
+                            assert key in rows, f"delete of missing row {key}"
+                            del rows[key]
+    return rows
+
+
+def _source_rows(domain: Db2CdcDomain, table: str) -> dict[int, tuple]:
+    engine = cdc_engine(domain)
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(
+                text(f"select ID, NAME, AGE from {domain.schema.upper()}.{table}")
+            )
+            return {row[0]: (row[1], row[2]) for row in result}
+    finally:
+        engine.dispose()
+
+
+@db2cdc_domain("db2cdc_employees_xs")
+def test_changes_during_the_initial_load_are_applied_exactly_once(
+    domain_db2cdc_employees_xs: Db2CdcDomain, tmp_path: Path
+):
+    """Updates, inserts and deletes committed while the load reads the table
+    are in what it loaded, in the change stream, or both: the stage carries
+    each of them exactly once, so a consumer that refuses duplicates and
+    gaps ends at the table's contents."""
+    domain = domain_db2cdc_employees_xs
+    seeded = 2000
+    with cdc_source_table(domain) as (table, cd_table):
+        cdc_insert(
+            domain,
+            table,
+            [{"id": i, "name": f"seed-{i}", "age": i} for i in range(1, seeded + 1)],
+        )
+        stop = threading.Event()
+
+        def churn() -> None:
+            # Several changes per row: updated, updated to the same contents,
+            # back to its seeded contents, deleted and reinserted with the
+            # same or other contents; and rows born, changed and killed.
+            step = 0
+            while not stop.is_set():
+                step += 1
+                key = step % seeded + 1
+                cdc_update(domain, table, key, f"upd-{step}", step)
+                cdc_update(domain, table, key, f"upd-{step}", step)
+                cdc_update(domain, table, key, f"seed-{key}", key)
+                born = seeded + step
+                cdc_insert(domain, table, [{"id": born, "name": "new", "age": step}])
+                cdc_update(domain, table, born, "changed", step)
+                if step % 2 == 0:
+                    cdc_delete(domain, table, born)
+                if step % 3 == 0:
+                    cdc_delete(domain, table, key)
+                    cdc_insert(
+                        domain, table, [{"id": key, "name": f"seed-{key}", "age": key}]
+                    )
+                if step % 5 == 0:
+                    cdc_delete(domain, table, key)
+                    cdc_insert(
+                        domain, table, [{"id": key, "name": f"re-{step}", "age": step}]
+                    )
+
+        churner = threading.Thread(target=churn, name="db2-churn", daemon=True)
+        churner.start()
+        try:
+            first = _CdcCtx(tmp_path / "run1", until=lambda ctx: bool(ctx.staged))
+            first.work_dir.mkdir()
+            _run_plugin(
+                first,
+                cdc_src_conn(domain),
+                _src([cd_table], **{"tabsdata.cdc.fetch_size": 5}),
+            )
+        finally:
+            stop.set()
+            churner.join(timeout=60)
+
+        expected = _source_rows(domain, table)
+        second = _CdcCtx(
+            tmp_path / "run2",
+            until=lambda ctx: _replay_strictly([first, ctx]) == expected,
+            initial_state=first.persisted_state(),
+        )
+        second.work_dir.mkdir()
+        _run_plugin(second, cdc_src_conn(domain), _src([cd_table]))
+
+    assert _replay_strictly([first, second]) == expected
+
+
+# ---- changes at chosen moments of the load ------------------------------------
+#
+# The load reads the tracked tables one after another. Changes committed after
+# it read the first table and before it reads the second are, for the first
+# table, changes it has not loaded, and for the second, changes it has: so the
+# changes the deduplication keeps are known exactly, on a real change stream.
+
+
+@contextmanager
+def _after_loading_the_first_table(changes: Callable[[], None]):
+    from tabsdatak.conn.common.sql.cdc import _initial_load
+
+    load_table = _initial_load.InitialLoader._load_table
+    loaded: list[str] = []
+
+    def load_then_change(self, tracked_table, connection, timestamp):
+        load_table(self, tracked_table, connection, timestamp)
+        loaded.append(tracked_table.qualified)
+        if len(loaded) == 1:
+            changes()
+
+    with patch.object(_initial_load.InitialLoader, "_load_table", load_then_change):
+        yield
+
+
+def _move_key(domain: Db2CdcDomain, table: str, old: int, new: int) -> None:
+    engine = cdc_engine(domain)
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    f"update {domain.schema.upper()}.{table} set id = :new "
+                    f"where id = :old"
+                ),
+                {"new": new, "old": old},
+            )
+    finally:
+        engine.dispose()
+
+
+def _kept_changes(ctx: _CdcCtx, slot: int) -> list[tuple]:
+    """The changes the load's stage carries for `slot`, besides its rows."""
+    staged = ctx.staged[0]
+    frames = [pl.from_arrow(pq.read_table(path)) for path in staged.manifest[slot]]
+    frame = pl.concat(frames, how="diagonal_relaxed")
+    seg, op = _column(frame, SEG_COLUMN_SUFFIX), _column(frame, OP_COLUMN_SUFFIX)
+    window = frame.filter(pl.col(seg) != INITIAL_LOAD_SEG)
+    return [(row[op], row["ID"], row["NAME"]) for row in window.iter_rows(named=True)]
+
+
+SEEDED = [{"id": i, "name": f"seed-{i}", "age": i} for i in (1, 2, 3)]
+
+
+def _changes_to(domain: Db2CdcDomain, table: str) -> None:
+    cdc_update(domain, table, 1, "upd", 10)
+    cdc_delete(domain, table, 2)
+    cdc_insert(domain, table, [{"id": 4, "name": "new", "age": 4}])
+    cdc_update(domain, table, 3, "flip", 30)
+    cdc_update(domain, table, 3, "seed-3", 3)
+
+
+@db2cdc_domain("db2cdc_employees_xs")
+def test_changes_after_a_table_was_loaded_are_kept_and_before_dropped(
+    domain_db2cdc_employees_xs: Db2CdcDomain, tmp_path: Path
+):
+    """The same changes, committed between reading the first table and the
+    second: the first loaded none of them, so all apply; the second loaded
+    all of them, so only the update that flips a row away from what it
+    loaded and back applies, and every other change is dropped."""
+    domain = domain_db2cdc_employees_xs
+    with cdc_source_table(domain) as (first, first_cd):
+        with cdc_source_table(domain) as (second, second_cd):
+            cdc_insert(domain, first, SEEDED)
+            cdc_insert(domain, second, SEEDED)
+
+            def changes() -> None:
+                _changes_to(domain, first)
+                _changes_to(domain, second)
+                _move_key(domain, first, 1, 9)
+
+            ctx = _CdcCtx(tmp_path / "work", until=lambda ctx: bool(ctx.staged))
+            ctx.work_dir.mkdir()
+            with _after_loading_the_first_table(changes):
+                _run_plugin(ctx, cdc_src_conn(domain), _src([first_cd, second_cd]))
+
+            assert _kept_changes(ctx, 0) == [
+                (UPDATE, 1, "upd"),
+                (DELETE, 2, "seed-2"),
+                (INSERT, 4, "new"),
+                (UPDATE, 3, "flip"),
+                (UPDATE, 3, "seed-3"),
+                (UPDATE, 9, "upd"),
+            ]
+            assert _kept_changes(ctx, 1) == [
+                (UPDATE, 3, "flip"),
+                (UPDATE, 3, "seed-3"),
+            ]
+            assert _replay_strictly([ctx], slot=0) == _source_rows(domain, first)
+            assert _replay_strictly([ctx], slot=1) == _source_rows(domain, second)
+
+
+@db2cdc_domain("db2cdc_employees_xs")
+def test_a_key_taken_again_after_its_row_moved_fails_the_load_safely(
+    domain_db2cdc_employees_xs: Db2CdcDomain, tmp_path: Path
+):
+    """Before the second table is read, its row 1 moves to key 9 and a new
+    row takes key 1: the load reads both keys held, so when the key change
+    comes up it cannot tell this from a row read twice, and fails."""
+    from tabsdatak.conn.common.sql.cdc.error import SqlCdcException
+
+    domain = domain_db2cdc_employees_xs
+    with cdc_source_table(domain) as (first, first_cd):
+        with cdc_source_table(domain) as (second, second_cd):
+            cdc_insert(domain, first, SEEDED)
+            cdc_insert(domain, second, SEEDED)
+
+            def changes() -> None:
+                _move_key(domain, second, 1, 9)
+                cdc_insert(domain, second, [{"id": 1, "name": "other", "age": 1}])
+
+            ctx = _CdcCtx(tmp_path / "work", until=lambda ctx: bool(ctx.staged))
+            ctx.work_dir.mkdir()
+            with _after_loading_the_first_table(changes):
+                with pytest.raises(SqlCdcException, match="CDC_23"):
+                    _run_plugin(ctx, cdc_src_conn(domain), _src([first_cd, second_cd]))
+            assert ctx.staged == []

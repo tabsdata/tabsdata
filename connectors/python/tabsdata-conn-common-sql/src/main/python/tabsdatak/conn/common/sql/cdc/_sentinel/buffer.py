@@ -43,6 +43,7 @@ class BufferSentinel:
         self._total_bytes: int = 0
         self._last_flushed: float = time.time()
         self._offset: CdcOffset = offset
+        self._pending: list[CdcOffset] = []
 
     @property
     def is_empty(self) -> bool:
@@ -67,6 +68,9 @@ class BufferSentinel:
 
     @property
     def offset(self) -> CdcOffset:
+        """The offset of the changes written to disk, which is what a stage
+        carries: a change still held in memory is not in the staged files, so
+        an offset past it would let the next run resume after it."""
         return self._offset
 
     def process_data_change(self, change: CdcDataChange) -> None:
@@ -90,7 +94,7 @@ class BufferSentinel:
             raise SqlCdcErrorCode.CDC_10.exception()
         if change.offset is None:
             raise SqlCdcErrorCode.CDC_11.exception(table=change.table)
-        self._offset.update(change.offset)
+        self._pending.append(change.offset)
 
         rows_hit = self._max_rows is not None and self._total_rows >= self._max_rows
         bytes_hit = self._max_bytes is not None and self._total_bytes >= self._max_bytes
@@ -104,6 +108,10 @@ class BufferSentinel:
 
     def flush(self) -> None:
         self._disk_sentinel.process_buffers(self._buffers)
+        # In arrival order: an offset may be one position for every table.
+        for offset in self._pending:
+            self._offset.update(offset)
+        self._pending.clear()
         for buffer in self._buffers.values():
             buffer.rows.clear()
             buffer.bytes = 0

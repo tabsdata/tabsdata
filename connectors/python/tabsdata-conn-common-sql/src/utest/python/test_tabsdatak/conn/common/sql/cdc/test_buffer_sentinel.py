@@ -90,3 +90,45 @@ def test_row_threshold_triggers_disk_flush():
     sentinel.process_data_change(_change(offset=FakeOffset()))
     assert disk.flushes == 1
     assert sentinel.is_empty is True
+
+
+class RecordingOffset:
+    def __init__(self):
+        self.applied: list[str] = []
+
+    def update(self, other) -> None:
+        self.applied.append(other.name)
+
+
+class NamedOffset:
+    def __init__(self, name: str):
+        self.name = name
+
+
+def test_the_offset_moves_only_when_its_changes_reach_disk():
+    """A stage carries the files on disk with this offset: were it past a
+    change still in memory, the next run would resume after a change that
+    was never staged."""
+    offset = RecordingOffset()
+    sentinel = _sentinel(offset=offset)
+    sentinel.process_data_change(_change(offset=NamedOffset("a")))
+    assert offset.applied == []
+    sentinel.flush()
+    assert offset.applied == ["a"]
+
+
+def test_offsets_are_applied_in_the_order_their_changes_arrived():
+    offset = RecordingOffset()
+    sentinel = BufferSentinel(
+        disk_sentinel=FakeDisk(),
+        max_rows=1_000,
+        max_bytes=None,
+        max_secs=10_000,
+        tables={"s.t": None, "s.u": None},
+        offset=offset,
+    )
+    sentinel.process_data_change(_change("s.u", offset=NamedOffset("u1")))
+    sentinel.process_data_change(_change("s.t", offset=NamedOffset("t1")))
+    sentinel.process_data_change(_change("s.u", offset=NamedOffset("u2")))
+    sentinel.flush()
+    assert offset.applied == ["u1", "t1", "u2"]

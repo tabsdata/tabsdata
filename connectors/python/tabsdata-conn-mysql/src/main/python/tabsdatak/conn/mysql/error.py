@@ -168,4 +168,17 @@ class MysqlErrorCode(ErrorCode):
         "hold a transaction before an earlier one of the same source, which "
         "would be dropped as already published. Set "
         "replica_preserve_commit_order to ON",
-    )  # BinlogIngester._verify_commit_order
+    )  # BinlogIngester._verify_server_settings
+    MYSQL_27 = ErrorDef(
+        MySQLRuntimeException,
+        "The server's binlog cannot be streamed as it is set up ({settings}): "
+        "the stream needs log_bin ON, binlog_format ROW, binlog_row_image FULL "
+        "and gtid_mode ON",
+    )  # BinlogIngester._verify_server_settings
+    MYSQL_28 = ErrorDef(
+        MySQLRuntimeException,
+        "The server is a replica that does not write what it replicates to its "
+        "own binlog (log_replica_updates {logged}), so the stream would see none "
+        "of the changes made on its source. Set log_replica_updates to ON, or "
+        "stream from the source",
+    )  # BinlogIngester._verify_server_settings

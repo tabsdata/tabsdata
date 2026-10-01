@@ -14,6 +14,7 @@ from typing import Any
 import polars as pl
 import pyarrow.parquet as pq
 import pytest
+from sqlalchemy import create_engine, text
 from tabsdatax.itest.fixture.backends.mysqlcdc import MysqlcdcDomain, mysqlcdc_domain
 from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.mysql.backend import (
@@ -40,6 +41,7 @@ POLL_SECONDS = 0.25
 
 OP_COLUMN_SUFFIX = "cdc.meta.op"
 SEG_COLUMN_SUFFIX = "cdc.meta.seg"
+SCH_COLUMN_SUFFIX = "cdc.meta.sch"
 INSERT, UPDATE, DELETE, LOAD, TRUNCATE = "i", "u", "d", "l", "t"
 
 INITIAL_LOAD_SEG = -1
@@ -762,3 +764,65 @@ def test_truncate_then_reinsert_after_the_load_keeps_their_order(
     seg = _column(frame, SEG_COLUMN_SUFFIX)
     captured = _ops(frame.filter(pl.col(seg) != INITIAL_LOAD_SEG))
     assert captured.index(TRUNCATE) < captured.index(INSERT)
+
+
+# One column per common type, so that a type whose catalog and binlog
+# descriptions normalize differently gives the loaded rows and the captured
+# changes two schema hashes.
+TYPE_ZOO_COLUMNS = (
+    "id INTEGER PRIMARY KEY, c_tiny TINYINT, c_small SMALLINT, c_big BIGINT, "
+    "c_unsigned INT UNSIGNED, c_num DECIMAL(10, 2), c_float FLOAT, c_double DOUBLE, "
+    "c_bool BOOLEAN, c_varchar VARCHAR(20), c_char CHAR(5), c_text TEXT, "
+    "c_date DATE, c_time TIME, c_datetime DATETIME, c_ts TIMESTAMP NULL, "
+    "c_varbinary VARBINARY(8)"
+)
+TYPE_ZOO_VALUES = (
+    "{id}, 1, 7, 9000000000, 4000000000, 12.34, 1.5, 2.25, true, 'varchar', 'chr', "
+    "'text', '2026-01-02', '03:04:05', '2026-01-02 03:04:05', "
+    "'2026-01-02 03:04:05', x'0001'"
+)
+
+
+@contextmanager
+def _type_zoo(domain: MysqlcdcDomain, table: str) -> Iterator[str]:
+    engine = create_engine(domain.sqlalchemy_uri)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP TABLE IF EXISTS `{table}`"))
+            conn.execute(text(f"CREATE TABLE `{table}` ({TYPE_ZOO_COLUMNS})"))
+        yield table
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text(f"DROP TABLE IF EXISTS `{table}`"))
+        engine.dispose()
+
+
+def _insert_zoo_row(domain: MysqlcdcDomain, table: str, id_: int) -> None:
+    engine = create_engine(domain.sqlalchemy_uri)
+    try:
+        with engine.begin() as conn:
+            values = TYPE_ZOO_VALUES.format(id=id_)
+            conn.execute(text(f"INSERT INTO `{table}` VALUES ({values})"))
+    finally:
+        engine.dispose()
+
+
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_loaded_rows_and_changes_share_one_schema_hash(
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+):
+    domain = domain_mysqlcdc_employees_xs
+    with _type_zoo(domain, "td_il_types") as table:
+        _insert_zoo_row(domain, table, 1)
+
+        src = _stream_src([cdc_table(domain, table)])
+        ctx = _CdcCtx(work_dir(tmp_path))
+        with _running(ctx, cdc_src_conn(domain), src):
+            _await(ctx, "the snapshot", lambda f: _loaded_ids(f) == [1])
+            _insert_zoo_row(domain, table, 2)
+            frame = _await(ctx, "the change", lambda f: 2 in _captured_ids(f))
+
+    hashes = frame[_column(frame, SCH_COLUMN_SUFFIX)].unique().to_list()
+    assert len(hashes) == 1, (
+        f"the load and the stream normalized the schema differently: {hashes}"
+    )

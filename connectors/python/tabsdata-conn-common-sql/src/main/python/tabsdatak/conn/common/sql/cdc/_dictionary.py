@@ -42,6 +42,18 @@ def raw_schema_hash(raw_schema: RawSchema) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
+def schema_hash(
+    columns: tuple[TrackedColumn, ...], primary_key: tuple[str, ...]
+) -> str:
+    """The hash of a normalized schema: each column's name and Arrow type,
+    and the primary key's columns. Read from the catalog or from the change
+    stream, the same schema gives the same hash, whatever type names the
+    source reported its columns with."""
+    canonical = "|".join(f"{column.name}:{column.patype}" for column in columns)
+    canonical += "|key:" + ",".join(primary_key)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
 def build_pa_schema(
     columns: tuple[TrackedColumn, ...] | list[TrackedColumn],
     cdc_format: CdcFormat,
@@ -118,3 +130,4 @@ class SchemaVersion:
     columns: tuple[TrackedColumn, ...]
     pa_schema: pa.Schema
     large_columns: tuple[LargeColumn, ...]
+    primary_key: tuple[str, ...] = ()

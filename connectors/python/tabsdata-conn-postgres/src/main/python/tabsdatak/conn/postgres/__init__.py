@@ -424,6 +424,7 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.max_large_text_length",
     "tabsdata.cdc.fetch_size",
     "tabsdata.cdc.chunk_size",
+    "tabsdata.cdc.initial_load.max_window_changes",
 ]
 
 CdcSrcCfgSpec: TypeAlias = Annotated[

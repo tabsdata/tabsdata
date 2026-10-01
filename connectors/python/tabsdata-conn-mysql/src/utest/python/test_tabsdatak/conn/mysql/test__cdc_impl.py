@@ -170,6 +170,39 @@ def test_binlog_integer_family(d):
     assert isinstance(d.cdc_to_sa("binlog", _Col(FT.TINY)), TINYINT)
 
 
+@pytest.mark.parametrize("unsigned", [False, True], ids=["signed", "unsigned"])
+def test_binlog_integers_keep_their_unsigned_flag(d, unsigned):
+    import pymysqlreplication.constants.FIELD_TYPE as FT
+
+    for code in (FT.TINY, FT.SHORT, FT.INT24, FT.LONG, FT.LONGLONG):
+        assert d.cdc_to_sa("binlog", _Col(code, unsigned=unsigned)).unsigned is unsigned
+
+
+@pytest.mark.parametrize(
+    ("code", "catalog"),
+    [
+        ("TINY", "TINYINT"),
+        ("SHORT", "SMALLINT"),
+        ("INT24", "MEDIUMINT"),
+        ("LONG", "INTEGER"),
+        ("LONGLONG", "BIGINT"),
+    ],
+)
+@pytest.mark.parametrize("unsigned", [False, True], ids=["signed", "unsigned"])
+def test_binlog_and_catalog_integers_normalize_alike(d, code, catalog, unsigned):
+    """The load reads a column's type from the catalog and the stream from
+    the binlog: both must give it the same Arrow type, or the two schema
+    hashes differ and an unsigned value past the signed range overflows."""
+    import pymysqlreplication.constants.FIELD_TYPE as FT
+    from sqlalchemy.dialects import mysql
+
+    from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow
+
+    logged = d.cdc_to_sa("binlog", _Col(getattr(FT, code), unsigned=unsigned))
+    reflected = getattr(mysql, catalog)(unsigned=unsigned)
+    assert sqlalchemy_to_arrow(logged) == sqlalchemy_to_arrow(reflected)
+
+
 def test_binlog_numeric_carries_precision_and_scale(d):
     import pymysqlreplication.constants.FIELD_TYPE as FT
     t = d.cdc_to_sa("binlog", _Col(FT.NEWDECIMAL, precision=10, decimals=2))
@@ -915,7 +948,7 @@ def _init_stream(monkeypatch, bi):
     monkeypatch.setattr(bi, "_stream_connection_settings", lambda: {})
     monkeypatch.setattr(bi, "_schema_table_filter", lambda: (None, None))
     monkeypatch.setattr(bi, "_verify_gtids", lambda consumed: None)
-    monkeypatch.setattr(bi, "_verify_commit_order", lambda: None)
+    monkeypatch.setattr(bi, "_verify_server_settings", lambda: None)
     monkeypatch.setattr(bi, "_first_binlog_file", lambda: ("binlog.000003", "u:1-40"))
     monkeypatch.setattr(
         bi, "_last_binlog_position", lambda: ("binlog.000009", 812, "u:1-90,v:1-4")
@@ -991,6 +1024,14 @@ def test_a_tag_is_a_source_of_its_own():
     assert ei.value.api_error is MysqlErrorCode.MYSQL_25
 
 
+HEALTHY_BINLOG = [
+    ("log_bin", "ON"),
+    ("binlog_format", "ROW"),
+    ("binlog_row_image", "FULL"),
+    ("gtid_mode", "ON"),
+]
+
+
 @pytest.mark.parametrize(
     ("variables", "fails"),
     [
@@ -1003,18 +1044,110 @@ def test_a_tag_is_a_source_of_its_own():
 )
 def test_parallel_apply_without_commit_order_is_refused(monkeypatch, variables, fails):
     bi, server = _gtid_ingester(monkeypatch, None)
-    server.cursor = lambda: _Rows(variables)
+    server.cursor = lambda: _Rows(HEALTHY_BINLOG + variables)
     if fails:
         with pytest.raises(TabsdataException) as ei:
-            bi._verify_commit_order()
+            bi._verify_server_settings()
         assert ei.value.api_error is MysqlErrorCode.MYSQL_26
     else:
-        bi._verify_commit_order()
+        bi._verify_server_settings()
+
+
+@pytest.mark.parametrize(
+    ("setting", "value"),
+    [
+        ("log_bin", "OFF"),
+        ("binlog_format", "STATEMENT"),
+        ("binlog_format", "MIXED"),
+        ("binlog_row_image", "MINIMAL"),
+        ("binlog_row_image", "NOBLOB"),
+        ("gtid_mode", "OFF"),
+        ("gtid_mode", "ON_PERMISSIVE"),
+    ],
+)
+def test_a_binlog_the_stream_cannot_rely_on_is_refused(monkeypatch, setting, value):
+    bi, server = _gtid_ingester(monkeypatch, None)
+    variables = [
+        (name, value if name == setting else good) for name, good in HEALTHY_BINLOG
+    ]
+    server.cursor = lambda: _Rows(variables)
+    with pytest.raises(TabsdataException) as ei:
+        bi._verify_server_settings()
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_27
+    assert f"{setting} {value}" in str(ei.value)
+
+
+def test_a_missing_binlog_setting_is_refused(monkeypatch):
+    bi, server = _gtid_ingester(monkeypatch, None)
+    variables = [row for row in HEALTHY_BINLOG if row[0] != "gtid_mode"]
+    server.cursor = lambda: _Rows(variables)
+    with pytest.raises(TabsdataException) as ei:
+        bi._verify_server_settings()
+    assert "gtid_mode unset" in str(ei.value)
+
+
+@pytest.mark.parametrize(
+    ("variable", "value", "channels", "fails"),
+    [
+        ("log_replica_updates", "OFF", [("source",)], True),
+        ("log_slave_updates", "OFF", [("source",)], True),
+        ("log_replica_updates", "ON", [("source",)], False),
+        ("log_replica_updates", "OFF", [], False),
+    ],
+    ids=[
+        "replica-not-logging",
+        "older-name-not-logging",
+        "replica-logging",
+        "no-replica",
+    ],
+)
+def test_a_replica_that_does_not_log_what_it_replicates_is_refused(
+    monkeypatch, variable, value, channels, fails
+):
+    bi, server = _gtid_ingester(monkeypatch, None)
+    rows = HEALTHY_BINLOG + [(variable, value)]
+    server.cursor = lambda: _Rows(rows, channels)
+    if fails:
+        with pytest.raises(TabsdataException) as ei:
+            bi._verify_server_settings()
+        assert ei.value.api_error is MysqlErrorCode.MYSQL_28
+        assert value in str(ei.value)
+    else:
+        bi._verify_server_settings()
+
+
+def test_the_replica_status_has_its_older_name_before_8_0_22():
+    class OldServer:
+        def __init__(self):
+            self.statements = []
+
+        def execute(self, sql):
+            self.statements.append(sql)
+            if sql == "show replica status":
+                raise _cdc_impl.pymysql.err.ProgrammingError(1064, "syntax")
+
+        def fetchall(self):
+            return [("source",)]
+
+    cursor = OldServer()
+    assert BinlogIngester._is_replica(cursor) is True
+    assert cursor.statements == ["show replica status", "show slave status"]
+
+
+def test_log_bin_reported_as_one_is_accepted(monkeypatch):
+    bi, server = _gtid_ingester(monkeypatch, None)
+    server.cursor = lambda: _Rows([("log_bin", "1")] + HEALTHY_BINLOG[1:])
+    bi._verify_server_settings()
 
 
 class _Rows:
-    def __init__(self, rows):
+    """The server's global variables, and its replica status: a row per
+    replication channel it has configured, none when it is no replica."""
+
+    def __init__(self, rows, channels=()):
         self._rows = rows
+        self._channels = list(channels)
+        self._last = None
 
     def __enter__(self):
         return self
@@ -1023,10 +1156,11 @@ class _Rows:
         return False
 
     def execute(self, sql, parameters=None):
-        assert "replica_preserve_commit_order" in sql
+        assert "replica_preserve_commit_order" in sql or sql == "show replica status"
+        self._last = sql
 
     def fetchall(self):
-        return self._rows
+        return self._channels if self._last == "show replica status" else self._rows
 
 
 def test_a_user_gtid_set_is_not_flattened():

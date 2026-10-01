@@ -39,8 +39,12 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from tabsdatak.api import StreamSrc
+from tabsdatak.conn.common.sql.cdc._deduplicator import (
+    deduplicate_initial_load_files,
+)
 from tabsdatak.conn.common.sql.cdc._ingester import (
     CDC_INITIAL_LOAD_STATE_KEY,
     CdcIngester,
@@ -56,6 +60,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BUFFER_MAX_SECS,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_FETCH_SIZE,
+    DEFAULT_INITIAL_LOAD_MAX_WINDOW_CHANGES,
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
@@ -66,9 +71,13 @@ from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.spi import Conn, StreamSrcPlugin, StreamSrcPluginCtx
 
-# Work-dir subdirectory the initial load's parquet files land in, wiped
-# at the start of a load so a previous attempt leaves nothing behind.
+# Work-dir subdirectories the initial load's parquet files land in: the
+# load's rows, the changes committed while it read them, and those of the
+# changes deduplication keeps. Wiped at the start of a load so a previous
+# attempt leaves nothing behind.
 _INITIAL_LOAD_DIR = "_cdc_initial_load"
+_INITIAL_LOAD_WINDOW_DIR = "_cdc_initial_load_window"
+_INITIAL_LOAD_KEPT_DIR = "_cdc_initial_load_kept"
 
 NO_TIME_LIMIT = math.inf
 
@@ -101,6 +110,7 @@ class CdcRunConfig:
     initial_load: bool = False
     fetch_size: int = DEFAULT_FETCH_SIZE
     chunk_size: int = DEFAULT_CHUNK_SIZE
+    initial_load_max_window_changes: int = DEFAULT_INITIAL_LOAD_MAX_WINDOW_CHANGES
     logging_level: int = logging.ERROR
 
 
@@ -185,23 +195,40 @@ def _initial_load_pending(ctx: StreamSrcPluginCtx, cfg: CdcRunConfig) -> bool:
     return state.get(CDC_INITIAL_LOAD_STATE_KEY, True)
 
 
+@dataclass(frozen=True)
+class _PendingLoad:
+    """A load read but not staged yet: its files, and where the changes
+    committed while it ran end."""
+
+    manifest: list[list[Path]]
+    window_end: CdcOffset
+
+
+def _fresh(folder: Path) -> Path:
+    if folder.exists():
+        shutil.rmtree(folder)
+    folder.mkdir(parents=True)
+    return folder
+
+
 def _load_initially(
     *,
     ctx: StreamSrcPluginCtx,
     ingester: CdcIngester,
     cfg: CdcRunConfig,
     large_column_policy: LargeColumnPolicy,
-) -> CdcOffset:
-    """Snapshot the tracked tables and stage them as a single batch.
+) -> tuple[CdcOffset, _PendingLoad | None]:
+    """Snapshot the tracked tables, and stage them as a single batch when
+    the snapshot is a point in time.
 
-    Returns the offset change capture resumes from. The whole load is one
-    ``ctx.stage`` call, so it is all-or-nothing: an error anywhere leaves
-    no manifest and no state, and the next run redoes it.
+    Returns the offset change capture resumes from and, for a load whose
+    session reports a window, the load left unstaged: the run loop reads
+    the window's changes and stages both together
+    (:func:`_stage_initial_load`). Either way the load is one ``ctx.stage``
+    call, so it is all-or-nothing: an error anywhere leaves no manifest and
+    no state, and the next run redoes it.
     """
-    landing = ctx.work_dir / _INITIAL_LOAD_DIR
-    if landing.exists():
-        shutil.rmtree(landing)
-    landing.mkdir(parents=True)
+    landing = _fresh(ctx.work_dir / _INITIAL_LOAD_DIR)
 
     session = ingester.open_initial_load()
     try:
@@ -226,19 +253,106 @@ def _load_initially(
             chunk_size=cfg.chunk_size,
         )
         offset = loader.load(session)
+        window_end = session.window_end
     finally:
         session.close()
 
+    if window_end is not None:
+        return offset, _PendingLoad(
+            manifest=disk_sentinel.build_manifest(), window_end=window_end
+        )
+    _stage_load_manifest(ctx, ingester, disk_sentinel.build_manifest(), offset)
+    logger.info("Initial load staged")
+    return offset, None
+
+
+def _stage_load_manifest(
+    ctx: StreamSrcPluginCtx,
+    ingester: CdcIngester,
+    manifest: list[list[Path]],
+    offset: CdcOffset,
+) -> None:
     state = ingester.commit_state(offset)
     if not isinstance(state, dict):
         raise SqlCdcErrorCode.CDC_21.exception(ingester=type(ingester).__name__)
-    ctx.stage(
-        disk_sentinel.build_manifest(),
-        {**state, CDC_INITIAL_LOAD_STATE_KEY: False},
-    )
+    ctx.stage(manifest, {**state, CDC_INITIAL_LOAD_STATE_KEY: False})
     ingester.commit_offset(offset)
-    logger.info("Initial load staged")
-    return offset
+
+
+def _read_window(
+    *,
+    ctx: StreamSrcPluginCtx,
+    ingester: CdcIngester,
+    session,
+    tracked_tables: dict,
+    cfg: CdcRunConfig,
+    large_column_policy: LargeColumnPolicy,
+    window_end: CdcOffset,
+    stop_signal: threading.Event,
+) -> list[list[Path]] | None:
+    """The changes committed while the load read the tables, as a manifest:
+    read by the ingester's own poll, bounded at `window_end`, and written as
+    the stream writes them. ``None`` when a signal stops the read."""
+    disk_sentinel = DiskSentinel(
+        landing=_fresh(ctx.work_dir / _INITIAL_LOAD_WINDOW_DIR),
+        max_rows=None,
+        max_bytes=None,
+        max_secs=NO_TIME_LIMIT,
+        tables=tracked_tables,
+        cdc_format=cfg.cdc_format,
+    )
+    buffer_sentinel = BufferSentinel(
+        disk_sentinel=disk_sentinel,
+        max_rows=cfg.buffer_max_rows,
+        max_bytes=cfg.buffer_max_bytes,
+        max_secs=NO_TIME_LIMIT,
+        tables=tracked_tables,
+        offset=ingester.base_offset(),
+    )
+    limit = cfg.initial_load_max_window_changes
+    read = 0
+    ingester.bound_stream(window_end)
+    while not ingester.stream_bound_reached():
+        if stop_signal.is_set():
+            return None
+        for change in large_column_policy.apply(ingester.poll_changes(session)):
+            read += 1
+            if read > limit:
+                raise SqlCdcErrorCode.CDC_29.exception(limit=limit)
+            buffer_sentinel.process_changes([change])
+    buffer_sentinel.flush()
+    logger.info("Initial load window read: %d change(s)", read)
+    return disk_sentinel.build_manifest()
+
+
+def _stage_initial_load(
+    *,
+    ctx: StreamSrcPluginCtx,
+    ingester: CdcIngester,
+    tracked_tables: dict,
+    cfg: CdcRunConfig,
+    pending: _PendingLoad,
+    window: list[list[Path]],
+) -> None:
+    """Stage the load with the window's changes that still apply to it, at
+    the window's end, as one batch."""
+    registry = ingester.schema_registry
+    kept = deduplicate_initial_load_files(
+        loaded=pending.manifest,
+        changes=window,
+        tables=tracked_tables,
+        schemas={table: registry.version(table, 0) for table in tracked_tables},
+        cdc_format=cfg.cdc_format,
+        landing=_fresh(ctx.work_dir / _INITIAL_LOAD_KEPT_DIR),
+    )
+    manifest = [
+        loaded + changes for loaded, changes in zip(pending.manifest, kept, strict=True)
+    ]
+    _stage_load_manifest(ctx, ingester, manifest, pending.window_end)
+    logger.info(
+        "Initial load staged with %d deduplicated change file(s)",
+        sum(len(files) for files in kept),
+    )
 
 
 def _run_loop(
@@ -271,6 +385,7 @@ def _run_loop(
     )
 
     stop_signal = _setup_signal_handlers()
+    pending: _PendingLoad | None = None
     try:
         if _initial_load_pending(ctx, cfg):
             # A reload replaces the persisted offset, so the previous one is
@@ -284,14 +399,13 @@ def _run_loop(
                     stream_state=ctx.stream_state,
                 )
             )
-            ingester.seed_offset(
-                _load_initially(
-                    ctx=ctx,
-                    ingester=ingester,
-                    cfg=cfg,
-                    large_column_policy=large_column_policy,
-                )
+            offset, pending = _load_initially(
+                ctx=ctx,
+                ingester=ingester,
+                cfg=cfg,
+                large_column_policy=large_column_policy,
             )
+            ingester.seed_offset(offset)
         else:
             # Seed the resume position before the stream opens: from the
             # persisted ``stream_state`` (Tabsdata-owned offset) or left to
@@ -308,6 +422,29 @@ def _run_loop(
             session=session,
             cdc_format=cfg.cdc_format,
         )
+        if pending is not None:
+            window = _read_window(
+                ctx=ctx,
+                ingester=ingester,
+                session=session,
+                tracked_tables=tracked_tables,
+                cfg=cfg,
+                large_column_policy=large_column_policy,
+                window_end=pending.window_end,
+                stop_signal=stop_signal,
+            )
+            if window is None:
+                interrupted = True
+                logger.info("cdc: interrupted while reading the initial load window.")
+                return
+            _stage_initial_load(
+                ctx=ctx,
+                ingester=ingester,
+                tracked_tables=tracked_tables,
+                cfg=cfg,
+                pending=pending,
+                window=window,
+            )
         disk_sentinel = DiskSentinel(
             landing=ctx.work_dir,
             max_rows=cfg.trigger_max_rows,

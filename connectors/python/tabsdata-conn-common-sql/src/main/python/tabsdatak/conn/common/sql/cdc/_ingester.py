@@ -288,18 +288,11 @@ class CdcIngester(ABC):
         session: Any,
         cdc_format: CdcFormat = CdcFormat(),
     ) -> dict[str, TrackedTable]:
-        inspector: Inspector = sa.inspect(session)
-        self.prepare_inspector(inspector)
-        result: dict[str, TrackedTable] = {}
-
-        for tablespec in self.resolve_tablespecs():
-            tracked_table = self.gather_table_identity(tablespec, inspector)
-            result[tracked_table.qualified] = tracked_table
-
-        self._tracked_tables = result
-        self.init_schema_registry(cdc_format)
-
-        return result
+        """The tracked tables as the stream starts, read from the catalog as
+        :meth:`collect_tables` reads them: the catalog is where each table's
+        primary key comes from, and the schema versions the stream then
+        registers from the log carry it."""
+        return self.collect_tables(session, cdc_format)
 
     @abstractmethod
     def base_offset(self) -> CdcOffset: ...
@@ -317,6 +310,18 @@ class CdcIngester(ABC):
         raise NotImplementedError(
             f"{type(self).__name__} does not support initial_load"
         )
+
+    def bound_stream(self, end: CdcOffset) -> None:
+        """Stop the next polls at `end`, the load session's
+        :attr:`~InitialLoadSession.window_end`: they deliver the changes up
+        to it and none after, until :meth:`stream_bound_reached`. Only an
+        ingester whose load session reports a window implements it."""
+        raise NotImplementedError(f"{type(self).__name__} reads no initial-load window")
+
+    def stream_bound_reached(self) -> bool:
+        """Whether every change up to the :meth:`bound_stream` end has been
+        delivered, and the mark stands at it."""
+        raise NotImplementedError(f"{type(self).__name__} reads no initial-load window")
 
     # ------------------------------------------------------------------
     # Offset ownership: Tabsdata-owned (default) vs external-owned.

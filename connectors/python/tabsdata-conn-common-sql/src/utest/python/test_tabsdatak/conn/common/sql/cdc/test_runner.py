@@ -115,17 +115,26 @@ class FakeBuffer:
 
 
 class _FakeInitialLoadSession:
-    def __init__(self):
+    def __init__(self, window_end=None):
         self.closed = False
         self.engine = object()
+        self.window_end = window_end
 
     def close(self) -> None:
         self.closed = True
 
 
 class FakeIngester:
-    def __init__(self, *, resume_value=None, poll_raises=False, open_raises=False):
+    def __init__(
+        self,
+        *,
+        resume_value=None,
+        poll_raises=False,
+        open_raises=False,
+        window_end=None,
+    ):
         self._resume_value = resume_value
+        self._window_end = window_end
         self._poll_raises = poll_raises
         self._open_raises = open_raises
         self.resume_args = None
@@ -150,7 +159,7 @@ class FakeIngester:
         return self.session
 
     def open_initial_load(self):
-        self.initial_load_session = _FakeInitialLoadSession()
+        self.initial_load_session = _FakeInitialLoadSession(self._window_end)
         return self.initial_load_session
 
     def harvest_tables(self, *, session, cdc_format):
@@ -219,6 +228,55 @@ def test_publish_stages_manifest_and_commits_offset():
     assert ingester.commit_state_arg is buffer.offset
     assert ingester.committed_offsets == [buffer.offset]
     assert disk.cleared == 1
+
+
+def test_a_stage_does_not_cover_changes_still_in_memory():
+    """The disk sentinel's thresholds can stage while the buffer still holds
+    changes it has not written: the staged offset must stop at what is on
+    disk, or a stop before the next stage loses those changes."""
+    from datetime import datetime
+
+    from tabsdatak.conn.common.sql.cdc._model import CdcDataChange
+    from tabsdatak.conn.common.sql.cdc._sentinel.buffer import BufferSentinel
+
+    class Positions:
+        def __init__(self, applied=()):
+            self.applied = list(applied)
+
+        def update(self, other) -> None:
+            self.applied.extend(other.applied)
+
+    def change(position: str) -> CdcDataChange:
+        return CdcDataChange(
+            operation="i",
+            transaction="tx",
+            sequence=1,
+            timestamp=datetime(2026, 1, 1),
+            table="s.t",
+            schema=None,
+            new_values={"id": 1},
+            old_values=None,
+            offset=Positions([position]),
+        )
+
+    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
+    disk.process_buffers = lambda buffers: None
+    buffer = BufferSentinel(
+        disk_sentinel=disk,
+        max_rows=1_000,
+        max_bytes=None,
+        max_secs=10_000,
+        tables={"s.t": None},
+        offset=Positions(),
+    )
+    buffer.process_data_change(change("written"))
+    buffer.flush()
+    buffer.process_data_change(change("in-memory"))
+    ingester = FakeIngester()
+
+    assert _publish(FakeCtx(active_values=[]), disk, buffer, ingester) is True
+    assert ingester.commit_state_arg.applied == ["written"]
+    assert ingester.committed_offsets[0].applied == ["written"]
 
 
 def test_publish_does_not_commit_offset_when_stage_fails():
@@ -411,7 +469,7 @@ def test_initial_load_pending_decision(initial_load, stream_state, pending):
     assert _initial_load_pending(ctx, cfg) is pending
 
 
-def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False):
+def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False, window_end=None):
     """Run ``_load_initially`` with the loader and sentinel faked out, so
     only the runner's own orchestration is under test."""
     manifest = [[tmp_path / "t0.parquet"], []]
@@ -430,7 +488,7 @@ def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False):
             return offset
 
     monkeypatch.setattr(_runner, "InitialLoader", FakeLoader)
-    ingester = FakeIngester()
+    ingester = FakeIngester(window_end=window_end)
     ingester.commit_state_marker = {"cdc.offset": "o"}
     result = _runner._load_initially(
         ctx=ctx,
@@ -446,7 +504,7 @@ def test_initial_load_stages_once_with_offset_and_flag(monkeypatch, tmp_path):
     ctx.work_dir = tmp_path
     result, offset, ingester, manifest = _loaded(monkeypatch, tmp_path, ctx=ctx)
 
-    assert result is offset
+    assert result == (offset, None)
     assert len(ctx.staged) == 1
     staged_files, staged_state = ctx.staged[0]
     assert staged_files == manifest
@@ -497,6 +555,139 @@ def test_initial_load_requires_a_tabsdata_owned_offset(monkeypatch, tmp_path):
     assert ctx.staged == []
 
 
+def test_a_load_with_a_window_is_left_unstaged(monkeypatch, tmp_path):
+    """The load is staged with the window's changes, once they are read and
+    deduplicated, so the load alone stages nothing."""
+    ctx = FakeCtx(active_values=[])
+    ctx.work_dir = tmp_path
+    end = object()
+    result, offset, ingester, manifest = _loaded(
+        monkeypatch, tmp_path, ctx=ctx, window_end=end
+    )
+    start, pending = result
+    assert start is offset
+    assert pending.manifest == manifest
+    assert pending.window_end is end
+    assert ctx.staged == []
+    assert ingester.committed_offsets == []
+
+
+class _FakeRegistry:
+    def version(self, table, ordinal):
+        return ("version", table, ordinal)
+
+
+def _with_window(monkeypatch, tmp_path, *, window):
+    """Run the loop over a pending load, with the window read and the
+    deduplication faked out."""
+    disk = FakeDisk(manifest=[[]])
+    buffer = FakeBuffer()
+    _patch_sentinels(monkeypatch, disk, buffer)
+    start, end = object(), object()
+    load_file = tmp_path / "load.parquet"
+    kept_file = tmp_path / "kept.parquet"
+    pending = _runner._PendingLoad(manifest=[[load_file]], window_end=end)
+    monkeypatch.setattr(_runner, "_load_initially", lambda **kw: (start, pending))
+    monkeypatch.setattr(_runner, "_read_window", lambda **kw: window)
+    deduplicated: list = []
+    monkeypatch.setattr(
+        _runner,
+        "deduplicate_initial_load_files",
+        lambda **kw: deduplicated.append(kw) or [[kept_file]],
+    )
+    ingester = FakeIngester()
+    ingester.schema_registry = _FakeRegistry()
+    ingester.commit_state_marker = {"cdc.offset": "end"}
+    ctx = FakeCtx(active_values=[False], stream_state=None)
+    ctx.work_dir = tmp_path
+    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg(initial_load=True))
+    return ctx, ingester, deduplicated, end, load_file, kept_file
+
+
+def test_the_load_is_staged_with_what_deduplication_keeps(monkeypatch, tmp_path):
+    window_file = tmp_path / "window.parquet"
+    ctx, ingester, deduplicated, end, load_file, kept_file = _with_window(
+        monkeypatch, tmp_path, window=[[window_file]]
+    )
+    assert ctx.staged == [
+        (
+            [[load_file, kept_file]],
+            {"cdc.offset": "end", CDC_INITIAL_LOAD_STATE_KEY: False},
+        )
+    ]
+    assert ingester.commit_state_arg is end
+    assert ingester.committed_offsets == [end]
+    (call,) = deduplicated
+    assert call["loaded"] == [[load_file]]
+    assert call["changes"] == [[window_file]]
+    assert call["schemas"] == {"s.t": ("version", "s.t", 0)}
+
+
+def test_an_interrupted_window_read_stages_nothing(monkeypatch, tmp_path):
+    ctx, ingester, deduplicated, *_ = _with_window(monkeypatch, tmp_path, window=None)
+    assert ctx.staged == []
+    assert deduplicated == []
+    assert ingester.closed is True
+
+
+class _BoundedIngester(FakeIngester):
+    """Delivers `batches` one poll each, then reports the bound reached."""
+
+    def __init__(self, batches):
+        super().__init__()
+        self._batches = list(batches)
+        self.bound = None
+
+    def bound_stream(self, end):
+        self.bound = end
+
+    def stream_bound_reached(self):
+        return not self._batches
+
+    def poll_changes(self, session):
+        return self._batches.pop(0)
+
+
+class _Identity:
+    def apply(self, changes):
+        return changes
+
+
+def _read(monkeypatch, tmp_path, ingester, limit):
+    disk = FakeDisk(manifest=[["window.parquet"]])
+    buffer = FakeBuffer()
+    _patch_sentinels(monkeypatch, disk, buffer)
+    ctx = FakeCtx(active_values=[])
+    ctx.work_dir = tmp_path
+    end = object()
+    manifest = _runner._read_window(
+        ctx=ctx,
+        ingester=ingester,
+        session=object(),
+        tracked_tables={"s.t": object()},
+        cfg=_cfg(initial_load_max_window_changes=limit),
+        large_column_policy=_Identity(),
+        window_end=end,
+        stop_signal=threading.Event(),
+    )
+    return manifest, buffer, end
+
+
+def test_the_window_is_read_by_the_bounded_poll(monkeypatch, tmp_path):
+    ingester = _BoundedIngester([["a", "b"], ["c"]])
+    manifest, buffer, end = _read(monkeypatch, tmp_path, ingester, limit=3)
+    assert manifest == [["window.parquet"]]
+    assert ingester.bound is end
+    assert buffer.processed == 3
+    assert buffer.flushed == 1
+
+
+def test_a_window_past_the_limit_fails(monkeypatch, tmp_path):
+    ingester = _BoundedIngester([["a", "b"], ["c", "d"]])
+    with pytest.raises(SqlCdcException, match="CDC_29"):
+        _read(monkeypatch, tmp_path, ingester, limit=3)
+
+
 def test_run_loop_seeds_the_mark_from_the_initial_load(monkeypatch, tmp_path):
     """Capture resumes exactly where the snapshot ended, so the load's
     offset seeds the mark last. The previous offset is seeded before it,
@@ -505,9 +696,7 @@ def test_run_loop_seeds_the_mark_from_the_initial_load(monkeypatch, tmp_path):
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
     load_offset = object()
-    monkeypatch.setattr(
-        _runner, "_load_initially", lambda **kw: load_offset
-    )
+    monkeypatch.setattr(_runner, "_load_initially", lambda **kw: (load_offset, None))
     previous = object()
     ingester = FakeIngester(resume_value=previous)
     seeds: list = []
@@ -526,7 +715,7 @@ def test_run_loop_skips_a_completed_initial_load(monkeypatch, tmp_path):
     _patch_sentinels(monkeypatch, disk, buffer)
     calls: list = []
     monkeypatch.setattr(
-        _runner, "_load_initially", lambda **kw: calls.append(kw) or object()
+        _runner, "_load_initially", lambda **kw: calls.append(kw) or (object(), None)
     )
     resume = object()
     ingester = FakeIngester(resume_value=resume)
