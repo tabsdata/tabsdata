@@ -7,6 +7,9 @@
 import json
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, stream_publisher
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._floor import unsafe_seconds
 from tabsdatak.conn.kafka import KafkaStreamSrc
 
 PUBLISHED_TABLE = "kafka_published"
@@ -33,6 +36,7 @@ SCHEMA = json.dumps({
         src_cfg={
             "kafka.messages_rollover": len(ROWS),
             "kafka.consume_timeout_seconds": 2,
+            "kafka.time_rollover_seconds": unsafe_seconds(1),
         },
     ),
     flush_interval_mins=1,

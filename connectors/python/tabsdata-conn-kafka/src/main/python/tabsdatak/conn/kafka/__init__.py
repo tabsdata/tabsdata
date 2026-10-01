@@ -54,9 +54,11 @@ import tabsdatak._api as _api
 # noinspection PyProtectedMember
 import tabsdatak.conn.kafka._validation as _validation
 from tabsdatak.api import StreamSrc, StrOrSecretSpec
+from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common import _validation as _common_validation
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream import _floor
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
@@ -271,7 +273,9 @@ SrcCfgKey: TypeAlias = Literal[
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
-    Mapping[SrcCfgKey, Any], _common_validation.CONN_CFG_VALIDATION
+    Mapping[SrcCfgKey, Any],
+    _common_validation.CONN_CFG_VALIDATION,
+    _floor.seconds_floor_validator("kafka.time_rollover_seconds"),
 ]
 
 

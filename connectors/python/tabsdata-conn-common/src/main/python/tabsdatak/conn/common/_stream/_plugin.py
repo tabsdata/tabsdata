@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 STREAM_NAMESPACE = "tabsdatak.conn.common._stream"
 
 
+def manifest_secs(trigger_max_secs: float, flush_interval_secs: float) -> float:
+    if flush_interval_secs > 0:
+        return min(trigger_max_secs, flush_interval_secs)
+    return trigger_max_secs
+
+
 @dataclass(kw_only=True)
 class StreamRun[R, O: StreamOffset]:
     ctx: StreamSrcPluginCtx
@@ -99,11 +105,11 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         plugin_logger.setLevel(cfg.logging_level)
 
         ingester = self.build_ingester(conn, stream_src)
-        plugin_logger.info("stream: starting (%s)", type(ingester).__name__)
+        plugin_logger.info("Starting the stream with %s", type(ingester).__name__)
         try:
             self.stream(ctx=ctx, ingester=ingester, cfg=cfg)
         finally:
-            plugin_logger.info("stream: stopped")
+            plugin_logger.info("Stopped the stream")
 
     def stream(
         self,
@@ -134,13 +140,6 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                 interrupted = True
                 return
             ledger = FileLedger(landing=ctx.work_dir, slots=run.slots)
-            disk_sentinel = DiskSentinel(
-                ledger=ledger,
-                max_rows=cfg.trigger_max_rows,
-                max_bytes=cfg.trigger_max_bytes,
-                max_secs=cfg.trigger_max_secs,
-                clock=self.clock,
-            )
             buffer_sentinel = BufferSentinel(
                 ledger=ledger,
                 encoder=self.build_encoder(run),
@@ -149,12 +148,20 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                 max_bytes=cfg.buffer_max_bytes,
                 max_secs=cfg.buffer_max_secs,
                 offset=ingester.base_offset(),
+                measure_bytes=cfg.trigger_max_bytes is not None,
+                clock=self.clock,
+            )
+            disk_sentinel = DiskSentinel(
+                ledger=ledger,
+                buffer=buffer_sentinel,
+                max_rows=cfg.trigger_max_rows,
+                max_bytes=cfg.trigger_max_bytes,
+                max_secs=manifest_secs(cfg.trigger_max_secs, flush_interval_secs),
                 clock=self.clock,
             )
 
             buffer_sentinel.reset_timer()
             disk_sentinel.reset_timer()
-            last_flush = self.clock()
 
             while not stop_signal.is_set() and ctx.active:
                 buffer_sentinel.add_all(
@@ -162,21 +169,16 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                 )
                 if buffer_sentinel.due():
                     buffer_sentinel.flush()
-                interval_due = (
-                    flush_interval_secs > 0
-                    and (self.clock() - last_flush) >= flush_interval_secs
-                    and ledger.has_data
-                )
-                if disk_sentinel.due(force=False) or interval_due:
+                if disk_sentinel.due():
+                    buffer_sentinel.flush()
                     self.publish(run, ledger, disk_sentinel, buffer_sentinel)
-                    last_flush = self.clock()
                 stop_signal.wait(timeout=cfg.poll_interval_seconds)
             if stop_signal.is_set():
                 interrupted = True
-                logger.info("stream: interrupted; exiting loop.")
+                logger.info("Interrupted the stream; exiting the run loop")
         except Exception as exception:
             errored = True
-            logger.error(f"Error in stream run loop: {exception}")
+            logger.error(f"Error in the stream run loop: {exception}")
             raise
         finally:
             if not interrupted and not errored:
@@ -224,4 +226,6 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         try:
             run.ingester.settle()
         except Exception as exception:
-            logger.warning(f"stream: could not record the final position: {exception}")
+            logger.warning(
+                f"Could not record the final position of the stream: {exception}"
+            )

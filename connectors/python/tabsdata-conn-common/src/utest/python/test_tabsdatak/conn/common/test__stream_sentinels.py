@@ -28,6 +28,7 @@ from tabsdatak.conn.common._stream._sentinels import (
     ChunkSentinel,
     DiskSentinel,
 )
+from tabsdatak.conn.common._stream.constants import MANIFEST_FLOOR_SECS
 from tabsdatak.conn.common.error import ConnErrorCode, ConnStreamException
 
 
@@ -62,12 +63,16 @@ def disk(
     max_rows: int | None = None,
     max_bytes: int | None = None,
     max_secs: float = math.inf,
+    floor_secs: float = 0,
+    buffer: BufferSentinel | None = None,
 ) -> DiskSentinel:
     return DiskSentinel(
         ledger=ledger,
+        buffer=buffer,
         max_rows=max_rows,
         max_bytes=max_bytes,
         max_secs=max_secs,
+        floor_secs=floor_secs,
         clock=clock,
     )
 
@@ -110,7 +115,7 @@ def test_the_disk_is_due_once_the_time_threshold_elapses(ledger: FileLedger):
     assert sentinel.due() is True
 
 
-def test_resetting_the_timer_restarts_the_time_threshold(ledger: FileLedger):
+def test_resetting_the_disk_timer_restarts_the_time_threshold(ledger: FileLedger):
     clock = Clock()
     sentinel = disk(ledger, clock, max_secs=60)
     ledger.write("s.a", table(1))
@@ -126,6 +131,84 @@ def test_the_disk_is_not_due_after_the_ledger_is_cleared(ledger: FileLedger):
     ledger.write("s.a", table(1))
     ledger.clear()
     assert sentinel.due() is False
+
+
+def test_nothing_is_due_before_the_floor_even_past_a_threshold(ledger: FileLedger):
+    clock = Clock()
+    sentinel = disk(ledger, clock, max_rows=1, max_secs=600, floor_secs=60)
+    ledger.write("s.a", table(1, 2, 3))
+    clock.now += 59.9
+    assert sentinel.due() is False
+    clock.now += 0.1
+    assert sentinel.due() is True
+
+
+def test_a_threshold_hit_before_the_floor_stages_at_the_floor(ledger: FileLedger):
+    clock = Clock()
+    sentinel = disk(ledger, clock, max_bytes=1, max_secs=600, floor_secs=60)
+    ledger.write("s.a", table(1))
+    assert sentinel.due() is False
+    clock.now += 60
+    assert sentinel.due() is True
+
+
+def test_past_the_floor_the_time_threshold_still_waits(ledger: FileLedger):
+    clock = Clock()
+    sentinel = disk(ledger, clock, max_rows=100, max_secs=600, floor_secs=60)
+    ledger.write("s.a", table(1))
+    clock.now += 599
+    assert sentinel.due() is False
+    clock.now += 1
+    assert sentinel.due() is True
+
+
+def test_a_time_threshold_below_the_floor_lowers_the_floor(ledger: FileLedger):
+    clock = Clock()
+    sentinel = disk(ledger, clock, max_rows=1, max_secs=5, floor_secs=60)
+    ledger.write("s.a", table(1))
+    clock.now += 4.9
+    assert sentinel.due() is False
+    clock.now += 0.1
+    assert sentinel.due() is True
+
+
+def test_forcing_bypasses_the_floor(ledger: FileLedger):
+    sentinel = disk(ledger, Clock(), max_secs=600, floor_secs=60)
+    ledger.write("s.a", table(1))
+    assert sentinel.due() is False
+    assert sentinel.due(force=True) is True
+
+
+def test_the_default_floor_is_the_manifest_floor(ledger: FileLedger):
+    clock = Clock()
+    sentinel = DiskSentinel(
+        ledger=ledger, max_rows=1, max_bytes=None, max_secs=600, clock=clock
+    )
+    ledger.write("s.a", table(1))
+    clock.now += MANIFEST_FLOOR_SECS - 0.1
+    assert sentinel.due() is False
+    clock.now += 0.1
+    assert sentinel.due() is True
+
+
+def test_the_disk_counts_what_the_buffer_still_holds(ledger: FileLedger):
+    clock = Clock()
+    held = buffer(ledger, clock, measure_bytes=True)
+    sentinel = disk(ledger, clock, buffer=held, max_rows=3)
+    held.add_all([Record("s.a", 1, size=4), Record("s.b", 2, size=6)])
+    ledger.write("s.a", table(3))
+    assert (sentinel.rows, sentinel.has_data) == (3, True)
+    assert sentinel.bytes == ledger.bytes + 10
+    assert sentinel.due() is True
+
+
+def test_the_disk_has_data_when_only_the_buffer_holds_it(ledger: FileLedger):
+    clock = Clock()
+    held = buffer(ledger, clock)
+    sentinel = disk(ledger, clock, buffer=held)
+    held.add(Record("s.a", 1))
+    assert ledger.has_data is False
+    assert sentinel.due(force=True) is True
 
 
 def chunks(ledger: FileLedger, **limits) -> ChunkSentinel:
@@ -252,6 +335,7 @@ def buffer(
     max_rows: int | None = None,
     max_bytes: int | None = None,
     max_secs: float = math.inf,
+    measure_bytes: bool = False,
 ) -> BufferSentinel:
     return BufferSentinel(
         ledger=ledger,
@@ -261,6 +345,7 @@ def buffer(
         max_bytes=max_bytes,
         max_secs=max_secs,
         offset=Trail() if offset is None else offset,
+        measure_bytes=measure_bytes,
         clock=clock,
     )
 
@@ -300,6 +385,14 @@ def test_sizes_are_measured_only_under_a_byte_threshold(ledger: FileLedger):
     sentinel = buffer(ledger, Clock(), encoder=encoder, max_rows=10)
     sentinel.add(Record("s.a", 1))
     assert encoder.sized == 0
+    assert sentinel.bytes == 0
+
+
+def test_sizes_are_measured_when_asked_for(ledger: FileLedger):
+    encoder = RecordEncoder()
+    sentinel = buffer(ledger, Clock(), encoder=encoder, measure_bytes=True)
+    sentinel.add(Record("s.a", 1, size=7))
+    assert (encoder.sized, sentinel.bytes, sentinel.rows) == (1, 7, 1)
 
 
 def test_the_buffer_is_due_once_the_time_threshold_elapses(ledger: FileLedger):
@@ -329,7 +422,9 @@ def test_an_empty_buffer_is_never_due(ledger: FileLedger):
     assert sentinel.due() is False
 
 
-def test_resetting_the_timer_restarts_the_time_threshold(ledger: FileLedger):
+def test_resetting_the_buffer_timer_restarts_the_time_threshold(
+    ledger: FileLedger,
+):
     clock = Clock()
     sentinel = buffer(ledger, clock, max_secs=60)
     sentinel.add(Record("s.a", 1))

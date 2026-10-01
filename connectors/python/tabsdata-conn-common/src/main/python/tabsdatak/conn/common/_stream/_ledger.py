@@ -61,8 +61,8 @@ class FileLedger:
         self._bytes += file_bytes
 
         logger.debug(
-            f"Buffer flush: writen {slot} → {file_name} "
-            f"({file_rows} rows & {file_bytes} bytes)"
+            f"Wrote {file_rows} row(s) and {file_bytes} byte(s) of {slot} "
+            f"to {file_name}"
         )
         return file_path
 

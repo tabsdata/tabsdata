@@ -119,6 +119,13 @@ def test_run_config_format_fields_default_to_columns_flattened():
 # --- logging_level wiring -------------------------------------------
 
 
+def test_run_config_decodes_a_marked_trigger_max_secs():
+    from tabsdatak.conn.common._stream._floor import unsafe_seconds
+
+    src = _src(src_cfg={"tabsdata.cdc.trigger.max_secs": unsafe_seconds(2)})
+    assert _build_cdc_run_config(src).trigger_max_secs == 2
+
+
 def test_run_config_logging_level_default_is_error():
     import logging
     cfg = _build_cdc_run_config(_src())

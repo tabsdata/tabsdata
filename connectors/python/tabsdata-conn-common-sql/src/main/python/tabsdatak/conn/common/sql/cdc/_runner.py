@@ -369,7 +369,7 @@ class CdcPlugin[C: Conn, SS: StreamSrc](
             stop_signal=run.stop_signal,
         )
         if window is None:
-            logger.info("cdc: interrupted while reading the initial load window.")
+            logger.info("Interrupted while reading the initial load window")
             return False
         _stage_initial_load(
             ctx=run.ctx,

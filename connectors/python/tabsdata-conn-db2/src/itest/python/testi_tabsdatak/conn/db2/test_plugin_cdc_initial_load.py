@@ -35,6 +35,9 @@ from testi_tabsdatak.conn.db2.backend import (
 )
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._floor import unsafe_seconds
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._signal import StopSignal
 from tabsdatak.conn.db2 import Db2CdcStreamSrc, Db2CdcStreamSrcConn
 
@@ -61,6 +64,7 @@ _SRC_CFG = {
     "tabsdata.cdc.buffer.max_rows": 1,
     "tabsdata.cdc.buffer.max_secs": 1,
     "tabsdata.cdc.trigger.max_rows": 1,
+    "tabsdata.cdc.trigger.max_secs": unsafe_seconds(1),
     "tabsdata.cdc.poll_interval_seconds": 1,
     "db2.cdc.blocking_timeout_seconds": 1,
 }

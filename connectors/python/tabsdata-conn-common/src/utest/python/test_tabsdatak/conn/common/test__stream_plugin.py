@@ -23,7 +23,11 @@ from tabsdatak.conn.common._stream._encoder import StreamEncoder
 from tabsdatak.conn.common._stream._offset import StreamOffset
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._plugin import PipelineStreamSrcPlugin, StreamRun
+from tabsdatak.conn.common._stream._plugin import (
+    PipelineStreamSrcPlugin,
+    StreamRun,
+    manifest_secs,
+)
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._sentinels import BufferSentinel
@@ -175,16 +179,6 @@ class Plugin(PipelineStreamSrcPlugin):
         return None
 
 
-class StepClock:
-    def __init__(self, *values: float) -> None:
-        self._values = list(values)
-
-    def __call__(self) -> float:
-        if len(self._values) > 1:
-            return self._values.pop(0)
-        return self._values[0]
-
-
 def cfg() -> StreamRunConfig:
     return StreamRunConfig(poll_interval_seconds=0)
 
@@ -324,29 +318,73 @@ def test_stream_threshold_flush_stages_once(monkeypatch):
     assert len(ctx.staged) == 1
 
 
-def test_stream_interval_flush_stages_when_interval_elapses(monkeypatch):
-    disk = FakeDisk(manifest=[[Path("f")]], due_normal=False, due_force=False)
-    patch_sentinels(monkeypatch, disk, FakeBuffer())
-    plugin = Plugin()
-    plugin.clock = StepClock(1000.0, 1120.0)
-    ctx = FakeCtx(active_values=[True, False], flush_interval_mins=1)
+def disk_arguments(monkeypatch, disk) -> dict:
+    arguments: dict = {}
 
-    stream(ctx, FakeIngester(), plugin=plugin)
+    def build(**kwargs):
+        arguments.update(kwargs)
+        return disk
 
-    assert len(ctx.staged) == 1
+    monkeypatch.setattr(_plugin, "DiskSentinel", build)
+    return arguments
 
 
-def test_stream_interval_flush_skipped_when_no_data(monkeypatch):
-    disk = FakeDisk(manifest=[[]], due_normal=False)
-    disk.has_data = False
-    patch_sentinels(monkeypatch, disk, FakeBuffer())
-    plugin = Plugin()
-    plugin.clock = StepClock(1000.0, 1120.0)
-    ctx = FakeCtx(active_values=[True, False], flush_interval_mins=1)
+@pytest.mark.parametrize(
+    ("trigger_max_secs", "flush_interval_mins", "expected"),
+    [(60, 0, 60), (600, 0, 600), (600, 2, 120), (60, 10, 60), (5, 1, 5)],
+)
+def test_the_manifest_time_threshold_is_capped_by_the_flush_interval(
+    trigger_max_secs, flush_interval_mins, expected
+):
+    assert manifest_secs(trigger_max_secs, flush_interval_mins * 60) == expected
 
-    stream(ctx, FakeIngester(), plugin=plugin)
 
-    assert ctx.staged == []
+def test_stream_hands_the_disk_sentinel_its_thresholds(monkeypatch):
+    disk = FakeDisk(manifest=[[]])
+    buffer = FakeBuffer()
+    patch_sentinels(monkeypatch, disk, buffer)
+    arguments = disk_arguments(monkeypatch, disk)
+    ctx = FakeCtx(active_values=[False], flush_interval_mins=2)
+
+    Plugin().stream(
+        ctx=ctx,
+        ingester=FakeIngester(),
+        cfg=StreamRunConfig(
+            trigger_max_rows=7,
+            trigger_max_bytes=11,
+            trigger_max_secs=600,
+            poll_interval_seconds=0,
+        ),
+    )
+
+    assert arguments["buffer"] is buffer
+    assert (
+        arguments["max_rows"],
+        arguments["max_bytes"],
+        arguments["max_secs"],
+    ) == (7, 11, 120)
+
+
+def test_a_due_manifest_writes_the_buffer_out_before_it_stages(monkeypatch):
+    class OrderedDisk(FakeDisk):
+        def manifest(self):
+            order.append("manifest")
+            return super().manifest()
+
+    class OrderedBuffer(FakeBuffer):
+        def flush(self) -> None:
+            order.append("flush")
+            super().flush()
+
+    order: list[str] = []
+    disk = OrderedDisk(manifest=[[Path("f")]], due_normal=True)
+    patch_sentinels(monkeypatch, disk, OrderedBuffer())
+    ctx = FakeCtx(active_values=[True, False])
+
+    stream(ctx, FakeIngester())
+
+    assert order[:2] == ["flush", "manifest"]
+    assert len(ctx.staged) >= 1
 
 
 def test_stream_graceful_end_flushes_trailing_batch(monkeypatch):

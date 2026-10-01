@@ -27,6 +27,9 @@ import logging
 from typing import TYPE_CHECKING
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._floor import decode_seconds
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
@@ -117,7 +120,10 @@ def _build_cdc_run_config(
         trigger_max_bytes=cfg.get(
             _KEY_CDC_TRIGGER_MAX_BYTES, DEFAULT_TRIGGER_MAX_BYTES
         ),
-        trigger_max_secs=cfg.get(_KEY_CDC_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
+        trigger_max_secs=decode_seconds(
+            _KEY_CDC_TRIGGER_MAX_SECS,
+            cfg.get(_KEY_CDC_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
+        ),
         poll_interval_seconds=cfg.get(
             _KEY_CDC_POLL_INTERVAL, DEFAULT_POLL_INTERVAL_SECONDS
         ),

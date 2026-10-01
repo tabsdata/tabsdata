@@ -23,6 +23,9 @@ from tabsdatak.api import Secret
 from tabsdatak.conn.common._stream import _plugin
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._floor import unsafe_seconds
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._signal import StopSignal
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
@@ -88,13 +91,19 @@ def test_run_config_defaults():
     cfg = KafkaStreamSrcPlugin().build_run_config(_src())
     assert cfg.consume_timeout_secs == 2
     assert cfg.connection_timeout_secs == 16
-    assert cfg.buffer_max_secs == 60
-    assert cfg.buffer_max_bytes is None
-    assert cfg.buffer_max_rows is None
+    assert cfg.trigger_max_secs == 60
+    assert cfg.trigger_max_bytes is None
+    assert cfg.trigger_max_rows is None
+    assert (cfg.buffer_max_rows, cfg.buffer_max_bytes, cfg.buffer_max_secs) == (
+        10_000,
+        None,
+        60,
+    )
+    assert cfg.poll_interval_seconds == 0
     assert cfg.logging_level == logging.ERROR
 
 
-def test_run_config_maps_the_rollover_keys_onto_the_buffer():
+def test_run_config_maps_the_rollover_keys_onto_the_trigger():
     src = _src(
         src_cfg={
             "kafka.consume_timeout_seconds": 5,
@@ -108,37 +117,22 @@ def test_run_config_maps_the_rollover_keys_onto_the_buffer():
     cfg = KafkaStreamSrcPlugin().build_run_config(src)
     assert cfg.consume_timeout_secs == 5
     assert cfg.connection_timeout_secs == 30
-    assert cfg.buffer_max_secs == 120
-    assert cfg.buffer_max_bytes == 64 * 1024 * 1024
-    assert cfg.buffer_max_rows == 1000
+    assert cfg.trigger_max_secs == 120
+    assert cfg.trigger_max_bytes == 64 * 1024 * 1024
+    assert cfg.trigger_max_rows == 1000
     assert cfg.logging_level == logging.DEBUG
 
 
-def test_run_config_stages_every_file_as_soon_as_it_is_written():
-    cfg = KafkaStreamSrcPlugin().build_run_config(_src())
-    assert (cfg.trigger_max_rows, cfg.trigger_max_bytes, cfg.trigger_max_secs) == (
-        None,
-        None,
-        0,
-    )
-    assert cfg.poll_interval_seconds == 0
+def test_run_config_decodes_a_marked_time_rollover():
+    src = _src(src_cfg={"kafka.time_rollover_seconds": unsafe_seconds(3)})
+    assert KafkaStreamSrcPlugin().build_run_config(src).trigger_max_secs == 3
 
 
-@pytest.mark.parametrize(
-    ("flush_interval_mins", "expected"), [(0, 120), (1, 60), (5, 120)]
-)
-def test_the_flush_interval_caps_the_time_rollover(flush_interval_mins, expected):
-    plugin = KafkaStreamSrcPlugin()
-    src = _src(src_cfg={"kafka.time_rollover_seconds": 120})
-    ctx = MagicMock()
-    ctx.flush_interval_mins = flush_interval_mins
-    run = plugin.build_run(
-        ctx=ctx,
-        ingester=plugin.build_ingester(_conn(), src),
-        cfg=plugin.build_run_config(src),
-        stop_signal=StopSignal(),
-    )
-    assert run.cfg.buffer_max_secs == expected
+@pytest.mark.parametrize("seconds", [0, 15, 59])
+def test_a_time_rollover_below_the_floor_is_rejected(seconds):
+    with pytest.raises(TabsdataException) as raised:
+        _src(src_cfg={"kafka.time_rollover_seconds": seconds})
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_5
 
 
 # --- Plugin.run wiring ---------------------------------------------
@@ -253,6 +247,7 @@ def _run(tmp_path, polls, *, active_calls, src_cfg=None):
     consumer = MagicMock()
     consumer.poll.side_effect = polls
     ctx = _make_ctx(tmp_path, active_calls=active_calls)
+    src_cfg = {"kafka.time_rollover_seconds": unsafe_seconds(0)} | (src_cfg or {})
     with patch("confluent_kafka.Consumer", return_value=consumer):
         KafkaStreamSrcPlugin().run(ctx, _conn(), _src(src_cfg=src_cfg))
     return ctx, consumer
@@ -286,15 +281,10 @@ def test_a_schema_change_adds_a_file_to_the_same_manifest(tmp_path):
     assert _committed_offsets(consumer) == [{0: 3}]
 
 
-def test_the_commit_covers_only_the_staged_messages(tmp_path):
-    polls = [_message({"a": 1}, 1), _message({"a": 2}, 2), _message({"a": 3}, 3), None]
-    polls += [None, None]
-    ctx, consumer = _run(
-        tmp_path,
-        polls,
-        active_calls=[True, False],
-        src_cfg={"kafka.messages_rollover": 2},
-    )
+def test_each_stage_commits_exactly_what_it_staged(tmp_path):
+    polls = [_message({"a": 1}, 1), _message({"a": 2}, 2), None]
+    polls += [_message({"a": 3}, 3), None, None, None]
+    ctx, consumer = _run(tmp_path, polls, active_calls=[True, True, False])
 
     assert _staged_ids(ctx) == [[[1, 2]], [[3]]]
     assert _committed_offsets(consumer) == [{0: 3}, {0: 4}]

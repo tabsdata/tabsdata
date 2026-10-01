@@ -12,6 +12,7 @@ import pyarrow as pa
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
 from tabsdatak.conn.common._stream._ledger import FileLedger
 from tabsdatak.conn.common._stream._offset import StreamOffset
+from tabsdatak.conn.common._stream.constants import MANIFEST_FLOOR_SECS
 from tabsdatak.conn.common.error import ConnErrorCode
 
 
@@ -64,28 +65,51 @@ class DiskSentinel:
         self,
         *,
         ledger: FileLedger,
+        buffer: BufferSentinel | None = None,
         max_rows: int | None,
         max_bytes: int | None,
         max_secs: float,
+        floor_secs: float = MANIFEST_FLOOR_SECS,
         clock: Callable[[], float] = time.time,
     ):
         self._ledger = ledger
+        self._buffer = buffer
         self._max_rows = max_rows
         self._max_bytes = max_bytes
         self._max_secs = max_secs
+        self._floor_secs = min(floor_secs, max_secs)
         self._clock = clock
         self._last_flushed: float = clock()
+
+    @property
+    def rows(self) -> int:
+        buffered = self._buffer.rows if self._buffer is not None else 0
+        return self._ledger.rows + buffered
+
+    @property
+    def bytes(self) -> int:
+        buffered = self._buffer.bytes if self._buffer is not None else 0
+        return self._ledger.bytes + buffered
+
+    @property
+    def has_data(self) -> bool:
+        buffered = self._buffer is not None and self._buffer.has_data
+        return self._ledger.has_data or buffered
 
     def reset_timer(self) -> None:
         self._last_flushed = self._clock()
 
     def due(self, force: bool = False) -> bool:
-        rows_hit = self._max_rows is not None and self._ledger.rows >= self._max_rows
-        bytes_hit = (
-            self._max_bytes is not None and self._ledger.bytes >= self._max_bytes
-        )
-        time_hit = (self._clock() - self._last_flushed) >= self._max_secs
-        return self._ledger.has_data and (force or rows_hit or bytes_hit or time_hit)
+        if not self.has_data:
+            return False
+        if force:
+            return True
+        elapsed = self._clock() - self._last_flushed
+        if elapsed < self._floor_secs:
+            return False
+        rows_hit = self._max_rows is not None and self.rows >= self._max_rows
+        bytes_hit = self._max_bytes is not None and self.bytes >= self._max_bytes
+        return elapsed >= self._max_secs or rows_hit or bytes_hit
 
 
 class BufferSentinel[R, O: StreamOffset]:
@@ -99,12 +123,14 @@ class BufferSentinel[R, O: StreamOffset]:
         max_bytes: int | None,
         max_secs: float,
         offset: O,
+        measure_bytes: bool = False,
         clock: Callable[[], float] = time.time,
     ):
         self._ledger = ledger
         self._encoder = encoder
         self._max_rows = max_rows
         self._max_bytes = max_bytes
+        self._measure_bytes = measure_bytes or max_bytes is not None
         self._max_secs = max_secs
         self._clock = clock
         self._records: dict[str, list[R]] = {slot: [] for slot in slots}
@@ -113,6 +139,14 @@ class BufferSentinel[R, O: StreamOffset]:
         self._last_flushed: float = clock()
         self._offset: O = offset
         self._pending: list[O] = []
+
+    @property
+    def rows(self) -> int:
+        return self._rows
+
+    @property
+    def bytes(self) -> int:
+        return self._bytes
 
     @property
     def has_data(self) -> bool:
@@ -135,7 +169,7 @@ class BufferSentinel[R, O: StreamOffset]:
             return
         self._records[slot].append(record)
         self._rows += 1
-        if self._max_bytes is not None:
+        if self._measure_bytes:
             self._bytes += self._encoder.size(record)
         if self._offset is None:
             raise ConnErrorCode.CONN_33.exception()

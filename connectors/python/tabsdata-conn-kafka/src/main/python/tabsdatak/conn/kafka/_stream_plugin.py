@@ -21,7 +21,6 @@ Kafka consumer offset on the broker.
 
 from __future__ import annotations
 
-import dataclasses
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -30,10 +29,10 @@ from dataclasses import dataclass
 from tabsdatak.conn.common._stream._config import StreamRunConfig
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._plugin import PipelineStreamSrcPlugin, StreamRun
+from tabsdatak.conn.common._stream._floor import decode_seconds
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._signal import StopSignal
+from tabsdatak.conn.common._stream._plugin import PipelineStreamSrcPlugin, StreamRun
 from tabsdatak.conn.kafka import (
     KafkaStreamSrc,
     KafkaStreamSrcConn,
@@ -55,7 +54,6 @@ from tabsdatak.conn.kafka._stream_impl import (
 )
 from tabsdatak.spi import (
     StreamSrcDef,
-    StreamSrcPluginCtx,
     StreamStageSrc,
 )
 
@@ -85,14 +83,14 @@ def _build_kafka_run_config(src: KafkaStreamSrc) -> KafkaRunConfig:
     cfg = dict(src.src_cfg or {})
     size_rollover_mb = cfg.get(_KEY_SIZE_ROLLOVER_MB)
     return KafkaRunConfig(
-        buffer_max_rows=cfg.get(_KEY_MESSAGES_ROLLOVER),
-        buffer_max_bytes=(
+        trigger_max_rows=cfg.get(_KEY_MESSAGES_ROLLOVER),
+        trigger_max_bytes=(
             None if size_rollover_mb is None else int(size_rollover_mb) * _MEBIBYTE
         ),
-        buffer_max_secs=int(cfg.get(_KEY_TIME_ROLLOVER, DEFAULT_TIME_ROLLOVER_SECS)),
-        trigger_max_rows=None,
-        trigger_max_bytes=None,
-        trigger_max_secs=0,
+        trigger_max_secs=decode_seconds(
+            _KEY_TIME_ROLLOVER,
+            cfg.get(_KEY_TIME_ROLLOVER, DEFAULT_TIME_ROLLOVER_SECS),
+        ),
         poll_interval_seconds=0,
         consume_timeout_secs=int(
             cfg.get(_KEY_CONSUME_TIMEOUT, DEFAULT_CONSUME_TIMEOUT_SECS),
@@ -125,23 +123,6 @@ class KafkaStreamSrcPlugin(
             stream_src=stream_src,
             consume_timeout_secs=cfg.consume_timeout_secs,
             connection_timeout_secs=cfg.connection_timeout_secs,
-        )
-
-    def build_run(
-        self,
-        *,
-        ctx: StreamSrcPluginCtx,
-        ingester: KafkaIngester,
-        cfg: KafkaRunConfig,
-        stop_signal: StopSignal,
-    ) -> StreamRun[KafkaRecord, KafkaPosition]:
-        if ctx.flush_interval_mins > 0:
-            cfg = dataclasses.replace(
-                cfg,
-                buffer_max_secs=min(cfg.buffer_max_secs, ctx.flush_interval_mins * 60),
-            )
-        return super().build_run(
-            ctx=ctx, ingester=ingester, cfg=cfg, stop_signal=stop_signal
         )
 
     def slots(self, run: StreamRun[KafkaRecord, KafkaPosition]) -> Sequence[str]:

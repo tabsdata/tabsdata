@@ -20,6 +20,8 @@ from tabsdatax.itest.fixture.backends.redpanda import RedpandaDomain, redpanda_d
 from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.kafka.backend import Broker, broker, confluent_sr, src_conn
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._floor import unsafe_seconds
 from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn, Protobuf
 
 # noinspection PyProtectedMember
@@ -46,7 +48,10 @@ SCHEMAS = Path(__file__).parents[4] / "resources/testi_tabsdatak/conn/kafka/sche
 PROTOBUF_MESSAGE = "PersonV1"
 PLUGIN_TIMEOUT_SECONDS = 60.0
 CAPTURE_TIMEOUT_SECONDS = 45.0
-ROLLOVER_CFG = {"kafka.consume_timeout_seconds": 2, "kafka.time_rollover_seconds": 1}
+ROLLOVER_CFG = {
+    "kafka.consume_timeout_seconds": 2,
+    "kafka.time_rollover_seconds": unsafe_seconds(1),
+}
 
 
 @dataclass
@@ -443,11 +448,7 @@ def test_stream_src_plugin_messages_rollover_stages_while_running(
             domain,
             topic=topic,
             variant=JSON_VARIANT,
-            src_cfg=ROLLOVER_CFG
-            | {
-                "kafka.time_rollover_seconds": 3600,
-                "kafka.messages_rollover": len(messages) // 2,
-            },
+            src_cfg=ROLLOVER_CFG | {"kafka.messages_rollover": len(messages) // 2},
         )
         _run_plugin(ctx, conn, src)
 

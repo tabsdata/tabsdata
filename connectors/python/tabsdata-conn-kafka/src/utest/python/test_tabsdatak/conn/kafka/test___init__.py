@@ -236,7 +236,7 @@ def test_kafka_stream_src_accepts_known_src_cfg_keys():
         schema="",
         src_cfg={
             "kafka.consume_timeout_seconds": 2,
-            "kafka.time_rollover_seconds": 30,
+            "kafka.time_rollover_seconds": 60,
             "kafka.size_rollover_mb": 16,
             "kafka.messages_rollover": 1000,
             "kafka.logging_level": 20,
@@ -257,3 +257,18 @@ def test_kafka_stream_src_json_round_trip():
     )
     loaded = KafkaStreamSrc.from_json(src.to_json())
     assert loaded == src
+
+
+def test_kafka_stream_src_json_round_trip_keeps_a_marked_time_rollover():
+    from tabsdatak.conn.common._stream._floor import unsafe_seconds
+    from tabsdatak.conn.kafka import KafkaStreamSrc
+
+    marked = unsafe_seconds(1)
+    src = KafkaStreamSrc(
+        topic="events",
+        data_format="json",
+        schema="",
+        src_cfg={"kafka.time_rollover_seconds": marked},
+    )
+    loaded = KafkaStreamSrc.from_json(src.to_json())
+    assert loaded.src_cfg["kafka.time_rollover_seconds"] == marked

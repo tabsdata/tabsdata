@@ -227,9 +227,10 @@ def validate_call(
 # is re-validated through the field.
 #
 # Each ``Rule`` pairs a check with the ``ErrorCode`` raised when it fails,
-# so a rejection reports a domain message ("not a valid S3 bucket name")
-# instead of the regex that did the rejecting. A field may carry several
-# rules, each with its own code, so multi-part shapes stay diagnosable.
+# so a rejection reports a domain message ("The value is not a valid S3
+# bucket name") instead of the regex that did the rejecting. A field may
+# carry several rules, each with its own code, so multi-part shapes stay
+# diagnosable.
 # ---------------------------------------------------------------------------
 
 

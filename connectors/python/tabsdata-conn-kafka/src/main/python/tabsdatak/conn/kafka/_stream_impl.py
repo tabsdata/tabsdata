@@ -108,20 +108,20 @@ class KafkaPosition(StreamOffset):
         try:
             payload = json.loads(data)
             if not isinstance(payload, dict):
-                raise TypeError("the offset is not a topic map")
+                raise TypeError("The offset is not a map of topics")
             offsets: dict[str, dict[int, int]] = {}
             for topic, partitions in payload.items():
                 if not isinstance(partitions, dict):
-                    raise TypeError(f"the partitions of {topic!r} are not a map")
+                    raise TypeError(f"The partitions of topic {topic!r} are not a map")
                 offsets[topic] = {}
                 for partition, offset in partitions.items():
                     number = int(partition)
                     if number < 0:
-                        raise ValueError(f"partition {partition!r} is negative")
+                        raise ValueError(f"The partition {partition!r} is negative")
                     if isinstance(offset, bool) or not isinstance(offset, int):
-                        raise TypeError(f"offset {offset!r} is not an integer")
+                        raise TypeError(f"The offset {offset!r} is not an integer")
                     if offset < 0:
-                        raise ValueError(f"offset {offset!r} is negative")
+                        raise ValueError(f"The offset {offset!r} is negative")
                     offsets[topic][number] = offset
         except (TypeError, ValueError) as error:
             raise KafkaErrorCode.KAFKA_25.exception(cause=error, state=data)
@@ -300,7 +300,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
                 return
             err = msg.error()
             if err is not None:
-                logger.error("Kafka error: %s", err)
+                logger.error("Received an error from the Kafka broker: %s", err)
                 self._send_to_dlq(msg, err)
                 continue
             try:

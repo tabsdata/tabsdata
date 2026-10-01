@@ -99,87 +99,95 @@ class ConnErrorCode(ErrorCode):
     # broke, never the regex that enforced it.
     CONN_17 = ErrorDef(
         ConnInitException,
-        "not a cloud object-key prefix (must start with '/', no trailing '/' "
-        "except the bare root, no empty segments, no backslash or NUL): {value!r}",
+        "The value is not a cloud object-key prefix (it must start with '/', "
+        "have no trailing '/' except the bare root, and no empty segments, "
+        "backslash or NUL): {value!r}",
     )  # CloudRelativePathSpec
     CONN_18 = ErrorDef(
         ConnInitException,
-        "not an absolute local path (POSIX '/a/b' or Windows 'C:/a/b'; UNC and "
-        "relative paths are rejected, no empty segments or NUL): {value!r}",
+        "The value is not an absolute local path (POSIX '/a/b' or Windows "
+        "'C:/a/b'; UNC and relative paths are rejected, as are empty segments "
+        "and NUL): {value!r}",
     )  # LocalAbsolutePathSpec
     CONN_19 = ErrorDef(
         ConnInitException,
-        "not a valid S3 bucket name (3-63 chars, lowercase letters, digits and "
-        "hyphens, starting and ending alphanumeric): {value!r}",
+        "The value is not a valid S3 bucket name (3-63 characters of lowercase "
+        "letters, digits and hyphens, starting and ending alphanumeric): "
+        "{value!r}",
     )  # S3BucketSpec
     CONN_20 = ErrorDef(
         ConnInitException,
-        "not a valid AWS region name (e.g. 'us-east-1', 'us-gov-west-1'): {value!r}",
+        "The value is not a valid AWS region name (for example 'us-east-1' or "
+        "'us-gov-west-1'): {value!r}",
     )  # AwsRegionSpec
     CONN_21 = ErrorDef(
         ConnInitException,
-        "not a valid GCS bucket name (3-63 chars, lowercase letters, digits, "
-        "hyphens and underscores, starting and ending alphanumeric): {value!r}",
+        "The value is not a valid GCS bucket name (3-63 characters of lowercase "
+        "letters, digits, hyphens and underscores, starting and ending "
+        "alphanumeric): {value!r}",
     )  # GCSBucketSpec
     CONN_22 = ErrorDef(
         ConnInitException,
-        "not a valid Azure Blob container name (3-63 chars, lowercase letters and "
-        "digits with single non-leading, non-trailing hyphens): {value!r}",
+        "The value is not a valid Azure Blob container name (3-63 characters of "
+        "lowercase letters and digits, with single hyphens that neither lead nor "
+        "trail): {value!r}",
     )  # AzContainerSpec
     CONN_23 = ErrorDef(
         ConnInitException,
-        "not a DNS host name or IPv4 literal (e.g. 'localhost', 'db.example.com', "
-        "'10.0.0.1'): {value!r}",
+        "The value is not a DNS host name or an IPv4 literal (for example "
+        "'localhost', 'db.example.com' or '10.0.0.1'): {value!r}",
     )  # HostSpec
     CONN_24 = ErrorDef(
         ConnInitException,
-        "not a TCP port number (1-65535, written without leading zeros, sign or "
-        "spaces): {value!r}",
+        "The value is not a TCP port number (1-65535, written without leading "
+        "zeros, sign or spaces): {value!r}",
     )  # PortSpec
     CONN_25 = ErrorDef(
         ConnInitException,
-        "not a boolean flag (one of true/false, t/f, yes/no, y/n, on/off, 1/0, "
-        "case-insensitive): {value!r}",
+        "The value is not a boolean flag (one of true/false, t/f, yes/no, y/n, "
+        "on/off or 1/0, in any case): {value!r}",
     )  # BoolSpec
     CONN_26 = ErrorDef(
-        ConnInitException, "FqnDef.separator must be non-empty"
+        ConnInitException, "The FqnDef separator must be non-empty"
     )  # SeparatorSpec
     CONN_27 = ErrorDef(
-        ConnInitException, "FqnDef.quote, when set, must be non-empty"
+        ConnInitException, "The FqnDef quote, when set, must be non-empty"
     )  # QuoteSpec
     CONN_28 = ErrorDef(
         ConnInitException,
-        "entity_whitelist entry at index {index} is not a valid regular "
+        "The entity_whitelist entry at index {index} is not a valid regular "
         "expression: {value!r}: {reason}",
     )  # EntityWhitelistSpec
     CONN_29 = ErrorDef(
         ConnInitException,
-        "name has {parts} parts, exceeds the maximum of {max_parts}: {value!r}",
+        "The name has {parts} parts, which exceeds the maximum of {max_parts}: "
+        "{value!r}",
     )  # name_validate -- too many FQN parts
     CONN_30 = ErrorDef(
         ConnInitException,
-        "not a valid {syntax} qualified name: {value!r}: {reason}",
+        "The value is not a valid {syntax} qualified name: {value!r}: {reason}",
     )  # name_validate -- FQN syntax error
     # --- cfg shape (tabsdatak.conn.common._validation) --------------
     # `conn_cfg` / `src_cfg` / `dest_cfg` accept only JSON-like values;
     # `check_basic` reports which way a tree broke that rule.
     CONN_31 = ErrorDef(
         ConnInitException,
-        "cfg key at {path} must be a string, got {type}",
+        "The configuration key at {path} must be a string; its type is {type}",
     )  # check_basic -- non-str dict key
     CONN_32 = ErrorDef(
         ConnInitException,
-        "cfg value at {path} must be a string, number, boolean, null, list or "
-        "dict, got {type}",
+        "The configuration value at {path} must be a string, number, boolean, "
+        "null, list or dict; its type is {type}",
     )  # check_basic -- non-basic value
     CONN_33 = ErrorDef(
         ConnStreamException,
-        "Buffer sentinel has no base offset; ingester must provide a "
-        "base offset at initialization",
+        "The buffer sentinel has no base offset; the ingester must provide one "
+        "at initialization",
     )
     CONN_34 = ErrorDef(
         ConnStreamException,
-        "{ingester} reported a position to record without staging, but gave "
+        "The ingester {ingester} reported a position to record without staging, "
+        "but gave "
         "{offset!r}: it must report the offset the stream resumes from, and "
         "keep that offset in Tabsdata stream state",
     )

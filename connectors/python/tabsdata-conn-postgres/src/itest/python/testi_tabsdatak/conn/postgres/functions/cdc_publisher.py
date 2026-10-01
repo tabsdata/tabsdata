@@ -3,6 +3,9 @@
 #
 
 from tabsdatak.api import TableFrameSpec, TableFramesSpec, stream_publisher
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._floor import unsafe_seconds
 from tabsdatak.conn.postgres import PostgresCdcStreamSrc
 
 PUBLISHED_TABLE = "postgres_cdc_published"
@@ -16,6 +19,7 @@ SRC_CFG = {
     "tabsdata.cdc.buffer.max_rows": 1,
     "tabsdata.cdc.buffer.max_secs": 1,
     "tabsdata.cdc.trigger.max_rows": 1,
+    "tabsdata.cdc.trigger.max_secs": unsafe_seconds(1),
     "tabsdata.cdc.poll_interval_seconds": 1,
     "postgres.cdc.blocking_timeout_seconds": 2,
 }
