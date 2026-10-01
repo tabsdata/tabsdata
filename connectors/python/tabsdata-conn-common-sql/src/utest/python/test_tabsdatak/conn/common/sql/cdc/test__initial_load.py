@@ -67,7 +67,7 @@ class _PinOnYieldSession(InitialLoadSession):
 def _loader(ingester) -> InitialLoader:
     return InitialLoader(
         ingester=ingester,
-        disk_sentinel=MagicMock(),
+        chunk_sentinel=MagicMock(),
         cdc_format=MagicMock(),
         large_column_policy=MagicMock(),
         fetch_size=10,

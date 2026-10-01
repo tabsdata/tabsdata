@@ -9,6 +9,9 @@ import sys
 import time
 from collections.abc import Iterable
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._ledger import FileLedger
+from tabsdatak.conn.common.sql.cdc._encoder import CdcEncoder
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
@@ -16,7 +19,6 @@ from tabsdatak.conn.common.sql.cdc._model import (
     TrackedTable,
 )
 from tabsdatak.conn.common.sql.cdc._sentinel import CdcBuffer
-from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
 from tabsdatak.conn.common.sql.cdc._utils import TRACE
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 
@@ -27,14 +29,16 @@ logger.setLevel(logging.DEBUG)
 class BufferSentinel:
     def __init__(
         self,
-        disk_sentinel: DiskSentinel,
+        ledger: FileLedger,
+        encoder: CdcEncoder,
         max_rows: int,
         max_bytes: int | None,
         max_secs: int,
         tables: dict[str, TrackedTable],
         offset: CdcOffset,
     ):
-        self._disk_sentinel = disk_sentinel
+        self._ledger = ledger
+        self._encoder = encoder
         self._max_rows = max_rows
         self._max_bytes = max_bytes
         self._max_secs = max_secs
@@ -107,7 +111,11 @@ class BufferSentinel:
             self.flush()
 
     def flush(self) -> None:
-        self._disk_sentinel.process_buffers(self._buffers)
+        for table, buffer in self._buffers.items():
+            if len(buffer.rows) == 0:
+                continue
+            for arrow in self._encoder.encode(table, buffer.rows):
+                self._ledger.write(table, arrow)
         # In arrival order: an offset may be one position for every table.
         for offset in self._pending:
             self._offset.update(offset)

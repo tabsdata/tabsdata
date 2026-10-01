@@ -42,9 +42,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from tabsdatak.api import StreamSrc
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._ledger import FileLedger
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._sentinels import ChunkSentinel, DiskSentinel
 from tabsdatak.conn.common.sql.cdc._deduplicator import (
     deduplicate_initial_load_files,
 )
+from tabsdatak.conn.common.sql.cdc._encoder import CdcEncoder
 from tabsdatak.conn.common.sql.cdc._ingester import (
     CDC_INITIAL_LOAD_STATE_KEY,
     CdcIngester,
@@ -53,7 +60,6 @@ from tabsdatak.conn.common.sql.cdc._initial_load import InitialLoader
 from tabsdatak.conn.common.sql.cdc._large import LargeColumnPolicy
 from tabsdatak.conn.common.sql.cdc._model import CdcOffset
 from tabsdatak.conn.common.sql.cdc._sentinel.buffer import BufferSentinel
-from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
@@ -149,13 +155,14 @@ def _setup_signal_handlers() -> threading.Event:
 
 def _publish(
     ctx: StreamSrcPluginCtx,
+    ledger: FileLedger,
     disk_sentinel: DiskSentinel,
     buffer_sentinel: BufferSentinel,
     ingester: CdcIngester,
 ) -> bool:
     """Stage the accumulated batch through ``ctx`` and commit the offset.
 
-    The disk sentinel hands us a positional per-output-table file-list
+    The ledger hands us a positional per-output-table file-list
     (entry ``i`` -> table ``i``), which we hand to ``ctx.stage`` along
     with the ingester's :meth:`~CdcIngester.commit_state` -- the ingester
     decides whether Tabsdata persists the offset (read back via
@@ -166,13 +173,14 @@ def _publish(
     Returns whether anything was staged (so the caller can reset its
     flush-interval clock only on a real flush).
     """
-    tables_files = disk_sentinel.build_manifest()
+    tables_files = ledger.manifest()
     if not any(tables_files):
         return False
     offset = buffer_sentinel.offset
     ctx.stage(tables_files, _state(ctx, ingester, offset))
     ingester.commit_offset(offset)
-    disk_sentinel.clear()
+    ledger.clear()
+    disk_sentinel.reset_timer()
     return True
 
 
@@ -265,17 +273,15 @@ def _load_initially(
             session=session.engine,
             cdc_format=cfg.cdc_format,
         )
-        disk_sentinel = DiskSentinel(
-            landing=landing,
+        ledger = FileLedger(landing=landing, slots=tracked_tables)
+        chunk_sentinel = ChunkSentinel(
+            ledger=ledger,
             max_rows=cfg.buffer_max_rows,
             max_bytes=cfg.buffer_max_bytes,
-            max_secs=NO_TIME_LIMIT,
-            tables=tracked_tables,
-            cdc_format=cfg.cdc_format,
         )
         loader = InitialLoader(
             ingester=ingester,
-            disk_sentinel=disk_sentinel,
+            chunk_sentinel=chunk_sentinel,
             cdc_format=cfg.cdc_format,
             large_column_policy=large_column_policy,
             fetch_size=cfg.fetch_size,
@@ -287,10 +293,8 @@ def _load_initially(
         session.close()
 
     if window_end is not None:
-        return offset, _PendingLoad(
-            manifest=disk_sentinel.build_manifest(), window_end=window_end
-        )
-    _stage_load_manifest(ctx, ingester, disk_sentinel.build_manifest(), offset)
+        return offset, _PendingLoad(manifest=ledger.manifest(), window_end=window_end)
+    _stage_load_manifest(ctx, ingester, ledger.manifest(), offset)
     logger.info("Initial load staged")
     return offset, None
 
@@ -322,16 +326,13 @@ def _read_window(
     """The changes committed while the load read the tables, as a manifest:
     read by the ingester's own poll, bounded at `window_end`, and written as
     the stream writes them. ``None`` when a signal stops the read."""
-    disk_sentinel = DiskSentinel(
+    ledger = FileLedger(
         landing=_fresh(ctx.work_dir / _INITIAL_LOAD_WINDOW_DIR),
-        max_rows=None,
-        max_bytes=None,
-        max_secs=NO_TIME_LIMIT,
-        tables=tracked_tables,
-        cdc_format=cfg.cdc_format,
+        slots=tracked_tables,
     )
     buffer_sentinel = BufferSentinel(
-        disk_sentinel=disk_sentinel,
+        ledger=ledger,
+        encoder=CdcEncoder(cfg.cdc_format),
         max_rows=cfg.buffer_max_rows,
         max_bytes=cfg.buffer_max_bytes,
         max_secs=NO_TIME_LIMIT,
@@ -351,7 +352,7 @@ def _read_window(
             buffer_sentinel.process_changes([change])
     buffer_sentinel.flush()
     logger.info("Initial load window read: %d change(s)", read)
-    return disk_sentinel.build_manifest()
+    return ledger.manifest()
 
 
 def _stage_initial_load(
@@ -401,6 +402,7 @@ def _run_loop(
     the last stage. On a graceful end-of-stream the trailing partial batch
     is flushed before returning. Invoked by :meth:`CdcPlugin.run`.
     """
+    ledger: FileLedger | None = None
     buffer_sentinel: BufferSentinel | None = None
     disk_sentinel: DiskSentinel | None = None
     session = None
@@ -475,16 +477,16 @@ def _run_loop(
                 pending=pending,
                 window=window,
             )
+        ledger = FileLedger(landing=ctx.work_dir, slots=tracked_tables)
         disk_sentinel = DiskSentinel(
-            landing=ctx.work_dir,
+            ledger=ledger,
             max_rows=cfg.trigger_max_rows,
             max_bytes=cfg.trigger_max_bytes,
             max_secs=cfg.trigger_max_secs,
-            tables=tracked_tables,
-            cdc_format=cfg.cdc_format,
         )
         buffer_sentinel = BufferSentinel(
-            disk_sentinel=disk_sentinel,
+            ledger=ledger,
+            encoder=CdcEncoder(cfg.cdc_format),
             max_rows=cfg.buffer_max_rows,
             max_bytes=cfg.buffer_max_bytes,
             max_secs=cfg.buffer_max_secs,
@@ -507,10 +509,10 @@ def _run_loop(
             interval_due = (
                 flush_interval_secs > 0
                 and (time.time() - last_flush) >= flush_interval_secs
-                and disk_sentinel.has_data
+                and ledger.has_data
             )
-            if disk_sentinel.should_flush(force=False) or interval_due:
-                _publish(ctx, disk_sentinel, buffer_sentinel, ingester)
+            if disk_sentinel.due(force=False) or interval_due:
+                _publish(ctx, ledger, disk_sentinel, buffer_sentinel, ingester)
                 last_flush = time.time()
             stop_signal.wait(timeout=cfg.poll_interval_seconds)
         if stop_signal.is_set():
@@ -532,8 +534,8 @@ def _run_loop(
         if not interrupted and not errored:
             if buffer_sentinel is not None:
                 buffer_sentinel.flush()
-            if disk_sentinel is not None and disk_sentinel.should_flush(force=True):
-                _publish(ctx, disk_sentinel, buffer_sentinel, ingester)
+            if disk_sentinel is not None and disk_sentinel.due(force=True):
+                _publish(ctx, ledger, disk_sentinel, buffer_sentinel, ingester)
         if session is not None:
             if not errored:
                 _settle(ingester)

@@ -5,8 +5,8 @@
 """Unit tests for
 :class:`~tabsdatak.conn.common.sql.cdc._sentinel.buffer.BufferSentinel`
 covering the offset invariants (CDC_10 / CDC_11), the unsupported-change
-guard, the untracked-table skip, and the row-threshold flush. The disk
-sentinel is faked so no parquet is written."""
+guard, the untracked-table skip, and the row-threshold flush. The ledger
+and the encoder are faked so no parquet is written."""
 
 from __future__ import annotations
 
@@ -27,12 +27,17 @@ class FakeOffset:
         self.updates += 1
 
 
-class FakeDisk:
+class FakeLedger:
     def __init__(self):
-        self.flushes = 0
+        self.writes = 0
 
-    def process_buffers(self, buffers) -> None:
-        self.flushes += 1
+    def write(self, slot, table) -> None:
+        self.writes += 1
+
+
+class FakeEncoder:
+    def encode(self, table, rows):
+        yield rows
 
 
 def _change(table: str = "s.t", *, offset=None) -> CdcDataChange:
@@ -49,9 +54,10 @@ def _change(table: str = "s.t", *, offset=None) -> CdcDataChange:
     )
 
 
-def _sentinel(*, offset, max_rows=1_000, disk=None) -> BufferSentinel:
+def _sentinel(*, offset, max_rows=1_000, ledger=None) -> BufferSentinel:
     return BufferSentinel(
-        disk_sentinel=disk or FakeDisk(),
+        ledger=ledger or FakeLedger(),
+        encoder=FakeEncoder(),
         max_rows=max_rows,
         max_bytes=None,
         max_secs=10_000,
@@ -85,10 +91,10 @@ def test_untracked_table_change_is_skipped():
 
 
 def test_row_threshold_triggers_disk_flush():
-    disk = FakeDisk()
-    sentinel = _sentinel(offset=FakeOffset(), max_rows=1, disk=disk)
+    ledger = FakeLedger()
+    sentinel = _sentinel(offset=FakeOffset(), max_rows=1, ledger=ledger)
     sentinel.process_data_change(_change(offset=FakeOffset()))
-    assert disk.flushes == 1
+    assert ledger.writes == 1
     assert sentinel.is_empty is True
 
 
@@ -120,7 +126,8 @@ def test_the_offset_moves_only_when_its_changes_reach_disk():
 def test_offsets_are_applied_in_the_order_their_changes_arrived():
     offset = RecordingOffset()
     sentinel = BufferSentinel(
-        disk_sentinel=FakeDisk(),
+        ledger=FakeLedger(),
+        encoder=FakeEncoder(),
         max_rows=1_000,
         max_bytes=None,
         max_secs=10_000,

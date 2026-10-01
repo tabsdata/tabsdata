@@ -80,21 +80,21 @@ class FakeCtx:
 
 
 class FakeDisk:
-    def __init__(self, *, manifest, should_flush_force=False, should_flush_normal=False):
-        self.manifest = manifest
+    def __init__(self, *, manifest, due_force=False, due_normal=False):
+        self._manifest = manifest
         self.has_data = bool(manifest and any(manifest))
-        self._force = should_flush_force
-        self._normal = should_flush_normal
+        self._force = due_force
+        self._normal = due_normal
         self.cleared = 0
 
     def reset_timer(self) -> None:
         pass
 
-    def should_flush(self, force: bool = False) -> bool:
+    def due(self, force: bool = False) -> bool:
         return self._force if force else self._normal
 
-    def build_manifest(self):
-        return self.manifest
+    def manifest(self):
+        return self._manifest
 
     def clear(self) -> None:
         self.cleared += 1
@@ -201,6 +201,7 @@ class FakeIngester:
 
 
 def _patch_sentinels(monkeypatch, disk, buffer):
+    monkeypatch.setattr(_runner, "FileLedger", lambda **kw: disk)
     monkeypatch.setattr(_runner, "DiskSentinel", lambda **kw: disk)
     monkeypatch.setattr(_runner, "BufferSentinel", lambda **kw: buffer)
 
@@ -224,7 +225,7 @@ def test_publish_empty_manifest_does_not_stage():
     buffer = FakeBuffer()
     ingester = FakeIngester()
 
-    assert _publish(ctx, disk, buffer, ingester) is False
+    assert _publish(ctx, disk, disk, buffer, ingester) is False
     assert ctx.staged == []
     assert disk.cleared == 0
 
@@ -236,7 +237,7 @@ def test_publish_stages_manifest_and_commits_offset():
     buffer = FakeBuffer()
     ingester = FakeIngester()
 
-    assert _publish(ctx, disk, buffer, ingester) is True
+    assert _publish(ctx, disk, disk, buffer, ingester) is True
     assert ctx.staged == [(files, ingester.commit_state_marker)]
     assert ingester.commit_state_arg is buffer.offset
     assert ingester.committed_offsets == [buffer.offset]
@@ -272,10 +273,14 @@ def test_a_stage_does_not_cover_changes_still_in_memory():
             offset=Positions([position]),
         )
 
+    class SilentEncoder:
+        def encode(self, table, rows):
+            return []
+
     disk = FakeDisk(manifest=[[Path("t0.parquet")]])
-    disk.process_buffers = lambda buffers: None
     buffer = BufferSentinel(
-        disk_sentinel=disk,
+        ledger=disk,
+        encoder=SilentEncoder(),
         max_rows=1_000,
         max_bytes=None,
         max_secs=10_000,
@@ -287,7 +292,7 @@ def test_a_stage_does_not_cover_changes_still_in_memory():
     buffer.process_data_change(change("in-memory"))
     ingester = FakeIngester()
 
-    assert _publish(FakeCtx(active_values=[]), disk, buffer, ingester) is True
+    assert _publish(FakeCtx(active_values=[]), disk, disk, buffer, ingester) is True
     assert ingester.commit_state_arg.applied == ["written"]
     assert ingester.committed_offsets[0].applied == ["written"]
 
@@ -302,7 +307,7 @@ def test_publish_does_not_commit_offset_when_stage_fails():
     ingester = FakeIngester()
 
     with pytest.raises(RuntimeError, match="boom-stage"):
-        _publish(ctx, disk, buffer, ingester)
+        _publish(ctx, disk, disk, buffer, ingester)
 
     assert ingester.committed_offsets == []
     assert disk.cleared == 0
@@ -312,7 +317,7 @@ def test_publish_does_not_commit_offset_when_stage_fails():
 
 
 def test_run_loop_seeds_resume_offset_from_ctx(monkeypatch):
-    disk = FakeDisk(manifest=[[]], should_flush_force=False)
+    disk = FakeDisk(manifest=[[]], due_force=False)
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
     sentinel_offset = object()
@@ -330,7 +335,7 @@ def test_run_loop_seeds_resume_offset_from_ctx(monkeypatch):
 
 
 def test_run_loop_threshold_flush_stages_once(monkeypatch):
-    disk = FakeDisk(manifest=[[Path("f")]], should_flush_normal=True)
+    disk = FakeDisk(manifest=[[Path("f")]], due_normal=True)
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
     ingester = FakeIngester()
@@ -346,8 +351,8 @@ def test_run_loop_interval_flush_stages_when_interval_elapses(monkeypatch):
     ``flush_interval_mins`` alone must trigger a stage."""
     disk = FakeDisk(
         manifest=[[Path("f")]],
-        should_flush_normal=False,
-        should_flush_force=False,
+        due_normal=False,
+        due_force=False,
     )
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
@@ -368,7 +373,7 @@ def test_run_loop_interval_flush_stages_when_interval_elapses(monkeypatch):
 def test_run_loop_interval_flush_skipped_when_no_data(monkeypatch):
     """The interval must not fire on an empty sentinel (no no-data
     publishes)."""
-    disk = FakeDisk(manifest=[[]], should_flush_normal=False)
+    disk = FakeDisk(manifest=[[]], due_normal=False)
     disk.has_data = False
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
@@ -388,7 +393,7 @@ def test_run_loop_interval_flush_skipped_when_no_data(monkeypatch):
 def test_run_loop_graceful_end_flushes_trailing_batch(monkeypatch):
     """A clean end-of-stream (``ctx.active`` -> False, no signal/error)
     flushes the trailing partial batch."""
-    disk = FakeDisk(manifest=[[Path("f")]], should_flush_force=True)
+    disk = FakeDisk(manifest=[[Path("f")]], due_force=True)
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
     ingester = FakeIngester()
@@ -408,7 +413,7 @@ def test_run_loop_interrupted_skips_trailing_flush(monkeypatch):
     preset.set()
     monkeypatch.setattr(_runner, "_setup_signal_handlers", lambda: preset)
 
-    disk = FakeDisk(manifest=[[Path("f")]], should_flush_force=True)
+    disk = FakeDisk(manifest=[[Path("f")]], due_force=True)
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
     ingester = FakeIngester()
@@ -424,7 +429,7 @@ def test_run_loop_interrupted_skips_trailing_flush(monkeypatch):
 def test_run_loop_errored_skips_trailing_flush_but_closes(monkeypatch):
     """An error propagates, the trailing batch is left for resume, and
     the session is still closed in the finally."""
-    disk = FakeDisk(manifest=[[Path("f")]], should_flush_force=True)
+    disk = FakeDisk(manifest=[[Path("f")]], due_force=True)
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
     ingester = FakeIngester(poll_raises=True)
@@ -509,7 +514,7 @@ def test_a_checkpoint_without_a_state_to_record_is_a_bug(ingester, offset):
 
 
 def test_a_clean_end_settles_the_position_after_the_last_stage(monkeypatch):
-    disk = FakeDisk(manifest=[[Path("f")]], should_flush_force=True)
+    disk = FakeDisk(manifest=[[Path("f")]], due_force=True)
     _patch_sentinels(monkeypatch, disk, FakeBuffer())
     ingester = FakeIngester()
     ctx = FakeCtx(active_values=[False])
@@ -602,7 +607,7 @@ def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False, window_end=None)
     only the runner's own orchestration is under test."""
     manifest = [[tmp_path / "t0.parquet"], []]
     disk = FakeDisk(manifest=manifest)
-    monkeypatch.setattr(_runner, "DiskSentinel", lambda **kw: disk)
+    monkeypatch.setattr(_runner, "FileLedger", lambda **kw: disk)
 
     offset = object()
 
@@ -664,7 +669,7 @@ def test_initial_load_requires_a_tabsdata_owned_offset(monkeypatch, tmp_path):
     ctx = FakeCtx(active_values=[])
     ctx.work_dir = tmp_path
     disk = FakeDisk(manifest=[[tmp_path / "t0.parquet"]])
-    monkeypatch.setattr(_runner, "DiskSentinel", lambda **kw: disk)
+    monkeypatch.setattr(_runner, "FileLedger", lambda **kw: disk)
     monkeypatch.setattr(
         _runner,
         "InitialLoader",

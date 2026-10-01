@@ -11,6 +11,8 @@ from typing import Any
 import pyarrow as pa
 import sqlalchemy as sa
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._sentinels import ChunkSentinel
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
 from tabsdatak.conn.common.sql.cdc._large import LargeColumnPolicy
@@ -19,7 +21,6 @@ from tabsdatak.conn.common.sql.cdc._model import (
     InitialLoadSession,
     TrackedTable,
 )
-from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
 from tabsdatak.conn.common.sql.cdc._shaper import CdcRowShaper
 from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_INITIAL_LOAD_TX,
@@ -41,7 +42,7 @@ INITIAL_LOAD_HEADER_ORDINAL = 0
 
 
 class InitialLoader:
-    """Reads a consistent snapshot of the tracked tables into the disk
+    """Reads a consistent snapshot of the tracked tables into the chunk
     sentinel, as CDC rows: one ``LOAD`` control row per table followed by
     its rows marked as inserts.
 
@@ -55,14 +56,14 @@ class InitialLoader:
         self,
         *,
         ingester: CdcIngester,
-        disk_sentinel: DiskSentinel,
+        chunk_sentinel: ChunkSentinel,
         cdc_format: CdcFormat,
         large_column_policy: LargeColumnPolicy,
         fetch_size: int,
         chunk_size: int,
     ):
         self._ingester = ingester
-        self._disk_sentinel = disk_sentinel
+        self._chunk_sentinel = chunk_sentinel
         self._cdc_format = cdc_format
         self._large_column_policy = large_column_policy
         self._fetch_size = fetch_size
@@ -93,7 +94,7 @@ class InitialLoader:
         schema = self._ingester.schema_registry.version(qualified, 0)
         shaper = CdcRowShaper(schema, self._cdc_format)
 
-        self._disk_sentinel.process_chunk(
+        self._chunk_sentinel.add(
             qualified,
             schema.hash,
             shaper.table(
@@ -113,7 +114,7 @@ class InitialLoader:
             ordinals = list(range(ordinal + 1, ordinal + 1 + chunk.num_rows))
             ordinal = ordinals[-1]
             rows += chunk.num_rows
-            self._disk_sentinel.process_chunk(
+            self._chunk_sentinel.add(
                 qualified,
                 schema.hash,
                 shaper.table(
@@ -129,7 +130,7 @@ class InitialLoader:
                     },
                 ),
             )
-        self._disk_sentinel.flush_chunks(qualified)
+        self._chunk_sentinel.flush(qualified)
         logger.info("Initial load read %d row(s) from %s", rows, qualified)
 
     @staticmethod

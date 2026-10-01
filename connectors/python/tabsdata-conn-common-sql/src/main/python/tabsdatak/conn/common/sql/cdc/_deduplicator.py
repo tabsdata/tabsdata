@@ -31,9 +31,10 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._ledger import FileLedger
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._model import TrackedTable
-from tabsdatak.conn.common.sql.cdc._sentinel.disk import DiskSentinel
 from tabsdatak.conn.common.sql.cdc.constants import (
     CDC_DATA_COL_NEW_PREFIX,
     CDC_DATA_COL_OLD_PREFIX,
@@ -111,20 +112,13 @@ def deduplicate_initial_load_files(
             cdc_format=cdc_format,
         ).collect()
 
-    sentinel = DiskSentinel(
-        landing=landing,
-        max_rows=None,
-        max_bytes=None,
-        max_secs=0,
-        tables=tables,
-        cdc_format=cdc_format,
-    )
+    ledger = FileLedger(landing=landing, slots=tables)
     for table, frame in kept.items():
         if frame.height:
             pa_schema = schemas[table].pa_schema
             arrow = frame.to_arrow().select(pa_schema.names).cast(pa_schema)
-            sentinel.process_table(table, arrow)
-    return sentinel.build_manifest()
+            ledger.write(table, arrow)
+    return ledger.manifest()
 
 
 def scan(files: list[Path], schema: SchemaVersion) -> pl.LazyFrame:
