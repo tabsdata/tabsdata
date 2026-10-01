@@ -37,8 +37,11 @@ from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.conn.common.types import UserPassword
+from tabsdatak.conn.mysql import _cdc_impl
 from tabsdatak.conn.mysql._cdc_impl import (
+    INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS,
     BinlogIngester,
+    BinlogInitialLoadSession,
     GtidOffset,
     MySQLDialect,
 )
@@ -626,3 +629,104 @@ def test_closing_the_session_drops_a_carried_gtid():
 
     assert bi._carry_gtid is None
 
+
+# =====================================================================
+# BinlogInitialLoadSession
+# =====================================================================
+
+
+class _Cursor:
+    def __init__(self, log: list[str]):
+        self._log = log
+        self._row = None
+
+    def execute(self, sql: str) -> None:
+        self._log.append(sql)
+        if sql == "select @@gtid_mode":
+            self._row = ("ON",)
+        elif sql == "select @@global.gtid_executed":
+            self._row = ("uuid:1-5",)
+
+    def fetchone(self):
+        return self._row
+
+
+class _PymysqlConnection:
+    def __init__(self, log: list[str]):
+        self._log = log
+
+    def cursor(self) -> _Cursor:
+        return _Cursor(self._log)
+
+    def close(self) -> None:
+        self._log.append("close")
+
+
+class _WarmedConnection:
+    def __init__(self, log: list[str]):
+        self._log = log
+
+    def close(self) -> None:
+        self._log.append("engine connection returned")
+
+
+class _Engine:
+    def __init__(self, log: list[str]):
+        self._log = log
+
+    def connect(self) -> _WarmedConnection:
+        self._log.append("engine connection opened")
+        return _WarmedConnection(self._log)
+
+    def dispose(self) -> None:
+        self._log.append("dispose")
+
+
+@pytest.fixture
+def initial_load_log(monkeypatch) -> list[str]:
+    log: list[str] = []
+    monkeypatch.setattr(
+        _cdc_impl.pymysql, "connect", lambda **settings: _PymysqlConnection(log)
+    )
+    monkeypatch.setattr(
+        _cdc_impl.sqlalchemy_utils,
+        "create_engine",
+        lambda *args, **kwargs: _Engine(log),
+    )
+    return log
+
+
+def test_the_engine_is_initialised_before_the_snapshot_opens(initial_load_log):
+    BinlogInitialLoadSession(connection_settings={})
+    log = initial_load_log
+    assert log.index("engine connection returned") < log.index(
+        "start transaction with consistent snapshot, read only"
+    )
+
+
+def test_the_snapshot_is_opened_under_repeatable_read(initial_load_log):
+    BinlogInitialLoadSession(connection_settings={})
+    log = initial_load_log
+    assert log.index("set session transaction isolation level repeatable read") < (
+        log.index("start transaction with consistent snapshot, read only")
+    )
+
+
+def test_the_global_read_lock_waits_as_long_as_the_server_allows(initial_load_log):
+    BinlogInitialLoadSession(connection_settings={})
+    log = initial_load_log
+    setting = f"set session lock_wait_timeout = {INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS}"
+    assert INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS == 31536000
+    assert log.index(setting) < log.index("flush tables with read lock")
+
+
+def test_the_position_is_read_under_the_global_read_lock(initial_load_log):
+    session = BinlogInitialLoadSession(connection_settings={})
+    log = initial_load_log
+    assert (
+        log.index("flush tables with read lock")
+        < log.index("start transaction with consistent snapshot, read only")
+        < log.index("select @@global.gtid_executed")
+        < log.index("unlock tables")
+    )
+    assert session.offset.gtid == "uuid:1-5"

@@ -113,6 +113,11 @@ HEARTBEAT_INTERVAL_SECONDS = 1
 # bytes). Used for ``RelativePositionSpec="head"``.
 BINLOG_START_POSITION = 4
 
+# The largest lock_wait_timeout MySQL accepts (one year). The initial load's
+# global read lock waits behind running statements, and giving up would fail
+# the load, so it waits as long as the server allows.
+INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS = 31536000
+
 # Placeholder timestamp stamped on rows held in the buffered poll's
 # pending list. The real commit timestamp is written in on the next
 # XidEvent / QueryEvent("COMMIT") that closes the transaction.
@@ -425,27 +430,36 @@ class BinlogInitialLoadSession(InitialLoadSession):
     def __init__(self, *, connection_settings: dict[str, Any]):
         self._connection = pymysql.connect(**connection_settings)
         self._require_gtid_mode()
-        cursor = self._connection.cursor()
-        try:
-            cursor.execute("flush tables with read lock")
-        except pymysql.Error as error:
-            self._connection.close()
-            raise MysqlErrorCode.MYSQL_21.exception(cause=error, reason=str(error))
-        try:
-            cursor.execute("start transaction with consistent snapshot")
-            cursor.execute("select @@global.gtid_executed")
-            gtid = cursor.fetchone()[0] or ""
-        finally:
-            cursor.execute("unlock tables")
-        self._offset = GtidOffset(gtid=gtid)
         # Everything the load reads must come from the transaction opened
-        # above, so the engine wraps that one connection instead of opening
+        # below, so the engine wraps that one connection instead of opening
         # its own, which would see current data rather than the snapshot.
         self._engine = sqlalchemy_utils.create_engine(
             "mysql+pymysql://",
             creator=lambda: self._connection,
             poolclass=StaticPool,
         )
+        # The engine's first connection initialises the dialect and then rolls
+        # back, which would end the snapshot transaction, so it runs first.
+        self._engine.connect().close()
+        cursor = self._connection.cursor()
+        # A consistent snapshot is only consistent under repeatable read; under
+        # any other level the server silently ignores the request.
+        cursor.execute("set session transaction isolation level repeatable read")
+        cursor.execute(
+            f"set session lock_wait_timeout = {INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS}"
+        )
+        try:
+            cursor.execute("flush tables with read lock")
+        except pymysql.Error as error:
+            self.close()
+            raise MysqlErrorCode.MYSQL_21.exception(cause=error, reason=str(error))
+        try:
+            cursor.execute("start transaction with consistent snapshot, read only")
+            cursor.execute("select @@global.gtid_executed")
+            gtid = cursor.fetchone()[0] or ""
+        finally:
+            cursor.execute("unlock tables")
+        self._offset = GtidOffset(gtid=gtid)
         logger.info("Initial load snapshot is consistent at GTID set %r", gtid)
 
     def _require_gtid_mode(self) -> None:
