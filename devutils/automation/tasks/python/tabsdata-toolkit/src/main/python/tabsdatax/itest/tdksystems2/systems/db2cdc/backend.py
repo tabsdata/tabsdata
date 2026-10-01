@@ -54,12 +54,25 @@ _BACKUP_DIR = "backup"
 CD_TABLE_PREFIX_KEY = "CD_TABLE_PREFIX"
 _OLD_VALUES_PREFIX = "_"
 _WAIT_TIMEOUT_S = 300
-_WAIT_POLL_S = 3
+_WAIT_POLL_S = 1
+
+# asncap publishes what it has done -- a signal consumed, a registration made
+# active, the CD rows of a change -- only when it commits, every
+# COMMIT_INTERVAL seconds (30 by default), and it looks at the log every
+# SLEEP_INTERVAL seconds (5 by default). Each registration and each test's
+# change would wait on them, so the test system runs both at their minimum.
+_CAPTURE_INTERVAL_S = 1
 
 # The Db2 CLP returns non-zero for warnings too (e.g. SQL1363W); `db2w` treats
 # only rc >= 4 (real errors) as failure so a `set -e`/`&&` chain isn't aborted
 # by a perfectly successful step.
 _PRELUDE = 'db2w() { db2 "$@"; local r=$?; [ "$r" -ge 4 ] && return "$r"; return 0; }\n'
+# Appended to a step of a multi-statement call: a failure ends the call there.
+_OR_EXIT = ' || { r=$?; db2 terminate >/dev/null 2>&1; exit "$r"; }'
+
+
+def _sql_list(values: list[str]) -> str:
+    return ", ".join(f"'{value}'" for value in values)
 
 
 class Db2Cdc(Db2):
@@ -92,6 +105,34 @@ class Db2Cdc(Db2):
             f"rc=$?\n"
             f"db2 terminate >/dev/null 2>&1\n"
             f"exit $rc\n",
+            ignore_failure=ignore_failure,
+        )
+
+    def _clp_lines(self, container: str, sql: str) -> list[str]:
+        out = self._run(
+            container,
+            f"db2 connect to {_XP_DB} >/dev/null 2>&1\n"
+            f'db2 -x "{sql}"\n'
+            f"db2 terminate >/dev/null 2>&1\n",
+            ignore_failure=True,
+        )
+        return [
+            line.strip()
+            for line in out.splitlines()
+            if line.strip() and not line.strip().startswith(("DB2", "SQL"))
+        ]
+
+    def _clp_batch(
+        self, container: str, statements: list[str], *, ignore_failure: bool = False
+    ) -> str:
+        """Run `statements` in one container call over one connection. Without
+        `ignore_failure` the first one to fail stops the batch and fails it."""
+        on_failure = "" if ignore_failure else _OR_EXIT
+        return self._run(
+            container,
+            f"db2w connect to {_XP_DB} >/dev/null{on_failure}\n"
+            + "".join(f'db2w -v "{sql}"{on_failure}\n' for sql in statements)
+            + "db2 terminate >/dev/null 2>&1\n",
             ignore_failure=ignore_failure,
         )
 
@@ -130,7 +171,7 @@ class Db2Cdc(Db2):
         print(">>> CDC: configuring Db2 SQL Replication (archive log + asncap) …")
         self._setup_archive(container)
         self._setup_asn_control_tables(container)
-        self._ensure_asncap(container)
+        self._ensure_asncap(container, tune=True)
         print(">>> CDC: asncap capture program is running")
 
     def _archive_configured(self, container: str) -> bool:
@@ -195,7 +236,9 @@ class Db2Cdc(Db2):
         self._clp(
             container,
             f"update {_ASN}.ibmsnap_capparms set capture_path = '{home}', "
-            f"autostop = 'N', term = 'N'",
+            f"autostop = 'N', term = 'N', "
+            f"commit_interval = {_CAPTURE_INTERVAL_S}, "
+            f"sleep_interval = {_CAPTURE_INTERVAL_S}",
         )
         self._exec_inst(
             container,
@@ -215,7 +258,7 @@ class Db2Cdc(Db2):
             what="asncap to populate the restart table",
         )
 
-    def _ensure_asncap(self, container: str) -> None:
+    def _ensure_asncap(self, container: str, *, tune: bool = False) -> None:
         """Start ``asncap`` unless it is already answering.
 
         ``asncap`` is a process inside the container, not a database object, so
@@ -227,8 +270,29 @@ class Db2Cdc(Db2):
         """
         if self._asncap_responsive(container):
             print(">>> CDC: asncap already running")
+            if tune:
+                self._tune_capture(container)
             return
         self._setup_asncap(container)
+
+    def _tune_capture(self, container: str) -> None:
+        """Bring a capture program started with other intervals to the test
+        system's: in ``IBMSNAP_CAPPARMS`` for its next start, and in the running
+        process for now."""
+        interval = _CAPTURE_INTERVAL_S
+        self._clp_batch(
+            container,
+            [
+                f"update {_ASN}.ibmsnap_capparms set commit_interval = {interval}, "
+                f"sleep_interval = {interval} where commit_interval <> {interval} "
+                f"or sleep_interval <> {interval}"
+            ],
+        )
+        self._exec_inst(
+            container,
+            f"asnccmd capture_server={_XP_DB} capture_schema={_ASN} chgparms "
+            f"commit_interval={interval} sleep_interval={interval} >/dev/null",
+        )
 
     def restart_system(self, meta: dict[str, str]) -> str:
         """Restart the container, then put the capture program back.
@@ -248,7 +312,7 @@ class Db2Cdc(Db2):
         print(">>> CDC: re-establishing Db2 SQL Replication after restart …")
         self._setup_archive(container)
         self._setup_asn_control_tables(container)
-        self._ensure_asncap(container)
+        self._ensure_asncap(container, tune=True)
         print(">>> CDC: asncap capture program is running")
         return result
 
@@ -312,7 +376,7 @@ class Db2Cdc(Db2):
         self._ensure_asncap(container)
         if ddl:
             self._clp(container, ddl)
-        self._register_table(container, schema, table.upper())
+        self._register_tables(container, schema, [table.upper()])
         return self.cd_table(schema, table)
 
     def deregister_table(
@@ -330,103 +394,132 @@ class Db2Cdc(Db2):
         part of the registration was never made.
         """
         container, schema = self._container_and_schema(meta)
-        table = table.upper()
-        self._remove_registration(container, schema, table)
-        self._clp(
-            container,
-            f"alter table {schema}.{table} data capture none",
-            ignore_failure=True,
-        )
+        self._deregister_tables(container, schema, [table.upper()], drop=drop)
+
+    def _deregister_tables(
+        self, container: str, schema: str, tables: list[str], *, drop: bool = False
+    ) -> None:
+        self._remove_registrations(container, schema, tables)
+        statements = [
+            f"alter table {schema}.{table} data capture none" for table in tables
+        ]
         if drop:
-            self._clp(container, f"drop table {schema}.{table}", ignore_failure=True)
+            statements += [f"drop table {schema}.{table}" for table in tables]
+        self._clp_batch(container, statements, ignore_failure=True)
 
-    def _remove_registration(self, container: str, schema: str, table: str) -> None:
-        """CAPSTOP, then the registration's rows, its trigger and its CD table:
-        what a deregistration and a reclaim both take away. The source table's
-        own ``DATA CAPTURE`` flag is the deregistration's to clear -- a reclaim
-        has no source table left to alter. The CD table is the one the
-        registration records, so one made under an older naming goes too."""
-        staging = self._registered_staging(container, schema, table)
-        self._send_capstop(container, schema, table)
-        self._clp(
+    def _remove_registrations(
+        self, container: str, schema: str, tables: list[str]
+    ) -> None:
+        """CAPSTOP, then the registrations' rows, triggers and CD tables: what a
+        deregistration and a reclaim both take away. The source tables' own
+        ``DATA CAPTURE`` flag is the deregistration's to clear -- a reclaim has
+        no source table left to alter. Each CD table is the one its registration
+        records, so one made under an older naming goes too."""
+        if not tables:
+            return
+        stagings = self._registered_stagings(container, schema, tables)
+        self._send_capstops(container, schema, tables)
+        names = _sql_list(tables)
+        self._clp_batch(
             container,
-            f"delete from {_ASN}.ibmsnap_register where source_owner = "
-            f"'{schema}' and source_table = '{table}'",
+            [
+                f"delete from {_ASN}.ibmsnap_register where source_owner = "
+                f"'{schema}' and source_table in ({names})",
+                f"delete from {_ASN}.ibmsnap_pruncntl where source_owner = "
+                f"'{schema}' and source_table in ({names})",
+            ]
+            + [f"drop trigger {_ASN}.LM_{staging}" for staging in stagings]
+            + [f"drop table {_ASN}.{staging}" for staging in stagings],
             ignore_failure=True,
         )
-        self._clp(
-            container,
-            f"delete from {_ASN}.ibmsnap_pruncntl where source_owner = "
-            f"'{schema}' and source_table = '{table}'",
-            ignore_failure=True,
+        self._require_cd_tables_gone(container, stagings)
+
+    def _registered_stagings(
+        self, container: str, schema: str, tables: list[str]
+    ) -> list[str]:
+        """The CD tables the registrations of `tables` write to, as
+        ``IBMSNAP_REGISTER`` records them; this naming's for any without one."""
+        recorded = dict(
+            line.split()[:2]
+            for line in self._clp_lines(
+                container,
+                f"select source_table, cd_table from {_ASN}.ibmsnap_register "
+                f"where source_owner = '{schema}' and source_table in "
+                f"({_sql_list(tables)})",
+            )
+            if len(line.split()) >= 2
         )
-        self._drop_cd_table(container, staging)
+        return [recorded.get(table) or self._staging(schema, table) for table in tables]
 
-    def _registered_staging(self, container: str, schema: str, table: str) -> str:
-        """The CD table the registration of ``schema.table`` writes to, as
-        ``IBMSNAP_REGISTER`` records it; this naming's when there is none."""
-        recorded = self._clp_scalar(
-            container,
-            f"select coalesce(min(cd_table), '') from {_ASN}.ibmsnap_register "
-            f"where source_owner = '{schema}' and source_table = '{table}'",
-        ).strip()
-        return recorded or self._staging(schema, table)
-
-    def _drop_cd_table(self, container: str, staging: str) -> None:
-        """Drop ``ASN.<staging>`` and its trigger, and make sure it is gone.
-
-        Each drop may fail on its own -- a trigger already removed, a table
-        never made -- so neither is fatal by itself; what matters is the
-        table. One that survives is the name the next registration of this
-        model collides on (ASN1705E), with no registration row left to say who
-        holds it, so it is an error here rather than a silent orphan later.
-        """
-        self._clp(container, f"drop trigger {_ASN}.LM_{staging}", ignore_failure=True)
-        self._clp(container, f"drop table {_ASN}.{staging}", ignore_failure=True)
-        if self._cd_table_exists(container, staging):
+    def _require_cd_tables_gone(self, container: str, stagings: list[str]) -> None:
+        """A CD table that survives its removal is the name the next
+        registration of this model collides on (ASN1705E), with no registration
+        row left to say who holds it, so it is an error here rather than a
+        silent orphan later."""
+        left = self._existing_cd_tables(container, stagings)
+        if left:
+            names = ", ".join(f"{_ASN}.{staging}" for staging in sorted(left))
             raise TdxError(
-                f"CDC: {_ASN}.{staging} could not be dropped in {container}; "
-                f"drop it by hand (db2 drop table {_ASN}.{staging}) or "
-                f"recreate the system"
+                f"CDC: {names} could not be dropped in {container}; drop them by "
+                f"hand (db2 drop table ...) or recreate the system"
             )
 
-    def _cd_table_exists(self, container: str, staging: str) -> bool:
-        return self._clp_scalar(
-            container,
-            f"select count(*) from syscat.tables where tabschema = '{_ASN}' "
-            f"and tabname = '{staging}'",
-        ).strip() not in ("", "0")
+    def _existing_cd_tables(self, container: str, stagings: list[str]) -> set[str]:
+        if not stagings:
+            return set()
+        return set(
+            self._clp_lines(
+                container,
+                f"select tabname from syscat.tables where tabschema = '{_ASN}' "
+                f"and tabname in ({_sql_list(stagings)})",
+            )
+        )
 
-    def _send_capstop(self, container: str, schema: str, table: str) -> None:
-        """Tell asncap to stop capturing ``schema.table`` and wait for it to
-        acknowledge, so the CD table can be removed safely."""
-        source = f"{schema}.{table}"
-        self._clp(
+    def _drop_cd_table(self, container: str, staging: str) -> None:
+        self._clp_batch(
             container,
-            f"insert into {_ASN}.ibmsnap_signal (signal_type, signal_subtype, "
-            f"signal_input_in, signal_state) values "
-            f"('CMD', 'CAPSTOP', '{source}', 'P')",
+            [f"drop trigger {_ASN}.LM_{staging}", f"drop table {_ASN}.{staging}"],
+            ignore_failure=True,
+        )
+        self._require_cd_tables_gone(container, [staging])
+
+    def _send_capstops(self, container: str, schema: str, tables: list[str]) -> None:
+        """Tell asncap to stop capturing `tables` and wait for it to acknowledge
+        every stop, so their CD tables can be removed safely."""
+        sources = [f"{schema}.{table}" for table in tables]
+        self._clp_batch(
+            container,
+            [
+                f"insert into {_ASN}.ibmsnap_signal (signal_type, signal_subtype, "
+                f"signal_input_in, signal_state) values "
+                f"('CMD', 'CAPSTOP', '{source}', 'P')"
+                for source in sources
+            ],
             ignore_failure=True,
         )
         try:
             self._poll(
-                lambda: self._capstop_consumed(container, source),
-                what=f"CAPSTOP of {source} to be consumed",
+                lambda: self._capstops_consumed(container, sources),
+                what=f"CAPSTOP of {', '.join(sources)} to be consumed",
             )
         except TdxError:
-            # A capture program that is already down cannot consume it; the
-            # registration is going away regardless.
+            # A capture program that is already down cannot consume them; the
+            # registrations are going away regardless.
             pass
 
-    def _capstop_consumed(self, container: str, source: str) -> bool:
-        state = self._clp_scalar(
+    def _capstops_consumed(self, container: str, sources: list[str]) -> bool:
+        # Only each source's latest stop counts: an older one sent while the
+        # capture program was down is never consumed.
+        pending = self._clp_scalar(
             container,
-            f"select signal_state from {_ASN}.ibmsnap_signal where "
-            f"signal_type = 'CMD' and signal_subtype = 'CAPSTOP' and "
-            f"signal_input_in = '{source}' order by signal_time desc "
-            f"fetch first 1 row only",
-        )
-        return state.upper() == "C" or state == ""
+            f"select count(*) from (select signal_state, row_number() over "
+            f"(partition by signal_input_in order by signal_time desc) as latest "
+            f"from {_ASN}.ibmsnap_signal where signal_type = 'CMD' and "
+            f"signal_subtype = 'CAPSTOP' and signal_input_in in "
+            f"({_sql_list(sources)})) as stops "
+            f"where latest = 1 and signal_state <> 'C'",
+        ).strip()
+        return pending == "0"
 
     def _container_and_schema(self, meta: dict[str, str]) -> tuple[str, str]:
         container = meta.get("SYS_CONTAINER", "")
@@ -511,11 +604,10 @@ class Db2Cdc(Db2):
         if not tables:
             return
         print(f">>> CDC: deregistering {len(tables)} table(s) from ASN capture …")
-        for table in tables:
-            try:
-                self.deregister_table(meta, table)
-            except TdxError as exc:  # noqa: PERF203 -- per-table isolation
-                print(f"    WARNING: {schema}.{table} not fully deregistered: {exc}")
+        try:
+            self._deregister_tables(container, schema, tables)
+        except TdxError as exc:
+            print(f"    WARNING: {schema} not fully deregistered: {exc}")
 
     def _registered_tables(self, container: str, schema: str) -> list[str]:
         """The tables ASN still holds a registration for under `schema`.
@@ -525,19 +617,11 @@ class Db2Cdc(Db2):
         outlive its source table — a table dropped by hand leaves a row here,
         and that row still owns the CD table name.
         """
-        out = self._run(
+        return self._clp_lines(
             container,
-            f"db2 connect to {_XP_DB} >/dev/null 2>&1\n"
-            f'db2 -x "select source_table from {_ASN}.ibmsnap_register '
-            f"where source_owner = '{schema}'\"\n"
-            f"db2 terminate >/dev/null 2>&1\n",
-            ignore_failure=True,
+            f"select source_table from {_ASN}.ibmsnap_register "
+            f"where source_owner = '{schema}'",
         )
-        return [
-            line.strip()
-            for line in out.splitlines()
-            if line.strip() and not line.strip().startswith("DB2")
-        ]
 
     # ---- model registration ---------------------------------------------
 
@@ -547,10 +631,10 @@ class Db2Cdc(Db2):
         if not tables:
             print(">>> CDC: no tables to register")
             return
+        self._ensure_asncap(container, tune=True)
         self._claim_cd_tables(container, schema, tables)
         print(f">>> CDC: registering {len(tables)} table(s) for ASN capture …")
-        for table in tables:
-            self._register_table(container, schema, table)
+        self._register_tables(container, schema, tables)
         print(">>> CDC: all tables registered and active")
 
     # ---- CD table names: this domain's own, left over or not --------------
@@ -577,9 +661,13 @@ class Db2Cdc(Db2):
         store has a descriptor with that schema, the domain and the command
         that frees it.
         """
+        stagings = {table: self._staging(schema, table) for table in tables}
+        owners = self._cd_table_owners(container, list(stagings.values()))
+        existing = self._existing_cd_tables(container, list(stagings.values()))
+        own: list[str] = []
         blockers: dict[str, list[str]] = {}
         for table in tables:
-            owner = self._cd_table_owner(container, schema, table)
+            owner = owners.get(stagings[table], "")
             if owner == schema:
                 # This domain's own registration from an earlier install: the
                 # model installed again over tables that were kept. asnclp
@@ -589,18 +677,18 @@ class Db2Cdc(Db2):
                     f"    {schema}.{table} is still registered from an earlier "
                     f"install; re-registering …"
                 )
-                self._remove_registration(container, schema, table)
+                own.append(table)
                 continue
             if not owner:
                 # No registration holds the name, but the table can still be
                 # there: a removal whose drop failed took the rows and left the
                 # table, and asnclp refuses on the table, not on the rows.
-                if self._cd_table_exists(container, self._staging(schema, table)):
+                if stagings[table] in existing:
                     print(
                         f"    reclaiming {self.cd_table(schema, table)}, which no "
                         f"registration holds …"
                     )
-                    self._drop_cd_table(container, self._staging(schema, table))
+                    self._drop_cd_table(container, stagings[table])
                 continue
             if self._source_table_exists(container, owner, table):
                 blockers.setdefault(owner, []).append(table)
@@ -609,21 +697,22 @@ class Db2Cdc(Db2):
                 f"    reclaiming {self.cd_table(schema, table)} from {owner}.{table}, "
                 f"whose source table is gone …"
             )
-            self._remove_registration(container, owner, table)
+            self._remove_registrations(container, owner, [table])
+        self._remove_registrations(container, schema, own)
         if not blockers:
             return
         held = ", ".join(
             self.cd_table(schema, t) for tables_ in blockers.values() for t in tables_
         )
-        owners = []
+        holders = []
         fixes = []
         for owner in sorted(blockers):
             named = self._domain_with_schema(owner, container)
             if named:
-                owners.append(f"schema {owner} -- domain '{named}'")
+                holders.append(f"schema {owner} -- domain '{named}'")
                 fixes.append(f"tdd domain destroy --domain {named}")
             else:
-                owners.append(
+                holders.append(
                     f"schema {owner} -- no domain in this store has that schema "
                     f"(its descriptor is gone, or unreadable here)"
                 )
@@ -634,21 +723,19 @@ class Db2Cdc(Db2):
             "recreate the system"
         )
         raise TdxError(
-            f"CDC: {held} held by the live registrations of {'; '.join(owners)} in "
+            f"CDC: {held} held by the live registrations of {'; '.join(holders)} in "
             f"{container}: {fix}, or create this one on another db2cdc system."
         )
 
-    def _cd_table_owner(self, container: str, schema: str, table: str) -> str:
-        """The schema whose registration holds this domain's CD table for
-        `table`, or ''."""
-        # coalesce over min(): one row always comes back, so an empty result is
-        # a blank and not whatever the CLP prints for no rows
-        return self._clp_scalar(
+    def _cd_table_owners(self, container: str, stagings: list[str]) -> dict[str, str]:
+        """The schema whose registration holds each of these CD tables, for
+        the ones any registration holds."""
+        rows = self._clp_lines(
             container,
-            f"select coalesce(min(source_owner), '') from {_ASN}.ibmsnap_register "
-            f"where cd_owner = '{_ASN}' and "
-            f"cd_table = '{self._staging(schema, table)}'",
-        ).strip()
+            f"select cd_table, source_owner from {_ASN}.ibmsnap_register "
+            f"where cd_owner = '{_ASN}' and cd_table in ({_sql_list(stagings)})",
+        )
+        return dict(row.split()[:2] for row in rows if len(row.split()) >= 2)
 
     def _source_table_exists(self, container: str, schema: str, table: str) -> bool:
         return self._clp_scalar(
@@ -681,31 +768,61 @@ class Db2Cdc(Db2):
         return ""
 
     def _list_schema_tables(self, container: str, schema: str) -> list[str]:
-        out = self._run(
+        return self._clp_lines(
             container,
-            f"db2 connect to {_XP_DB} >/dev/null 2>&1\n"
-            f'db2 -x "select tabname from syscat.tables where '
-            f"tabschema = '{schema}' and type = 'T'\"\n"
-            f"db2 terminate >/dev/null 2>&1\n",
-            ignore_failure=True,
+            f"select tabname from syscat.tables where tabschema = '{schema}' "
+            f"and type = 'T'",
         )
-        return [
-            line.strip()
-            for line in out.splitlines()
-            if line.strip() and not line.strip().startswith("DB2")
-        ]
 
-    def _register_table(self, container: str, schema: str, table: str) -> None:
+    def _register_tables(self, container: str, schema: str, tables: list[str]) -> None:
+        """Register every one of `tables`, then wait once for asncap to take
+        them all: each start is one container call, and the capture program
+        consumes every pending CAPSTART in the same cycle."""
+        map_ids = []
+        for table in tables:
+            print(f"    registering {schema}.{table} …")
+            map_ids.append(self._start_registration(container, schema, table))
+        self._poll(
+            lambda: self._registrations_started(container, schema, tables, map_ids),
+            what=(
+                f"CAPSTART of {', '.join(f'{schema}.{t}' for t in tables)} to be "
+                f"consumed and the registrations to become active"
+            ),
+        )
+
+    def _start_registration(self, container: str, schema: str, table: str) -> str:
+        """``data capture changes``, ``asnclp create registration``, the
+        ``IBMSNAP_LOGMARKER`` column and trigger, the prune control row and the
+        CAPSTART signal, in one container call over one connection."""
         source = f"{schema}.{table}"
         staging = self._staging(schema, table)
         # The domain's own, as the CD table is: two domains of one model may
         # register at the same moment, and share the container's home dir.
         script = f"TD_ASN_REGISTER_{staging}".upper()
-        print(f"    registering {source} …")
-        self._clp(container, f"alter table {source} data capture changes")
+        map_id = str(random.randint(1, 2**31 - 1))  # noqa: S311 - internal signal id
+        after = [
+            f"alter table {_ASN}.{staging} add column IBMSNAP_LOGMARKER "
+            f"TIMESTAMP NOT NULL WITH DEFAULT CURRENT TIMESTAMP",
+            f"create trigger {_ASN}.LM_{staging} no cascade before insert on "
+            f"{_ASN}.{staging} referencing new as N for each row "
+            f"set N.IBMSNAP_LOGMARKER = coalesce((select IBMSNAP_LOGMARKER from "
+            f"{_ASN}.IBMSNAP_UOW where IBMSNAP_COMMITSEQ = N.IBMSNAP_COMMITSEQ), "
+            f"CURRENT TIMESTAMP)",
+            f"insert into {_ASN}.ibmsnap_pruncntl (target_server, target_owner, "
+            f"target_table, source_owner, source_table, source_view_qual, "
+            f"apply_qual, set_name, cntl_server, target_structure, "
+            f"phys_change_owner, phys_change_table, map_id) values "
+            f"('{_XP_DB}', '{_ASN}', '{staging}', '{schema}', '{table}', 0, "
+            f"'TDQUAL', 'TDSET', '{_XP_DB}', 1, '{_ASN}', '{staging}', '{map_id}')",
+            f"insert into {_ASN}.ibmsnap_signal (signal_type, signal_subtype, "
+            f"signal_input_in, signal_state) values "
+            f"('CMD', 'CAPSTART', '{map_id}', 'P')",
+        ]
         self._run(
             container,
             f'cd "$HOME"\n'
+            f"db2w connect to {_XP_DB} >/dev/null{_OR_EXIT}\n"
+            f'db2w -v "alter table {source} data capture changes"{_OR_EXIT}\n'
             f"rm -f {script}\n"
             f"printf 'set output capture script {script}\\n"
             f"set server capture to db {_XP_DB}\\n"
@@ -714,76 +831,22 @@ class Db2Cdc(Db2):
             f"stage {_ASN}.{staging} cols all image both "
             f"prefix {_OLD_VALUES_PREFIX} options capture all\\n"
             f"quit\\n' | asnclp\n"
-            f"db2w connect to {_XP_DB} >/dev/null\n"
-            f"db2w -tvf {script}\n"
-            f"rc=$?\n"
-            f"db2 terminate >/dev/null 2>&1\n"
-            f"exit $rc\n",
-        )
-        self._add_logmarker(container, staging)
-        map_id = self._send_capstart(container, schema, table, staging)
-        self._poll(
-            lambda: self._capstart_consumed(container, map_id),
-            what=f"CAPSTART of {source} to be consumed",
-        )
-        self._poll(
-            lambda: self._registration_active(container, schema, table),
-            what=f"registration of {source} to become active",
-        )
-
-    def _add_logmarker(self, container: str, staging: str) -> None:
-        trigger = f"LM_{staging}"
-        self._clp(
-            container,
-            f"alter table {_ASN}.{staging} add column IBMSNAP_LOGMARKER "
-            f"TIMESTAMP NOT NULL WITH DEFAULT CURRENT TIMESTAMP",
-        )
-        self._clp(
-            container,
-            f"create trigger {_ASN}.{trigger} no cascade before insert on "
-            f"{_ASN}.{staging} referencing new as N for each row "
-            f"set N.IBMSNAP_LOGMARKER = coalesce((select IBMSNAP_LOGMARKER from "
-            f"{_ASN}.IBMSNAP_UOW where IBMSNAP_COMMITSEQ = N.IBMSNAP_COMMITSEQ), "
-            f"CURRENT TIMESTAMP)",
-        )
-
-    def _send_capstart(
-        self, container: str, schema: str, table: str, staging: str
-    ) -> str:
-        map_id = str(random.randint(1, 2**31 - 1))  # noqa: S311 - internal signal id
-        self._clp(
-            container,
-            f"insert into {_ASN}.ibmsnap_pruncntl (target_server, target_owner, "
-            f"target_table, source_owner, source_table, source_view_qual, "
-            f"apply_qual, set_name, cntl_server, target_structure, "
-            f"phys_change_owner, phys_change_table, map_id) values "
-            f"('{_XP_DB}', '{_ASN}', '{staging}', '{schema}', '{table}', 0, "
-            f"'TDQUAL', 'TDSET', '{_XP_DB}', 1, '{_ASN}', '{staging}', '{map_id}')",
-        )
-        self._clp(
-            container,
-            f"insert into {_ASN}.ibmsnap_signal (signal_type, signal_subtype, "
-            f"signal_input_in, signal_state) values "
-            f"('CMD', 'CAPSTART', '{map_id}', 'P')",
+            f"db2w -tvf {script}{_OR_EXIT}\n"
+            + "".join(f'db2w -v "{sql}"{_OR_EXIT}\n' for sql in after)
+            + "db2 terminate >/dev/null 2>&1\n",
         )
         return map_id
 
-    def _capstart_consumed(self, container: str, map_id: str) -> bool:
-        state = self._clp_scalar(
+    def _registrations_started(
+        self, container: str, schema: str, tables: list[str], map_ids: list[str]
+    ) -> bool:
+        counts = self._clp_scalar(
             container,
-            f"select signal_state from {_ASN}.ibmsnap_signal where "
+            f"select (select count(*) from {_ASN}.ibmsnap_signal where "
             f"signal_type = 'CMD' and signal_subtype = 'CAPSTART' and "
-            f"signal_input_in = '{map_id}' order by signal_time desc "
-            f"fetch first 1 row only",
-        )
-        return state.upper() == "C" or state == ""
-
-    def _registration_active(self, container: str, schema: str, table: str) -> bool:
-        state = self._clp_scalar(
-            container,
-            f"select state from {_ASN}.ibmsnap_register where "
-            f"source_owner = '{schema}' and source_table = '{table}'",
-        )
-        if not state:
-            raise TdxError("registration row not found yet")
-        return state.upper() == "A"
+            f"signal_input_in in ({_sql_list(map_ids)}) and signal_state <> 'C'), "
+            f"(select count(*) from {_ASN}.ibmsnap_register where source_owner = "
+            f"'{schema}' and source_table in ({_sql_list(tables)}) and state = 'A') "
+            f"from sysibm.sysdummy1",
+        ).split()
+        return counts == ["0", str(len(tables))]

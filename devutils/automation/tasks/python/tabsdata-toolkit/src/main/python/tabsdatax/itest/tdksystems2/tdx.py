@@ -831,6 +831,9 @@ def _entry_steps(
             *f,
         ])
     if entry.get("size"):
+        # No force here: a forced create-data drops and recreates the tables,
+        # and with a model the step before has just installed them empty.
+        data_force = [] if entry.get("model") else f
         steps.append([
             constants.V_CREATE_DATA,
             constants.OPT_DOMAIN,
@@ -838,7 +841,7 @@ def _entry_steps(
             constants.OPT_SIZE,
             str(entry["size"]),
             *d,
-            *f,
+            *data_force,
         ])
     return steps
 

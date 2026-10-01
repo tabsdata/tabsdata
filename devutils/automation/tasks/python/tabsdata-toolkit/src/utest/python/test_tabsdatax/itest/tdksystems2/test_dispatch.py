@@ -165,6 +165,24 @@ def test_manifest_children_are_pointed_at_the_callers_store():
     assert "--sys-dir" not in plain[0]
 
 
+def test_a_forced_domain_chain_loads_data_without_reinstalling_the_model():
+    create, create_model, create_data = tdx._entry_steps(
+        "tdx-domain",
+        {"name": "d1", "sys": "s1", "model": "employees", "size": 1},
+        force=True,
+        ports=None,
+    )
+    assert "-f" in create and "-f" in create_model
+    assert "-f" not in create_data
+
+
+def test_a_forced_domain_chain_without_a_model_still_forces_the_data():
+    create, create_data = tdx._entry_steps(
+        "tdx-domain", {"name": "d1", "sys": "s1", "size": 1}, force=True, ports=None
+    )
+    assert "-f" in create and "-f" in create_data
+
+
 def test_full_lifecycle(stores, faked):
     assert _sys(["create", "--type", "mysql", "--sys", "sys1"]) == 0
     sdoc = descriptor.load(store.system_path("sys1"))
