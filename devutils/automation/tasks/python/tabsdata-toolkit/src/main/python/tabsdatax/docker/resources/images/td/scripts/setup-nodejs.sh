@@ -7,7 +7,7 @@
 set -e
 
 PACKAGES_FOLDER=/tmp/packages
-NODE_VERSION="24.13.1"
+NODE_VERSION="24.21.0"
 
 curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-arm64.tar.xz" \
     | tar -xJ -C /usr/local --strip-components=1

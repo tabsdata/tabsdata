@@ -8,7 +8,7 @@ set -e
 
 TARGETARCH="${TARGETARCH:-arm64}"
 PACKAGES_FOLDER=/tmp/packages
-NODE_VERSION="24.13.1"
+NODE_VERSION="24.21.0"
 
 case "${TARGETARCH}" in
     arm64) NODE_ARCH="arm64" ;;
