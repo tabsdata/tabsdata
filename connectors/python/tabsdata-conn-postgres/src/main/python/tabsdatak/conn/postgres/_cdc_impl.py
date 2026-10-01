@@ -804,6 +804,9 @@ class Wal2JsonIngester(CdcIngester):
             "include-transaction": "true",
             "include-xids": "true",
             "include-timestamp": "true",
+            # Puts the commit position on each format-2 BEGIN message, which
+            # every row of the transaction then takes as its segment.
+            "include-lsn": "true",
             "add-tables": self._schema_table_filter(),
         }
         if self._publication_name:
@@ -1053,6 +1056,7 @@ class Wal2JsonIngester(CdcIngester):
         new_values: dict,
         old_values: dict,
         offset: LsnOffset | None,
+        segment: int,
     ) -> CdcDataChange:
         columns = schema_version.columns
         null_row = {column.name: None for column in columns}
@@ -1073,7 +1077,7 @@ class Wal2JsonIngester(CdcIngester):
             new_values=new_values,
             old_values=old_values,
             offset=offset,
-            segment=offset.lsn if offset is not None else 0,
+            segment=segment,
             ordinal=sequence,
             schema=schema_version,
         )
@@ -1205,6 +1209,7 @@ class Wal2JsonIngester(CdcIngester):
             new_values=new_values,
             old_values=old_values,
             offset=offset,
+            segment=offset.lsn,
         )
 
     @staticmethod
@@ -1236,6 +1241,7 @@ class Wal2JsonIngester(CdcIngester):
         )
         xid: str | None = None
         timestamp: datetime | None = None
+        commit: int = 0
         sequence: int = 0
         while True:
             pending = xid is not None
@@ -1255,6 +1261,7 @@ class Wal2JsonIngester(CdcIngester):
                 timestamp = datetime.fromisoformat(payload["timestamp"]).astimezone(
                     timezone.utc
                 )
+                commit = self._commit_lsn(payload, xid)
                 sequence = 0
                 continue
             if action == _V2Actions.COMMIT:
@@ -1270,6 +1277,7 @@ class Wal2JsonIngester(CdcIngester):
                     sequence=sequence,
                     timestamp=timestamp,
                     offset=LsnOffset(lsn=message.data_start),
+                    segment=commit,
                 )
                 if truncated is not None:
                     yield truncated
@@ -1282,9 +1290,26 @@ class Wal2JsonIngester(CdcIngester):
                 sequence=sequence,
                 timestamp=timestamp,
                 offset=lsn_offset,
+                segment=commit,
             )
             if produced is not None:
                 yield produced
+
+    @staticmethod
+    def _commit_lsn(payload: dict, xid: str) -> int:
+        """The commit position of the transaction a format-2 BEGIN opens.
+
+        Every row of the transaction takes it as its segment. A row's own
+        position is where it was written, which can be long before its
+        transaction commits: transactions arrive in commit order, so a later
+        one can hold rows written before an earlier one's, and those rows
+        would sort below what the stage publisher has already published and
+        be dropped. Commit positions grow in the order transactions
+        arrive."""
+        lsn = payload.get("lsn")
+        if not isinstance(lsn, str):
+            raise PostgresErrorCode.POSTGRES_30.exception(xid=xid)
+        return lsn_to_int(lsn)
 
     def _process_change_v2(
         self,
@@ -1294,6 +1319,7 @@ class Wal2JsonIngester(CdcIngester):
         sequence: int,
         timestamp: datetime,
         offset: LsnOffset,
+        segment: int,
     ) -> CdcDataChange | None:
         qualified = self._resolve_table(payload)
         if qualified is None:
@@ -1330,6 +1356,7 @@ class Wal2JsonIngester(CdcIngester):
             new_values=new_values,
             old_values=old_values,
             offset=offset,
+            segment=segment,
         )
 
     def _truncate_change(
@@ -1340,6 +1367,7 @@ class Wal2JsonIngester(CdcIngester):
         sequence: int,
         timestamp: datetime | None,
         offset: LsnOffset,
+        segment: int,
     ) -> CdcDataChange | None:
         qualified = self._resolve_table(payload)
         if qualified is None or self._schema_registry is None:
@@ -1357,7 +1385,7 @@ class Wal2JsonIngester(CdcIngester):
             new_values=dict(null_row),
             old_values=dict(null_row),
             offset=offset,
-            segment=offset.lsn,
+            segment=segment,
             ordinal=sequence,
             schema=schema_version,
         )

@@ -189,3 +189,9 @@ class PostgresErrorCode(ErrorCode):
         "lsn, system_identifier and timeline): {state!r}. Run the initial load "
         "again",
     )  # LsnOffset.read
+    POSTGRES_30 = ErrorDef(
+        PostgresRuntimeException,
+        "wal2json sent the BEGIN of transaction {xid!r} without its commit "
+        "position, which every row of the transaction is positioned by. The "
+        "include-lsn option needs wal2json 2.0 or later",
+    )  # Wal2JsonIngester._commit_lsn

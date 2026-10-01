@@ -10,6 +10,7 @@ domain and live in the integration tests (``test_plugin_cdc.py``)."""
 
 from __future__ import annotations
 
+import json
 
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
@@ -30,6 +31,7 @@ from tabsdatak.conn.postgres._cdc_impl import (
     SlotSnapshotSession,
     TransactionSnapshotSession,
     Wal2JsonIngester,
+    lsn_to_int,
 )
 from tabsdatak.conn.postgres.error import PostgresErrorCode
 from tabsdatak.error import TabsdataException
@@ -418,6 +420,7 @@ def test_truncate_is_emitted_with_the_known_table_definition():
         sequence=3,
         timestamp=TS,
         offset=LsnOffset(lsn=900),
+        segment=900,
     )
 
     assert change.operation is CdcOperation.TRUNCATE
@@ -441,6 +444,7 @@ def test_truncate_of_a_never_captured_table_is_still_emitted():
         sequence=1,
         timestamp=TS,
         offset=LsnOffset(lsn=900),
+        segment=900,
     )
 
     assert change is not None
@@ -451,8 +455,8 @@ def test_truncate_of_a_never_captured_table_is_still_emitted():
 
 def test_truncate_keeps_the_transaction_position():
     """Postgres truncates inside the transaction that issued them, so the
-    row takes that transaction's LSN and sequence and sorts between the
-    changes around it."""
+    row takes that transaction's commit position and its sequence, and sorts
+    between the changes around it."""
     bi = _truncate_ready()
 
     change = bi._truncate_change(
@@ -461,9 +465,11 @@ def test_truncate_keeps_the_transaction_position():
         sequence=5,
         timestamp=TS,
         offset=LsnOffset(lsn=1234),
+        segment=5000,
     )
 
-    assert change.segment == 1234
+    assert change.segment == 5000
+    assert change.offset.lsn == 1234
     assert change.ordinal == 5
     assert change.sequence == 5
     assert change.timestamp == TS
@@ -479,6 +485,7 @@ def test_truncate_of_an_untracked_table_is_ignored():
             sequence=1,
             timestamp=TS,
             offset=LsnOffset(lsn=900),
+            segment=900,
         )
         is None
     )
@@ -495,6 +502,7 @@ def test_truncate_without_a_timestamp_falls_back_to_now():
         sequence=1,
         timestamp=None,
         offset=LsnOffset(lsn=900),
+        segment=900,
     )
 
     assert change.timestamp is not None
@@ -988,3 +996,91 @@ def test_a_created_slot_is_identified_before_it_exports_its_snapshot(monkeypatch
     assert commands[1].startswith("CREATE_REPLICATION_SLOT slot LOGICAL")
     assert (session.offset.lsn, session.offset.timeline) == (0x3000, 5)
 
+
+# =====================================================================
+# Format 2: every row is positioned at its transaction's commit
+# =====================================================================
+
+
+class _Message:
+    def __init__(self, data_start: str, payload: dict):
+        self.data_start = self.wal_end = lsn_to_int(data_start)
+        self.payload = json.dumps(payload)
+
+
+class _ReplicationCursor:
+    def __init__(self, messages: list[_Message]):
+        self._messages = list(messages)
+
+    def read_message(self):
+        return self._messages.pop(0) if self._messages else None
+
+
+def _row(xid: int, row_id: int) -> dict:
+    return {
+        "action": "I",
+        "xid": xid,
+        "schema": "public",
+        "table": "t",
+        "columns": [{"name": "id", "type": "integer", "value": row_id}],
+    }
+
+
+def _transaction(xid: int, commit: str, rows: list[tuple[str, int]], end: str):
+    begin = {"action": "B", "xid": xid, "timestamp": "2026-09-29 19:15:18+00"}
+    return [
+        _Message(rows[0][0], begin | {"lsn": commit}),
+        *[_Message(start, _row(xid, row_id)) for start, row_id in rows],
+        _Message(end, {"action": "C", "xid": xid, "lsn": commit}),
+    ]
+
+
+def _format_2_ingester(messages: list[_Message]) -> Wal2JsonIngester:
+    bi = _ingester_with_tables(["public.t"])
+    bi.init_schema_registry(CdcFormat())
+    bi._cursor = _ReplicationCursor(messages)
+    bi._blocking_timeout_seconds = 0.05
+    return bi
+
+
+def test_a_transaction_committed_later_is_positioned_after_an_earlier_one():
+    """What wal2json sent for two overlapping transactions (verified live on
+    PostgreSQL 18.6): T2 wrote a row, T1 wrote and committed, T2 wrote again
+    and committed. T1 arrives first; T2's first row was written before T1's,
+    so by its own position it would sort below T1 and be dropped once T1 is
+    published."""
+    t1 = _transaction(816, "0/368A110", [("0/368A090", 2)], "0/368A140")
+    t2 = _transaction(
+        815, "0/368A1C8", [("0/3689F90", 1), ("0/368A140", 3)], "0/368A1F8"
+    )
+    changes = list(_format_2_ingester(t1 + t2)._poll_changes_v2(None))
+
+    assert [change.new_values["id"] for change in changes] == [2, 1, 3]
+    assert [change.segment for change in changes] == [
+        lsn_to_int("0/368A110"),
+        lsn_to_int("0/368A1C8"),
+        lsn_to_int("0/368A1C8"),
+    ]
+    assert [(c.segment, c.ordinal) for c in changes] == sorted(
+        (c.segment, c.ordinal) for c in changes
+    )
+    # The offset still records where each row was written, which a resume
+    # starts from.
+    assert changes[1].offset.lsn == lsn_to_int("0/3689F90")
+
+
+def test_a_begin_without_its_commit_position_fails():
+    messages = _transaction(9, "0/100", [("0/90", 1)], "0/120")
+    messages[0].payload = json.dumps(
+        {"action": "B", "xid": 9, "timestamp": "2026-09-29 19:15:18+00"}
+    )
+    with pytest.raises(TabsdataException) as ei:
+        list(_format_2_ingester(messages)._poll_changes_v2(None))
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_30
+
+
+def test_the_stream_asks_wal2json_for_commit_positions(monkeypatch):
+    bi = _ingester_with_tables(["public.users"])
+    cursor = _replication_cursor(monkeypatch, bi)
+    bi.init_stream()
+    assert cursor.start_replication.call_args.kwargs["options"]["include-lsn"] == "true"
