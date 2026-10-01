@@ -34,6 +34,8 @@ from testi_tabsdatak.conn.db2.backend import (
     cdc_wait_cd_count,
 )
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._signal import StopSignal
 from tabsdatak.conn.db2 import Db2CdcStreamSrc, Db2CdcStreamSrcConn
 
 # noinspection PyProtectedMember
@@ -198,12 +200,9 @@ def _src(tables: list[str], **cfg) -> Db2CdcStreamSrc:
 
 @contextmanager
 def _patched_signal_handlers():
-    def _fake() -> threading.Event:
-        return threading.Event()
-
     with patch(
-        "tabsdatak.conn.common.sql.cdc._runner._setup_signal_handlers",
-        side_effect=_fake,
+        "tabsdatak.conn.common._stream._signal.StopSignal.install",
+        side_effect=StopSignal,
     ):
         yield
 

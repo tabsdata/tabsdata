@@ -70,8 +70,8 @@ def test_codes_have_expected_names_with_intentional_gap():
     # CONN_17..CONN_30 for the shared field-value rules -- one code per
     # spec in ``types.py`` plus the two FQN rules ``name_validate``
     # builds -- CONN_31 / CONN_32 for the two ways a cfg tree can
-    # break the JSON-like value rule, and CONN_33 for the stream buffer
-    # sentinel.
+    # break the JSON-like value rule, CONN_33 for the stream buffer
+    # sentinel, and CONN_34 for the stream checkpoint.
     # CONN_5..CONN_7 were intentionally retired with the CloudLocation
     # move into the per-connector packages; the gap is preserved so
     # callers that still imported the conn-common variants surface
@@ -108,4 +108,5 @@ def test_codes_have_expected_names_with_intentional_gap():
         "CONN_31",
         "CONN_32",
         "CONN_33",
+        "CONN_34",
     ]

@@ -179,9 +179,3 @@ class SqlCdcErrorCode(ErrorCode):
         "Run the initial load again at a time with fewer changes, or raise the "
         "limit",
     )  # _read_window
-    CDC_30 = ErrorDef(
-        SqlCdcException,
-        "{ingester} reported a position to record without staging, but gave "
-        "{offset!r}: it must report the offset the stream resumes from, and "
-        "keep that offset in Tabsdata stream state",
-    )  # _checkpoint

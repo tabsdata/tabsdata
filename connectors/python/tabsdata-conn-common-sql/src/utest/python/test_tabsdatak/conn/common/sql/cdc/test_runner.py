@@ -2,42 +2,46 @@
 #  Copyright 2026 Tabsdata Inc.
 #
 
-"""Unit tests for the dialect-agnostic CDC run loop
-(:mod:`tabsdatak.conn.common.sql.cdc._runner`): ``_publish``,
-``_run_loop`` (seeding, threshold vs interval flush, graceful vs
-interrupted/errored shutdown), ``_setup_signal_handlers`` and the
-``CdcRunConfig`` defaults. The sentinels are faked out so the loop's
-orchestration is tested in isolation, without a database or parquet."""
+"""Unit tests for the CDC hooks of the shared stream run loop
+(:mod:`tabsdatak.conn.common.sql.cdc._runner`): the initial load and its
+window, the initial-load flag kept in the stream state and in checkpoints,
+and the ``CdcRunConfig`` defaults. The sentinels are faked out so the
+hooks are tested in isolation, without a database or parquet."""
 
 from __future__ import annotations
 
-import threading
 from pathlib import Path
 
 import pytest
 
-from tabsdatak.conn.common.sql.cdc import _runner
-from tabsdatak.conn.common.sql.cdc._ingester import CDC_INITIAL_LOAD_STATE_KEY
-from tabsdatak.conn.common.sql.cdc._runner import (
-    CdcRunConfig,
-    _checkpoint,
-    _initial_load_pending,
-    _publish,
-    _run_loop,
-    _setup_signal_handlers,
-)
-from tabsdatak.conn.common.sql.cdc.constants import (
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream import _plugin
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._signal import StopSignal
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
-    DEFAULT_FETCH_SIZE,
-    DEFAULT_MAX_LARGE_TEXT_LENGTH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
 )
-from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode, SqlCdcException
+from tabsdatak.conn.common.sql.cdc import _runner
+from tabsdatak.conn.common.sql.cdc._ingester import CDC_INITIAL_LOAD_STATE_KEY
+from tabsdatak.conn.common.sql.cdc._runner import (
+    CdcPlugin,
+    CdcRunConfig,
+    _initial_load_pending,
+)
+from tabsdatak.conn.common.sql.cdc.constants import (
+    DEFAULT_FETCH_SIZE,
+    DEFAULT_MAX_LARGE_TEXT_LENGTH,
+)
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcException
 
 # --- fakes --------------------------------------------------------------
 
@@ -204,9 +208,10 @@ class FakeIngester:
 
 
 def _patch_sentinels(monkeypatch, disk, buffer):
-    monkeypatch.setattr(_runner, "FileLedger", lambda **kw: disk)
-    monkeypatch.setattr(_runner, "DiskSentinel", lambda **kw: disk)
-    monkeypatch.setattr(_runner, "BufferSentinel", lambda **kw: buffer)
+    for module in (_plugin, _runner):
+        monkeypatch.setattr(module, "FileLedger", lambda **kw: disk)
+        monkeypatch.setattr(module, "BufferSentinel", lambda **kw: buffer)
+    monkeypatch.setattr(_plugin, "DiskSentinel", lambda **kw: disk)
 
 
 def _cfg(**overrides) -> CdcRunConfig:
@@ -217,260 +222,32 @@ def _cfg(**overrides) -> CdcRunConfig:
     return CdcRunConfig(**base)
 
 
-# --- _publish -----------------------------------------------------------
+class _Plugin(CdcPlugin):
+    def build_run_config(self, stream_src) -> CdcRunConfig:
+        return _cfg()
+
+    def build_ingester(self, conn, stream_src):
+        return FakeIngester()
 
 
-def test_publish_empty_manifest_does_not_stage():
-    """An all-empty manifest must not stage, clear, or commit an offset
-    (otherwise a no-data batch would advance the resume point)."""
-    ctx = FakeCtx(active_values=[])
-    disk = FakeDisk(manifest=[[], []])
-    buffer = FakeBuffer()
-    ingester = FakeIngester()
-
-    assert _publish(ctx, disk, disk, buffer, ingester) is False
-    assert ctx.staged == []
-    assert disk.cleared == 0
+def _stream(ctx, ingester, cfg: CdcRunConfig) -> None:
+    _Plugin().stream(ctx=ctx, ingester=ingester, cfg=cfg)
 
 
-def test_publish_stages_manifest_and_commits_offset():
-    ctx = FakeCtx(active_values=[])
-    files = [[Path("t0.parquet")], []]
-    disk = FakeDisk(manifest=files)
-    buffer = FakeBuffer()
-    ingester = FakeIngester()
-
-    assert _publish(ctx, disk, disk, buffer, ingester) is True
-    assert ctx.staged == [(files, ingester.commit_state_marker)]
-    assert ingester.commit_state_arg is buffer.offset
-    assert ingester.committed_offsets == [buffer.offset]
-    assert disk.cleared == 1
-
-
-def test_a_stage_does_not_cover_changes_still_in_memory():
-    """The disk sentinel's thresholds can stage while the buffer still holds
-    changes it has not written: the staged offset must stop at what is on
-    disk, or a stop before the next stage loses those changes."""
-    from datetime import datetime
-
-    # noinspection PyProtectedMember
-    from tabsdatak.conn.common._stream._sentinels import BufferSentinel
-    from tabsdatak.conn.common.sql.cdc._encoder import CdcEncoder
-    from tabsdatak.conn.common.sql.cdc._model import CdcDataChange
-    from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
-
-    class Positions:
-        def __init__(self, applied=()):
-            self.applied = list(applied)
-
-        def update(self, other) -> None:
-            self.applied.extend(other.applied)
-
-    def change(position: str) -> CdcDataChange:
-        return CdcDataChange(
-            operation="i",
-            transaction="tx",
-            sequence=1,
-            timestamp=datetime(2026, 1, 1),
-            table="s.t",
-            schema=None,
-            new_values={"id": 1},
-            old_values=None,
-            offset=Positions([position]),
-        )
-
-    class SilentEncoder(CdcEncoder):
-        def encode(self, slot, records):
-            return []
-
-    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
-    buffer = BufferSentinel(
-        ledger=disk,
-        encoder=SilentEncoder(CdcFormat(), {"s.t": None}),
-        slots=["s.t"],
-        max_rows=1_000,
-        max_bytes=None,
-        max_secs=10_000,
-        offset=Positions(),
+def _checkpoint(ctx, ingester, cfg: CdcRunConfig, offset) -> None:
+    plugin = _Plugin()
+    run = plugin.build_run(
+        ctx=ctx, ingester=ingester, cfg=cfg, stop_signal=StopSignal()
     )
-    buffer.add(change("written"))
-    buffer.flush()
-    buffer.add(change("in-memory"))
-    ingester = FakeIngester()
-
-    assert _publish(FakeCtx(active_values=[]), disk, disk, buffer, ingester) is True
-    assert ingester.commit_state_arg.applied == ["written"]
-    assert ingester.committed_offsets[0].applied == ["written"]
+    plugin.checkpoint(run, offset)
 
 
-def test_publish_does_not_commit_offset_when_stage_fails():
-    """The source is acknowledged only for a batch Tabsdata has made
-    durable; a failed stage must leave the source cursor where it was."""
-    ctx = FakeCtx(active_values=[])
-    ctx.stage_raises = True
-    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
-    buffer = FakeBuffer()
-    ingester = FakeIngester()
-
-    with pytest.raises(RuntimeError, match="boom-stage"):
-        _publish(ctx, disk, disk, buffer, ingester)
-
-    assert ingester.committed_offsets == []
-    assert disk.cleared == 0
-
-
-# --- _run_loop: seeding -------------------------------------------------
-
-
-def test_run_loop_seeds_resume_offset_from_ctx(monkeypatch):
-    disk = FakeDisk(manifest=[[]], due_force=False)
-    buffer = FakeBuffer()
-    _patch_sentinels(monkeypatch, disk, buffer)
-    sentinel_offset = object()
-    ingester = FakeIngester(resume_value=sentinel_offset)
-    ctx = FakeCtx(active_values=[False], first_stage=False, stream_state={"x": 1})
-
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
-
-    assert ingester.resume_args == (False, {"x": 1})
-    assert ingester.seeded is sentinel_offset
-    assert ingester.closed is True
-
-
-# --- _run_loop: flush triggers ------------------------------------------
-
-
-def test_run_loop_threshold_flush_stages_once(monkeypatch):
-    disk = FakeDisk(manifest=[[Path("f")]], due_normal=True)
-    buffer = FakeBuffer()
-    _patch_sentinels(monkeypatch, disk, buffer)
-    ingester = FakeIngester()
-    ctx = FakeCtx(active_values=[True, False])
-
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
-
-    assert len(ctx.staged) == 1
-
-
-def test_run_loop_interval_flush_stages_when_interval_elapses(monkeypatch):
-    """With size/row thresholds never firing, an elapsed
-    ``flush_interval_mins`` alone must trigger a stage."""
-    disk = FakeDisk(
-        manifest=[[Path("f")]],
-        due_normal=False,
-        due_force=False,
-    )
-    buffer = FakeBuffer()
-    _patch_sentinels(monkeypatch, disk, buffer)
-
-    # last_flush is set from the first time.time(); the interval check on
-    # the next iteration sees +120s, exceeding the 60s (1 min) interval.
-    clock = iter([1000.0, 1120.0, 1120.0, 1120.0, 1120.0])
-    monkeypatch.setattr(_runner.time, "time", lambda: next(clock))
-
-    ingester = FakeIngester()
-    ctx = FakeCtx(active_values=[True, False], flush_interval_mins=1)
-
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
-
-    assert len(ctx.staged) == 1
-
-
-def test_run_loop_interval_flush_skipped_when_no_data(monkeypatch):
-    """The interval must not fire on an empty sentinel (no no-data
-    publishes)."""
-    disk = FakeDisk(manifest=[[]], due_normal=False)
-    disk.has_data = False
-    buffer = FakeBuffer()
-    _patch_sentinels(monkeypatch, disk, buffer)
-    clock = iter([1000.0, 1120.0, 1120.0, 1120.0, 1120.0])
-    monkeypatch.setattr(_runner.time, "time", lambda: next(clock))
-    ingester = FakeIngester()
-    ctx = FakeCtx(active_values=[True, False], flush_interval_mins=1)
-
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
-
-    assert ctx.staged == []
-
-
-# --- _run_loop: shutdown ------------------------------------------------
-
-
-def test_run_loop_graceful_end_flushes_trailing_batch(monkeypatch):
-    """A clean end-of-stream (``ctx.active`` -> False, no signal/error)
-    flushes the trailing partial batch."""
-    disk = FakeDisk(manifest=[[Path("f")]], due_force=True)
-    buffer = FakeBuffer()
-    _patch_sentinels(monkeypatch, disk, buffer)
-    ingester = FakeIngester()
-    ctx = FakeCtx(active_values=[False])
-
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
-
-    assert buffer.flushed == 1
-    assert len(ctx.staged) == 1
-    assert ingester.closed is True
-
-
-def test_run_loop_interrupted_skips_trailing_flush(monkeypatch):
-    """A signalled exit leaves the buffer for the next run (no trailing
-    flush) but still closes the session."""
-    preset = threading.Event()
-    preset.set()
-    monkeypatch.setattr(_runner, "_setup_signal_handlers", lambda: preset)
-
-    disk = FakeDisk(manifest=[[Path("f")]], due_force=True)
-    buffer = FakeBuffer()
-    _patch_sentinels(monkeypatch, disk, buffer)
-    ingester = FakeIngester()
-    ctx = FakeCtx(active_values=[True, True])
-
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
-
-    assert buffer.flushed == 0
-    assert ctx.staged == []
-    assert ingester.closed is True
-
-
-def test_run_loop_errored_skips_trailing_flush_but_closes(monkeypatch):
-    """An error propagates, the trailing batch is left for resume, and
-    the session is still closed in the finally."""
-    disk = FakeDisk(manifest=[[Path("f")]], due_force=True)
-    buffer = FakeBuffer()
-    _patch_sentinels(monkeypatch, disk, buffer)
-    ingester = FakeIngester(poll_raises=True)
-    ctx = FakeCtx(active_values=[True])
-
-    with pytest.raises(RuntimeError, match="boom-poll"):
-        _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
-
-    assert buffer.flushed == 0
-    assert ctx.staged == []
-    assert ingester.closed is True
-
-
-# --- _run_loop: positions recorded between stages -------------------------
+# --- checkpoints ----------------------------------------------------------
 
 
 class _OwnedOffsetIngester(FakeIngester):
     def commit_state(self, offset):
         return {"cdc.offset": offset}
-
-
-def test_run_loop_hands_the_ingester_a_checkpoint_that_records_state(monkeypatch):
-    _patch_sentinels(monkeypatch, FakeDisk(manifest=[]), FakeBuffer())
-    ingester = _OwnedOffsetIngester()
-    ctx = FakeCtx(
-        active_values=[False],
-        first_stage=False,
-        stream_state={"cdc.offset": "staged"},
-    )
-
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
-    ingester.checkpoint("moved")
-
-    assert ctx.checkpoints == [{"cdc.offset": "moved"}]
-    assert ctx.staged == []
 
 
 def test_a_checkpoint_keeps_the_record_of_a_done_initial_load():
@@ -502,87 +279,6 @@ def test_there_is_no_checkpoint_without_a_state_to_move_on(
     ctx = FakeCtx(active_values=[], first_stage=first_stage, stream_state=stream_state)
     _checkpoint(ctx, _OwnedOffsetIngester(), _cfg(initial_load=initial_load), "moved")
     assert ctx.checkpoints == []
-
-
-@pytest.mark.parametrize(
-    ("ingester", "offset"),
-    [(_OwnedOffsetIngester(), None), (FakeIngester(), "moved")],
-    ids=["no-offset", "source-owned-offset"],
-)
-def test_a_checkpoint_without_a_state_to_record_is_a_bug(ingester, offset):
-    ctx = FakeCtx(
-        active_values=[], first_stage=False, stream_state={"cdc.offset": "staged"}
-    )
-    with pytest.raises(SqlCdcException) as ei:
-        _checkpoint(ctx, ingester, _cfg(), offset)
-    assert ei.value.api_error is SqlCdcErrorCode.CDC_30
-    assert ctx.checkpoints == []
-
-
-def test_a_clean_end_settles_the_position_after_the_last_stage(monkeypatch):
-    disk = FakeDisk(manifest=[[Path("f")]], due_force=True)
-    _patch_sentinels(monkeypatch, disk, FakeBuffer())
-    ingester = FakeIngester()
-    ctx = FakeCtx(active_values=[False])
-
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
-
-    assert (len(ctx.staged), ingester.settled, ingester.closed) == (1, 1, True)
-
-
-def test_a_signalled_stop_settles_the_position(monkeypatch):
-    preset = threading.Event()
-    preset.set()
-    monkeypatch.setattr(_runner, "_setup_signal_handlers", lambda: preset)
-    _patch_sentinels(monkeypatch, FakeDisk(manifest=[]), FakeBuffer())
-    ingester = FakeIngester()
-
-    _run_loop(ctx=FakeCtx(active_values=[True]), ingester=ingester, cfg=_cfg())
-
-    assert ingester.settled == 1
-
-
-def test_an_errored_run_does_not_settle(monkeypatch):
-    """After an error the stream may no longer hold its position, so what
-    the source reports then cannot be told to be the stream's own."""
-    _patch_sentinels(monkeypatch, FakeDisk(manifest=[]), FakeBuffer())
-    ingester = FakeIngester(poll_raises=True)
-
-    with pytest.raises(RuntimeError, match="boom-poll"):
-        _run_loop(ctx=FakeCtx(active_values=[True]), ingester=ingester, cfg=_cfg())
-
-    assert (ingester.settled, ingester.closed) == (0, True)
-
-
-def test_a_failed_settle_still_closes_the_session(monkeypatch):
-    _patch_sentinels(monkeypatch, FakeDisk(manifest=[]), FakeBuffer())
-    ingester = FakeIngester()
-    ingester.settle = lambda: (_ for _ in ()).throw(RuntimeError("boom-settle"))
-
-    _run_loop(ctx=FakeCtx(active_values=[False]), ingester=ingester, cfg=_cfg())
-
-    assert ingester.closed is True
-
-
-# --- _setup_signal_handlers ---------------------------------------------
-
-
-def test_setup_signal_handlers_off_main_thread_is_noop():
-    """Off the main thread the handler install is skipped (it would raise
-    in CPython), returning a plain unset Event."""
-    result = {}
-
-    def worker():
-        event = _setup_signal_handlers()
-        result["event"] = event
-        result["is_set"] = event.is_set()
-
-    thread = threading.Thread(target=worker)
-    thread.start()
-    thread.join()
-
-    assert isinstance(result["event"], threading.Event)
-    assert result["is_set"] is False
 
 
 # --- initial load -------------------------------------------------------
@@ -739,7 +435,7 @@ def _with_window(monkeypatch, tmp_path, *, window):
     ingester.commit_state_marker = {"cdc.offset": "end"}
     ctx = FakeCtx(active_values=[False], stream_state=None)
     ctx.work_dir = tmp_path
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg(initial_load=True))
+    _stream(ctx, ingester, _cfg(initial_load=True))
     return ctx, ingester, deduplicated, end, load_file, kept_file
 
 
@@ -807,7 +503,7 @@ def _read(monkeypatch, tmp_path, ingester, limit):
         cfg=_cfg(initial_load_max_window_changes=limit),
         large_column_policy=_Identity(),
         window_end=end,
-        stop_signal=threading.Event(),
+        stop_signal=StopSignal(),
     )
     return manifest, buffer, end
 
@@ -827,7 +523,7 @@ def test_a_window_past_the_limit_fails(monkeypatch, tmp_path):
         _read(monkeypatch, tmp_path, ingester, limit=3)
 
 
-def test_run_loop_seeds_the_mark_from_the_initial_load(monkeypatch, tmp_path):
+def test_the_stream_seeds_the_mark_from_the_initial_load(monkeypatch, tmp_path):
     """Capture resumes exactly where the snapshot ended, so the load's
     offset seeds the mark last. The previous offset is seeded before it,
     so what it recorded outlives the reload."""
@@ -843,12 +539,12 @@ def test_run_loop_seeds_the_mark_from_the_initial_load(monkeypatch, tmp_path):
     ctx = FakeCtx(active_values=[False], stream_state=None)
     ctx.work_dir = tmp_path
 
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg(initial_load=True))
+    _stream(ctx, ingester, _cfg(initial_load=True))
 
     assert seeds == [previous, load_offset]
 
 
-def test_run_loop_skips_a_completed_initial_load(monkeypatch, tmp_path):
+def test_the_stream_skips_a_completed_initial_load(monkeypatch, tmp_path):
     disk = FakeDisk(manifest=[[]])
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
@@ -865,7 +561,7 @@ def test_run_loop_skips_a_completed_initial_load(monkeypatch, tmp_path):
     )
     ctx.work_dir = tmp_path
 
-    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg(initial_load=True))
+    _stream(ctx, ingester, _cfg(initial_load=True))
 
     assert calls == []
     assert ingester.seeded is resume

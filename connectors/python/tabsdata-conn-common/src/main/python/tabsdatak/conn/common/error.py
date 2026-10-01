@@ -177,3 +177,9 @@ class ConnErrorCode(ErrorCode):
         "Buffer sentinel has no base offset; ingester must provide a "
         "base offset at initialization",
     )
+    CONN_34 = ErrorDef(
+        ConnStreamException,
+        "{ingester} reported a position to record without staging, but gave "
+        "{offset!r}: it must report the offset the stream resumes from, and "
+        "keep that offset in Tabsdata stream state",
+    )

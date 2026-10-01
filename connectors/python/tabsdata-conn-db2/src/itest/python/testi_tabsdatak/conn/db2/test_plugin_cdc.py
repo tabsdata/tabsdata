@@ -46,6 +46,8 @@ from testi_tabsdatak.conn.db2.backend import (
     cdc_wait_cd_count,
 )
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._signal import StopSignal
 from tabsdatak.conn.db2 import (
     CommitSeqPosition,
     Db2CdcStreamSrc,
@@ -207,12 +209,9 @@ def _patched_signal_handlers():
     """``run_cdc`` installs SIGINT / SIGTERM handlers, which only works on the
     main thread."""
 
-    def _fake() -> threading.Event:
-        return threading.Event()
-
     with patch(
-        "tabsdatak.conn.common.sql.cdc._runner._setup_signal_handlers",
-        side_effect=_fake,
+        "tabsdatak.conn.common._stream._signal.StopSignal.install",
+        side_effect=StopSignal,
     ):
         yield
 

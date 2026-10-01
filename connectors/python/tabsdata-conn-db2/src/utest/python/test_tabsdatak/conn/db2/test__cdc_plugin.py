@@ -143,7 +143,7 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
         # ``run`` just does its setup (config + log levels + ingester) and
         # returns.
         with patch(
-            "tabsdatak.conn.common.sql.cdc._runner._run_loop",
+            "tabsdatak.conn.common._stream._plugin.PipelineStreamSrcPlugin.stream",
         ), patch(
             "tabsdatak.conn.db2._cdc_impl.SqlReplicaIngester",
         ):

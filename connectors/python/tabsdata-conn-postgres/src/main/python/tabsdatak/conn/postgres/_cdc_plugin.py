@@ -26,21 +26,24 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
-from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
-from tabsdatak.conn.common.sql.cdc.constants import (
-    DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
-    DEFAULT_CHUNK_SIZE,
-    DEFAULT_FETCH_SIZE,
-    DEFAULT_INITIAL_LOAD_MAX_WINDOW_CHANGES,
-    DEFAULT_MAX_LARGE_TEXT_LENGTH,
     DEFAULT_POLL_INTERVAL_SECONDS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
+)
+from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
+from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
+from tabsdatak.conn.common.sql.cdc.constants import (
+    DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_FETCH_SIZE,
+    DEFAULT_INITIAL_LOAD_MAX_WINDOW_CHANGES,
+    DEFAULT_MAX_LARGE_TEXT_LENGTH,
 )
 from tabsdatak.conn.common.sql.cdc.typing import (
     CdcFormat as _CommonCdcFormat,
