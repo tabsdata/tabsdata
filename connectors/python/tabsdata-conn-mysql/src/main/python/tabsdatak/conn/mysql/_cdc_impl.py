@@ -29,6 +29,7 @@ import re
 import time
 from collections.abc import Generator, Iterator
 from datetime import datetime, timedelta, timezone, tzinfo
+from pathlib import Path
 from typing import Any, Literal, TypeAlias, Union
 
 import pymysql
@@ -736,7 +737,7 @@ class BinlogIngester(CdcIngester):
     # Session lifecycle
     # ------------------------------------------------------------------
 
-    def open_session(self) -> Any:
+    def open_session(self, work_dir: Path) -> Any:
         engine = self._build_engine()
         self._server_tz = self.dialect.server_timezone(engine)
         logger.info("MySQL server timezone: %s", self._server_tz)

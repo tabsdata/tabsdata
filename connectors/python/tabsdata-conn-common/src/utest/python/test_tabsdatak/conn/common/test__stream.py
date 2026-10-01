@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Self
 
 import pytest
@@ -117,4 +118,4 @@ def test_settling_by_default_records_nothing():
 
 
 def test_opening_a_session_by_default_returns_none():
-    assert CounterIngester().open_session() is None
+    assert CounterIngester().open_session(Path("/tmp")) is None

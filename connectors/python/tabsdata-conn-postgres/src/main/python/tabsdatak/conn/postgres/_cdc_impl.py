@@ -36,6 +36,7 @@ import time
 from collections.abc import Generator, Iterable, Iterator
 from datetime import date, datetime, time as dt_time, timezone, tzinfo
 from decimal import Decimal
+from pathlib import Path
 from typing import Any, Literal, TypeAlias, Union
 
 import orjson
@@ -733,7 +734,7 @@ class Wal2JsonIngester(CdcIngester):
     # Session lifecycle
     # ------------------------------------------------------------------
 
-    def open_session(self) -> Any:
+    def open_session(self, work_dir: Path) -> Any:
         engine = self._build_engine()
         self._server_tz = self.dialect.server_timezone(engine)
         logger.info("PostgreSQL server timezone: %s", self._server_tz)

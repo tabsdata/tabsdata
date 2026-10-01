@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable
+from pathlib import Path
 from typing import Any
 
 from tabsdatak.conn.common._stream._offset import StreamOffset
@@ -19,7 +20,7 @@ class StreamIngester[R, O: StreamOffset](ABC):
         self._mark: O | None = None
         self._checkpoint: Callable[[O], None] | None = None
 
-    def open_session(self) -> Any: ...
+    def open_session(self, work_dir: Path) -> Any: ...
 
     @abstractmethod
     def close_session(self, session: Any) -> None: ...

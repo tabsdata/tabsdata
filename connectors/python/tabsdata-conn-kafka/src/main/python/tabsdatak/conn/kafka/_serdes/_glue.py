@@ -7,7 +7,7 @@
 AWS Glue's wire format prepends an 18-byte header to every
 payload: 1 magic byte (``0x03``) + 1 compression byte + 16
 schema-version UUID bytes. The serdes extract that UUID and the
-``MessagesBuffer`` keys on it (exact-UUID equality).
+``KafkaEncoder`` keys on it (exact-UUID equality).
 
 Schema-version resolution goes through the boto3 Glue client
 (``get_schema_by_definition`` -> ``register_schema_version`` ->

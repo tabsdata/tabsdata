@@ -134,7 +134,7 @@ class FakeIngester:
     def settle(self) -> None:
         self.settled += 1
 
-    def open_session(self):
+    def open_session(self, work_dir):
         return self.session
 
     def base_offset(self):

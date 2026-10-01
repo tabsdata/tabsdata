@@ -4,28 +4,36 @@
 
 """Kafka stream-source plugin glue.
 
-Mirrors the layering of the CDC sides (``_cdc_plugin.py`` /
-``_cdc_impl.py``): the plugin lives here, the consumer / buffer
-sit in ``_stream_impl.py``, and the wire-format (de)serialisers
-in :mod:`tabsdatak.conn.kafka._serdes`.
+The run loop is the shared
+:class:`~tabsdatak.conn.common._stream._plugin.PipelineStreamSrcPlugin`
+one, as for the CDC sources; the ingester and the encoder sit in
+``_stream_impl.py``, and the wire-format (de)serialisers in
+:mod:`tabsdatak.conn.kafka._serdes`.
 
-Each rollover hands a single-table positional manifest
-(``[[parquet_file]]``) to ``ctx.stage`` along with a callback that
-commits the Kafka consumer offset -- exactly like the CDC sources.
+Each staged batch is a single-table positional manifest (one slot, the
+topic) handed to ``ctx.stage`` along with a callback that commits the
+Kafka consumer offset on the broker.
 
-* :class:`KafkaStreamSrcPlugin` -- wires
-  :class:`KafkaStreamSrc` to a polling consumer + manifest-based
-  staging.
+* :class:`KafkaStreamSrcPlugin` -- wires :class:`KafkaStreamSrc` to the
+  shared pipeline.
 * :data:`KAFKA_STREAM_SRC` -- entry-point :class:`StreamSrcDef`.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import logging
-import signal
-import time
-from pathlib import Path
+from collections.abc import Sequence
+from dataclasses import dataclass
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._config import StreamRunConfig
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._plugin import PipelineStreamSrcPlugin, StreamRun
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._signal import StopSignal
 from tabsdatak.conn.kafka import (
     KafkaStreamSrc,
     KafkaStreamSrcConn,
@@ -36,24 +44,17 @@ from tabsdatak.conn.kafka import (
 from tabsdatak.conn.kafka._explorer import KafkaConnectionExplorer
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.kafka._serdes import (
-    build_schema_registry_client,
-    build_serde,
-)
-
-# noinspection PyProtectedMember
 from tabsdatak.conn.kafka._stream_impl import (
     DEFAULT_CONNECTION_TIMEOUT_SECS,
     DEFAULT_CONSUME_TIMEOUT_SECS,
     DEFAULT_TIME_ROLLOVER_SECS,
-    KafkaConsumer,
-    RolloverReason,
-    build_kafka_configs,
+    KafkaEncoder,
+    KafkaIngester,
+    KafkaPosition,
+    KafkaRecord,
 )
-from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.spi import (
     StreamSrcDef,
-    StreamSrcPlugin,
     StreamSrcPluginCtx,
     StreamStageSrc,
 )
@@ -71,257 +72,83 @@ _KEY_TIME_ROLLOVER: SrcCfgKey = "kafka.time_rollover_seconds"
 _KEY_SIZE_ROLLOVER_MB: SrcCfgKey = "kafka.size_rollover_mb"
 _KEY_MESSAGES_ROLLOVER: SrcCfgKey = "kafka.messages_rollover"
 
+_MEBIBYTE = 1024 * 1024
 
-def _resolve_rollover_cfg(src: KafkaStreamSrc) -> dict:
-    """Pull the rollover / timeout knobs off ``src.src_cfg`` with
-    sensible defaults. Centralised here so ``KafkaStreamSrcPlugin.run``
-    stays focused on lifecycle."""
+
+@dataclass(frozen=True, kw_only=True)
+class KafkaRunConfig(StreamRunConfig):
+    consume_timeout_secs: int = DEFAULT_CONSUME_TIMEOUT_SECS
+    connection_timeout_secs: int = DEFAULT_CONNECTION_TIMEOUT_SECS
+
+
+def _build_kafka_run_config(src: KafkaStreamSrc) -> KafkaRunConfig:
     cfg = dict(src.src_cfg or {})
-    return {
-        "consume_timeout_secs": int(
+    size_rollover_mb = cfg.get(_KEY_SIZE_ROLLOVER_MB)
+    return KafkaRunConfig(
+        buffer_max_rows=cfg.get(_KEY_MESSAGES_ROLLOVER),
+        buffer_max_bytes=(
+            None if size_rollover_mb is None else int(size_rollover_mb) * _MEBIBYTE
+        ),
+        buffer_max_secs=int(cfg.get(_KEY_TIME_ROLLOVER, DEFAULT_TIME_ROLLOVER_SECS)),
+        trigger_max_rows=None,
+        trigger_max_bytes=None,
+        trigger_max_secs=0,
+        poll_interval_seconds=0,
+        consume_timeout_secs=int(
             cfg.get(_KEY_CONSUME_TIMEOUT, DEFAULT_CONSUME_TIMEOUT_SECS),
         ),
-        "connection_timeout_secs": int(
+        connection_timeout_secs=int(
             cfg.get(_KEY_CONNECTION_TIMEOUT, DEFAULT_CONNECTION_TIMEOUT_SECS),
         ),
-        "time_rollover_secs": int(
-            cfg.get(_KEY_TIME_ROLLOVER, DEFAULT_TIME_ROLLOVER_SECS),
-        ),
-        "size_rollover_mb": cfg.get(_KEY_SIZE_ROLLOVER_MB),
-        "messages_rollover": cfg.get(_KEY_MESSAGES_ROLLOVER),
-        "logging_level": int(cfg.get(_KEY_LOGGING_LEVEL, logging.ERROR)),
-    }
+        logging_level=int(cfg.get(_KEY_LOGGING_LEVEL, logging.ERROR)),
+    )
 
 
-def _setup_sigterm_handler() -> None:
-    """Translate SIGTERM into ``KeyboardInterrupt`` so the consume
-    loop unwinds cleanly through its ``finally`` (final flush +
-    commit). Only installs on the main thread; the integration
-    tests patch this out when running the plugin on a worker."""
+class KafkaStreamSrcPlugin(
+    PipelineStreamSrcPlugin[
+        KafkaStreamSrcConn, KafkaStreamSrc, KafkaRecord, KafkaPosition
+    ]
+):
+    """Wires a :class:`KafkaStreamSrc` to the shared stream pipeline."""
 
-    def _handler(_signum, _frame):  # noqa: ANN001 -- signal callback
-        raise KeyboardInterrupt
+    logging_namespace = "tabsdatak.conn.kafka"
 
-    try:
-        signal.signal(signal.SIGTERM, _handler)
-    except ValueError:
-        # Off the main thread -- no-op, the test ctx is expected
-        # to drive shutdown via ``ctx.active`` instead.
-        pass
+    def build_run_config(self, stream_src: KafkaStreamSrc) -> KafkaRunConfig:
+        return _build_kafka_run_config(stream_src)
 
-
-class KafkaStreamSrcPlugin(StreamSrcPlugin[KafkaStreamSrcConn, KafkaStreamSrc]):
-    """Wires a :class:`KafkaStreamSrc` to a polling consumer +
-    manifest-based staging."""
-
-    def run(
-        self,
-        ctx: StreamSrcPluginCtx,
-        conn: KafkaStreamSrcConn,
-        stream_src: KafkaStreamSrc,
-    ) -> None:
-        from confluent_kafka import Consumer
-
-        cfg = _resolve_rollover_cfg(stream_src)
-        # Set the level on the whole connector namespace so the
-        # plugin, consumer wrapper, serdes and the kafka-config
-        # builder all report at the same verbosity (mirrors the
-        # ``run_cdc`` convention on ``tabsdatak.conn.common.sql.cdc``).
-        logging.getLogger("tabsdatak.conn.kafka").setLevel(
-            cfg["logging_level"],
-        )
-        logger.info(
-            "kafka-stream: starting (topic=%r, format=%r)",
-            stream_src.topic,
-            stream_src.data_format,
+    def build_ingester(
+        self, conn: KafkaStreamSrcConn, stream_src: KafkaStreamSrc
+    ) -> KafkaIngester:
+        cfg = _build_kafka_run_config(stream_src)
+        return KafkaIngester(
+            conn=conn,
+            stream_src=stream_src,
+            consume_timeout_secs=cfg.consume_timeout_secs,
+            connection_timeout_secs=cfg.connection_timeout_secs,
         )
 
-        kafka_configs = build_kafka_configs(conn=conn)
-        try:
-            consumer = Consumer(kafka_configs)
-            consumer.list_topics(timeout=cfg["connection_timeout_secs"])
-        except Exception as exc:
-            raise KafkaErrorCode.KAFKA_6.exception(
-                cause=exc,
-                servers=kafka_configs.get("bootstrap.servers"),
-            )
-
-        consumer.subscribe([stream_src.topic])
-
-        dlq_producer = self._build_dlq_producer(
-            kafka_configs=kafka_configs,
-            dlq_topic=stream_src.dlq_topic,
-            connection_timeout_secs=cfg["connection_timeout_secs"],
-        )
-
-        # SR client (Confluent / Glue); ``None`` for the no-SR
-        # path. The Protobuf SR variant wants a second client for
-        # the deserializer (see ``ProtobufSrKafkaSerde``); the
-        # plugin builds it lazily inside ``build_serde``.
-        sr_client = build_schema_registry_client(
-            schema_registry=conn.schema_registry,
-        )
-        sr_client_alt = None
-        if sr_client is not None and stream_src.data_format not in (
-            "json",
-            "avro",
-        ):
-            # Only Protobuf SR needs the second client.
-            sr_client_alt = build_schema_registry_client(
-                schema_registry=conn.schema_registry,
-            )
-
-        serde = build_serde(
-            data_format=stream_src.data_format,
-            schema=stream_src.schema,
-            schema_registry=conn.schema_registry,
-            working_dir=str(ctx.work_dir),
-            sr_client=sr_client,
-            sr_client_alt=sr_client_alt,
-        )
-
-        kafka_consumer = KafkaConsumer(
-            topic=stream_src.topic,
-            consumer=consumer,
-            serde=serde,
-            size_rollover_mb=cfg["size_rollover_mb"],
-            messages_rollover=cfg["messages_rollover"],
-            dlq_producer=dlq_producer,
-            dlq_topic=stream_src.dlq_topic,
-        )
-
-        _setup_sigterm_handler()
-        logger.info("kafka-stream: entering poll loop")
-        try:
-            self._consume_loop(
-                ctx=ctx,
-                stream_src=stream_src,
-                kafka_consumer=kafka_consumer,
-                cfg=cfg,
-            )
-        finally:
-            kafka_consumer.close()
-            if dlq_producer is not None:
-                try:
-                    dlq_producer.flush()
-                except Exception as exc:  # pragma: no cover
-                    logger.warning("Failed to flush DLQ producer: %s", exc)
-            logger.info("kafka-stream: stopped")
-
-    @staticmethod
-    def _build_dlq_producer(
-        *,
-        kafka_configs: dict,
-        dlq_topic: str | None,
-        connection_timeout_secs: int,
-    ):
-        if dlq_topic is None:
-            return None
-        from confluent_kafka import Producer
-
-        try:
-            producer = Producer(kafka_configs)
-            producer.list_topics(timeout=connection_timeout_secs)
-            return producer
-        except Exception as exc:
-            raise KafkaErrorCode.KAFKA_7.exception(
-                cause=exc,
-                servers=kafka_configs.get("bootstrap.servers"),
-            )
-
-    def _consume_loop(
+    def build_run(
         self,
         *,
         ctx: StreamSrcPluginCtx,
-        stream_src: KafkaStreamSrc,
-        kafka_consumer: KafkaConsumer,
-        cfg: dict,
-    ) -> None:
-        """Poll + rollover loop. Stages each completed buffer as a
-        single-table positional manifest; exits cleanly on
-        ``ctx.active == False``.
-        """
-        # Honour the runtime's flush interval: never let the time-based
-        # rollover window exceed it (the connector's own
-        # ``time_rollover_secs`` may be shorter).
-        time_rollover_secs = cfg["time_rollover_secs"]
+        ingester: KafkaIngester,
+        cfg: KafkaRunConfig,
+        stop_signal: StopSignal,
+    ) -> StreamRun[KafkaRecord, KafkaPosition]:
         if ctx.flush_interval_mins > 0:
-            time_rollover_secs = min(time_rollover_secs, ctx.flush_interval_mins * 60)
-        deadline_window_start = time.time()
-        reset_on_next_consume = False
-        try:
-            while ctx.active:
-                rollover_reason, buffer = kafka_consumer.consume(
-                    timeout_secs=cfg["consume_timeout_secs"],
-                    reset_buffer=reset_on_next_consume,
-                )
-                logger.debug(
-                    "kafka-stream: poll completed (reason=%s, msgs=%d, size_mb=%d)",
-                    rollover_reason.value,
-                    buffer.message_count,
-                    buffer.size_mb,
-                )
-                elapsed = time.time() - deadline_window_start
-                max_timeout = time_rollover_secs - elapsed
-                if rollover_reason != RolloverReason.Time or max_timeout <= 0:
-                    deadline_window_start = self._handle_rollover(
-                        ctx=ctx,
-                        stream_src=stream_src,
-                        kafka_consumer=kafka_consumer,
-                        buffer=buffer,
-                        rollover_reason=rollover_reason,
-                    )
-                reset_on_next_consume = max_timeout <= 0
-        except KeyboardInterrupt:
-            logger.info("kafka-stream: interrupted, exiting loop")
-        finally:
-            # Final flush so the trailing partial batch is staged.
-            final_buffer = kafka_consumer.buffer
-            if final_buffer is not None and final_buffer.message_count:
-                logger.info(
-                    "kafka-stream: shutdown flush (%d msgs)",
-                    final_buffer.message_count,
-                )
-                self._handle_rollover(
-                    ctx=ctx,
-                    stream_src=stream_src,
-                    kafka_consumer=kafka_consumer,
-                    buffer=final_buffer,
-                    rollover_reason=RolloverReason.Time,
-                )
-
-    @staticmethod
-    def _handle_rollover(
-        *,
-        ctx: StreamSrcPluginCtx,
-        stream_src: KafkaStreamSrc,
-        kafka_consumer: KafkaConsumer,
-        buffer,
-        rollover_reason: RolloverReason,
-    ) -> float:
-        """Write the buffer to parquet, build a positional manifest
-        for the topic's output table, and stage it through the plugin
-        ctx -- committing the Kafka consumer offset (the external
-        system keeps the offset) once the batch is durably staged.
-
-        Returns the new ``deadline_window_start`` for the time-based
-        rollover bookkeeping in the loop above."""
-        if buffer.is_flushed or buffer.message_count == 0:
-            return time.time()
-        parquet_path = buffer.to_parquet(dir_path=str(ctx.work_dir))
-        if parquet_path is None:
-            return time.time()
-        # One Kafka topic -> one output table (index 0): a single-entry
-        # positional manifest whose only inner list holds this rollover's
-        # parquet file. Kafka owns the offset, so commit it on the broker
-        # when the runtime commits the staged batch.
-        ctx.stage([[Path(parquet_path)]], lambda: kafka_consumer.commit())
-        logger.info(
-            "kafka-stream: staged + committed (reason=%s, msgs=%d)",
-            rollover_reason.value,
-            buffer.message_count,
+            cfg = dataclasses.replace(
+                cfg,
+                buffer_max_secs=min(cfg.buffer_max_secs, ctx.flush_interval_mins * 60),
+            )
+        return super().build_run(
+            ctx=ctx, ingester=ingester, cfg=cfg, stop_signal=stop_signal
         )
-        return time.time()
+
+    def slots(self, run: StreamRun[KafkaRecord, KafkaPosition]) -> Sequence[str]:
+        return [run.ingester.topic]
+
+    def build_encoder(self, run: StreamRun[KafkaRecord, KafkaPosition]) -> KafkaEncoder:
+        return KafkaEncoder(run.ingester.topic, run.ingester.schema_id_compatibles())
 
 
 KAFKA_STREAM_SRC = StreamSrcDef(

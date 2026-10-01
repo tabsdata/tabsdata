@@ -9,11 +9,9 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from unittest.mock import patch
 
 import polars as pl
 import pyarrow.parquet as pq
@@ -333,24 +331,14 @@ def _stream_src(
     return conn, src
 
 
-@contextmanager
-def _patched_sigterm():
-    # `_setup_sigterm_handler` calls signal.signal, main-thread only; the test drives
-    # the plugin on a worker. It no-ops on ValueError anyway; patch it out to keep the
-    # warning out of the log.
-    with patch("tabsdatak.conn.kafka._stream_plugin._setup_sigterm_handler"):
-        yield
-
-
 def _run_plugin(ctx: _KafkaCtx, conn: KafkaStreamSrcConn, src: KafkaStreamSrc) -> None:
-    """``run`` is an infinite poll+rollover loop, so it is driven on a worker thread
+    """``run`` is an infinite poll + stage loop, so it is driven on a worker thread
     and joined with a timeout; ``ctx.active`` is what ends it."""
     err: list[BaseException] = []
 
     def _go():
         try:
-            with _patched_sigterm():
-                KafkaStreamSrcPlugin().run(ctx=ctx, conn=conn, stream_src=src)
+            KafkaStreamSrcPlugin().run(ctx=ctx, conn=conn, stream_src=src)
         except BaseException as exc:  # noqa: BLE001
             err.append(exc)
 
@@ -474,7 +462,7 @@ def test_stream_src_plugin_schema_change_rollover_segregates_buffers(
     domain = domain_redpanda
     ctx = _KafkaCtx(work_dir(tmp_path), until=_staged_at_least(3))
     # No schema enforcement either side, so the two message shapes reach the plugin
-    # as they are and each one closes the buffer the other cannot join.
+    # as they are and each one lands in files the other cannot join.
     unschemad = _Variant(
         id="no_sr_json_no_schema",
         data_format="json",

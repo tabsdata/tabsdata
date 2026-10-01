@@ -7,7 +7,7 @@
 Confluent's wire format prepends a 5-byte header to every payload:
 1 magic byte (``0x00``) + 4 bytes of big-endian schema id. The
 serdes extract that id directly from the bytes; the
-``MessagesBuffer`` keys on it (exact-id equality is the
+``KafkaEncoder`` keys on it (exact-id equality is the
 compatibility rule)."""
 
 from __future__ import annotations

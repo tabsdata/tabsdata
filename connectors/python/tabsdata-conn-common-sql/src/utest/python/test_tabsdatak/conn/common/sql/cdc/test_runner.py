@@ -173,7 +173,7 @@ class FakeIngester:
     def settle(self) -> None:
         self.settled += 1
 
-    def open_session(self):
+    def open_session(self, work_dir):
         if self._open_raises:
             raise RuntimeError("boom-open")
         return self.session

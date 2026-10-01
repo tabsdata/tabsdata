@@ -2,13 +2,13 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Kafka stream-source consumer + buffer.
+"""Kafka stream-source ingester + encoder.
 
 The wire-format (de)serialisers live in the
 :mod:`tabsdatak.conn.kafka._serdes` subpackage; this module
-hosts the polling consumer wrapper and the schema-compatible
-message buffer that bridge ``confluent_kafka`` to the runtime's
-manifest-stage contract.
+hosts the ingester and the encoder that bridge ``confluent_kafka``
+to the shared stream pipeline of
+:mod:`tabsdatak.conn.common._stream`.
 """
 
 from __future__ import annotations
@@ -16,18 +16,37 @@ from __future__ import annotations
 import json
 import logging
 import time
-import uuid
-from enum import Enum
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
+
+import pyarrow as pa
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._encoder import StreamEncoder
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._ingester import StreamIngester
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._offset import StreamOffset
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
-from tabsdatak.conn.kafka import KafkaStreamSrcConn
+from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.kafka._serdes import KafkaSerde, SchemaIdCompatibles, SchemaIdSpec
+from tabsdatak.conn.kafka._serdes import (
+    KafkaSerde,
+    SchemaIdCompatibles,
+    SchemaIdSpec,
+    build_schema_registry_client,
+    build_serde,
+)
 from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
+from tabsdatak.conn.kafka.error import KafkaErrorCode
+from tabsdatak.spi import StreamStateSpec
 
 if TYPE_CHECKING:  # pragma: no cover -- typing-only
     from confluent_kafka import Consumer, Message, Producer
@@ -51,175 +70,202 @@ DEFAULT_CONSUME_TIMEOUT_SECS = 2
 DEFAULT_CONNECTION_TIMEOUT_SECS = 16
 
 
-class RolloverReason(Enum):
-    """Why the consumer just closed the current buffer:
-
-    * ``SchemaChange`` -- a message with an incompatible schema
-      arrived and was bumped to a new buffer.
-    * ``Size`` -- buffer hit its byte threshold.
-    * ``Messages`` -- buffer hit its message-count threshold.
-    * ``Time`` -- the poll-deadline elapsed; flush what we have.
-    """
-
-    SchemaChange = "SchemaChange"
-    Size = "Size"
-    Messages = "Messages"
-    Time = "Time"
+@dataclass(frozen=True)
+class KafkaRecord:
+    value: dict
+    schema_id: SchemaIdSpec
+    size: int
+    message: Message
 
 
-# ---------------------------------------------------------------------
-# Messages buffer
-# ---------------------------------------------------------------------
+class KafkaPosition(StreamOffset):
+    def __init__(self, message: Message | None = None) -> None:
+        self.message = message
 
+    def update(self, other: Self) -> None:
+        if other.message is not None:
+            self.message = other.message
 
-class MessagesBuffer:
-    """Schema-compatible buffer of deserialised messages.
-
-    Maintains the current ``schema_id`` (set on first append).
-    Subsequent appends with the same / compatible id grow the
-    buffer; incompatible ids fail the append (caller rolls over).
-    :meth:`to_parquet` writes the buffer to a fresh parquet file
-    under ``dir_path`` and marks the buffer flushed."""
-
-    def __init__(
-        self,
-        topic: str,
-        schema_ids_compatibles_checker: SchemaIdCompatibles,
-    ):
-        self._topic = topic
-        self._schema_ids_compatibles_checker = schema_ids_compatibles_checker
-        self._messages: list[dict] = []
-        self._schema_id: SchemaIdSpec | None = None
-        self._size_bytes = 0
-        self._flushed = False
-
-    def append(self, entry: tuple[int, dict, SchemaIdSpec]) -> bool:
-        data_size, message, schema_id = entry
-        if self._schema_id is None:
-            self._messages.append(message)
-            self._schema_id = schema_id
-            self._size_bytes += data_size
-            return True
-        if self._schema_ids_compatibles_checker(self._schema_id, schema_id):
-            self._messages.append(message)
-            self._size_bytes += data_size
-            return True
-        return False
-
-    @property
-    def message_count(self) -> int:
-        return len(self._messages)
-
-    @property
-    def size_mb(self) -> int:
-        return int(self._size_bytes / (1024 * 1024))
-
-    @property
-    def is_flushed(self) -> bool:
-        return self._flushed
-
-    def to_parquet(self, dir_path: str | Path) -> Path | None:
-        """Write the buffered messages to a parquet file, led by the
-        `KAFKA_META_TOPIC` column. Returns ``None`` if the buffer is
-        empty -- caller treats this as a no-op rollover."""
-        if not self._messages:
-            return None
-        file_path = (
-            Path(dir_path)
-            / f"{self._topic}_{int(time.time())}_{uuid.uuid4().hex[:8]}.parquet"
+    def write(self) -> str:
+        if self.message is None:
+            return ""
+        return (
+            f"{self.message.topic()}:{self.message.partition()}:{self.message.offset()}"
         )
-        import pyarrow as pa
-        import pyarrow.parquet as pq
 
-        column_names = sorted(self._messages[0].keys())
-        table = pa.Table.from_pydict(
+    @classmethod
+    def read(cls, data: str) -> Self:
+        raise NotImplementedError("Kafka keeps its consumer offsets on the broker")
+
+
+class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaPosition]):
+    def __init__(self, topic: str, compatible: SchemaIdCompatibles):
+        self._topic = topic
+        self._compatible = compatible
+
+    def slot(self, record: KafkaRecord) -> str:
+        return self._topic
+
+    def size(self, record: KafkaRecord) -> int:
+        return record.size
+
+    def offset(self, record: KafkaRecord) -> KafkaPosition:
+        return KafkaPosition(record.message)
+
+    def encode(self, slot: str, records: list[KafkaRecord]) -> Iterator[pa.Table]:
+        group = [records[0]]
+        for record in records[1:]:
+            if self._compatible(group[0].schema_id, record.schema_id):
+                group.append(record)
+            else:
+                yield self.encode_group(group)
+                group = [record]
+        yield self.encode_group(group)
+
+    def encode_group(self, group: list[KafkaRecord]) -> pa.Table:
+        values = [record.value for record in group]
+        column_names = sorted(values[0].keys())
+        return pa.Table.from_pydict(
             mapping={
-                KAFKA_META_TOPIC: [self._topic for _ in self._messages],
-                **{k: [m.get(k) for m in self._messages] for k in column_names},
+                KAFKA_META_TOPIC: [self._topic for _ in values],
+                **{k: [value.get(k) for value in values] for k in column_names},
             },
         )
-        pq.write_table(table, file_path)
-        self._flushed = True
-        return file_path
 
 
-# ---------------------------------------------------------------------
-# Consumer wrapper
-# ---------------------------------------------------------------------
-
-
-class KafkaConsumer:
-    """Thin wrapper around ``confluent_kafka.Consumer`` that drives
-    a :class:`MessagesBuffer` + rollover decision per poll cycle.
-
-    Each :meth:`consume` call returns when one of the rollover
-    conditions fires (time / size / messages / schema-change).
-    """
-
+class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
     def __init__(
         self,
         *,
-        topic: str,
-        consumer: "Consumer",
-        serde: KafkaSerde,
-        size_rollover_mb: int | None = None,
-        messages_rollover: int | None = None,
-        dlq_producer: "Producer | None" = None,
-        dlq_topic: str | None = None,
+        conn: KafkaStreamSrcConn,
+        stream_src: KafkaStreamSrc,
+        consume_timeout_secs: int,
+        connection_timeout_secs: int,
     ):
-        self._topic = topic
-        self._consumer = consumer
-        self._serde = serde
-        self._size_rollover_mb = size_rollover_mb
-        self._messages_rollover = messages_rollover
-        self._dlq_producer = dlq_producer
-        self._dlq_topic = dlq_topic
-        self._buffer = self._new_buffer()
-        self._commit_message: "Message | None" = None
-
-    def _new_buffer(self) -> MessagesBuffer:
-        return MessagesBuffer(
-            self._topic,
-            self._serde.schema_id_compatibles_checker(),
-        )
+        super().__init__()
+        self._conn = conn
+        self._stream_src = stream_src
+        self._consume_timeout_secs = consume_timeout_secs
+        self._connection_timeout_secs = connection_timeout_secs
+        self._consumer: Consumer | None = None
+        self._dlq_producer: Producer | None = None
+        self._serde: KafkaSerde | None = None
 
     @property
-    def buffer(self) -> MessagesBuffer:
-        return self._buffer
+    def topic(self) -> str:
+        return self._stream_src.topic
 
-    def consume(
+    def schema_id_compatibles(self) -> SchemaIdCompatibles:
+        return self._serde.schema_id_compatibles_checker()
+
+    def open_session(self, work_dir: Path) -> Consumer:
+        from confluent_kafka import Consumer
+
+        kafka_configs = build_kafka_configs(conn=self._conn)
+        try:
+            consumer = Consumer(kafka_configs)
+            consumer.list_topics(timeout=self._connection_timeout_secs)
+        except Exception as exc:
+            raise KafkaErrorCode.KAFKA_6.exception(
+                cause=exc,
+                servers=kafka_configs.get(_BOOTSTRAP_SERVERS_KEY),
+            )
+        consumer.subscribe([self.topic])
+        self._consumer = consumer
+
+        self._dlq_producer = self._build_dlq_producer(kafka_configs)
+
+        sr_client = build_schema_registry_client(
+            schema_registry=self._conn.schema_registry,
+        )
+        sr_client_alt = None
+        if sr_client is not None and self._stream_src.data_format not in (
+            "json",
+            "avro",
+        ):
+            sr_client_alt = build_schema_registry_client(
+                schema_registry=self._conn.schema_registry,
+            )
+        self._serde = build_serde(
+            data_format=self._stream_src.data_format,
+            schema=self._stream_src.schema,
+            schema_registry=self._conn.schema_registry,
+            working_dir=str(work_dir),
+            sr_client=sr_client,
+            sr_client_alt=sr_client_alt,
+        )
+        return consumer
+
+    def _build_dlq_producer(self, kafka_configs: dict) -> Producer | None:
+        if self._stream_src.dlq_topic is None:
+            return None
+        from confluent_kafka import Producer
+
+        try:
+            producer = Producer(kafka_configs)
+            producer.list_topics(timeout=self._connection_timeout_secs)
+            return producer
+        except Exception as exc:
+            raise KafkaErrorCode.KAFKA_7.exception(
+                cause=exc,
+                servers=kafka_configs.get(_BOOTSTRAP_SERVERS_KEY),
+            )
+
+    def close_session(self, session: Consumer) -> None:
+        try:
+            session.close()
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Failed to close kafka consumer: %s", exc)
+        if self._dlq_producer is not None:
+            try:
+                self._dlq_producer.flush()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Failed to flush DLQ producer: %s", exc)
+
+    def base_offset(self) -> KafkaPosition:
+        return KafkaPosition()
+
+    def resume_offset(
         self,
         *,
-        timeout_secs: int,
-        reset_buffer: bool = False,
-    ) -> tuple[RolloverReason, MessagesBuffer]:
-        """Poll up to ``timeout_secs``; return on the first
-        rollover trigger. ``reset_buffer`` discards the current
-        buffer before polling (used after a time rollover that the
-        runner already staged)."""
+        first_stage: bool,
+        stream_state: dict | None,
+    ) -> KafkaPosition | None:
+        return None
+
+    def commit_state(self, offset: KafkaPosition) -> StreamStateSpec:
+        message = offset.message
+        return lambda: self._commit(message)
+
+    def commit_offset(self, offset: KafkaPosition) -> None:
+        pass
+
+    def _commit(self, message: Message | None) -> None:
+        if message is not None:
+            self._consumer.commit(message=message, asynchronous=False)
+
+    def poll_changes(self, session: Consumer) -> Iterator[KafkaRecord]:
         from confluent_kafka.serialization import (
             MessageField,
             SerializationContext,
         )
 
-        if reset_buffer:
-            self._buffer = self._new_buffer()
-
+        deserialize = self._serde.deserializer_with_schema_id()
         start = time.time()
         while True:
-            remaining = timeout_secs - (time.time() - start)
+            remaining = self._consume_timeout_secs - (time.time() - start)
             if remaining <= 0:
-                return RolloverReason.Time, self._buffer
-            msg = self._consumer.poll(remaining)
+                return
+            msg = session.poll(remaining)
             if msg is None:
-                return RolloverReason.Time, self._buffer
+                return
             err = msg.error()
             if err is not None:
                 logger.error("Kafka error: %s", err)
                 self._send_to_dlq(msg, err)
                 continue
             try:
-                record, schema_id = self._serde.deserializer_with_schema_id()(
+                record, schema_id = deserialize(
                     msg.value(),
                     SerializationContext(msg.topic(), MessageField.VALUE),
                 )
@@ -231,37 +277,19 @@ class KafkaConsumer:
                 )
                 self._send_to_dlq(msg, exc)
                 continue
-            entry = (len(msg.value() or b""), record, schema_id)
-            if not self._buffer.append(entry):
-                # Schema change: hand the old buffer back, start a
-                # fresh one that owns this message.
-                rolled = self._buffer
-                self._buffer = self._new_buffer()
-                self._buffer.append(entry)
-                self._commit_message = msg
-                return RolloverReason.SchemaChange, rolled
-            self._commit_message = msg
-            if (
-                self._messages_rollover is not None
-                and self._buffer.message_count >= self._messages_rollover
-            ):
-                rolled = self._buffer
-                self._buffer = self._new_buffer()
-                return RolloverReason.Messages, rolled
-            if (
-                self._size_rollover_mb is not None
-                and self._buffer.size_mb >= self._size_rollover_mb
-            ):
-                rolled = self._buffer
-                self._buffer = self._new_buffer()
-                return RolloverReason.Size, rolled
+            yield KafkaRecord(
+                value=record,
+                schema_id=schema_id,
+                size=len(msg.value() or b""),
+                message=msg,
+            )
 
     def _send_to_dlq(
         self,
-        msg: "Message",
+        msg: Message,
         error: Exception | Any,
     ) -> None:
-        if not (self._dlq_producer and self._dlq_topic):
+        if not (self._dlq_producer and self._stream_src.dlq_topic):
             return
         envelope = {
             "original_value": (
@@ -276,32 +304,12 @@ class KafkaConsumer:
             "timestamp": msg.timestamp(),
         }
         self._dlq_producer.produce(
-            topic=self._dlq_topic,
+            topic=self._stream_src.dlq_topic,
             key=msg.key(),
             value=json.dumps(envelope).encode("utf-8"),
         )
         self._dlq_producer.poll(0)
         self._dlq_producer.flush()
-
-    def commit(self) -> None:
-        """Sync-commit the last successfully-buffered offset."""
-        if self._commit_message is not None:
-            self._consumer.commit(
-                message=self._commit_message,
-                asynchronous=False,
-            )
-            self._commit_message = None
-
-    def close(self) -> None:
-        try:
-            self._consumer.close()
-        except Exception as exc:  # pragma: no cover
-            logger.warning("Failed to close kafka consumer: %s", exc)
-
-
-# ---------------------------------------------------------------------
-# Kafka configs builder
-# ---------------------------------------------------------------------
 
 
 def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:
@@ -311,7 +319,7 @@ def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:
     Resolves ``Secret`` references on ``servers`` and
     ``group_id``, resolves ``Secret`` SASL credentials, and forces
     ``auto.offset.reset=earliest`` + ``enable.auto.commit=False``
-    (the plugin commits explicitly after each rollover)."""
+    (the plugin commits explicitly once each batch is staged)."""
     cfg: dict = dict(conn.conn_cfg or {})
     cfg[_BOOTSTRAP_SERVERS_KEY] = conn._servers()
     cfg[_AUTO_OFFSET_RESET_KEY] = "earliest"

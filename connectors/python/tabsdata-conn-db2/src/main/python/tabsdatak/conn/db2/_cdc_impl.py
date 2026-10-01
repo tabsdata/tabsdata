@@ -36,6 +36,7 @@ import time
 from collections.abc import Generator, Iterable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone, tzinfo
+from pathlib import Path
 from typing import Any, Literal, TypeAlias, Union
 
 import sqlalchemy as sa
@@ -832,7 +833,7 @@ class SqlReplicaIngester(CdcIngester):
     # Session lifecycle
     # ------------------------------------------------------------------
 
-    def open_session(self) -> Any:
+    def open_session(self, work_dir: Path) -> Any:
         engine = self._build_engine()
         self._server_tz = self.dialect.server_timezone(engine)
         logger.info("Db2 server timezone: %s", self._server_tz)

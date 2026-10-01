@@ -124,10 +124,11 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         run = self.build_run(
             ctx=ctx, ingester=ingester, cfg=cfg, stop_signal=stop_signal
         )
+        cfg = run.cfg
         try:
             self.seed(run)
             ingester.watch_position(lambda offset: self.checkpoint(run, offset))
-            run.session = ingester.open_session()
+            run.session = ingester.open_session(ctx.work_dir)
             run.slots = list(self.slots(run))
             if not self.before_stream(run):
                 interrupted = True
