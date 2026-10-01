@@ -171,6 +171,7 @@ async fn ensure_trend_table_is_adoptable(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn reconcile_dq_summary_trend_children(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ctx: &RequestContext,
@@ -221,7 +222,7 @@ pub async fn reconcile_dq_summary_trend_children(
             Some(current) => {
                 ensure_trend_table_is_adoptable(conn, collection, table, reuse_frozen_tables)
                     .await?;
-                let update = child.to_update(name, reuse_frozen_tables, owner.enabled.clone())?;
+                let update = child.to_update(name, reuse_frozen_tables, owner.enabled)?;
                 update_one(conn, ctx, bridge, collection, current, &update, at).await?;
             }
             None => {
@@ -237,7 +238,7 @@ pub async fn reconcile_dq_summary_trend_children(
                 ensure_trend_table_is_adoptable(conn, collection, table, reuse_frozen_tables)
                     .await?;
                 let register =
-                    child.to_register(name, reuse_frozen_tables, owner.enabled.clone())?;
+                    child.to_register(name, reuse_frozen_tables, owner.enabled)?;
                 let platform = PlatformOwned {
                     function_type: child.function_type.clone(),
                     parent: &owner.function_id,
