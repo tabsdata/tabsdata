@@ -12,9 +12,11 @@ Catalog / engine calls (``server_timezone``,
 from __future__ import annotations
 
 import json
+import logging
 from unittest.mock import MagicMock
 
 import pytest
+import sqlalchemy as sa
 import sqlalchemy.types as sa_types
 from ibm_db_sa import LONGVARCHAR
 from ibm_db_sa.base import DBCLOB, XML
@@ -23,12 +25,16 @@ from sqlalchemy.types import BLOB, CLOB, LargeBinary, Text
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.common.sql.cdc.constants import DEFAULT_FETCH_SIZE
+from tabsdatak.conn.db2 import _cdc_impl
 from tabsdatak.conn.db2._cdc_impl import (
     COMMITSEQ_ORIGIN,
+    INITIAL_LOAD_ISOLATION_LEVEL,
     CommitSeqOffset,
     Db2Dialect,
     MatchedColumns,
     SqlReplicaIngester,
+    SqlReplicaInitialLoadSession,
+    commitseq_lsn,
     match_cd_columns,
 )
 from tabsdatak.conn.db2.error import Db2ErrorCode
@@ -393,3 +399,244 @@ def test_seed_offset_sets_resume_mark():
     offset = CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x01" * 16})
     bi.seed_offset(offset)
     assert bi._mark is offset
+
+
+# =====================================================================
+# SqlReplicaInitialLoadSession
+# =====================================================================
+
+
+def _commitseq(flush: int, lsn: int) -> bytes:
+    return flush.to_bytes(8, byteorder="big") + lsn.to_bytes(8, byteorder="big")
+
+
+class _Result:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar(self):
+        return self._value[0] if isinstance(self._value, tuple) else self._value
+
+    def fetchone(self):
+        return self._value
+
+    def fetchall(self):
+        return self._value
+
+
+class _Connection:
+    def __init__(self, engine: "_Engine"):
+        self._engine = engine
+
+    def execution_options(self, **options):
+        self._engine.log.append(("options", options))
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def commit(self):
+        self._engine.log.append(("commit",))
+
+    def execute(self, statement, parameters=None):
+        sql = str(statement)
+        self._engine.log.append(("execute", sql, parameters))
+        for fragment, answer in self._engine.answers.items():
+            if fragment in sql:
+                value = answer() if callable(answer) else answer
+                if isinstance(value, Exception):
+                    raise value
+                return _Result(value)
+        raise AssertionError(f"unexpected statement: {sql}")
+
+
+class _Engine:
+    def __init__(self, answers: dict):
+        self.answers = answers
+        self.log: list[tuple] = []
+
+    def connect(self):
+        return _Connection(self)
+
+    def dispose(self):
+        pass
+
+    def executed(self) -> list[str]:
+        return [entry[1] for entry in self.log if entry[0] == "execute"]
+
+
+def _tracked(cd_table: str) -> TrackedTable:
+    return TrackedTable(
+        data_table=TableObject(schema="SRC", table=cd_table.removesuffix("_CD")),
+        cdc_table=TableObject(schema="ASN", table=cd_table),
+    )
+
+
+def _session(answers: dict) -> tuple[SqlReplicaInitialLoadSession, _Engine]:
+    engine = _Engine({"cur_commit": "ON"} | answers)
+    return SqlReplicaInitialLoadSession(engine=engine), engine
+
+
+def _restart_rows(*rows):
+    pending = list(rows)
+    return lambda: pending.pop(0) if len(pending) > 1 else pending[0]
+
+
+def test_commitseq_lsn_is_the_second_half_of_the_commit_sequence():
+    assert commitseq_lsn(_commitseq(0xAB, 0x0A3024)) == 0x0A3024
+
+
+def test_the_initial_load_reads_under_cursor_stability():
+    session, engine = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+    })
+    list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert ("options", {"isolation_level": INITIAL_LOAD_ISOLATION_LEVEL}) in engine.log
+    assert INITIAL_LOAD_ISOLATION_LEVEL == "CURSOR STABILITY"
+
+
+def test_the_pin_takes_no_table_lock():
+    session, engine = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+    })
+    list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert not [sql for sql in engine.executed() if "lock table" in sql]
+
+
+def test_the_pin_reads_the_log_position_before_the_first_table():
+    session, engine = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+    })
+    tables = session.tables({"ASN.T_CD": _tracked("T_CD")})
+    next(tables)
+    assert any("mon_get_transaction_log" in sql for sql in engine.executed())
+    assert not any("IBMSNAP_RESTART" in sql for sql in engine.executed())
+    with pytest.raises(TabsdataException) as ei:
+        _ = session.offset
+    assert ei.value.api_error is Db2ErrorCode.DB2_25
+    list(tables)
+    assert session.offset is not None
+
+
+def test_the_pin_resumes_each_table_from_its_last_commit_before_it():
+    before = _commitseq(7, 0x0FF)
+    session, _ = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(9, 0x180), None),
+        "as idx": [(0, before)],
+    })
+    list(session.tables({"ASN.A_CD": _tracked("A_CD"), "ASN.B_CD": _tracked("B_CD")}))
+    assert session.offset.commits == {
+        "ASN.A_CD": before,
+        "ASN.B_CD": COMMITSEQ_ORIGIN,
+    }
+
+
+def test_the_pin_bounds_the_commit_sequence_strictly_below_it():
+    session, engine = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+    })
+    list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    [(sql, parameters)] = [
+        (entry[1], entry[2])
+        for entry in engine.log
+        if entry[0] == "execute" and "as idx" in entry[1]
+    ]
+    assert "substr(\"IBMSNAP_COMMITSEQ\", 9, 8) < :bound" in sql
+    assert parameters == {"bound": (0x100).to_bytes(8, byteorder="big")}
+
+
+def test_every_table_is_pinned_in_one_statement():
+    session, engine = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+    })
+    list(session.tables({"ASN.A_CD": _tracked("A_CD"), "ASN.B_CD": _tracked("B_CD")}))
+    [sql] = [sql for sql in engine.executed() if "as idx" in sql]
+    assert '"ASN"."A_CD"' in sql
+    assert '"ASN"."B_CD"' in sql
+    assert " union all " in sql
+
+
+def test_the_pin_waits_until_capture_passes_the_log_position(monkeypatch):
+    monkeypatch.setattr(_cdc_impl.time, "sleep", lambda seconds: None)
+    session, engine = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": _restart_rows(
+            (_commitseq(1, 0x050), _commitseq(1, 0x060)),
+            (_commitseq(1, 0x050), _commitseq(1, 0x0FF)),
+            (_commitseq(1, 0x050), _commitseq(1, 0x100)),
+        ),
+        "as idx": [],
+    })
+    list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert len([sql for sql in engine.executed() if "IBMSNAP_RESTART" in sql]) == 3
+
+
+def test_a_capture_commit_past_the_log_position_is_enough_while_one_is_in_flight():
+    session, engine = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x120), _commitseq(1, 0x010)),
+        "as idx": [],
+    })
+    list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert len([sql for sql in engine.executed() if "IBMSNAP_RESTART" in sql]) == 1
+
+
+def test_the_pin_fails_when_capture_never_passes_the_log_position(
+    monkeypatch,
+):
+    monkeypatch.setattr(_cdc_impl, "CAPTURE_CATCH_UP_TIMEOUT_SECONDS", 0)
+    session, _ = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x050), _commitseq(1, 0x050)),
+        "as idx": [],
+    })
+    with pytest.raises(TabsdataException) as ei:
+        list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert ei.value.api_error is Db2ErrorCode.DB2_26
+
+
+def test_an_unreadable_log_position_names_the_missing_privilege():
+    denied = sa.exc.DBAPIError("select", {}, Exception("SQL0551N not authorized"))
+    session, _ = _session({"mon_get_transaction_log": denied})
+    with pytest.raises(TabsdataException) as ei:
+        list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert ei.value.api_error is Db2ErrorCode.DB2_27
+
+
+@pytest.mark.parametrize("setting", ["DISABLED", "AVAILABLE"])
+def test_a_cur_commit_setting_other_than_on_is_warned_about(setting, caplog):
+    session, _ = _session({
+        "cur_commit": setting,
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+    })
+    with caplog.at_level(logging.WARNING, logger=_cdc_impl.__name__):
+        list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert "cur_commit" in caplog.text
+    assert setting in caplog.text
+
+
+def test_cur_commit_on_is_not_warned_about(caplog):
+    session, _ = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+    })
+    with caplog.at_level(logging.WARNING, logger=_cdc_impl.__name__):
+        list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert "cur_commit" not in caplog.text

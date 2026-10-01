@@ -98,6 +98,19 @@ COMMITSEQ_ORIGIN = b"\x00" * 16
 POSITION_MAX_DIGITS = 38
 POSITION_LIMIT = 10**POSITION_MAX_DIGITS
 
+# Db2 has no snapshot isolation. Cursor stability reads only committed data and
+# holds no lock beyond the current row; stronger levels lock every row read or
+# the whole table for the length of the load.
+INITIAL_LOAD_ISOLATION_LEVEL = "CURSOR STABILITY"
+
+CAPTURE_CATCH_UP_TIMEOUT_SECONDS = 3600
+
+# IBMSNAP_COMMITSEQ is a log record identifier: an 8-byte log flush sequence
+# followed by the 8-byte log sequence number that MON_GET_TRANSACTION_LOG
+# reports as CURRENT_LSN.
+COMMITSEQ_LSN_OFFSET = 8
+COMMITSEQ_LSN_LENGTH = 8
+
 
 # Internal start-position shape consumed by the ingester after the
 # plugin has converted the user-facing ``Db2CdcStartFromSpec``.
@@ -427,27 +440,34 @@ class CommitSeqOffset(CdcOffset):
         return CommitSeqOffset(commits=self.commits)
 
 
+def commitseq_lsn(commitseq: bytes) -> int:
+    return int.from_bytes(
+        commitseq[COMMITSEQ_LSN_OFFSET : COMMITSEQ_LSN_OFFSET + COMMITSEQ_LSN_LENGTH],
+        byteorder="big",
+    )
+
+
 # ---------------------------------------------------------------------
 # Ingester
 # ---------------------------------------------------------------------
 
 
 class SqlReplicaInitialLoadSession(InitialLoadSession):
-    """Snapshot pinned to a capture position by locking the source tables
-    in share mode, reading the highest commit sequence the capture program
-    has recorded, then releasing the locks and reading the rows under
-    repeatable read.
+    """Initial load read under cursor stability and pinned to the database
+    log position, without locking any table.
 
-    The share locks let readers through and block only writers, and only
-    while the position is read. The position is the global
-    ``max(IBMSNAP_COMMITSEQ)`` across units of work, so a change committed
-    after it is captured above the mark rather than lost; a change
-    committed just before it may be replayed, which is the safe direction.
+    The log position is read before the rows; once they are read, the session
+    waits for the Capture program to pass it and resumes each CD table from
+    its last commit before it. The highest commit sequence Capture has copied
+    would lag the log, so commits not yet copied would be both loaded and
+    replayed.
+
+    Db2 has no snapshot isolation, so a change committed while the rows are
+    read may be both loaded and replayed. No change is ever lost.
     """
 
-    def __init__(self, *, engine: Any, dialect: Db2Dialect):
+    def __init__(self, *, engine: Any):
         self._engine = engine
-        self._dialect = dialect
         self._offset: CommitSeqOffset | None = None
         self._tracked_tables: dict[str, TrackedTable] = {}
 
@@ -464,37 +484,121 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
     def tables(
         self, tracked_tables: dict[str, TrackedTable]
     ) -> Iterator[tuple[TrackedTable, Any]]:
+        # Pinned even with nothing to yield, so the offset is established
+        # whatever the caller iterates.
+        self._check_currently_committed()
         with self._engine.connect().execution_options(
-            isolation_level="REPEATABLE READ"
+            isolation_level=INITIAL_LOAD_ISOLATION_LEVEL
         ) as connection:
-            self._pin(connection, tracked_tables)
+            lsn = self._current_lsn(connection)
             for tracked_table in tracked_tables.values():
                 yield tracked_table, connection
+            connection.commit()
+            self._wait_for_capture(connection, lsn)
+            self._pin(connection, tracked_tables, lsn)
 
-    def _pin(self, connection: Any, tracked_tables: dict[str, TrackedTable]) -> None:
-        for tracked_table in tracked_tables.values():
-            data_table = tracked_table.data_table
-            qualified = (
-                f"{self._dialect.quote_identifier(data_table.schema)}"
-                f".{self._dialect.quote_identifier(data_table.table)}"
+    def _check_currently_committed(self) -> None:
+        # Without currently committed semantics the read still sees only
+        # committed data, but it waits behind writers' uncommitted changes.
+        try:
+            with self._engine.connect() as connection:
+                value = connection.execute(
+                    text("select value from sysibmadm.dbcfg where name = 'cur_commit'")
+                ).scalar()
+        except sa.exc.DBAPIError as error:
+            logger.warning(
+                "Could not read the cur_commit database setting, so the initial "
+                "load may wait behind uncommitted changes: %s",
+                error,
             )
-            connection.execute(text(f"lock table {qualified} in share mode"))
-        commitseq = connection.execute(
-            text(
-                f"select max({IBMSNAP_COMMITSEQ.quoted}) from {ASN_SCHEMA}.IBMSNAP_UOW"
+            return
+        setting = str(value).strip().upper() if value is not None else None
+        if setting != "ON":
+            logger.warning(
+                "The cur_commit database setting is %r rather than 'ON', so the "
+                "initial load waits behind uncommitted changes instead of reading "
+                "the last committed version of each row",
+                setting,
             )
-        ).scalar()
-        commitseq = commitseq or COMMITSEQ_ORIGIN
-        self._offset = CommitSeqOffset(
-            commits={
-                tracked_table.cdc_table.qualified: commitseq
-                for tracked_table in tracked_tables.values()
-            }
-        )
+
+    def _current_lsn(self, connection: Any) -> int:
+        try:
+            lsn = connection.execute(
+                text("select current_lsn from table(mon_get_transaction_log(-1))")
+            ).scalar()
+        except sa.exc.DBAPIError as error:
+            raise Db2ErrorCode.DB2_27.exception(cause=error, reason=str(error))
+        lsn = int(lsn)
+        logger.info("Initial load snapshot starts at log position %x", lsn)
+        return lsn
+
+    def _wait_for_capture(self, connection: Any, lsn: int) -> None:
+        # Capture reads the log in order, so once either position reaches the
+        # pin every earlier commit is in the CD tables. The commit position
+        # stays still while nothing commits and the in-flight one stays still
+        # while a transaction is open, so either one is enough.
+        deadline = time.monotonic() + CAPTURE_CATCH_UP_TIMEOUT_SECONDS
+        waiting = False
+        while True:
+            row = connection.execute(
+                text(
+                    "select max_commitseq, min_inflightseq "
+                    f"from {ASN_SCHEMA}.IBMSNAP_RESTART"
+                )
+            ).fetchone()
+            connection.commit()
+            if row is not None and any(
+                position is not None and commitseq_lsn(position) >= lsn
+                for position in row
+            ):
+                return
+            if time.monotonic() >= deadline:
+                raise Db2ErrorCode.DB2_26.exception(
+                    lsn=f"{lsn:x}",
+                    timeout=CAPTURE_CATCH_UP_TIMEOUT_SECONDS,
+                )
+            if not waiting:
+                logger.info(
+                    "Waiting for the Capture program to reach log position %x",
+                    lsn,
+                )
+                waiting = True
+            time.sleep(POLL_INTERVAL_SECONDS)
+
+    def _pin(
+        self,
+        connection: Any,
+        tracked_tables: dict[str, TrackedTable],
+        lsn: int,
+    ) -> None:
+        # Within one member the log flush sequence grows with the log sequence
+        # number, so the rows before the pin are exactly those at or below the
+        # returned commit sequence. A table with none resumes from the origin,
+        # since every row it holds is at or after the pin.
+        commits: dict[str, bytes] = {}
+        cd_tables = [tracked.cdc_table for tracked in tracked_tables.values()]
+        if cd_tables:
+            blocks = [
+                f"select {index} as idx, max({IBMSNAP_COMMITSEQ.quoted}) as mcs "
+                f'from "{cd_table.schema}"."{cd_table.table}" '
+                f"where substr({IBMSNAP_COMMITSEQ.quoted}, "
+                f"{COMMITSEQ_LSN_OFFSET + 1}, {COMMITSEQ_LSN_LENGTH}) < :bound"
+                for index, cd_table in enumerate(cd_tables)
+            ]
+            rows = connection.execute(
+                text(" union all ".join(blocks)),
+                {"bound": lsn.to_bytes(COMMITSEQ_LSN_LENGTH, byteorder="big")},
+            ).fetchall()
+            before = {index: commitseq for index, commitseq in rows}
+            for index, cd_table in enumerate(cd_tables):
+                commits[cd_table.qualified] = before.get(index) or COMMITSEQ_ORIGIN
         connection.commit()
+        self._offset = CommitSeqOffset(commits=commits)
         logger.info(
-            "Initial load snapshot is consistent at commit sequence %s",
-            commitseq.hex(),
+            "Initial load resumes each CD table from its last commit before log "
+            "position %x: %s",
+            lsn,
+            {table: commitseq.hex() for table, commitseq in commits.items()},
         )
 
     def close(self) -> None:
@@ -556,10 +660,7 @@ class SqlReplicaIngester(CdcIngester):
         return engine
 
     def open_initial_load(self) -> SqlReplicaInitialLoadSession:
-        return SqlReplicaInitialLoadSession(
-            engine=self._build_engine(),
-            dialect=self.dialect,
-        )
+        return SqlReplicaInitialLoadSession(engine=self._build_engine())
 
     def close_session(self, session: Any) -> None:
         if session is not None:

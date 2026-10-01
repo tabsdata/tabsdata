@@ -150,6 +150,18 @@ class Db2ErrorCode(ErrorCode):
     )  # UriSpec
     DB2_25 = ErrorDef(
         Db2RuntimeException,
-        "An initial load read its resume position before pinning the source "
-        "tables, so the position cannot be trusted",
+        "An initial load read its resume position before every table was "
+        "loaded, so the position cannot be trusted",
     )  # SqlReplicaInitialLoadSession.offset
+    DB2_26 = ErrorDef(
+        Db2RuntimeException,
+        "The Capture program did not reach log position {lsn} within "
+        "{timeout}s after the initial load, so the load cannot be handed over "
+        "to the change stream (is asncap running?)",
+    )  # SqlReplicaInitialLoadSession._wait_for_capture
+    DB2_27 = ErrorDef(
+        Db2RuntimeException,
+        "Could not read the current log position from "
+        "MON_GET_TRANSACTION_LOG: {reason}. The connection user needs EXECUTE "
+        "on SYSPROC.MON_GET_TRANSACTION_LOG or SYSMON authority",
+    )  # SqlReplicaInitialLoadSession._current_lsn
