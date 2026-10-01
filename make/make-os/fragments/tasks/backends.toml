@@ -288,8 +288,8 @@ script = [
 
     info "📄 Using systems manifest: ${manifest}"
     info "🛠️ Creating backend systems..."
-    debug "🚀 tdx-system create --manifest ${manifest} -f"
-    exec --fail-on-error tdx-system create --manifest ${manifest} -f
+    debug "🚀 tdx-system create --manifest ${manifest} --force"
+    exec --fail-on-error tdx-system create --manifest ${manifest} --force
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -534,8 +534,8 @@ script = [
 
     info "📄 Using domains manifest: ${manifest}"
     info "🛠️ Creating backend domains..."
-    debug "🚀 tdx-domain create --manifest ${manifest} -f"
-    exec --fail-on-error tdx-domain create --manifest ${manifest} -f
+    debug "🚀 tdx-domain create --manifest ${manifest} --force"
+    exec --fail-on-error tdx-domain create --manifest ${manifest} --force
 
     cm_run_task __os__reset_venv_env
 
@@ -593,8 +593,8 @@ script = [
 
     info "📄 Using domains manifest: ${manifest}"
     info "🛠️ Creating backend domains..."
-    debug "🚀 tdx-domain create --manifest ${manifest} -f"
-    exec --fail-on-error tdx-domain create --manifest ${manifest} -f
+    debug "🚀 tdx-domain create --manifest ${manifest} --force"
+    exec --fail-on-error tdx-domain create --manifest ${manifest} --force
 
     cm_run_task __os__reset_venv_env
 
