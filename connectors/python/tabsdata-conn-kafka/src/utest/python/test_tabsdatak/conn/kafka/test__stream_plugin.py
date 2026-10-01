@@ -239,12 +239,12 @@ def test_plugin_run_applies_logging_level_to_connector_namespace(
 # --- Staging over the shared pipeline --------------------------------
 
 
-def _message(value: dict, offset: int):
+def _message(value: dict, offset: int, partition: int = 0):
     message = MagicMock()
     message.error.return_value = None
     message.value.return_value = json.dumps(value).encode("utf-8")
     message.topic.return_value = "events"
-    message.partition.return_value = 0
+    message.partition.return_value = partition
     message.offset.return_value = offset
     return message
 
@@ -258,8 +258,11 @@ def _run(tmp_path, polls, *, active_calls, src_cfg=None):
     return ctx, consumer
 
 
-def _committed_offsets(consumer) -> list[int]:
-    return [call.kwargs["message"].offset() for call in consumer.commit.call_args_list]
+def _committed_offsets(consumer) -> list[dict[int, int]]:
+    return [
+        {tp.partition: tp.offset for tp in call.kwargs["offsets"]}
+        for call in consumer.commit.call_args_list
+    ]
 
 
 def _staged_ids(ctx) -> list[list[list[int]]]:
@@ -280,7 +283,7 @@ def test_a_schema_change_adds_a_file_to_the_same_manifest(tmp_path):
     ((first, second),) = _staged_frames(ctx)
     assert first.columns == [KAFKA_META_TOPIC, "a"]
     assert second.columns == [KAFKA_META_TOPIC, "a", "z"]
-    assert _committed_offsets(consumer) == [2]
+    assert _committed_offsets(consumer) == [{0: 3}]
 
 
 def test_the_commit_covers_only_the_staged_messages(tmp_path):
@@ -294,7 +297,21 @@ def test_the_commit_covers_only_the_staged_messages(tmp_path):
     )
 
     assert _staged_ids(ctx) == [[[1, 2]], [[3]]]
-    assert _committed_offsets(consumer) == [2, 3]
+    assert _committed_offsets(consumer) == [{0: 3}, {0: 4}]
+
+
+def test_every_partition_read_is_committed(tmp_path):
+    polls = [
+        _message({"a": 1}, 10, partition=0),
+        _message({"a": 2}, 20, partition=1),
+        _message({"a": 3}, 11, partition=0),
+        None,
+        None,
+    ]
+    ctx, consumer = _run(tmp_path, polls, active_calls=[True, False])
+
+    assert _staged_ids(ctx) == [[[1, 2, 3]]]
+    assert _committed_offsets(consumer) == [{0: 12, 1: 21}]
 
 
 def test_a_signalled_stop_stages_and_commits_nothing(tmp_path, monkeypatch):

@@ -49,7 +49,7 @@ from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.spi import StreamStateSpec
 
 if TYPE_CHECKING:  # pragma: no cover -- typing-only
-    from confluent_kafka import Consumer, Message, Producer
+    from confluent_kafka import Consumer, Message, Producer, TopicPartition
 
 
 logger = logging.getLogger(__name__)
@@ -79,23 +79,62 @@ class KafkaRecord:
 
 
 class KafkaPosition(StreamOffset):
-    def __init__(self, message: Message | None = None) -> None:
-        self.message = message
+    def __init__(self, offsets: dict[str, dict[int, int]] | None = None) -> None:
+        self.offsets: dict[str, dict[int, int]] = {
+            topic: dict(partitions) for topic, partitions in (offsets or {}).items()
+        }
+
+    @classmethod
+    def after(cls, message: Message) -> Self:
+        return cls({message.topic(): {message.partition(): message.offset() + 1}})
 
     def update(self, other: Self) -> None:
-        if other.message is not None:
-            self.message = other.message
+        for topic, partitions in other.offsets.items():
+            known = self.offsets.setdefault(topic, {})
+            for partition, offset in partitions.items():
+                known[partition] = max(offset, known.get(partition, offset))
 
     def write(self) -> str:
-        if self.message is None:
-            return ""
-        return (
-            f"{self.message.topic()}:{self.message.partition()}:{self.message.offset()}"
-        )
+        return json.dumps({
+            topic: {
+                str(partition): offset
+                for partition, offset in sorted(partitions.items())
+            }
+            for topic, partitions in sorted(self.offsets.items())
+        })
 
     @classmethod
     def read(cls, data: str) -> Self:
-        raise NotImplementedError("Kafka keeps its consumer offsets on the broker")
+        try:
+            payload = json.loads(data)
+            if not isinstance(payload, dict):
+                raise TypeError("the offset is not a topic map")
+            offsets: dict[str, dict[int, int]] = {}
+            for topic, partitions in payload.items():
+                if not isinstance(partitions, dict):
+                    raise TypeError(f"the partitions of {topic!r} are not a map")
+                offsets[topic] = {}
+                for partition, offset in partitions.items():
+                    number = int(partition)
+                    if number < 0:
+                        raise ValueError(f"partition {partition!r} is negative")
+                    if isinstance(offset, bool) or not isinstance(offset, int):
+                        raise TypeError(f"offset {offset!r} is not an integer")
+                    if offset < 0:
+                        raise ValueError(f"offset {offset!r} is negative")
+                    offsets[topic][number] = offset
+        except (TypeError, ValueError) as error:
+            raise KafkaErrorCode.KAFKA_25.exception(cause=error, state=data)
+        return cls(offsets)
+
+    def topic_partitions(self) -> list[TopicPartition]:
+        from confluent_kafka import TopicPartition
+
+        return [
+            TopicPartition(topic, partition, offset)
+            for topic, partitions in sorted(self.offsets.items())
+            for partition, offset in sorted(partitions.items())
+        ]
 
 
 class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaPosition]):
@@ -110,7 +149,7 @@ class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaPosition]):
         return record.size
 
     def offset(self, record: KafkaRecord) -> KafkaPosition:
-        return KafkaPosition(record.message)
+        return KafkaPosition.after(record.message)
 
     def encode(self, slot: str, records: list[KafkaRecord]) -> Iterator[pa.Table]:
         group = [records[0]]
@@ -234,15 +273,15 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
         return None
 
     def commit_state(self, offset: KafkaPosition) -> StreamStateSpec:
-        message = offset.message
-        return lambda: self._commit(message)
+        partitions = offset.topic_partitions()
+        return lambda: self._commit(partitions)
 
     def commit_offset(self, offset: KafkaPosition) -> None:
         pass
 
-    def _commit(self, message: Message | None) -> None:
-        if message is not None:
-            self._consumer.commit(message=message, asynchronous=False)
+    def _commit(self, partitions: list[TopicPartition]) -> None:
+        if partitions:
+            self._consumer.commit(offsets=partitions, asynchronous=False)
 
     def poll_changes(self, session: Consumer) -> Iterator[KafkaRecord]:
         from confluent_kafka.serialization import (

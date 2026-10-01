@@ -147,3 +147,8 @@ class KafkaErrorCode(ErrorCode):
     KAFKA_24 = ErrorDef(
         ConnInitException, "Kafka topic must be non-empty"
     )  # KafkaTopicSpec
+    KAFKA_25 = ErrorDef(
+        KafkaRuntimeException,
+        "The stream state holds an offset this connector cannot read (it needs "
+        "a map of topics to partitions to non-negative offsets): {state!r}",
+    )

@@ -41,14 +41,21 @@ def _allow_subset(a, b):
     return set(b).issubset(set(a))
 
 
-def _message(value: dict | None = None, *, offset: int = 0, error=None, raw=None):
+def _message(
+    value: dict | None = None,
+    *,
+    offset: int = 0,
+    partition: int = 0,
+    error=None,
+    raw=None,
+):
     message = MagicMock()
     message.error.return_value = error
     message.value.return_value = (
         raw if raw is not None else json.dumps(value).encode("utf-8")
     )
     message.topic.return_value = "evt"
-    message.partition.return_value = 0
+    message.partition.return_value = partition
     message.offset.return_value = offset
     message.key.return_value = None
     message.timestamp.return_value = (0, 0)
@@ -80,10 +87,10 @@ def test_a_record_size_is_its_payload_size():
     assert KafkaEncoder("evt", _allow_subset).size(_record({"a": 1})) == 10
 
 
-def test_a_record_offset_is_its_message():
-    record = _record({"a": 1})
+def test_a_record_offset_is_the_next_offset_of_its_partition():
+    record = _record({"a": 1}, offset=4)
     offset = KafkaEncoder("evt", _allow_subset).offset(record)
-    assert offset.message is record.message
+    assert offset.offsets == {"evt": {0: 5}}
 
 
 def test_compatible_records_encode_into_one_table_led_by_the_topic():
@@ -126,28 +133,45 @@ def test_compatibility_is_checked_against_the_first_record_of_a_run():
 # --- KafkaPosition --------------------------------------------------
 
 
-def test_a_position_moves_to_a_newer_message():
-    first, second = _message({"a": 1}, offset=1), _message({"a": 2}, offset=2)
-    position = KafkaPosition(first)
-    position.update(KafkaPosition(second))
-    assert position.message is second
+def test_a_position_keeps_the_highest_offset_of_every_partition():
+    position = KafkaPosition({"evt": {0: 5, 1: 9}})
+    position.update(KafkaPosition({"evt": {0: 7, 1: 3, 2: 1}, "other": {0: 2}}))
+    assert position.offsets == {"evt": {0: 7, 1: 9, 2: 1}, "other": {0: 2}}
 
 
-def test_a_position_without_a_message_does_not_move_another():
-    message = _message({"a": 1})
-    position = KafkaPosition(message)
-    position.update(KafkaPosition())
-    assert position.message is message
+def test_a_position_after_a_message_points_past_it():
+    position = KafkaPosition.after(_message({"a": 1}, offset=7, partition=2))
+    assert position.offsets == {"evt": {2: 8}}
 
 
-def test_a_position_is_written_as_its_coordinates():
-    assert KafkaPosition(_message({"a": 1}, offset=7)).write() == "evt:0:7"
-    assert KafkaPosition().write() == ""
+def test_a_position_is_written_as_a_topic_partition_map():
+    position = KafkaPosition({"evt": {3: 17, 0: 42}})
+    assert json.loads(position.write()) == {"evt": {"0": 42, "3": 17}}
+    assert KafkaPosition().write() == "{}"
 
 
-def test_a_position_is_never_read_back():
-    with pytest.raises(NotImplementedError):
-        KafkaPosition.read("evt:0:7")
+def test_a_written_position_reads_back_equal():
+    position = KafkaPosition({"evt": {0: 42, 3: 17}, "other": {1: 0}})
+    assert KafkaPosition.read(position.write()).offsets == position.offsets
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        "not json",
+        "[]",
+        '{"evt": 3}',
+        '{"evt": {"zero": 1}}',
+        '{"evt": {"-1": 1}}',
+        '{"evt": {"0": -1}}',
+        '{"evt": {"0": 1.5}}',
+        '{"evt": {"0": true}}',
+    ],
+)
+def test_a_malformed_state_raises_kafka_25(state):
+    with pytest.raises(TabsdataException) as raised:
+        KafkaPosition.read(state)
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_25
 
 
 # --- KafkaIngester --------------------------------------------------
@@ -234,23 +258,38 @@ def test_broker_errors_and_undecodable_messages_go_to_the_dlq(tmp_path):
 def test_the_broker_keeps_the_offset():
     ingester = _ingester()
     assert ingester.resume_offset(first_stage=False, stream_state={"x": 1}) is None
-    assert ingester.base_offset().message is None
+    assert ingester.base_offset().offsets == {}
 
 
-def test_the_commit_state_commits_the_staged_message_only(tmp_path):
+def _committed(consumer) -> list[tuple[str, int, int]]:
+    (call,) = consumer.commit.call_args_list
+    assert call.kwargs["asynchronous"] is False
+    return [(tp.topic, tp.partition, tp.offset) for tp in call.kwargs["offsets"]]
+
+
+def test_the_commit_state_commits_every_partition_staged(tmp_path):
     consumer = MagicMock()
     ingester = _opened(consumer, tmp_path)
-    staged = _message({"a": 1}, offset=1)
-    position = KafkaPosition(staged)
+    position = KafkaPosition({"evt": {0: 5, 2: 3}})
+
+    ingester.commit_state(position)()
+
+    assert _committed(consumer) == [("evt", 0, 5), ("evt", 2, 3)]
+
+
+def test_the_commit_state_commits_what_was_staged_when_it_was_taken(tmp_path):
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    position = KafkaPosition({"evt": {0: 2}})
 
     commit = ingester.commit_state(position)
-    position.update(KafkaPosition(_message({"a": 2}, offset=2)))
+    position.update(KafkaPosition({"evt": {0: 3, 1: 1}}))
     commit()
 
-    consumer.commit.assert_called_once_with(message=staged, asynchronous=False)
+    assert _committed(consumer) == [("evt", 0, 2)]
 
 
-def test_a_commit_state_without_a_message_commits_nothing(tmp_path):
+def test_a_commit_state_without_offsets_commits_nothing(tmp_path):
     consumer = MagicMock()
     ingester = _opened(consumer, tmp_path)
     ingester.commit_state(KafkaPosition())()
