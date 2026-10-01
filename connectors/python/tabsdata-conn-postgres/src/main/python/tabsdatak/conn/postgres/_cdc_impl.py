@@ -380,7 +380,7 @@ class Wal2JsonInitialLoadSession(InitialLoadSession):
         self, tracked_tables: dict[str, TrackedTable]
     ) -> Iterator[tuple[TrackedTable, Any]]:
         with self._engine.connect().execution_options(
-            isolation_level="REPEATABLE READ"
+            isolation_level="REPEATABLE READ", postgresql_readonly=True
         ) as connection:
             connection.execute(
                 text(f"set transaction snapshot '{self._snapshot_name}'")
@@ -451,16 +451,18 @@ class TransactionSnapshotSession(Wal2JsonInitialLoadSession):
                 text("select 1 from pg_replication_slots where slot_name = :slot"),
                 {"slot": replication_slot},
             ).scalar()
-        if not exists:
-            raise PostgresErrorCode.POSTGRES_22.exception(slot=replication_slot)
+            if not exists:
+                raise PostgresErrorCode.POSTGRES_22.exception(slot=replication_slot)
+            # Read before the snapshot forms: a commit landing in between is
+            # then both in the snapshot and replayed, rather than in neither.
+            lsn = connection.execute(
+                text("select pg_current_wal_lsn() - '0/0'::pg_lsn")
+            ).scalar()
         self._holder = engine.connect().execution_options(
-            isolation_level="REPEATABLE READ"
+            isolation_level="REPEATABLE READ", postgresql_readonly=True
         )
         self._snapshot_name = self._holder.execute(
             text("select pg_export_snapshot()")
-        ).scalar()
-        lsn = self._holder.execute(
-            text("select pg_current_wal_lsn() - '0/0'::pg_lsn")
         ).scalar()
         self._offset = LsnOffset(lsn=int(lsn))
         logger.info(

@@ -26,6 +26,7 @@ from tabsdatak.conn.postgres._cdc_impl import (
     DEFAULT_WAL2JSON_FORMAT_VERSION,
     LsnOffset,
     PostgresDialect,
+    TransactionSnapshotSession,
     Wal2JsonIngester,
 )
 from tabsdatak.conn.postgres.error import PostgresErrorCode
@@ -734,3 +735,88 @@ def test_init_stream_does_not_acknowledge_a_cold_head_start(monkeypatch):
 
     assert cursor.start_replication.call_args.kwargs["start_lsn"] == 0
     cursor.send_feedback.assert_not_called()
+
+
+# =====================================================================
+# TransactionSnapshotSession
+# =====================================================================
+
+
+class _Result:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar(self):
+        return self._value
+
+
+class _Connection:
+    def __init__(self, engine: "_Engine", number: int):
+        self._engine = engine
+        self.number = number
+
+    def execution_options(self, **options):
+        self._engine.log.append((self.number, "options", options))
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+    def close(self):
+        pass
+
+    def execute(self, statement, parameters=None):
+        sql = str(statement)
+        self._engine.log.append((self.number, "execute", sql))
+        if "pg_replication_slots" in sql:
+            return _Result(1)
+        if "pg_current_wal_lsn" in sql:
+            return _Result(4096)
+        if "pg_export_snapshot" in sql:
+            return _Result("00000003-0000001B-1")
+        raise AssertionError(f"unexpected statement: {sql}")
+
+
+class _Engine:
+    def __init__(self):
+        self.log: list[tuple] = []
+        self._connections = 0
+
+    def connect(self):
+        self._connections += 1
+        return _Connection(self, self._connections)
+
+    def dispose(self):
+        pass
+
+
+def _executed(engine: _Engine, fragment: str) -> tuple[int, int]:
+    return next(
+        (index, entry[0])
+        for index, entry in enumerate(engine.log)
+        if entry[1] == "execute" and fragment in entry[2]
+    )
+
+
+def test_the_wal_position_is_read_before_the_snapshot_is_exported():
+    engine = _Engine()
+    session = TransactionSnapshotSession(engine=engine, replication_slot="slot")
+    lsn_at, lsn_connection = _executed(engine, "pg_current_wal_lsn")
+    export_at, holder_connection = _executed(engine, "pg_export_snapshot")
+    assert lsn_at < export_at
+    assert lsn_connection != holder_connection
+    assert session.offset.lsn == 4096
+
+
+def test_the_snapshot_holder_is_a_read_only_repeatable_read_transaction():
+    engine = _Engine()
+    TransactionSnapshotSession(engine=engine, replication_slot="slot")
+    _, holder_connection = _executed(engine, "pg_export_snapshot")
+    assert (
+        holder_connection,
+        "options",
+        {"isolation_level": "REPEATABLE READ", "postgresql_readonly": True},
+    ) in engine.log
