@@ -143,6 +143,11 @@ class _KafkaCtx(StreamSrcPluginCtx):
                 self._tabsdata_owns_state = False
                 new_state()
 
+    def checkpoint(self, new_state):
+        with self._lock:
+            self._state = dict(new_state)
+            self._tabsdata_owns_state = True
+
 
 def _avro_schema() -> str:
     return (SCHEMAS / "user_v1.avsc").read_text()

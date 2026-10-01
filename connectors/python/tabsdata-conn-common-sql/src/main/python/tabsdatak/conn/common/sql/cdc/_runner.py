@@ -69,7 +69,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
 )
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
-from tabsdatak.spi import Conn, StreamSrcPlugin, StreamSrcPluginCtx
+from tabsdatak.spi import Conn, StreamSrcPlugin, StreamSrcPluginCtx, StreamStateSpec
 
 # Work-dir subdirectories the initial load's parquet files land in: the
 # load's rows, the changes committed while it read them, and those of the
@@ -170,18 +170,47 @@ def _publish(
     if not any(tables_files):
         return False
     offset = buffer_sentinel.offset
-    state = ingester.commit_state(offset)
-    if isinstance(state, dict):
-        # The staged state replaces the persisted one wholesale, so a batch
-        # carrying only the offset would drop the record of an initial load
-        # already done and make the next run redo it.
-        done = (ctx.stream_state or {}).get(CDC_INITIAL_LOAD_STATE_KEY)
-        if done is not None:
-            state = {**state, CDC_INITIAL_LOAD_STATE_KEY: done}
-    ctx.stage(tables_files, state)
+    ctx.stage(tables_files, _state(ctx, ingester, offset))
     ingester.commit_offset(offset)
     disk_sentinel.clear()
     return True
+
+
+def _state(
+    ctx: StreamSrcPluginCtx, ingester: CdcIngester, offset: CdcOffset
+) -> StreamStateSpec:
+    state = ingester.commit_state(offset)
+    if isinstance(state, dict):
+        # The new state replaces the persisted one wholesale, so one carrying
+        # only the offset would drop the record of an initial load already
+        # done and make the next run redo it.
+        done = (ctx.stream_state or {}).get(CDC_INITIAL_LOAD_STATE_KEY)
+        if done is not None:
+            state = {**state, CDC_INITIAL_LOAD_STATE_KEY: done}
+    return state
+
+
+def _checkpoint(
+    ctx: StreamSrcPluginCtx,
+    ingester: CdcIngester,
+    cfg: CdcRunConfig,
+    offset: CdcOffset,
+) -> None:
+    """Record `offset` without staging. Until a first stage, or while an
+    initial load is owed, there is no resume state for it to move on: the
+    next run starts over from the configuration."""
+    if offset is None:
+        raise SqlCdcErrorCode.CDC_30.exception(
+            ingester=type(ingester).__name__, offset=offset
+        )
+    if ctx.first_stage or _initial_load_pending(ctx, cfg):
+        return
+    state = _state(ctx, ingester, offset)
+    if not isinstance(state, dict):
+        raise SqlCdcErrorCode.CDC_30.exception(
+            ingester=type(ingester).__name__, offset=offset
+        )
+    ctx.checkpoint(state)
 
 
 def _initial_load_pending(ctx: StreamSrcPluginCtx, cfg: CdcRunConfig) -> bool:
@@ -417,6 +446,7 @@ def _run_loop(
                     stream_state=ctx.stream_state,
                 )
             )
+        ingester.watch_position(lambda offset: _checkpoint(ctx, ingester, cfg, offset))
         session = ingester.open_session()
         tracked_tables = ingester.harvest_tables(
             session=session,
@@ -505,7 +535,18 @@ def _run_loop(
             if disk_sentinel is not None and disk_sentinel.should_flush(force=True):
                 _publish(ctx, disk_sentinel, buffer_sentinel, ingester)
         if session is not None:
+            if not errored:
+                _settle(ingester)
             ingester.close_session(session)
+
+
+def _settle(ingester: CdcIngester) -> None:
+    # A failed settle loses nothing: the recorded offset only lags the
+    # source's, which the next run reports.
+    try:
+        ingester.settle()
+    except Exception as exception:
+        logger.warning(f"cdc: could not record the final position: {exception}")
 
 
 class CdcPlugin[C: Conn, SS: StreamSrc](StreamSrcPlugin[C, SS], ABC):

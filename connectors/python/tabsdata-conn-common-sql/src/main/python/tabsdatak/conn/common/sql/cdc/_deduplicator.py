@@ -27,6 +27,7 @@ does.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -58,6 +59,8 @@ if TYPE_CHECKING:
     import polars as pl
 
 __all__ = ["deduplicate_initial_load", "deduplicate_initial_load_files"]
+
+logger = logging.getLogger(__name__)
 
 POSITION = f"{TD_VOLATILE_SYSTEM_COLUMN_PREFIX}dedup_position"
 OLD_KEY = f"{TD_VOLATILE_SYSTEM_COLUMN_PREFIX}dedup_old"
@@ -169,7 +172,16 @@ def deduplicate_initial_load(
 
     key = schema.primary_key
     if not key:
-        check_window(changes.select(CDC_META_OP, CDC_META_SCH).collect(), schema, table)
+        window = changes.select(CDC_META_OP, CDC_META_SCH).collect()
+        check_window(window, schema, table)
+        if window.height:
+            logger.warning(
+                "Table %s has no primary key, so the %d change(s) committed to it "
+                "while the initial load read it are staged as read: one the load "
+                "already holds arrives again",
+                table,
+                window.height,
+            )
         return changes
     if cdc_format.columns_format == "map":
         raise SqlCdcErrorCode.CDC_26.exception()

@@ -160,9 +160,17 @@ class PostgresErrorCode(ErrorCode):
     POSTGRES_25 = ErrorDef(
         PostgresRuntimeException,
         "Replication slot {slot!r} has confirmed LSN {confirmed}, past the "
-        "stream's position {lsn}: the server would skip the changes in between. "
-        "The slot was recreated, or advanced by another consumer. Run the "
-        "initial load again",
+        "stream's position {lsn}, so the server would resume after the WAL in "
+        "between. This is almost never lost data: while a stream runs, the "
+        "replication client moves the slot on by itself over WAL that holds "
+        "nothing for the stream, and a stream that ends before recording how "
+        "far that went (a killed process, a dropped connection) leaves this "
+        "difference behind. It is lost data only if something else moved the "
+        "slot while the stream was stopped: another consumer read from it, it "
+        "was advanced by hand, or it was dropped and created again. If you are "
+        "sure nothing did, set 'postgres.cdc.accept_gap' to {gap!r} in src_cfg "
+        "and start the stream again: it resumes at {confirmed}, and the "
+        "setting accepts this gap only. Otherwise, run the initial load again",
     )  # Wal2JsonIngester._verify_resume
     POSTGRES_26 = ErrorDef(
         PostgresRuntimeException,
@@ -208,3 +216,9 @@ class PostgresErrorCode(ErrorCode):
         "{timeout:.0f}s ({reason}): another stream reads it, or a previous one "
         "has not let it go",
     )  # Wal2JsonIngester._attach
+    POSTGRES_33 = ErrorDef(
+        PostgresValidateException,
+        "postgres.cdc.accept_gap is {value!r}, but it takes the gap a POSTGRES_25 "
+        "failure names, as '<stream position>-<slot position>' (for example "
+        "'0/7173FE8-0/7175C90')",
+    )  # accepted_gap

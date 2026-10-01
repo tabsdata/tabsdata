@@ -784,6 +784,34 @@ def test_the_position_is_read_under_the_global_read_lock(initial_load_log):
     assert session.offset.gtid == "uuid:1-5"
 
 
+def test_the_catalog_is_not_read_through_the_snapshot_connection(
+    initial_load_log, monkeypatch
+):
+    """A connection handed back to its pool is rolled back, which on the
+    snapshot's connection would end the snapshot before the tables are read,
+    so the catalog is read through connections of its own."""
+    engines = []
+
+    def create_engine(*args, **kwargs):
+        engine = _Engine(initial_load_log)
+        engine.creator = kwargs["creator"]
+        engines.append(engine)
+        return engine
+
+    monkeypatch.setattr(_cdc_impl.sqlalchemy_utils, "create_engine", create_engine)
+    session = BinlogInitialLoadSession(connection_settings={})
+    snapshot = session._connection
+    (reader,) = [engine for engine in engines if engine is not session.engine]
+
+    assert reader.creator() is snapshot
+    assert session.engine.creator() is not snapshot
+
+
+def test_closing_the_load_disposes_both_engines(initial_load_log):
+    BinlogInitialLoadSession(connection_settings={}).close()
+    assert initial_load_log.count("dispose") == 2
+
+
 # =====================================================================
 # Resume continuity
 # =====================================================================

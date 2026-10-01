@@ -20,6 +20,7 @@ from tabsdatak.conn.common.sql.cdc import _runner
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_INITIAL_LOAD_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._runner import (
     CdcRunConfig,
+    _checkpoint,
     _initial_load_pending,
     _publish,
     _run_loop,
@@ -36,7 +37,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
 )
-from tabsdatak.conn.common.sql.cdc.error import SqlCdcException
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode, SqlCdcException
 
 # --- fakes --------------------------------------------------------------
 
@@ -59,6 +60,7 @@ class FakeCtx:
         self.stream_state = stream_state
         self.work_dir = Path("/tmp")
         self.staged: list[tuple] = []
+        self.checkpoints: list = []
         self.stage_raises = False
 
     @property
@@ -72,6 +74,9 @@ class FakeCtx:
         if self.stage_raises:
             raise RuntimeError("boom-stage")
         self.staged.append((tables_files, new_state))
+
+    def checkpoint(self, new_state) -> None:
+        self.checkpoints.append(new_state)
 
 
 class FakeDisk:
@@ -145,6 +150,8 @@ class FakeIngester:
         self.commit_state_marker = object()
         self.committed_offsets: list = []
         self.tracked_tables: dict = {"s.t": object()}
+        self.checkpoint = None
+        self.settled = 0
 
     def resume_offset(self, *, first_stage, stream_state):
         self.resume_args = (first_stage, stream_state)
@@ -152,6 +159,12 @@ class FakeIngester:
 
     def seed_offset(self, offset) -> None:
         self.seeded = offset
+
+    def watch_position(self, checkpoint) -> None:
+        self.checkpoint = checkpoint
+
+    def settle(self) -> None:
+        self.settled += 1
 
     def open_session(self):
         if self._open_raises:
@@ -422,6 +435,121 @@ def test_run_loop_errored_skips_trailing_flush_but_closes(monkeypatch):
 
     assert buffer.flushed == 0
     assert ctx.staged == []
+    assert ingester.closed is True
+
+
+# --- _run_loop: positions recorded between stages -------------------------
+
+
+class _OwnedOffsetIngester(FakeIngester):
+    def commit_state(self, offset):
+        return {"cdc.offset": offset}
+
+
+def test_run_loop_hands_the_ingester_a_checkpoint_that_records_state(monkeypatch):
+    _patch_sentinels(monkeypatch, FakeDisk(manifest=[]), FakeBuffer())
+    ingester = _OwnedOffsetIngester()
+    ctx = FakeCtx(
+        active_values=[False],
+        first_stage=False,
+        stream_state={"cdc.offset": "staged"},
+    )
+
+    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
+    ingester.checkpoint("moved")
+
+    assert ctx.checkpoints == [{"cdc.offset": "moved"}]
+    assert ctx.staged == []
+
+
+def test_a_checkpoint_keeps_the_record_of_a_done_initial_load():
+    ctx = FakeCtx(
+        active_values=[],
+        first_stage=False,
+        stream_state={"cdc.offset": "staged", CDC_INITIAL_LOAD_STATE_KEY: False},
+    )
+    _checkpoint(ctx, _OwnedOffsetIngester(), _cfg(initial_load=True), "moved")
+    assert ctx.checkpoints == [
+        {"cdc.offset": "moved", CDC_INITIAL_LOAD_STATE_KEY: False}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("first_stage", "stream_state", "initial_load"),
+    [
+        (True, None, False),
+        (False, {"cdc.offset": "staged"}, True),
+        (False, {CDC_INITIAL_LOAD_STATE_KEY: True}, True),
+    ],
+    ids=["before-a-first-stage", "load-never-staged", "load-owed"],
+)
+def test_there_is_no_checkpoint_without_a_state_to_move_on(
+    first_stage, stream_state, initial_load
+):
+    """Until a stage, or while an initial load is owed, the next run starts
+    over from the configuration, so there is no resume state to move on."""
+    ctx = FakeCtx(active_values=[], first_stage=first_stage, stream_state=stream_state)
+    _checkpoint(ctx, _OwnedOffsetIngester(), _cfg(initial_load=initial_load), "moved")
+    assert ctx.checkpoints == []
+
+
+@pytest.mark.parametrize(
+    ("ingester", "offset"),
+    [(_OwnedOffsetIngester(), None), (FakeIngester(), "moved")],
+    ids=["no-offset", "source-owned-offset"],
+)
+def test_a_checkpoint_without_a_state_to_record_is_a_bug(ingester, offset):
+    ctx = FakeCtx(
+        active_values=[], first_stage=False, stream_state={"cdc.offset": "staged"}
+    )
+    with pytest.raises(SqlCdcException) as ei:
+        _checkpoint(ctx, ingester, _cfg(), offset)
+    assert ei.value.api_error is SqlCdcErrorCode.CDC_30
+    assert ctx.checkpoints == []
+
+
+def test_a_clean_end_settles_the_position_after_the_last_stage(monkeypatch):
+    disk = FakeDisk(manifest=[[Path("f")]], should_flush_force=True)
+    _patch_sentinels(monkeypatch, disk, FakeBuffer())
+    ingester = FakeIngester()
+    ctx = FakeCtx(active_values=[False])
+
+    _run_loop(ctx=ctx, ingester=ingester, cfg=_cfg())
+
+    assert (len(ctx.staged), ingester.settled, ingester.closed) == (1, 1, True)
+
+
+def test_a_signalled_stop_settles_the_position(monkeypatch):
+    preset = threading.Event()
+    preset.set()
+    monkeypatch.setattr(_runner, "_setup_signal_handlers", lambda: preset)
+    _patch_sentinels(monkeypatch, FakeDisk(manifest=[]), FakeBuffer())
+    ingester = FakeIngester()
+
+    _run_loop(ctx=FakeCtx(active_values=[True]), ingester=ingester, cfg=_cfg())
+
+    assert ingester.settled == 1
+
+
+def test_an_errored_run_does_not_settle(monkeypatch):
+    """After an error the stream may no longer hold its position, so what
+    the source reports then cannot be told to be the stream's own."""
+    _patch_sentinels(monkeypatch, FakeDisk(manifest=[]), FakeBuffer())
+    ingester = FakeIngester(poll_raises=True)
+
+    with pytest.raises(RuntimeError, match="boom-poll"):
+        _run_loop(ctx=FakeCtx(active_values=[True]), ingester=ingester, cfg=_cfg())
+
+    assert (ingester.settled, ingester.closed) == (0, True)
+
+
+def test_a_failed_settle_still_closes_the_session(monkeypatch):
+    _patch_sentinels(monkeypatch, FakeDisk(manifest=[]), FakeBuffer())
+    ingester = FakeIngester()
+    ingester.settle = lambda: (_ for _ in ()).throw(RuntimeError("boom-settle"))
+
+    _run_loop(ctx=FakeCtx(active_values=[False]), ingester=ingester, cfg=_cfg())
+
     assert ingester.closed is True
 
 

@@ -595,6 +595,9 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
             self._stream_state = None
             new_state()
 
+    def checkpoint(self, new_state: BasicDictSpec) -> None:
+        self._stream_state = dict(new_state)
+
 
 def test_stream_src_plugin_ctx_is_abstract():
     with pytest.raises(TypeError, match="abstract"):
@@ -623,6 +626,14 @@ def test_first_stage_flips_after_first_stage_call():
     assert ctx.first_stage is True
     ctx.stage([[Path("a.parquet")]], {"cdc.offset": 1})
     assert ctx.first_stage is False
+
+
+def test_a_checkpoint_replaces_the_state_without_staging():
+    ctx = _RecordingStreamCtx()
+    ctx.stage([[Path("a.parquet")]], {"cdc.offset": 1, "topic": "people"})
+    ctx.checkpoint({"cdc.offset": 2, "topic": "people"})
+    assert ctx.stream_state == {"cdc.offset": 2, "topic": "people"}
+    assert len(ctx.staged) == 1
 
 
 def test_stage_with_dict_state_exposes_stream_state():

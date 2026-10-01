@@ -24,6 +24,7 @@ from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
+from tabsdatak.conn.postgres import _cdc_impl
 from tabsdatak.conn.postgres._cdc_impl import (
     DEFAULT_WAL2JSON_FORMAT_VERSION,
     LsnOffset,
@@ -31,6 +32,7 @@ from tabsdatak.conn.postgres._cdc_impl import (
     SlotSnapshotSession,
     TransactionSnapshotSession,
     Wal2JsonIngester,
+    accepted_gap,
     lsn_to_int,
 )
 from tabsdatak.conn.postgres.error import PostgresErrorCode
@@ -915,6 +917,191 @@ def test_a_head_start_checks_no_slot_position(monkeypatch):
     bi, cursor = _resume(monkeypatch, _identified(0), slot=None)
     bi.init_stream()
     assert cursor.start_replication.call_args.kwargs["start_lsn"] == 0
+
+
+# --- A gap the configuration accepts ---------------------------------
+
+
+def test_an_accepted_gap_is_read_as_the_failure_writes_it():
+    assert accepted_gap(None) is None
+    assert accepted_gap(" 0/7173FE8 - 0/7175C90 ") == (
+        lsn_to_int("0/7173FE8"),
+        lsn_to_int("0/7175C90"),
+    )
+
+
+@pytest.mark.parametrize("value", ["0/7173FE8", "0/1-0/2-0/3", "x/1-0/2", ""])
+def test_a_malformed_accepted_gap_fails(value):
+    with pytest.raises(TabsdataException) as ei:
+        accepted_gap(value)
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_33
+
+
+def test_a_gap_failure_names_the_gap_to_accept(monkeypatch):
+    bi, _ = _resume(monkeypatch, _identified(0x1F4), slot=(0x258, "reserved", 900))
+    with pytest.raises(TabsdataException) as ei:
+        bi.init_stream()
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_25
+    assert "'0/1F4-0/258'" in str(ei.value)
+    assert accepted_gap("0/1F4-0/258") == (0x1F4, 0x258)
+
+
+def test_the_accepted_gap_resumes_at_the_slot_and_records_it(monkeypatch):
+    bi, cursor = _resume(monkeypatch, _identified(500), slot=(600, "reserved", 900))
+    bi._accepted_gap = (500, 600)
+    recorded = []
+    bi.watch_position(recorded.append)
+
+    bi.init_stream()
+
+    assert cursor.start_replication.call_args.kwargs["start_lsn"] == 600
+    assert [offset.lsn for offset in recorded] == [600]
+    assert recorded[0].system_identifier == SYSTEM_ID
+
+
+@pytest.mark.parametrize("gap", [(500, 700), (400, 600)], ids=["later", "earlier"])
+def test_another_gap_than_the_accepted_one_fails(monkeypatch, gap):
+    """A setting left in place after its gap was skipped matches no later
+    one, so it cannot hide a gap nobody looked at."""
+    bi, cursor = _resume(monkeypatch, _identified(500), slot=(600, "reserved", 900))
+    bi._accepted_gap = gap
+    with pytest.raises(TabsdataException) as ei:
+        bi.init_stream()
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_25
+    cursor.start_replication.assert_not_called()
+
+
+# --- The slot's own moves ---------------------------------------------
+
+
+PID = 4242
+
+
+def _attached(monkeypatch, *, staged: int, rows: list) -> tuple:
+    """An ingester attached at `staged`, whose reads of the slot return
+    `rows` in turn, recording what it hands its checkpoint."""
+    bi = _ingester_with_tables(["public.t"])
+    bi._replicator = MagicMock()
+    bi._replicator.get_backend_pid.return_value = PID
+    bi._cursor = MagicMock()
+    bi._base_offset = _identified(staged)
+    bi._slot_floor = bi._recorded = staged
+    answers = iter(rows)
+    monkeypatch.setattr(bi, "_slot_row", lambda: next(answers))
+    recorded = []
+    bi.watch_position(recorded.append)
+    return bi, recorded
+
+
+def test_a_move_of_the_held_slot_is_recorded(monkeypatch):
+    bi, recorded = _attached(monkeypatch, staged=100, rows=[(150, PID)])
+    bi._watch_slot()
+    assert [(o.lsn, o.system_identifier) for o in recorded] == [(150, SYSTEM_ID)]
+
+
+@pytest.mark.parametrize("row", [(150, 7), (150, None), (None, PID), None], ids=str)
+def test_a_slot_not_held_by_the_stream_is_not_taken_as_its_move(monkeypatch, row):
+    """Only while this stream's walsender holds the slot can nothing but the
+    stream have moved it."""
+    bi, recorded = _attached(monkeypatch, staged=100, rows=[row])
+    bi._watch_slot()
+    assert recorded == []
+
+
+def test_the_slot_is_read_once_per_interval(monkeypatch):
+    bi, recorded = _attached(monkeypatch, staged=100, rows=[(150, PID)])
+    bi._watch_slot()
+    bi._watch_slot()
+    assert [o.lsn for o in recorded] == [150]
+
+
+def test_an_unchanged_slot_records_nothing(monkeypatch):
+    bi, recorded = _attached(monkeypatch, staged=100, rows=[(100, PID)])
+    bi._watch_slot()
+    assert recorded == []
+
+
+def test_a_failed_read_of_the_slot_does_not_stop_the_stream(monkeypatch):
+    bi, recorded = _attached(monkeypatch, staged=100, rows=[])
+
+    def fail():
+        raise _cdc_impl.psycopg2.OperationalError("gone")
+
+    monkeypatch.setattr(bi, "_slot_row", fail)
+    bi._watch_slot()
+    assert recorded == []
+
+
+def test_a_stage_after_the_slot_moved_past_its_changes_takes_the_slot(monkeypatch):
+    """Changes buffered up to 120 and the slot moved to 150: psycopg2 moves
+    it only past what it has delivered and seen confirmed, so the buffered
+    transactions commit after 150, and resuming there delivers them again.
+    The stage records 150 and leaves the buffer's offset as it was."""
+    bi, recorded = _attached(monkeypatch, staged=100, rows=[(150, PID)])
+    bi._watch_slot()
+    buffered = _identified(120)
+
+    state = bi.commit_state(buffered)
+
+    assert LsnOffset.read(state[CDC_OFFSET_STATE_KEY]).lsn == 150
+    assert buffered.lsn == 120
+    assert [o.lsn for o in recorded] == [150]
+
+
+def test_a_stage_past_the_slot_keeps_its_own_position(monkeypatch):
+    bi, _ = _attached(monkeypatch, staged=100, rows=[(150, PID)])
+    bi._watch_slot()
+    state = bi.commit_state(_identified(180))
+    assert LsnOffset.read(state[CDC_OFFSET_STATE_KEY]).lsn == 180
+
+
+def test_a_stage_already_at_the_slot_is_not_recorded_again(monkeypatch):
+    bi, recorded = _attached(monkeypatch, staged=100, rows=[(180, PID)])
+    bi.commit_state(_identified(180))
+    bi._watch_slot()
+    assert recorded == []
+
+
+# --- A clean stop -----------------------------------------------------
+
+
+def test_a_clean_stop_records_where_the_released_slot_ends(monkeypatch):
+    """The server releases the slot after applying every feedback message,
+    so its position once released is the final one."""
+    bi, recorded = _attached(
+        monkeypatch, staged=100, rows=[(150, PID), (160, PID), (170, None)]
+    )
+    monkeypatch.setattr(_cdc_impl.time, "sleep", lambda _: None)
+    replicator, cursor = bi._replicator, bi._cursor
+
+    bi.settle()
+
+    assert [o.lsn for o in recorded] == [170]
+    replicator.close.assert_called_once()
+    cursor.close.assert_called_once()
+    assert (bi._replicator, bi._cursor) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "rows", [[(170, 7)], [None]], ids=["taken-by-another", "dropped"]
+)
+def test_a_clean_stop_records_nothing_it_cannot_tell_is_its_own(monkeypatch, rows):
+    bi, recorded = _attached(monkeypatch, staged=100, rows=rows)
+    bi.settle()
+    assert recorded == []
+
+
+def test_a_clean_stop_gives_up_on_a_slot_never_released(monkeypatch):
+    bi, recorded = _attached(monkeypatch, staged=100, rows=[(150, PID)] * 3)
+    monkeypatch.setattr(_cdc_impl, "SLOT_RELEASE_TIMEOUT_SECONDS", 0)
+    bi.settle()
+    assert recorded == []
+
+
+def test_a_stream_never_attached_settles_nothing(monkeypatch):
+    bi = _ingester_with_tables(["public.t"])
+    monkeypatch.setattr(bi, "_slot_row", lambda: pytest.fail("slot read"))
+    bi.settle()
 
 
 # =====================================================================

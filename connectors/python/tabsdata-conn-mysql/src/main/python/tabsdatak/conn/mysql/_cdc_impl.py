@@ -439,17 +439,27 @@ class BinlogInitialLoadSession(InitialLoadSession):
     def __init__(self, *, connection_settings: dict[str, Any]):
         self._connection = pymysql.connect(**connection_settings)
         self._require_gtid_mode()
-        # Everything the load reads must come from the transaction opened
-        # below, so the engine wraps that one connection instead of opening
-        # its own, which would see current data rather than the snapshot.
-        self._engine = sqlalchemy_utils.create_engine(
+        # Every row the load reads must come from the transaction opened
+        # below, so the tables are read through an engine wrapping that one
+        # connection instead of opening its own, which would see current
+        # data rather than the snapshot.
+        self._snapshot_engine = sqlalchemy_utils.create_engine(
             "mysql+pymysql://",
             creator=lambda: self._connection,
             poolclass=StaticPool,
         )
         # The engine's first connection initialises the dialect and then rolls
         # back, which would end the snapshot transaction, so it runs first.
-        self._engine.connect().close()
+        self._snapshot_engine.connect().close()
+        # The catalog is read on connections of its own: every connection
+        # handed back to its pool is rolled back, which on the snapshot's one
+        # would end the snapshot before the tables are read, and they would
+        # then be read at a later point than the position the stream resumes
+        # from, delivering the changes in between twice.
+        self._engine = sqlalchemy_utils.create_engine(
+            "mysql+pymysql://",
+            creator=lambda: pymysql.connect(**connection_settings),
+        )
         cursor = self._connection.cursor()
         # A consistent snapshot is only consistent under repeatable read; under
         # any other level the server silently ignores the request.
@@ -490,15 +500,24 @@ class BinlogInitialLoadSession(InitialLoadSession):
     def tables(
         self, tracked_tables: dict[str, TrackedTable]
     ) -> Iterator[tuple[TrackedTable, Any]]:
-        with self._engine.connect() as connection:
+        with self._snapshot_engine.connect() as connection:
             for tracked_table in tracked_tables.values():
                 yield tracked_table, connection
 
     def close(self) -> None:
-        # Disposing the engine closes the connection it was built over, so
-        # the connection is only closed here when no engine took it.
-        engine, connection = self._engine, self._connection
-        self._engine = self._connection = None
+        # Disposing the snapshot engine closes the connection it was built
+        # over, so the connection is only closed here when no engine took it.
+        catalog, engine, connection = (
+            self._engine,
+            self._snapshot_engine,
+            self._connection,
+        )
+        self._engine = self._snapshot_engine = self._connection = None
+        if catalog is not None:
+            try:
+                catalog.dispose()
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Failed to dispose initial-load catalog engine: %s", exc)
         if engine is not None:
             try:
                 engine.dispose()

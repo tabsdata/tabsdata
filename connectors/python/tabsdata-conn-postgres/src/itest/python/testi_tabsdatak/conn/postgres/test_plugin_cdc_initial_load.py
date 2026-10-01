@@ -34,8 +34,11 @@ from testi_tabsdatak.conn.postgres.backend import (
 from tabsdatak.conn.postgres import PostgresCdcStreamSrc, PostgresCdcStreamSrcConn
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.postgres._cdc_impl import LsnOffset, gap_to_text
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.postgres._cdc_plugin import PostgresCdcStreamSrcPlugin
-from tabsdatak.conn.postgres.error import PostgresRuntimeException
+from tabsdatak.conn.postgres.error import PostgresErrorCode, PostgresRuntimeException
 from tabsdatak.spi import StreamSrcPluginCtx
 
 pytestmark = [
@@ -150,6 +153,10 @@ class _CdcCtx(StreamSrcPluginCtx):
                 self._state = dict(new_state)
             else:
                 new_state()
+
+    def checkpoint(self, new_state):
+        with self._lock:
+            self._state = dict(new_state)
 
     def stop(self) -> None:
         self._stop.set()
@@ -1138,3 +1145,158 @@ def test_a_reused_slot_load_with_nothing_committed_after_it_stages(
                 frame = _await(ctx, "the load", lambda f: _loaded_ids(f) == [1, 2, 3])
 
     assert _captured_ids(frame) == []
+
+
+def _until(expected: str, ready: Callable[[], Any]) -> Any:
+    deadline = time.monotonic() + CAPTURE_TIMEOUT_SECONDS
+    while time.monotonic() < deadline:
+        value = ready()
+        if value:
+            return value
+        time.sleep(POLL_SECONDS)
+    pytest.fail(f"no {expected} within {CAPTURE_TIMEOUT_SECONDS:.0f}s")
+
+
+def _state_lsn(ctx: _CdcCtx) -> int:
+    return LsnOffset.read(ctx.persisted_state()["cdc.offset"]).lsn
+
+
+def _slot_confirmed(domain: PostgrescdcDomain, slot: str) -> int:
+    engine = create_engine(domain.sqlalchemy_uri)
+    try:
+        with engine.connect() as conn:
+            return int(
+                conn.execute(
+                    text(
+                        "select confirmed_flush_lsn - '0/0'::pg_lsn "
+                        "from pg_replication_slots where slot_name = :slot"
+                    ),
+                    {"slot": slot},
+                ).scalar_one()
+            )
+    finally:
+        engine.dispose()
+
+
+def _write_wal_with_no_changes(domain: PostgrescdcDomain, table: str) -> None:
+    """A vacuum of `table`'s dead rows writes WAL but commits no
+    transaction, so logical decoding has nothing to send for it: only the
+    server's keepalives report the position past it."""
+    engine = create_engine(domain.sqlalchemy_uri, isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as conn:
+            conn.execute(text(f'VACUUM "{table}"'))
+    finally:
+        engine.dispose()
+
+
+def _leave_dead_rows(probe) -> None:
+    for identifier in range(1, 51):
+        probe.insert(identifier, f"dead-{identifier}")
+    for identifier in range(1, 51):
+        probe.delete(identifier)
+
+
+@postgrescdc_domain("postgrescdc_employees_xs")
+def test_the_recorded_position_keeps_up_with_the_slot_moving_by_itself(
+    domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
+):
+    """psycopg2 confirms WAL that holds nothing for the stream by itself, on
+    the server's keepalives, moving the slot past what was staged. The stream
+    reads the move back and records it, so a clean stop leaves its state
+    where the slot is, and the restart resumes instead of failing with
+    POSTGRES_25 over a gap that holds nothing."""
+    domain = domain_postgrescdc_employees_xs
+    with (
+        cdc_probe(domain, "td_il_moves") as probe,
+        cdc_probe(domain, "td_il_moves_elsewhere") as elsewhere,
+    ):
+        probe.insert(1, "row-1")
+        _leave_dead_rows(elsewhere)
+
+        with replication_slot(domain, "td_il_moves_slot") as slot:
+            src = _stream_src([cdc_table(probe.name)], slot)
+            first = _CdcCtx(work_dir(tmp_path, "first"))
+            with _running(first, cdc_src_conn(domain), src):
+                _await(first, "the snapshot", lambda f: _loaded_ids(f) == [1])
+                staged = _state_lsn(first)
+                _write_wal_with_no_changes(domain, elsewhere.name)
+                moved = _until(
+                    "move of the slot past the load by itself",
+                    lambda: max(_slot_confirmed(domain, slot) - staged, 0),
+                )
+                _until(
+                    "record of the slot's move",
+                    lambda: _state_lsn(first) >= staged + moved,
+                )
+            carried = first.persisted_state()
+            stopped_at = _slot_confirmed(domain, slot)
+
+            probe.insert(2, "while-stopped")
+
+            second = _CdcCtx(work_dir(tmp_path, "second"), carry_over=carried)
+            with _running(second, cdc_src_conn(domain), src):
+                frame = _await(
+                    second, "the row written while stopped", lambda f: 2 in _ids(f)
+                )
+
+    assert _captured_ids(_rows(first)) == []
+    assert LsnOffset.read(carried["cdc.offset"]).lsn == stopped_at
+    assert _loaded_ids(frame) == []
+    assert _captured_ids(frame) == [2]
+
+
+def _advance_slot(domain: PostgrescdcDomain, slot: str) -> int:
+    engine = create_engine(domain.sqlalchemy_uri, isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as conn:
+            conn.execute(
+                text("select pg_replication_slot_advance(:slot, pg_current_wal_lsn())"),
+                {"slot": slot},
+            )
+    finally:
+        engine.dispose()
+    return _slot_confirmed(domain, slot)
+
+
+@postgrescdc_domain("postgrescdc_employees_xs")
+def test_a_gap_made_by_hand_fails_until_the_configuration_accepts_it(
+    domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
+):
+    """A slot advanced by hand while the stream is stopped skips a change:
+    the resume fails naming the gap, and resumes once
+    ``postgres.cdc.accept_gap`` accepts that gap, with the change in it lost
+    as the failure warned."""
+    domain = domain_postgrescdc_employees_xs
+    with cdc_probe(domain, "td_il_gap") as probe:
+        probe.insert(1, "row-1")
+
+        with replication_slot(domain, "td_il_gap_slot") as slot:
+            src = _stream_src([cdc_table(probe.name)], slot)
+            first = _CdcCtx(work_dir(tmp_path, "first"))
+            with _running(first, cdc_src_conn(domain), src):
+                _await(first, "the snapshot", lambda f: _loaded_ids(f) == [1])
+            carried = first.persisted_state()
+
+            probe.insert(2, "skipped")
+            advanced = _advance_slot(domain, slot)
+            gap = gap_to_text(LsnOffset.read(carried["cdc.offset"]).lsn, advanced)
+
+            refused = _CdcCtx(work_dir(tmp_path, "refused"), carry_over=carried)
+            with pytest.raises(PostgresRuntimeException) as ei:
+                with _running(refused, cdc_src_conn(domain), src):
+                    _until("refusal to resume", lambda: not refused.active)
+
+            accepting = _CdcCtx(work_dir(tmp_path, "accepting"), carry_over=carried)
+            accepting_src = _stream_src(
+                [cdc_table(probe.name)], slot, **{"postgres.cdc.accept_gap": gap}
+            )
+            with _running(accepting, cdc_src_conn(domain), accepting_src):
+                probe.insert(3, "after")
+                frame = _await(
+                    accepting, "the row after the gap", lambda f: 3 in _ids(f)
+                )
+
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_25
+    assert f"'{gap}'" in str(ei.value)
+    assert _captured_ids(frame) == [3]

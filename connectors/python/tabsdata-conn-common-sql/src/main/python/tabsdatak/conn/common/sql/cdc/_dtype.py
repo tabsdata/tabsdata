@@ -8,9 +8,21 @@ from typing import Any
 
 import pyarrow as pa
 import sqlalchemy as sa
+from sqlalchemy.dialects import mysql
+
+# Types whose meaning differs from the generic type they reflect as. A MySQL
+# TIME is an interval of up to 838 hours either way, read as a timedelta by
+# both its driver and its binlog reader, so it is a duration as batch reads
+# publish it, not a time of day.
+DIALECT_TYPES: dict[type, pa.DataType] = {
+    mysql.TIME: pa.duration("us"),
+}
 
 
 def sqlalchemy_to_arrow(sa_type: Any) -> pa.DataType:
+    dialect_type = DIALECT_TYPES.get(type(sa_type))
+    if dialect_type is not None:
+        return dialect_type
     try:
         gt = sa_type.as_generic()
     except (NotImplementedError, AttributeError):

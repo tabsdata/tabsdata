@@ -400,6 +400,19 @@ def test_a_table_without_a_primary_key_is_not_deduplicated():
     assert dedup(load((1, "a")), changes, primary_key=()).rows() == changes.rows()
 
 
+def test_changes_kept_as_read_for_a_table_without_a_key_are_warned_of(caplog):
+    changes = frame([("i", (1, "a"), None), ("i", (2, "b"), None)], FLAT)
+    with caplog.at_level("WARNING"):
+        dedup(load((1, "a")), changes, primary_key=())
+    assert "2 change(s)" in caplog.text
+
+
+def test_a_table_without_a_key_and_no_changes_is_not_warned_of(caplog):
+    with caplog.at_level("WARNING"):
+        dedup(load((1, "a")), frame([], FLAT), primary_key=())
+    assert caplog.text == ""
+
+
 def test_no_changes_yield_no_changes():
     changes = frame([], FLAT)
     assert dedup(load((1, "a")), changes).height == 0

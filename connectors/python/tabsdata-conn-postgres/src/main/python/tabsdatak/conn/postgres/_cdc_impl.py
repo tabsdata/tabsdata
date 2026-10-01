@@ -76,6 +76,7 @@ from tabsdatak.conn.common.sql.cdc.typing import CdcFormat, QualifiedTablesSpec
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.postgres import LsnPosition
 from tabsdatak.conn.postgres.error import PostgresErrorCode
+from tabsdatak.spi import StreamStateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,15 @@ PENDING_TIMEOUT_MULTIPLIER = 16
 # previous pod's walsender releases it only once it notices the connection
 # is gone. Attaching is retried on the same connection for this long.
 SLOT_ATTACH_TIMEOUT_SECONDS = 30.0
+
+# The replication client moves the slot on by itself over WAL that holds
+# nothing for the stream, so while the stream holds the slot its confirmed
+# position is read back this often and recorded.
+SLOT_WATCH_INTERVAL_SECONDS = 10.0
+
+# A clean stop reads the slot once the server has released it, which it does
+# after applying every feedback message the stream sent.
+SLOT_RELEASE_TIMEOUT_SECONDS = 10.0
 
 DEFAULT_WAL2JSON_FORMAT_VERSION: int = 2
 
@@ -405,6 +415,21 @@ def lsn_to_text(lsn: int) -> str:
     return f"{lsn >> 32:X}/{lsn & 0xFFFFFFFF:X}"
 
 
+def gap_to_text(start: int, end: int) -> str:
+    return f"{lsn_to_text(start)}-{lsn_to_text(end)}"
+
+
+def accepted_gap(value: Any) -> tuple[int, int] | None:
+    """The gap `value` accepts, written as `gap_to_text` writes it."""
+    if value is None:
+        return None
+    try:
+        start, end = str(value).split("-")
+        return lsn_to_int(start.strip()), lsn_to_int(end.strip())
+    except ValueError as error:
+        raise PostgresErrorCode.POSTGRES_33.exception(cause=error, value=value)
+
+
 def identify_system(cursor: Any) -> tuple[str, int]:
     """The database cluster's system identifier and current timeline, read
     with ``IDENTIFY_SYSTEM`` on a replication connection's `cursor`."""
@@ -668,6 +693,7 @@ class Wal2JsonIngester(CdcIngester):
         publication_name: str | None = None,
         wal2json_format_version: int = DEFAULT_WAL2JSON_FORMAT_VERSION,
         unchanged_large_text_as_null: bool = False,
+        accepted_gap: tuple[int, int] | None = None,
     ):
         super().__init__(tables=tables)
         self._conn = conn
@@ -685,6 +711,15 @@ class Wal2JsonIngester(CdcIngester):
         self._bound: int | None = None
         self._bound_reached = False
         self._held: list[Any] = []
+        self._accepted_gap = accepted_gap
+        # The furthest position the slot is known to have been confirmed at
+        # by this stream, and the furthest one handed on to be recorded:
+        # the recorded offset is kept at or past the first, so a resume
+        # never finds the slot ahead of it for a move of the stream's own.
+        self._slot_floor = 0
+        self._recorded = 0
+        self._watched_at = 0.0
+        self._watcher: Any | None = None
 
     @property
     def ingester_type(self) -> CdcIngesterType:
@@ -797,6 +832,7 @@ class Wal2JsonIngester(CdcIngester):
                 logger.warning("Failed to close replicator: %s", exc)
             finally:
                 self._replicator = None
+        self._close_watcher()
         if session is not None:
             try:
                 session.dispose()
@@ -869,6 +905,7 @@ class Wal2JsonIngester(CdcIngester):
                     )
 
         system_identifier, timeline = identify_system(self._cursor)
+        self._recorded = self._mark.lsn
         self._verify_resume(system_identifier, timeline)
         self._mark.system_identifier = system_identifier
         self._mark.timeline = timeline
@@ -889,8 +926,11 @@ class Wal2JsonIngester(CdcIngester):
         self._base_offset = self._mark.copy()
         self._attach(options)
         logger.info("Replication slot %r attached", self._replication_slot)
+        self._slot_floor = self._mark.lsn
+        self._watched_at = time.monotonic()
         if self._mark.lsn:
             self.commit_offset(self._mark)
+        self._record()
 
     def _attach(self, options: dict[str, str]) -> None:
         deadline = time.monotonic() + SLOT_ATTACH_TIMEOUT_SECONDS
@@ -958,19 +998,42 @@ class Wal2JsonIngester(CdcIngester):
                 slot=self._replication_slot,
                 lsn=lsn_to_text(mark.lsn),
             )
-        if confirmed is None or int(confirmed) > mark.lsn:
+        if confirmed is None:
             raise PostgresErrorCode.POSTGRES_25.exception(
                 slot=self._replication_slot,
-                confirmed=(
-                    lsn_to_text(int(confirmed)) if confirmed is not None else "none"
-                ),
+                confirmed="none",
                 lsn=lsn_to_text(mark.lsn),
+                gap="none",
             )
+        if int(confirmed) > mark.lsn:
+            self._skip_gap(mark, int(confirmed))
         if int(current) < mark.lsn:
             raise PostgresErrorCode.POSTGRES_26.exception(
                 current=lsn_to_text(int(current)),
                 lsn=lsn_to_text(mark.lsn),
             )
+
+    def _skip_gap(self, mark: LsnOffset, confirmed: int) -> None:
+        """Resume at `confirmed`, past the stream's position, only when the
+        configuration accepts that very gap."""
+        gap = gap_to_text(mark.lsn, confirmed)
+        if self._accepted_gap != (mark.lsn, confirmed):
+            raise PostgresErrorCode.POSTGRES_25.exception(
+                slot=self._replication_slot,
+                confirmed=lsn_to_text(confirmed),
+                lsn=lsn_to_text(mark.lsn),
+                gap=gap,
+            )
+        logger.warning(
+            "Replication slot %r is at %s, past the stream's position %s: "
+            "resuming there, as the configuration accepts the gap %s. Any "
+            "change to the tracked tables in it is not delivered",
+            self._replication_slot,
+            lsn_to_text(confirmed),
+            lsn_to_text(mark.lsn),
+            gap,
+        )
+        mark.lsn = confirmed
 
     def _timeline_switch(self, recorded: int, current: int) -> int | None:
         """The LSN at which the server's history left timeline `recorded`, or
@@ -1066,6 +1129,111 @@ class Wal2JsonIngester(CdcIngester):
 
     def offset_from_state(self, offset_state: str) -> CdcOffset:
         return LsnOffset.read(offset_state)
+
+    def commit_state(self, offset: CdcOffset) -> StreamStateSpec:
+        if not isinstance(offset, LsnOffset):
+            raise PostgresErrorCode.POSTGRES_16.exception(
+                actual=type(offset).__name__,
+            )
+        if offset.lsn < self._slot_floor:
+            offset = offset.copy()
+            offset.lsn = self._slot_floor
+        self._recorded = max(self._recorded, offset.lsn)
+        return super().commit_state(offset)
+
+    def settle(self) -> None:
+        """Record where the slot ends up once this stream lets it go. The
+        server releases it after applying every feedback message the
+        stream sent, so its position then is final; releasing is the one
+        way this can be told from outside."""
+        if self._replicator is None:
+            return
+        pid = self._replicator.get_backend_pid()
+        self._cursor.close()
+        self._replicator.close()
+        self._cursor = None
+        self._replicator = None
+        deadline = time.monotonic() + SLOT_RELEASE_TIMEOUT_SECONDS
+        while True:
+            row = self._slot_row()
+            if row is None:
+                return
+            confirmed, active_pid = row
+            if active_pid is None:
+                break
+            if active_pid != pid:
+                return
+            if time.monotonic() >= deadline:
+                logger.warning(
+                    "Replication slot %r was not released within %.0fs; its "
+                    "final position is not recorded",
+                    self._replication_slot,
+                    SLOT_RELEASE_TIMEOUT_SECONDS,
+                )
+                return
+            time.sleep(POLL_INTERVAL_SECONDS / 10)
+        if confirmed is not None:
+            self._raise_floor(int(confirmed))
+
+    def _watch_slot(self) -> None:
+        """Every so often, read how far the slot is confirmed while this
+        stream holds it: the replication client confirms WAL with nothing
+        for the stream by itself, and nothing else can move a held slot."""
+        now = time.monotonic()
+        if (
+            self._replicator is None
+            or now - self._watched_at < SLOT_WATCH_INTERVAL_SECONDS
+        ):
+            return
+        self._watched_at = now
+        try:
+            row = self._slot_row()
+        except psycopg2.Error as error:
+            logger.warning("Could not read replication slot position: %s", error)
+            self._close_watcher()
+            return
+        if row is None:
+            return
+        confirmed, active_pid = row
+        if confirmed is not None and active_pid == self._replicator.get_backend_pid():
+            self._raise_floor(int(confirmed))
+
+    def _raise_floor(self, confirmed: int) -> None:
+        if confirmed > self._slot_floor:
+            self._slot_floor = confirmed
+        self._record()
+
+    def _record(self) -> None:
+        if self._slot_floor <= self._recorded or self._checkpoint is None:
+            return
+        offset = self.base_offset()
+        offset.lsn = self._slot_floor
+        self._checkpoint(offset)
+        self._recorded = self._slot_floor
+
+    def _slot_row(self) -> tuple[Any, Any] | None:
+        """The slot's confirmed LSN and the pid of the walsender holding it,
+        or ``None`` when the slot does not exist."""
+        if self._watcher is None:
+            settings = dict(self._replication_connection_settings())
+            settings.pop("connection_factory", None)
+            self._watcher = psycopg2.connect(**settings)
+            self._watcher.autocommit = True
+        with self._watcher.cursor() as cursor:
+            cursor.execute(
+                "select confirmed_flush_lsn - '0/0'::pg_lsn, active_pid "
+                "from pg_replication_slots where slot_name = %s",
+                (self._replication_slot,),
+            )
+            return cursor.fetchone()
+
+    def _close_watcher(self) -> None:
+        if self._watcher is not None:
+            try:
+                self._watcher.close()
+            except psycopg2.Error:  # pragma: no cover
+                pass
+            self._watcher = None
 
     # ------------------------------------------------------------------
     # Schema extraction
@@ -1246,6 +1414,7 @@ class Wal2JsonIngester(CdcIngester):
             if self._cursor is None:  # pragma: no cover
                 return None
             message = self._cursor.read_message()
+            self._watch_slot()
             if message is not None:
                 return message
             sleep = min(POLL_INTERVAL_SECONDS, max(remaining, 0.0))

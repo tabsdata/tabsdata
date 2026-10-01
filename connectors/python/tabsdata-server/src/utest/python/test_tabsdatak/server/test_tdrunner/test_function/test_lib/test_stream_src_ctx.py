@@ -18,6 +18,8 @@ Covers:
     - missing input file raises FileNotFoundError
     - `first_stage` flips after first call
     - back-to-back stages produce distinct manifests
+  * `StreamerPluginCtx.checkpoint`: persists the state alone, keeping the
+    last stage's externalId
   * `mark_inactive`: flips `active` to False
 """
 
@@ -442,6 +444,35 @@ def test_stage_handles_empty_slots(tmp_path):
     content = json.loads(manifests[0].read_text())
     external_id = manifests[0].stem[len("stream-manifest-") :]
     assert content == [[f"files/{external_id}/data.parquet"], []]
+
+
+# --- checkpoint() ---------------------------------------------------------
+
+
+def test_a_checkpoint_persists_the_state_alone(tmp_path):
+    """A checkpoint rewrites the state file with the last stage's externalId,
+    and stages no manifest and no files."""
+    ctx = _make_ctx(tmp_path=tmp_path)
+    ctx.stage([[_write_parquet_stub(tmp_path / "work" / "data.parquet")]], {"o": 1})
+    stage = tmp_path / "stage"
+    staged_id = json.loads((stage / STREAM_STATE_FILENAME).read_text())["externalId"]
+
+    ctx.checkpoint({"o": 2})
+
+    envelope = json.loads((stage / STREAM_STATE_FILENAME).read_text())
+    assert envelope["state"] == {"o": 2}
+    assert envelope["externalId"] == staged_id
+    assert len(list((stage / MANIFESTS_SUBDIR).iterdir())) == 1
+    assert len(list((stage / FILES_SUBDIR).iterdir())) == 1
+    assert ctx.stream_state == {"o": 2}
+    assert ctx.first_stage is False
+
+
+def test_a_checkpoint_is_read_back_by_the_next_run(tmp_path):
+    ctx = _make_ctx(tmp_path=tmp_path)
+    ctx.stage([[_write_parquet_stub(tmp_path / "work" / "data.parquet")]], {"o": 1})
+    ctx.checkpoint({"o": 2})
+    assert _make_ctx(tmp_path=tmp_path).stream_state == {"o": 2}
 
 
 # --- mark_inactive --------------------------------------------------------

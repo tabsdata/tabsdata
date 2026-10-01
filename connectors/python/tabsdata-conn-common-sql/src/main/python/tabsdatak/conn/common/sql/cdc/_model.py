@@ -122,7 +122,10 @@ class InitialLoadSession(ABC):
 
     @property
     @abstractmethod
-    def engine(self) -> Any: ...
+    def engine(self) -> Any:
+        """The engine the tracked tables' catalog is read through before
+        :meth:`tables`. Reading through it must leave the snapshot as it
+        is."""
 
     @abstractmethod
     def tables(

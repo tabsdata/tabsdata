@@ -69,6 +69,7 @@ _KEY_CDC_WAL2JSON_FORMAT_VERSION: CdcSrcCfgKey = "postgres.cdc.wal2json_format_v
 _KEY_CDC_UNCHANGED_LARGE_TEXT_AS_NULL: CdcSrcCfgKey = (
     "postgres.cdc.unchanged_large_text_as_null"
 )
+_KEY_CDC_ACCEPT_GAP: CdcSrcCfgKey = "postgres.cdc.accept_gap"
 _KEY_CDC_BUFFER_MAX_ROWS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_rows"
 _KEY_CDC_BUFFER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_bytes"
 _KEY_CDC_BUFFER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_secs"
@@ -155,6 +156,7 @@ class PostgresCdcStreamSrcPlugin(
         from tabsdatak.conn.postgres._cdc_impl import (
             DEFAULT_WAL2JSON_FORMAT_VERSION,
             Wal2JsonIngester,
+            accepted_gap,
         )
 
         src_cfg = stream_src.src_cfg or {}
@@ -179,6 +181,7 @@ class PostgresCdcStreamSrcPlugin(
             publication_name=stream_src.publication_name,
             wal2json_format_version=int(wal2json_format),
             unchanged_large_text_as_null=unchanged_large_text_as_null,
+            accepted_gap=accepted_gap(src_cfg.get(_KEY_CDC_ACCEPT_GAP)),
         )
 
 

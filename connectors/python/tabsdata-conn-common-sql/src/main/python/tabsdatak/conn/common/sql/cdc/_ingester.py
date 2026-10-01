@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from datetime import datetime, tzinfo
 from typing import Any
 
@@ -54,6 +54,7 @@ class CdcIngester(ABC):
         # Resume mark seeded by :meth:`seed_offset` before the stream
         # opens; subclasses retype it to their concrete offset class.
         self._mark: CdcOffset | None = None
+        self._checkpoint: Callable[[CdcOffset], None] | None = None
 
     @property
     @abstractmethod
@@ -377,6 +378,19 @@ class CdcIngester(ABC):
         raise NotImplementedError(
             f"{type(self).__name__} keeps no Tabsdata-owned offset state"
         )
+
+    def watch_position(self, checkpoint: Callable[[CdcOffset], None]) -> None:
+        """Hand the ingester what records a resume offset between stages.
+        An ingester whose source moves the stream's position on by itself,
+        past data with nothing to stage, reports each move through it, so
+        the recorded offset keeps up with the source's. Called before
+        :meth:`open_session`."""
+        self._checkpoint = checkpoint
+
+    def settle(self) -> None:
+        """Called on a clean stop, after the last stage and before
+        :meth:`close_session`: report any move of the stream's position
+        not recorded yet through the :meth:`watch_position` checkpoint."""
 
     def seed_offset(self, offset: CdcOffset | None) -> None:
         """Seed the resume mark before the stream opens, so

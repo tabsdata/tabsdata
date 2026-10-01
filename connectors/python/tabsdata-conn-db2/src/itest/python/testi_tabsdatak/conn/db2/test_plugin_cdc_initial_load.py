@@ -182,6 +182,11 @@ class _CdcCtx(StreamSrcPluginCtx):
                 self._tabsdata_owns_state = False
                 new_state()
 
+    def checkpoint(self, new_state):
+        with self._lock:
+            self._state = dict(new_state)
+            self._tabsdata_owns_state = True
+
     def persisted_state(self) -> dict:
         with self._lock:
             return dict(self._state)

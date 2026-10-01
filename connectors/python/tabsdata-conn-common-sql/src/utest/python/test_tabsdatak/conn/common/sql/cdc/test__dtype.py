@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pyarrow as pa
 import pytest
 import sqlalchemy.types as sa_types
@@ -46,3 +48,28 @@ def test_an_integer_maps_to_a_type_holding_its_whole_range(sa_type, expected):
 )
 def test_an_unsigned_integer_holds_its_largest_value(sa_type, largest):
     assert pa.array([largest], type=sqlalchemy_to_arrow(sa_type))[0].as_py() == largest
+
+
+@pytest.mark.parametrize(
+    ("sa_type", "expected"),
+    [
+        (sa_types.Time(), pa.time64("us")),
+        (mysql.TIME(), pa.duration("us")),
+        (mysql.TIME(fsp=6), pa.duration("us")),
+    ],
+    ids=["generic", "mysql", "mysql-fsp"],
+)
+def test_a_time_maps_to_what_its_database_means_by_it(sa_type, expected):
+    assert sqlalchemy_to_arrow(sa_type) == expected
+
+
+def test_a_mysql_time_holds_its_whole_range_as_read():
+    values = [
+        timedelta(hours=9, minutes=30),
+        timedelta(hours=838, minutes=59, seconds=59),
+        -timedelta(hours=838, minutes=59, seconds=59),
+        timedelta(microseconds=1),
+        None,
+    ]
+    array = pa.array(values, type=sqlalchemy_to_arrow(mysql.TIME(fsp=6)))
+    assert array.to_pylist() == values

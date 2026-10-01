@@ -112,10 +112,10 @@ class StreamStateView(BaseModel):
 
       * ``state`` -- the inner dict the user plugin reads / writes via
         :attr:`StreamSrcPluginCtx.state`.
-      * ``external_id`` -- the manifest TS that produced this state (the
-        streamer pairs each state write with the manifest emitted in the
-        same ``ctx.stage()`` call). Diagnostic / cross-reference only;
-        absent for legacy files.
+      * ``external_id`` -- the TS of the last manifest staged with or
+        before this state (``ctx.stage()`` writes both together;
+        ``ctx.checkpoint()`` stages none and keeps the previous one).
+        Diagnostic / cross-reference only; absent for legacy files.
       * ``tabsdata_version`` -- the Tabsdata runtime version that wrote
         the file. Lets future versions detect older envelopes and
         migrate the schema if it evolves. Absent for legacy files.
@@ -134,7 +134,7 @@ class StreamStateView(BaseModel):
 def format_state_envelope(
     state: dict,
     *,
-    external_id: str,
+    external_id: str | None,
     tabsdata_version: str,
 ) -> dict:
     """Build the ``stream-state.json`` envelope around ``state``.

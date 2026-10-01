@@ -414,6 +414,7 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "postgres.cdc.logging_level",
     "postgres.cdc.wal2json_format_version",
     "postgres.cdc.unchanged_large_text_as_null",
+    "postgres.cdc.accept_gap",
     "tabsdata.cdc.buffer.max_rows",
     "tabsdata.cdc.buffer.max_bytes",
     "tabsdata.cdc.buffer.max_secs",
@@ -526,6 +527,9 @@ class PostgresCdcStreamSrc(StreamSrc):
             accepts that, on a table without `REPLICA IDENTITY FULL`, an
             UPDATE not touching a large text column delivers it as null;
             when unset, such a table refuses to start the stream.
+            `postgres.cdc.accept_gap` lets a stream resume past the one
+            gap a POSTGRES_25 failure names, given as that failure prints
+            it; it matches no later gap.
     """
 
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)

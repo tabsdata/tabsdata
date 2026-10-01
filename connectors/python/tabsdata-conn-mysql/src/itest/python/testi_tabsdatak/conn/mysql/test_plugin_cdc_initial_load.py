@@ -27,6 +27,9 @@ from testi_tabsdatak.conn.mysql.backend import (
 from tabsdatak.conn.mysql import MySQLCdcStreamSrc, MySQLCdcStreamSrcConn
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.mysql._cdc_plugin import MySQLCdcStreamSrcPlugin
 from tabsdatak.spi import StreamSrcPluginCtx
 
@@ -142,6 +145,10 @@ class _CdcCtx(StreamSrcPluginCtx):
                 self._state = dict(new_state)
             else:
                 new_state()
+
+    def checkpoint(self, new_state):
+        with self._lock:
+            self._state = dict(new_state)
 
     def stop(self) -> None:
         self._stop.set()
@@ -294,6 +301,44 @@ def test_changes_during_the_initial_load_are_not_lost(
     # every seed row is loaded and no row is lost either way.
     assert set(range(1, 501)) <= set(_loaded_ids(frame))
     assert set(range(1000, 1010)) <= set(_ids(frame))
+
+
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_a_commit_right_after_the_snapshot_opens_arrives_once(
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path, monkeypatch
+):
+    """The load reads the tracked tables' catalog after its snapshot opens,
+    and a row committed right after that read is not in the snapshot, so it
+    arrives once, as a change. A catalog read through the snapshot's
+    connection would roll the snapshot back: the tables would then be read at
+    a later point than the position the stream resumes from, and the row
+    would arrive both loaded and captured."""
+    domain = domain_mysqlcdc_employees_xs
+    with cdc_probe(domain, "td_il_after_catalog") as probe:
+        probe.insert(1, "seed")
+        collect = BinlogIngester.collect_tables
+        committed: list[int] = []
+
+        def collect_then_commit(self, *args, **kwargs):
+            tables = collect(self, *args, **kwargs)
+            if not committed:
+                probe.insert(2, "after-the-catalog")
+                committed.append(2)
+            return tables
+
+        monkeypatch.setattr(BinlogIngester, "collect_tables", collect_then_commit)
+        ctx = _CdcCtx(work_dir(tmp_path))
+        with _running(
+            ctx, cdc_src_conn(domain), _stream_src([cdc_table(domain, probe.name)])
+        ):
+            frame = _await(
+                ctx,
+                "the row committed after the catalog read",
+                lambda f: 2 in _captured_ids(f),
+            )
+
+    assert _loaded_ids(frame) == [1]
+    assert _ids(frame).count(2) == 1
 
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
@@ -768,7 +813,7 @@ def test_truncate_then_reinsert_after_the_load_keeps_their_order(
 
 # One column per common type, so that a type whose catalog and binlog
 # descriptions normalize differently gives the loaded rows and the captured
-# changes two schema hashes.
+# changes two schema hashes. The TIME is no time of day, as MySQL allows.
 TYPE_ZOO_COLUMNS = (
     "id INTEGER PRIMARY KEY, c_tiny TINYINT, c_small SMALLINT, c_big BIGINT, "
     "c_unsigned INT UNSIGNED, c_num DECIMAL(10, 2), c_float FLOAT, c_double DOUBLE, "
@@ -778,7 +823,7 @@ TYPE_ZOO_COLUMNS = (
 )
 TYPE_ZOO_VALUES = (
     "{id}, 1, 7, 9000000000, 4000000000, 12.34, 1.5, 2.25, true, 'varchar', 'chr', "
-    "'text', '2026-01-02', '03:04:05', '2026-01-02 03:04:05', "
+    "'text', '2026-01-02', '-100:04:05', '2026-01-02 03:04:05', "
     "'2026-01-02 03:04:05', x'0001'"
 )
 

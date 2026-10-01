@@ -263,6 +263,7 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
     * `flush_interval_mins` -- max minutes the plugin may buffer
       before it must `stage`.
     * `stage` -- publish a batch and commit its new resume state.
+    * `checkpoint` -- commit a new resume state with no batch.
     """
 
     @property
@@ -316,6 +317,20 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
             new_state: The new resume state -- a `BasicDictSpec` the
                 runtime persists, or a `CommitStateFn` it invokes for
                 its side effect (external system owns the offset).
+        """
+
+    @abstractmethod
+    def checkpoint(self, new_state: BasicDictSpec) -> None:
+        """Commit a new resume state without publishing anything: the
+        position moved past source data that carried nothing to stage.
+
+        It replaces the state `stage` last persisted, and is read back
+        through `stream_state` like it. Call it only once `first_stage`
+        is `False`: a state is what tells the next run that this stream
+        has staged before.
+
+        Args:
+            new_state: The new resume state, persisted as is.
         """
 
 

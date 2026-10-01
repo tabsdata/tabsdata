@@ -51,6 +51,9 @@ Responsibilities on each :meth:`StreamerPluginCtx.stage` call:
        we persist an empty-dict envelope as the first-invocation marker.
 
   4. Flip :attr:`first_stage` to ``False``.
+
+:meth:`StreamerPluginCtx.checkpoint` persists a new state alone (step 3
+with no files and no manifest), keeping the last stage's ``externalId``.
 """
 
 from __future__ import annotations
@@ -309,6 +312,24 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         # 4. Flip the first-stage flag.
         self._first_stage = False
 
+    def checkpoint(self, new_state: BasicDictSpec) -> None:
+        """Persist ``new_state`` with no manifest and no files, keeping the
+        ``externalId`` of the last stage."""
+        inner_state = dict(new_state)
+        external_id = self._state_view.external_id if self._state_view else None
+        self._write_state(inner_state, external_id=external_id)
+        self._state_view = StreamStateView(
+            state=inner_state,
+            external_id=external_id,
+            tabsdata_version=self._tabsdata_version,
+            kind="streamState",
+            api_version=1,
+        )
+        logger.debug(
+            "stream_src_ctx.checkpoint: persisted stream state; %d key(s)",
+            len(inner_state),
+        )
+
     # --- streamer-pod-only surface -----------------------------------
 
     def mark_inactive(self) -> None:
@@ -327,7 +348,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
 
     # --- private helpers ---------------------------------------------
 
-    def _write_state(self, state: dict[str, Any], *, external_id: str) -> None:
+    def _write_state(self, state: dict[str, Any], *, external_id: str | None) -> None:
         """Write ``<stage>/stream-state.json`` with the envelope around
         ``state`` (via the backend: a rename for local, a transporter
         copy for cloud -- both atomic at the destination)."""

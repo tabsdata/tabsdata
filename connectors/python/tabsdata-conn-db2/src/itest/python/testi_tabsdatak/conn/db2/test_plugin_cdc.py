@@ -181,6 +181,11 @@ class _CdcCtx(StreamSrcPluginCtx):
                 self._tabsdata_owns_state = False
                 new_state()
 
+    def checkpoint(self, new_state):
+        with self._lock:
+            self._state = dict(new_state)
+            self._tabsdata_owns_state = True
+
 
 _SRC_CFG = {
     "tabsdata.cdc.buffer.max_rows": 1,
