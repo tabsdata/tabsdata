@@ -48,9 +48,9 @@ SCHEMAS = Path(__file__).parents[4] / "resources/testi_tabsdatak/conn/kafka/sche
 PROTOBUF_MESSAGE = "PersonV1"
 PLUGIN_TIMEOUT_SECONDS = 60.0
 CAPTURE_TIMEOUT_SECONDS = 45.0
-ROLLOVER_CFG = {
+STREAM_CFG = {
     "kafka.consume_timeout_seconds": 2,
-    "kafka.time_rollover_seconds": unsafe_seconds(1),
+    "tabsdata.kafka.trigger.max_secs": unsafe_seconds(1),
 }
 
 
@@ -398,7 +398,7 @@ def test_stream_src_plugin_round_trips_each_serde_variant(
             domain,
             topic=topic,
             variant=variant,
-            src_cfg=ROLLOVER_CFG | {"kafka.messages_rollover": len(messages)},
+            src_cfg=STREAM_CFG | {"tabsdata.kafka.trigger.max_rows": len(messages)},
         )
         _run_plugin(ctx, conn, src)
 
@@ -423,7 +423,7 @@ def test_stream_src_plugin_output_table_is_topic(
             domain,
             topic=topic,
             variant=JSON_VARIANT,
-            src_cfg=ROLLOVER_CFG | {"kafka.messages_rollover": len(messages)},
+            src_cfg=STREAM_CFG | {"tabsdata.kafka.trigger.max_rows": len(messages)},
         )
         _run_plugin(ctx, conn, src)
         assert src.output_table() == topic
@@ -435,7 +435,7 @@ def test_stream_src_plugin_output_table_is_topic(
 
 
 @redpanda_domain("redpanda")
-def test_stream_src_plugin_messages_rollover_stages_while_running(
+def test_stream_src_plugin_trigger_max_rows_stages_while_running(
     domain_redpanda: RedpandaDomain, tmp_path: Path
 ):
     domain = domain_redpanda
@@ -448,7 +448,8 @@ def test_stream_src_plugin_messages_rollover_stages_while_running(
             domain,
             topic=topic,
             variant=JSON_VARIANT,
-            src_cfg=ROLLOVER_CFG | {"kafka.messages_rollover": len(messages) // 2},
+            src_cfg=STREAM_CFG
+            | {"tabsdata.kafka.trigger.max_rows": len(messages) // 2},
         )
         _run_plugin(ctx, conn, src)
 
@@ -457,7 +458,7 @@ def test_stream_src_plugin_messages_rollover_stages_while_running(
 
 
 @redpanda_domain("redpanda")
-def test_stream_src_plugin_schema_change_rollover_segregates_buffers(
+def test_stream_src_plugin_schema_change_segregates_files(
     domain_redpanda: RedpandaDomain, tmp_path: Path
 ):
     domain = domain_redpanda
@@ -479,7 +480,7 @@ def test_stream_src_plugin_schema_change_rollover_segregates_buffers(
     with bus.fresh_topic() as topic:
         bus.produce(topic, aged + located, unschemad.producer_serde(bus, tmp_path))
         conn, src = _stream_src(
-            domain, topic=topic, variant=unschemad, src_cfg=ROLLOVER_CFG
+            domain, topic=topic, variant=unschemad, src_cfg=STREAM_CFG
         )
         _run_plugin(ctx, conn, src)
 

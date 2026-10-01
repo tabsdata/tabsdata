@@ -82,7 +82,7 @@ from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream import _floor
+from tabsdatak.conn.common._stream import _floor, _validation as _stream_validation
 from tabsdatak.conn.common.sql.cdc.typing import validate_start
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
@@ -434,6 +434,13 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
     Mapping[CdcSrcCfgKey, Any],
     _common_validation.CONN_CFG_VALIDATION,
     _floor.seconds_floor_validator("tabsdata.cdc.trigger.max_secs"),
+    _stream_validation.positive_integers_validator(
+        "tabsdata.cdc.buffer.max_rows",
+        "tabsdata.cdc.buffer.max_bytes",
+        "tabsdata.cdc.buffer.max_secs",
+        "tabsdata.cdc.trigger.max_rows",
+        "tabsdata.cdc.trigger.max_bytes",
+    ),
 ]
 
 

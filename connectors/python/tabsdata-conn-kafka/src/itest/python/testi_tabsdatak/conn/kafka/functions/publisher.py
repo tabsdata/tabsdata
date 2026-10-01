@@ -34,9 +34,9 @@ SCHEMA = json.dumps({
         data_format="json",
         schema=SCHEMA,
         src_cfg={
-            "kafka.messages_rollover": len(ROWS),
+            "tabsdata.kafka.trigger.max_rows": len(ROWS),
             "kafka.consume_timeout_seconds": 2,
-            "kafka.time_rollover_seconds": unsafe_seconds(1),
+            "tabsdata.kafka.trigger.max_secs": unsafe_seconds(1),
         },
     ),
     flush_interval_mins=1,

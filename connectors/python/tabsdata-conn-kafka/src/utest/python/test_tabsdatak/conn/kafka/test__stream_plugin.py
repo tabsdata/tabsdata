@@ -103,14 +103,17 @@ def test_run_config_defaults():
     assert cfg.logging_level == logging.ERROR
 
 
-def test_run_config_maps_the_rollover_keys_onto_the_trigger():
+def test_run_config_reads_the_buffer_and_trigger_keys():
     src = _src(
         src_cfg={
             "kafka.consume_timeout_seconds": 5,
             "kafka.connection_timeout_seconds": 30,
-            "kafka.time_rollover_seconds": 120,
-            "kafka.size_rollover_mb": 64,
-            "kafka.messages_rollover": 1000,
+            "tabsdata.kafka.buffer.max_rows": 50,
+            "tabsdata.kafka.buffer.max_bytes": 4096,
+            "tabsdata.kafka.buffer.max_secs": 7,
+            "tabsdata.kafka.trigger.max_secs": 120,
+            "tabsdata.kafka.trigger.max_bytes": 64 * 1024 * 1024,
+            "tabsdata.kafka.trigger.max_rows": 1000,
             "kafka.logging_level": logging.DEBUG,
         }
     )
@@ -123,15 +126,15 @@ def test_run_config_maps_the_rollover_keys_onto_the_trigger():
     assert cfg.logging_level == logging.DEBUG
 
 
-def test_run_config_decodes_a_marked_time_rollover():
-    src = _src(src_cfg={"kafka.time_rollover_seconds": unsafe_seconds(3)})
+def test_run_config_decodes_a_marked_trigger_max_secs():
+    src = _src(src_cfg={"tabsdata.kafka.trigger.max_secs": unsafe_seconds(3)})
     assert KafkaStreamSrcPlugin().build_run_config(src).trigger_max_secs == 3
 
 
 @pytest.mark.parametrize("seconds", [0, 15, 59])
-def test_a_time_rollover_below_the_floor_is_rejected(seconds):
+def test_a_trigger_max_secs_below_the_floor_is_rejected(seconds):
     with pytest.raises(TabsdataException) as raised:
-        _src(src_cfg={"kafka.time_rollover_seconds": seconds})
+        _src(src_cfg={"tabsdata.kafka.trigger.max_secs": seconds})
     assert raised.value.api_error is KafkaErrorCode.KAFKA_5
 
 
@@ -247,7 +250,7 @@ def _run(tmp_path, polls, *, active_calls, src_cfg=None):
     consumer = MagicMock()
     consumer.poll.side_effect = polls
     ctx = _make_ctx(tmp_path, active_calls=active_calls)
-    src_cfg = {"kafka.time_rollover_seconds": unsafe_seconds(0)} | (src_cfg or {})
+    src_cfg = {"tabsdata.kafka.trigger.max_secs": unsafe_seconds(0)} | (src_cfg or {})
     with patch("confluent_kafka.Consumer", return_value=consumer):
         KafkaStreamSrcPlugin().run(ctx, _conn(), _src(src_cfg=src_cfg))
     return ctx, consumer

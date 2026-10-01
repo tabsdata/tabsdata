@@ -33,6 +33,16 @@ from tabsdatak.conn.common._stream._floor import decode_seconds
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._plugin import PipelineStreamSrcPlugin, StreamRun
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream.constants import (
+    DEFAULT_BUFFER_MAX_BYTES,
+    DEFAULT_BUFFER_MAX_ROWS,
+    DEFAULT_BUFFER_MAX_SECS,
+    DEFAULT_TRIGGER_MAX_BYTES,
+    DEFAULT_TRIGGER_MAX_ROWS,
+    DEFAULT_TRIGGER_MAX_SECS,
+)
 from tabsdatak.conn.kafka import (
     KafkaStreamSrc,
     KafkaStreamSrcConn,
@@ -46,7 +56,6 @@ from tabsdatak.conn.kafka._explorer import KafkaConnectionExplorer
 from tabsdatak.conn.kafka._stream_impl import (
     DEFAULT_CONNECTION_TIMEOUT_SECS,
     DEFAULT_CONSUME_TIMEOUT_SECS,
-    DEFAULT_TIME_ROLLOVER_SECS,
     KafkaEncoder,
     KafkaIngester,
     KafkaPosition,
@@ -66,11 +75,12 @@ logger = logging.getLogger(__name__)
 _KEY_CONSUME_TIMEOUT: SrcCfgKey = "kafka.consume_timeout_seconds"
 _KEY_CONNECTION_TIMEOUT: SrcCfgKey = "kafka.connection_timeout_seconds"
 _KEY_LOGGING_LEVEL: SrcCfgKey = "kafka.logging_level"
-_KEY_TIME_ROLLOVER: SrcCfgKey = "kafka.time_rollover_seconds"
-_KEY_SIZE_ROLLOVER_MB: SrcCfgKey = "kafka.size_rollover_mb"
-_KEY_MESSAGES_ROLLOVER: SrcCfgKey = "kafka.messages_rollover"
-
-_MEBIBYTE = 1024 * 1024
+_KEY_BUFFER_MAX_ROWS: SrcCfgKey = "tabsdata.kafka.buffer.max_rows"
+_KEY_BUFFER_MAX_BYTES: SrcCfgKey = "tabsdata.kafka.buffer.max_bytes"
+_KEY_BUFFER_MAX_SECS: SrcCfgKey = "tabsdata.kafka.buffer.max_secs"
+_KEY_TRIGGER_MAX_ROWS: SrcCfgKey = "tabsdata.kafka.trigger.max_rows"
+_KEY_TRIGGER_MAX_BYTES: SrcCfgKey = "tabsdata.kafka.trigger.max_bytes"
+_KEY_TRIGGER_MAX_SECS: SrcCfgKey = "tabsdata.kafka.trigger.max_secs"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -81,15 +91,15 @@ class KafkaRunConfig(StreamRunConfig):
 
 def _build_kafka_run_config(src: KafkaStreamSrc) -> KafkaRunConfig:
     cfg = dict(src.src_cfg or {})
-    size_rollover_mb = cfg.get(_KEY_SIZE_ROLLOVER_MB)
     return KafkaRunConfig(
-        trigger_max_rows=cfg.get(_KEY_MESSAGES_ROLLOVER),
-        trigger_max_bytes=(
-            None if size_rollover_mb is None else int(size_rollover_mb) * _MEBIBYTE
-        ),
+        buffer_max_rows=cfg.get(_KEY_BUFFER_MAX_ROWS, DEFAULT_BUFFER_MAX_ROWS),
+        buffer_max_bytes=cfg.get(_KEY_BUFFER_MAX_BYTES, DEFAULT_BUFFER_MAX_BYTES),
+        buffer_max_secs=cfg.get(_KEY_BUFFER_MAX_SECS, DEFAULT_BUFFER_MAX_SECS),
+        trigger_max_rows=cfg.get(_KEY_TRIGGER_MAX_ROWS, DEFAULT_TRIGGER_MAX_ROWS),
+        trigger_max_bytes=cfg.get(_KEY_TRIGGER_MAX_BYTES, DEFAULT_TRIGGER_MAX_BYTES),
         trigger_max_secs=decode_seconds(
-            _KEY_TIME_ROLLOVER,
-            cfg.get(_KEY_TIME_ROLLOVER, DEFAULT_TIME_ROLLOVER_SECS),
+            _KEY_TRIGGER_MAX_SECS,
+            cfg.get(_KEY_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
         ),
         poll_interval_seconds=0,
         consume_timeout_secs=int(

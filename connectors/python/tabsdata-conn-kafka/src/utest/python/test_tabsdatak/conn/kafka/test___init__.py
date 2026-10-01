@@ -198,7 +198,9 @@ def test_kafka_stream_src_output_table_is_topic():
     from tabsdatak.conn.kafka import KafkaStreamSrc
 
     src = KafkaStreamSrc(
-        topic="events", data_format="json", schema="",
+        topic="events",
+        data_format="json",
+        schema="",
     )
     assert src.output_table() == "events"
 
@@ -236,13 +238,16 @@ def test_kafka_stream_src_accepts_known_src_cfg_keys():
         schema="",
         src_cfg={
             "kafka.consume_timeout_seconds": 2,
-            "kafka.time_rollover_seconds": 60,
-            "kafka.size_rollover_mb": 16,
-            "kafka.messages_rollover": 1000,
+            "tabsdata.kafka.buffer.max_rows": 100,
+            "tabsdata.kafka.buffer.max_bytes": 1024,
+            "tabsdata.kafka.buffer.max_secs": 5,
+            "tabsdata.kafka.trigger.max_secs": 60,
+            "tabsdata.kafka.trigger.max_bytes": 16,
+            "tabsdata.kafka.trigger.max_rows": 1000,
             "kafka.logging_level": 20,
         },
     )
-    assert src.src_cfg["kafka.size_rollover_mb"] == 16
+    assert src.src_cfg["tabsdata.kafka.trigger.max_bytes"] == 16
 
 
 def test_kafka_stream_src_json_round_trip():
@@ -253,13 +258,13 @@ def test_kafka_stream_src_json_round_trip():
         data_format="json",
         schema='{"type": "object"}',
         dlq_topic="events_dlq",
-        src_cfg={"kafka.messages_rollover": 500},
+        src_cfg={"tabsdata.kafka.trigger.max_rows": 500},
     )
     loaded = KafkaStreamSrc.from_json(src.to_json())
     assert loaded == src
 
 
-def test_kafka_stream_src_json_round_trip_keeps_a_marked_time_rollover():
+def test_kafka_stream_src_json_round_trip_keeps_a_marked_trigger_max_secs():
     from tabsdatak.conn.common._stream._floor import unsafe_seconds
     from tabsdatak.conn.kafka import KafkaStreamSrc
 
@@ -268,7 +273,42 @@ def test_kafka_stream_src_json_round_trip_keeps_a_marked_time_rollover():
         topic="events",
         data_format="json",
         schema="",
-        src_cfg={"kafka.time_rollover_seconds": marked},
+        src_cfg={"tabsdata.kafka.trigger.max_secs": marked},
     )
     loaded = KafkaStreamSrc.from_json(src.to_json())
-    assert loaded.src_cfg["kafka.time_rollover_seconds"] == marked
+    assert loaded.src_cfg["tabsdata.kafka.trigger.max_secs"] == marked
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "kafka.time_rollover_seconds",
+        "kafka.messages_rollover",
+        "kafka.size_rollover_mb",
+    ],
+)
+def test_kafka_stream_src_rejects_the_removed_rollover_keys(key):
+    from tabsdatak.conn.kafka import KafkaStreamSrc
+
+    with pytest.raises(ConnInitException):
+        KafkaStreamSrc(topic="events", data_format="json", schema="", src_cfg={key: 60})
+
+
+@pytest.mark.parametrize(
+    "key",
+    [
+        "tabsdata.kafka.buffer.max_rows",
+        "tabsdata.kafka.buffer.max_bytes",
+        "tabsdata.kafka.buffer.max_secs",
+        "tabsdata.kafka.trigger.max_rows",
+        "tabsdata.kafka.trigger.max_bytes",
+    ],
+)
+@pytest.mark.parametrize("value", [0, -1, 2.5])
+def test_kafka_stream_src_rejects_a_limit_that_is_not_positive(key, value):
+    from tabsdatak.conn.kafka import KafkaStreamSrc
+
+    with pytest.raises(ConnInitException, match="must be a positive whole number"):
+        KafkaStreamSrc(
+            topic="events", data_format="json", schema="", src_cfg={key: value}
+        )

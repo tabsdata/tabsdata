@@ -13,8 +13,9 @@ the CDC connectors (mysql / postgres / db2). Imported from
   `schema_registry`. Registered on a collection, not passed to a
   decorator.
 * `KafkaStreamSrc` -- the `@stream_publisher` source: pulls from a
-  single `topic` and emits one tableframe batch per rollover
-  (time / size / message-count threshold).
+  single `topic`, writes the messages to parquet files as its buffer
+  fills, and emits them as one tableframe batch whenever a trigger
+  threshold (time / size / message count) is due.
 * `ConfluentSchemaRegistry` / `AwsGlueSchemaRegistry` -- optional
   schema-registry configs set as the connection's `schema_registry`.
 * `Protobuf` -- a `data_format` variant carrying the protobuf
@@ -58,7 +59,7 @@ from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream import _floor
+from tabsdatak.conn.common._stream import _floor, _validation as _stream_validation
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
@@ -260,34 +261,55 @@ class KafkaStreamSrcConn(Conn):
 
 # --- KafkaStreamSrc.src_cfg keys ------------------------------------
 #
-# Mirrors the CDC connectors' `src_cfg` shape. The rollover knobs
-# control when the plugin closes one parquet batch and stages it.
+# Mirrors the CDC connectors' `src_cfg` shape. The `buffer` knobs
+# control when the buffered messages are written to a parquet file;
+# the `trigger` knobs control when the written files are staged as
+# one batch.
 
 SrcCfgKey: TypeAlias = Literal[
     "kafka.consume_timeout_seconds",
     "kafka.connection_timeout_seconds",
     "kafka.logging_level",
-    "kafka.time_rollover_seconds",
-    "kafka.size_rollover_mb",
-    "kafka.messages_rollover",
+    "tabsdata.kafka.buffer.max_rows",
+    "tabsdata.kafka.buffer.max_bytes",
+    "tabsdata.kafka.buffer.max_secs",
+    "tabsdata.kafka.trigger.max_rows",
+    "tabsdata.kafka.trigger.max_bytes",
+    "tabsdata.kafka.trigger.max_secs",
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
     Mapping[SrcCfgKey, Any],
     _common_validation.CONN_CFG_VALIDATION,
-    _floor.seconds_floor_validator("kafka.time_rollover_seconds"),
+    _floor.seconds_floor_validator("tabsdata.kafka.trigger.max_secs"),
+    _stream_validation.positive_integers_validator(
+        "tabsdata.kafka.buffer.max_rows",
+        "tabsdata.kafka.buffer.max_bytes",
+        "tabsdata.kafka.buffer.max_secs",
+        "tabsdata.kafka.trigger.max_rows",
+        "tabsdata.kafka.trigger.max_bytes",
+    ),
 ]
 
 
 @_api.dataclass(KafkaErrorCode.KAFKA_5, kw_only=True)
 class KafkaStreamSrc(StreamSrc):
     """Kafka streaming source for `@stream_publisher` -- one batch
-    per rollover.
+    per due trigger.
 
     :categories: source
 
-    Consumes a single Kafka `topic` and emits one tableframe batch
-    each time a rollover threshold fires (time / size / message count).
+    Consumes a single Kafka `topic` in two levels. The `buffer` keys
+    decide when the buffered messages are written to a parquet file;
+    the `trigger` keys decide when the written files are staged as one
+    tableframe batch. A batch is due once
+    `tabsdata.kafka.trigger.max_secs` (or the decorator's
+    `flush_interval_mins`, when shorter) have passed since the last one,
+    or earlier when `tabsdata.kafka.trigger.max_rows` or
+    `tabsdata.kafka.trigger.max_bytes` is reached -- but never sooner
+    than 60 seconds after the previous batch. Messages of incompatible
+    schemas land in separate files of the same batch.
+
     Used as the `source` of a `@stream_publisher`; that function
     receives the batch as a list of frames and must NOT declare a
     `ctx` parameter. The emitted table name is the `topic`.
@@ -308,13 +330,19 @@ class KafkaStreamSrc(StreamSrc):
             failures are produced to.
         src_cfg: Optional connector config over the keys
             `kafka.consume_timeout_seconds`,
-            `kafka.connection_timeout_seconds`,
-            `kafka.logging_level`, `kafka.time_rollover_seconds`,
-            `kafka.size_rollover_mb` and `kafka.messages_rollover`.
+            `kafka.connection_timeout_seconds`, `kafka.logging_level`,
+            the buffer limits `tabsdata.kafka.buffer.max_rows`
+            (default 10000), `tabsdata.kafka.buffer.max_bytes` (raw
+            payload bytes, off by default) and
+            `tabsdata.kafka.buffer.max_secs` (default 60), and the
+            trigger limits `tabsdata.kafka.trigger.max_secs` (default
+            60, at least 60), `tabsdata.kafka.trigger.max_rows` and
+            `tabsdata.kafka.trigger.max_bytes` (both off by default).
+            Every limit is a positive whole number.
 
     Examples:
-        Consume Avro payloads, staging a batch every 500 messages
-        via a `src_cfg` rollover threshold:
+        Consume Avro payloads, staging a batch as soon as 500 messages
+        are waiting, and no sooner than a minute after the last one:
 
         .. code-block:: python
 
@@ -323,7 +351,7 @@ class KafkaStreamSrc(StreamSrc):
                     topic="users",
                     data_format="avro",
                     schema=AVRO_SCHEMA,
-                    src_cfg={"kafka.messages_rollover": 500},
+                    src_cfg={"tabsdata.kafka.trigger.max_rows": 500},
                 ),
                 flush_interval_mins=1,
                 output_tables=["users"],

@@ -126,6 +126,21 @@ def test_run_config_decodes_a_marked_trigger_max_secs():
     assert _build_cdc_run_config(src).trigger_max_secs == 2
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        "tabsdata.cdc.buffer.max_rows",
+        "tabsdata.cdc.buffer.max_bytes",
+        "tabsdata.cdc.buffer.max_secs",
+        "tabsdata.cdc.trigger.max_rows",
+        "tabsdata.cdc.trigger.max_bytes",
+    ],
+)
+def test_a_cdc_limit_that_is_not_positive_is_rejected(key):
+    with pytest.raises(Exception, match="must be a positive whole number"):
+        _src(src_cfg={key: 0})
+
+
 def test_run_config_logging_level_default_is_error():
     import logging
     cfg = _build_cdc_run_config(_src())

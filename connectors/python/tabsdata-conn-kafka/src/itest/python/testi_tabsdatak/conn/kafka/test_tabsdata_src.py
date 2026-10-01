@@ -36,8 +36,8 @@ POLL_TIMEOUT_SECONDS = 120
 
 
 def _await_rows(collection: Collection, table: str, rows: int) -> pl.DataFrame:
-    """A streamer stages a batch per rollover while it keeps running, so the output
-    table is polled until the batch lands rather than read once."""
+    """A streamer stages a batch whenever a trigger is due while it keeps running, so
+    the output table is polled until the batch lands rather than read once."""
     deadline = time.time() + POLL_TIMEOUT_SECONDS
     while time.time() < deadline:
         handle = collection.get_table(table)
