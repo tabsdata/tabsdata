@@ -44,11 +44,9 @@ MYSQL = Image(
     _tag(constants.ENV_MYSQL_IMAGE_VERSION, constants.DEFAULT_MYSQL_IMAGE_VERSION),
     NATIVE,
 )
-# Tracks the major of the POSTGRESQL_VERSION td-database pins its embedded
-# server to (18.x), so the Rust db tests run against the major the product
-# ships. Only the major is pinned: the official image publishes its own patch
-# cadence and has no tag for theseus's exact patch level.
-POSTGRES = Image("postgres", _tag("POSTGRES_IMAGE_VERSION", "18"), NATIVE)
+# 18.6 matches the POSTGRESQL_VERSION td-database pins its embedded server to,
+# so the Rust db tests run against the version the product ships.
+POSTGRES = Image("postgres", _tag("POSTGRES_IMAGE_VERSION", "18.6"), NATIVE)
 MSSQLSERVER = Image(
     "mcr.microsoft.com/mssql/server",
     _tag("MSSQL_IMAGE_VERSION", "2022-CU14-ubuntu-22.04"),
@@ -57,7 +55,7 @@ MSSQLSERVER = Image(
 ORACLE = Image(
     "container-registry.oracle.com/database/free",
     _tag("ORACLE_IMAGE_VERSION", "23.6.0.0-lite"),
-    AMD64,
+    NATIVE,
 )
 STARROCKS = Image(
     "starrocks/allin1-ubuntu", _tag("STARROCKS_IMAGE_VERSION", "3.4.8"), NATIVE
