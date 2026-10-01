@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,6 +62,8 @@ pytestmark = [
     pytest.mark.xdist_group("db2cdc_seq"),
 ]
 
+GRACE_POLLS = 2
+
 
 @dataclass
 class _StagedManifest:
@@ -71,20 +74,24 @@ class _StagedManifest:
 class _CdcCtx(StreamSrcPluginCtx):
     """The trx scratch the plugin stages into.
 
-    ``active`` is consumed a fixed number of times so ``run`` returns instead of
-    tailing forever, and ``stage`` records what was staged plus whichever offset
-    the ingester handed over.
+    ``active`` holds the run open until ``until`` sees what the test expects
+    staged, and then for ``GRACE_POLLS`` more polls, so whatever should not
+    arrive has had its chance to; without ``until``, until the test calls
+    ``stop``. ``stage`` records what was staged plus whichever offset the
+    ingester handed over.
     """
 
     def __init__(
         self,
         work_dir: Path,
         *,
-        active_polls: int,
+        until: Callable[["_CdcCtx"], bool] | None = None,
         initial_state: dict | None = None,
     ) -> None:
         self._work_dir = work_dir
-        self._active_left = active_polls
+        self._until = until
+        self._grace_left = GRACE_POLLS
+        self._stop = threading.Event()
         self._state: dict[str, Any] = dict(initial_state or {})
         self._tabsdata_owns_state = bool(initial_state)
         self.staged: list[_StagedManifest] = []
@@ -133,11 +140,16 @@ class _CdcCtx(StreamSrcPluginCtx):
 
     @property
     def active(self) -> bool:
-        with self._lock:
-            if self._active_left <= 0:
+        if self._stop.is_set():
+            return False
+        if self._until is not None and self._until(self):
+            if self._grace_left <= 0:
                 return False
-            self._active_left -= 1
-            return True
+            self._grace_left -= 1
+        return True
+
+    def stop(self) -> None:
+        self._stop.set()
 
     @property
     def first_stage(self) -> bool:
@@ -173,8 +185,9 @@ class _CdcCtx(StreamSrcPluginCtx):
 _SRC_CFG = {
     "tabsdata.cdc.buffer.max_rows": 1,
     "tabsdata.cdc.buffer.max_secs": 1,
+    "tabsdata.cdc.trigger.max_rows": 1,
     "tabsdata.cdc.poll_interval_seconds": 1,
-    "db2.cdc.blocking_timeout_seconds": 3,
+    "db2.cdc.blocking_timeout_seconds": 1,
 }
 
 
@@ -218,37 +231,53 @@ def _run_plugin(
     thread.start()
     thread.join(timeout=timeout_s)
     if thread.is_alive():
-        pytest.fail(f"the plugin did not exit within {timeout_s:.0f}s")
+        ctx.stop()
+        thread.join(timeout=timeout_s)
+        pytest.fail(
+            f"the plugin did not stage what was expected within {timeout_s:.0f}s"
+        )
     if err:
         raise err[0]
 
 
-def _staged_frame(ctx: _CdcCtx) -> pl.DataFrame:
-    files = [
+def _staged_files(ctx: _CdcCtx) -> list[Path]:
+    return [
         Path(path)
         for staged in ctx.staged
         if staged.committed
         for table_files in staged.manifest
         for path in table_files
     ]
+
+
+def _staged_frame(ctx: _CdcCtx) -> pl.DataFrame:
+    files = _staged_files(ctx)
     assert files, "the plugin staged no committed manifest files"
     return pl.concat([pl.from_arrow(pq.read_table(f)) for f in files])
 
 
 def _staged_ids(ctx: _CdcCtx) -> set[int]:
-    files = [
-        Path(path)
-        for staged in ctx.staged
-        if staged.committed
-        for table_files in staged.manifest
-        for path in table_files
-    ]
     ids: set[int] = set()
-    for f in files:
+    for f in _staged_files(ctx):
         frame = pl.from_arrow(pq.read_table(f))
         if "ID" in frame.columns:
             ids.update(v for v in frame["ID"].to_list() if v is not None)
     return ids
+
+
+def _staged(ids: set[int]) -> Callable[[_CdcCtx], bool]:
+    return lambda ctx: ids <= _staged_ids(ctx)
+
+
+def _staged_ops(ops: set[str]) -> Callable[[_CdcCtx], bool]:
+    def _ready(ctx: _CdcCtx) -> bool:
+        if not _staged_files(ctx):
+            return False
+        frame = _staged_frame(ctx)
+        op_column = next(c for c in frame.columns if c.endswith("cdc.meta.op"))
+        return ops <= set(frame[op_column].to_list())
+
+    return _ready
 
 
 @db2cdc_domain("db2cdc_employees_xs")
@@ -260,7 +289,7 @@ def test_cdc_insert_event_stages_a_committed_manifest(
         cdc_insert(domain, table, [{"id": 1, "name": "alice", "age": 30}])
         cdc_wait_cd_count(domain, cd_table, expected=1)
 
-        ctx = _CdcCtx(tmp_path / "work", active_polls=12)
+        ctx = _CdcCtx(tmp_path / "work", until=_staged({1}))
         ctx.work_dir.mkdir()
         _run_plugin(ctx, cdc_src_conn(domain), _src(cd_table))
 
@@ -284,7 +313,7 @@ def test_cdc_insert_update_delete_events_surface(
         # CD rows; three is the floor either way.
         cdc_wait_cd_count(domain, cd_table, expected=3)
 
-        ctx = _CdcCtx(tmp_path / "work", active_polls=18)
+        ctx = _CdcCtx(tmp_path / "work", until=_staged_ops({"i", "u", "d"}))
         ctx.work_dir.mkdir()
         _run_plugin(ctx, cdc_src_conn(domain), _src(cd_table))
 
@@ -311,7 +340,7 @@ def test_cdc_tail_skips_pre_existing_events(
 
         # `tail` anchors past whatever is already in the CD table, so only what
         # is produced after the stream attaches should surface.
-        ctx = _CdcCtx(tmp_path / "work", active_polls=18)
+        ctx = _CdcCtx(tmp_path / "work", until=_staged({200}))
         ctx.work_dir.mkdir()
 
         def _produce_after_attach() -> None:
@@ -342,7 +371,7 @@ def test_cdc_resumes_from_commitseq_position(
         # is not.
         resume = seqs[1].hex().upper()
 
-        ctx = _CdcCtx(tmp_path / "work", active_polls=12)
+        ctx = _CdcCtx(tmp_path / "work", until=_staged({70}))
         ctx.work_dir.mkdir()
         _run_plugin(
             ctx,
@@ -365,7 +394,7 @@ def test_cdc_persists_offset_to_ctx_state(
         cdc_insert(domain, table, [{"id": 11, "name": "eleven", "age": 11}])
         cdc_wait_cd_count(domain, cd_table, expected=1)
 
-        ctx = _CdcCtx(tmp_path / "work", active_polls=12)
+        ctx = _CdcCtx(tmp_path / "work", until=_staged({11}))
         ctx.work_dir.mkdir()
         _run_plugin(ctx, cdc_src_conn(domain), _src(cd_table))
 
@@ -396,7 +425,7 @@ def test_cdc_resumes_from_persisted_stream_state(
             cdc_insert(domain, table, [{"id": id_, "name": name, "age": id_}])
         cdc_wait_cd_count(domain, cd_table, expected=2)
 
-        first = _CdcCtx(tmp_path / "run1", active_polls=12)
+        first = _CdcCtx(tmp_path / "run1", until=_staged({50, 60}))
         first.work_dir.mkdir()
         _run_plugin(first, cdc_src_conn(domain), _src(cd_table))
 
@@ -407,7 +436,9 @@ def test_cdc_resumes_from_persisted_stream_state(
         cdc_insert(domain, table, [{"id": 70, "name": "seven", "age": 70}])
         cdc_wait_cd_count(domain, cd_table, expected=3)
 
-        second = _CdcCtx(tmp_path / "run2", active_polls=12, initial_state=persisted)
+        second = _CdcCtx(
+            tmp_path / "run2", until=_staged({70}), initial_state=persisted
+        )
         second.work_dir.mkdir()
         assert second.first_stage is False
         _run_plugin(second, cdc_src_conn(domain), _src(cd_table))
@@ -418,25 +449,9 @@ def test_cdc_resumes_from_persisted_stream_state(
         assert 60 not in ids, f"a consumed row was replayed, got {ids}"
 
 
-class _StoppableCtx(_CdcCtx):
-    """Polls until the test stops it, so a test can hold transactions open
-    while it waits for what the stream has staged."""
-
-    def __init__(self, work_dir: Path) -> None:
-        super().__init__(work_dir, active_polls=0)
-        self._stop = threading.Event()
-
-    @property
-    def active(self) -> bool:
-        return not self._stop.is_set()
-
-    def stop(self) -> None:
-        self._stop.set()
-
-
 @contextmanager
 def _running(
-    ctx: _StoppableCtx,
+    ctx: _CdcCtx,
     conn: Db2CdcStreamSrcConn,
     src: Db2CdcStreamSrc,
     exit_timeout_s: float = 120.0,
@@ -492,7 +507,7 @@ def test_cdc_publishes_every_row_of_interleaved_transactions(
             f"insert into {domain.schema.upper()}.{table} (id, name, age) "
             f"values (:id, 'interleaved', 0)"
         )
-        ctx = _StoppableCtx(tmp_path / "work")
+        ctx = _CdcCtx(tmp_path / "work")
         ctx.work_dir.mkdir()
         try:
             with _running(ctx, cdc_src_conn(domain), _src(cd_table)):

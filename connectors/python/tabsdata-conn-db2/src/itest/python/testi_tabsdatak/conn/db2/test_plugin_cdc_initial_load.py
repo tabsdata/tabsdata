@@ -12,6 +12,7 @@ as regular delete events. There is therefore no truncate test here.
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +36,7 @@ from tabsdatak.conn.db2 import Db2CdcStreamSrc, Db2CdcStreamSrcConn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2._cdc_plugin import Db2CdcStreamSrcPlugin
+from tabsdatak.conn.db2.error import Db2RuntimeException
 from tabsdatak.spi import StreamSrcPluginCtx
 
 pytestmark = [
@@ -48,12 +50,14 @@ SEG_COLUMN_SUFFIX = "cdc.meta.seg"
 INSERT, UPDATE, DELETE, LOAD = "i", "u", "d", "l"
 
 INITIAL_LOAD_SEG = -1
+GRACE_POLLS = 2
 
 _SRC_CFG = {
     "tabsdata.cdc.buffer.max_rows": 1,
     "tabsdata.cdc.buffer.max_secs": 1,
+    "tabsdata.cdc.trigger.max_rows": 1,
     "tabsdata.cdc.poll_interval_seconds": 1,
-    "db2.cdc.blocking_timeout_seconds": 3,
+    "db2.cdc.blocking_timeout_seconds": 1,
 }
 
 
@@ -68,16 +72,22 @@ class _StageFailed(RuntimeError):
 
 
 class _CdcCtx(StreamSrcPluginCtx):
+    """``active`` holds the run open until ``until`` sees what the test expects
+    staged, and then for ``GRACE_POLLS`` more polls, so whatever should not
+    arrive has had its chance to."""
+
     def __init__(
         self,
         work_dir: Path,
         *,
-        active_polls: int,
+        until: Callable[["_CdcCtx"], bool],
         initial_state: dict | None = None,
         fail_on_stage: bool = False,
     ) -> None:
         self._work_dir = work_dir
-        self._active_left = active_polls
+        self._until = until
+        self._grace_left = GRACE_POLLS
+        self._stop = threading.Event()
         self._state: dict[str, Any] = dict(initial_state or {})
         self._tabsdata_owns_state = bool(initial_state)
         self._resumed = bool(initial_state)
@@ -128,11 +138,16 @@ class _CdcCtx(StreamSrcPluginCtx):
 
     @property
     def active(self) -> bool:
-        with self._lock:
-            if self._active_left <= 0:
+        if self._stop.is_set():
+            return False
+        if self._until(self):
+            if self._grace_left <= 0:
                 return False
-            self._active_left -= 1
-            return True
+            self._grace_left -= 1
+        return True
+
+    def stop(self) -> None:
+        self._stop.set()
 
     @property
     def first_stage(self) -> bool:
@@ -204,7 +219,11 @@ def _run_plugin(
     thread.start()
     thread.join(timeout=timeout_s)
     if thread.is_alive():
-        pytest.fail(f"the plugin did not exit within {timeout_s:.0f}s")
+        ctx.stop()
+        thread.join(timeout=timeout_s)
+        pytest.fail(
+            f"the plugin did not stage what was expected within {timeout_s:.0f}s"
+        )
     if err:
         raise err[0]
 
@@ -248,6 +267,20 @@ def _captured_ids(frame: pl.DataFrame) -> set[int]:
     return {value for value in captured["ID"].to_list() if value is not None}
 
 
+def _staged(
+    ready: Callable[[pl.DataFrame], bool], slot: int | None = None
+) -> Callable[[_CdcCtx], bool]:
+    return lambda ctx: bool(_files(ctx, slot)) and ready(_frame(ctx, slot))
+
+
+def _loaded(ids: set[int], slot: int | None = None) -> Callable[[_CdcCtx], bool]:
+    return _staged(lambda frame: _loaded_ids(frame) == ids, slot)
+
+
+def _captured(ids: set[int], slot: int | None = None) -> Callable[[_CdcCtx], bool]:
+    return _staged(lambda frame: ids <= _captured_ids(frame), slot)
+
+
 @db2cdc_domain("db2cdc_employees_xs")
 def test_initial_load_emits_every_existing_row_once(
     domain_db2cdc_employees_xs: Db2CdcDomain, tmp_path: Path
@@ -260,7 +293,7 @@ def test_initial_load_emits_every_existing_row_once(
             [{"id": i, "name": f"row-{i}", "age": i} for i in range(1, 21)],
         )
 
-        ctx = _CdcCtx(tmp_path / "work", active_polls=12)
+        ctx = _CdcCtx(tmp_path / "work", until=_loaded(set(range(1, 21))))
         ctx.work_dir.mkdir()
         _run_plugin(ctx, cdc_src_conn(domain), _src([cd_table]))
 
@@ -278,7 +311,15 @@ def test_changes_right_after_the_initial_load_are_captured(
     with cdc_source_table(domain) as (table, cd_table):
         cdc_insert(domain, table, [{"id": 1, "name": "seed", "age": 1}])
 
-        ctx = _CdcCtx(tmp_path / "work", active_polls=30)
+        ctx = _CdcCtx(
+            tmp_path / "work",
+            until=_staged(
+                lambda frame: (
+                    {INSERT, UPDATE, DELETE} <= set(_ops(frame))
+                    and 2 in _captured_ids(frame)
+                )
+            ),
+        )
         ctx.work_dir.mkdir()
 
         def _produce_after_attach() -> None:
@@ -303,7 +344,7 @@ def test_restart_after_the_initial_load_does_not_reload(
     with cdc_source_table(domain) as (table, cd_table):
         cdc_insert(domain, table, [{"id": 1, "name": "before", "age": 1}])
 
-        first = _CdcCtx(tmp_path / "run1", active_polls=12)
+        first = _CdcCtx(tmp_path / "run1", until=_loaded({1}))
         first.work_dir.mkdir()
         _run_plugin(first, cdc_src_conn(domain), _src([cd_table]))
 
@@ -314,7 +355,7 @@ def test_restart_after_the_initial_load_does_not_reload(
         cdc_insert(domain, table, [{"id": 2, "name": "while-stopped", "age": 2}])
         cdc_wait_cd_count(domain, cd_table, expected=2)
 
-        second = _CdcCtx(tmp_path / "run2", active_polls=12, initial_state=carried)
+        second = _CdcCtx(tmp_path / "run2", until=_captured({2}), initial_state=carried)
         second.work_dir.mkdir()
         assert second.first_stage is False
         _run_plugin(second, cdc_src_conn(domain), _src([cd_table]))
@@ -336,7 +377,7 @@ def test_initial_load_does_not_lose_rows_across_chunks(
             [{"id": i, "name": f"seed-{i}", "age": i} for i in range(1, 501)],
         )
 
-        ctx = _CdcCtx(tmp_path / "work", active_polls=12)
+        ctx = _CdcCtx(tmp_path / "work", until=_loaded(set(range(1, 501))))
         ctx.work_dir.mkdir()
         _run_plugin(
             ctx,
@@ -362,7 +403,7 @@ def test_initial_load_stages_one_manifest_for_every_tracked_table(
             cdc_insert(domain, first_table, rows)
             cdc_insert(domain, second_table, rows)
 
-            ctx = _CdcCtx(tmp_path / "work", active_polls=12)
+            ctx = _CdcCtx(tmp_path / "work", until=lambda ctx: bool(ctx.staged))
             ctx.work_dir.mkdir()
             _run_plugin(
                 ctx,
@@ -395,7 +436,7 @@ def test_the_initial_load_state_carries_both_the_flag_and_the_offset(
     with cdc_source_table(domain) as (table, cd_table):
         cdc_insert(domain, table, [{"id": 1, "name": "seed", "age": 1}])
 
-        ctx = _CdcCtx(tmp_path / "work", active_polls=12)
+        ctx = _CdcCtx(tmp_path / "work", until=lambda ctx: bool(ctx.staged))
         ctx.work_dir.mkdir()
         _run_plugin(ctx, cdc_src_conn(domain), _src([cd_table]))
 
@@ -419,7 +460,7 @@ def test_resetting_the_flag_reloads_every_row_including_the_new_ones(
             ],
         )
 
-        first = _CdcCtx(tmp_path / "run1", active_polls=12)
+        first = _CdcCtx(tmp_path / "run1", until=_loaded({1, 2}))
         first.work_dir.mkdir()
         _run_plugin(first, cdc_src_conn(domain), _src([cd_table]))
         assert _loaded_ids(_frame(first)) == {1, 2}
@@ -429,7 +470,9 @@ def test_resetting_the_flag_reloads_every_row_including_the_new_ones(
         cdc_wait_cd_count(domain, cd_table, expected=3)
 
         reset = dict(carried) | {"cdc.initial-load": True}
-        second = _CdcCtx(tmp_path / "run2", active_polls=12, initial_state=reset)
+        second = _CdcCtx(
+            tmp_path / "run2", until=_loaded({1, 2, 3}), initial_state=reset
+        )
         second.work_dir.mkdir()
         _run_plugin(second, cdc_src_conn(domain), _src([cd_table]))
 
@@ -447,7 +490,7 @@ def test_a_reset_reload_does_not_also_replay_the_rows_as_changes(
     with cdc_source_table(domain) as (table, cd_table):
         cdc_insert(domain, table, [{"id": 1, "name": "first", "age": 1}])
 
-        first = _CdcCtx(tmp_path / "run1", active_polls=12)
+        first = _CdcCtx(tmp_path / "run1", until=_loaded({1}))
         first.work_dir.mkdir()
         _run_plugin(first, cdc_src_conn(domain), _src([cd_table]))
         assert _loaded_ids(_frame(first)) == {1}
@@ -457,7 +500,7 @@ def test_a_reset_reload_does_not_also_replay_the_rows_as_changes(
         cdc_wait_cd_count(domain, cd_table, expected=2)
 
         reset = dict(carried) | {"cdc.initial-load": True}
-        second = _CdcCtx(tmp_path / "run2", active_polls=12, initial_state=reset)
+        second = _CdcCtx(tmp_path / "run2", until=_loaded({1, 2}), initial_state=reset)
         second.work_dir.mkdir()
         _run_plugin(second, cdc_src_conn(domain), _src([cd_table]))
 
@@ -482,7 +525,7 @@ def test_a_source_without_initial_load_never_loads_whatever_the_state_says(
         )
         ctx = _CdcCtx(
             tmp_path / "work",
-            active_polls=12,
+            until=_captured({1}),
             initial_state={"cdc.initial-load": True},
         )
         ctx.work_dir.mkdir()
@@ -501,7 +544,7 @@ def test_a_run_interrupted_before_the_load_stages_redoes_it(
     with cdc_source_table(domain) as (table, cd_table):
         cdc_insert(domain, table, [{"id": 1, "name": "seed", "age": 1}])
 
-        aborted = _CdcCtx(tmp_path / "aborted", active_polls=12, fail_on_stage=True)
+        aborted = _CdcCtx(tmp_path / "aborted", until=_loaded({1}), fail_on_stage=True)
         aborted.work_dir.mkdir()
         with pytest.raises(_StageFailed):
             _run_plugin(aborted, cdc_src_conn(domain), _src([cd_table]))
@@ -510,7 +553,7 @@ def test_a_run_interrupted_before_the_load_stages_redoes_it(
         # the flag stays owed.
         assert aborted.persisted_state() == {}
 
-        retry = _CdcCtx(tmp_path / "retry", active_polls=12)
+        retry = _CdcCtx(tmp_path / "retry", until=_loaded({1}))
         retry.work_dir.mkdir()
         _run_plugin(retry, cdc_src_conn(domain), _src([cd_table]))
 
@@ -526,7 +569,7 @@ def test_two_consecutive_restarts_each_resume_without_replaying(
     with cdc_source_table(domain) as (table, cd_table):
         cdc_insert(domain, table, [{"id": 1, "name": "seed", "age": 1}])
 
-        first = _CdcCtx(tmp_path / "run1", active_polls=12)
+        first = _CdcCtx(tmp_path / "run1", until=_loaded({1}))
         first.work_dir.mkdir()
         _run_plugin(first, cdc_src_conn(domain), _src([cd_table]))
         assert _loaded_ids(_frame(first)) == {1}
@@ -535,7 +578,7 @@ def test_two_consecutive_restarts_each_resume_without_replaying(
         cdc_insert(domain, table, [{"id": 2, "name": "between-one-and-two", "age": 2}])
         cdc_wait_cd_count(domain, cd_table, expected=2)
 
-        second = _CdcCtx(tmp_path / "run2", active_polls=12, initial_state=state)
+        second = _CdcCtx(tmp_path / "run2", until=_captured({2}), initial_state=state)
         second.work_dir.mkdir()
         _run_plugin(second, cdc_src_conn(domain), _src([cd_table]))
         second_frame = _frame(second)
@@ -546,7 +589,7 @@ def test_two_consecutive_restarts_each_resume_without_replaying(
         )
         cdc_wait_cd_count(domain, cd_table, expected=3)
 
-        third = _CdcCtx(tmp_path / "run3", active_polls=12, initial_state=state)
+        third = _CdcCtx(tmp_path / "run3", until=_captured({3}), initial_state=state)
         third.work_dir.mkdir()
         _run_plugin(third, cdc_src_conn(domain), _src([cd_table]))
         third_frame = _frame(third)
@@ -572,7 +615,7 @@ def test_updates_and_deletes_of_loaded_rows_arrive_after_the_load(
             ],
         )
 
-        first = _CdcCtx(tmp_path / "run1", active_polls=12)
+        first = _CdcCtx(tmp_path / "run1", until=_loaded({1, 2}))
         first.work_dir.mkdir()
         _run_plugin(first, cdc_src_conn(domain), _src([cd_table]))
         assert _loaded_ids(_frame(first)) == {1, 2}
@@ -582,7 +625,16 @@ def test_updates_and_deletes_of_loaded_rows_arrive_after_the_load(
         cdc_delete(domain, table, 2)
         cdc_wait_cd_count(domain, cd_table, expected=2)
 
-        second = _CdcCtx(tmp_path / "run2", active_polls=18, initial_state=state)
+        second = _CdcCtx(
+            tmp_path / "run2",
+            until=_staged(
+                lambda frame: (
+                    {UPDATE, DELETE} <= set(_ops(frame))
+                    and _captured_ids(frame) == {1, 2}
+                )
+            ),
+            initial_state=state,
+        )
         second.work_dir.mkdir()
         _run_plugin(second, cdc_src_conn(domain), _src([cd_table]))
 
@@ -593,16 +645,19 @@ def test_updates_and_deletes_of_loaded_rows_arrive_after_the_load(
 
 
 @db2cdc_domain("db2cdc_employees_xs")
-def test_a_table_added_after_the_load_is_not_back_filled(
+def test_a_table_added_after_the_load_fails_until_the_load_is_run_again(
     domain_db2cdc_employees_xs: Db2CdcDomain, tmp_path: Path
 ):
+    """The load flag is per stream, not per table, so a table added later has
+    no position the stream can prove its rows continue from: the resume fails,
+    and a reload snapshots every tracked table."""
     domain = domain_db2cdc_employees_xs
     with cdc_source_table(domain) as (first_table, first_cd):
         with cdc_source_table(domain) as (second_table, second_cd):
             cdc_insert(domain, first_table, [{"id": 1, "name": "tracked", "age": 1}])
             cdc_insert(domain, second_table, [{"id": 1, "name": "untracked", "age": 1}])
 
-            first = _CdcCtx(tmp_path / "run1", active_polls=12)
+            first = _CdcCtx(tmp_path / "run1", until=_loaded({1}))
             first.work_dir.mkdir()
             _run_plugin(first, cdc_src_conn(domain), _src([first_cd]))
             assert _loaded_ids(_frame(first)) == {1}
@@ -613,14 +668,27 @@ def test_a_table_added_after_the_load_is_not_back_filled(
             )
             cdc_wait_cd_count(domain, second_cd, expected=2)
 
-            second = _CdcCtx(tmp_path / "run2", active_polls=18, initial_state=state)
-            second.work_dir.mkdir()
-            _run_plugin(second, cdc_src_conn(domain), _src([first_cd, second_cd]))
+            added = _CdcCtx(
+                tmp_path / "run2", until=_loaded({1, 2}, slot=1), initial_state=state
+            )
+            added.work_dir.mkdir()
+            with pytest.raises(Db2RuntimeException, match="DB2_33"):
+                _run_plugin(added, cdc_src_conn(domain), _src([first_cd, second_cd]))
+            assert added.staged == []
 
-            # The load flag is per stream, not per table, so a table added later
-            # is picked up from its own start_from and never snapshotted.
-            added = _frame(second, slot=1)
-            assert _loaded_ids(added) == set()
+            reset = dict(state) | {"cdc.initial-load": True}
+            reload = _CdcCtx(
+                tmp_path / "run3",
+                until=lambda ctx: (
+                    _loaded({1}, slot=0)(ctx) and _loaded({1, 2}, slot=1)(ctx)
+                ),
+                initial_state=reset,
+            )
+            reload.work_dir.mkdir()
+            _run_plugin(reload, cdc_src_conn(domain), _src([first_cd, second_cd]))
+
+            assert _loaded_ids(_frame(reload, slot=0)) == {1}
+            assert _loaded_ids(_frame(reload, slot=1)) == {1, 2}
 
 
 @db2cdc_domain("db2cdc_employees_xs")
@@ -633,7 +701,12 @@ def test_per_table_offsets_advance_independently_after_the_load(
             cdc_insert(domain, first_table, [{"id": 1, "name": "first", "age": 1}])
             cdc_insert(domain, second_table, [{"id": 1, "name": "second", "age": 1}])
 
-            first = _CdcCtx(tmp_path / "run1", active_polls=12)
+            first = _CdcCtx(
+                tmp_path / "run1",
+                until=lambda ctx: (
+                    _loaded({1}, slot=0)(ctx) and _loaded({1}, slot=1)(ctx)
+                ),
+            )
             first.work_dir.mkdir()
             _run_plugin(first, cdc_src_conn(domain), _src([first_cd, second_cd]))
             assert _loaded_ids(_frame(first, slot=0)) == {1}
@@ -645,7 +718,9 @@ def test_per_table_offsets_advance_independently_after_the_load(
             )
             cdc_wait_cd_count(domain, second_cd, expected=2)
 
-            second = _CdcCtx(tmp_path / "run2", active_polls=18, initial_state=state)
+            second = _CdcCtx(
+                tmp_path / "run2", until=_captured({2}, slot=1), initial_state=state
+            )
             second.work_dir.mkdir()
             _run_plugin(second, cdc_src_conn(domain), _src([first_cd, second_cd]))
 
