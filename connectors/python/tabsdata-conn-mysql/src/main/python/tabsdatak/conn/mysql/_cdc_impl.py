@@ -548,6 +548,11 @@ class BinlogIngester(CdcIngester):
         self._mark: GtidOffset | None = None
         self._base_offset: GtidOffset | None = None
         self._stream: BinLogStreamReader | None = None
+        # A poll that runs out of time on the event opening a transaction has
+        # already taken that event off the stream, so its GTID is held here for
+        # the next poll to adopt. Losing it would tag the whole transaction
+        # with an empty GTID, and segment 0 sits below every real one.
+        self._carry_gtid: str | None = None
 
     @property
     def ingester_type(self) -> CdcIngesterType:
@@ -588,6 +593,7 @@ class BinlogIngester(CdcIngester):
                 logger.warning("Failed to close binlog stream: %s", exc)
             finally:
                 self._stream = None
+                self._carry_gtid = None
         if session is not None:
             try:
                 session.dispose()
@@ -885,7 +891,8 @@ class BinlogIngester(CdcIngester):
         # blocking=True + a stream that's idle would hang the
         # runner forever.
         deadline = time.monotonic() + self._blocking_timeout_seconds
-        gtid: str | None = None
+        gtid: str | None = self._carry_gtid
+        self._carry_gtid = None
         seq: int = 0
         if self._stream is None:
             return
@@ -896,6 +903,7 @@ class BinlogIngester(CdcIngester):
                     # before adopting the new one.
                     self._mark = GtidOffset(gtid=gtid)
                 if time.monotonic() > deadline:
+                    self._carry_gtid = event.gtid
                     return
                 gtid = event.gtid
                 seq = 0
@@ -954,7 +962,8 @@ class BinlogIngester(CdcIngester):
         # row carries the *commit* timestamp (not the row's own
         # binlog-event timestamp).
         deadline = time.monotonic() + self._blocking_timeout_seconds
-        gtid: str | None = None
+        gtid: str | None = self._carry_gtid
+        self._carry_gtid = None
         seq: int = 0
         pending: list[CdcDataChange] = []
         if self._stream is None:
@@ -962,6 +971,7 @@ class BinlogIngester(CdcIngester):
         for event in self._stream:
             if isinstance(event, GtidEvent):
                 if not pending and time.monotonic() > deadline:
+                    self._carry_gtid = event.gtid
                     return
                 gtid = event.gtid
                 seq = 0

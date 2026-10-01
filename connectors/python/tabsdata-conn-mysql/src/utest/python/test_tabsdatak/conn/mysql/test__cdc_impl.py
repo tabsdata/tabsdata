@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import sqlalchemy.types as sa_types
+from pymysqlreplication.event import GtidEvent
 from sqlalchemy.dialects.mysql import (
     DATETIME,
     ENUM,
@@ -587,3 +588,41 @@ def test_seed_offset_sets_resume_mark():
     bi = _ingester_with_tables(["app.users"])
     bi.seed_offset(GtidOffset(gtid="uuid:7"))
     assert bi._mark.gtid == "uuid:7"
+
+
+# --- poll deadline at a transaction boundary -------------------------
+
+
+def test_poll_carries_the_gtid_of_a_transaction_it_ran_out_of_time_on():
+    from pymysqlreplication.row_event import WriteRowsEvent
+
+    bi = _ingester_with_tables(["app.users"])
+    bi._blocking_timeout_seconds = 0
+    opening = MagicMock(spec=GtidEvent)
+    opening.gtid = "uuid:9475"
+    bi._stream = iter([opening, MagicMock(spec=WriteRowsEvent)])
+
+    assert list(bi._poll_changes_buffered(session=None)) == []
+    assert bi._carry_gtid == "uuid:9475"
+
+
+def test_poll_adopts_a_carried_gtid_instead_of_tagging_segment_zero():
+    bi = _ingester_with_tables(["app.users"])
+    bi._carry_gtid = "uuid:9475"
+    bi._stream = iter([])
+
+    list(bi._poll_changes_buffered(session=None))
+
+    # Consumed by the poll that adopted it, so it is not replayed again.
+    assert bi._carry_gtid is None
+
+
+def test_closing_the_session_drops_a_carried_gtid():
+    bi = _ingester_with_tables(["app.users"])
+    bi._carry_gtid = "uuid:9475"
+    bi._stream = MagicMock()
+
+    bi.close_session(None)
+
+    assert bi._carry_gtid is None
+
