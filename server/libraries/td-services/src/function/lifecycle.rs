@@ -237,8 +237,7 @@ pub async fn reconcile_dq_summary_trend_children(
                 }
                 ensure_trend_table_is_adoptable(conn, collection, table, reuse_frozen_tables)
                     .await?;
-                let register =
-                    child.to_register(name, reuse_frozen_tables, owner.enabled)?;
+                let register = child.to_register(name, reuse_frozen_tables, owner.enabled)?;
                 let platform = PlatformOwned {
                     function_type: child.function_type.clone(),
                     parent: &owner.function_id,
