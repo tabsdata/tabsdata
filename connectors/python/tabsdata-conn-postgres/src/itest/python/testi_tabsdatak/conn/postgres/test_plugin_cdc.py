@@ -16,9 +16,17 @@ from typing import Any
 import polars as pl
 import pyarrow.parquet as pq
 import pytest
+from sqlalchemy import create_engine
 from tabsdatax.itest.fixture.backends.postgrescdc import (
     PostgrescdcDomain,
     postgrescdc_domain,
+)
+from testi_tabsdatak.conn.common.sql.cdc_interleave import (
+    INTERLEAVED_IDS,
+    OpenTransaction,
+    first_stages,
+    interleave,
+    publish_in_order,
 )
 from testi_tabsdatak.conn.common.sql.plugin_io import work_dir
 from testi_tabsdatak.conn.postgres.backend import (
@@ -393,3 +401,39 @@ def test_cdc_plugin_captures_every_tracked_table(
     # Each tracked table owns an output slot, positionally by `tables`.
     assert _ids(_captured(ctx, slot=0)) == [1]
     assert _ids(_captured(ctx, slot=1)) == [2]
+
+
+@postgrescdc_domain("postgrescdc_employees_xs")
+def test_cdc_plugin_publishes_every_row_of_interleaved_transactions(
+    domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
+):
+    """Transactions that overlap, and one nested inside another, each with a
+    stage between the two commits. The later-committed transaction holds a row
+    written in the WAL before the earlier one's last: positioned by where rows
+    were written, that row would sort below the stage cursor and be dropped;
+    positioned by the commit, every row is published."""
+    domain = domain_postgrescdc_employees_xs
+    with cdc_probe(domain, "td_cdc_interleaved") as probe:
+        with replication_slot(domain, "td_cdc_interleaved_slot") as slot:
+            src = _stream_src([cdc_table(probe.name)], slot, "head")
+            engine = create_engine(domain.sqlalchemy_uri)
+            insert = (
+                f"INSERT INTO \"{probe.name}\" (id, name) VALUES (:id, 'interleaved')"
+            )
+            ctx = _CdcCtx(work_dir(tmp_path))
+            try:
+                with _running(ctx, cdc_src_conn(domain), src):
+                    cases = interleave(
+                        lambda: OpenTransaction(engine, insert),
+                        lambda ids: _await_captured(
+                            ctx, f"rows {sorted(ids)}", lambda f: ids <= set(_ids(f))
+                        ),
+                    )
+            finally:
+                engine.dispose()
+
+    stages = first_stages(ctx.manifests(), "id")
+    for case, (earlier, later) in cases.items():
+        assert max(stages[i] for i in earlier) < min(stages[i] for i in later), case
+    published = publish_in_order(ctx.manifests(), work_dir(tmp_path, "publish"), "id")
+    assert published == set(INTERLEAVED_IDS)

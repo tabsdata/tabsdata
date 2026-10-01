@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,9 +27,17 @@ import polars as pl
 import pyarrow.parquet as pq
 import pytest
 from tabsdatax.itest.fixture.backends.db2cdc import Db2CdcDomain, db2cdc_domain
+from testi_tabsdatak.conn.common.sql.cdc_interleave import (
+    INTERLEAVED_IDS,
+    OpenTransaction,
+    first_stages,
+    interleave,
+    publish_in_order,
+)
 from testi_tabsdatak.conn.db2.backend import (
     cdc_commitseqs,
     cdc_delete,
+    cdc_engine,
     cdc_insert,
     cdc_source_table,
     cdc_src_conn,
@@ -407,3 +416,97 @@ def test_cdc_resumes_from_persisted_stream_state(
         assert 70 in ids, f"the post-resume row should surface, got {ids}"
         assert 50 not in ids, f"a consumed row was replayed, got {ids}"
         assert 60 not in ids, f"a consumed row was replayed, got {ids}"
+
+
+class _StoppableCtx(_CdcCtx):
+    """Polls until the test stops it, so a test can hold transactions open
+    while it waits for what the stream has staged."""
+
+    def __init__(self, work_dir: Path) -> None:
+        super().__init__(work_dir, active_polls=0)
+        self._stop = threading.Event()
+
+    @property
+    def active(self) -> bool:
+        return not self._stop.is_set()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+
+@contextmanager
+def _running(
+    ctx: _StoppableCtx,
+    conn: Db2CdcStreamSrcConn,
+    src: Db2CdcStreamSrc,
+    exit_timeout_s: float = 120.0,
+):
+    err: list[BaseException] = []
+
+    def _go():
+        try:
+            with _patched_signal_handlers():
+                Db2CdcStreamSrcPlugin().run(ctx=ctx, conn=conn, stream_src=src)
+        except BaseException as exc:  # noqa: BLE001 -- re-raised on the main thread
+            err.append(exc)
+            ctx.stop()
+
+    thread = threading.Thread(target=_go, name="db2-cdc-plugin", daemon=True)
+    thread.start()
+    try:
+        yield
+    finally:
+        ctx.stop()
+        thread.join(timeout=exit_timeout_s)
+        if err:
+            raise err[0]
+        if thread.is_alive():
+            pytest.fail(f"the plugin did not exit within {exit_timeout_s:.0f}s")
+
+
+def _await_staged(ctx: _CdcCtx, ids: set[int], timeout_s: float = 120.0) -> None:
+    """asncap copies a commit into the CD table within its commit interval, and
+    the stream stages it within a poll after that."""
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if ids <= _staged_ids(ctx):
+            return
+        time.sleep(0.5)
+    pytest.fail(
+        f"rows {sorted(ids)} were not staged within {timeout_s:.0f}s "
+        f"(staged: {sorted(_staged_ids(ctx))})"
+    )
+
+
+@db2cdc_domain("db2cdc_employees_xs")
+def test_cdc_publishes_every_row_of_interleaved_transactions(
+    domain_db2cdc_employees_xs: Db2CdcDomain, tmp_path: Path
+):
+    """Transactions that overlap, and one nested inside another, each with a
+    stage between the two commits: every row reaches the stage publisher past
+    its cursor, so none is dropped."""
+    domain = domain_db2cdc_employees_xs
+    with cdc_source_table(domain) as (table, cd_table):
+        engine = cdc_engine(domain)
+        insert = (
+            f"insert into {domain.schema.upper()}.{table} (id, name, age) "
+            f"values (:id, 'interleaved', 0)"
+        )
+        ctx = _StoppableCtx(tmp_path / "work")
+        ctx.work_dir.mkdir()
+        try:
+            with _running(ctx, cdc_src_conn(domain), _src(cd_table)):
+                cases = interleave(
+                    lambda: OpenTransaction(engine, insert),
+                    lambda ids: _await_staged(ctx, ids),
+                )
+        finally:
+            engine.dispose()
+
+    manifests = [staged.manifest for staged in ctx.staged if staged.committed]
+    stages = first_stages(manifests, "ID")
+    for case, (earlier, later) in cases.items():
+        assert max(stages[i] for i in earlier) < min(stages[i] for i in later), case
+    publish = tmp_path / "publish"
+    publish.mkdir()
+    assert publish_in_order(manifests, publish, "ID") == set(INTERLEAVED_IDS)
