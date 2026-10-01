@@ -12,28 +12,16 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any, Union
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._offset import StreamOffset
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow
 from tabsdatak.conn.common.sql.cdc.constants import DOT
 
 
-class CdcOffset(ABC):
-    @abstractmethod
-    def update(self, other: CdcOffset) -> None: ...
-
-    @abstractmethod
-    def write(self) -> str:
-        """Serialize this offset to an opaque string. Each impl owns its
-        own encoding; the runner persists the string verbatim and hands
-        it back to :meth:`read` on resume."""
-        ...
-
-    @classmethod
-    @abstractmethod
-    def read(cls, data: str) -> CdcOffset:
-        """Reconstruct an offset from a string produced by :meth:`write`."""
-        ...
+class CdcOffset(StreamOffset, ABC):
+    pass
 
 
 @dataclass

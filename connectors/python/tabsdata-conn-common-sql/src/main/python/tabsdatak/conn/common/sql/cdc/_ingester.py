@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
 from datetime import datetime, tzinfo
 from typing import Any
 
@@ -15,6 +14,8 @@ from sqlalchemy.engine.interfaces import ReflectedColumn
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.sql.elements import quoted_name
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._ingester import StreamIngester
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcOffset,
@@ -45,16 +46,13 @@ CDC_OFFSET_STATE_KEY = "cdc.offset"
 CDC_INITIAL_LOAD_STATE_KEY = "cdc.initial-load"
 
 
-class CdcIngester(ABC):
+class CdcIngester(StreamIngester[CdcChange, CdcOffset], ABC):
     def __init__(self, tables: QualifiedTablesSpec):
+        super().__init__()
         self._tables = tables
         self._tracked_tables: dict[str, TrackedTable] = {}
         self._schema_registry: SchemaRegistry | None = None
         self._server_tz: tzinfo | None = None
-        # Resume mark seeded by :meth:`seed_offset` before the stream
-        # opens; subclasses retype it to their concrete offset class.
-        self._mark: CdcOffset | None = None
-        self._checkpoint: Callable[[CdcOffset], None] | None = None
 
     @property
     @abstractmethod
@@ -83,11 +81,6 @@ class CdcIngester(ABC):
             if isinstance(value, datetime) and value.tzinfo is None:
                 values[key] = value.replace(tzinfo=self._server_tz)
         return values
-
-    def open_session(self) -> Any: ...
-
-    @abstractmethod
-    def close_session(self, session: Any) -> None: ...
 
     @property
     @abstractmethod
@@ -295,15 +288,6 @@ class CdcIngester(ABC):
         registers from the log carry it."""
         return self.collect_tables(session, cdc_format)
 
-    @abstractmethod
-    def base_offset(self) -> CdcOffset: ...
-
-    @abstractmethod
-    def commit_offset(self, offset: CdcOffset) -> None: ...
-
-    @abstractmethod
-    def poll_changes(self, session: Any) -> Iterable[CdcChange]: ...
-
     def open_initial_load(self) -> InitialLoadSession:
         """Open the consistent snapshot an initial load reads the tracked
         tables from (see :class:`InitialLoadSession`). Called before
@@ -378,24 +362,3 @@ class CdcIngester(ABC):
         raise NotImplementedError(
             f"{type(self).__name__} keeps no Tabsdata-owned offset state"
         )
-
-    def watch_position(self, checkpoint: Callable[[CdcOffset], None]) -> None:
-        """Hand the ingester what records a resume offset between stages.
-        An ingester whose source moves the stream's position on by itself,
-        past data with nothing to stage, reports each move through it, so
-        the recorded offset keeps up with the source's. Called before
-        :meth:`open_session`."""
-        self._checkpoint = checkpoint
-
-    def settle(self) -> None:
-        """Called on a clean stop, after the last stage and before
-        :meth:`close_session`: report any move of the stream's position
-        not recorded yet through the :meth:`watch_position` checkpoint."""
-
-    def seed_offset(self, offset: CdcOffset | None) -> None:
-        """Seed the resume mark before the stream opens, so
-        ``open_session`` / ``init_stream`` continues from ``offset``
-        instead of ``start_from``. ``None`` leaves the mark untouched
-        (cold start / source-managed resume)."""
-        if offset is not None:
-            self._mark = offset
