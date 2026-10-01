@@ -332,5 +332,18 @@ script = [
         exec python ${WARMUP_SCRIPT}
         debug "✅ Native libraries warmed"
 
+        ee_connectors_py_root_folder = get_env EE_CONNECTORS_PY_ROOT_FOLDER
+        if is_empty ${ee_connectors_py_root_folder}
+            ee_modules = array tabsdatak.ag tabsdatak.mcp
+            for module in ${ee_modules}
+                debug "🔸🔸🔸 Checking non-import: ${module}"
+                result = exec python -c "import ${module}"
+                if eq ${result.code} 0
+                    warn "❌ Enterprise module importable in open source: ${module}"
+                else
+                    debug "✅ Enterprise module not importable: ${module}"
+                end
+            end
+        end
     end
     ''']

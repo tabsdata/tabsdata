@@ -304,10 +304,8 @@ env_scripts = [
     end
 
     ee_connectors_py_root_folder = get_env EE_CONNECTORS_PY_ROOT_FOLDER
-    ee_connectors_py_root_folder_is_defined = is_defined EE_CONNECTORS_PY_ROOT_FOLDER
-    ee_connectors_py_root_folder_is_not_defined = not {ee_connectors_py_root_folder_is_defined}
     ee_connectors_py_root_folder_is_blank = is_empty ${ee_connectors_py_root_folder}
-    if ${ee_connectors_py_root_folder_is_not_defined} or ${ee_connectors_py_root_folder_is_blank}
+    if ${ee_connectors_py_root_folder_is_blank}
         noop
     else
         debug "✅ Using ee connectors folder: '${EE_CONNECTORS_PY_ROOT_FOLDER}'"
@@ -326,10 +324,8 @@ env_scripts = [
     new_path = concat ${new_path_item} ${separator} ${new_path}
 
     project_tabsdata_ag_root_folder = get_env PROJECT_TABSDATA_AG_ROOT_FOLDER
-    project_tabsdata_ag_root_folder_is_defined = is_defined PROJECT_TABSDATA_AG_ROOT_FOLDER
-    project_tabsdata_ag_root_folder_is_not_defined = not {project_tabsdata_ag_root_folder_is_defined}
     project_tabsdata_ag_root_folder_is_blank = is_empty ${project_tabsdata_ag_root_folder}
-    if ${project_tabsdata_ag_root_folder_is_not_defined} or ${project_tabsdata_ag_root_folder_is_blank}
+    if ${project_tabsdata_ag_root_folder_is_blank}
         noop
     else
         debug "✅ Using tabsdata agent folder: '${PROJECT_TABSDATA_AG_ROOT_FOLDER}'"

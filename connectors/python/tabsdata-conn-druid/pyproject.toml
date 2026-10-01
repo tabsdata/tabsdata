@@ -102,6 +102,7 @@ markers = [
     "localfile_live: live test that needs the td_transporter binary.",
     "mariadb: mark test as requiring a mariadb docker container.",
     "mariadb_docker: end-to-end test that needs a docker daemon and a MariaDB image.",
+    "mcp: mark tests that require the tabsdata-mcp package.",
     "medallion: mark tests that require the tabsdata-medallion package.",
     "mongodb: mark tests that require the tabsdata-mongodb package.",
     "mount_extractor: tests for the mount_extractor tool in tabsserver.",

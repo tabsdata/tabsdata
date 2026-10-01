@@ -668,6 +668,7 @@ script = [
         is_connector = is_dir ${connector}
         if ${is_connector}
             cd ${connector}
+            connector_name = basename ${connector}
 
             td_temp = temp_dir
             set_env COVERAGE_FILE ${td_temp}/.tabsdata/.coverage.${PYTEST_XDIST_WORKER}

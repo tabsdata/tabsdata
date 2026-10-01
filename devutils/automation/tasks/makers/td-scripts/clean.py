@@ -117,22 +117,24 @@ def clean_py(project_folder):
     def gather_connectors() -> list[str]:
         root = project_folder
         connectors_folders = [
-            os.path.join(root, "connectors", "python"),
-            # os.path.join(root, "connectors.ee", "python"),
+            os.path.join("connectors", "python"),
+            os.path.join("connectors.ee", "python"),
         ]
 
         tabsdata_connectors: list[str] = []
 
         for connectors_folder in connectors_folders:
-            if not os.path.isdir(connectors_folder):
+            if not os.path.isdir(os.path.join(root, connectors_folder)):
                 continue
 
-            for entry in os.scandir(connectors_folder):
+            for entry in os.scandir(os.path.join(root, connectors_folder)):
                 if entry.is_dir():
                     if not entry.name.startswith("tabsdata-"):
                         logger.debug(f"⛔️ Invalid connector folder name: {entry.name}")
                     else:
-                        tabsdata_connectors.append(entry.name)
+                        tabsdata_connectors.append(
+                            os.path.join(connectors_folder, entry.name)
+                        )
                         logger.debug(f"📦️ Inserting connector {entry}")
         return sorted(tabsdata_connectors)
 
@@ -177,8 +179,6 @@ def clean_py(project_folder):
         for leaf in ("BANNER", "LICENSE"):
             inclusion_patterns.append(
                 os.path.join(
-                    "connectors",
-                    "python",
                     connector,
                     "src",
                     "main",

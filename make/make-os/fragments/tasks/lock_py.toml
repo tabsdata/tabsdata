@@ -121,6 +121,9 @@ script = [
     tabsdata_agent_root = set "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-ag"
     tabsdata_agent_root_exists = is_directory ${tabsdata_agent_root}
 
+    ee_connectors_root = set "${PROJECT_TABSDATA_ROOT_FOLDER}/connectors.ee/python"
+    ee_connectors_root_exists = is_directory ${ee_connectors_root}
+
     lock_command = array
     array_push ${lock_command} uv pip compile --universal --upgrade --no-header --no-annotate --format requirements.txt --quiet
     array_push ${lock_command} --output-file ./variant/resources/lock/tabsdata-requirements.txt
@@ -131,6 +134,13 @@ script = [
             array_push ${lock_command} ${tabsdata_agent_root}/requirements/requirements-third-party-all.txt
         else
             info "🔅 Skipping tabsdata agent requirements as ../tabsdata-ag does not exist"
+        end
+    end
+    if ${ee_connectors_root_exists}
+        ee_connectors_requirements = glob_array ${ee_connectors_root}/tabsdata-*/requirements/requirements-third-party.txt
+        for ee_connector_requirements in ${ee_connectors_requirements}
+            info "🔅 Including enterprise connector requirements from: ${ee_connector_requirements}"
+            array_push ${lock_command} ${ee_connector_requirements}
         end
     end
     lock_exec_command = array_join ${lock_command} " "
@@ -154,6 +164,18 @@ script = [
         if ${tabsdata_agent_root_exists}
             info "🔅 Including tabsdata agent dev requirements from: ${tabsdata_agent_root}/requirements/requirements-dev-third-party.txt"
             array_push ${lock_dev_command} ${tabsdata_agent_root}/requirements/requirements-dev-third-party.txt
+        end
+    end
+    if ${ee_connectors_root_exists}
+        ee_connectors_requirements = glob_array ${ee_connectors_root}/tabsdata-*/requirements/requirements-third-party.txt
+        for ee_connector_requirements in ${ee_connectors_requirements}
+            info "🔅 Including enterprise connector dev constraints from: ${ee_connector_requirements}"
+            array_push ${lock_dev_command} -c ${ee_connector_requirements}
+        end
+        ee_connectors_dev_requirements = glob_array ${ee_connectors_root}/tabsdata-*/requirements/requirements-dev-third-party.txt
+        for ee_connector_dev_requirements in ${ee_connectors_dev_requirements}
+            info "🔅 Including enterprise connector dev requirements from: ${ee_connector_dev_requirements}"
+            array_push ${lock_dev_command} ${ee_connector_dev_requirements}
         end
     end
     lock_dev_exec_command = array_join ${lock_dev_command} " "

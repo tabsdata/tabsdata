@@ -547,6 +547,7 @@ run_task = [
     { name = [
         "__os__dehydrate_py_tabsdata",
         "__os__dehydrate_py_connectors",
+        "__os__dehydrate_py_enterprise",
         "__td__mark_uninstalled_py"
     ], condition = { env_not_set = ["TD_PY_INSTALLED", "TD_PY_UNINSTALLED"] } },
     { name = [

@@ -1,3 +1,3 @@
 The third-party Rust crates, Python packages and Node modules used by this project are included in the Tabsdata {c.version} package.
 
-With Tabsdata {c.version} installed, run `tdk info --third-party` for details.
+With Tabsdata {c.version} installed, run `tdk info third-party` for details.

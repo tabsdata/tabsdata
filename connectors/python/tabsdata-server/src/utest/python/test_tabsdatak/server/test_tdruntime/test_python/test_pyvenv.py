@@ -24,8 +24,10 @@ from tabsdatak.common._interpreter.python.recipe import (
 )
 from tabsdatak.common._interpreter.python.venv import (
     CONNECTORS_RELATIVE_PATH,
+    EE_CONNECTORS_RELATIVE_PATH,
     TABSDATA_AGENT_PACKAGE,
     TABSDATA_CONNECTORS_NAMES,
+    TABSDATA_EE_CONNECTORS_NAMES,
     TABSDATA_PACKAGE,
     TABSDATA_TOOLKIT_PACKAGE,
     EnvironmentProfile,
@@ -113,7 +115,7 @@ def test_build_recipes_agent_includes_agent_package():
 
 def test_build_connector_recipes_empty_when_tabsdata_missing():
     other = make_recipe("tabsdata-toolkit", install=InstallRecipe.REGISTRY)
-    assert build_connector_recipes((other,)) == ()
+    assert build_connector_recipes((other,), TabsdataEdition.OPEN_SOURCE) == ()
 
 
 def test_build_connector_recipes_empty_when_tabsdata_is_wheel(tmp_path: Path):
@@ -121,24 +123,37 @@ def test_build_connector_recipes_empty_when_tabsdata_is_wheel(tmp_path: Path):
     tabsdata = make_recipe(
         TABSDATA_PACKAGE, install=InstallRecipe.WHEEL, location=wheel_path
     )
-    assert build_connector_recipes((tabsdata,)) == ()
+    assert build_connector_recipes((tabsdata,), TabsdataEdition.OPEN_SOURCE) == ()
 
 
 def test_build_connector_recipes_uses_constants_list_for_editable(tmp_path: Path):
     tabsdata = make_recipe(
         TABSDATA_PACKAGE, install=InstallRecipe.EDITABLE, location=tmp_path
     )
-    connectors = build_connector_recipes((tabsdata,))
+    connectors = build_connector_recipes((tabsdata,), TabsdataEdition.OPEN_SOURCE)
     assert len(connectors) == len(TABSDATA_CONNECTORS_NAMES)
     names = {recipe.name for recipe in connectors}
     assert names == set(TABSDATA_CONNECTORS_NAMES)
+
+
+def test_build_connector_recipes_adds_ee_connectors_for_enterprise(tmp_path: Path):
+    tabsdata = make_recipe(
+        TABSDATA_PACKAGE, install=InstallRecipe.EDITABLE, location=tmp_path
+    )
+    connectors = build_connector_recipes((tabsdata,), TabsdataEdition.ENTERPRISE)
+    locations = {recipe.name: recipe.location for recipe in connectors}
+    assert set(locations) == {*TABSDATA_CONNECTORS_NAMES, *TABSDATA_EE_CONNECTORS_NAMES}
+    for name in TABSDATA_EE_CONNECTORS_NAMES:
+        assert locations[name] == tmp_path / EE_CONNECTORS_RELATIVE_PATH / name
 
 
 def test_build_connector_recipe_for_registry_has_no_location():
     tabsdata = make_recipe(
         TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY, location=None
     )
-    recipe = build_connector_recipe("tabsdata-conn-s3", tabsdata)
+    recipe = build_connector_recipe(
+        "tabsdata-conn-s3", CONNECTORS_RELATIVE_PATH, tabsdata
+    )
     assert recipe.recipe == InstallRecipe.REGISTRY
     assert recipe.location is None
     assert recipe.version == "2.0.0"
@@ -150,7 +165,9 @@ def test_build_connector_recipe_for_editable_resolves_connector_location(
     tabsdata = make_recipe(
         TABSDATA_PACKAGE, install=InstallRecipe.EDITABLE, location=tmp_path
     )
-    recipe = build_connector_recipe("tabsdata-conn-s3", tabsdata)
+    recipe = build_connector_recipe(
+        "tabsdata-conn-s3", CONNECTORS_RELATIVE_PATH, tabsdata
+    )
     assert recipe.recipe == InstallRecipe.EDITABLE
     assert recipe.location == tmp_path / CONNECTORS_RELATIVE_PATH / "tabsdata-conn-s3"
 

@@ -23,9 +23,12 @@ def setup_toml_files(root: Path) -> list[Path]:
     root_setup_toml = root / SETUP_TOML_FILE
     if root_setup_toml.is_file():
         files.append(root_setup_toml)
-    connectors = root / "connectors" / "python"
-    if connectors.is_dir():
-        files.extend(sorted(connectors.glob(f"*/{SETUP_TOML_FILE}")))
+    for connectors in (
+        root / "connectors" / "python",
+        root / "connectors.ee" / "python",
+    ):
+        if connectors.is_dir():
+            files.extend(sorted(connectors.glob(f"*/{SETUP_TOML_FILE}")))
     return files
 
 

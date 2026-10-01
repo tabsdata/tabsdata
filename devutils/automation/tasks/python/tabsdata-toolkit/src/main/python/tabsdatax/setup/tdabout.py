@@ -20,6 +20,7 @@ from archspec import cpu
 from setuptools import build_meta as _backend
 
 from tabsdatax.setup._dirtiness import repository_dirty, strict_dirtiness
+from tabsdatax.setup.common.edition import is_enterprise
 
 
 # noinspection DuplicatedCode
@@ -594,17 +595,7 @@ def inject_wheel_metadata(wheel_path):
 
 def write_build_manifest(root_path, output_path):
     try:
-        feature_yaml_path = Path(root_path) / ".manifest" / "feature.yaml"
-        enterprise = False
-        if feature_yaml_path.exists():
-            # noinspection PyBroadException
-            try:
-                with open(feature_yaml_path, "r", encoding="utf-8") as f:
-                    features = yaml.safe_load(f)
-                    if features and isinstance(features, list):
-                        enterprise = "enterprise" in features
-            except Exception:
-                pass
+        enterprise = is_enterprise(root_path)
 
         build = _render_build(root_path)
         build["X-Enterprise"] = "true" if enterprise else "false"

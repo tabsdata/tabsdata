@@ -105,7 +105,7 @@ def enrich_sys_path():
     def gather_connectors() -> list[str]:
         connectors_folders = [
             os.path.join(root, "connectors", "python"),
-            # os.path.join(root, "connectors.ee", "python"),
+            os.path.join(root, "connectors.ee", "python"),
         ]
 
         tabsdata_connectors: list[str] = []
@@ -123,7 +123,7 @@ def enrich_sys_path():
                     ):
                         logger.debug(f"⛔️ Invalid connector folder name: {entry.name}")
                     else:
-                        tabsdata_connectors.append(entry.name)
+                        tabsdata_connectors.append(entry.path)
                         logger.debug(f"📦️ Inserting connector {entry}")
         return sorted(tabsdata_connectors)
 
@@ -411,15 +411,11 @@ def enrich_sys_path():
             )
         ),
     )
-    connectors = gather_connectors()
-    for connector in connectors:
+    for connector_folder in gather_connectors():
         sys.path.append(
             os.path.abspath(
                 os.path.join(
-                    root,
-                    "connectors",
-                    "python",
-                    connector,
+                    connector_folder,
                     "src",
                     "itest",
                     "python",
@@ -429,10 +425,7 @@ def enrich_sys_path():
         sys.path.append(
             os.path.abspath(
                 os.path.join(
-                    root,
-                    "connectors",
-                    "python",
-                    connector,
+                    connector_folder,
                     "src",
                     "itest",
                     "resources",

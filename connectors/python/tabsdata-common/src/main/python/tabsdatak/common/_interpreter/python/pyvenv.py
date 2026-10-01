@@ -18,12 +18,11 @@ from tabsdatak.common._interpreter.python.recipe import (
     VenvRecipe,
 )
 from tabsdatak.common._interpreter.python.venv import (
-    CONNECTORS_RELATIVE_PATH,
     TABSDATA_AGENT_PACKAGE,
-    TABSDATA_CONNECTORS_NAMES,
     TABSDATA_PACKAGE,
     EnvironmentProfile,
     PythonEnvironment,
+    edition_connectors,
 )
 
 PYTHON_ROOT: str = "Python Root"
@@ -236,7 +235,7 @@ def create_recipe(
 
 
 def build_recipes(profile: EnvironmentProfile) -> tuple[VenvRecipe, ...]:
-    connector_recipes = build_connector_recipes(profile.packages)
+    connector_recipes = build_connector_recipes(profile.packages, profile.edition)
     server_recipes = (
         tuple(
             package
@@ -256,6 +255,7 @@ def build_recipes(profile: EnvironmentProfile) -> tuple[VenvRecipe, ...]:
 
 def build_connector_recipes(
     packages: tuple[PackageRecipe, ...],
+    edition: TabsdataEdition,
 ) -> tuple[PackageRecipe, ...]:
     tabsdata = next(
         (package for package in packages if package.name == TABSDATA_PACKAGE),
@@ -264,15 +264,18 @@ def build_connector_recipes(
     if tabsdata is None:
         return ()
     if tabsdata.recipe == InstallRecipe.WHEEL:
-        return installed_connector_recipes()
+        return installed_connector_recipes(edition)
     return tuple(
-        build_connector_recipe(name, tabsdata) for name in TABSDATA_CONNECTORS_NAMES
+        build_connector_recipe(name, connectors_relative_path, tabsdata)
+        for name, connectors_relative_path in edition_connectors(edition)
     )
 
 
-def installed_connector_recipes() -> tuple[PackageRecipe, ...]:
+def installed_connector_recipes(
+    edition: TabsdataEdition,
+) -> tuple[PackageRecipe, ...]:
     recipes = []
-    for name in TABSDATA_CONNECTORS_NAMES:
+    for name, _ in edition_connectors(edition):
         recipe = Package(name).recipe()
         if recipe is None or recipe.recipe != InstallRecipe.WHEEL:
             continue
@@ -280,7 +283,11 @@ def installed_connector_recipes() -> tuple[PackageRecipe, ...]:
     return tuple(recipes)
 
 
-def build_connector_recipe(name: str, tabsdata: PackageRecipe) -> PackageRecipe:
+def build_connector_recipe(
+    name: str,
+    connectors_relative_path: Path,
+    tabsdata: PackageRecipe,
+) -> PackageRecipe:
     if tabsdata.recipe == InstallRecipe.REGISTRY:
         return PackageRecipe(
             name=name,
@@ -289,7 +296,7 @@ def build_connector_recipe(name: str, tabsdata: PackageRecipe) -> PackageRecipe:
             location=None,
         )
     location = (
-        tabsdata.location / CONNECTORS_RELATIVE_PATH / name
+        tabsdata.location / connectors_relative_path / name
         if tabsdata.location is not None
         else None
     )

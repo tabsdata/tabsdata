@@ -35,6 +35,15 @@ def read(*paths, **kwargs):
 
 TABSDATA_VERSION = read(os.path.join("assets", "manifest", "VERSION"))
 
+VENV_PY_LINE_LENGTH = 88
+
+TABSDATA_FAMILY_REPOSITORIES = (
+    "tabsdata",
+    "tabsdata-os",
+    "tabsdata-ee",
+    "tabsdata-ag",
+)
+
 
 # noinspection DuplicatedCode
 def load(module_name: str) -> ModuleType:
@@ -102,6 +111,24 @@ def gather_connectors(root: str) -> list[tuple[str, str]]:
     return sorted(connectors)
 
 
+def gather_family_ee_connectors(root: str) -> list[str]:
+    family_folder = Path(root).resolve().parent
+    repository_roots = {Path(root).resolve()} | {
+        (family_folder / repository).resolve()
+        for repository in TABSDATA_FAMILY_REPOSITORIES
+        if (family_folder / repository).is_dir()
+    }
+    connectors: set[str] = set()
+    for repository_root in repository_roots:
+        ee_connectors_folder = repository_root / "connectors.ee" / "python"
+        if not ee_connectors_folder.is_dir():
+            continue
+        for entry in os.scandir(ee_connectors_folder):
+            if entry.is_dir() and entry.name.startswith("tabsdata-"):
+                connectors.add(entry.name)
+    return sorted(connectors)
+
+
 # noinspection DuplicatedCode
 def gather_python_modules(root: str) -> list[tuple[str, str]]:
     polars_modules_folders = [
@@ -142,6 +169,19 @@ def gather_test_modules(root: str) -> set[str]:
             if entry.is_dir() and entry.name.startswith("test_"):
                 test_modules.add(entry.name)
                 logger.debug(f"🧪 Found test module {entry.name} at {entry}")
+    return test_modules
+
+
+def gather_family_test_modules(root: str) -> set[str]:
+    family_folder = Path(root).resolve().parent
+    repository_roots = {Path(root).resolve()} | {
+        (family_folder / repository).resolve()
+        for repository in TABSDATA_FAMILY_REPOSITORIES
+        if (family_folder / repository).is_dir()
+    }
+    test_modules: set[str] = set()
+    for repository_root in sorted(repository_roots):
+        test_modules |= gather_test_modules(str(repository_root))
     return test_modules
 
 
@@ -336,7 +376,9 @@ def lock_pyprojects(
 
         known_first_party_entry = isort_entry.get("known-first-party", [])
         known_first_party_entry_set = {
-            entry for entry in known_first_party_entry if isinstance(entry, str)
+            entry
+            for entry in known_first_party_entry
+            if isinstance(entry, str) and not entry.startswith("test_")
         }
 
         merged = known_first_party_entry_set | {"tabsdata", "tabsdatak"} | test_modules
@@ -377,7 +419,7 @@ def lock_pyprojects(
 
         logger.info(f"🔐️ File pyproject.toml @ {module_folder} locked!")
 
-    test_modules = gather_test_modules(str(root))
+    test_modules = gather_family_test_modules(str(root))
 
     lock_pyproject(root, test_modules)
 
@@ -439,22 +481,31 @@ def lock_connectors_venv(root: str, connectors: list[tuple[str, str]]) -> None:
 
     content = venv_py_path.read_text(encoding="utf-8")
 
-    connector_names = sorted(name for _, name in connectors)
+    def render_names(constant: str, names: list[str]) -> str:
+        if len(names) == 1:
+            single = f'{constant}: tuple[str, ...] = ("{names[0]}",)'
+            if len(single) <= VENV_PY_LINE_LENGTH:
+                return single
+        if names:
+            names_list = ",\n".join(f'    "{name}"' for name in names)
+            return f"{constant}: tuple[str, ...] = (\n{names_list},\n)"
+        return f"{constant}: tuple[str, ...] = ()"
 
-    if connector_names:
-        names_list = ",\n".join(f'    "{name}"' for name in connector_names)
-        new_list = f"TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (\n{names_list},\n)"
-    else:
-        new_list = "TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = ()"
-
-    pattern = r"TABSDATA_CONNECTORS_NAMES: tuple\[str, \.\.\.\] = \([^)]*\)"
-    new_content = re.sub(pattern, new_list, content)
+    new_content = content
+    for constant, names in (
+        ("TABSDATA_CONNECTORS_NAMES", sorted(name for _, name in connectors)),
+        ("TABSDATA_EE_CONNECTORS_NAMES", gather_family_ee_connectors(root)),
+    ):
+        pattern = rf"{constant}: tuple\[str, \.\.\.\] = \([^)]*\)"
+        new_content = re.sub(
+            pattern, lambda _match: render_names(constant, names), new_content
+        )
 
     if new_content != content:
         venv_py_path.write_text(new_content, encoding="utf-8")
-        logger.info("🔐️ File venv.py TABSDATA_CONNECTORS_NAMES locked!")
+        logger.info("🔐️ File venv.py connectors names locked!")
     else:
-        logger.debug("⚠️️ File venv.py TABSDATA_CONNECTORS_NAMES already up to date")
+        logger.debug("⚠️️ File venv.py connectors names already up to date")
 
 
 def find_base_pytest_ini(root: str) -> Path | None:

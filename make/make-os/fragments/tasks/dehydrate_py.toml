@@ -112,3 +112,26 @@ script = [
         end
     end
     ''']
+
+[tasks.__os__dehydrate_py_enterprise]
+plugin = "td-task-tracker"
+category = "11 - Development"
+private = true
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    set_env PYTHONWARNINGS ignore
+
+    ee_packages = array tabsdata-agent tabsdata-mcp
+    for ee_package in ${ee_packages}
+        installed = exec uv pip show --quiet ${ee_package}
+        if eq ${installed.code} 0
+            debug "🚀 uv pip uninstall ${ee_package}"
+            exec --fail-on-error uv pip uninstall ${ee_package}
+        else
+            debug "🔅 Enterprise package not installed: ${ee_package}"
+        end
+    end
+    ''']

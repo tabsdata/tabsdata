@@ -91,7 +91,10 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
     "tabsdata-server",
 )
 
+TABSDATA_EE_CONNECTORS_NAMES: tuple[str, ...] = ("tabsdata-mcp",)
+
 CONNECTORS_RELATIVE_PATH = Path("connectors") / "python"
+EE_CONNECTORS_RELATIVE_PATH = Path("connectors.ee") / "python"
 
 TABSDATA_ENTERPRISE_PROJECT = "tabsdata-ee"
 
@@ -129,6 +132,17 @@ class EnvironmentProfile:
     packages: tuple[PackageRecipe, ...]
 
 
+def edition_connectors(edition: TabsdataEdition) -> tuple[tuple[str, Path], ...]:
+    connectors = tuple(
+        (name, CONNECTORS_RELATIVE_PATH) for name in TABSDATA_CONNECTORS_NAMES
+    )
+    if edition == TabsdataEdition.ENTERPRISE:
+        connectors += tuple(
+            (name, EE_CONNECTORS_RELATIVE_PATH) for name in TABSDATA_EE_CONNECTORS_NAMES
+        )
+    return connectors
+
+
 @dataclass(frozen=True)
 class PythonEnvironment:
     root: Path = field(default_factory=lambda: Path(sys.prefix))
@@ -162,7 +176,11 @@ class PythonEnvironment:
 
     @staticmethod
     def expected_packages(edition: TabsdataEdition) -> tuple[str, ...]:
-        names = [TABSDATA_PACKAGE, TABSDATA_TOOLKIT_PACKAGE, *TABSDATA_CONNECTORS_NAMES]
+        names = [
+            TABSDATA_PACKAGE,
+            TABSDATA_TOOLKIT_PACKAGE,
+            *(name for name, _ in edition_connectors(edition)),
+        ]
         if edition == TabsdataEdition.ENTERPRISE:
             names.append(TABSDATA_AGENT_PACKAGE)
         return tuple(sorted(set(names), key=str.casefold))

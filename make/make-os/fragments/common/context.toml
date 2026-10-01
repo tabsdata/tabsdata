@@ -74,6 +74,10 @@ script = [
             cm_run_task hydrate
         end
         cm_run_task __os__check_hydrate_py
+        ee_connectors_py_root_folder = get_env EE_CONNECTORS_PY_ROOT_FOLDER
+        if not is_empty ${ee_connectors_py_root_folder}
+            cm_run_task __ee__check_hydrate_py
+        end
     else
         debug "🔷 _____ Skipping packages deployment (TD_WITH_DEPLOY=false)."
     end
@@ -147,10 +151,8 @@ script = [
     # debug "🔷 _____ Setting up tabsdata agent development package mode..."
     #
     # project_tabsdata_ag_root_folder = get_env PROJECT_TABSDATA_AG_ROOT_FOLDER
-    # project_tabsdata_ag_root_folder_is_defined = is_defined PROJECT_TABSDATA_AG_ROOT_FOLDER
-    # project_tabsdata_ag_root_folder_is_not_defined = not {project_tabsdata_ag_root_folder_is_defined}
     # project_tabsdata_ag_root_folder_is_blank = is_empty ${project_tabsdata_ag_root_folder}
-    # if ${project_tabsdata_ag_root_folder_is_not_defined} or ${project_tabsdata_ag_root_folder_is_blank}
+    # if ${project_tabsdata_ag_root_folder_is_blank}
     #     debug "🔅 tabsdata agent development python package location not set as env PROJECT_TABSDATA_AG_ROOT_FOLDER is not set"
     # else
     #     set_env TD_TABSDATA_AGENT_DEV_PKG ${PROJECT_TABSDATA_AG_ROOT_FOLDER}
@@ -161,5 +163,9 @@ script = [
     with_deploy = get_env TD_WITH_DEPLOY
     if eq ${with_deploy} "true"
         cm_run_task __os__check_hydrate_py
+        ee_connectors_py_root_folder = get_env EE_CONNECTORS_PY_ROOT_FOLDER
+        if not is_empty ${ee_connectors_py_root_folder}
+            cm_run_task __ee__check_hydrate_py
+        end
     end
     ''']

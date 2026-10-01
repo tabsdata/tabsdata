@@ -42,13 +42,20 @@ VALID_PROJECT_NAMES = {"tabsdata", "tabsdata-os"}
 
 TEMPLATE_FOLDER = "templates/connector/tabsdata-{c.package}"
 
+TEMPLATE_IGNORED = (
+    ".ruff_cache",
+    "__pycache__",
+    ".DS_Store",
+)
+
 CONNECTORS_FOLDER = "connectors/python"
 
-ROOT_PYPROJECT = "pyproject.toml"
 PLATFORM_PYTEST_INI = "client/platform/src/utest/python/test_tabsdatak/pytest.ini"
-RENDER_WIDTH = 1024
+RENDER_WIDTH_MAXIMUM = 100
 
-console = Console(width=RENDER_WIDTH)
+console = Console(
+    width=min(shutil.get_terminal_size().columns, RENDER_WIDTH_MAXIMUM),
+)
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 
@@ -211,11 +218,7 @@ def show_report(
             if placeholder.key in PLACEHOLDERS_HIDDEN:
                 continue
             summary.add_row(placeholder.caption, placeholder.value)
-        summary.add_row(
-            "pyproject.toml",
-            "Added test_tabsdatak to known-first-party",
-        )
-        summary.add_row("pytest.ini", f"Added {alias} marker")
+        summary.add_row("pytest.ini", f"{alias} marker registered")
         console.print(summary)
         console.print()
 
@@ -373,7 +376,11 @@ def process_template(
     target_path: Path,
     placeholders: Placeholders,
 ) -> None:
-    shutil.copytree(template_path, target_path)
+    shutil.copytree(
+        template_path,
+        target_path,
+        ignore=shutil.ignore_patterns(*TEMPLATE_IGNORED),
+    )
 
     for root, _, files in os.walk(target_path):
         top = Path(root)
@@ -427,58 +434,6 @@ def is_binary_file(file: Path) -> bool:
             return b"\x00" in chunk
     except Exception:
         return True
-
-
-def update_main_pyproject_toml(
-    root: Path, placeholders: Placeholders
-) -> tuple[bool, str]:
-    pyproject_toml_path = root / ROOT_PYPROJECT
-    if not pyproject_toml_path.exists():
-        return False, f"pyproject.toml not found at {pyproject_toml_path}"
-
-    try:
-        content = pyproject_toml_path.read_text(encoding="utf-8")
-        new_entry = "test_tabsdatak"
-
-        if f'"{new_entry}"' in content:
-            return True, f"Entry '{new_entry}' already exists in pyproject.toml"
-
-        pattern = (
-            r"(\[tool\.ruff\.lint\.isort\].*?known-first-party\s*=\s*\[)([^\]]*?)(\])"
-        )
-        match = re.search(pattern, content, re.DOTALL)
-
-        if not match:
-            return (
-                False,
-                "Could not find [tool.ruff.lint.isort] "
-                "known-first-party in pyproject.toml",
-            )
-
-        prefix = match.group(1)
-        entries_string = match.group(2)
-        suffix = match.group(3)
-
-        entries = re.findall(r'"([^"]+)"', entries_string)
-
-        entries.append(new_entry)
-        entries.sort()
-
-        new_entries_string = "\n" + "\n".join(f'    "{e}",' for e in entries) + "\n"
-
-        new_content = (
-            content[: match.start()]
-            + prefix
-            + new_entries_string
-            + suffix
-            + content[match.end() :]
-        )
-
-        pyproject_toml_path.write_text(new_content, encoding="utf-8")
-        return True, f"Added '{new_entry}' to pyproject.toml known-first-party"
-
-    except Exception as e:
-        return False, f"Failed to update pyproject.toml: {e}"
 
 
 def update_main_pytest_ini(root: Path, placeholders: Placeholders) -> tuple[bool, str]:
@@ -554,7 +509,7 @@ def generate_connector(
     root: Path,
     verbose: bool = False,
 ) -> tuple[bool, str]:
-    total_steps = 5
+    total_steps = 4
 
     if verbose:
         show_step(1, total_steps, "Validating project root...")
@@ -597,13 +552,7 @@ def generate_connector(
         return False, f"Failed to generate connector: {exception}"
 
     if verbose:
-        show_step(4, total_steps, "Updating pyproject.toml...")
-    success, message = update_main_pyproject_toml(root, placeholders)
-    if not success:
-        return False, message
-
-    if verbose:
-        show_step(5, total_steps, "Updating pytest.ini...")
+        show_step(4, total_steps, "Updating pytest.ini...")
     success, message = update_main_pytest_ini(root, placeholders)
     if not success:
         return False, message
