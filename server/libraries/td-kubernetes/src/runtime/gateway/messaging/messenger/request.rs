@@ -32,19 +32,23 @@ pub(crate) trait WorkerStartRequest {
     fn collection(&self) -> String;
     fn connection_id(&self) -> Option<String>;
     fn connection(&self) -> Option<String>;
+    fn function_id(&self) -> String;
     fn function(&self) -> String;
 
     fn connection_class(&self) -> Option<String> {
         self.connection().map(conn_class)
     }
 
-    fn custom_labels(&self) -> Vec<(String, String)>;
+    fn custom_labels(&self) -> Vec<(String, String)> {
+        Vec::new()
+    }
 
     fn labels(&self) -> Vec<(String, String)> {
         let mut labels = vec![
             (LABEL_PROJECT_ID.to_owned(), self.project_id()),
             (LABEL_COLLECTION_ID.to_owned(), self.collection_id()),
             (LABEL_COLLECTION.to_owned(), self.collection()),
+            (LABEL_FUNCTION_ID.to_owned(), self.function_id()),
             (LABEL_FUNCTION.to_owned(), self.function()),
         ];
         if let Some(project) = self.project() {
@@ -114,12 +118,12 @@ impl WorkerStartRequest for FunctionStartRequest {
         self.connection.as_ref().map(ToString::to_string)
     }
 
-    fn function(&self) -> String {
-        self.function.to_string()
+    fn function_id(&self) -> String {
+        self.function_id.to_string()
     }
 
-    fn custom_labels(&self) -> Vec<(String, String)> {
-        vec![(LABEL_FUNCTION_ID.to_owned(), self.function_id.to_string())]
+    fn function(&self) -> String {
+        self.function.to_string()
     }
 }
 
@@ -170,6 +174,10 @@ impl WorkerStartRequest for StageTriggerStartRequest {
 
     fn connection(&self) -> Option<String> {
         self.connection.as_ref().map(ToString::to_string)
+    }
+
+    fn function_id(&self) -> String {
+        self.function_id.to_string()
     }
 
     fn function(&self) -> String {
@@ -231,6 +239,10 @@ impl WorkerStartRequest for CronStartRequest {
 
     fn connection(&self) -> Option<String> {
         self.connection.as_ref().map(ToString::to_string)
+    }
+
+    fn function_id(&self) -> String {
+        self.function_id.to_string()
     }
 
     fn function(&self) -> String {

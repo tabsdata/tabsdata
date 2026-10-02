@@ -110,6 +110,7 @@ pub(crate) fn cron_trigger_start_message(
                 collection: cron_trigger_worker.collection.clone(),
                 connection_id: cron_trigger_worker.connection_id,
                 connection: cron_trigger_worker.connection.clone(),
+                function_id: cron_trigger_worker.function_id,
                 function_version_id: cron_trigger_worker.base.base.function_version_id.clone(),
                 function: cron_trigger_worker.function.clone(),
                 schedule: cron_config.mask,

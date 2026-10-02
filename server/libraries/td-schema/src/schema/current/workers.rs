@@ -183,6 +183,7 @@ impl Entity for Defs {
                 .expr_as(Expr::col((CollectionsResolved, Collections::ConnectionId)), Alias::new("connection_id"))
                 .expr_as(Expr::col((Connections::Table, Connections::Kind)), Alias::new("connection"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
+                .expr_as(Expr::col((Functions::Table, Functions::FunctionId)), Alias::new("function_id"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .expr_as(Expr::col((Functions::Table, Functions::Enabled)), Alias::new("enabled"))
                 .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))

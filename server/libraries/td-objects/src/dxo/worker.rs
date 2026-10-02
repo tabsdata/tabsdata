@@ -5,7 +5,7 @@
 use crate::dxo::yaml::WorkerOutput;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, Enabled, Ended,
-    ExecutionId, ExecutionName, FunctionName, FunctionVersionId, LogicalFunctionRunId,
+    ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, LogicalFunctionRunId,
     LogsCastNumber, OfFunction, Patch, PhysicalFunctionRunId, ProjectId, ProjectName,
     SizeThreshold, Started, TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerId,
     WorkerMessageStatus, WorkerStatus, WorkerType,
@@ -79,6 +79,7 @@ pub struct WorkerDBWithNames {
     pub connection_id: Option<ConnectionId>,
     pub connection: Option<ConnectionKind>,
     pub execution: Option<ExecutionName>,
+    pub function_id: FunctionId,
     pub function: FunctionName,
     pub enabled: OfFunction<Enabled>,
     // Patch the attempt's PFR ran (NULL = head), from physical_function_runs.

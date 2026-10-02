@@ -116,9 +116,9 @@ pub(crate) fn build_worker_run_kit(
         };
 
     Ok(FunctionRunKit {
-        main_configmap: build_configmap(&main_name, namespace, config_data),
-        main_secret: build_secret(&main_name, namespace, secret_data),
-        latch_configmap: build_configmap(&latch_name, namespace, latch_data),
+        main_configmap: build_configmap(&main_name, namespace, &labels, config_data),
+        main_secret: build_secret(&main_name, namespace, &labels, secret_data),
+        latch_configmap: build_configmap(&latch_name, namespace, &labels, latch_data),
         common_envfrom,
         connection_configmap_name,
         connection_secret_name,
@@ -364,28 +364,40 @@ fn insert_responder_secrets(data: &mut BTreeMap<String, ByteString>, responder: 
     );
 }
 
-fn build_configmap(name: &str, namespace: &str, data: BTreeMap<String, String>) -> ConfigMap {
+fn build_configmap(
+    name: &str,
+    namespace: &str,
+    labels: &[(String, String)],
+    data: BTreeMap<String, String>,
+) -> ConfigMap {
     ConfigMap {
-        metadata: ObjectMeta {
-            name: Some(name.to_owned()),
-            namespace: Some(namespace.to_owned()),
-            ..Default::default()
-        },
+        metadata: build_metadata(name, namespace, labels),
         data: Some(data),
         ..Default::default()
     }
 }
 
-fn build_secret(name: &str, namespace: &str, data: BTreeMap<String, ByteString>) -> Secret {
+fn build_secret(
+    name: &str,
+    namespace: &str,
+    labels: &[(String, String)],
+    data: BTreeMap<String, ByteString>,
+) -> Secret {
     Secret {
-        metadata: ObjectMeta {
-            name: Some(name.to_owned()),
-            namespace: Some(namespace.to_owned()),
-            ..Default::default()
-        },
+        metadata: build_metadata(name, namespace, labels),
         data: Some(data),
         ..Default::default()
     }
+}
+
+fn build_metadata(name: &str, namespace: &str, labels: &[(String, String)]) -> ObjectMeta {
+    let mut metadata = ObjectMeta {
+        name: Some(name.to_owned()),
+        namespace: Some(namespace.to_owned()),
+        ..Default::default()
+    };
+    apply_labels(&mut metadata, labels);
+    metadata
 }
 
 fn envfrom_configmap(name: &str) -> EnvFromSource {
@@ -409,3 +421,6 @@ fn envfrom_secret(name: &str, prefix: &str) -> EnvFromSource {
         config_map_ref: None,
     }
 }
+
+#[cfg(test)]
+mod tests;

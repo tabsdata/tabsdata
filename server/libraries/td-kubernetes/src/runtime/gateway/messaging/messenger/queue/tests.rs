@@ -131,6 +131,7 @@ fn stream_publisher_start_routes_by_worker_name() {
                 connection: Some(
                     ConnectionKind::try_from("tabsdatak.conn.mysql:MySQLSrcConn").unwrap(),
                 ),
+                function_id: FunctionId::default(),
                 function_version_id: FunctionVersionId::try_from("fv20260101-0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
             }),
@@ -190,6 +191,7 @@ fn cron_publisher_start_routes_by_worker_name() {
                 connection: Some(
                     ConnectionKind::try_from("tabsdatak.conn.mysql:MySQLSrcConn").unwrap(),
                 ),
+                function_id: FunctionId::default(),
                 function_version_id: FunctionVersionId::try_from("fv20260101-0000000001").unwrap(),
                 function: FunctionName::try_from("function").unwrap(),
                 schedule: CronMask::try_from("* * * * *").unwrap(),

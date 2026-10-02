@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use td_common::worker::{Callback, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, FunctionName,
+    CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, FunctionId, FunctionName,
     FunctionVersionId, ProjectId, ProjectName, WorkerId,
 };
 
@@ -48,6 +48,8 @@ pub struct CronStartRequest {
     pub connection_id: Option<ConnectionId>,
     /// Type of the collection's connection, as its Conn class.
     pub connection: Option<ConnectionKind>,
+    /// Function id of the function being run.
+    pub function_id: FunctionId,
     /// Function version id of the function being run.
     pub function_version_id: FunctionVersionId,
     /// Function name of the function being run.

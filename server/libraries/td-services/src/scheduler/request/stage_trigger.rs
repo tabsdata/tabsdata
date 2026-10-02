@@ -135,6 +135,7 @@ pub(crate) fn stage_trigger_start_message(
                 collection: stage_trigger_worker.collection.clone(),
                 connection_id: stage_trigger_worker.connection_id,
                 connection: stage_trigger_worker.connection.clone(),
+                function_id: stage_trigger_worker.function_id,
                 function_version_id: stage_trigger_worker.base.base.function_version_id.clone(),
                 function: stage_trigger_worker.function.clone(),
             }),

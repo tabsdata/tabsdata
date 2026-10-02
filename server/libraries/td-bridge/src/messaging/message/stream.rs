@@ -5,8 +5,8 @@
 use serde::{Deserialize, Serialize};
 use td_common::worker::{Callback, Decorator, WorkerName};
 use td_objects::types::basic::{
-    CollectionId, CollectionName, ConnectionId, ConnectionKind, FunctionName, FunctionVersionId,
-    ProjectId, ProjectName, WorkerId,
+    CollectionId, CollectionName, ConnectionId, ConnectionKind, FunctionId, FunctionName,
+    FunctionVersionId, ProjectId, ProjectName, WorkerId,
 };
 
 #[allow(clippy::large_enum_variant)]
@@ -43,6 +43,8 @@ pub struct StageTriggerStartRequest {
     pub connection_id: Option<ConnectionId>,
     /// Type of the collection's connection, as its Conn class.
     pub connection: Option<ConnectionKind>,
+    /// Function id of the function being run.
+    pub function_id: FunctionId,
     /// Function version id of the function being run.
     pub function_version_id: FunctionVersionId,
     /// Function name of the function being run.
