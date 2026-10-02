@@ -19,8 +19,8 @@ from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.db2 import (
     CommitSeqPosition,
-    Db2CdcStreamSrcConn,
     Db2CdcStreamSrc,
+    Db2CdcStreamSrcConn,
     TableCommitSeqPosition,
     TimestampPosition,
 )
@@ -77,7 +77,7 @@ def test_run_config_uses_defaults_when_no_src_cfg():
     assert isinstance(cfg, CdcRunConfig)
     assert cfg.buffer_max_rows == 10_000
     assert cfg.buffer_max_secs == 60
-    assert cfg.poll_interval_seconds == 1
+    assert cfg.poll_idle_secs == 1
     assert cfg.max_large_text_length == 1024
 
 
@@ -86,14 +86,14 @@ def test_run_config_picks_up_src_cfg_overrides():
         src_cfg={
             "tabsdata.cdc.buffer.max_rows": 5,
             "tabsdata.cdc.buffer.max_secs": 30,
-            "tabsdata.cdc.poll_interval_seconds": 2,
+            "tabsdata.cdc.poll.idle_secs": 2,
             "tabsdata.cdc.max_large_text_length": 4096,
         },
     )
     cfg = _build_cdc_run_config(src)
     assert cfg.buffer_max_rows == 5
     assert cfg.buffer_max_secs == 30
-    assert cfg.poll_interval_seconds == 2
+    assert cfg.poll_idle_secs == 2
     assert cfg.max_large_text_length == 4096
 
 
@@ -141,6 +141,20 @@ def test_a_cdc_limit_that_is_not_positive_is_rejected(key):
         _src(src_cfg={key: 0})
 
 
+def test_a_zero_poll_max_secs_is_rejected():
+    with pytest.raises(Exception, match="must be a positive whole number"):
+        _src(src_cfg={"tabsdata.cdc.poll.max_secs": 0})
+
+
+def test_a_negative_poll_idle_secs_is_rejected():
+    with pytest.raises(Exception, match="whole number of zero or more"):
+        _src(src_cfg={"tabsdata.cdc.poll.idle_secs": -1})
+
+
+def test_a_zero_poll_idle_secs_is_accepted():
+    assert _build_cdc_run_config(_src(src_cfg={"tabsdata.cdc.poll.idle_secs": 0})).poll_idle_secs == 0
+
+
 def test_run_config_logging_level_default_is_error():
     import logging
     cfg = _build_cdc_run_config(_src())
@@ -181,7 +195,7 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
 def test_build_ingester_constructs_with_timeout_and_fetch_size():
     src = _src(
         src_cfg={
-            "db2.cdc.blocking_timeout_seconds": 7,
+            "tabsdata.cdc.poll.max_secs": 7,
             "tabsdata.cdc.fetch_size": 5000,
         },
     )
@@ -198,7 +212,7 @@ def test_build_ingester_constructs_with_timeout_and_fetch_size():
     assert kw["conn"] is conn
     assert kw["tables"] == ["CDSCHEMA.USERS_CD", "CDSCHEMA.ORDERS_CD"]
     assert kw["start_from"] == "tail"
-    assert kw["blocking_timeout_seconds"] == 7
+    assert kw["poll_max_secs"] == 7
     assert kw["fetch_size"] == 5000
     assert ingester == "ingester-instance"
 
@@ -212,8 +226,8 @@ def test_build_ingester_defaults_when_no_src_cfg():
         Db2CdcStreamSrcPlugin().build_ingester(_conn(), src)
 
     kw = mock_ingester_cls.call_args.kwargs
-    # DEFAULT_BLOCKING_TIMEOUT_SECONDS from common-sql constants.
-    assert kw["blocking_timeout_seconds"] == 1
+    # DEFAULT_POLL_MAX_SECS from common-sql constants.
+    assert kw["poll_max_secs"] == 1
     # DEFAULT_FETCH_SIZE from common-sql constants.
     assert kw["fetch_size"] == 100_000
 

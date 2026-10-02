@@ -11,7 +11,8 @@ from tabsdatak.conn.common._stream.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
-    DEFAULT_POLL_INTERVAL_SECONDS,
+    DEFAULT_POLL_IDLE_SECS,
+    DEFAULT_POLL_MAX_SECS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
@@ -26,5 +27,6 @@ class StreamRunConfig:
     trigger_max_rows: int | None = DEFAULT_TRIGGER_MAX_ROWS
     trigger_max_bytes: int | None = DEFAULT_TRIGGER_MAX_BYTES
     trigger_max_secs: int = DEFAULT_TRIGGER_MAX_SECS
-    poll_interval_seconds: int = DEFAULT_POLL_INTERVAL_SECONDS
+    poll_max_secs: int = DEFAULT_POLL_MAX_SECS
+    poll_idle_secs: int = DEFAULT_POLL_IDLE_SECS
     logging_level: int = logging.ERROR

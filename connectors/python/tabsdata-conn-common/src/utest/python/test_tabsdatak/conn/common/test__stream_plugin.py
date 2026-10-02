@@ -101,8 +101,9 @@ class FakeBuffer:
     def reset_timer(self) -> None:
         pass
 
-    def add_all(self, records) -> None:
+    def add_all(self, records) -> int:
         self.processed += 1
+        return len(list(records))
 
     def due(self) -> bool:
         return False
@@ -180,7 +181,7 @@ class Plugin(PipelineStreamSrcPlugin):
 
 
 def cfg() -> StreamRunConfig:
-    return StreamRunConfig(poll_interval_seconds=0)
+    return StreamRunConfig(poll_idle_secs=0)
 
 
 def patch_sentinels(monkeypatch, disk, buffer):
@@ -318,6 +319,36 @@ def test_stream_threshold_flush_stages_once(monkeypatch):
     assert len(ctx.staged) == 1
 
 
+class WaitingSignal(StopSignal):
+    def __init__(self) -> None:
+        super().__init__()
+        self.waits: list[float] = []
+
+    def wait(self, timeout: float) -> bool:
+        self.waits.append(timeout)
+        return False
+
+
+def test_the_loop_rests_only_after_a_poll_that_found_nothing(monkeypatch):
+    class Trickle(FakeIngester):
+        def __init__(self):
+            super().__init__()
+            self.batches = [["a", "b"], [], ["c"], []]
+
+        def poll_changes(self, session):
+            return self.batches.pop(0)
+
+    disk = FakeDisk(manifest=[[]])
+    patch_sentinels(monkeypatch, disk, FakeBuffer())
+    signal = WaitingSignal()
+    monkeypatch.setattr(_plugin.StopSignal, "install", lambda: signal)
+    ctx = FakeCtx(active_values=[True, True, True, True, False])
+
+    Plugin().stream(ctx=ctx, ingester=Trickle(), cfg=StreamRunConfig(poll_idle_secs=7))
+
+    assert signal.waits == [7, 7]
+
+
 def disk_arguments(monkeypatch, disk) -> dict:
     arguments: dict = {}
 
@@ -353,7 +384,7 @@ def test_stream_hands_the_disk_sentinel_its_thresholds(monkeypatch):
             trigger_max_rows=7,
             trigger_max_bytes=11,
             trigger_max_secs=600,
-            poll_interval_seconds=0,
+            poll_idle_secs=0,
         ),
     )
 

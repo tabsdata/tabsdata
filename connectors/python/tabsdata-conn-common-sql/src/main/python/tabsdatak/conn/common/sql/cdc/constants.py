@@ -82,8 +82,6 @@ CDC_DATA_ROW_NEW = "@td.cdc.data.row.new"
 CDC_DATA_MAP_OLD = "@td.cdc.data.map.old"
 CDC_DATA_MAP_NEW = "@td.cdc.data.map.new"
 
-DEFAULT_BLOCKING_TIMEOUT_SECONDS = 1
-
 DEFAULT_MAX_LARGE_TEXT_LENGTH = 1024
 
 CDC_INITIAL_LOAD_TX = "initial-load"

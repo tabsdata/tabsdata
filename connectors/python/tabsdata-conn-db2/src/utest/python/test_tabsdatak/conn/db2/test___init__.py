@@ -9,7 +9,6 @@ import typing
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
@@ -31,12 +30,13 @@ from tabsdatak.conn.db2 import (
     TimestampPosition,
     UriSpec,
 )
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.db2.error import (
-    Db2ValidateException,
     Db2ErrorCode,
+    Db2ValidateException,
 )
-
+from tabsdatak.error import TabsdataException
 
 pytestmark = pytest.mark.db2
 
@@ -402,11 +402,11 @@ def test_db2_cdc_stream_src_rejects_unknown_src_cfg_key():
 def test_db2_cdc_stream_src_accepts_known_src_cfg_keys():
     src = _cdc_stream_src(
         src_cfg={
-            "db2.cdc.blocking_timeout_seconds": 5,
+            "tabsdata.cdc.poll.max_secs": 5,
             "tabsdata.cdc.fetch_size": 5000,
             "db2.cdc.logging_level": 20,
             "tabsdata.cdc.buffer.max_rows": 1000,
-            "tabsdata.cdc.poll_interval_seconds": 2,
+            "tabsdata.cdc.poll.idle_secs": 2,
         },
     )
     assert src.src_cfg["tabsdata.cdc.buffer.max_rows"] == 1000

@@ -267,8 +267,8 @@ class KafkaStreamSrcConn(Conn):
 # one batch.
 
 SrcCfgKey: TypeAlias = Literal[
-    "kafka.consume_timeout_seconds",
-    "kafka.connection_timeout_seconds",
+    "tabsdata.kafka.poll.max_secs",
+    "kafka.connect_timeout_secs",
     "kafka.logging_level",
     "tabsdata.kafka.buffer.max_rows",
     "tabsdata.kafka.buffer.max_bytes",
@@ -288,6 +288,8 @@ SrcCfgSpec: TypeAlias = Annotated[
         "tabsdata.kafka.buffer.max_secs",
         "tabsdata.kafka.trigger.max_rows",
         "tabsdata.kafka.trigger.max_bytes",
+        "tabsdata.kafka.poll.max_secs",
+        "kafka.connect_timeout_secs",
     ),
 ]
 
@@ -329,11 +331,12 @@ class KafkaStreamSrc(StreamSrc):
         dlq_topic: Optional dead-letter topic that deserialization
             failures are produced to.
         src_cfg: Optional connector config over the keys
-            `kafka.consume_timeout_seconds`,
-            `kafka.connection_timeout_seconds`, `kafka.logging_level`,
-            the buffer limits `tabsdata.kafka.buffer.max_rows`
-            (default 10000), `tabsdata.kafka.buffer.max_bytes` (raw
-            payload bytes, off by default) and
+            `tabsdata.kafka.poll.max_secs` (how long one poll waits for
+            messages, default 2), `kafka.connect_timeout_secs` (default
+            16), `kafka.logging_level`, the buffer limits
+            `tabsdata.kafka.buffer.max_rows` (default 10000),
+            `tabsdata.kafka.buffer.max_bytes` (raw payload bytes, off by
+            default) and
             `tabsdata.kafka.buffer.max_secs` (default 60), and the
             trigger limits `tabsdata.kafka.trigger.max_secs` (default
             60, at least 60), `tabsdata.kafka.trigger.max_rows` and

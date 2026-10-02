@@ -32,8 +32,8 @@ from tabsdatak.conn.db2._cdc_impl import (
     CommitSeqOffset,
     Db2Dialect,
     MatchedColumns,
-    SqlReplicaIngester,
     RegistrationPositions,
+    SqlReplicaIngester,
     SqlReplicaInitialLoadSession,
     commitseq_lsn,
     match_cd_columns,
@@ -41,7 +41,6 @@ from tabsdatak.conn.db2._cdc_impl import (
 )
 from tabsdatak.conn.db2.error import Db2ErrorCode
 from tabsdatak.error import TabsdataException
-
 
 # =====================================================================
 # Db2Dialect
@@ -863,7 +862,7 @@ def test_rows_pruned_while_a_poll_reads_them_fail_the_poll(monkeypatch):
         "_query_table_changes",
         lambda **kwargs: iter([read.append(kwargs["commitseq"]) or "change"]),
     )
-    bi._blocking_timeout_seconds = 60
+    bi._poll_max_secs = 60
     with pytest.raises(TabsdataException) as ei:
         list(bi.poll_changes(session))
     assert ei.value.api_error is Db2ErrorCode.DB2_32
@@ -894,7 +893,7 @@ def test_a_bounded_poll_reads_up_to_the_bound_once_and_stands_at_it(monkeypatch)
             [read.append((kwargs["commitseq"], kwargs["watermark"])) or "change"]
         ),
     )
-    bi._blocking_timeout_seconds = 60
+    bi._poll_max_secs = 60
     bound = CommitSeqOffset(commits={"ASN.T_CD": end, "ASN.Q_CD": quiet_end})
     bi.bound_stream(bound)
     assert not bi.stream_bound_reached()
@@ -909,7 +908,7 @@ def test_a_bounded_poll_reads_up_to_the_bound_once_and_stands_at_it(monkeypatch)
 def test_a_poll_capture_still_covers_yields_its_changes(monkeypatch):
     bi, session = _resumed(monkeypatch, {"ASN.T_CD": POSITION}, [_registrations("T_CD")])
     monkeypatch.setattr(bi, "_query_table_watermarks", lambda c: {})
-    bi._blocking_timeout_seconds = 0.05
+    bi._poll_max_secs = 0.05
     assert list(bi.poll_changes(session)) == []
     assert any("ibmsnap_register r" in sql for sql in session.engine.executed())
 
@@ -932,7 +931,7 @@ def _two_tables(monkeypatch, *, captured, watermarks):
     monkeypatch.setattr(bi, "_extract_raw_schema", lambda *a: ())
     bi._schema_registry = MagicMock()
     monkeypatch.setattr(bi, "_query_table_changes", lambda **kwargs: iter(["change"]))
-    bi._blocking_timeout_seconds = 0.05
+    bi._poll_max_secs = 0.05
     return bi, session
 
 

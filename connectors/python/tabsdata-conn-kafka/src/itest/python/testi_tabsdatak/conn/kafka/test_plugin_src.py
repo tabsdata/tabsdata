@@ -49,7 +49,7 @@ PROTOBUF_MESSAGE = "PersonV1"
 PLUGIN_TIMEOUT_SECONDS = 60.0
 CAPTURE_TIMEOUT_SECONDS = 45.0
 STREAM_CFG = {
-    "kafka.consume_timeout_seconds": 2,
+    "tabsdata.kafka.poll.max_secs": 2,
     "tabsdata.kafka.trigger.max_secs": unsafe_seconds(1),
 }
 

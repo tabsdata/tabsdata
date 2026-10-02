@@ -197,8 +197,8 @@ _SRC_CFG = {
     "tabsdata.cdc.buffer.max_secs": 1,
     "tabsdata.cdc.trigger.max_rows": 1,
     "tabsdata.cdc.trigger.max_secs": unsafe_seconds(1),
-    "tabsdata.cdc.poll_interval_seconds": 1,
-    "db2.cdc.blocking_timeout_seconds": 1,
+    "tabsdata.cdc.poll.idle_secs": 1,
+    "tabsdata.cdc.poll.max_secs": 1,
 }
 
 

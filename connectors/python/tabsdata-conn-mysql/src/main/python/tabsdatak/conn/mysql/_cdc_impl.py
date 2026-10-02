@@ -77,6 +77,9 @@ from sqlalchemy.sql.elements import quoted_name
 from sqlalchemy.types import LargeBinary, Text
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream.constants import DEFAULT_POLL_MAX_SECS
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
 from tabsdatak.conn.common.sql.cdc._model import (
@@ -87,7 +90,6 @@ from tabsdatak.conn.common.sql.cdc._model import (
     TrackedTable,
 )
 from tabsdatak.conn.common.sql.cdc.constants import (
-    DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DOT,
     CdcOperation,
 )
@@ -698,13 +700,13 @@ class BinlogIngester(CdcIngester):
         tables: QualifiedTablesSpec,
         start_from: _InternalStartFromSpec,
         server_id: int,
-        blocking_timeout_seconds: int = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+        poll_max_secs: int = DEFAULT_POLL_MAX_SECS,
     ):
         super().__init__(tables=tables)
         self._conn = conn
         self._start_from = start_from
         self._server_id = server_id
-        self._blocking_timeout_seconds = blocking_timeout_seconds
+        self._poll_max_secs = poll_max_secs
         # ``_mark`` advances as GTID events flow past; ``_base_offset``
         # is the snapshot taken at stream init for the runner.
         self._mark: GtidOffset | None = None
@@ -797,7 +799,7 @@ class BinlogIngester(CdcIngester):
         }
         if url.database:
             settings["db"] = url.database
-        settings["read_timeout"] = int(self._blocking_timeout_seconds)
+        settings["read_timeout"] = int(self._poll_max_secs)
         return settings
 
     # ------------------------------------------------------------------
@@ -810,9 +812,7 @@ class BinlogIngester(CdcIngester):
             "server_id": self._server_id,
             "blocking": True,
             "resume_stream": True,
-            "slave_heartbeat": min(
-                self._blocking_timeout_seconds, HEARTBEAT_INTERVAL_SECONDS
-            ),
+            "slave_heartbeat": min(self._poll_max_secs, HEARTBEAT_INTERVAL_SECONDS),
             "only_events": [
                 WriteRowsEvent,
                 UpdateRowsEvent,
@@ -1207,7 +1207,7 @@ class BinlogIngester(CdcIngester):
         # before returning control to the runner. Without it,
         # blocking=True + a stream that's idle would hang the
         # runner forever.
-        deadline = time.monotonic() + self._blocking_timeout_seconds
+        deadline = time.monotonic() + self._poll_max_secs
         gtid: str | None = self._carry_gtid
         self._carry_gtid = None
         offset = self._begin_transaction(gtid) if gtid is not None else None
@@ -1289,7 +1289,7 @@ class BinlogIngester(CdcIngester):
         # XidEvent / QueryEvent("COMMIT") arrives, so every yielded
         # row carries the *commit* timestamp (not the row's own
         # binlog-event timestamp).
-        deadline = time.monotonic() + self._blocking_timeout_seconds
+        deadline = time.monotonic() + self._poll_max_secs
         gtid: str | None = self._carry_gtid
         self._carry_gtid = None
         offset = self._begin_transaction(gtid) if gtid is not None else None

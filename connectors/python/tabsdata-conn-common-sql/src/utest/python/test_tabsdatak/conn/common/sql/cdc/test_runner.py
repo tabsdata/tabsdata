@@ -25,7 +25,7 @@ from tabsdatak.conn.common._stream.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
-    DEFAULT_POLL_INTERVAL_SECONDS,
+    DEFAULT_POLL_IDLE_SECS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
@@ -215,9 +215,9 @@ def _patch_sentinels(monkeypatch, disk, buffer):
 
 
 def _cfg(**overrides) -> CdcRunConfig:
-    # poll_interval_seconds=0 so the loop's stop_signal.wait() returns
+    # poll_idle_secs=0 so the loop's stop_signal.wait() returns
     # immediately and the test never blocks.
-    base = dict(poll_interval_seconds=0)
+    base = dict(poll_idle_secs=0)
     base.update(overrides)
     return CdcRunConfig(**base)
 
@@ -578,7 +578,7 @@ def test_cdc_run_config_uses_package_defaults():
     assert cfg.trigger_max_rows == DEFAULT_TRIGGER_MAX_ROWS
     assert cfg.trigger_max_bytes == DEFAULT_TRIGGER_MAX_BYTES
     assert cfg.trigger_max_secs == DEFAULT_TRIGGER_MAX_SECS
-    assert cfg.poll_interval_seconds == DEFAULT_POLL_INTERVAL_SECONDS
+    assert cfg.poll_idle_secs == DEFAULT_POLL_IDLE_SECS
     assert cfg.max_large_text_length == DEFAULT_MAX_LARGE_TEXT_LENGTH
     assert cfg.initial_load is False
     assert cfg.fetch_size == DEFAULT_FETCH_SIZE

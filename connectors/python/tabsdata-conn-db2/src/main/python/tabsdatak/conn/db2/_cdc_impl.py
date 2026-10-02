@@ -45,6 +45,8 @@ from sqlalchemy import text
 from sqlalchemy.sql.elements import quoted_name
 from sqlalchemy.types import CLOB, LargeBinary, TypeEngine
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream.constants import DEFAULT_POLL_MAX_SECS
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
 from tabsdatak.conn.common.sql.cdc._model import (
@@ -56,7 +58,6 @@ from tabsdatak.conn.common.sql.cdc._model import (
     TrackedTable,
 )
 from tabsdatak.conn.common.sql.cdc.constants import (
-    DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DEFAULT_FETCH_SIZE,
     DOT,
     CdcOperation,
@@ -804,13 +805,13 @@ class SqlReplicaIngester(CdcIngester):
         conn: Any,
         tables: QualifiedTablesSpec,
         start_from: _InternalStartFromSpec,
-        blocking_timeout_seconds: int = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+        poll_max_secs: int = DEFAULT_POLL_MAX_SECS,
         fetch_size: int = DEFAULT_FETCH_SIZE,
     ):
         super().__init__(tables=tables)
         self._conn = conn
         self._start_from = start_from
-        self._blocking_timeout_seconds = blocking_timeout_seconds
+        self._poll_max_secs = poll_max_secs
         self._fetch_size = fetch_size
         self._mark: CommitSeqOffset | None = None
         self._base_offset: CommitSeqOffset | None = None
@@ -1342,7 +1343,7 @@ class SqlReplicaIngester(CdcIngester):
             self._init_reader(session)
         bound = self._bound
         qualified: str | None = None
-        deadline = time.monotonic() + self._blocking_timeout_seconds
+        deadline = time.monotonic() + self._poll_max_secs
         with session.connect() as connection:
             while True:
                 remaining = deadline - time.monotonic()

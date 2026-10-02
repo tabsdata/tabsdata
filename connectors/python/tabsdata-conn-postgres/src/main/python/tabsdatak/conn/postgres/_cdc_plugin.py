@@ -34,7 +34,8 @@ from tabsdatak.conn.common._stream.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
-    DEFAULT_POLL_INTERVAL_SECONDS,
+    DEFAULT_POLL_IDLE_SECS,
+    DEFAULT_POLL_MAX_SECS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
@@ -42,7 +43,6 @@ from tabsdatak.conn.common._stream.constants import (
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
 from tabsdatak.conn.common.sql.cdc.constants import (
-    DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_FETCH_SIZE,
     DEFAULT_INITIAL_LOAD_MAX_WINDOW_CHANGES,
@@ -69,7 +69,7 @@ if TYPE_CHECKING:
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
 # schema-construction time. ``_build_cdc_run_config`` reads from
 # src_cfg and falls back to common-sql defaults.
-_KEY_CDC_BLOCKING_TIMEOUT: CdcSrcCfgKey = "postgres.cdc.blocking_timeout_seconds"
+_KEY_CDC_POLL_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.poll.max_secs"
 _KEY_CDC_LOGGING_LEVEL: CdcSrcCfgKey = "postgres.cdc.logging_level"
 _KEY_CDC_WAL2JSON_FORMAT_VERSION: CdcSrcCfgKey = "postgres.cdc.wal2json_format_version"
 _KEY_CDC_UNCHANGED_LARGE_TEXT_AS_NULL: CdcSrcCfgKey = (
@@ -82,7 +82,7 @@ _KEY_CDC_BUFFER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_secs"
 _KEY_CDC_TRIGGER_MAX_ROWS: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_rows"
 _KEY_CDC_TRIGGER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_bytes"
 _KEY_CDC_TRIGGER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_secs"
-_KEY_CDC_POLL_INTERVAL: CdcSrcCfgKey = "tabsdata.cdc.poll_interval_seconds"
+_KEY_CDC_POLL_IDLE_SECS: CdcSrcCfgKey = "tabsdata.cdc.poll.idle_secs"
 _KEY_CDC_MAX_LARGE_TEXT_LENGTH: CdcSrcCfgKey = "tabsdata.cdc.max_large_text_length"
 _KEY_CDC_INITIAL_LOAD_MAX_WINDOW_CHANGES: CdcSrcCfgKey = (
     "tabsdata.cdc.initial_load.max_window_changes"
@@ -124,9 +124,8 @@ def _build_cdc_run_config(
             _KEY_CDC_TRIGGER_MAX_SECS,
             cfg.get(_KEY_CDC_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
         ),
-        poll_interval_seconds=cfg.get(
-            _KEY_CDC_POLL_INTERVAL, DEFAULT_POLL_INTERVAL_SECONDS
-        ),
+        poll_idle_secs=cfg.get(_KEY_CDC_POLL_IDLE_SECS, DEFAULT_POLL_IDLE_SECS),
+        poll_max_secs=cfg.get(_KEY_CDC_POLL_MAX_SECS, DEFAULT_POLL_MAX_SECS),
         max_large_text_length=int(
             cfg.get(_KEY_CDC_MAX_LARGE_TEXT_LENGTH, DEFAULT_MAX_LARGE_TEXT_LENGTH)
         ),
@@ -169,9 +168,9 @@ class PostgresCdcStreamSrcPlugin(
         )
 
         src_cfg = stream_src.src_cfg or {}
-        blocking_timeout = src_cfg.get(
-            _KEY_CDC_BLOCKING_TIMEOUT,
-            DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+        poll_max_secs = src_cfg.get(
+            _KEY_CDC_POLL_MAX_SECS,
+            DEFAULT_POLL_MAX_SECS,
         )
         wal2json_format = src_cfg.get(
             _KEY_CDC_WAL2JSON_FORMAT_VERSION,
@@ -186,7 +185,7 @@ class PostgresCdcStreamSrcPlugin(
             start_from=_to_internal_start_from(stream_src.start_from),
             replication_slot=stream_src.replication_slot,
             replication_slot_behavior=stream_src.replication_slot_behavior,
-            blocking_timeout_seconds=blocking_timeout,
+            poll_max_secs=poll_max_secs,
             publication_name=stream_src.publication_name,
             wal2json_format_version=int(wal2json_format),
             unchanged_large_text_as_null=unchanged_large_text_as_null,

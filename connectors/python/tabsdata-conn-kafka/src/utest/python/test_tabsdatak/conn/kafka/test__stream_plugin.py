@@ -89,8 +89,8 @@ def test_kafka_stream_src_def_cardinality_always_one():
 
 def test_run_config_defaults():
     cfg = KafkaStreamSrcPlugin().build_run_config(_src())
-    assert cfg.consume_timeout_secs == 2
-    assert cfg.connection_timeout_secs == 16
+    assert cfg.poll_max_secs == 2
+    assert cfg.connect_timeout_secs == 16
     assert cfg.trigger_max_secs == 60
     assert cfg.trigger_max_bytes is None
     assert cfg.trigger_max_rows is None
@@ -99,15 +99,15 @@ def test_run_config_defaults():
         None,
         60,
     )
-    assert cfg.poll_interval_seconds == 0
+    assert cfg.poll_idle_secs == 0
     assert cfg.logging_level == logging.ERROR
 
 
 def test_run_config_reads_the_buffer_and_trigger_keys():
     src = _src(
         src_cfg={
-            "kafka.consume_timeout_seconds": 5,
-            "kafka.connection_timeout_seconds": 30,
+            "tabsdata.kafka.poll.max_secs": 5,
+            "kafka.connect_timeout_secs": 30,
             "tabsdata.kafka.buffer.max_rows": 50,
             "tabsdata.kafka.buffer.max_bytes": 4096,
             "tabsdata.kafka.buffer.max_secs": 7,
@@ -118,8 +118,8 @@ def test_run_config_reads_the_buffer_and_trigger_keys():
         }
     )
     cfg = KafkaStreamSrcPlugin().build_run_config(src)
-    assert cfg.consume_timeout_secs == 5
-    assert cfg.connection_timeout_secs == 30
+    assert cfg.poll_max_secs == 5
+    assert cfg.connect_timeout_secs == 30
     assert cfg.trigger_max_secs == 120
     assert cfg.trigger_max_bytes == 64 * 1024 * 1024
     assert cfg.trigger_max_rows == 1000

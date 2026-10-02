@@ -25,7 +25,7 @@ from tabsdatak.conn.kafka import KafkaStreamSrcConn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._stream_impl import (
-    DEFAULT_CONNECTION_TIMEOUT_SECS,
+    DEFAULT_CONNECT_TIMEOUT_SECS,
     build_kafka_configs,
 )
 from tabsdatak.conn.kafka.error import KafkaErrorCode
@@ -106,7 +106,7 @@ class KafkaConnectionExplorer(Explorer):
         cfg = build_kafka_configs(conn=conn)
         consumer = Consumer(cfg)
         try:
-            return consumer.list_topics(timeout=DEFAULT_CONNECTION_TIMEOUT_SECS)
+            return consumer.list_topics(timeout=DEFAULT_CONNECT_TIMEOUT_SECS)
         except Exception as exc:
             raise KafkaErrorCode.KAFKA_6.exception(
                 cause=exc,

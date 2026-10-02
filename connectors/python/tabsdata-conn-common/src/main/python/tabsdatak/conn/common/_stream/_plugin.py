@@ -164,7 +164,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             disk_sentinel.reset_timer()
 
             while not stop_signal.is_set() and ctx.active:
-                buffer_sentinel.add_all(
+                polled = buffer_sentinel.add_all(
                     self.records(run, ingester.poll_changes(run.session)),
                 )
                 if buffer_sentinel.due():
@@ -172,7 +172,8 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                 if disk_sentinel.due():
                     buffer_sentinel.flush()
                     self.publish(run, ledger, disk_sentinel, buffer_sentinel)
-                stop_signal.wait(timeout=cfg.poll_interval_seconds)
+                if polled == 0:
+                    stop_signal.wait(timeout=cfg.poll_idle_secs)
             if stop_signal.is_set():
                 interrupted = True
                 logger.info("Interrupted the stream; exiting the run loop")

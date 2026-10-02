@@ -51,6 +51,9 @@ from sqlalchemy.sql.elements import quoted_name
 from sqlalchemy.types import JSON, LargeBinary, Text
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream.constants import DEFAULT_POLL_MAX_SECS
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
@@ -62,7 +65,6 @@ from tabsdatak.conn.common.sql.cdc._model import (
     TrackedTable,
 )
 from tabsdatak.conn.common.sql.cdc.constants import (
-    DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DOT,
     CdcOperation,
 )
@@ -690,7 +692,7 @@ class Wal2JsonIngester(CdcIngester):
         start_from: _InternalStartFromSpec,
         replication_slot: str,
         replication_slot_behavior: str = DEFAULT_REPLICATION_SLOT_BEHAVIOR,
-        blocking_timeout_seconds: int = DEFAULT_BLOCKING_TIMEOUT_SECONDS,
+        poll_max_secs: int = DEFAULT_POLL_MAX_SECS,
         publication_name: str | None = None,
         wal2json_format_version: int = DEFAULT_WAL2JSON_FORMAT_VERSION,
         unchanged_large_text_as_null: bool = False,
@@ -701,7 +703,7 @@ class Wal2JsonIngester(CdcIngester):
         self._start_from = start_from
         self._replication_slot = replication_slot
         self._replication_slot_behavior = replication_slot_behavior
-        self._blocking_timeout_seconds = blocking_timeout_seconds
+        self._poll_max_secs = poll_max_secs
         self._publication_name = publication_name
         self._wal2json_format_version = wal2json_format_version
         self._unchanged_large_text_as_null = unchanged_large_text_as_null
@@ -1436,7 +1438,7 @@ class Wal2JsonIngester(CdcIngester):
         self,
         _session: Any,
     ) -> Generator[CdcChange, None, None]:
-        deadline = time.monotonic() + self._blocking_timeout_seconds
+        deadline = time.monotonic() + self._poll_max_secs
         while True:
             message = self._read_next_message(
                 pending=False,
@@ -1539,9 +1541,9 @@ class Wal2JsonIngester(CdcIngester):
         self,
         _session: Any,
     ) -> Generator[CdcChange, None, None]:
-        deadline = time.monotonic() + self._blocking_timeout_seconds
+        deadline = time.monotonic() + self._poll_max_secs
         pending_timeout = time.monotonic() + (
-            self._blocking_timeout_seconds * PENDING_TIMEOUT_MULTIPLIER
+            self._poll_max_secs * PENDING_TIMEOUT_MULTIPLIER
         )
         xid: str | None = None
         timestamp: datetime | None = None

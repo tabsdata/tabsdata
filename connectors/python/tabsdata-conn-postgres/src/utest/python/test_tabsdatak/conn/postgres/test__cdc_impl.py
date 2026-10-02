@@ -11,7 +11,6 @@ domain and live in the integration tests (``test_plugin_cdc.py``)."""
 from __future__ import annotations
 
 import json
-
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
@@ -37,7 +36,6 @@ from tabsdatak.conn.postgres._cdc_impl import (
 )
 from tabsdatak.conn.postgres.error import PostgresErrorCode
 from tabsdatak.error import TabsdataException
-
 
 # =====================================================================
 # PostgresDialect
@@ -1302,7 +1300,7 @@ def _format_2_ingester(messages: list[_Message]) -> Wal2JsonIngester:
     bi = _ingester_with_tables(["public.t"])
     bi.init_schema_registry(CdcFormat())
     bi._cursor = _ReplicationCursor(messages)
-    bi._blocking_timeout_seconds = 0.05
+    bi._poll_max_secs = 0.05
     return bi
 
 

@@ -17,8 +17,8 @@ from tabsdatak.conn.common.sql.cdc import CdcStageSrc
 from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mysql import (
-    MySQLCdcStreamSrcConn,
     MySQLCdcStreamSrc,
+    MySQLCdcStreamSrcConn,
 )
 from tabsdatak.conn.mysql._cdc_plugin import (
     MYSQL_CDC_STREAM_SRC,
@@ -75,7 +75,7 @@ def test_run_config_uses_defaults_when_no_src_cfg():
     assert isinstance(cfg, CdcRunConfig)
     assert cfg.buffer_max_rows == 10_000
     assert cfg.buffer_max_secs == 60
-    assert cfg.poll_interval_seconds == 1
+    assert cfg.poll_idle_secs == 1
     assert cfg.max_large_text_length == 1024
 
 
@@ -84,14 +84,14 @@ def test_run_config_picks_up_src_cfg_overrides():
         src_cfg={
             "tabsdata.cdc.buffer.max_rows": 5,
             "tabsdata.cdc.buffer.max_secs": 30,
-            "tabsdata.cdc.poll_interval_seconds": 2,
+            "tabsdata.cdc.poll.idle_secs": 2,
             "tabsdata.cdc.max_large_text_length": 4096,
         },
     )
     cfg = _build_cdc_run_config(src)
     assert cfg.buffer_max_rows == 5
     assert cfg.buffer_max_secs == 30
-    assert cfg.poll_interval_seconds == 2
+    assert cfg.poll_idle_secs == 2
     assert cfg.max_large_text_length == 4096
 
 
@@ -141,6 +141,20 @@ def test_a_cdc_limit_that_is_not_positive_is_rejected(key):
         _src(src_cfg={key: 0})
 
 
+def test_a_zero_poll_max_secs_is_rejected():
+    with pytest.raises(Exception, match="must be a positive whole number"):
+        _src(src_cfg={"tabsdata.cdc.poll.max_secs": 0})
+
+
+def test_a_negative_poll_idle_secs_is_rejected():
+    with pytest.raises(Exception, match="whole number of zero or more"):
+        _src(src_cfg={"tabsdata.cdc.poll.idle_secs": -1})
+
+
+def test_a_zero_poll_idle_secs_is_accepted():
+    assert _build_cdc_run_config(_src(src_cfg={"tabsdata.cdc.poll.idle_secs": 0})).poll_idle_secs == 0
+
+
 def test_run_config_logging_level_default_is_error():
     import logging
     cfg = _build_cdc_run_config(_src())
@@ -180,7 +194,7 @@ def test_plugin_run_applies_logging_level_to_connector_logger():
 
 def test_build_ingester_constructs_binlog_with_server_id_and_blocking():
     src = _src(
-        src_cfg={"mysql.cdc.blocking_timeout_seconds": 7},
+        src_cfg={"tabsdata.cdc.poll.max_secs": 7},
     )
     conn = _conn()
 
@@ -196,7 +210,7 @@ def test_build_ingester_constructs_binlog_with_server_id_and_blocking():
     assert kw["tables"] == ["app.users", "app.orders"]
     assert kw["start_from"] == "tail"
     assert kw["server_id"] == 777
-    assert kw["blocking_timeout_seconds"] == 7
+    assert kw["poll_max_secs"] == 7
     assert ingester == "ingester-instance"
 
 
@@ -252,7 +266,7 @@ def test_build_ingester_translates_timestamp_start_from():
     assert kw["start_from"].ts == ts
 
 
-def test_build_ingester_blocking_timeout_falls_back_to_default():
+def test_build_ingester_poll_max_secs_falls_back_to_default():
     src = _src()  # no src_cfg
 
     with patch(
@@ -261,5 +275,5 @@ def test_build_ingester_blocking_timeout_falls_back_to_default():
         MySQLCdcStreamSrcPlugin().build_ingester(_conn(), src)
 
     kw = mock_ingester_cls.call_args.kwargs
-    # DEFAULT_BLOCKING_TIMEOUT_SECONDS from common-sql constants.
-    assert kw["blocking_timeout_seconds"] == 1
+    # DEFAULT_POLL_MAX_SECS from common-sql constants.
+    assert kw["poll_max_secs"] == 1

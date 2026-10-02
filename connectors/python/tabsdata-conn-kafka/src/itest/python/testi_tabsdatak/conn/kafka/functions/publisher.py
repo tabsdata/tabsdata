@@ -35,7 +35,7 @@ SCHEMA = json.dumps({
         schema=SCHEMA,
         src_cfg={
             "tabsdata.kafka.trigger.max_rows": len(ROWS),
-            "kafka.consume_timeout_seconds": 2,
+            "tabsdata.kafka.poll.max_secs": 2,
             "tabsdata.kafka.trigger.max_secs": unsafe_seconds(1),
         },
     ),

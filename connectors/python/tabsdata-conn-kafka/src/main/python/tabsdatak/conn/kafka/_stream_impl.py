@@ -65,8 +65,7 @@ _SASL_USERNAME_KEY = "sasl.username"
 _SASL_PASSWORD_KEY = "sasl.password"
 _GROUP_ID_KEY = "group.id"
 
-DEFAULT_CONSUME_TIMEOUT_SECS = 2
-DEFAULT_CONNECTION_TIMEOUT_SECS = 16
+DEFAULT_CONNECT_TIMEOUT_SECS = 16
 
 
 @dataclass(frozen=True)
@@ -177,14 +176,14 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
         *,
         conn: KafkaStreamSrcConn,
         stream_src: KafkaStreamSrc,
-        consume_timeout_secs: int,
-        connection_timeout_secs: int,
+        poll_max_secs: int,
+        connect_timeout_secs: int,
     ):
         super().__init__()
         self._conn = conn
         self._stream_src = stream_src
-        self._consume_timeout_secs = consume_timeout_secs
-        self._connection_timeout_secs = connection_timeout_secs
+        self._poll_max_secs = poll_max_secs
+        self._connect_timeout_secs = connect_timeout_secs
         self._consumer: Consumer | None = None
         self._dlq_producer: Producer | None = None
         self._serde: KafkaSerde | None = None
@@ -202,7 +201,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
         kafka_configs = build_kafka_configs(conn=self._conn)
         try:
             consumer = Consumer(kafka_configs)
-            consumer.list_topics(timeout=self._connection_timeout_secs)
+            consumer.list_topics(timeout=self._connect_timeout_secs)
         except Exception as exc:
             raise KafkaErrorCode.KAFKA_6.exception(
                 cause=exc,
@@ -241,7 +240,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
 
         try:
             producer = Producer(kafka_configs)
-            producer.list_topics(timeout=self._connection_timeout_secs)
+            producer.list_topics(timeout=self._connect_timeout_secs)
             return producer
         except Exception as exc:
             raise KafkaErrorCode.KAFKA_7.exception(
@@ -291,7 +290,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
         deserialize = self._serde.deserializer_with_schema_id()
         start = time.time()
         while True:
-            remaining = self._consume_timeout_secs - (time.time() - start)
+            remaining = self._poll_max_secs - (time.time() - start)
             if remaining <= 0:
                 return
             msg = session.poll(remaining)
@@ -299,8 +298,9 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
                 return
             err = msg.error()
             if err is not None:
-                logger.error("Received an error from the Kafka broker: %s", err)
-                self._send_to_dlq(msg, err)
+                if err.fatal():
+                    raise KafkaErrorCode.KAFKA_26.exception(error=err)
+                logger.warning("The Kafka consumer reported an error: %s", err)
                 continue
             try:
                 record, schema_id = deserialize(

@@ -49,7 +49,6 @@ from tabsdatak.conn.mysql._cdc_impl import (
 from tabsdatak.conn.mysql.error import MysqlErrorCode
 from tabsdatak.error import TabsdataException
 
-
 # =====================================================================
 # MySQLDialect
 # =====================================================================
@@ -706,7 +705,7 @@ def test_poll_carries_the_gtid_of_a_transaction_it_ran_out_of_time_on():
     from pymysqlreplication.row_event import WriteRowsEvent
 
     bi = _ingester_with_tables(["app.users"])
-    bi._blocking_timeout_seconds = 0
+    bi._poll_max_secs = 0
     opening = MagicMock(spec=GtidEvent)
     opening.gtid = "uuid:9475"
     bi._stream = iter([opening, MagicMock(spec=WriteRowsEvent)])
@@ -986,7 +985,7 @@ def _transactions(*gtids_and_bodies):
 @pytest.mark.parametrize("loop", ["_poll_changes_buffered", "_poll_changes_unbuffered"])
 def test_every_transaction_read_enters_the_offset(loop):
     bi = _ingester_with_tables(["app.users"])
-    bi._blocking_timeout_seconds = 60
+    bi._poll_max_secs = 60
     bi._executed = GtidSet.parse("u:1-10")
     bi._stream = iter(
         _transactions(
@@ -1003,7 +1002,7 @@ def test_every_transaction_read_enters_the_offset(loop):
 @pytest.mark.parametrize("loop", ["_poll_changes_buffered", "_poll_changes_unbuffered"])
 def test_a_transaction_from_another_source_fails_the_poll(loop):
     bi = _ingester_with_tables(["app.users"])
-    bi._blocking_timeout_seconds = 60
+    bi._poll_max_secs = 60
     bi._executed = GtidSet.parse("u:1-10")
     bi._stream = iter(_transactions(("u:11", "dml"), ("v:1", "dml")))
     with pytest.raises(TabsdataException) as ei:
@@ -1015,7 +1014,7 @@ def test_a_transaction_from_another_source_fails_the_poll(loop):
 @pytest.mark.parametrize("loop", ["_poll_changes_buffered", "_poll_changes_unbuffered"])
 def test_a_poll_ending_on_a_heartbeat_carries_its_open_transaction(loop):
     bi = _ingester_with_tables(["app.users"])
-    bi._blocking_timeout_seconds = 0
+    bi._poll_max_secs = 0
     bi._carry_gtid = "u:5"
     bi._stream = iter([_event(HeartbeatLogEvent)])
     list(getattr(bi, loop)(session=None))

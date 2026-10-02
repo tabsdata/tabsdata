@@ -9,14 +9,13 @@ import typing
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, EntityWhitelistSpec, UserPassword
 from tabsdatak.conn.mysql import (
+    DEFAULT_SERVER_ID,
     BinlogPosition,
     CredentialsSpec,
-    DEFAULT_SERVER_ID,
     DestCfgSpec,
     GtidPosition,
     IfTableExistsSpec,
@@ -32,12 +31,13 @@ from tabsdatak.conn.mysql import (
     TimestampPosition,
     UriSpec,
 )
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql.error import (
-    MySQLValidateException,
     MysqlErrorCode,
+    MySQLValidateException,
 )
-
+from tabsdatak.error import TabsdataException
 
 pytestmark = pytest.mark.mysql
 
@@ -439,10 +439,10 @@ def test_mysql_cdc_stream_src_accepts_known_src_cfg_keys():
         tables=["app.users"],
         start_from="head",
         src_cfg={
-            "mysql.cdc.blocking_timeout_seconds": 5,
+            "tabsdata.cdc.poll.max_secs": 5,
             "mysql.cdc.logging_level": 20,
             "tabsdata.cdc.buffer.max_rows": 1000,
-            "tabsdata.cdc.poll_interval_seconds": 2,
+            "tabsdata.cdc.poll.idle_secs": 2,
         },
     )
     assert src.src_cfg["tabsdata.cdc.buffer.max_rows"] == 1000

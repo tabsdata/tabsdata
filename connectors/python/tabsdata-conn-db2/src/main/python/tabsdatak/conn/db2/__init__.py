@@ -433,7 +433,7 @@ Db2CdcStartFromSpec: TypeAlias = Union[
 
 # --- Db2CdcStreamSrc.src_cfg keys -----------------------------------
 CdcSrcCfgKey: TypeAlias = Literal[
-    "db2.cdc.blocking_timeout_seconds",
+    "tabsdata.cdc.poll.max_secs",
     "db2.cdc.logging_level",
     "tabsdata.cdc.buffer.max_rows",
     "tabsdata.cdc.buffer.max_bytes",
@@ -441,7 +441,7 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.trigger.max_rows",
     "tabsdata.cdc.trigger.max_bytes",
     "tabsdata.cdc.trigger.max_secs",
-    "tabsdata.cdc.poll_interval_seconds",
+    "tabsdata.cdc.poll.idle_secs",
     "tabsdata.cdc.max_large_text_length",
     "tabsdata.cdc.fetch_size",
     "tabsdata.cdc.chunk_size",
@@ -458,7 +458,9 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
         "tabsdata.cdc.buffer.max_secs",
         "tabsdata.cdc.trigger.max_rows",
         "tabsdata.cdc.trigger.max_bytes",
+        "tabsdata.cdc.poll.max_secs",
     ),
+    _stream_validation.non_negative_integers_validator("tabsdata.cdc.poll.idle_secs"),
 ]
 
 

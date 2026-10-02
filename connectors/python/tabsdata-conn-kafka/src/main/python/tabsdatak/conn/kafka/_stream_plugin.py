@@ -54,8 +54,7 @@ from tabsdatak.conn.kafka._explorer import KafkaConnectionExplorer
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._stream_impl import (
-    DEFAULT_CONNECTION_TIMEOUT_SECS,
-    DEFAULT_CONSUME_TIMEOUT_SECS,
+    DEFAULT_CONNECT_TIMEOUT_SECS,
     KafkaEncoder,
     KafkaIngester,
     KafkaPosition,
@@ -72,8 +71,8 @@ logger = logging.getLogger(__name__)
 # Allowed ``KafkaStreamSrc.src_cfg`` keys -- mirrors the literal
 # annotation on :data:`tabsdatak.conn.kafka.SrcCfgKey` so a typo
 # in the runtime key spelling is caught by Pyright.
-_KEY_CONSUME_TIMEOUT: SrcCfgKey = "kafka.consume_timeout_seconds"
-_KEY_CONNECTION_TIMEOUT: SrcCfgKey = "kafka.connection_timeout_seconds"
+_KEY_POLL_MAX_SECS: SrcCfgKey = "tabsdata.kafka.poll.max_secs"
+_KEY_CONNECT_TIMEOUT: SrcCfgKey = "kafka.connect_timeout_secs"
 _KEY_LOGGING_LEVEL: SrcCfgKey = "kafka.logging_level"
 _KEY_BUFFER_MAX_ROWS: SrcCfgKey = "tabsdata.kafka.buffer.max_rows"
 _KEY_BUFFER_MAX_BYTES: SrcCfgKey = "tabsdata.kafka.buffer.max_bytes"
@@ -83,10 +82,14 @@ _KEY_TRIGGER_MAX_BYTES: SrcCfgKey = "tabsdata.kafka.trigger.max_bytes"
 _KEY_TRIGGER_MAX_SECS: SrcCfgKey = "tabsdata.kafka.trigger.max_secs"
 
 
+KAFKA_DEFAULT_POLL_MAX_SECS = 2
+
+
 @dataclass(frozen=True, kw_only=True)
 class KafkaRunConfig(StreamRunConfig):
-    consume_timeout_secs: int = DEFAULT_CONSUME_TIMEOUT_SECS
-    connection_timeout_secs: int = DEFAULT_CONNECTION_TIMEOUT_SECS
+    poll_max_secs: int = KAFKA_DEFAULT_POLL_MAX_SECS
+    poll_idle_secs: int = 0
+    connect_timeout_secs: int = DEFAULT_CONNECT_TIMEOUT_SECS
 
 
 def _build_kafka_run_config(src: KafkaStreamSrc) -> KafkaRunConfig:
@@ -101,12 +104,9 @@ def _build_kafka_run_config(src: KafkaStreamSrc) -> KafkaRunConfig:
             _KEY_TRIGGER_MAX_SECS,
             cfg.get(_KEY_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
         ),
-        poll_interval_seconds=0,
-        consume_timeout_secs=int(
-            cfg.get(_KEY_CONSUME_TIMEOUT, DEFAULT_CONSUME_TIMEOUT_SECS),
-        ),
-        connection_timeout_secs=int(
-            cfg.get(_KEY_CONNECTION_TIMEOUT, DEFAULT_CONNECTION_TIMEOUT_SECS),
+        poll_max_secs=cfg.get(_KEY_POLL_MAX_SECS, KAFKA_DEFAULT_POLL_MAX_SECS),
+        connect_timeout_secs=cfg.get(
+            _KEY_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT_SECS
         ),
         logging_level=int(cfg.get(_KEY_LOGGING_LEVEL, logging.ERROR)),
     )
@@ -131,8 +131,8 @@ class KafkaStreamSrcPlugin(
         return KafkaIngester(
             conn=conn,
             stream_src=stream_src,
-            consume_timeout_secs=cfg.consume_timeout_secs,
-            connection_timeout_secs=cfg.connection_timeout_secs,
+            poll_max_secs=cfg.poll_max_secs,
+            connect_timeout_secs=cfg.connect_timeout_secs,
         )
 
     def slots(self, run: StreamRun[KafkaRecord, KafkaPosition]) -> Sequence[str]:

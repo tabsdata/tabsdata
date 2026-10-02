@@ -22,7 +22,6 @@ from tabsdatak.conn.kafka import (
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 
-
 pytestmark = pytest.mark.kafka
 
 
@@ -237,7 +236,7 @@ def test_kafka_stream_src_accepts_known_src_cfg_keys():
         data_format="json",
         schema="",
         src_cfg={
-            "kafka.consume_timeout_seconds": 2,
+            "tabsdata.kafka.poll.max_secs": 2,
             "tabsdata.kafka.buffer.max_rows": 100,
             "tabsdata.kafka.buffer.max_bytes": 1024,
             "tabsdata.kafka.buffer.max_secs": 5,
@@ -312,3 +311,13 @@ def test_kafka_stream_src_rejects_a_limit_that_is_not_positive(key, value):
         KafkaStreamSrc(
             topic="events", data_format="json", schema="", src_cfg={key: value}
         )
+
+
+@pytest.mark.parametrize(
+    "key", ["tabsdata.kafka.poll.max_secs", "kafka.connect_timeout_secs"]
+)
+def test_kafka_stream_src_rejects_a_zero_timeout(key):
+    from tabsdatak.conn.kafka import KafkaStreamSrc
+
+    with pytest.raises(ConnInitException, match="must be a positive whole number"):
+        KafkaStreamSrc(topic="events", data_format="json", schema="", src_cfg={key: 0})

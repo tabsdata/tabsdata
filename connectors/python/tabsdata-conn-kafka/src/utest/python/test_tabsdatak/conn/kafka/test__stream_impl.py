@@ -181,14 +181,14 @@ def _conn() -> KafkaStreamSrcConn:
     return KafkaStreamSrcConn(servers="broker:9092", group_id="g1")
 
 
-def _ingester(*, dlq_topic=None, consume_timeout_secs=2) -> KafkaIngester:
+def _ingester(*, dlq_topic=None, poll_max_secs=2) -> KafkaIngester:
     return KafkaIngester(
         conn=_conn(),
         stream_src=KafkaStreamSrc(
             topic="evt", data_format="json", schema="", dlq_topic=dlq_topic
         ),
-        consume_timeout_secs=consume_timeout_secs,
-        connection_timeout_secs=16,
+        poll_max_secs=poll_max_secs,
+        connect_timeout_secs=16,
     )
 
 
@@ -227,21 +227,53 @@ def test_polling_yields_the_decoded_messages_until_none_arrives(tmp_path):
     assert records[0].size == len(first.value())
 
 
-def test_polling_stops_once_the_consume_timeout_elapses(tmp_path):
+def test_polling_stops_once_the_poll_max_secs_elapse(tmp_path):
     consumer = MagicMock()
     consumer.poll.return_value = _message({"a": 1})
-    ingester = _opened(consumer, tmp_path, consume_timeout_secs=0)
+    ingester = _opened(consumer, tmp_path, poll_max_secs=0)
 
     assert list(ingester.poll_changes(consumer)) == []
     consumer.poll.assert_not_called()
 
 
-def test_broker_errors_and_undecodable_messages_go_to_the_dlq(tmp_path):
+def _broker_error(fatal: bool = False):
+    error = MagicMock()
+    error.fatal.return_value = fatal
+    error.__str__ = lambda self: "boom"
+    return _message(error=error)
+
+
+def test_a_broker_error_is_logged_and_polling_goes_on(tmp_path, caplog):
     consumer = MagicMock()
-    broken = _message(error="boom")
+    good = _message({"a": 1})
+    consumer.poll.side_effect = [_broker_error(), good, None]
+    producer = MagicMock()
+    with patch("confluent_kafka.Producer", return_value=producer):
+        ingester = _opened(consumer, tmp_path, dlq_topic="evt_dlq")
+
+    with caplog.at_level("WARNING"):
+        records = list(ingester.poll_changes(consumer))
+
+    assert [record.value for record in records] == [{"a": 1}]
+    producer.produce.assert_not_called()
+    assert "boom" in caplog.text
+
+
+def test_a_fatal_broker_error_fails_the_run(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_broker_error(fatal=True)]
+    ingester = _opened(consumer, tmp_path)
+
+    with pytest.raises(TabsdataException) as raised:
+        list(ingester.poll_changes(consumer))
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_26
+
+
+def test_undecodable_messages_go_to_the_dlq(tmp_path):
+    consumer = MagicMock()
     garbled = _message(raw=b"not json")
     good = _message({"a": 1})
-    consumer.poll.side_effect = [broken, garbled, good, None]
+    consumer.poll.side_effect = [garbled, good, None]
     producer = MagicMock()
     with patch("confluent_kafka.Producer", return_value=producer):
         ingester = _opened(consumer, tmp_path, dlq_topic="evt_dlq")
@@ -249,10 +281,8 @@ def test_broker_errors_and_undecodable_messages_go_to_the_dlq(tmp_path):
     records = list(ingester.poll_changes(consumer))
 
     assert [record.value for record in records] == [{"a": 1}]
-    assert producer.produce.call_count == 2
-    assert {call.kwargs["topic"] for call in producer.produce.call_args_list} == {
-        "evt_dlq"
-    }
+    assert producer.produce.call_count == 1
+    assert producer.produce.call_args.kwargs["topic"] == "evt_dlq"
 
 
 def test_the_broker_keeps_the_offset():

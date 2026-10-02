@@ -35,7 +35,8 @@ from tabsdatak.conn.common._stream.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
-    DEFAULT_POLL_INTERVAL_SECONDS,
+    DEFAULT_POLL_IDLE_SECS,
+    DEFAULT_POLL_MAX_SECS,
     DEFAULT_TRIGGER_MAX_BYTES,
     DEFAULT_TRIGGER_MAX_ROWS,
     DEFAULT_TRIGGER_MAX_SECS,
@@ -43,7 +44,6 @@ from tabsdatak.conn.common._stream.constants import (
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
 from tabsdatak.conn.common.sql.cdc.constants import (
-    DEFAULT_BLOCKING_TIMEOUT_SECONDS,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_FETCH_SIZE,
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
@@ -71,7 +71,7 @@ if TYPE_CHECKING:
 # Allowed CDC src_cfg keys -- the Literal annotation gates typos at
 # schema-construction time. ``_resolve_*`` reads from src_cfg and
 # falls back to common-sql defaults.
-_KEY_CDC_BLOCKING_TIMEOUT: CdcSrcCfgKey = "mysql.cdc.blocking_timeout_seconds"
+_KEY_CDC_POLL_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.poll.max_secs"
 _KEY_CDC_LOGGING_LEVEL: CdcSrcCfgKey = "mysql.cdc.logging_level"
 _KEY_CDC_BUFFER_MAX_ROWS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_rows"
 _KEY_CDC_BUFFER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_bytes"
@@ -79,7 +79,7 @@ _KEY_CDC_BUFFER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_secs"
 _KEY_CDC_TRIGGER_MAX_ROWS: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_rows"
 _KEY_CDC_TRIGGER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_bytes"
 _KEY_CDC_TRIGGER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_secs"
-_KEY_CDC_POLL_INTERVAL: CdcSrcCfgKey = "tabsdata.cdc.poll_interval_seconds"
+_KEY_CDC_POLL_IDLE_SECS: CdcSrcCfgKey = "tabsdata.cdc.poll.idle_secs"
 _KEY_CDC_MAX_LARGE_TEXT_LENGTH: CdcSrcCfgKey = "tabsdata.cdc.max_large_text_length"
 _KEY_CDC_FETCH_SIZE: CdcSrcCfgKey = "tabsdata.cdc.fetch_size"
 _KEY_CDC_CHUNK_SIZE: CdcSrcCfgKey = "tabsdata.cdc.chunk_size"
@@ -118,9 +118,8 @@ def _build_cdc_run_config(
             _KEY_CDC_TRIGGER_MAX_SECS,
             cfg.get(_KEY_CDC_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
         ),
-        poll_interval_seconds=cfg.get(
-            _KEY_CDC_POLL_INTERVAL, DEFAULT_POLL_INTERVAL_SECONDS
-        ),
+        poll_idle_secs=cfg.get(_KEY_CDC_POLL_IDLE_SECS, DEFAULT_POLL_IDLE_SECS),
+        poll_max_secs=cfg.get(_KEY_CDC_POLL_MAX_SECS, DEFAULT_POLL_MAX_SECS),
         max_large_text_length=int(
             cfg.get(_KEY_CDC_MAX_LARGE_TEXT_LENGTH, DEFAULT_MAX_LARGE_TEXT_LENGTH)
         ),
@@ -150,15 +149,15 @@ class MySQLCdcStreamSrcPlugin(CdcPlugin[MySQLCdcStreamSrcConn, MySQLCdcStreamSrc
         # noinspection PyProtectedMember
         from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
 
-        blocking_timeout = (stream_src.src_cfg or {}).get(
-            _KEY_CDC_BLOCKING_TIMEOUT, DEFAULT_BLOCKING_TIMEOUT_SECONDS
+        poll_max_secs = (stream_src.src_cfg or {}).get(
+            _KEY_CDC_POLL_MAX_SECS, DEFAULT_POLL_MAX_SECS
         )
         return BinlogIngester(
             conn=conn,
             tables=list(stream_src.tables),
             start_from=_to_internal_start_from(stream_src.start_from),
             server_id=conn.server_id,
-            blocking_timeout_seconds=blocking_timeout,
+            poll_max_secs=poll_max_secs,
         )
 
 

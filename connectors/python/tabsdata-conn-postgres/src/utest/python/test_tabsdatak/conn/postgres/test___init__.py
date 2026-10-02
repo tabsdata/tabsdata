@@ -9,7 +9,6 @@ import typing
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.error import TabsdataException
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import CfgSpec, UserPassword
@@ -18,23 +17,24 @@ from tabsdatak.conn.postgres import (
     DestCfgSpec,
     IfTableExistsSpec,
     LsnPosition,
-    PostgresCdcStreamSrcConn,
     PostgresCdcStreamSrc,
-    PostgresDestConn,
-    PostgresSrcConn,
+    PostgresCdcStreamSrcConn,
     PostgresDest,
+    PostgresDestConn,
     PostgresSrc,
+    PostgresSrcConn,
     PostgresTableNamesSpec,
     QueriesSpec,
     SrcCfgSpec,
     UriSpec,
 )
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.postgres.error import (
-    PostgresValidateException,
     PostgresErrorCode,
+    PostgresValidateException,
 )
-
+from tabsdatak.error import TabsdataException
 
 pytestmark = pytest.mark.postgres
 
@@ -384,11 +384,11 @@ def test_postgres_cdc_stream_src_rejects_unknown_src_cfg_key():
 def test_postgres_cdc_stream_src_accepts_known_src_cfg_keys():
     src = _cdc_stream_src(
         src_cfg={
-            "postgres.cdc.blocking_timeout_seconds": 5,
+            "tabsdata.cdc.poll.max_secs": 5,
             "postgres.cdc.logging_level": 20,
             "postgres.cdc.wal2json_format_version": 2,
             "tabsdata.cdc.buffer.max_rows": 1000,
-            "tabsdata.cdc.poll_interval_seconds": 2,
+            "tabsdata.cdc.poll.idle_secs": 2,
         },
     )
     assert src.src_cfg["tabsdata.cdc.buffer.max_rows"] == 1000

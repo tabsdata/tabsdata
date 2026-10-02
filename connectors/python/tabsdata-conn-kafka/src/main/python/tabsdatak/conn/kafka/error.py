@@ -152,3 +152,8 @@ class KafkaErrorCode(ErrorCode):
         "The stream state holds an offset this connector cannot read (it needs "
         "a map of topics to partitions to non-negative offsets): {state!r}",
     )
+    KAFKA_26 = ErrorDef(
+        KafkaRuntimeException,
+        "The Kafka consumer reported a fatal error; the stream cannot continue: "
+        "{error}",
+    )

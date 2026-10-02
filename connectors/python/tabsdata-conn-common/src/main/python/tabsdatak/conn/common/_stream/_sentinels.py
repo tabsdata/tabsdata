@@ -159,9 +159,12 @@ class BufferSentinel[R, O: StreamOffset]:
     def reset_timer(self) -> None:
         self._last_flushed = self._clock()
 
-    def add_all(self, records: Iterable[R]) -> None:
+    def add_all(self, records: Iterable[R]) -> int:
+        count = 0
         for record in records:
             self.add(record)
+            count += 1
+        return count
 
     def add(self, record: R) -> None:
         slot = self._encoder.slot(record)
