@@ -7,9 +7,7 @@
 
 from __future__ import annotations
 
-import io
 import json
-from pathlib import Path
 
 import pytest
 
@@ -17,7 +15,6 @@ import pytest
 from tabsdatak.conn.kafka._serdes._no_sr import (
     AvroKafkaSerde,
     JsonKafkaSerde,
-    NonSrKafkaSerde,
     ProtobufKafkaSerde,
 )
 from tabsdatak.conn.kafka.error import KafkaErrorCode
@@ -92,6 +89,23 @@ def test_json_serde_rejects_malformed_schema_string():
     with pytest.raises(TabsdataException) as ei:
         JsonKafkaSerde(json_schema="{not valid json")
     assert ei.value.api_error is KafkaErrorCode.KAFKA_14
+
+
+def test_json_serde_rejects_an_invalid_schema_when_built():
+    with pytest.raises(TabsdataException) as ei:
+        JsonKafkaSerde(json_schema=json.dumps({"type": "nope"}))
+    assert ei.value.api_error is KafkaErrorCode.KAFKA_14
+
+
+def test_json_serde_validates_every_message_with_one_validator():
+    schema = json.dumps({"type": "object", "required": ["id"]})
+    serde = JsonKafkaSerde(json_schema=schema)
+    deserialize = serde.deserializer()
+    assert deserialize(b'{"id": 1}', None) == {"id": 1}
+    assert deserialize(b'{"id": 2}', None) == {"id": 2}
+    with pytest.raises(TabsdataException) as ei:
+        deserialize(b'{"name": "no-id"}', None)
+    assert ei.value.api_error is KafkaErrorCode.KAFKA_15
 
 
 # --- AvroKafkaSerde -------------------------------------------------

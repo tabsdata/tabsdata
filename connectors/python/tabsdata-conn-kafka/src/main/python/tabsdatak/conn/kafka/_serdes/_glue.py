@@ -33,6 +33,7 @@ from tabsdatak.conn.kafka._serdes._base import (
     MsgFormatSpec,
     SchemaIdCompatibles,
     SchemaIdSpec,
+    build_json_validator,
 )
 
 # noinspection PyProtectedMember
@@ -148,6 +149,11 @@ class _AwsGlueDeserializer:
         self.glue_client = glue_client
 
     @lru_cache(maxsize=1000)
+    def get_json_validator(self, schema_uuid_str: str):
+        schema = json.loads(self.get_schema_definition(schema_uuid_str))
+        return build_json_validator(schema)
+
+    @lru_cache(maxsize=1000)
     def get_schema_definition(self, schema_uuid_str: str) -> str:
         try:
             response = self.glue_client.get_schema_version(
@@ -237,13 +243,7 @@ class JsonGlueKafkaSerde(GlueKafkaSerde):
             schema_uuid, json_bytes = inner.unpack_data(data)
             obj = json.loads(json_bytes)
             if validate:
-                import jsonschema
-
-                schema_str = inner.get_schema_definition(schema_uuid)
-                jsonschema.validate(
-                    instance=obj,
-                    schema=json.loads(schema_str),
-                )
+                inner.get_json_validator(schema_uuid).validate(obj)
             return obj
 
         return _deserialise

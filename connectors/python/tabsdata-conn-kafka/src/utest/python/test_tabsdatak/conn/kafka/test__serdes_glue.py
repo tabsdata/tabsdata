@@ -16,7 +16,6 @@ import pytest
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._serdes._glue import (
     AvroGlueKafkaSerde,
-    GlueKafkaSerde,
     JsonGlueKafkaSerde,
     ProtobufGlueKafkaSerde,
 )
@@ -140,6 +139,37 @@ def test_json_glue_validate_enforced_when_flag_true():
 
     with pytest.raises(jsonschema.ValidationError):
         serde.deserializer()(bad_payload, None)
+
+
+def test_json_glue_builds_one_validator_per_schema_version():
+    schema = json.dumps({"type": "object", "required": ["id"]})
+    client = _fake_glue_client(schema)
+    serde = JsonGlueKafkaSerde(
+        glue_client=client,
+        registry_name="reg",
+        schema_name="sch",
+        json_schema=schema,
+        validate_schema=True,
+    )
+    deserialize = serde.deserializer()
+    for identifier in range(3):
+        payload = serde.serializer()({"id": identifier}, None)
+        assert deserialize(payload, None) == {"id": identifier}
+    assert client.get_schema_version.call_count == 1
+
+
+def test_json_glue_rejects_an_invalid_registry_schema():
+    serde = JsonGlueKafkaSerde(
+        glue_client=_fake_glue_client(json.dumps({"type": "nope"})),
+        registry_name="reg",
+        schema_name="sch",
+        json_schema=json.dumps({"type": "object"}),
+        validate_schema=True,
+    )
+    payload = serde.serializer()({"id": 1}, None)
+    with pytest.raises(TabsdataException) as ei:
+        serde.deserializer()(payload, None)
+    assert ei.value.api_error is KafkaErrorCode.KAFKA_14
 
 
 def test_json_glue_format_label():

@@ -23,6 +23,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable, Literal, TypeAlias, Union
 
+from tabsdatak.conn.kafka.error import KafkaErrorCode
+
 if TYPE_CHECKING:  # pragma: no cover -- typing-only
     from confluent_kafka.serialization import SerializationContext
 
@@ -37,6 +39,17 @@ MsgFormatSpec: TypeAlias = Literal["avro", "json", "protobuf"]
 SchemaIdSpec: TypeAlias = Union[str, tuple[str, ...], dict[str, str]]
 
 SchemaIdCompatibles: TypeAlias = Callable[[SchemaIdSpec, SchemaIdSpec], bool]
+
+
+def build_json_validator(json_schema: dict):
+    import jsonschema
+
+    cls = jsonschema.validators.validator_for(json_schema)
+    try:
+        cls.check_schema(json_schema)
+    except jsonschema.SchemaError as e:
+        raise KafkaErrorCode.KAFKA_14.exception(error=e)
+    return cls(json_schema)
 
 
 class KafkaSerde(ABC):

@@ -25,6 +25,7 @@ from tabsdatak.conn.kafka._serdes._base import (
     MsgFormatSpec,
     SchemaIdCompatibles,
     SchemaIdSpec,
+    build_json_validator,
 )
 
 # noinspection PyProtectedMember
@@ -62,8 +63,9 @@ class JsonKafkaSerde(NonSrKafkaSerde):
     def __init__(self, json_schema: str | None = None):
         super().__init__()
         parsed = self._parse_json_schema(json_schema)
-        self._serializer = self._make_serializer(parsed)
-        self._deserializer = self._make_deserializer(parsed)
+        validator = build_json_validator(parsed) if parsed else None
+        self._serializer = self._make_serializer(validator)
+        self._deserializer = self._make_deserializer(validator)
         self._schema = json.dumps(parsed) if parsed else None
 
     @staticmethod
@@ -76,15 +78,15 @@ class JsonKafkaSerde(NonSrKafkaSerde):
             raise KafkaErrorCode.KAFKA_14.exception(error=e)
 
     @staticmethod
-    def _make_serializer(json_schema):
+    def _make_serializer(validator):
         def serialize(obj: dict, _ctx: "SerializationContext") -> bytes:
             if obj is None:
                 raise ValueError("Serialisation failed: 'obj' is None")
-            if json_schema:
+            if validator is not None:
                 import jsonschema
 
                 try:
-                    jsonschema.validate(instance=obj, schema=json_schema)
+                    validator.validate(obj)
                 except jsonschema.ValidationError as e:
                     raise KafkaErrorCode.KAFKA_15.exception(error=e)
             return json.dumps(obj, separators=(",", ":")).encode("utf-8")
@@ -92,7 +94,7 @@ class JsonKafkaSerde(NonSrKafkaSerde):
         return serialize
 
     @staticmethod
-    def _make_deserializer(json_schema):
+    def _make_deserializer(validator):
         def deserialize(data: bytes, _ctx: "SerializationContext") -> dict:
             if data is None:
                 raise ValueError("Deserialisation failed: payload is None")
@@ -107,11 +109,11 @@ class JsonKafkaSerde(NonSrKafkaSerde):
                     f"Deserialisation failed: expected JSON object, got "
                     f"{type(record).__name__}"
                 )
-            if json_schema:
+            if validator is not None:
                 import jsonschema
 
                 try:
-                    jsonschema.validate(instance=record, schema=json_schema)
+                    validator.validate(record)
                 except jsonschema.ValidationError as e:
                     raise KafkaErrorCode.KAFKA_15.exception(error=e)
             return record
