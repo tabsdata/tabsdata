@@ -3,13 +3,16 @@
 #
 
 from tabsdatak._logging import setup_logging
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, run_command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    run_command,
+)
 from tabsdatak.server._tdrunner.function.commands import tabsdata_command
 
 
 def _build_parser():
     return build_parser(
-        prog="prepare-py-env",
+        program="prepare-py-env",
         description="Prepare the python environment (not yet implemented).",
     )
 

@@ -37,7 +37,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.run_streamer.runner import (
     _load_function_def,
     _resolve_plugin,
@@ -75,11 +78,11 @@ MAN = (
 
 def _build_parser():
     parser = build_parser(
-        prog="run-streamer",
+        program="run-streamer",
         description="Long-running streamer pod entrypoint.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
     parser.add_argument("--request", required=True, help="Path to request.yaml")
     parser.add_argument(

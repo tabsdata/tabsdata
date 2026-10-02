@@ -30,7 +30,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.prep_upload_tables.runner import run
 
 __all__ = ["run", "main"]
@@ -54,11 +57,11 @@ MAN = (
 
 def _build_parser():
     parser = build_parser(
-        prog="prep-upload-tables",
+        program="prep-upload-tables",
         description="Generate the upload-tables transporter request.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
     parser.add_argument("--request", required=True, help="Path to request.yaml")
     parser.add_argument(

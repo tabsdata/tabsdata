@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Tests for `_lib/http_request.py`.
+"""Tests for `_commons/http/request.py`.
 
 Covers:
   * `HttpRequest` / `HttpResponse` dataclass shape
@@ -10,7 +10,7 @@ Covers:
   * `invoke` 4xx / 5xx are returned, not raised
   * `invoke` connection failure raises `HttpRequestError`
   * `invoke` query overlay merging
-  * `_apply_query` edge cases
+  * `apply_query` edge cases
 """
 
 from __future__ import annotations
@@ -24,11 +24,11 @@ from contextlib import contextmanager
 
 import pytest
 
-from tabsdatak.server._tdrunner.function._lib.http_request import (
+from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpRequest,
     HttpRequestError,
     HttpResponse,
-    _apply_query,
+    apply_query,
     invoke,
 )
 
@@ -104,18 +104,18 @@ def test_http_request_is_frozen():
 
 
 def test_http_response_ok_property_true_for_2xx():
-    assert HttpResponse(status_code=200, body=b"").ok is True
-    assert HttpResponse(status_code=204, body=b"").ok is True
-    assert HttpResponse(status_code=299, body=b"").ok is True
+    assert HttpResponse(status=200, body=b"").ok is True
+    assert HttpResponse(status=204, body=b"").ok is True
+    assert HttpResponse(status=299, body=b"").ok is True
 
 
 def test_http_response_ok_property_false_for_non_2xx():
     """3xx / 4xx / 5xx are not ``ok``. NU7 will key on this for
     triggered-vs-skip-vs-fail dispatch."""
-    assert HttpResponse(status_code=199, body=b"").ok is False
-    assert HttpResponse(status_code=300, body=b"").ok is False
-    assert HttpResponse(status_code=409, body=b"").ok is False
-    assert HttpResponse(status_code=500, body=b"").ok is False
+    assert HttpResponse(status=199, body=b"").ok is False
+    assert HttpResponse(status=300, body=b"").ok is False
+    assert HttpResponse(status=409, body=b"").ok is False
+    assert HttpResponse(status=500, body=b"").ok is False
 
 
 # --- invoke: happy path ---------------------------------------------------
@@ -125,7 +125,7 @@ def test_invoke_returns_response_on_200():
     handler = _silent_handler(200, body=b"hello", extra_headers={"X-Foo": "bar"})
     with _server(handler) as base_url:
         resp = invoke(HttpRequest(url=base_url + "/path"))
-    assert resp.status_code == 200
+    assert resp.status == 200
     assert resp.body == b"hello"
     assert resp.headers.get("x-foo") == "bar"  # lowercased
     assert resp.ok is True
@@ -185,7 +185,7 @@ def test_invoke_returns_response_on_4xx_not_raises():
     handler = _silent_handler(409, body=b'{"error":"already running"}')
     with _server(handler) as base_url:
         resp = invoke(HttpRequest(url=base_url + "/"))
-    assert resp.status_code == 409
+    assert resp.status == 409
     assert resp.body == b'{"error":"already running"}'
     assert resp.ok is False
 
@@ -194,7 +194,7 @@ def test_invoke_returns_response_on_5xx_not_raises():
     handler = _silent_handler(503, body=b"server unavailable")
     with _server(handler) as base_url:
         resp = invoke(HttpRequest(url=base_url + "/"))
-    assert resp.status_code == 503
+    assert resp.status == 503
     assert resp.body == b"server unavailable"
 
 
@@ -223,7 +223,7 @@ def test_invoke_raises_http_request_error_on_connection_refused():
     with pytest.raises(HttpRequestError, match="failed"):
         invoke(
             HttpRequest(url=f"http://127.0.0.1:{port}/"),
-            timeout_seconds=1.0,
+            timeout=1.0,
         )
 
 
@@ -237,48 +237,48 @@ def test_invoke_raises_http_request_error_on_timeout(monkeypatch):
 
     monkeypatch.setattr(urllib.request, "urlopen", _slow)
     with pytest.raises(HttpRequestError, match="timed out"):
-        invoke(HttpRequest(url="http://127.0.0.1:1/"), timeout_seconds=0.1)
+        invoke(HttpRequest(url="http://127.0.0.1:1/"), timeout=0.1)
 
 
-# --- _apply_query ---------------------------------------------------------
+# --- apply_query ---------------------------------------------------------
 
 
-def test_apply_query_none_returns_url_unchanged():
-    assert _apply_query("http://x/p", None) == "http://x/p"
+def testapply_query_none_returns_url_unchanged():
+    assert apply_query("http://x/p", None) == "http://x/p"
 
 
-def test_apply_query_empty_returns_url_unchanged():
-    assert _apply_query("http://x/p", {}) == "http://x/p"
+def testapply_query_empty_returns_url_unchanged():
+    assert apply_query("http://x/p", {}) == "http://x/p"
 
 
-def test_apply_query_appends_to_url_without_query():
+def testapply_query_appends_to_url_without_query():
     assert (
-        _apply_query("http://x/p", {"skip_if_running": "true"})
+        apply_query("http://x/p", {"skip_if_running": "true"})
         == "http://x/p?skip_if_running=true"
     )
 
 
-def test_apply_query_merges_with_existing_query():
+def testapply_query_merges_with_existing_query():
     """Existing keys preserved, new keys added. URL parser will
     quote correctly."""
-    out = _apply_query("http://x/p?keep=1", {"new": "2"})
+    out = apply_query("http://x/p?keep=1", {"new": "2"})
     # urlencode order may vary on impl; verify both pieces present
     assert "keep=1" in out
     assert "new=2" in out
 
 
-def test_apply_query_caller_keys_override_existing():
+def testapply_query_caller_keys_override_existing():
     """Caller-supplied wins -- the sidecar can pass a freshly-built
     ``external_id`` and override any stale value baked into the
     apiserver's base URL."""
-    out = _apply_query("http://x/p?stale=old", {"stale": "new"})
+    out = apply_query("http://x/p?stale=old", {"stale": "new"})
     assert "stale=new" in out
     assert "stale=old" not in out
 
 
-def test_apply_query_stringifies_values():
+def testapply_query_stringifies_values():
     """Values are stringified -- callers may pass ints, bools."""
-    out = _apply_query("http://x/p", {"size": 10, "active": True})
+    out = apply_query("http://x/p", {"size": 10, "active": True})
     assert "size=10" in out
     assert "active=True" in out
 

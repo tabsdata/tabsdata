@@ -29,7 +29,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.runner import (
     _execution_request_body,
     _fire,
@@ -59,11 +62,11 @@ MAN = (
 
 def _build_parser():
     parser = build_parser(
-        prog="run-cron-trigger",
+        program="run-cron-trigger",
         description="One-shot cron trigger: POST the function execute endpoint once.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
     parser.add_argument(
         "--trigger-url",

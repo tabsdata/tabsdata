@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.inspect_function.runner import run
 
 __all__ = ["run", "main"]
@@ -38,11 +41,11 @@ MAN = (
 
 def _build_parser():
     return build_parser(
-        prog="inspect-function",
+        program="inspect-function",
         description="Dump function-run execution information for troubleshooting.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
 
 

@@ -26,7 +26,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle.runner import (
     _extract,
     _fetch_via_transporter,
@@ -53,11 +56,11 @@ MAN = (
 
 def _build_parser():
     parser = build_parser(
-        prog="localize-fn-bundle",
+        program="localize-fn-bundle",
         description="Fetch and extract the function bundle.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
     parser.add_argument("--request", required=True, help="Path to request.yaml")
     parser.add_argument(

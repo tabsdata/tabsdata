@@ -233,7 +233,7 @@ class CommandErrorCode(ErrorCode):
         InvalidOptionsError,
         "invalid or missing options: {detail}",
     )
-    # Raised by ``_lib.cli._Parser.error`` and by ``resolve_flag`` when the
+    # Raised by ``_commons.run.command.Parser.error`` and by ``resolve_flag`` when the
     # resolved literal isn't ``true`` / ``false``.
 
     CMD_2 = ErrorDef(

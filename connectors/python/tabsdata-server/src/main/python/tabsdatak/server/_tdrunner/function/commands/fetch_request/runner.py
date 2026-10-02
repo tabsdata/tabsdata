@@ -20,26 +20,21 @@ import urllib.request
 from pathlib import Path
 
 import yaml
-from tenacity import retry, stop_after_delay, wait_fixed
 
-from tabsdatak.server._tdrunner.function._lib.command import resolve_value
+from tabsdatak.server._tdrunner.function._commons.http.request import (
+    DEFAULT_TIMEOUT_SECONDS,
+)
+from tabsdatak.server._tdrunner.function._commons.http.retry import call_with_retry
+from tabsdatak.server._tdrunner.function._commons.solver.arguments import resolve_value
 from tabsdatak.server._tdrunner.function.commands.fetch_request.error import (
     FetchRequestErrorCode,
 )
 
 logger = logging.getLogger(__name__)
 
-RESOLVER_RETRY_WAIT_SECONDS = 2
-RESOLVER_RETRY_TOTAL_SECONDS = 32
 
-
-@retry(
-    stop=stop_after_delay(RESOLVER_RETRY_TOTAL_SECONDS),
-    wait=wait_fixed(RESOLVER_RETRY_WAIT_SECONDS),
-    reraise=True,
-)
 def _fetch_request(request: urllib.request.Request) -> bytes:
-    with urllib.request.urlopen(request) as response:
+    with urllib.request.urlopen(request, timeout=DEFAULT_TIMEOUT_SECONDS) as response:
         return response.read()
 
 
@@ -50,7 +45,7 @@ def _fetch(url: str, method: str, authorization: str) -> bytes:
         headers={"Authorization": authorization},
     )
     try:
-        return _fetch_request(request)
+        return call_with_retry(_fetch_request, request)
     except urllib.error.HTTPError as exc:
         # Surface the apiserver's response body in the detail so a 4xx
         # carrying a JSON error description (auth scope mismatch, bad

@@ -20,8 +20,8 @@ import pyarrow.parquet as pq
 import pytest
 import yaml
 
-from tabsdatak.server._tdrunner.function._lib import command as command_lib
-from tabsdatak.server._tdrunner.function._lib.command import UnexpectedError
+from tabsdatak.server._tdrunner.function._commons.run import command as command_lib
+from tabsdatak.server._tdrunner.function._commons.run.command import UnexpectedError
 from tabsdatak.server._tdrunner.function.commands.report_completion import main
 from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
     BadManifestError,
@@ -34,14 +34,6 @@ from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
-
-
-@pytest.fixture
-def no_responder_retry(monkeypatch):
-    """Collapse the responder retry budget so a failing POST gives up on
-    the first attempt instead of retrying for the full 32-second window."""
-    monkeypatch.setattr(command_lib, "_RESPONDER_RETRY_TOTAL_SECONDS", 0)
-    monkeypatch.setattr(command_lib, "_RESPONDER_RETRY_WAIT_SECONDS", 0)
 
 
 # --- helpers ---
@@ -424,7 +416,7 @@ def test_main_write_error_returns_write_failed(monkeypatch, tmp_path, responder)
 
 
 def test_main_responder_http_error_returns_unexpected_but_writes_out(
-    monkeypatch, tmp_path, responder, no_responder_retry
+    monkeypatch, tmp_path, responder, no_http_retry
 ):
     """When the Done POST gets an HTTP error, main fails — but the `--out`
     artifact is written before the POST, so it survives the failure."""
@@ -450,7 +442,7 @@ def test_main_responder_http_error_returns_unexpected_but_writes_out(
 
 
 def test_main_responder_url_error_returns_unexpected(
-    monkeypatch, tmp_path, no_responder_retry
+    monkeypatch, tmp_path, no_http_retry
 ):
     """A URLError (responder unreachable) fails the command."""
     request_yaml = _write_request(tmp_path / "request.yaml")
@@ -471,7 +463,7 @@ def test_main_responder_url_error_returns_unexpected(
 
 
 def test_responder_http_error_surfaces_response_body(
-    monkeypatch, tmp_path, no_responder_retry
+    monkeypatch, tmp_path, no_http_retry
 ):
     """The apiserver's error body (its specific complaint) must reach the
     raised error — otherwise a 400 like 'missing field `status`' bottoms

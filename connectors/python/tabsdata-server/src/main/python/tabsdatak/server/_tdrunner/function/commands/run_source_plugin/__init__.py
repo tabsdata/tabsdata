@@ -34,7 +34,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin.runner import (
     _build_manifest_stage_conn,
     _invoke_read_in,
@@ -75,11 +78,11 @@ MAN = (
 
 def _build_parser():
     parser = build_parser(
-        prog="run-source-plugin",
+        program="run-source-plugin",
         description="Invoke the publisher's source plugin.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
     parser.add_argument("--request", required=True, help="Path to request.yaml")
     parser.add_argument(

@@ -10,6 +10,8 @@ from typing import Any, Iterator
 
 import pytest
 
+from tabsdatak.server._tdrunner.function._commons.http import retry
+
 # --- Shared synthetic Request.info builder --------------------------------
 #
 # Single source of truth for the ``Function.info`` payload used by
@@ -80,7 +82,7 @@ class _OkHandler(BaseHTTPRequestHandler):
 def http_ok_url() -> Iterator[str]:
     """An always-200 local HTTP server. Yields its base URL.
 
-    Used by error-path tests that would otherwise stall for ~32s on the
+    Used by error-path tests that would otherwise stall for the whole
     framework's responder retry budget when the responder URL can't be
     reached. Pointing `--responder-url` here lets the real POST succeed
     immediately while exercising the genuine code path.
@@ -95,3 +97,9 @@ def http_ok_url() -> Iterator[str]:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+@pytest.fixture
+def no_http_retry(monkeypatch):
+    monkeypatch.setattr(retry, "TOTAL_SECONDS", 0)
+    monkeypatch.setattr(retry, "WAIT_SECONDS", 0)

@@ -51,7 +51,7 @@ class _Resp:
 def test_fetch_returns_body_and_passes_authorization_verbatim(monkeypatch):
     captured: dict = {}
 
-    def fake(req):
+    def fake(req, timeout=None):
         captured["url"] = req.full_url
         captured["method"] = req.get_method()
         captured["headers"] = dict(req.headers)
@@ -67,7 +67,7 @@ def test_fetch_returns_body_and_passes_authorization_verbatim(monkeypatch):
 
 
 def test_fetch_http_error_raises_typed_exception(monkeypatch):
-    def fake(req):
+    def fake(req, timeout=None):
         raise urllib.error.HTTPError("https://api/r", 404, "Not Found", {}, None)
 
     monkeypatch.setattr(urllib.request, "urlopen", fake)
@@ -87,7 +87,7 @@ def test_fetch_http_error_includes_response_body_in_detail(monkeypatch):
 
     apiserver_body = b'{"code":"AuthError::0001","error":"scope_mismatch"}'
 
-    def fake(req):
+    def fake(req, timeout=None):
         raise urllib.error.HTTPError(
             "https://api/r",
             404,
@@ -104,8 +104,8 @@ def test_fetch_http_error_includes_response_body_in_detail(monkeypatch):
     assert apiserver_body.decode("utf-8") in rendered
 
 
-def test_fetch_url_error_raises_typed_exception(monkeypatch):
-    def fake(req):
+def test_fetch_url_error_raises_typed_exception(monkeypatch, no_http_retry):
+    def fake(req, timeout=None):
         raise urllib.error.URLError("connection refused")
 
     monkeypatch.setattr(urllib.request, "urlopen", fake)
@@ -123,7 +123,7 @@ def _set_argv(monkeypatch, *args):
 
 
 def _stub_urlopen(monkeypatch, body: bytes = b"data", capture: dict | None = None):
-    def fake(req):
+    def fake(req, timeout=None):
         if capture is not None:
             capture["url"] = req.full_url
             capture["method"] = req.get_method()
@@ -230,7 +230,7 @@ def test_main_undefined_env_returns_2(monkeypatch, tmp_path):
 
 
 def test_main_http_error_returns_command_specific_exit(
-    monkeypatch, tmp_path, http_ok_url
+    monkeypatch, tmp_path, http_ok_url, no_http_retry
 ):
     real_urlopen = urllib.request.urlopen
 

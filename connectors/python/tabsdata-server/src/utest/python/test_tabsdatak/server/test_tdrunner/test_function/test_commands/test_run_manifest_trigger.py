@@ -33,7 +33,7 @@ import pytest
 
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
-from tabsdatak.server._tdrunner.function._lib.http_request import (
+from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpRequest,
 )
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (

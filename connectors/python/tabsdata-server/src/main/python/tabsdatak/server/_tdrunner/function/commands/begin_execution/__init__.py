@@ -30,7 +30,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.begin_execution.runner import run
 
 __all__ = ["run", "main"]
@@ -55,11 +58,11 @@ MAN = (
 
 def _build_parser():
     return build_parser(
-        prog="begin-execution",
+        program="begin-execution",
         description="Initialize the shared Journal YAML for the run.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
 
 

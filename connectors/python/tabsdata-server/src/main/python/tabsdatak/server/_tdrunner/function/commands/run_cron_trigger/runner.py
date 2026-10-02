@@ -16,12 +16,12 @@ import argparse
 import json
 import logging
 
-from tabsdatak.server._tdrunner.function._lib.command import resolve_value
-from tabsdatak.server._tdrunner.function._lib.http_request import (
+from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpRequest,
     HttpRequestError,
     invoke,
 )
+from tabsdatak.server._tdrunner.function._commons.solver.arguments import resolve_value
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.error import (
     RunCronTriggerErrorCode,
 )
@@ -69,13 +69,13 @@ def _fire(url: str, method: str, authorization: str) -> None:
 
     if response.ok:
         logger.info(
-            "run-cron-trigger: execution scheduled (status=%d)", response.status_code
+            "run-cron-trigger: execution scheduled (status=%d)", response.status
         )
         return
 
     body_preview = response.body[:256] if response.body else b""
     raise RunCronTriggerErrorCode.CT_2.exception(
-        url=url, status=response.status_code, body=repr(body_preview)
+        url=url, status=response.status, body=repr(body_preview)
     )
 
 

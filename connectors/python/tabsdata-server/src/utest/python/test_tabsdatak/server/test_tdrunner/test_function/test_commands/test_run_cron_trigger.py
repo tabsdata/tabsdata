@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from tabsdatak.server._tdrunner.function._lib.http_request import (
+from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpRequest,
     HttpRequestError,
     HttpResponse,
@@ -108,7 +108,7 @@ def _capture_invoke(*, response: HttpResponse | None = None, raise_exc=None):
 
 
 def test_fire_posts_cron_body_and_returns_on_2xx(monkeypatch):
-    fake, captured = _capture_invoke(response=HttpResponse(status_code=200, body=b"{}"))
+    fake, captured = _capture_invoke(response=HttpResponse(status=200, body=b"{}"))
     monkeypatch.setattr(runner, "invoke", fake)
 
     # 2xx -> returns cleanly (no raise); the @command wrapper turns this into
@@ -125,7 +125,7 @@ def test_fire_posts_cron_body_and_returns_on_2xx(monkeypatch):
 
 
 def test_fire_raises_ct2_on_non_2xx(monkeypatch):
-    fake, _ = _capture_invoke(response=HttpResponse(status_code=403, body=b"forbidden"))
+    fake, _ = _capture_invoke(response=HttpResponse(status=403, body=b"forbidden"))
     monkeypatch.setattr(runner, "invoke", fake)
 
     with pytest.raises(CronTriggerRejectedError) as excinfo:

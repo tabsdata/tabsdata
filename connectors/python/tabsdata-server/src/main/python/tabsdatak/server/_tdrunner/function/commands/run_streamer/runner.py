@@ -21,7 +21,7 @@ from pathlib import Path
 from tabsdatak._connectors import get_stream_src
 from tabsdatak._info import KIND_STREAM_PUBLISHER_DEF, StreamPublisherInfo, _unwrap_info
 from tabsdatak.extensions.variant.version import version as _tabsdata_version
-from tabsdatak.server._tdrunner.function._lib.command import notify_done
+from tabsdatak.server._tdrunner.function._commons.run.command import notify_done
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     UnsupportedSchemeError as _StageUnsupportedSchemeError,

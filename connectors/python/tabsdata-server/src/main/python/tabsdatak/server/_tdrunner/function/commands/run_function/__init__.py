@@ -32,7 +32,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.run_function.runner import (
     _FunctionContext,
     _infer_table_modes,
@@ -82,11 +85,11 @@ MAN = (
 
 def _build_parser():
     parser = build_parser(
-        prog="run-function",
+        program="run-function",
         description="Invoke the publisher's user-defined function.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
     parser.add_argument("--request", required=True, help="Path to request.yaml")
     parser.add_argument(

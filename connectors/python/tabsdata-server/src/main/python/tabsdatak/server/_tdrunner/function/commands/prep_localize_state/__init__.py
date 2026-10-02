@@ -26,7 +26,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.runner import (
     _build_inputs_manifest_entries,
     _build_state_manifest_entries,
@@ -60,11 +63,11 @@ MAN = (
 
 def _build_parser():
     parser = build_parser(
-        prog="prep-localize-state",
+        program="prep-localize-state",
         description="Generate the localize-state transporter request.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
     parser.add_argument("--request", required=True, help="Path to request.yaml")
     parser.add_argument(

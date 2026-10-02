@@ -17,7 +17,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tabsdatak.server._tdrunner.function._lib.command import notify_done
+from tabsdatak.server._tdrunner.function._commons.run.command import notify_done
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     load_outputs_manifest_or_raise,

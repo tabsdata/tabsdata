@@ -19,7 +19,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.fetch_request.runner import (
     _fetch,
     run,
@@ -52,11 +55,11 @@ MAN = (
 
 def _build_parser():
     parser = build_parser(
-        prog="fetch-request",
+        program="fetch-request",
         description="Fetch a function-run definition (request.yaml) from a URL.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
     parser.add_argument(
         "--resolver-url",

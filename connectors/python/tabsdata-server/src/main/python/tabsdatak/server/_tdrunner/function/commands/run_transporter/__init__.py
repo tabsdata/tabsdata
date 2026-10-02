@@ -12,7 +12,10 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function._lib.command import build_parser, command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    build_parser,
+    command,
+)
 from tabsdatak.server._tdrunner.function.commands.run_transporter.runner import (
     run,
 )
@@ -32,11 +35,11 @@ MAN = (
 
 def _build_parser():
     parser = build_parser(
-        prog="run-transporter",
+        program="run-transporter",
         description="Exec td_transporter with a transporter request YAML.",
         version=VERSION,
         info=INFO,
-        man=MAN,
+        manual=MAN,
     )
     parser.add_argument(
         "--request",

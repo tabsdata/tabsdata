@@ -24,15 +24,15 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from tabsdatak.conn.stream.stage._backend import StageBackend
-from tabsdatak.server._tdrunner.function._lib.command import (
-    resolve_value,
-)
-from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
-from tabsdatak.server._tdrunner.function._lib.http_request import (
+from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpRequest,
     HttpRequestError,
     invoke,
 )
+from tabsdatak.server._tdrunner.function._commons.solver.arguments import (
+    resolve_value,
+)
+from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.request import (
     load_any_request_or_raise,
 )
@@ -219,15 +219,15 @@ def _trigger_one(
             "run-manifest-trigger: triggered manifest %s (status=%d); "
             "deferring deletion until next iteration sees dedup-reject",
             manifest_path.name,
-            response.status_code,
+            response.status,
         )
         return _TriggerOutcome.TRIGGERED
-    if response.status_code == _DEDUP_REJECT_STATUS:
+    if response.status == _DEDUP_REJECT_STATUS:
         logger.info(
             "run-manifest-trigger: manifest %s dedup-rejected (status=%d); "
             "external_uid already seen, queueing for deletion",
             manifest_path.name,
-            response.status_code,
+            response.status,
         )
         _enqueue_for_deletion(manifest_path, external_uid, backend, deletion_queue)
         return _TriggerOutcome.DEDUP_DELETED
@@ -239,7 +239,7 @@ def _trigger_one(
         "run-manifest-trigger: manifest %s got unexpected response "
         "(status=%d); leaving in place for retry. Body: %r",
         manifest_path.name,
-        response.status_code,
+        response.status,
         body_preview,
     )
     return _TriggerOutcome.TRANSIENT
