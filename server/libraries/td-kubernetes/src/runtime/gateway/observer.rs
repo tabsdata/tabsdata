@@ -12,8 +12,9 @@ use td_bridge::observer::{
     ObservedWorkload, ObserverError, WorkloadKind, WorkloadObservation, WorkloadObserver,
     WorkloadPhase,
 };
-use td_objects::types::basic::{AtTime, WorkerId};
+use td_objects::types::basic::{AtTime, FunctionId, FunctionName, WorkerId};
 
+use crate::base::annotations::ANNOTATION_FUNCTION;
 use crate::base::constants::{
     DECORATOR_CRON_PUBLISHER, DECORATOR_PUBLISHER, DECORATOR_STREAM_PUBLISHER,
     DECORATOR_SUBSCRIBER, DECORATOR_TRANSFORMER, JOB_CONDITION_FAILED, JOB_CONDITION_STATUS_TRUE,
@@ -21,7 +22,7 @@ use crate::base::constants::{
     POD_PHASE_FAILED, POD_PHASE_PENDING, POD_PHASE_RUNNING, POD_PHASE_SUCCEEDED,
     POD_YAML_DECORATOR_LABEL,
 };
-use crate::base::labels::LABEL_WORKER_ID;
+use crate::base::labels::{LABEL_FUNCTION_ID, LABEL_WORKER_ID};
 use crate::kube::api::entity::cronjob::{delete_cronjob, list_cronjobs_of_workers};
 use crate::kube::api::entity::job::{delete_job, list_jobs_of_workers};
 use crate::kube::api::entity::pod::{delete_pod, list_pods_of_workers};
@@ -44,8 +45,12 @@ fn at_time(time: Option<&Time>) -> Option<AtTime> {
 trait WorkloadMetadata {
     fn name(&self) -> String;
     fn label(&self, label: &str) -> Option<&str>;
+    fn annotation(&self, annotation: &str) -> Option<&str>;
     fn unmapped(&self, label: &str, value: Option<&str>) -> ObserverError;
     fn worker_id(&self) -> Result<WorkerId, ObserverError>;
+    fn function_id(&self) -> Option<FunctionId>;
+    fn function(&self) -> Option<FunctionName>;
+    fn deleting(&self) -> bool;
     fn workload_kind(&self) -> Result<WorkloadKind, ObserverError>;
     fn created(&self) -> Option<AtTime>;
     fn owned_by(&self, kind: &str) -> bool;
@@ -64,6 +69,13 @@ impl WorkloadMetadata for ObjectMeta {
             .map(String::as_str)
     }
 
+    fn annotation(&self, annotation: &str) -> Option<&str> {
+        self.annotations
+            .as_ref()
+            .and_then(|annotations| annotations.get(annotation))
+            .map(String::as_str)
+    }
+
     fn unmapped(&self, label: &str, value: Option<&str>) -> ObserverError {
         ObserverError::UnmappedWorkload {
             workload: self.name(),
@@ -77,6 +89,20 @@ impl WorkloadMetadata for ObjectMeta {
         value
             .and_then(|value| WorkerId::try_from(value).ok())
             .ok_or_else(|| self.unmapped(LABEL_WORKER_ID, value))
+    }
+
+    fn function_id(&self) -> Option<FunctionId> {
+        self.label(LABEL_FUNCTION_ID)
+            .and_then(|value| FunctionId::try_from(value).ok())
+    }
+
+    fn function(&self) -> Option<FunctionName> {
+        self.annotation(ANNOTATION_FUNCTION)
+            .and_then(|value| FunctionName::try_from(value).ok())
+    }
+
+    fn deleting(&self) -> bool {
+        self.deletion_timestamp.is_some()
     }
 
     fn workload_kind(&self) -> Result<WorkloadKind, ObserverError> {
@@ -256,12 +282,15 @@ impl FromKubernetes for ObservedWorkload {
         };
         Ok(Self {
             worker_id: Some(job.metadata.worker_id()?),
+            function_id: job.metadata.function_id(),
+            function: job.metadata.function(),
             kind: job.metadata.workload_kind()?,
             name,
             phase,
             phase_since,
             finished_at,
             message,
+            deleting: job.metadata.deleting(),
         })
     }
 
@@ -273,6 +302,8 @@ impl FromKubernetes for ObservedWorkload {
             .unwrap_or(false);
         Ok(Self {
             worker_id: Some(cronjob.metadata.worker_id()?),
+            function_id: cronjob.metadata.function_id(),
+            function: cronjob.metadata.function(),
             kind: cronjob.metadata.workload_kind()?,
             name: cronjob.metadata.name(),
             phase: if suspended {
@@ -283,18 +314,22 @@ impl FromKubernetes for ObservedWorkload {
             phase_since: cronjob.metadata.created(),
             finished_at: None,
             message: None,
+            deleting: cronjob.metadata.deleting(),
         })
     }
 
     fn from_pod(pod: &Pod) -> Result<Self, ObserverError> {
         Ok(Self {
             worker_id: Some(pod.metadata.worker_id()?),
+            function_id: pod.metadata.function_id(),
+            function: pod.metadata.function(),
             kind: pod.metadata.workload_kind()?,
             name: pod.metadata.name(),
             phase: pod.phase(),
             phase_since: pod.phase_since(),
             finished_at: None,
             message: pod.message(),
+            deleting: pod.metadata.deleting(),
         })
     }
 }

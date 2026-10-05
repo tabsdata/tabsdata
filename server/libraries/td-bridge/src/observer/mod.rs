@@ -9,7 +9,7 @@
 use async_trait::async_trait;
 use td_common::worker::WorkerName;
 use td_error::td_error;
-use td_objects::types::basic::{AtTime, WorkerId};
+use td_objects::types::basic::{AtTime, FunctionId, FunctionName, WorkerId};
 
 #[td_error]
 pub enum ObserverError {
@@ -73,6 +73,10 @@ pub enum WorkloadPhase {
 pub struct ObservedWorkload {
     /// `None` when the worker-id label is missing or does not round-trip.
     pub worker_id: Option<WorkerId>,
+    /// `None` when the function-id label is missing or does not round-trip.
+    pub function_id: Option<FunctionId>,
+    /// `None` when the function annotation is missing or is not a valid name.
+    pub function: Option<FunctionName>,
     pub kind: WorkloadKind,
     pub name: String,
     pub phase: WorkloadPhase,
@@ -80,6 +84,8 @@ pub struct ObservedWorkload {
     pub phase_since: Option<AtTime>,
     pub finished_at: Option<AtTime>,
     pub message: Option<String>,
+    /// The backend is already deleting it.
+    pub deleting: bool,
 }
 
 #[derive(Debug, Clone, Default)]
