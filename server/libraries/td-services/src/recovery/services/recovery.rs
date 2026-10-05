@@ -62,13 +62,13 @@ async fn recovery(
     };
 
     match (observer, observation) {
-        (Some(observer), Some(observation)) => {
+        (Some(_), Some(observation)) => {
             let snapshot = {
                 let mut conn = db.read().await?;
                 take_recovery_snapshot(conn.get(grant), &at).await?
             };
             let decisions = classify_divergence(&config, &observation, &snapshot);
-            let actions = execute_workload_removals(observer, &decisions).await;
+            let actions = execute_workload_removals(bridge.message_queue(), &decisions).await;
             for (project, actions) in actions.by_project() {
                 let mut trx = db.in_project(&project).begin_exclusive().await?;
                 match apply_recovery_actions(msgs, trx.get(grant), &at, &actions).await {

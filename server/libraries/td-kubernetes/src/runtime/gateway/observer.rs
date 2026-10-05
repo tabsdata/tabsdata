@@ -12,6 +12,7 @@ use td_bridge::observer::{
     ObservedWorkload, ObserverError, WorkloadKind, WorkloadObservation, WorkloadObserver,
     WorkloadPhase,
 };
+use td_common::worker::Decorator;
 use td_objects::types::basic::{AtTime, FunctionId, FunctionName, WorkerId};
 
 use crate::base::annotations::ANNOTATION_FUNCTION;
@@ -23,9 +24,9 @@ use crate::base::constants::{
     POD_YAML_DECORATOR_LABEL,
 };
 use crate::base::labels::{LABEL_FUNCTION_ID, LABEL_WORKER_ID};
-use crate::kube::api::entity::cronjob::{delete_cronjob, list_cronjobs_of_workers};
-use crate::kube::api::entity::job::{delete_job, list_jobs_of_workers};
-use crate::kube::api::entity::pod::{delete_pod, list_pods_of_workers};
+use crate::kube::api::entity::cronjob::list_cronjobs_of_workers;
+use crate::kube::api::entity::job::list_jobs_of_workers;
+use crate::kube::api::entity::pod::list_pods_of_workers;
 use crate::kube::context::KubeContext;
 
 pub struct KubernetesWorkloadObserver {
@@ -52,6 +53,7 @@ trait WorkloadMetadata {
     fn function(&self) -> Option<FunctionName>;
     fn deleting(&self) -> bool;
     fn workload_kind(&self) -> Result<WorkloadKind, ObserverError>;
+    fn decorator(&self) -> Option<Decorator>;
     fn created(&self) -> Option<AtTime>;
     fn owned_by(&self, kind: &str) -> bool;
     fn owner_name(&self, kind: &str) -> Option<&str>;
@@ -113,6 +115,15 @@ impl WorkloadMetadata for ObjectMeta {
             Some(DECORATOR_CRON_PUBLISHER) => Ok(WorkloadKind::CronTrigger),
             Some(DECORATOR_STREAM_PUBLISHER) => Ok(WorkloadKind::StageTrigger),
             other => Err(self.unmapped(POD_YAML_DECORATOR_LABEL, other)),
+        }
+    }
+
+    fn decorator(&self) -> Option<Decorator> {
+        match self.label(POD_YAML_DECORATOR_LABEL) {
+            Some(DECORATOR_PUBLISHER) => Some(Decorator::Publisher),
+            Some(DECORATOR_SUBSCRIBER) => Some(Decorator::Subscriber),
+            Some(DECORATOR_TRANSFORMER) => Some(Decorator::Transformer),
+            _ => None,
         }
     }
 
@@ -284,6 +295,7 @@ impl FromKubernetes for ObservedWorkload {
             worker_id: Some(job.metadata.worker_id()?),
             function_id: job.metadata.function_id(),
             function: job.metadata.function(),
+            decorator: job.metadata.decorator(),
             kind: job.metadata.workload_kind()?,
             name,
             phase,
@@ -304,6 +316,7 @@ impl FromKubernetes for ObservedWorkload {
             worker_id: Some(cronjob.metadata.worker_id()?),
             function_id: cronjob.metadata.function_id(),
             function: cronjob.metadata.function(),
+            decorator: cronjob.metadata.decorator(),
             kind: cronjob.metadata.workload_kind()?,
             name: cronjob.metadata.name(),
             phase: if suspended {
@@ -323,6 +336,7 @@ impl FromKubernetes for ObservedWorkload {
             worker_id: Some(pod.metadata.worker_id()?),
             function_id: pod.metadata.function_id(),
             function: pod.metadata.function(),
+            decorator: pod.metadata.decorator(),
             kind: pod.metadata.workload_kind()?,
             name: pod.metadata.name(),
             phase: pod.phase(),
@@ -371,17 +385,6 @@ impl WorkloadObserver for KubernetesWorkloadObserver {
         }
 
         Ok(WorkloadObservation { workloads })
-    }
-
-    async fn remove(&self, kind: &WorkloadKind, name: &str) -> Result<(), ObserverError> {
-        match kind {
-            WorkloadKind::CronTrigger => delete_cronjob(&self.context, name).await?,
-            WorkloadKind::Function | WorkloadKind::StageTrigger => {
-                delete_job(&self.context, name).await?;
-                delete_pod(&self.context, name).await?;
-            }
-        }
-        Ok(())
     }
 }
 

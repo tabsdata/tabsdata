@@ -13,7 +13,7 @@ use crate::connection::ConnectionStore;
 use crate::connection::memory::InMemoryConnectionStore;
 use crate::messaging::OrchestratorMessageQueue;
 use crate::messaging::memory::InMemoryOrchestratorMessageQueue;
-use crate::observer::{ObserverError, WorkloadKind, WorkloadObservation, WorkloadObserver};
+use crate::observer::{ObserverError, WorkloadObservation, WorkloadObserver};
 use crate::worker::{LogBridgeError, WorkerHandler, WorkerLogStream, WorkerLogTarget};
 use crate::{BridgeProvider, BridgeProviderHandle, Orchestrator};
 use async_trait::async_trait;
@@ -55,8 +55,7 @@ impl TestBridgeProvider {
     }
 }
 
-/// Observer that answers every `observe` with the same fixed observation
-/// and swallows removals.
+/// Observer that answers every `observe` with the same fixed observation.
 #[derive(Default)]
 pub struct StaticWorkloadObserver(pub WorkloadObservation);
 
@@ -64,10 +63,6 @@ pub struct StaticWorkloadObserver(pub WorkloadObservation);
 impl WorkloadObserver for StaticWorkloadObserver {
     async fn observe(&self) -> Result<WorkloadObservation, ObserverError> {
         Ok(self.0.clone())
-    }
-
-    async fn remove(&self, _kind: &WorkloadKind, _name: &str) -> Result<(), ObserverError> {
-        Ok(())
     }
 }
 

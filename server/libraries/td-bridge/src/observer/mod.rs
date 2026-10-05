@@ -7,7 +7,7 @@
 //! observer, and recovery falls back to its time-based sweep.
 
 use async_trait::async_trait;
-use td_common::worker::WorkerName;
+use td_common::worker::{Decorator, WorkerName};
 use td_error::td_error;
 use td_objects::types::basic::{AtTime, FunctionId, FunctionName, WorkerId};
 
@@ -78,6 +78,8 @@ pub struct ObservedWorkload {
     /// `None` when the function annotation is missing or is not a valid name.
     pub function: Option<FunctionName>,
     pub kind: WorkloadKind,
+    /// Set for function runs; `None` for triggers.
+    pub decorator: Option<Decorator>,
     pub name: String,
     pub phase: WorkloadPhase,
     /// When the workload entered its current phase if the backend can date it.
@@ -98,7 +100,4 @@ pub trait WorkloadObserver: Send + Sync {
     /// Workloads owned by another observed workload fold into their owner, not listed
     /// (e.g., the runs a cron trigger spawns).
     async fn observe(&self) -> Result<WorkloadObservation, ObserverError>;
-
-    /// Idempotent: removing an already-gone workload succeeds.
-    async fn remove(&self, kind: &WorkloadKind, name: &str) -> Result<(), ObserverError>;
 }

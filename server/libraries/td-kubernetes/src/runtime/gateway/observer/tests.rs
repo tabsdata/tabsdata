@@ -114,3 +114,17 @@ fn a_workload_with_a_deletion_timestamp_is_being_deleted() {
     metadata.deletion_timestamp = Some(Time(chrono::Utc::now()));
     assert!(metadata.deleting());
 }
+
+#[test]
+fn function_runs_expose_their_decorator_and_triggers_none() {
+    for (decorator, expected) in [
+        (DECORATOR_PUBLISHER, Some(Decorator::Publisher)),
+        (DECORATOR_SUBSCRIBER, Some(Decorator::Subscriber)),
+        (DECORATOR_TRANSFORMER, Some(Decorator::Transformer)),
+        (DECORATOR_CRON_PUBLISHER, None),
+        (DECORATOR_STREAM_PUBLISHER, None),
+    ] {
+        let metadata = metadata(&[(POD_YAML_DECORATOR_LABEL, decorator)]);
+        assert_eq!(metadata.decorator(), expected, "{decorator}");
+    }
+}

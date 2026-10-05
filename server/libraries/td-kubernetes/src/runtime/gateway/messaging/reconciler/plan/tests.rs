@@ -36,6 +36,7 @@ fn workload(
         function_id: FunctionId::try_from(function).ok(),
         function: None,
         kind,
+        decorator: None,
         name: name.to_owned(),
         phase,
         phase_since: None,

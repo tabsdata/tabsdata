@@ -9,9 +9,12 @@ use chrono::{DateTime, Utc};
 use itertools::Itertools;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use td_bridge::BridgeProviderHandle;
-use td_bridge::observer::{
-    ObservedWorkload, WorkloadKind, WorkloadObservation, WorkloadObserver, WorkloadPhase,
+use td_bridge::messaging::{
+    CronRequest, CronStopRequest, FunctionRequest, FunctionStopRequest, OrchestratorMessagePayload,
+    OrchestratorMessageQueue, StageTriggerRequest, StageTriggerStopRequest,
 };
+use td_bridge::observer::{ObservedWorkload, WorkloadKind, WorkloadObservation, WorkloadPhase};
+use td_common::worker::WorkerName;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -28,7 +31,7 @@ use td_objects::types::basic::{
 };
 use td_queries::Queries;
 use td_storage::Storage;
-use tracing::{debug, instrument, warn};
+use tracing::{debug, error, instrument, warn};
 
 #[derive(Debug, Clone, Default)]
 pub struct CronCandidates(pub Vec<WorkerDBWithNames>);
@@ -70,7 +73,7 @@ pub struct FnRecoveryAction {
     pub project_id: ProjectId,
     pub lfr: Option<LogicalFunctionRunDB>,
     pub recover: bool,
-    pub remove: Option<(WorkloadKind, String)>,
+    pub remove: Option<ObservedWorkload>,
     pub reason: String,
 }
 
@@ -79,12 +82,12 @@ pub struct RecoveryDecisions {
     pub fn_actions: Vec<FnRecoveryAction>,
     pub cron_recreates: Vec<WorkerDBWithNames>,
     pub stage_recreates: Vec<WorkerDBWithNames>,
-    /// Deleted now, recreated next tick once observed absent.
-    pub stage_restarts: Vec<(WorkerId, WorkloadKind, String)>,
-    pub orphan_removals: Vec<(WorkloadKind, String)>,
+    /// Stopped now, recreated next tick once observed absent.
+    pub stage_restarts: Vec<(WorkerId, ObservedWorkload)>,
+    pub orphan_removals: Vec<ObservedWorkload>,
 }
 
-/// Function actions whose workload removal succeeded; the rest retry next
+/// Function actions whose workload Stop was queued; the rest retry next
 /// tick.
 #[derive(Debug, Clone, Default)]
 pub struct RecoveryActions {
@@ -386,9 +389,7 @@ pub fn classify_divergence(
                 project_id: attempt.pfr.project_id,
                 lfr: None,
                 recover,
-                remove: remove
-                    .then(|| workload.map(|w| (w.kind, w.name.clone())))
-                    .flatten(),
+                remove: remove.then(|| workload.cloned()).flatten(),
                 reason,
             });
         }
@@ -415,11 +416,9 @@ pub fn classify_divergence(
                     WorkloadPhase::Unknown => before(&w.phase_since, &grace_cutoff),
                 };
                 if restart {
-                    decisions.stage_restarts.push((
-                        worker.base.base.id.clone(),
-                        w.kind,
-                        w.name.clone(),
-                    ));
+                    decisions
+                        .stage_restarts
+                        .push((worker.base.base.id.clone(), (*w).clone()));
                 }
             }
         }
@@ -453,9 +452,7 @@ pub fn classify_divergence(
             continue;
         }
         if before_or_undated(&workload.phase_since, &grace_cutoff) {
-            decisions
-                .orphan_removals
-                .push((workload.kind, workload.name.clone()));
+            decisions.orphan_removals.push(workload.clone());
         }
     }
 
@@ -500,44 +497,120 @@ pub fn classify_divergence(
     decisions
 }
 
-/// Orchestrator actions before DB outcomes: a function action whose removal
-/// failed is dropped — its DB outcome must not land while the workload may
-/// still be alive.
+/// Each removal is a Stop on the bridge queue, which carries it out
+/// asynchronously; a re-dispatched run shares the stopped run's key, so the
+/// reconciler creates it only once the old workload is gone. A function action
+/// whose Stop cannot be queued is dropped and retried next tick.
 #[instrument(name = "recovery.execute_workload_removals", skip_all, level = "debug")]
 pub async fn execute_workload_removals(
-    observer: &dyn WorkloadObserver,
+    queue: &dyn OrchestratorMessageQueue,
     decisions: &RecoveryDecisions,
 ) -> RecoveryActions {
     let mut fn_actions = Vec::with_capacity(decisions.fn_actions.len());
     for action in &decisions.fn_actions {
-        if let Some((kind, name)) = &action.remove
-            && let Err(e) = observer.remove(kind, name).await
+        if let Some(workload) = &action.remove
+            && !stop_workload(queue, workload).await
         {
-            warn!(
-                workload = %name,
-                reason = ?e,
-                "recovery: workload removal failed; retrying next tick"
-            );
             continue;
         }
         fn_actions.push(action.clone());
     }
 
-    for (worker_id, kind, name) in &decisions.stage_restarts {
-        warn!(worker_id = %worker_id, workload = %name, "recovery: restarting streamer workload");
-        if let Err(e) = observer.remove(kind, name).await {
-            warn!(workload = %name, reason = ?e, "recovery: streamer removal failed; retrying next tick");
-        }
+    for (worker_id, workload) in &decisions.stage_restarts {
+        warn!(worker_id = %worker_id, workload = %workload.name, "recovery: restarting streamer workload");
+        stop_workload(queue, workload).await;
     }
 
-    for (kind, name) in &decisions.orphan_removals {
-        warn!(workload = %name, "recovery: removing orphan workload");
-        if let Err(e) = observer.remove(kind, name).await {
-            warn!(workload = %name, reason = ?e, "recovery: orphan removal failed; retrying next tick");
-        }
+    for workload in &decisions.orphan_removals {
+        warn!(workload = %workload.name, "recovery: removing orphan workload");
+        stop_workload(queue, workload).await;
     }
 
     RecoveryActions { fn_actions }
+}
+
+async fn stop_workload(queue: &dyn OrchestratorMessageQueue, workload: &ObservedWorkload) -> bool {
+    let (id, payload) = match stop_message(workload) {
+        Ok(message) => message,
+        Err(missing) => {
+            error!(
+                workload = %workload.name,
+                missing = %missing,
+                "recovery: inconsistent workload, it lacks {missing} and cannot be stopped through the queue"
+            );
+            return false;
+        }
+    };
+    match queue.put(id, payload).await {
+        Ok(_) => true,
+        Err(e) => {
+            warn!(workload = %workload.name, reason = ?e, "recovery: stop message put failed; retrying next tick");
+            false
+        }
+    }
+}
+
+pub(crate) fn stop_message(
+    workload: &ObservedWorkload,
+) -> Result<(String, OrchestratorMessagePayload<serde_yaml::Value>), String> {
+    let (Some(worker_id), Some(function_id), Some(function)) = (
+        workload.worker_id.clone(),
+        workload.function_id,
+        workload.function.clone(),
+    ) else {
+        return Err(missing_fields(workload));
+    };
+    let id = worker_id.to_string();
+    let payload = match (workload.kind, workload.decorator) {
+        (WorkloadKind::Function, Some(decorator)) => {
+            OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+                FunctionRequest::Stop(FunctionStopRequest {
+                    worker: WorkerName::Function,
+                    worker_id,
+                    decorator,
+                    function_id,
+                    function,
+                }),
+            )
+        }
+        (WorkloadKind::Function, None) => return Err(missing_fields(workload)),
+        (WorkloadKind::CronTrigger, _) => {
+            OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Stop(
+                CronStopRequest {
+                    worker: WorkerName::CronTrigger,
+                    worker_id,
+                    function_id,
+                    function,
+                },
+            ))
+        }
+        (WorkloadKind::StageTrigger, _) => {
+            OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
+                StageTriggerRequest::Stop(StageTriggerStopRequest {
+                    worker: WorkerName::StageTrigger,
+                    worker_id,
+                    function_id,
+                    function,
+                }),
+            )
+        }
+    };
+    Ok((id, payload))
+}
+
+fn missing_fields(workload: &ObservedWorkload) -> String {
+    [
+        (workload.worker_id.is_none(), "worker_id"),
+        (workload.function_id.is_none(), "function_id"),
+        (workload.function.is_none(), "function"),
+        (
+            workload.kind == WorkloadKind::Function && workload.decorator.is_none(),
+            "decorator",
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(missing, field)| missing.then_some(field))
+    .join(", ")
 }
 
 /// Recreate the missing trigger workloads; a failed put retries next tick.
@@ -763,3 +836,6 @@ pub fn fail_lfrs_from_actions(
         .unique_by(|lfr| lfr.base.id.clone())
         .collect())
 }
+
+#[cfg(test)]
+mod tests;

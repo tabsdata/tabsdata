@@ -6,11 +6,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use humantime::format_duration;
-use td_bridge::observer::WorkloadObserver;
+use td_bridge::observer::{WorkloadKind, WorkloadObserver};
 use tokio::time::timeout;
 use tracing::{error, info, warn};
 
+use crate::base::error::kubernetes::KubernetesError;
 use crate::kube::api::domain::worker::delete_worker;
+use crate::kube::api::entity::cronjob::delete_cronjob;
+use crate::kube::api::entity::job::delete_job;
+use crate::kube::api::entity::pod::delete_pod;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::factory::WorkloadFactory;
 use crate::runtime::gateway::messaging::reconciler::Reconciler;
@@ -62,7 +66,7 @@ async fn reconcile(
     for action in actions {
         match action {
             Action::Delete { kind, name } => {
-                let outcome = timeout(CALL_TIMEOUT, observer.remove(&kind, &name)).await;
+                let outcome = timeout(CALL_TIMEOUT, delete_workload(context, kind, &name)).await;
                 if !matches!(outcome, Ok(Ok(()))) {
                     warn!("Could not delete '{name}'; retrying: {outcome:?}");
                     reconciler.state().reissue(&name);
@@ -105,6 +109,20 @@ async fn reconcile(
                     }
                 }
             }
+        }
+    }
+}
+
+async fn delete_workload(
+    context: &KubeContext,
+    kind: WorkloadKind,
+    name: &str,
+) -> Result<(), KubernetesError> {
+    match kind {
+        WorkloadKind::CronTrigger => delete_cronjob(context, name).await,
+        WorkloadKind::Function | WorkloadKind::StageTrigger => {
+            delete_job(context, name).await?;
+            delete_pod(context, name).await
         }
     }
 }
