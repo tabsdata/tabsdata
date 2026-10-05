@@ -548,7 +548,9 @@ class Db2CdcStreamSrc(StreamSrc):
             inlined as top-level columns.
         src_cfg: Optional config mapping over the allowed CDC keys only
             -- buffer / trigger thresholds, polling cadence, server-side
-            fetch size.
+            fetch size. A byte threshold is measured on every change and
+            slows ingestion down; bounding by rows is the cheap option
+            and the preferred one.
     """
 
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)

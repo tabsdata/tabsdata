@@ -368,12 +368,14 @@ class KafkaStreamSrc(StreamSrc):
             16), `kafka.logging_level`, the buffer limits
             `tabsdata.kafka.buffer.max_rows` (default 10000),
             `tabsdata.kafka.buffer.max_bytes` (memory the decoded records
-            hold, default 134217728, 128 MiB) and
-            `tabsdata.kafka.buffer.max_secs` (default 60), and the
-            trigger limits `tabsdata.kafka.trigger.max_secs` (default
-            60, at least 60), `tabsdata.kafka.trigger.max_rows` and
+            hold, off by default) and `tabsdata.kafka.buffer.max_secs`
+            (default 60), and the trigger limits
+            `tabsdata.kafka.trigger.max_secs` (default 60, at least 60),
+            `tabsdata.kafka.trigger.max_rows` and
             `tabsdata.kafka.trigger.max_bytes` (both off by default).
-            Every limit is a positive whole number.
+            Every limit is a positive whole number. A byte limit is
+            measured on every record and slows ingestion down; bounding
+            by rows is the cheap option and the preferred one.
 
     Examples:
         Consume Avro payloads, staging a batch as soon as 500 messages

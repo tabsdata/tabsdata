@@ -1126,7 +1126,9 @@ class _Connection:
         if "set transaction snapshot" in sql:
             return _Result(None)
         if "select now()" in sql:
-            return _Result(datetime(2026, 1, 1, 12, 0, tzinfo=timezone(timedelta(hours=2))))
+            return _Result(
+                datetime(2026, 1, 1, 12, 0, tzinfo=timezone(timedelta(hours=2)))
+            )
         raise AssertionError(f"unexpected statement: {sql}")
 
 
@@ -1351,6 +1353,58 @@ def test_a_begin_without_its_commit_position_fails():
     with pytest.raises(TabsdataException) as ei:
         list(_format_2_ingester(messages)._poll_changes_v2(None))
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_30
+
+
+class _Clock:
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, secs: float) -> None:
+        self.now += secs
+
+
+class _PacedCursor(_ReplicationCursor):
+    def __init__(self, messages: list[_Message], clock: _Clock, pause: float):
+        super().__init__(messages)
+        self._clock = clock
+        self._pause = pause
+
+    def read_message(self):
+        self._clock.now += self._pause
+        return super().read_message()
+
+
+def _paced_ingester(monkeypatch, messages: list[_Message], pause: float):
+    clock = _Clock()
+    monkeypatch.setattr(_cdc_impl, "time", clock)
+    bi = _format_2_ingester(messages)
+    bi._cursor = _PacedCursor(messages, clock, pause)
+    bi._poll_max_secs = 1
+    return bi, clock
+
+
+def test_a_transaction_longer_than_the_pending_budget_is_read_whole(monkeypatch):
+    budget = _cdc_impl.PENDING_TIMEOUT_MULTIPLIER
+    rows = [(f"0/{0x100 + 0x10 * i:X}", i) for i in range(1, 3 * budget)]
+    messages = _transaction(7, "0/9000", rows, "0/9100")
+    bi, clock = _paced_ingester(monkeypatch, messages, pause=1.0)
+
+    changes = list(bi._poll_changes_v2(None))
+
+    assert len(changes) == len(rows)
+    assert clock.now > budget
+
+
+def test_a_source_silent_mid_transaction_fails_the_stream(monkeypatch):
+    messages = _transaction(7, "0/9000", [("0/100", 1)], "0/9100")[:-1]
+    bi, _clock = _paced_ingester(monkeypatch, messages, pause=1.0)
+
+    with pytest.raises(TabsdataException) as ei:
+        list(bi._poll_changes_v2(None))
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_18
 
 
 def test_the_stream_asks_wal2json_for_commit_positions(monkeypatch):

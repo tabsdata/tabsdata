@@ -100,9 +100,11 @@ DEFAULT_REPLICATION_SLOT_BEHAVIOR = "reuse"
 POLL_INTERVAL_SECONDS = 1.0
 
 # When a transaction has begun (v2 BEGIN seen) but no COMMIT has
-# arrived yet, extend the per-poll deadline by this multiplier so
-# we don't synthesize a half-applied transaction into the staging
-# area. Mirrors the legacy ``Wal2JsonIngester``.
+# arrived yet, the poll outlives its deadline rather than synthesize
+# a half-applied transaction into the staging area: it waits this
+# many poll budgets for the NEXT message, however long the whole
+# transaction takes to read. Only a source gone silent mid-transaction
+# fails the stream.
 PENDING_TIMEOUT_MULTIPLIER = 16
 
 # A stream restarted right after a stop can find its slot still held: the
@@ -1409,9 +1411,9 @@ class Wal2JsonIngester(CdcIngester):
         deadline: float,
         pending_timeout: float,
     ) -> Any | None:
-        # ``pending`` extends the deadline -- when a v2 BEGIN has
-        # arrived but COMMIT hasn't, give the source more time so
-        # we don't synthesize a torn transaction.
+        # ``pending`` replaces the deadline -- when a v2 BEGIN has
+        # arrived but COMMIT hasn't, wait for the next message until
+        # ``pending_timeout`` so we don't synthesize a torn transaction.
         if self._held:
             return self._held.pop(0)
         effective = pending_timeout if pending else deadline
@@ -1547,9 +1549,7 @@ class Wal2JsonIngester(CdcIngester):
         _session: Any,
     ) -> Generator[CdcChange, None, None]:
         deadline = time.monotonic() + self._poll_max_secs
-        pending_timeout = time.monotonic() + (
-            self._poll_max_secs * PENDING_TIMEOUT_MULTIPLIER
-        )
+        idle_budget = self._poll_max_secs * PENDING_TIMEOUT_MULTIPLIER
         xid: str | None = None
         timestamp: datetime | None = None
         commit: int = 0
@@ -1559,7 +1559,7 @@ class Wal2JsonIngester(CdcIngester):
             message = self._read_next_message(
                 pending=pending,
                 deadline=deadline,
-                pending_timeout=pending_timeout,
+                pending_timeout=time.monotonic() + idle_budget,
             )
             if message is None:
                 if pending:

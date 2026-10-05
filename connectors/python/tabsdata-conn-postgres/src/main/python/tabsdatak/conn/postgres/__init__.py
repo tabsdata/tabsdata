@@ -543,7 +543,10 @@ class PostgresCdcStreamSrc(StreamSrc):
         src_cfg: Optional config mapping over the allowed CDC keys only
             -- buffer / trigger thresholds, polling cadence, wal2json
             format version, the large text length limit and
-            `postgres.cdc.unchanged_large_text_as_null`. The latter
+            `postgres.cdc.unchanged_large_text_as_null`. A byte
+            threshold is measured on every change and slows ingestion
+            down; bounding by rows is the cheap option and the preferred
+            one. `postgres.cdc.unchanged_large_text_as_null`
             accepts that, on a table without `REPLICA IDENTITY FULL`, an
             UPDATE not touching a large text column delivers it as null;
             when unset, such a table refuses to start the stream.

@@ -104,7 +104,7 @@ def test_run_config_defaults():
     assert cfg.trigger_max_rows is None
     assert (cfg.buffer_max_rows, cfg.buffer_max_bytes, cfg.buffer_max_secs) == (
         10_000,
-        128 * 1024 * 1024,
+        None,
         60,
     )
     assert cfg.poll_idle_secs == 0
