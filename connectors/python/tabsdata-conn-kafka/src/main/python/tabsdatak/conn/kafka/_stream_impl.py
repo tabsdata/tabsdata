@@ -38,11 +38,13 @@ from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._serdes import (
+    DecodeErrorKind,
     KafkaSerde,
     SchemaIdCompatibles,
     SchemaIdSpec,
     build_schema_registry_client,
     build_serde,
+    classify_decode_error,
 )
 from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
 from tabsdatak.conn.kafka.error import KafkaErrorCode
@@ -307,10 +309,29 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
                     msg.value(),
                     SerializationContext(msg.topic(), MessageField.VALUE),
                 )
-            except Exception as exc:  # noqa: BLE001 -- surface to DLQ
+            except Exception as exc:  # noqa: BLE001 -- classified below
+                if classify_decode_error(exc) is DecodeErrorKind.RETRYABLE:
+                    raise KafkaErrorCode.KAFKA_27.exception(
+                        cause=exc,
+                        topic=msg.topic(),
+                        partition=msg.partition(),
+                        offset=msg.offset(),
+                        error=exc,
+                    )
+                if not self._dlq_producer:
+                    raise KafkaErrorCode.KAFKA_28.exception(
+                        cause=exc,
+                        topic=msg.topic(),
+                        partition=msg.partition(),
+                        offset=msg.offset(),
+                        error=exc,
+                    )
                 logger.error(
-                    "Failed to deserialise message at offset %s: %s",
+                    "Failed to decode the message at offset %s of partition %s of "
+                    "topic %r; sending it to the dead-letter topic: %s",
                     msg.offset(),
+                    msg.partition(),
+                    msg.topic(),
                     exc,
                 )
                 self._send_to_dlq(msg, exc)

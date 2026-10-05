@@ -21,6 +21,7 @@ Every concrete serde implements:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import TYPE_CHECKING, Callable, Literal, TypeAlias, Union
 
 from tabsdatak.conn.kafka.error import KafkaErrorCode
@@ -39,6 +40,66 @@ MsgFormatSpec: TypeAlias = Literal["avro", "json", "protobuf"]
 SchemaIdSpec: TypeAlias = Union[str, tuple[str, ...], dict[str, str]]
 
 SchemaIdCompatibles: TypeAlias = Callable[[SchemaIdSpec, SchemaIdSpec], bool]
+
+
+class DecodeErrorKind(Enum):
+    RETRYABLE = "retryable"
+    FORMAT = "format"
+
+
+def retryable_error_types() -> tuple[type[BaseException], ...]:
+    types: list[type[BaseException]] = [
+        ConnectionError,
+        TimeoutError,
+    ]
+    try:
+        from confluent_kafka.schema_registry.error import SchemaRegistryError
+
+        types.append(SchemaRegistryError)
+    except ImportError:
+        pass
+    try:
+        from requests.exceptions import (
+            ConnectionError as RequestsConnectionError,
+            Timeout as RequestsTimeout,
+        )
+
+        types.extend([
+            RequestsConnectionError,
+            RequestsTimeout,
+        ])
+    except ImportError:
+        pass
+    try:
+        from botocore.exceptions import (
+            ClientError,
+            ConnectTimeoutError,
+            EndpointConnectionError,
+            ReadTimeoutError,
+        )
+
+        types.extend([
+            ClientError,
+            ConnectTimeoutError,
+            EndpointConnectionError,
+            ReadTimeoutError,
+        ])
+    except ImportError:
+        pass
+    return tuple(types)
+
+
+def classify_decode_error(error: BaseException) -> DecodeErrorKind:
+    retryable = retryable_error_types()
+    cause: BaseException | None = error
+    while cause is not None:
+        if isinstance(cause, retryable):
+            return DecodeErrorKind.RETRYABLE
+        api = getattr(cause, "api_error", None)
+        if api is KafkaErrorCode.KAFKA_18:
+            return DecodeErrorKind.RETRYABLE
+        cause = cause.__cause__ or cause.__context__
+    return DecodeErrorKind.FORMAT
 
 
 def build_json_validator(json_schema: dict):

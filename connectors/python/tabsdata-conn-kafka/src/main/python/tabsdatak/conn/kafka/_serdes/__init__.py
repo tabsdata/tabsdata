@@ -28,10 +28,12 @@ from __future__ import annotations
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._serdes._base import (
+    DecodeErrorKind,
     KafkaSerde,
     MsgFormatSpec,
     SchemaIdCompatibles,
     SchemaIdSpec,
+    classify_decode_error,
 )
 
 # noinspection PyProtectedMember
@@ -82,9 +84,11 @@ __all__ = [
     "ProtobufKafkaSerde",
     "ProtobufSrKafkaSerde",
     "SchemaIdCompatibles",
+    "DecodeErrorKind",
     "SchemaIdSpec",
     "SrKafkaSerde",
     "build_schema_registry_client",
     "build_serde",
+    "classify_decode_error",
     "get_protobuf_class",
 ]

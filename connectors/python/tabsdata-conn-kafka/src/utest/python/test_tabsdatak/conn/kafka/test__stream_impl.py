@@ -285,6 +285,92 @@ def test_undecodable_messages_go_to_the_dlq(tmp_path):
     assert producer.produce.call_args.kwargs["topic"] == "evt_dlq"
 
 
+def _decoding(ingester: KafkaIngester, outcomes: list):
+    def deserialize(_value, _ctx):
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome, ("a",)
+
+    ingester._serde.deserializer_with_schema_id = lambda: deserialize
+
+
+def test_a_registry_outage_stops_the_stream_without_committing(tmp_path):
+    from confluent_kafka.schema_registry.error import SchemaRegistryError
+
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message({"a": 1}, offset=7, partition=2), None]
+    producer = MagicMock()
+    with patch("confluent_kafka.Producer", return_value=producer):
+        ingester = _opened(consumer, tmp_path, dlq_topic="evt_dlq")
+    _decoding(ingester, [SchemaRegistryError(503, 50301, "unavailable")])
+
+    with pytest.raises(TabsdataException) as raised:
+        list(ingester.poll_changes(consumer))
+
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_27
+    assert "offset 7" in str(raised.value) and "partition 2" in str(raised.value)
+    producer.produce.assert_not_called()
+    consumer.commit.assert_not_called()
+
+
+def test_a_glue_resolution_failure_is_retryable(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message({"a": 1}), None]
+    ingester = _opened(consumer, tmp_path)
+    _decoding(
+        ingester,
+        [KafkaErrorCode.KAFKA_18.exception(registry_name="r", schema_name="s")],
+    )
+
+    with pytest.raises(TabsdataException) as raised:
+        list(ingester.poll_changes(consumer))
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_27
+
+
+def test_a_wrapped_network_error_is_retryable(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message({"a": 1}), None]
+    ingester = _opened(consumer, tmp_path)
+    wrapped = ValueError("decode failed")
+    wrapped.__cause__ = ConnectionError("registry unreachable")
+    _decoding(ingester, [wrapped])
+
+    with pytest.raises(TabsdataException) as raised:
+        list(ingester.poll_changes(consumer))
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_27
+
+
+def test_an_undecodable_message_without_a_dlq_stops_the_stream(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message(raw=b"not json", offset=3), None]
+    ingester = _opened(consumer, tmp_path)
+
+    with pytest.raises(TabsdataException) as raised:
+        list(ingester.poll_changes(consumer))
+
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_28
+    assert "offset 3" in str(raised.value)
+    consumer.commit.assert_not_called()
+
+
+def test_a_schema_violation_is_a_format_error_for_the_dlq(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message({"a": 1}), _message({"a": 2}), None]
+    producer = MagicMock()
+    with patch("confluent_kafka.Producer", return_value=producer):
+        ingester = _opened(consumer, tmp_path, dlq_topic="evt_dlq")
+    _decoding(
+        ingester,
+        [KafkaErrorCode.KAFKA_15.exception(error="id is required"), {"a": 2}],
+    )
+
+    records = list(ingester.poll_changes(consumer))
+
+    assert [record.value for record in records] == [{"a": 2}]
+    assert producer.produce.call_count == 1
+
+
 def test_the_broker_keeps_the_offset():
     ingester = _ingester()
     assert ingester.resume_offset(first_stage=False, stream_state={"x": 1}) is None

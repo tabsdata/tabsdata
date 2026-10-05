@@ -12,6 +12,10 @@ import json
 import pytest
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.kafka._serdes._base import (
+    DecodeErrorKind,
+    classify_decode_error,
+)
 from tabsdatak.conn.kafka._serdes._no_sr import (
     AvroKafkaSerde,
     JsonKafkaSerde,
@@ -19,7 +23,6 @@ from tabsdatak.conn.kafka._serdes._no_sr import (
 )
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.error import TabsdataException
-
 
 pytestmark = pytest.mark.kafka
 
@@ -195,3 +198,42 @@ def test_protobuf_unknown_message_name_raises_kafka_17(tmp_path):
 def test_non_sr_base_extract_schema_id_returns_sorted_keys():
     serde = JsonKafkaSerde()
     assert serde.extract_schema_id(b"", {"b": 2, "a": 1}) == ("a", "b")
+
+
+# --- classify_decode_error -----------------------------------------
+
+
+def test_connection_and_timeout_errors_are_retryable():
+    assert classify_decode_error(ConnectionError("down")) is DecodeErrorKind.RETRYABLE
+    assert classify_decode_error(TimeoutError("slow")) is DecodeErrorKind.RETRYABLE
+
+
+def test_a_schema_registry_error_is_retryable():
+    from confluent_kafka.schema_registry.error import SchemaRegistryError
+
+    assert classify_decode_error(SchemaRegistryError(503, 1, "x")) is DecodeErrorKind.RETRYABLE
+
+
+def test_a_botocore_client_error_is_retryable():
+    from botocore.exceptions import ClientError
+
+    error = ClientError({"Error": {"Code": "Throttling"}}, "GetSchemaVersion")
+    assert classify_decode_error(error) is DecodeErrorKind.RETRYABLE
+
+
+def test_a_retryable_cause_makes_the_wrapper_retryable():
+    wrapper = ValueError("decode failed")
+    wrapper.__cause__ = TimeoutError("registry")
+    assert classify_decode_error(wrapper) is DecodeErrorKind.RETRYABLE
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ValueError("invalid JSON"),
+        KafkaErrorCode.KAFKA_13.exception(length=2),
+        KafkaErrorCode.KAFKA_15.exception(error="missing id"),
+    ],
+)
+def test_payload_problems_are_format_errors(error):
+    assert classify_decode_error(error) is DecodeErrorKind.FORMAT

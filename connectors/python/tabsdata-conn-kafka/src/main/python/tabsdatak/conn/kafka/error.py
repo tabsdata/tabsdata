@@ -157,3 +157,16 @@ class KafkaErrorCode(ErrorCode):
         "The Kafka consumer reported a fatal error; the stream cannot continue: "
         "{error}",
     )
+    KAFKA_27 = ErrorDef(
+        KafkaRuntimeException,
+        "The message at offset {offset} of partition {partition} of topic {topic!r} "
+        "could not be decoded because the schema registry could not be reached; "
+        "the stream stops without committing so the messages are read again: "
+        "{error}",
+    )
+    KAFKA_28 = ErrorDef(
+        KafkaRuntimeException,
+        "The message at offset {offset} of partition {partition} of topic {topic!r} "
+        "could not be decoded and the source has no dead-letter topic to send it "
+        "to; the stream stops without committing: {error}",
+    )
