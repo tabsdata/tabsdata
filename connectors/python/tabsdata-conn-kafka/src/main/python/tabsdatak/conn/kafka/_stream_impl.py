@@ -466,6 +466,8 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
             except BufferError as exc:
                 raise self.dead_letter_failure(len(self._dlq_producer), cause=exc)
         self._dlq_producer.poll(0)
+        if self._dlq_failures:
+            raise self.dead_letter_failure(len(self._dlq_producer))
 
 
 def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:

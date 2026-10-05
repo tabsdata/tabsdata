@@ -699,13 +699,34 @@ def test_an_undelivered_dead_letter_message_stops_the_commit(tmp_path):
     consumer.commit.assert_not_called()
 
 
-def test_a_failed_dead_letter_delivery_stops_the_commit(tmp_path):
+def test_a_failed_dead_letter_delivery_stops_the_stream_at_once(tmp_path):
     consumer = MagicMock()
     consumer.poll.side_effect = [_message(raw=b"bad", offset=9), None]
     ingester, producer = _with_dlq(consumer, tmp_path)
     producer.produce.side_effect = lambda **kwargs: kwargs["on_delivery"](
         "Unknown topic", None
     )
+
+    with pytest.raises(TabsdataException) as raised:
+        list(ingester.poll_changes(consumer))
+
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_29
+    assert "offset 9 of partition 0 of topic 'evt': Unknown topic" in str(
+        raised.value
+    )
+
+
+def test_a_failed_dead_letter_delivery_stops_the_commit(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message(raw=b"bad", offset=9), None]
+    ingester, producer = _with_dlq(consumer, tmp_path)
+    callbacks = []
+    producer.produce.side_effect = lambda **kwargs: callbacks.append(
+        kwargs["on_delivery"]
+    )
+    producer.flush.side_effect = lambda _timeout: [
+        callback("Unknown topic", None) for callback in callbacks
+    ] and 0
 
     assert [r.value for r in ingester.poll_changes(consumer)] == [None]
     with pytest.raises(TabsdataException) as raised:
