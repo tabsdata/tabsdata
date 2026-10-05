@@ -13,9 +13,10 @@ the CDC connectors (mysql / postgres / db2). Imported from
   `schema_registry`. Registered on a collection, not passed to a
   decorator.
 * `KafkaStreamSrc` -- the `@stream_publisher` source: pulls from a
-  single `topic`, writes the messages to parquet files as its buffer
-  fills, and emits them as one tableframe batch whenever a trigger
-  threshold (time / size / message count) is due.
+  `topic` (every topic matching it when it starts with `^`), writes
+  the messages to parquet files as its buffer fills, and emits them as
+  one tableframe batch whenever a trigger threshold (time / size /
+  message count) is due.
 * `ConfluentSchemaRegistry` / `AwsGlueSchemaRegistry` -- optional
   schema-registry configs set as the connection's `schema_registry`.
 * `Protobuf` -- a `data_format` variant carrying the protobuf
@@ -42,6 +43,16 @@ Examples:
 Bootstrap servers, SASL credentials and schema-registry URL / region /
 names accept a plain string or a `Secret`. Rollover thresholds and
 the logging level live in `KafkaStreamSrc.src_cfg`.
+
+Delivery is at least once. The consumer group's offsets are
+acknowledged on the broker only once a batch is staged; a partition a
+rebalance takes away is staged and acknowledged before it is handed
+over; and a consumer that loses its partitions restarts by itself from
+the last acknowledged offset, dropping what it had not staged. A
+message that cannot be decoded, that its schema refuses, or whose
+values do not fit the types of its table goes to the source's
+`dlq_topic` when one is set and stops the stream otherwise; a broker
+error is never a dead letter.
 """
 
 from __future__ import annotations
@@ -313,7 +324,8 @@ class KafkaStreamSrc(StreamSrc):
 
     :categories: source
 
-    Consumes a single Kafka `topic` in two levels. The `buffer` keys
+    Consumes a Kafka `topic` (every topic matching it when it starts
+    with `^`) in two levels. The `buffer` keys
     decide when the buffered messages are written to a parquet file;
     the `trigger` keys decide when the written files are staged as one
     tableframe batch. A batch is due once
@@ -322,7 +334,9 @@ class KafkaStreamSrc(StreamSrc):
     or earlier when `tabsdata.kafka.trigger.max_rows` or
     `tabsdata.kafka.trigger.max_bytes` is reached -- but never sooner
     than 60 seconds after the previous batch. Messages of incompatible
-    schemas land in separate files of the same batch.
+    schemas land in separate files of the same batch; the files of one
+    schema keep the column types of the run's earlier files of that
+    schema, and a row whose values do not fit them is a dead letter.
 
     Used as the `source` of a `@stream_publisher`; that function
     receives the batch as a list of frames and must NOT declare a
@@ -339,9 +353,15 @@ class KafkaStreamSrc(StreamSrc):
             schema, a JSON Schema, or a Protobuf `.proto`). Required;
             in schema-registry mode it also cross-checks the registry's
             resolved schema.
-        topic: Kafka topic to consume; also the emitted table name.
-        dlq_topic: Optional dead-letter topic that deserialization
-            failures are produced to.
+        topic: Kafka topic to consume -- a regular expression over the
+            topic names when it starts with `^`; also the emitted table
+            name.
+        dlq_topic: Optional dead-letter topic for the messages the source
+            cannot stage: the ones that fail to decode, that the schema
+            refuses, or whose values do not fit the types of their table
+            (the envelope then carries the decoded `record`). Without it
+            such a message stops the stream. A broker error is never a
+            dead letter.
         src_cfg: Optional connector config over the keys
             `tabsdata.kafka.poll.max_secs` (how long one poll waits for
             messages, default 2), `kafka.connect_timeout_secs` (default
