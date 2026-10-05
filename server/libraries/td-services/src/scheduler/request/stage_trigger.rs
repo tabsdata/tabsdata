@@ -268,6 +268,8 @@ pub fn create_locked_stage_trigger_workers_stop_request(
                         StageTriggerRequest::Stop(StageTriggerStopRequest {
                             worker: WorkerName::StageTrigger,
                             worker_id: stage_trigger_worker.base.base.id.clone(),
+                            function_id: stage_trigger_worker.function_id,
+                            function: stage_trigger_worker.function.clone(),
                             responder: callback,
                         }),
                     ),

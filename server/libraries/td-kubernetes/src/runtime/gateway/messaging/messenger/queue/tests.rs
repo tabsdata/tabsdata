@@ -152,6 +152,8 @@ fn stream_publisher_stop_routes_by_worker_name() {
             StageTriggerRequest::Stop(StageTriggerStopRequest {
                 worker: WorkerName::StageTrigger,
                 worker_id: worker_id(),
+                function_id: FunctionId::default(),
+                function: FunctionName::try_from("function").unwrap(),
                 responder: responder(),
             }),
         );
@@ -213,6 +215,8 @@ fn cron_publisher_stop_routes_by_worker_name() {
             CronStopRequest {
                 worker: WorkerName::CronTrigger,
                 worker_id: worker_id(),
+                function_id: FunctionId::default(),
+                function: FunctionName::try_from("function").unwrap(),
                 responder: responder(),
             },
         ));

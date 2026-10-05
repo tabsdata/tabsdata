@@ -195,6 +195,8 @@ pub fn create_locked_cron_trigger_workers_stop_request(
                         CronRequest::Stop(CronStopRequest {
                             worker: WorkerName::CronTrigger,
                             worker_id: cron_trigger_worker.base.base.id.clone(),
+                            function_id: cron_trigger_worker.function_id,
+                            function: cron_trigger_worker.function.clone(),
                             responder: callback,
                         }),
                     ),

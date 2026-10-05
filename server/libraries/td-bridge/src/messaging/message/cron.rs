@@ -60,13 +60,18 @@ pub struct CronStartRequest {
 
 /// Routing identity for stopping a cron-trigger worker: enough for the
 /// kubernetes gateway to derive the pod template (`worker`) and the pod name
-/// (`worker`, `worker_id`) to delete.
+/// (`worker`, `worker_id`) to delete, and the function it belongs to
+/// (`function_id`, `function`).
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CronStopRequest {
     /// Worker name (template key), e.g. `cron-trigger`.
     pub worker: WorkerName,
     /// Worker id.
     pub worker_id: WorkerId,
+    /// Function id of the function being run.
+    pub function_id: FunctionId,
+    /// Function name of the function being run.
+    pub function: FunctionName,
     /// POST endpoint the worker reports status back on.
     pub responder: Callback,
 }
