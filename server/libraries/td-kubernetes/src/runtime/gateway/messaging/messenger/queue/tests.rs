@@ -154,7 +154,6 @@ fn stream_publisher_stop_routes_by_worker_name() {
                 worker_id: worker_id(),
                 function_id: FunctionId::default(),
                 function: FunctionName::try_from("function").unwrap(),
-                responder: responder(),
             }),
         );
     let routing = derive_routing("work", &payload).unwrap();
@@ -217,7 +216,6 @@ fn cron_publisher_stop_routes_by_worker_name() {
                 worker_id: worker_id(),
                 function_id: FunctionId::default(),
                 function: FunctionName::try_from("function").unwrap(),
-                responder: responder(),
             },
         ));
     let routing = derive_routing("task", &payload).unwrap();

@@ -155,12 +155,8 @@ async fn tick_project(
 
     let to_stop =
         claim_trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::CronTrigger)).await?;
-    let to_stop = create_locked_cron_trigger_workers_stop_request(
-        orchestrator,
-        internal_api,
-        to_stop,
-        &mut messages,
-    )?;
+    let to_stop =
+        create_locked_cron_trigger_workers_stop_request(orchestrator, to_stop, &mut messages)?;
     update_worker_message_statuses(conn, orchestrator, at, &to_stop, true).await?;
 
     let to_start = claim_trigger_workers(
@@ -178,12 +174,8 @@ async fn tick_project(
 
     let to_stop =
         claim_trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::StageTrigger)).await?;
-    let to_stop = create_locked_stage_trigger_workers_stop_request(
-        orchestrator,
-        internal_api,
-        to_stop,
-        &mut messages,
-    )?;
+    let to_stop =
+        create_locked_stage_trigger_workers_stop_request(orchestrator, to_stop, &mut messages)?;
     update_worker_message_statuses(conn, orchestrator, at, &to_stop, true).await?;
 
     let to_start = claim_trigger_workers(
@@ -1434,7 +1426,6 @@ mod tests {
             panic!("expected a StageTriggerRequest::Stop payload");
         };
         assert_eq!(stop.worker, WorkerName::StageTrigger);
-        assert_http_post(&stop.responder);
         assert_eq!(id, worker.base.id.to_string());
 
         Ok(())
@@ -1495,7 +1486,6 @@ mod tests {
             panic!("expected a CronRequest::Stop payload");
         };
         assert_eq!(stop.worker, WorkerName::CronTrigger);
-        assert_http_post(&stop.responder);
         assert_eq!(id, worker.base.id.to_string());
 
         Ok(())

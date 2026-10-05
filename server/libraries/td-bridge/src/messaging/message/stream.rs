@@ -65,6 +65,4 @@ pub struct StageTriggerStopRequest {
     pub function_id: FunctionId,
     /// Function name of the function being run.
     pub function: FunctionName,
-    /// POST endpoint the worker reports status back on.
-    pub responder: Callback,
 }

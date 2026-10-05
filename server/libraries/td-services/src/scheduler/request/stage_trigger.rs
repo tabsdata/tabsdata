@@ -244,7 +244,6 @@ pub(crate) async fn put_stage_trigger_start(
 )]
 pub fn create_locked_stage_trigger_workers_stop_request(
     orchestrator: Orchestrator,
-    internal_api: &InternalApi,
     stage_trigger_workers: Vec<WorkerDBWithNames>,
     messages: &mut WorkerMessages,
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
@@ -256,7 +255,6 @@ pub fn create_locked_stage_trigger_workers_stop_request(
     for stage_trigger_worker in stage_trigger_workers {
         let built = (|| {
             let worker_id = stage_trigger_worker.base.base.id.to_string();
-            let callback = internal_api.worker_responder(&stage_trigger_worker.base.base.id)?;
 
             // Kubernetes ships a lean Stop keyed by the worker id (so the
             // gateway can derive the pod to delete); supervisor ships a flat
@@ -270,7 +268,6 @@ pub fn create_locked_stage_trigger_workers_stop_request(
                             worker_id: stage_trigger_worker.base.base.id.clone(),
                             function_id: stage_trigger_worker.function_id,
                             function: stage_trigger_worker.function.clone(),
-                            responder: callback,
                         }),
                     ),
                 )
@@ -281,7 +278,7 @@ pub fn create_locked_stage_trigger_workers_stop_request(
                     worker_id,
                     action: MessageAction::Stop,
                     arguments: Vec::new(),
-                    callback: Some(callback),
+                    callback: None,
                     context: None,
                 };
                 (
