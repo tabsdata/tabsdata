@@ -74,3 +74,9 @@ class FileLedger:
             files.clear()
         self._rows = 0
         self._bytes = 0
+
+    def discard(self) -> None:
+        for files in self._files.values():
+            for path in files:
+                path.unlink(missing_ok=True)
+        self.clear()

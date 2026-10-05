@@ -229,7 +229,19 @@ class KafkaStreamSrcConn(Conn):
             `AwsGlueSchemaRegistry`; omit for schema-less ingest.
         conn_cfg: Optional connector config forwarded as consumer
             `configs` to `confluent_kafka.Consumer` (see
-            `CfgSpec`).
+            `CfgSpec`). The connector sets `auto.offset.reset=earliest`
+            and `enable.auto.commit=false` itself, and defaults
+            `partition.assignment.strategy=cooperative-sticky`,
+            `topic.metadata.refresh.interval.ms=30000`,
+            `fetch.queue.backoff.ms=0` and
+            `socket.keepalive.enable=true`; a value given here wins
+            over each default. Settings worth knowing:
+            `max.poll.interval.ms` (raise it when a stage takes
+            longer than its 5 minute default; the stream warns past
+            half of it and restarts itself if evicted),
+            `queued.max.messages.kbytes` (memory the fetch queue may
+            hold), `fetch.min.bytes` / `fetch.wait.max.ms` (latency
+            against throughput) and `fetch.message.max.bytes`.
 
     Examples:
         A connection with a Confluent schema registry for SR-aware

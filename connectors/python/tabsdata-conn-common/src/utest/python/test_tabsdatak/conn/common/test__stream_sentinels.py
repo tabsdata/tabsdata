@@ -372,11 +372,21 @@ def test_pending_offsets_alone_flush_on_time(ledger: FileLedger):
     assert sentinel.due() is False
 
 
-def test_an_empty_buffer_is_never_due(ledger: FileLedger):
-    clock = Clock()
-    sentinel = buffer(ledger, clock, max_secs=5)
-    clock.now += 50
+def test_discarding_drops_the_pending_work_and_takes_the_offset_given(
+    ledger: FileLedger,
+):
+    sentinel = buffer(ledger, Clock(), offset=Trail([1]))
+    sentinel.add_all([Record("s.a", 2), Record(None, 3)])
+    staged = Trail([1])
+
+    sentinel.discard(staged)
+
+    assert sentinel.has_data is False
     assert sentinel.due() is False
+    assert sentinel.offset is staged
+    sentinel.flush()
+    assert ids(ledger) == [[], []]
+    assert staged.values == [1]
 
 
 def test_records_stay_in_memory_below_every_threshold(ledger: FileLedger):

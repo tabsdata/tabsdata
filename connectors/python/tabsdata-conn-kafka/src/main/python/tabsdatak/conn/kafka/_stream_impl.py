@@ -36,6 +36,9 @@ from tabsdatak.conn.common._stream._offset import StreamOffset
 from tabsdatak.conn.common._stream._offsets import SourceKeptOffsets
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._restart import StreamRestart
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
 
@@ -69,9 +72,17 @@ _SASL_USERNAME_KEY = "sasl.username"
 _SASL_PASSWORD_KEY = "sasl.password"
 _GROUP_ID_KEY = "group.id"
 ASSIGNMENT_STRATEGY_KEY = "partition.assignment.strategy"
+METADATA_REFRESH_KEY = "topic.metadata.refresh.interval.ms"
+FETCH_BACKOFF_KEY = "fetch.queue.backoff.ms"
+KEEPALIVE_KEY = "socket.keepalive.enable"
+POLL_INTERVAL_KEY = "max.poll.interval.ms"
 
 DEFAULT_CONNECT_TIMEOUT_SECS = 16
 DEFAULT_ASSIGNMENT_STRATEGY = "cooperative-sticky"
+DEFAULT_METADATA_REFRESH_MS = 30_000
+DEFAULT_FETCH_BACKOFF_MS = 0
+DEFAULT_POLL_INTERVAL_MS = 300_000
+POLL_GAP_WARNING_RATIO = 0.5
 
 
 def retriable_acknowledgement(error: BaseException) -> bool:
@@ -208,6 +219,9 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
         self._dlq_producer: Producer | None = None
         self._dlq_failures: list[str] = []
         self._serde: KafkaSerde | None = None
+        self._lost: list[TopicPartition] | None = None
+        self._polled_at: float | None = None
+        self._poll_interval_secs: float = DEFAULT_POLL_INTERVAL_MS / 1000
 
     @property
     def topic(self) -> str:
@@ -234,7 +248,13 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
             on_lost=self.partitions_lost,
         )
         self._consumer = consumer
+        self._lost = None
+        self._polled_at = None
+        self._poll_interval_secs = (
+            int(kafka_configs.get(POLL_INTERVAL_KEY, DEFAULT_POLL_INTERVAL_MS)) / 1000
+        )
 
+        self._dlq_failures = []
         self._dlq_producer = self.build_dlq_producer(kafka_configs)
 
         sr_client = build_schema_registry_client(
@@ -292,9 +312,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
         consumer: Consumer,
         partitions: list[TopicPartition],
     ) -> None:
-        raise KafkaErrorCode.KAFKA_30.exception(
-            partitions=[(tp.topic, tp.partition) for tp in partitions],
-        )
+        self._lost = list(partitions)
 
     def close_session(self, session: Consumer) -> None:
         self._consumer = None
@@ -333,7 +351,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
         except KafkaException as exc:
             if exc.args[0].retriable():
                 raise
-            raise KafkaErrorCode.KAFKA_31.exception(cause=exc, error=exc.args[0])
+            raise KafkaErrorCode.KAFKA_30.exception(cause=exc, error=exc.args[0])
 
     def settle_dead_letters(self) -> None:
         if self._dlq_producer is None:
@@ -360,19 +378,52 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
             error=error,
         )
 
+    def check_lost(self) -> None:
+        if self._lost is None:
+            return
+        partitions = [(tp.topic, tp.partition) for tp in self._lost]
+        self._lost = None
+        raise StreamRestart(
+            f"the consumer lost the partitions {partitions} to the group"
+        )
+
+    def watch_poll_gap(self, now: float) -> None:
+        if self._polled_at is None:
+            return
+        gap = now - self._polled_at
+        if gap > POLL_GAP_WARNING_RATIO * self._poll_interval_secs:
+            logger.warning(
+                "The consumer went %.0f seconds without polling, more than half of "
+                "the %.0f seconds of %s; a longer stage would evict it from the "
+                "group, raise %s in conn_cfg if the stages take this long",
+                gap,
+                self._poll_interval_secs,
+                POLL_INTERVAL_KEY,
+                POLL_INTERVAL_KEY,
+            )
+
     def poll_changes(self, session: Consumer) -> Iterator[KafkaRecord]:
+        start = time.time()
+        self.watch_poll_gap(start)
+        try:
+            yield from self.poll_messages(session, start)
+        finally:
+            self._polled_at = time.time()
+
+    def poll_messages(self, session: Consumer, start: float) -> Iterator[KafkaRecord]:
         from confluent_kafka.serialization import (
             MessageField,
             SerializationContext,
         )
 
         deserialize = self._serde.deserializer_with_schema_id()
-        start = time.time()
         while True:
+            self.check_lost()
             remaining = self._poll_max_secs - (time.time() - start)
             if remaining <= 0:
                 return
             msg = session.poll(remaining)
+            self.check_lost()
             if msg is None:
                 return
             err = msg.error()
@@ -483,6 +534,9 @@ def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:
     cfg[_AUTO_OFFSET_RESET_KEY] = "earliest"
     cfg[_ENABLE_AUTO_COMMIT_KEY] = False
     cfg.setdefault(ASSIGNMENT_STRATEGY_KEY, DEFAULT_ASSIGNMENT_STRATEGY)
+    cfg.setdefault(METADATA_REFRESH_KEY, DEFAULT_METADATA_REFRESH_MS)
+    cfg.setdefault(FETCH_BACKOFF_KEY, DEFAULT_FETCH_BACKOFF_MS)
+    cfg.setdefault(KEEPALIVE_KEY, True)
     if conn.credentials is not None:
         cfg[_SECURITY_PROTOCOL_KEY] = "sasl_plaintext"
         cfg[_SASL_MECHANISM_KEY] = "SCRAM-SHA-256"

@@ -201,3 +201,12 @@ class BufferSentinel[R, O: StreamOffset]:
         self._rows = 0
         self._bytes = 0
         self._last_flushed = self._clock()
+
+    def discard(self, offset: O) -> None:
+        self._pending.clear()
+        for records in self._records.values():
+            records.clear()
+        self._rows = 0
+        self._bytes = 0
+        self._offset = offset
+        self._last_flushed = self._clock()

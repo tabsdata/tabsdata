@@ -18,8 +18,10 @@ from tabsdatak.conn.common._stream._ingester import StreamIngester
 from tabsdatak.conn.common._stream._ledger import FileLedger
 from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
 from tabsdatak.conn.common._stream._offset import StreamOffset
+from tabsdatak.conn.common._stream._restart import StreamRestart
 from tabsdatak.conn.common._stream._sentinels import BufferSentinel, DiskSentinel
 from tabsdatak.conn.common._stream._signal import StopSignal
+from tabsdatak.conn.common._stream.constants import MAX_RESTARTS_WITHOUT_STAGE
 from tabsdatak.conn.common.error import ConnErrorCode
 from tabsdatak.spi import Conn, StreamSrcPlugin, StreamSrcPluginCtx, StreamStateSpec
 
@@ -42,7 +44,12 @@ class StreamRun[R, O: StreamOffset]:
     stop_signal: StopSignal
     session: Any = None
     slots: list[str] = field(default_factory=list)
-    recorded: str | None = None
+    staged: O | None = None
+    restarts: int = 0
+
+
+def snapshot[O: StreamOffset](offset: O) -> O:
+    return type(offset).read(offset.write())
 
 
 class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
@@ -195,15 +202,19 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             )
 
             lifecycle.arm(ledger, disk_sentinel, buffer_sentinel)
-            run.recorded = buffer_sentinel.offset.write()
+            run.staged = snapshot(buffer_sentinel.offset)
 
             buffer_sentinel.reset_timer()
             disk_sentinel.reset_timer()
 
             while not stop_signal.is_set() and ctx.active:
-                polled = buffer_sentinel.add_all(
-                    self.records(run, ingester.poll_changes(run.session)),
-                )
+                try:
+                    polled = buffer_sentinel.add_all(
+                        self.records(run, ingester.poll_changes(run.session)),
+                    )
+                except StreamRestart as restart:
+                    self.restart(run, restart, ledger, disk_sentinel, buffer_sentinel)
+                    continue
                 if buffer_sentinel.due():
                     buffer_sentinel.flush()
                     self.record(run, ledger, buffer_sentinel)
@@ -245,10 +256,38 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         offset = buffer_sentinel.offset
         run.ctx.stage(tables_files, self.stage_state(run, offset))
         run.ingester.acknowledge_offset(offset)
-        run.recorded = offset.write()
+        run.staged = snapshot(offset)
+        run.restarts = 0
         ledger.clear()
         disk_sentinel.reset_timer()
         return True
+
+    def restart(
+        self,
+        run: StreamRun[R, O],
+        restart: StreamRestart,
+        ledger: FileLedger,
+        disk_sentinel: DiskSentinel,
+        buffer_sentinel: BufferSentinel[R, O],
+    ) -> None:
+        run.restarts += 1
+        if run.restarts > MAX_RESTARTS_WITHOUT_STAGE:
+            raise ConnErrorCode.CONN_36.exception(
+                cause=restart,
+                restarts=run.restarts - 1,
+                reason=restart.reason,
+            )
+        logger.warning(
+            "Restarting the stream from the last staged offset, dropping the "
+            "work pending since then, because %s",
+            restart.reason,
+        )
+        buffer_sentinel.discard(snapshot(run.staged))
+        ledger.discard()
+        disk_sentinel.reset_timer()
+        run.ingester.seed_offset(snapshot(run.staged))
+        run.ingester.close_session(run.session)
+        run.session = run.ingester.open_session(run.ctx.work_dir)
 
     def record(
         self,
@@ -259,7 +298,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         if ledger.has_data:
             return
         offset = buffer_sentinel.offset
-        if offset.write() == run.recorded:
+        if offset.write() == run.staged.write():
             return
         self.checkpoint(run, offset)
 
@@ -275,7 +314,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             run.ctx.checkpoint(state)
         else:
             state()
-        run.recorded = offset.write()
+        run.staged = snapshot(offset)
 
     def settle_offset(self, run: StreamRun[R, O]) -> None:
         try:

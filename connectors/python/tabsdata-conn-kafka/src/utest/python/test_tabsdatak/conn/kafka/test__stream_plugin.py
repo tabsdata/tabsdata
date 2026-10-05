@@ -246,10 +246,12 @@ def _message(value: dict, offset: int, partition: int = 0):
     return message
 
 
-def _run(tmp_path, polls, *, active_calls, src_cfg=None, dlq_topic=None):
+def _run(
+    tmp_path, polls, *, active_calls, src_cfg=None, dlq_topic=None, consumer=None
+):
     from confluent_kafka import TopicPartition
 
-    consumer = MagicMock()
+    consumer = consumer or MagicMock()
     consumer.poll.side_effect = polls
     consumer.assignment.return_value = [TopicPartition("events", p) for p in range(8)]
     producer = MagicMock()
@@ -335,6 +337,29 @@ def test_a_run_of_dead_letters_alone_acknowledges_their_offsets(tmp_path):
 
     assert ctx.manifests == []
     assert _committed_offsets(consumer) == [{0: 42}]
+
+
+def test_lost_partitions_restart_the_consumer_and_the_run_goes_on(tmp_path):
+    from confluent_kafka import TopicPartition
+
+    consumer = MagicMock()
+    good = _message({"a": 1}, 7)
+    answers = iter([good, None])
+
+    def poll(_timeout):
+        if not consumer.close.called:
+            on_lost = consumer.subscribe.call_args.kwargs["on_lost"]
+            on_lost(consumer, [TopicPartition("events", 0)])
+            return None
+        return next(answers, None)
+
+    ctx, consumer = _run(
+        tmp_path, poll, active_calls=[True, True, True, False], consumer=consumer
+    )
+
+    assert consumer.close.call_count == 2
+    assert len(ctx.manifests) == 1
+    assert _committed_offsets(consumer) == [{0: 8}]
 
 
 def test_a_signalled_stop_stages_and_commits_nothing(tmp_path, monkeypatch):

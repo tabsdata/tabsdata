@@ -30,6 +30,9 @@ from tabsdatak.conn.common._stream._plugin import (
 )
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._restart import StreamRestart
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._sentinels import BufferSentinel
 
 # noinspection PyProtectedMember
@@ -78,6 +81,11 @@ class FakeDisk:
         self._force = due_force
         self._normal = due_normal
         self.cleared = 0
+        self.discarded = 0
+
+    def discard(self) -> None:
+        self.discarded += 1
+        self.has_data = False
 
     def reset_timer(self) -> None:
         pass
@@ -99,6 +107,10 @@ class FakeOffset:
     def write(self) -> str:
         return self.mark
 
+    @classmethod
+    def read(cls, data: str) -> FakeOffset:
+        return cls(data)
+
 
 class FakeBuffer:
     def __init__(self, *, due=False, moves_to=None):
@@ -107,9 +119,14 @@ class FakeBuffer:
         self.processed = 0
         self._due = due
         self._moves_to = moves_to
+        self.discarded: list = []
 
     def reset_timer(self) -> None:
         pass
+
+    def discard(self, offset) -> None:
+        self.discarded.append(offset)
+        self.offset = offset
 
     def add_all(self, records) -> int:
         self.processed += 1
@@ -125,9 +142,11 @@ class FakeBuffer:
 
 
 class FakeIngester:
-    def __init__(self, *, resume_value=None, poll_raises=False):
+    def __init__(self, *, resume_value=None, poll_raises=False, restarts=0):
         self._resume_value = resume_value
         self._poll_raises = poll_raises
+        self.restarts = restarts
+        self.opened = 0
         self.resume_args = None
         self.seeded = "UNSET"
         self.session = object()
@@ -152,6 +171,7 @@ class FakeIngester:
         self.settled += 1
 
     def open_session(self, work_dir):
+        self.opened += 1
         return self.session
 
     def base_offset(self):
@@ -160,6 +180,9 @@ class FakeIngester:
     def poll_changes(self, session):
         if self._poll_raises:
             raise RuntimeError("boom-poll")
+        if self.restarts:
+            self.restarts -= 1
+            raise StreamRestart("the partitions were lost")
         return []
 
     def close_session(self, session) -> None:
@@ -507,6 +530,51 @@ def test_stream_hands_the_ingester_a_checkpoint_that_records_state(monkeypatch):
     assert ctx.staged == []
 
 
+def test_a_restart_drops_the_pending_work_and_reopens_from_the_staged_offset(
+    monkeypatch,
+):
+    ctx = FakeCtx(active_values=[True, True, False])
+    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
+    buffer = FakeBuffer()
+    patch_sentinels(monkeypatch, disk, buffer)
+    ingester = FakeIngester(restarts=1)
+
+    stream(ctx, ingester)
+
+    assert [offset.mark for offset in buffer.discarded] == ["base"]
+    assert disk.discarded == 1
+    assert ingester.seeded.mark == "base"
+    assert ingester.opened == 2
+    assert ingester.closed is True
+    assert ctx.staged == []
+
+
+def test_restarting_too_often_without_staging_stops_the_stream(monkeypatch):
+    ctx = FakeCtx(active_values=[True] * 10)
+    patch_sentinels(monkeypatch, FakeDisk(manifest=[[]]), FakeBuffer())
+    ingester = FakeIngester(restarts=5)
+
+    with pytest.raises(ConnStreamException) as raised:
+        stream(ctx, ingester)
+
+    assert raised.value.api_error is ConnErrorCode.CONN_36
+    assert "restarted 4 times in a row" in str(raised.value)
+    assert ingester.opened == 5
+
+
+def test_a_stage_resets_the_restart_count_and_the_staged_offset():
+    ctx = FakeCtx(active_values=[])
+    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
+    buffer = FakeBuffer()
+    buffer.offset = FakeOffset("staged")
+    run = run_of(ctx, FakeIngester())
+    run.restarts = 2
+
+    assert Plugin().publish(run, disk, disk, buffer) is True
+    assert run.restarts == 0
+    assert run.staged.mark == "staged"
+
+
 def test_a_flush_that_moves_the_offset_without_data_checkpoints_it(monkeypatch):
     ctx = FakeCtx(
         active_values=[True, False],
@@ -563,7 +631,7 @@ def test_a_source_kept_checkpoint_invokes_the_state_callable():
 
     assert acknowledged == ["done"]
     assert ctx.checkpoints == []
-    assert run.recorded == "moved"
+    assert run.staged.mark == "moved"
 
 
 def test_there_is_no_checkpoint_before_a_first_stage():

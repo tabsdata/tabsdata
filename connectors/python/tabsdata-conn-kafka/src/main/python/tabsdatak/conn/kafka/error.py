@@ -178,11 +178,6 @@ class KafkaErrorCode(ErrorCode):
     )
     KAFKA_30 = ErrorDef(
         KafkaRuntimeException,
-        "The consumer lost the partitions {partitions} to the group; the stream "
-        "stops without staging so the new owner reads them",
-    )
-    KAFKA_31 = ErrorDef(
-        KafkaRuntimeException,
         "The broker refused the acknowledgement of the consumed offsets; the "
         "stream stops and the staged messages are read again: {error}",
     )

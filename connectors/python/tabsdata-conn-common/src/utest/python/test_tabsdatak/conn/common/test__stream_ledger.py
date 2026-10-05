@@ -73,3 +73,15 @@ def test_file_names_sort_in_the_order_they_were_written(tmp_path: Path):
     ledger = FileLedger(landing=tmp_path, slots=["s.a"])
     paths = [ledger.write("s.a", table(value)) for value in range(5)]
     assert sorted(paths, key=lambda path: path.name) == paths
+
+
+def test_discarding_deletes_the_files_and_forgets_them(tmp_path):
+    ledger = FileLedger(landing=tmp_path, slots=["s.a"])
+    path = ledger.write("s.a", pa.table({"id": [1]}))
+    assert path.exists()
+
+    ledger.discard()
+
+    assert not path.exists()
+    assert ledger.manifest() == [[]]
+    assert ledger.has_data is False

@@ -111,6 +111,10 @@ class _Offset:
     def write(self) -> str:
         return self.mark
 
+    @classmethod
+    def read(cls, data: str) -> "_Offset":
+        return cls(data)
+
 
 class FakeBuffer:
     def __init__(self):

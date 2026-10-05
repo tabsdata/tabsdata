@@ -194,3 +194,8 @@ class ConnErrorCode(ErrorCode):
         "The acknowledgement of the staged offset failed after {attempts} "
         "attempts; the stream stops and the staged data is read again: {error}",
     )
+    CONN_36 = ErrorDef(
+        ConnStreamException,
+        "The stream restarted {restarts} times in a row without staging anything, "
+        "the last time because {reason}; it stops so the cause can be addressed",
+    )

@@ -9,6 +9,7 @@ live in the integration tests."""
 from __future__ import annotations
 
 import json
+import time
 from unittest.mock import MagicMock, patch
 
 import polars as pl
@@ -17,6 +18,9 @@ import pytest
 from tabsdatak.api import Secret
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._restart import StreamRestart
 from tabsdatak.conn.common.error import ConnErrorCode
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
@@ -237,13 +241,13 @@ def test_a_malformed_state_raises_kafka_25(state):
 # --- KafkaIngester --------------------------------------------------
 
 
-def _conn() -> KafkaStreamSrcConn:
-    return KafkaStreamSrcConn(servers="broker:9092", group_id="g1")
+def _conn(conn_cfg=None) -> KafkaStreamSrcConn:
+    return KafkaStreamSrcConn(servers="broker:9092", group_id="g1", conn_cfg=conn_cfg)
 
 
-def _ingester(*, dlq_topic=None, poll_max_secs=2) -> KafkaIngester:
+def _ingester(*, dlq_topic=None, poll_max_secs=2, conn_cfg=None) -> KafkaIngester:
     return KafkaIngester(
-        conn=_conn(),
+        conn=_conn(conn_cfg),
         stream_src=KafkaStreamSrc(
             topic="evt", data_format="json", schema="", dlq_topic=dlq_topic
         ),
@@ -557,7 +561,7 @@ def test_a_final_acknowledgement_error_is_not_retried(tmp_path):
     with pytest.raises(TabsdataException) as raised:
         ingester.stage_state(KafkaOffset({"evt": {0: 5}}))()
 
-    assert raised.value.api_error is KafkaErrorCode.KAFKA_31
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_30
     assert consumer.commit.call_count == 1
 
 
@@ -612,20 +616,61 @@ def test_a_revocation_while_closing_settles_nothing(tmp_path):
     assert lifecycle.settled == 0
 
 
-def test_losing_partitions_stops_the_stream_without_staging(tmp_path):
+def test_losing_partitions_restarts_the_stream_at_the_next_poll(tmp_path):
     from confluent_kafka import TopicPartition
 
     consumer = MagicMock()
+    consumer.poll.return_value = None
     ingester = _opened(consumer, tmp_path)
     lifecycle = Settling()
     ingester.attach_lifecycle(lifecycle)
 
-    with pytest.raises(TabsdataException) as raised:
-        ingester.partitions_lost(consumer, [TopicPartition("evt", 1)])
+    ingester.partitions_lost(consumer, [TopicPartition("evt", 1)])
+    with pytest.raises(StreamRestart) as raised:
+        list(ingester.poll_changes(consumer))
 
-    assert raised.value.api_error is KafkaErrorCode.KAFKA_30
-    assert "('evt', 1)" in str(raised.value)
+    assert "('evt', 1)" in raised.value.reason
     assert lifecycle.settled == 0
+    assert list(ingester.poll_changes(consumer)) == []
+
+
+def test_a_long_gap_between_polls_is_warned_about(tmp_path, caplog):
+    consumer = MagicMock()
+    consumer.poll.return_value = None
+    ingester = _opened(consumer, tmp_path)
+    ingester._polled_at = time.time() - 200
+
+    with caplog.at_level("WARNING"):
+        list(ingester.poll_changes(consumer))
+
+    assert "200 seconds without polling" in caplog.text
+    assert "max.poll.interval.ms" in caplog.text
+
+
+def test_a_short_gap_between_polls_is_quiet(tmp_path, caplog):
+    consumer = MagicMock()
+    consumer.poll.return_value = None
+    ingester = _opened(consumer, tmp_path)
+    ingester._polled_at = time.time() - 100
+
+    with caplog.at_level("WARNING"):
+        list(ingester.poll_changes(consumer))
+
+    assert "without polling" not in caplog.text
+
+
+def test_the_poll_gap_warning_follows_the_interval_given(tmp_path, caplog):
+    consumer = MagicMock()
+    consumer.poll.return_value = None
+    ingester = _opened(consumer, tmp_path, conn_cfg={"max.poll.interval.ms": 100_000})
+    ingester._polled_at = time.time() - 60
+
+    with caplog.at_level("WARNING"):
+        list(ingester.poll_changes(consumer))
+
+    assert "60 seconds without polling, more than half of the 100 seconds" in (
+        caplog.text
+    )
 
 
 def _with_dlq(consumer, tmp_path) -> tuple[KafkaIngester, MagicMock]:
@@ -804,6 +849,26 @@ def test_build_kafka_configs_force_auto_commit_off():
 def test_build_kafka_configs_rebalances_cooperatively_by_default():
     cfg = build_kafka_configs(conn=KafkaStreamSrcConn(servers="a:9092", group_id="g"))
     assert cfg["partition.assignment.strategy"] == "cooperative-sticky"
+
+
+def test_build_kafka_configs_sets_the_connector_defaults():
+    cfg = build_kafka_configs(conn=KafkaStreamSrcConn(servers="a:9092", group_id="g"))
+    assert cfg["topic.metadata.refresh.interval.ms"] == 30_000
+    assert cfg["fetch.queue.backoff.ms"] == 0
+    assert cfg["socket.keepalive.enable"] is True
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("topic.metadata.refresh.interval.ms", 5_000),
+        ("fetch.queue.backoff.ms", 500),
+        ("socket.keepalive.enable", False),
+    ],
+)
+def test_build_kafka_configs_keeps_the_values_given_over_its_defaults(key, value):
+    conn = KafkaStreamSrcConn(servers="a:9092", group_id="g", conn_cfg={key: value})
+    assert build_kafka_configs(conn=conn)[key] == value
 
 
 def test_build_kafka_configs_keeps_the_assignment_strategy_given():
