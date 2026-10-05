@@ -50,6 +50,9 @@ from tabsdatak.conn.common._stream._ledger import FileLedger
 from tabsdatak.conn.common._stream._plugin import PipelineStreamSrcPlugin, StreamRun
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._poll import SourcePoll
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._sentinels import BufferSentinel, ChunkSentinel
 
 # noinspection PyProtectedMember
@@ -235,11 +238,13 @@ def _read_window(
     while not ingester.stream_bound_reached():
         if stop_signal.is_set():
             return None
-        for change in large_column_policy.apply(ingester.poll_changes(session)):
+        poll = SourcePoll(ingester.poll_changes(session))
+        for change in large_column_policy.apply(poll):
             read += 1
             if read > limit:
                 raise SqlCdcErrorCode.CDC_29.exception(limit=limit)
             buffer_sentinel.add(change)
+        poll.log()
     buffer_sentinel.flush()
     logger.info("Initial load window read: %d change(s)", read)
     return ledger.manifest()

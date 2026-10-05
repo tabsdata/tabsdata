@@ -172,7 +172,7 @@ class BufferSentinel[R, O: StreamOffset]:
         slot = self._encoder.slot(record)
         if slot is not None:
             self._records[slot].append(record)
-            self._rows += 1
+            self._rows += self._encoder.rows(record)
             if self._measure_bytes:
                 self._bytes += self._encoder.size(record)
         self._pending.append(self._encoder.offset(record))

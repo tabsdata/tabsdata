@@ -149,6 +149,21 @@ def test_a_session_that_never_pins_surfaces_its_own_error(monkeypatch):
         loader.load(session)
 
 
+def test_each_table_loaded_logs_its_rows_as_one_poll_of_the_source(monkeypatch, caplog):
+    from tabsdatak.conn.common.sql.cdc import _initial_load
+
+    monkeypatch.setattr(_initial_load, "CdcRowShaper", MagicMock())
+    loader = _loader(_ingester({"s.t": MagicMock()}))
+    chunks = [MagicMock(num_rows=3), MagicMock(num_rows=4)]
+    monkeypatch.setattr(loader, "_read_chunks", lambda *_args: iter(chunks))
+
+    with caplog.at_level("DEBUG", logger="tabsdatak.conn.common._stream._poll"):
+        loader._load_table(MagicMock(qualified="s.t"), MagicMock(), PINNED_AT)
+
+    polled = [r.getMessage() for r in caplog.records if "Polled" in r.getMessage()]
+    assert [line.split(" from")[0] for line in polled] == ["Polled 7 record(s)"]
+
+
 def test_every_loaded_row_carries_the_time_the_snapshot_began(monkeypatch):
     tracked = {"s.t": MagicMock(), "s.u": MagicMock()}
     session = _PinOnYieldSession(tracked)

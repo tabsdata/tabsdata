@@ -24,3 +24,6 @@ class StreamEncoder[R, O: StreamOffset](ABC):
 
     @abstractmethod
     def encode(self, slot: str, records: list[R]) -> Iterable[pa.Table]: ...
+
+    def rows(self, record: R) -> int:
+        return 1

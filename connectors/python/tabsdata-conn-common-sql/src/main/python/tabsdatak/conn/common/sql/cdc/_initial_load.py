@@ -12,6 +12,7 @@ import pyarrow as pa
 import sqlalchemy as sa
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._poll import SourcePoll
 from tabsdatak.conn.common._stream._sentinels import ChunkSentinel
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
@@ -109,7 +110,11 @@ class InitialLoader:
 
         ordinal = INITIAL_LOAD_HEADER_ORDINAL
         rows = 0
-        for chunk in self._read_chunks(tracked_table, connection, schema):
+        poll = SourcePoll(
+            self._read_chunks(tracked_table, connection, schema),
+            count=lambda chunk: chunk.num_rows,
+        )
+        for chunk in poll:
             ordinals = list(range(ordinal + 1, ordinal + 1 + chunk.num_rows))
             ordinal = ordinals[-1]
             rows += chunk.num_rows
@@ -130,6 +135,7 @@ class InitialLoader:
                 ),
             )
         self._chunk_sentinel.flush(qualified)
+        poll.log()
         logger.info("Initial load read %d row(s) from %s", rows, qualified)
 
     @staticmethod

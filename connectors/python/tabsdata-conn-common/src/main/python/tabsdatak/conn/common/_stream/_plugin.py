@@ -18,6 +18,7 @@ from tabsdatak.conn.common._stream._ingester import StreamIngester
 from tabsdatak.conn.common._stream._ledger import FileLedger
 from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
 from tabsdatak.conn.common._stream._offset import StreamOffset
+from tabsdatak.conn.common._stream._poll import SourcePoll
 from tabsdatak.conn.common._stream._restart import StreamRestart
 from tabsdatak.conn.common._stream._sentinels import BufferSentinel, DiskSentinel
 from tabsdatak.conn.common._stream._signal import StopSignal
@@ -181,9 +182,10 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                 interrupted = True
                 return
             ledger = FileLedger(landing=ctx.work_dir, slots=run.slots)
+            encoder = self.build_encoder(run)
             buffer_sentinel = BufferSentinel(
                 ledger=ledger,
-                encoder=self.build_encoder(run),
+                encoder=encoder,
                 slots=run.slots,
                 max_rows=cfg.buffer_max_rows,
                 max_bytes=cfg.buffer_max_bytes,
@@ -209,12 +211,15 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
 
             while not stop_signal.is_set() and ctx.active:
                 try:
-                    polled = buffer_sentinel.add_all(
-                        self.records(run, ingester.poll_changes(run.session)),
+                    poll = SourcePoll(
+                        ingester.poll_changes(run.session),
+                        count=encoder.rows,
                     )
+                    polled = buffer_sentinel.add_all(self.records(run, poll))
                 except StreamRestart as restart:
                     self.restart(run, restart, ledger, disk_sentinel, buffer_sentinel)
                     continue
+                poll.log()
                 if buffer_sentinel.due():
                     buffer_sentinel.flush()
                     self.record(run, ledger, buffer_sentinel)

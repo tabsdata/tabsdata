@@ -212,7 +212,12 @@ class Plugin(PipelineStreamSrcPlugin):
         return ["s.t"]
 
     def build_encoder(self, run):
-        return None
+        return FakeEncoder()
+
+
+class FakeEncoder:
+    def rows(self, record) -> int:
+        return 1
 
 
 def cfg() -> StreamRunConfig:
@@ -382,6 +387,30 @@ def test_the_loop_rests_only_after_a_poll_that_found_nothing(monkeypatch):
     Plugin().stream(ctx=ctx, ingester=Trickle(), cfg=StreamRunConfig(poll_idle_secs=7))
 
     assert signal.waits == [7, 7]
+
+
+def test_each_poll_that_found_records_logs_the_time_spent_on_the_source(
+    monkeypatch, caplog
+):
+    class Trickle(FakeIngester):
+        def __init__(self):
+            super().__init__()
+            self.batches = [["a", "b"], [], ["c"]]
+
+        def poll_changes(self, session):
+            return self.batches.pop(0)
+
+    patch_sentinels(monkeypatch, FakeDisk(manifest=[[]]), FakeBuffer())
+    ctx = FakeCtx(active_values=[True, True, True, False])
+
+    with caplog.at_level("DEBUG", logger="tabsdatak.conn.common._stream._poll"):
+        Plugin().stream(ctx=ctx, ingester=Trickle(), cfg=cfg())
+
+    polled = [r.getMessage() for r in caplog.records if "Polled" in r.getMessage()]
+    assert [line.split(" from")[0] for line in polled] == [
+        "Polled 2 record(s)",
+        "Polled 1 record(s)",
+    ]
 
 
 def disk_arguments(monkeypatch, disk) -> dict:

@@ -404,6 +404,19 @@ def test_the_row_threshold_writes_every_slot_out(ledger: FileLedger):
     assert ids(ledger) == [[[1, 3]], [[2]]]
 
 
+def test_a_record_counts_the_rows_its_encoder_says_it_holds(ledger: FileLedger):
+    class Batches(RecordEncoder):
+        def rows(self, record: Record) -> int:
+            return 2
+
+    sentinel = buffer(ledger, Clock(), encoder=Batches(), max_rows=4)
+    sentinel.add(Record("s.a", 1))
+    assert (sentinel.rows, sentinel.has_data) == (2, True)
+    sentinel.add(Record("s.a", 2))
+    assert sentinel.has_data is False
+    assert ids(ledger) == [[[1, 2]], []]
+
+
 def test_the_byte_threshold_writes_the_records_out(ledger: FileLedger):
     sentinel = buffer(ledger, Clock(), max_bytes=10)
     sentinel.add(Record("s.a", 1, size=6))
