@@ -182,6 +182,17 @@ def test_protobuf_round_trip(tmp_path):
     assert schema_id == ("id", "name")
 
 
+def test_protobuf_default_values_are_kept(tmp_path):
+    serde = ProtobufKafkaSerde(
+        protobuf_schema=_PROTO_SCHEMA,
+        message_name="example.Event",
+        working_dir=str(tmp_path),
+    )
+    payload = serde.serializer()({"id": 0, "name": ""}, None)
+    record, _ = serde.deserializer_with_schema_id()(payload, None)
+    assert record == {"id": 0, "name": ""}
+
+
 def test_protobuf_unknown_message_name_raises_kafka_17(tmp_path):
     with pytest.raises(TabsdataException) as ei:
         ProtobufKafkaSerde(

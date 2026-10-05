@@ -62,13 +62,25 @@ def _message(
     return message
 
 
-def _record(value: dict, *, offset: int = 0) -> KafkaRecord:
+def _record(
+    value: dict,
+    *,
+    offset: int = 0,
+    topic: str = "evt",
+    schema_id=None,
+) -> KafkaRecord:
+    message = _message(value, offset=offset)
+    message.topic.return_value = topic
     return KafkaRecord(
         value=value,
-        schema_id=tuple(sorted(value)),
+        schema_id=schema_id if schema_id is not None else tuple(sorted(value)),
         size=10,
-        message=_message(value, offset=offset),
+        message=message,
     )
+
+
+def _same_schema(a, b):
+    return a == b
 
 
 # --- KafkaEncoder ---------------------------------------------------
@@ -119,6 +131,50 @@ def test_each_run_of_compatible_records_encodes_into_its_own_table():
         [KAFKA_META_TOPIC, "a", "y"],
     ]
     assert [frame["a"].to_list() for frame in frames] == [[1], [2, 3], [4]]
+
+
+def test_the_columns_are_the_union_of_the_keys_of_the_group():
+    encoder = KafkaEncoder("evt", _same_schema)
+    (frame,) = _frames(
+        encoder,
+        [
+            _record({"id": 1}, schema_id=7),
+            _record({"id": 2, "name": "bob"}, schema_id=7),
+            _record({"id": 3, "tags": ["x"]}, schema_id=7),
+        ],
+    )
+    assert frame.columns == [KAFKA_META_TOPIC, "id", "name", "tags"]
+    assert frame["name"].to_list() == [None, "bob", None]
+    assert frame["tags"].to_list() == [None, None, ["x"]]
+
+
+def test_the_topic_column_holds_the_topic_of_each_message():
+    encoder = KafkaEncoder("^evt.*", _allow_subset)
+    (frame,) = _frames(encoder, [_record({"a": 1}, topic="evt.a")])
+    assert frame[KAFKA_META_TOPIC].to_list() == ["evt.a"]
+
+
+def test_records_are_grouped_by_topic_before_schema():
+    encoder = KafkaEncoder("^evt.*", _allow_subset)
+    frames = _frames(
+        encoder,
+        [
+            _record({"a": 1}, topic="evt.a"),
+            _record({"b": 1}, topic="evt.b"),
+            _record({"a": 2}, topic="evt.a"),
+            _record({"b": 2, "c": 1}, topic="evt.b"),
+        ],
+    )
+    assert [frame[KAFKA_META_TOPIC].to_list() for frame in frames] == [
+        ["evt.a", "evt.a"],
+        ["evt.b"],
+        ["evt.b"],
+    ]
+    assert frames[0]["a"].to_list() == [1, 2]
+    assert [frame.columns for frame in frames[1:]] == [
+        [KAFKA_META_TOPIC, "b"],
+        [KAFKA_META_TOPIC, "b", "c"],
+    ]
 
 
 def test_compatibility_is_checked_against_the_first_record_of_a_run():

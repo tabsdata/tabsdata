@@ -11,7 +11,7 @@ the integration tests."""
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -22,6 +22,9 @@ from tabsdatak.conn.kafka._serdes._confluent import (
     ProtobufSrKafkaSerde,
     SrKafkaSerde,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.kafka._serdes._protobuf import get_protobuf_class
 from tabsdatak.conn.kafka.error import KafkaErrorCode
 from tabsdatak.error import TabsdataException
 
@@ -115,3 +118,21 @@ def test_protobuf_sr_serde_takes_separate_serializer_deserializer_clients(
         working_dir=str(tmp_path),
     )
     assert serde.format == "protobuf"
+
+
+def test_protobuf_sr_default_values_are_kept(tmp_path):
+    event = get_protobuf_class(
+        working_dir=str(tmp_path),
+        protobuf_schema=(
+            'syntax = "proto3";\n'
+            'package example;\n'
+            'message Event { int32 id = 1; string name = 2; }\n'
+        ),
+        message_name="example.Event",
+    )
+    with patch(
+        "confluent_kafka.schema_registry.protobuf.ProtobufDeserializer",
+        return_value=lambda _data, _ctx: event(),
+    ):
+        deserializer = ProtobufSrKafkaSerde._make_deserializer(MagicMock(), event)
+    assert deserializer(b"", None) == {"id": 0, "name": ""}

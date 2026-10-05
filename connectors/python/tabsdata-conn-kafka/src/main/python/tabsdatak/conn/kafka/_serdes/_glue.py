@@ -412,7 +412,11 @@ class ProtobufGlueKafkaSerde(GlueKafkaSerde):
             _uuid_str, proto_bytes = inner.unpack_data(data)
             obj = msg_class()
             obj.ParseFromString(proto_bytes)
-            return MessageToDict(obj, preserving_proto_field_name=True)
+            return MessageToDict(
+                obj,
+                preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=True,
+            )
 
         return _deserialise
 

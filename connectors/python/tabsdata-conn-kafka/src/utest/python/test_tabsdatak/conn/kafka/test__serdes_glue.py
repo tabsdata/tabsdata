@@ -240,6 +240,19 @@ def test_protobuf_glue_round_trip(tmp_path):
     assert record == {"id": 7, "name": "bob"}
 
 
+def test_protobuf_glue_default_values_are_kept(tmp_path):
+    serde = ProtobufGlueKafkaSerde(
+        glue_client=_fake_glue_client(_PROTO_SCHEMA),
+        registry_name="reg",
+        schema_name="sch",
+        protobuf_schema=_PROTO_SCHEMA,
+        message_name="example.Event",
+        working_dir=str(tmp_path),
+    )
+    payload = serde.serializer()({"id": 0, "name": ""}, None)
+    assert serde.deserializer()(payload, None) == {"id": 0, "name": ""}
+
+
 def test_protobuf_glue_format_label(tmp_path):
     serde = ProtobufGlueKafkaSerde(
         glue_client=_fake_glue_client(_PROTO_SCHEMA),

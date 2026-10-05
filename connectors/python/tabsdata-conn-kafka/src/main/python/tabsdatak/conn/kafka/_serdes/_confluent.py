@@ -211,7 +211,11 @@ class ProtobufSrKafkaSerde(SrKafkaSerde):
 
         def deserializer(data: bytes, ctx: "SerializationContext") -> dict:
             obj = class_deserializer(data, ctx)
-            return MessageToDict(obj, preserving_proto_field_name=True)
+            return MessageToDict(
+                obj,
+                preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=True,
+            )
 
         return deserializer
 

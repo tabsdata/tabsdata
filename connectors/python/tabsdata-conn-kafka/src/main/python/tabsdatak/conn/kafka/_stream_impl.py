@@ -152,21 +152,25 @@ class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaPosition]):
         return KafkaPosition.after(record.message)
 
     def encode(self, slot: str, records: list[KafkaRecord]) -> Iterator[pa.Table]:
-        group = [records[0]]
-        for record in records[1:]:
-            if self._compatible(group[0].schema_id, record.schema_id):
-                group.append(record)
-            else:
-                yield self.encode_group(group)
-                group = [record]
-        yield self.encode_group(group)
+        by_topic: dict[str, list[KafkaRecord]] = {}
+        for record in records:
+            by_topic.setdefault(record.message.topic(), []).append(record)
+        for topic, of_topic in by_topic.items():
+            group = [of_topic[0]]
+            for record in of_topic[1:]:
+                if self._compatible(group[0].schema_id, record.schema_id):
+                    group.append(record)
+                else:
+                    yield self.encode_group(topic, group)
+                    group = [record]
+            yield self.encode_group(topic, group)
 
-    def encode_group(self, group: list[KafkaRecord]) -> pa.Table:
+    def encode_group(self, topic: str, group: list[KafkaRecord]) -> pa.Table:
         values = [record.value for record in group]
-        column_names = sorted(values[0].keys())
+        column_names = sorted({key for value in values for key in value})
         return pa.Table.from_pydict(
             mapping={
-                KAFKA_META_TOPIC: [self._topic for _ in values],
+                KAFKA_META_TOPIC: [topic for _ in values],
                 **{k: [value.get(k) for value in values] for k in column_names},
             },
         )
