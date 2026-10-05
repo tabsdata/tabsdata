@@ -21,12 +21,11 @@ stream state.
 
 The ingester provides the database-specific surface
 (``open_session`` / ``harvest_tables`` / ``base_offset`` /
-``commit_offset`` / ``poll_changes`` / ``close_session``) and owns the
-offset policy -- Tabsdata-persisted (``stream_state``) or external
-(source-managed) -- via :meth:`~CdcIngester.resume_offset` /
-:meth:`~CdcIngester.commit_state`, plus the source-side acknowledgement
-of a staged offset via :meth:`~CdcIngester.commit_offset`. The loop never
-reaches into a particular replication protocol.
+``poll_changes`` / ``close_session``) and declares who keeps the offset
+through its ``offsets`` keeper -- Tabsdata (``stream_state``) or the
+source -- which the loop reaches through ``stage_state`` /
+``resume_offset`` / ``acknowledge_offset``. The loop never reaches into
+a particular replication protocol.
 """
 
 from __future__ import annotations
@@ -196,11 +195,11 @@ def _stage_load_manifest(
     manifest: list[list[Path]],
     offset: CdcOffset,
 ) -> None:
-    state = ingester.commit_state(offset)
+    state = ingester.stage_state(offset)
     if not isinstance(state, dict):
         raise SqlCdcErrorCode.CDC_21.exception(ingester=type(ingester).__name__)
     ctx.stage(manifest, {**state, CDC_INITIAL_LOAD_STATE_KEY: False})
-    ingester.commit_offset(offset)
+    ingester.acknowledge_offset(offset)
 
 
 def _read_window(

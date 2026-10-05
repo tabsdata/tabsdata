@@ -11,10 +11,13 @@ from typing import Any
 
 from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
 from tabsdatak.conn.common._stream._offset import StreamOffset
+from tabsdatak.conn.common._stream._offsets import OffsetKeeper
 from tabsdatak.spi import StreamStateSpec
 
 
 class StreamIngester[R, O: StreamOffset](ABC):
+    offsets: OffsetKeeper[O]
+
     def __init__(self) -> None:
         # Resume mark seeded by :meth:`seed_offset` before the stream
         # opens; subclasses retype it to their concrete offset class.
@@ -30,21 +33,27 @@ class StreamIngester[R, O: StreamOffset](ABC):
     def base_offset(self) -> O: ...
 
     @abstractmethod
-    def commit_offset(self, offset: O) -> None: ...
-
-    @abstractmethod
     def poll_changes(self, session: Any) -> Iterable[R]: ...
 
-    @abstractmethod
-    def commit_state(self, offset: O) -> StreamStateSpec: ...
+    def staged_offset(self, offset: O) -> O:
+        return offset
 
-    @abstractmethod
+    def stage_state(self, offset: O) -> StreamStateSpec:
+        return self.offsets.stage_state(self.staged_offset(offset))
+
     def resume_offset(
         self,
         *,
         first_stage: bool,
         stream_state: dict | None,
-    ) -> O | None: ...
+    ) -> O | None:
+        return self.offsets.resume_offset(
+            first_stage=first_stage,
+            stream_state=stream_state,
+        )
+
+    def acknowledge_offset(self, offset: O) -> None:
+        self.offsets.acknowledge_offset(offset)
 
     def attach_lifecycle(self, lifecycle: StreamLifecycle[O]) -> None:
         """Hand the ingester the run's lifecycle: what it raises events

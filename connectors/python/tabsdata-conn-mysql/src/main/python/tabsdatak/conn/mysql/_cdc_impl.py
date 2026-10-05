@@ -76,12 +76,17 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.sql.elements import quoted_name
 from sqlalchemy.types import LargeBinary, Text
 
+from tabsdatak.conn.common._stream._offsets import TabsdataKeptOffsets
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream.constants import DEFAULT_POLL_MAX_SECS
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
-from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
+from tabsdatak.conn.common.sql.cdc._ingester import (
+    CDC_OFFSET_STATE_KEY,
+    CdcIngester,
+)
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
@@ -703,6 +708,10 @@ class BinlogIngester(CdcIngester):
         poll_max_secs: int = DEFAULT_POLL_MAX_SECS,
     ):
         super().__init__(tables=tables)
+        self.offsets = TabsdataKeptOffsets(
+            key=CDC_OFFSET_STATE_KEY,
+            read=GtidOffset.read,
+        )
         self._conn = conn
         self._start_from = start_from
         self._server_id = server_id
@@ -1106,20 +1115,6 @@ class BinlogIngester(CdcIngester):
     def base_offset(self) -> CdcOffset:
         # Always return a concrete GtidOffset (cold start -> empty).
         return (self._base_offset or GtidOffset()).copy()
-
-    def commit_offset(self, offset: CdcOffset) -> None:
-        # MySQL binlog has no acknowledgement protocol; the source
-        # advances purely on stream-position. The runner still
-        # invokes this so the dialect could record state if needed.
-        if not isinstance(offset, GtidOffset):
-            raise MysqlErrorCode.MYSQL_17.exception(
-                actual=type(offset).__name__,
-            )
-
-    def offset_from_state(self, offset_state: str) -> CdcOffset:
-        # MySQL keeps no server-side consumer cursor: Tabsdata owns the
-        # offset, so resume from the persisted GTID set.
-        return GtidOffset.read(offset_state)
 
     # ------------------------------------------------------------------
     # Schema extraction

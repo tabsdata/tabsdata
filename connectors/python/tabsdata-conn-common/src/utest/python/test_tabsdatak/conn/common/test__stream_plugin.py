@@ -120,9 +120,9 @@ class FakeIngester:
         self.seeded = "UNSET"
         self.session = object()
         self.closed = False
-        self.commit_state_arg = None
-        self.commit_state_marker = object()
-        self.committed_offsets: list = []
+        self.stage_state_arg = None
+        self.stage_state_marker = object()
+        self.acknowledged_offsets: list = []
         self.lifecycle = None
         self.settled = 0
 
@@ -153,16 +153,16 @@ class FakeIngester:
     def close_session(self, session) -> None:
         self.closed = True
 
-    def commit_state(self, offset):
-        self.commit_state_arg = offset
-        return self.commit_state_marker
+    def stage_state(self, offset):
+        self.stage_state_arg = offset
+        return self.stage_state_marker
 
-    def commit_offset(self, offset) -> None:
-        self.committed_offsets.append(offset)
+    def acknowledge_offset(self, offset) -> None:
+        self.acknowledged_offsets.append(offset)
 
 
 class OwnedOffsetIngester(FakeIngester):
-    def commit_state(self, offset):
+    def stage_state(self, offset):
         return {"offset": offset}
 
 
@@ -227,13 +227,13 @@ def test_publish_stages_manifest_and_commits_offset():
     ingester = FakeIngester()
 
     assert publish(ctx, disk, buffer, ingester) is True
-    assert ctx.staged == [(files, ingester.commit_state_marker)]
-    assert ingester.commit_state_arg is buffer.offset
-    assert ingester.committed_offsets == [buffer.offset]
+    assert ctx.staged == [(files, ingester.stage_state_marker)]
+    assert ingester.stage_state_arg is buffer.offset
+    assert ingester.acknowledged_offsets == [buffer.offset]
     assert disk.cleared == 1
 
 
-def test_publish_does_not_commit_offset_when_stage_fails():
+def test_publish_does_not_acknowledge_the_offset_when_stage_fails():
     ctx = FakeCtx(active_values=[])
     ctx.stage_raises = True
     disk = FakeDisk(manifest=[[Path("t0.parquet")]])
@@ -242,7 +242,7 @@ def test_publish_does_not_commit_offset_when_stage_fails():
     with pytest.raises(RuntimeError, match="boom-stage"):
         publish(ctx, disk, FakeBuffer(), ingester)
 
-    assert ingester.committed_offsets == []
+    assert ingester.acknowledged_offsets == []
     assert disk.cleared == 0
 
 
@@ -292,8 +292,8 @@ def test_a_stage_does_not_cover_records_still_in_memory():
     ingester = FakeIngester()
 
     assert publish(FakeCtx(active_values=[]), disk, buffer, ingester) is True
-    assert ingester.commit_state_arg.applied == ["written"]
-    assert ingester.committed_offsets[0].applied == ["written"]
+    assert ingester.stage_state_arg.applied == ["written"]
+    assert ingester.acknowledged_offsets[0].applied == ["written"]
 
 
 def test_stream_seeds_resume_offset_from_ctx(monkeypatch):

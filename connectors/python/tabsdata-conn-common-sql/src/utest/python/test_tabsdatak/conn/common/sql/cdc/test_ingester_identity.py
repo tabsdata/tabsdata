@@ -65,9 +65,6 @@ class _Ingester(CdcIngester):
     def base_offset(self):  # pragma: no cover
         return None
 
-    def commit_offset(self, offset) -> None:  # pragma: no cover
-        pass
-
     def poll_changes(self, session: Any):  # pragma: no cover
         return []
 

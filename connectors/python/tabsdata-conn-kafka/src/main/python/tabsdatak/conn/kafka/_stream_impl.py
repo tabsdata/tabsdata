@@ -33,6 +33,9 @@ from tabsdatak.conn.common._stream._ingester import StreamIngester
 from tabsdatak.conn.common._stream._offset import StreamOffset
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._offsets import SourceKeptOffsets
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
 
@@ -48,7 +51,6 @@ from tabsdatak.conn.kafka._serdes import (
 )
 from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
 from tabsdatak.conn.kafka.error import KafkaErrorCode
-from tabsdatak.spi import StreamStateSpec
 
 if TYPE_CHECKING:  # pragma: no cover -- typing-only
     from confluent_kafka import Consumer, Message, Producer, TopicPartition
@@ -70,8 +72,12 @@ ASSIGNMENT_STRATEGY_KEY = "partition.assignment.strategy"
 
 DEFAULT_CONNECT_TIMEOUT_SECS = 16
 DEFAULT_ASSIGNMENT_STRATEGY = "cooperative-sticky"
-ACKNOWLEDGE_ATTEMPTS = 3
-ACKNOWLEDGE_RETRY_SECS = 1
+
+
+def retriable_acknowledgement(error: BaseException) -> bool:
+    from confluent_kafka import KafkaException
+
+    return isinstance(error, KafkaException) and error.args[0].retriable()
 
 
 @dataclass(frozen=True)
@@ -190,6 +196,10 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
         connect_timeout_secs: int,
     ):
         super().__init__()
+        self.offsets = SourceKeptOffsets(
+            acknowledger=self.acknowledge_offsets,
+            retriable=retriable_acknowledgement,
+        )
         self._conn = conn
         self._stream_src = stream_src
         self._poll_max_secs = poll_max_secs
@@ -282,7 +292,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
         consumer: Consumer,
         partitions: list[TopicPartition],
     ) -> None:
-        raise KafkaErrorCode.KAFKA_31.exception(
+        raise KafkaErrorCode.KAFKA_30.exception(
             partitions=[(tp.topic, tp.partition) for tp in partitions],
         )
 
@@ -308,49 +318,22 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
     def base_offset(self) -> KafkaOffset:
         return KafkaOffset()
 
-    def resume_offset(
-        self,
-        *,
-        first_stage: bool,
-        stream_state: dict | None,
-    ) -> KafkaOffset | None:
-        return None
-
-    def commit_state(self, offset: KafkaOffset) -> StreamStateSpec:
-        partitions = offset.topic_partitions()
-        return lambda: self.acknowledge_offsets(partitions)
-
-    def commit_offset(self, offset: KafkaOffset) -> None:
-        pass
-
-    def acknowledge_offsets(self, partitions: list[TopicPartition]) -> None:
+    def acknowledge_offsets(self, offset: KafkaOffset) -> None:
         from confluent_kafka import KafkaException
 
         self.settle_dead_letters()
         owned = {(tp.topic, tp.partition) for tp in self._consumer.assignment()}
-        offsets = [tp for tp in partitions if (tp.topic, tp.partition) in owned]
-        if not offsets:
+        partitions = [
+            tp for tp in offset.topic_partitions() if (tp.topic, tp.partition) in owned
+        ]
+        if not partitions:
             return
-        for attempt in range(1, ACKNOWLEDGE_ATTEMPTS + 1):
-            try:
-                self._consumer.commit(offsets=offsets, asynchronous=False)
-                return
-            except KafkaException as exc:
-                error = exc.args[0]
-                if attempt == ACKNOWLEDGE_ATTEMPTS or not error.retriable():
-                    raise KafkaErrorCode.KAFKA_30.exception(
-                        cause=exc,
-                        attempts=attempt,
-                        error=error,
-                    )
-                logger.warning(
-                    "The acknowledgement of the offsets failed on attempt %s of "
-                    "%s and will be retried: %s",
-                    attempt,
-                    ACKNOWLEDGE_ATTEMPTS,
-                    error,
-                )
-                time.sleep(ACKNOWLEDGE_RETRY_SECS)
+        try:
+            self._consumer.commit(offsets=partitions, asynchronous=False)
+        except KafkaException as exc:
+            if exc.args[0].retriable():
+                raise
+            raise KafkaErrorCode.KAFKA_31.exception(cause=exc, error=exc.args[0])
 
     def settle_dead_letters(self) -> None:
         if self._dlq_producer is None:

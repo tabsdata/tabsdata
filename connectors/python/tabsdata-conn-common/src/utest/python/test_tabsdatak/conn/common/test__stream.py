@@ -18,6 +18,9 @@ from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._offset import StreamOffset
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._offsets import TabsdataKeptOffsets
+
 
 class Counter(StreamOffset):
     def __init__(self, value: int) -> None:
@@ -35,30 +38,18 @@ class Counter(StreamOffset):
 
 
 class CounterIngester(StreamIngester[int, Counter]):
+    def __init__(self) -> None:
+        super().__init__()
+        self.offsets = TabsdataKeptOffsets(key="counter", read=Counter.read)
+
     def close_session(self, session: Any) -> None:
         pass
 
     def base_offset(self) -> Counter:
         return Counter(0)
 
-    def commit_offset(self, offset: Counter) -> None:
-        pass
-
     def poll_changes(self, session: Any) -> list[int]:
         return []
-
-    def commit_state(self, offset: Counter) -> dict:
-        return {"counter": offset.write()}
-
-    def resume_offset(
-        self,
-        *,
-        first_stage: bool,
-        stream_state: dict | None,
-    ) -> Counter | None:
-        if first_stage or not stream_state:
-            return None
-        return Counter.read(stream_state["counter"])
 
 
 def test_an_offset_round_trips_through_its_written_form():

@@ -116,7 +116,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         return polled
 
     def stage_state(self, run: StreamRun[R, O], offset: O) -> StreamStateSpec:
-        return run.ingester.commit_state(offset)
+        return run.ingester.stage_state(offset)
 
     def may_checkpoint(self, run: StreamRun[R, O]) -> bool:
         return not run.ctx.first_stage
@@ -237,7 +237,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             return False
         offset = buffer_sentinel.offset
         run.ctx.stage(tables_files, self.stage_state(run, offset))
-        run.ingester.commit_offset(offset)
+        run.ingester.acknowledge_offset(offset)
         ledger.clear()
         disk_sentinel.reset_timer()
         return True

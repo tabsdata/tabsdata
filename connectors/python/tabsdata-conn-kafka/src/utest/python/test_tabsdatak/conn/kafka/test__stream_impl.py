@@ -17,6 +17,7 @@ import pytest
 from tabsdatak.api import Secret
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
+from tabsdatak.conn.common.error import ConnErrorCode
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
 
@@ -27,6 +28,7 @@ from tabsdatak.conn.kafka._stream_impl import (
     KafkaOffset,
     KafkaRecord,
     build_kafka_configs,
+    retriable_acknowledgement,
 )
 from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
 from tabsdatak.conn.kafka.error import KafkaErrorCode
@@ -282,6 +284,12 @@ def _final(reason: str):
     )
 
 
+def test_a_retriable_kafka_error_is_a_retriable_acknowledgement():
+    assert retriable_acknowledgement(_retriable("broker away"))
+    assert not retriable_acknowledgement(_final("not a member"))
+    assert not retriable_acknowledgement(RuntimeError("boom"))
+
+
 def test_opening_a_session_subscribes_to_the_topic(tmp_path):
     consumer = MagicMock()
     _opened(consumer, tmp_path)
@@ -466,32 +474,32 @@ def _committed(consumer) -> list[tuple[str, int, int]]:
     return [(tp.topic, tp.partition, tp.offset) for tp in call.kwargs["offsets"]]
 
 
-def test_the_commit_state_commits_every_partition_staged(tmp_path):
+def test_the_stage_state_acknowledges_every_partition_staged(tmp_path):
     consumer = MagicMock()
     ingester = _opened(consumer, tmp_path)
     position = KafkaOffset({"evt": {0: 5, 2: 3}})
 
-    ingester.commit_state(position)()
+    ingester.stage_state(position)()
 
     assert _committed(consumer) == [("evt", 0, 5), ("evt", 2, 3)]
 
 
-def test_the_commit_state_commits_what_was_staged_when_it_was_taken(tmp_path):
+def test_the_stage_state_acknowledges_what_was_staged_when_it_was_taken(tmp_path):
     consumer = MagicMock()
     ingester = _opened(consumer, tmp_path)
     position = KafkaOffset({"evt": {0: 2}})
 
-    commit = ingester.commit_state(position)
+    commit = ingester.stage_state(position)
     position.update(KafkaOffset({"evt": {0: 3, 1: 1}}))
     commit()
 
     assert _committed(consumer) == [("evt", 0, 2)]
 
 
-def test_a_commit_state_without_offsets_commits_nothing(tmp_path):
+def test_a_stage_state_without_offsets_acknowledges_nothing(tmp_path):
     consumer = MagicMock()
     ingester = _opened(consumer, tmp_path)
-    ingester.commit_state(KafkaOffset())()
+    ingester.stage_state(KafkaOffset())()
     consumer.commit.assert_not_called()
 
 
@@ -502,7 +510,7 @@ def test_only_the_partitions_still_owned_are_acknowledged(tmp_path):
     ingester = _opened(consumer, tmp_path)
     consumer.assignment.return_value = [TopicPartition("evt", 2)]
 
-    ingester.commit_state(KafkaOffset({"evt": {0: 5, 2: 3}}))()
+    ingester.stage_state(KafkaOffset({"evt": {0: 5, 2: 3}}))()
 
     assert _committed(consumer) == [("evt", 2, 3)]
 
@@ -511,35 +519,20 @@ def test_nothing_is_acknowledged_when_no_partition_is_owned_any_more(tmp_path):
     consumer = MagicMock()
     ingester = _opened(consumer, tmp_path)
     consumer.assignment.return_value = []
-    ingester.commit_state(KafkaOffset({"evt": {0: 5}}))()
+    ingester.stage_state(KafkaOffset({"evt": {0: 5}}))()
     consumer.commit.assert_not_called()
 
 
 def test_a_retriable_acknowledgement_error_is_retried(tmp_path):
     consumer = MagicMock()
     ingester = _opened(consumer, tmp_path)
+    ingester.offsets.sleep = MagicMock()
     consumer.commit.side_effect = [_retriable("broker away"), None]
 
-    with patch("tabsdatak.conn.kafka._stream_impl.time.sleep") as sleep:
-        ingester.commit_state(KafkaOffset({"evt": {0: 5}}))()
+    ingester.stage_state(KafkaOffset({"evt": {0: 5}}))()
 
     assert consumer.commit.call_count == 2
-    sleep.assert_called_once_with(1)
-
-
-def test_an_acknowledgement_that_keeps_failing_stops_the_stream(tmp_path):
-    consumer = MagicMock()
-    ingester = _opened(consumer, tmp_path)
-    consumer.commit.side_effect = _retriable("broker away")
-
-    with (
-        patch("tabsdatak.conn.kafka._stream_impl.time.sleep"),
-        pytest.raises(TabsdataException) as raised,
-    ):
-        ingester.commit_state(KafkaOffset({"evt": {0: 5}}))()
-
-    assert raised.value.api_error is KafkaErrorCode.KAFKA_30
-    assert consumer.commit.call_count == 3
+    ingester.offsets.sleep.assert_called_once_with(1.0)
 
 
 def test_a_final_acknowledgement_error_is_not_retried(tmp_path):
@@ -548,10 +541,23 @@ def test_a_final_acknowledgement_error_is_not_retried(tmp_path):
     consumer.commit.side_effect = _final("not a member")
 
     with pytest.raises(TabsdataException) as raised:
-        ingester.commit_state(KafkaOffset({"evt": {0: 5}}))()
+        ingester.stage_state(KafkaOffset({"evt": {0: 5}}))()
 
-    assert raised.value.api_error is KafkaErrorCode.KAFKA_30
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_31
     assert consumer.commit.call_count == 1
+
+
+def test_an_acknowledgement_that_keeps_failing_stops_the_stream(tmp_path):
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    ingester.offsets.sleep = MagicMock()
+    consumer.commit.side_effect = _retriable("broker away")
+
+    with pytest.raises(TabsdataException) as raised:
+        ingester.stage_state(KafkaOffset({"evt": {0: 5}}))()
+
+    assert raised.value.api_error is ConnErrorCode.CONN_35
+    assert consumer.commit.call_count == 3
 
 
 def test_the_subscription_listens_for_revoked_and_lost_partitions(tmp_path):
@@ -603,7 +609,7 @@ def test_losing_partitions_stops_the_stream_without_staging(tmp_path):
     with pytest.raises(TabsdataException) as raised:
         ingester.partitions_lost(consumer, [TopicPartition("evt", 1)])
 
-    assert raised.value.api_error is KafkaErrorCode.KAFKA_31
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_30
     assert "('evt', 1)" in str(raised.value)
     assert lifecycle.settled == 0
 
@@ -662,7 +668,7 @@ def test_the_commit_settles_the_dead_letter_topic_before_committing(tmp_path):
     producer.flush.side_effect = lambda timeout: order.append(("flush", timeout)) or 0
     consumer.commit.side_effect = lambda **_: order.append(("commit", None))
 
-    ingester.commit_state(KafkaOffset({"evt": {0: 2}}))()
+    ingester.stage_state(KafkaOffset({"evt": {0: 2}}))()
 
     assert order == [("flush", 16), ("commit", None)]
 
@@ -673,7 +679,7 @@ def test_an_undelivered_dead_letter_message_stops_the_commit(tmp_path):
     producer.flush.return_value = 1
 
     with pytest.raises(TabsdataException) as raised:
-        ingester.commit_state(KafkaOffset({"evt": {0: 2}}))()
+        ingester.stage_state(KafkaOffset({"evt": {0: 2}}))()
 
     assert raised.value.api_error is KafkaErrorCode.KAFKA_29
     consumer.commit.assert_not_called()
@@ -689,7 +695,7 @@ def test_a_failed_dead_letter_delivery_stops_the_commit(tmp_path):
 
     assert list(ingester.poll_changes(consumer)) == []
     with pytest.raises(TabsdataException) as raised:
-        ingester.commit_state(KafkaOffset({"evt": {0: 10}}))()
+        ingester.stage_state(KafkaOffset({"evt": {0: 10}}))()
 
     assert raised.value.api_error is KafkaErrorCode.KAFKA_29
     assert "offset 9 of partition 0 of topic 'evt': Unknown topic" in str(

@@ -719,7 +719,7 @@ def test_extract_old_values_v2_from_identity():
     assert Wal2JsonIngester._extract_old_values_v2(payload) == {"id": 7}
 
 
-# --- base_offset / commit_offset ------------------------------------
+# --- base_offset / confirm_lsn --------------------------------------
 
 
 def test_base_offset_is_zero_before_init_stream():
@@ -727,17 +727,6 @@ def test_base_offset_is_zero_before_init_stream():
     base = bi.base_offset()
     assert isinstance(base, LsnOffset)
     assert base.lsn == 0
-
-
-def test_commit_offset_rejects_foreign_offset():
-    bi = _ingester_with_tables(["public.users"])
-
-    class _Foreign:
-        pass
-
-    with pytest.raises(TabsdataException) as ei:
-        bi.commit_offset(_Foreign())  # type: ignore[arg-type]
-    assert ei.value.api_error is PostgresErrorCode.POSTGRES_16
 
 
 # --- ingester defaults ----------------------------------------------
@@ -758,23 +747,23 @@ def test_ingester_default_format_version_is_v2():
 # =====================================================================
 
 
-def test_commit_state_persists_lsn_in_stream_state():
+def test_stage_state_persists_lsn_in_stream_state():
     bi = _ingester_with_tables(["public.users"])
-    spec = bi.commit_state(_identified(5))
+    spec = bi.stage_state(_identified(5))
     assert isinstance(spec, dict)
     assert LsnOffset.read(spec[CDC_OFFSET_STATE_KEY]).lsn == 5
 
 
-def test_offset_from_state_reconstructs_lsn_offset():
+def test_the_keeper_reads_back_an_lsn_offset():
     bi = _ingester_with_tables(["public.users"])
-    offset = bi.offset_from_state(_identified(9).write())
+    offset = bi.offsets.read(_identified(9).write())
     assert isinstance(offset, LsnOffset)
     assert offset.lsn == 9
 
 
 def test_resume_offset_round_trips_persisted_lsn():
     bi = _ingester_with_tables(["public.users"])
-    state = bi.commit_state(_identified(11))
+    state = bi.stage_state(_identified(11))
     resumed = bi.resume_offset(first_stage=False, stream_state=state)
     assert isinstance(resumed, LsnOffset)
     assert resumed.lsn == 11
@@ -782,17 +771,17 @@ def test_resume_offset_round_trips_persisted_lsn():
 
 def test_resume_offset_first_stage_ignores_persisted_state():
     bi = _ingester_with_tables(["public.users"])
-    state = bi.commit_state(_identified(11))
+    state = bi.stage_state(_identified(11))
     assert bi.resume_offset(first_stage=True, stream_state=state) is None
     assert bi.resume_offset(first_stage=False, stream_state=None) is None
 
 
-def test_commit_offset_acknowledges_the_offset_to_the_slot():
+def test_acknowledging_the_offset_confirms_the_lsn_to_the_slot():
     bi = _ingester_with_tables(["public.users"])
     bi._cursor = MagicMock()
     bi._mark = LsnOffset(lsn=99)
 
-    bi.commit_offset(LsnOffset(lsn=7))
+    bi.acknowledge_offset(LsnOffset(lsn=7))
 
     bi._cursor.send_feedback.assert_called_once_with(flush_lsn=7, reply=True)
 
@@ -1048,7 +1037,7 @@ def test_a_stage_after_the_slot_moved_past_its_changes_takes_the_slot(monkeypatc
     bi._watch_slot()
     buffered = _identified(120)
 
-    state = bi.commit_state(buffered)
+    state = bi.stage_state(buffered)
 
     assert LsnOffset.read(state[CDC_OFFSET_STATE_KEY]).lsn == 150
     assert buffered.lsn == 120
@@ -1058,13 +1047,13 @@ def test_a_stage_after_the_slot_moved_past_its_changes_takes_the_slot(monkeypatc
 def test_a_stage_past_the_slot_keeps_its_own_position(monkeypatch):
     bi, _ = _attached(monkeypatch, staged=100, rows=[(150, PID)])
     bi._watch_slot()
-    state = bi.commit_state(_identified(180))
+    state = bi.stage_state(_identified(180))
     assert LsnOffset.read(state[CDC_OFFSET_STATE_KEY]).lsn == 180
 
 
 def test_a_stage_already_at_the_slot_is_not_recorded_again(monkeypatch):
     bi, recorded = _attached(monkeypatch, staged=100, rows=[(180, PID)])
-    bi.commit_state(_identified(180))
+    bi.stage_state(_identified(180))
     bi._watch_slot()
     assert recorded == []
 

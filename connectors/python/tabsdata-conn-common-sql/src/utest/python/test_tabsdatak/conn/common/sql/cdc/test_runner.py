@@ -153,9 +153,9 @@ class FakeIngester:
         self.seeded = "UNSET"
         self.session = object()
         self.closed = False
-        self.commit_state_arg = None
-        self.commit_state_marker = object()
-        self.committed_offsets: list = []
+        self.stage_state_arg = None
+        self.stage_state_marker = object()
+        self.acknowledged_offsets: list = []
         self.tracked_tables: dict = {"s.t": object()}
         self.lifecycle = None
         self.settled = 0
@@ -199,12 +199,12 @@ class FakeIngester:
     def close_session(self, session) -> None:
         self.closed = True
 
-    def commit_state(self, offset):
-        self.commit_state_arg = offset
-        return self.commit_state_marker
+    def stage_state(self, offset):
+        self.stage_state_arg = offset
+        return self.stage_state_marker
 
-    def commit_offset(self, offset) -> None:
-        self.committed_offsets.append(offset)
+    def acknowledge_offset(self, offset) -> None:
+        self.acknowledged_offsets.append(offset)
 
 
 def _patch_sentinels(monkeypatch, disk, buffer):
@@ -246,7 +246,7 @@ def _checkpoint(ctx, ingester, cfg: CdcRunConfig, offset) -> None:
 
 
 class _OwnedOffsetIngester(FakeIngester):
-    def commit_state(self, offset):
+    def stage_state(self, offset):
         return {"cdc.offset": offset}
 
 
@@ -324,7 +324,7 @@ def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False, window_end=None)
 
     monkeypatch.setattr(_runner, "InitialLoader", FakeLoader)
     ingester = FakeIngester(window_end=window_end)
-    ingester.commit_state_marker = {"cdc.offset": "o"}
+    ingester.stage_state_marker = {"cdc.offset": "o"}
     result = _runner._load_initially(
         ctx=ctx,
         ingester=ingester,
@@ -346,7 +346,7 @@ def test_initial_load_stages_once_with_offset_and_flag(monkeypatch, tmp_path):
     # The resume offset and the "load done" flag are persisted together,
     # so a crash cannot leave one without the other.
     assert staged_state == {"cdc.offset": "o", CDC_INITIAL_LOAD_STATE_KEY: False}
-    assert ingester.committed_offsets == [offset]
+    assert ingester.acknowledged_offsets == [offset]
 
 
 def test_initial_load_failure_stages_nothing(monkeypatch, tmp_path):
@@ -378,7 +378,7 @@ def test_initial_load_requires_a_tabsdata_owned_offset(monkeypatch, tmp_path):
         lambda **kw: type("L", (), {"load": lambda self, session: object()})(),
     )
     ingester = FakeIngester()
-    ingester.commit_state_marker = lambda: None
+    ingester.stage_state_marker = lambda: None
 
     with pytest.raises(SqlCdcException):
         _runner._load_initially(
@@ -404,7 +404,7 @@ def test_a_load_with_a_window_is_left_unstaged(monkeypatch, tmp_path):
     assert pending.manifest == manifest
     assert pending.window_end is end
     assert ctx.staged == []
-    assert ingester.committed_offsets == []
+    assert ingester.acknowledged_offsets == []
 
 
 class _FakeRegistry:
@@ -432,7 +432,7 @@ def _with_window(monkeypatch, tmp_path, *, window):
     )
     ingester = FakeIngester()
     ingester.schema_registry = _FakeRegistry()
-    ingester.commit_state_marker = {"cdc.offset": "end"}
+    ingester.stage_state_marker = {"cdc.offset": "end"}
     ctx = FakeCtx(active_values=[False], stream_state=None)
     ctx.work_dir = tmp_path
     _stream(ctx, ingester, _cfg(initial_load=True))
@@ -450,8 +450,8 @@ def test_the_load_is_staged_with_what_deduplication_keeps(monkeypatch, tmp_path)
             {"cdc.offset": "end", CDC_INITIAL_LOAD_STATE_KEY: False},
         )
     ]
-    assert ingester.commit_state_arg is end
-    assert ingester.committed_offsets == [end]
+    assert ingester.stage_state_arg is end
+    assert ingester.acknowledged_offsets == [end]
     (call,) = deduplicated
     assert call["loaded"] == [[load_file]]
     assert call["changes"] == [[window_file]]

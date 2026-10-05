@@ -318,7 +318,7 @@ def test_ingester_default_fetch_size():
     assert DEFAULT_FETCH_SIZE == 100_000
 
 
-# --- base_offset / commit_offset ------------------------------------
+# --- base_offset ----------------------------------------------------
 
 
 def test_base_offset_is_empty_before_init_reader():
@@ -326,22 +326,6 @@ def test_base_offset_is_empty_before_init_reader():
     base = bi.base_offset()
     assert isinstance(base, CommitSeqOffset)
     assert base.commits == {}
-
-
-def test_commit_offset_accepts_commitseq_offset():
-    bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
-    bi.commit_offset(CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x01" * 16}))
-
-
-def test_commit_offset_rejects_foreign_offset():
-    bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
-
-    class _Foreign:
-        pass
-
-    with pytest.raises(TabsdataException) as ei:
-        bi.commit_offset(_Foreign())  # type: ignore[arg-type]
-    assert ei.value.api_error is Db2ErrorCode.DB2_21
 
 
 # --- COMMITSEQ_ORIGIN -----------------------------------------------
@@ -352,25 +336,25 @@ def test_commitseq_origin_is_16_zero_bytes():
 
 
 # =====================================================================
-# Offset ownership -- Db2 is Tabsdata-owned: it persists the per-CD-table
-# commitseq watermarks in stream state (default commit_state) and
-# reconstructs them on resume via offset_from_state.
+# Offset ownership -- Db2 is Tabsdata-kept: it persists the per-CD-table
+# commitseq watermarks in stream state (stage_state) and reconstructs them
+# on resume through its offsets keeper.
 # =====================================================================
 
 
-def test_offset_from_state_reconstructs_commitseq_offset():
+def test_the_keeper_reads_back_a_commitseq_offset():
     bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
-    offset = bi.offset_from_state(
+    offset = bi.offsets.read(
         CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x01" * 16}).write()
     )
     assert isinstance(offset, CommitSeqOffset)
     assert offset.commits == {"CDSCHEMA.USERS_CD": b"\x01" * 16}
 
 
-def test_commit_state_persists_commitseqs_in_stream_state():
+def test_stage_state_persists_commitseqs_in_stream_state():
     bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
     offset = CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x01" * 16})
-    spec = bi.commit_state(offset)
+    spec = bi.stage_state(offset)
     assert isinstance(spec, dict)
     assert spec == {CDC_OFFSET_STATE_KEY: offset.write()}
 
@@ -378,7 +362,7 @@ def test_commit_state_persists_commitseqs_in_stream_state():
 def test_resume_offset_round_trips_persisted_commitseqs():
     bi = _ingester_with_tables(["CDSCHEMA.USERS_CD"])
     offset = CommitSeqOffset(commits={"CDSCHEMA.USERS_CD": b"\x07" * 16})
-    persisted = bi.commit_state(offset)
+    persisted = bi.stage_state(offset)
     resumed = bi.resume_offset(first_stage=False, stream_state=persisted)
     assert isinstance(resumed, CommitSeqOffset)
     assert resumed.commits == {"CDSCHEMA.USERS_CD": b"\x07" * 16}
@@ -990,7 +974,7 @@ def test_a_moved_position_is_staged_once_the_last_row_is():
     bi = _ingester_with_tables(["ASN.Q_CD"])
     last_row, moved_to = _commitseq(5, 0x500), _commitseq(9, 0x900)
     bi._quiet = {"ASN.Q_CD": (last_row, moved_to)}
-    staged = bi.commit_state(CommitSeqOffset(commits={"ASN.Q_CD": last_row}))
+    staged = bi.stage_state(CommitSeqOffset(commits={"ASN.Q_CD": last_row}))
     assert CommitSeqOffset.read(staged["cdc.offset"]).commits == {
         "ASN.Q_CD": moved_to
     }
@@ -1003,7 +987,7 @@ def test_a_moved_position_waits_for_a_row_not_staged_yet():
     staged_row = _commitseq(3, 0x300)
     last_row, moved_to = _commitseq(5, 0x500), _commitseq(9, 0x900)
     bi._quiet = {"ASN.Q_CD": (last_row, moved_to)}
-    staged = bi.commit_state(CommitSeqOffset(commits={"ASN.Q_CD": staged_row}))
+    staged = bi.stage_state(CommitSeqOffset(commits={"ASN.Q_CD": staged_row}))
     assert CommitSeqOffset.read(staged["cdc.offset"]).commits == {
         "ASN.Q_CD": staged_row
     }

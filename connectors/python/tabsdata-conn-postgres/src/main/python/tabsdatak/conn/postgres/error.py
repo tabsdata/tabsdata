@@ -105,7 +105,7 @@ class PostgresErrorCode(ErrorCode):
     POSTGRES_16 = ErrorDef(
         PostgresRuntimeException,
         "Postgres wal2json offset type mismatch (got {actual!r})",
-    )  # commit_offset / GtidOffset.update: unexpected offset type
+    )  # unexpected offset type
     POSTGRES_17 = ErrorDef(
         PostgresRuntimeException,
         "Postgres wal2json: unsupported format-version {version!r} (expected 1 or 2)",

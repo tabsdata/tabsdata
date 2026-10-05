@@ -108,7 +108,7 @@ class MysqlErrorCode(ErrorCode):
     MYSQL_17 = ErrorDef(
         MySQLRuntimeException,
         "MySQL binlog offset type mismatch (got {actual!r})",
-    )  # commit_offset: unexpected offset type
+    )  # unexpected offset type
     MYSQL_18 = ErrorDef(
         ConnInitException,
         "Cannot create TimestampPosition",

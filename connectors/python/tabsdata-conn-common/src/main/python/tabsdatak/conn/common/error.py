@@ -191,3 +191,8 @@ class ConnErrorCode(ErrorCode):
         "{offset!r}: it must report the offset the stream resumes from, and "
         "keep that offset in Tabsdata stream state",
     )
+    CONN_35 = ErrorDef(
+        ConnStreamException,
+        "The acknowledgement of the staged offset failed after {attempts} "
+        "attempts; the stream stops and the staged data is read again: {error}",
+    )

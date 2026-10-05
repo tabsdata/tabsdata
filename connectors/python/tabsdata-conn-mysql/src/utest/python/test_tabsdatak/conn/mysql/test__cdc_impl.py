@@ -626,7 +626,7 @@ def test_extract_raw_schema_rejects_anonymous_column():
     assert ei.value.api_error is MysqlErrorCode.MYSQL_16
 
 
-# --- base_offset / commit_offset ------------------------------------
+# --- base_offset ----------------------------------------------------
 
 
 def test_base_offset_is_empty_before_init_stream():
@@ -636,46 +636,30 @@ def test_base_offset_is_empty_before_init_stream():
     assert base.gtid == ""
 
 
-def test_commit_offset_accepts_gtid_offset():
-    bi = _ingester_with_tables(["app.users"])
-    bi.commit_offset(GtidOffset(gtid="uuid:1"))
-
-
-def test_commit_offset_rejects_foreign_offset():
-    bi = _ingester_with_tables(["app.users"])
-
-    class _Foreign:
-        pass
-
-    with pytest.raises(TabsdataException) as ei:
-        bi.commit_offset(_Foreign())  # type: ignore[arg-type]
-    assert ei.value.api_error is MysqlErrorCode.MYSQL_17
-
-
 # =====================================================================
-# Offset ownership -- MySQL is Tabsdata-owned: it persists the GTID in
-# stream state (default commit_state) and reconstructs it on resume via
-# offset_from_state.
+# Offset ownership -- MySQL is Tabsdata-kept: it persists the GTID in
+# stream state (stage_state) and reconstructs it on resume through its
+# offsets keeper.
 # =====================================================================
 
 
-def test_offset_from_state_reconstructs_gtid_offset():
+def test_the_keeper_reads_back_a_gtid_offset():
     bi = _ingester_with_tables(["app.users"])
-    offset = bi.offset_from_state(GtidOffset(gtid="uuid:42").write())
+    offset = bi.offsets.read(GtidOffset(gtid="uuid:42").write())
     assert isinstance(offset, GtidOffset)
     assert offset.gtid == "uuid:42"
 
 
-def test_commit_state_persists_gtid_in_stream_state():
+def test_stage_state_persists_gtid_in_stream_state():
     bi = _ingester_with_tables(["app.users"])
-    spec = bi.commit_state(GtidOffset(gtid="uuid:7"))
+    spec = bi.stage_state(GtidOffset(gtid="uuid:7"))
     assert isinstance(spec, dict)
     assert spec == {CDC_OFFSET_STATE_KEY: GtidOffset(gtid="uuid:7").write()}
 
 
 def test_resume_offset_round_trips_persisted_gtid():
     bi = _ingester_with_tables(["app.users"])
-    persisted = bi.commit_state(GtidOffset(gtid="uuid:7"))
+    persisted = bi.stage_state(GtidOffset(gtid="uuid:7"))
     resumed = bi.resume_offset(first_stage=False, stream_state=persisted)
     assert isinstance(resumed, GtidOffset)
     assert resumed.gtid == "uuid:7"

@@ -45,10 +45,15 @@ from sqlalchemy import text
 from sqlalchemy.sql.elements import quoted_name
 from sqlalchemy.types import CLOB, LargeBinary, TypeEngine
 
+from tabsdatak.conn.common._stream._offsets import TabsdataKeptOffsets
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream.constants import DEFAULT_POLL_MAX_SECS
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
-from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
+from tabsdatak.conn.common.sql.cdc._ingester import (
+    CDC_OFFSET_STATE_KEY,
+    CdcIngester,
+)
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
@@ -79,7 +84,6 @@ from tabsdatak.conn.db2 import (
     TableCommitSeqPosition,
 )
 from tabsdatak.conn.db2.error import Db2ErrorCode
-from tabsdatak.spi import StreamStateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -809,6 +813,10 @@ class SqlReplicaIngester(CdcIngester):
         fetch_size: int = DEFAULT_FETCH_SIZE,
     ):
         super().__init__(tables=tables)
+        self.offsets = TabsdataKeptOffsets(
+            key=CDC_OFFSET_STATE_KEY,
+            read=CommitSeqOffset.read,
+        )
         self._conn = conn
         self._start_from = start_from
         self._poll_max_secs = poll_max_secs
@@ -1071,20 +1079,6 @@ class SqlReplicaIngester(CdcIngester):
     def base_offset(self) -> CdcOffset:
         return (self._base_offset or CommitSeqOffset()).copy()
 
-    def commit_offset(self, offset: CdcOffset) -> None:
-        if not isinstance(offset, CommitSeqOffset):
-            raise Db2ErrorCode.DB2_21.exception(
-                actual=type(offset).__name__,
-            )
-        # SQL Replication has no acknowledgement protocol; the
-        # capture program advances independently. The mark stays
-        # local to the runner -- no-op here, just type-check.
-
-    def offset_from_state(self, offset_state: str) -> CdcOffset:
-        # SQL Replication keeps no server-side consumer cursor: Tabsdata
-        # owns the offset, so resume from the persisted commit-seq map.
-        return CommitSeqOffset.read(offset_state)
-
     # ------------------------------------------------------------------
     # init_reader -- translate start_from to the per-table commit map
     # ------------------------------------------------------------------
@@ -1323,18 +1317,18 @@ class SqlReplicaIngester(CdcIngester):
             self._quiet[qualified] = (last_row, captured)
             self._mark.commits[qualified] = captured
 
-    def commit_state(self, offset: CdcOffset) -> StreamStateSpec:
-        """The staged state, with each quiet table at the position it was
+    def staged_offset(self, offset: CdcOffset) -> CdcOffset:
+        """The staged offset, with each quiet table at the position it was
         moved on to, once the stage covers the last row read from it: a
         stage short of that row cannot skip it."""
-        if isinstance(offset, CommitSeqOffset) and self._quiet:
-            commits = dict(offset.commits)
-            for table, (last_row, moved_to) in self._quiet.items():
-                staged = commits.get(table)
-                if staged is not None and staged >= last_row and moved_to > staged:
-                    commits[table] = moved_to
-            offset = CommitSeqOffset(commits=commits)
-        return super().commit_state(offset)
+        if not self._quiet:
+            return offset
+        commits = dict(offset.commits)
+        for table, (last_row, moved_to) in self._quiet.items():
+            staged = commits.get(table)
+            if staged is not None and staged >= last_row and moved_to > staged:
+                commits[table] = moved_to
+        return CommitSeqOffset(commits=commits)
 
     def poll_changes(self, session: Any) -> Iterable[CdcChange]:
         # Lazy init_reader on the first poll -- collect_tables

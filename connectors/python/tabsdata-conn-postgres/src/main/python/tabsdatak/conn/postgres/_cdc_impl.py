@@ -50,13 +50,18 @@ from sqlalchemy.dialects.postgresql import OID
 from sqlalchemy.sql.elements import quoted_name
 from sqlalchemy.types import JSON, LargeBinary, Text
 
+from tabsdatak.conn.common._stream._offsets import TabsdataKeptOffsets
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream.constants import DEFAULT_POLL_MAX_SECS
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
-from tabsdatak.conn.common.sql.cdc._ingester import CdcIngester
+from tabsdatak.conn.common.sql.cdc._ingester import (
+    CDC_OFFSET_STATE_KEY,
+    CdcIngester,
+)
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
     CdcDataChange,
@@ -79,7 +84,6 @@ from tabsdatak.conn.common.sql.cdc.typing import CdcFormat, QualifiedTablesSpec
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.postgres import LsnPosition
 from tabsdatak.conn.postgres.error import PostgresErrorCode
-from tabsdatak.spi import StreamStateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -699,6 +703,11 @@ class Wal2JsonIngester(CdcIngester):
         accepted_gap: tuple[int, int] | None = None,
     ):
         super().__init__(tables=tables)
+        self.offsets = TabsdataKeptOffsets(
+            key=CDC_OFFSET_STATE_KEY,
+            read=LsnOffset.read,
+            acknowledger=self.confirm_lsn,
+        )
         self._conn = conn
         self._start_from = start_from
         self._replication_slot = replication_slot
@@ -932,7 +941,7 @@ class Wal2JsonIngester(CdcIngester):
         self._slot_floor = self._mark.lsn
         self._watched_at = time.monotonic()
         if self._mark.lsn:
-            self.commit_offset(self._mark)
+            self.confirm_lsn(self._mark)
         self._record()
 
     def _attach(self, options: dict[str, str]) -> None:
@@ -1120,29 +1129,18 @@ class Wal2JsonIngester(CdcIngester):
     def base_offset(self) -> CdcOffset:
         return (self._base_offset or LsnOffset()).copy()
 
-    def commit_offset(self, offset: CdcOffset) -> None:
-        if not isinstance(offset, LsnOffset):
-            raise PostgresErrorCode.POSTGRES_16.exception(
-                actual=type(offset).__name__,
-            )
+    def confirm_lsn(self, offset: LsnOffset) -> None:
         if self._cursor is None:  # pragma: no cover -- stream init failed
             return
         self._cursor.send_feedback(flush_lsn=offset.lsn, reply=True)
-        logger.debug("Confirmed LSN position %d", offset.lsn)
+        logger.debug("Confirmed LSN offset %d", offset.lsn)
 
-    def offset_from_state(self, offset_state: str) -> CdcOffset:
-        return LsnOffset.read(offset_state)
-
-    def commit_state(self, offset: CdcOffset) -> StreamStateSpec:
-        if not isinstance(offset, LsnOffset):
-            raise PostgresErrorCode.POSTGRES_16.exception(
-                actual=type(offset).__name__,
-            )
+    def staged_offset(self, offset: CdcOffset) -> CdcOffset:
         if offset.lsn < self._slot_floor:
             offset = offset.copy()
             offset.lsn = self._slot_floor
         self._recorded = max(self._recorded, offset.lsn)
-        return super().commit_state(offset)
+        return offset
 
     def settle_offset(self) -> None:
         """Record where the slot ends up once this stream lets it go. The

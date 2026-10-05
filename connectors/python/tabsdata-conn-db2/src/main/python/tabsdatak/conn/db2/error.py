@@ -131,7 +131,7 @@ class Db2ErrorCode(ErrorCode):
     DB2_21 = ErrorDef(
         Db2RuntimeException,
         "Db2 sqlreplica offset type mismatch (got {actual!r})",
-    )  # commit_offset / CommitSeqOffset.update: unexpected offset type
+    )  # CommitSeqOffset.update: unexpected offset type
     DB2_22 = ErrorDef(
         Db2RuntimeException,
         "Db2 sqlreplica event: unknown IBMSNAP_OPERATION {op!r} for {table!r}",
