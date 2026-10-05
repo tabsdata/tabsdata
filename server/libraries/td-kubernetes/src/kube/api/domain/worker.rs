@@ -12,7 +12,7 @@ use crate::base::error::kubernetes::{
     KubeCronJobError, KubeJobError, KubePodError, KubernetesError,
 };
 use crate::base::labels::LABEL_WORKER_ID;
-use crate::base::naming::worker_id_text;
+use crate::base::naming::logical_id_text;
 use crate::kube::api::domain::labels::{LabelFilter, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
@@ -20,7 +20,7 @@ pub async fn delete_worker(
     context: &KubeContext,
     worker_id: &WorkerId,
 ) -> Result<(), KubernetesError> {
-    let worker_id = worker_id_text(worker_id);
+    let worker_id = logical_id_text(worker_id);
     let selector = tabsdata_selector(Some(LabelFilter::new(LABEL_WORKER_ID, &worker_id)));
     let list_params = ListParams::default().labels_from(&selector);
     let delete_params = DeleteParams {

@@ -11,7 +11,7 @@ use td_objects::types::basic::WorkerId;
 
 use crate::base::constants::LOG_POD_POLL_INTERVAL;
 use crate::base::labels::LABEL_WORKER_ID;
-use crate::base::naming::worker_id_text;
+use crate::base::naming::logical_id_text;
 use crate::kube::api::domain::labels::LabelFilter;
 use crate::kube::api::entity::pod::status::{is_pod_terminal, started_container_names};
 use crate::kube::api::entity::pod::{get_pods, stream_pod_log};
@@ -32,7 +32,7 @@ pub fn stream_worker_logs(
     follow: bool,
 ) -> WorkerLogStream {
     let context = context.clone();
-    let worker_id = worker_id_text(worker_id);
+    let worker_id = logical_id_text(worker_id);
 
     Box::pin(async_stream::stream! {
         let mut streamed: HashSet<String> = HashSet::new();

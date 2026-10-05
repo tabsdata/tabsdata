@@ -4,6 +4,7 @@
 
 use once_cell::sync::Lazy;
 use regex::Regex;
+use td_common::logic_id::{IdL, KeyId};
 use td_common::worker::{Decorator, WorkerName};
 use td_objects::types::basic::WorkerId;
 
@@ -99,15 +100,15 @@ pub fn to_connection_object_name(connection_id: &str) -> Result<String, NamingEr
     Ok(assembled)
 }
 
-pub fn worker_id_text(worker_id: &WorkerId) -> String {
-    worker_id.unpadded_str()
+pub fn logical_id_text<K: KeyId>(id: &IdL<K>) -> String {
+    id.unpadded_str()
 }
 
 pub fn to_fn_pod_name(prefix: &str, worker_id: &WorkerId) -> Result<String, NamingError> {
     let assembled = format!(
         "{}{KUBE_NAME_SEPARATOR}{}",
         normalize_segment(NameSegment::Component, prefix)?,
-        normalize_segment(NameSegment::WorkerId, &worker_id_text(worker_id))?,
+        normalize_segment(NameSegment::WorkerId, &logical_id_text(worker_id))?,
     );
     if !DNS_SUBDOMAIN_PATTERN.is_match(&assembled) {
         return Err(NamingError::AssembledIdentifierInvalid {

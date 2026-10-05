@@ -16,7 +16,7 @@ use td_common::worker::{Decorator, MessageAction};
 use td_objects::types::basic::WorkerId;
 use tracing::error;
 
-use crate::base::naming::{to_fn_pod_name, worker_id_text, worker_name_prefix, worker_pod_stem};
+use crate::base::naming::{logical_id_text, to_fn_pod_name, worker_name_prefix, worker_pod_stem};
 use crate::runtime::gateway::messaging::messenger::factory::WorkloadFactory;
 use crate::runtime::gateway::messaging::messenger::kit::{
     FunctionRunKit, build_cron_run_kit, build_function_run_kit, build_stream_run_kit,
@@ -206,7 +206,7 @@ pub(super) fn kit_for_payload(
 pub(super) fn derive_kube_name(worker_id: &WorkerId, prefix: &str) -> Result<String, QueueError> {
     to_fn_pod_name(prefix, worker_id).map_err(|error| {
         error!(
-            id = %worker_id_text(worker_id),
+            id = %logical_id_text(worker_id),
             prefix = %prefix,
             error = %error,
             "Failed to derive kube name from worker and id."

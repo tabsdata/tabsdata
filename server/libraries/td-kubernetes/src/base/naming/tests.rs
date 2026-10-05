@@ -13,9 +13,9 @@ fn to_fn_pod_name_spells_the_worker_id_as_the_api_does() {
 }
 
 #[test]
-fn worker_id_text_is_the_unpadded_spelling() {
+fn logical_id_text_is_the_unpadded_spelling() {
     let worker_id = WorkerId::try_from("wkr20260713-0000000005").unwrap();
-    assert_eq!(worker_id_text(&worker_id), "wkr20260713-5");
+    assert_eq!(logical_id_text(&worker_id), "wkr20260713-5");
 }
 
 #[test]

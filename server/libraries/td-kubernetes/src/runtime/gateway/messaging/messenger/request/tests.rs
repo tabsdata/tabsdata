@@ -112,7 +112,7 @@ fn every_kind_is_labelled_with_its_function_id() {
 
 #[test]
 fn triggers_also_keep_their_function_version_id() {
-    let version = Some("fv20260101-0000000001".to_owned());
+    let version = Some("fv20260101-1".to_owned());
     assert_eq!(
         label(&stage_trigger_request().labels(), LABEL_FUNCTION_VERSION_ID),
         version

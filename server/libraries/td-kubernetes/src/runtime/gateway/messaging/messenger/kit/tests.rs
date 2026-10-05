@@ -58,7 +58,6 @@ fn every_companion_carries_the_workload_labels() {
     let request = cron_request();
     let kit = build_worker_run_kit("crn-wkr20260101-1", "tabsdata", &request).unwrap();
     let function_id = request.function_id.to_string();
-    let function_version_id = request.function_version_id.to_string();
     for metadata in [
         &kit.main_configmap.metadata,
         &kit.main_secret.metadata,
@@ -70,7 +69,7 @@ fn every_companion_carries_the_workload_labels() {
         );
         assert_eq!(
             label(metadata, LABEL_FUNCTION_VERSION_ID),
-            Some(function_version_id.as_str())
+            Some("fv20260101-1")
         );
         assert_eq!(label(metadata, LABEL_WORKER_ID), Some("wkr20260101-1"));
         assert_eq!(
@@ -87,14 +86,14 @@ fn every_companion_carries_the_workload_labels() {
 #[test]
 fn companions_keep_their_names_and_namespace() {
     let kit =
-        build_worker_run_kit("crn-wkr20260101-0000000001", "tabsdata", &cron_request()).unwrap();
+        build_worker_run_kit("crn-wkr20260101-1", "tabsdata", &cron_request()).unwrap();
     assert_eq!(
         kit.main_configmap.metadata.name.as_deref(),
-        Some("crn-wkr20260101-0000000001-main")
+        Some("crn-wkr20260101-1-main")
     );
     assert_eq!(
         kit.latch_configmap.metadata.name.as_deref(),
-        Some("crn-wkr20260101-0000000001-latch")
+        Some("crn-wkr20260101-1-latch")
     );
     assert_eq!(
         kit.main_secret.metadata.namespace.as_deref(),

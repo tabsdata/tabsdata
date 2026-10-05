@@ -5,7 +5,7 @@
 use td_bridge::messaging::{CronStartRequest, FunctionStartRequest, StageTriggerStartRequest};
 use td_common::worker::Callback;
 
-use crate::base::naming::worker_id_text;
+use crate::base::naming::logical_id_text;
 
 use crate::base::annotations::{
     ANNOTATION_COLLECTION, ANNOTATION_CONNECTION, ANNOTATION_FUNCTION, ANNOTATION_PROJECT,
@@ -74,7 +74,7 @@ impl WorkerStartRequest for FunctionStartRequest {
     }
 
     fn worker_id(&self) -> String {
-        worker_id_text(&self.worker_id)
+        logical_id_text(&self.worker_id)
     }
 
     fn decorator(&self) -> Option<&str> {
@@ -132,7 +132,7 @@ impl WorkerStartRequest for StageTriggerStartRequest {
     }
 
     fn worker_id(&self) -> String {
-        worker_id_text(&self.worker_id)
+        logical_id_text(&self.worker_id)
     }
 
     fn decorator(&self) -> Option<&str> {
@@ -186,7 +186,7 @@ impl WorkerStartRequest for StageTriggerStartRequest {
     fn custom_labels(&self) -> Vec<(String, String)> {
         vec![(
             LABEL_FUNCTION_VERSION_ID.to_owned(),
-            self.function_version_id.to_string(),
+            logical_id_text(&self.function_version_id),
         )]
     }
 }
@@ -197,7 +197,7 @@ impl WorkerStartRequest for CronStartRequest {
     }
 
     fn worker_id(&self) -> String {
-        worker_id_text(&self.worker_id)
+        logical_id_text(&self.worker_id)
     }
 
     fn decorator(&self) -> Option<&str> {
@@ -251,7 +251,7 @@ impl WorkerStartRequest for CronStartRequest {
     fn custom_labels(&self) -> Vec<(String, String)> {
         vec![(
             LABEL_FUNCTION_VERSION_ID.to_owned(),
-            self.function_version_id.to_string(),
+            logical_id_text(&self.function_version_id),
         )]
     }
 }
