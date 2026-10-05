@@ -939,6 +939,10 @@ class Wal2JsonIngester(CdcIngester):
             # Puts the commit position on each format-2 BEGIN message, which
             # every row of the transaction then takes as its segment.
             "include-lsn": "true",
+            # Numbers come as decimal strings, not JSON numbers: a JSON number
+            # is parsed as a float and a numeric loses every digit past the
+            # fifteenth before the Decimal is built from it.
+            "numeric-data-types-as-string": "true",
             "add-tables": self._schema_table_filter(),
         }
         if self._publication_name:

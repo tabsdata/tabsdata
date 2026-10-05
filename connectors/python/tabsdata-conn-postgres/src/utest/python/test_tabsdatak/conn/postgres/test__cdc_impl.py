@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
@@ -1411,7 +1412,46 @@ def test_the_stream_asks_wal2json_for_commit_positions(monkeypatch):
     bi = _ingester_with_tables(["public.users"])
     cursor = _replication_cursor(monkeypatch, bi)
     bi.init_stream()
-    assert cursor.start_replication.call_args.kwargs["options"]["include-lsn"] == "true"
+    options = cursor.start_replication.call_args.kwargs["options"]
+    assert options["include-lsn"] == "true"
+    assert options["numeric-data-types-as-string"] == "true"
+
+
+def test_a_numeric_sent_as_text_keeps_every_digit():
+    """With numbers sent as strings, a numeric reaches the Decimal exact; parsed
+    as a JSON number it would have gone through a float first and kept 15
+    digits of its 30. Integers and floats sent the same way still type."""
+    begin = {
+        "action": "B",
+        "xid": 9,
+        "timestamp": "2026-09-29 19:15:18+00",
+        "lsn": "0/100",
+    }
+    row = {
+        "action": "I",
+        "xid": 9,
+        "schema": "public",
+        "table": "t",
+        "columns": [
+            {"name": "id", "type": "integer", "value": "7"},
+            {
+                "name": "amount",
+                "type": "numeric(30,10)",
+                "value": "12345678901234567890.1234567890",
+            },
+            {"name": "ratio", "type": "double precision", "value": "0.5"},
+        ],
+    }
+    messages = [
+        _Message("0/90", begin),
+        _Message("0/90", row),
+        _Message("0/120", {"action": "C", "xid": 9, "lsn": "0/100"}),
+    ]
+
+    [change] = list(_format_2_ingester(messages)._poll_changes_v2(None))
+
+    assert change.new_values["amount"] == Decimal("12345678901234567890.1234567890")
+    assert change.new_values["id"] == 7 and change.new_values["ratio"] == 0.5
 
 
 # =====================================================================
