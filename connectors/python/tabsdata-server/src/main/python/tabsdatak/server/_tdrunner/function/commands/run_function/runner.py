@@ -264,8 +264,11 @@ def _materialize_input_slot(
     SINGLE mode:
       * no records      → `None`
       * one record      → `TableFrame` (or `None` for a null `file`)
-      * many records    → contract violation (a SINGLE slot resolves to
-        exactly one table)
+      * many records    → for a publisher, the files a source plugin
+        wrote for one table (a query read in chunks), concatenated into
+        one `TableFrame`; for a transformer or subscriber they would be
+        several versions of a stored table, a contract violation (a
+        SINGLE slot resolves to exactly one table)
 
     ARRAY mode:
       * `is_empty` entry → `[]`
@@ -276,12 +279,32 @@ def _materialize_input_slot(
     if table_mode is TableMode.SINGLE:
         if len(records) == 0:
             return None
-        if len(records) > 1:
-            raise RunFunctionErrorCode.RF_11.exception(count=len(records))
-        return _build_input(records[0], info=info)
+        if len(records) == 1:
+            return _build_input(records[0], info=info)
+        if isinstance(info, (PublisherInfo, StreamPublisherInfo)):
+            return _build_chunked_input(records)
+        raise RunFunctionErrorCode.RF_11.exception(count=len(records))
     if entry.get(inputs_manifest.MANIFEST_IS_EMPTY_KEY):
         return []
     return [_build_input(record, info=info) for record in records]
+
+
+def _build_chunked_input(records: list[dict]):
+    """One `TableFrame` over the files a source plugin wrote for one
+    publisher input: the chunks are scanned lazily and concatenated,
+    widening a column whose type differs between chunks."""
+    from tabsdatak.tableframe import TableFrame
+    from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
+
+    files = [
+        record[inputs_manifest.MANIFEST_FILE_KEY]
+        for record in records
+        if record.get(inputs_manifest.MANIFEST_FILE_KEY) is not None
+    ]
+    if not files:
+        return None
+    scans = [_scan_parquet_or_fail(Path(file)) for file in files]
+    return TableFrame._build(pl.concat(scans, how="vertical_relaxed"), CreationMode.TAB)
 
 
 def _invoke_user_function(func, call_args: list, output_tables: list[str]) -> tuple:

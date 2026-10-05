@@ -738,6 +738,26 @@ def test_materialise_single_two_files_raises_bad_manifest(tmp_path):
         )
 
 
+def test_materialise_single_chunked_publisher_input_is_one_table_frame(
+    tmp_path, fixture_publisher
+):
+    a, b = tmp_path / "a.parquet", tmp_path / "b.parquet"
+    pl.DataFrame({"id": [1, 2], "name": ["a", "b"]}).write_parquet(a)
+    pl.DataFrame({"id": [None, None], "name": ["c", "d"]}).write_parquet(b)
+
+    out = _materialize_input_slot(
+        _slot_entry("in_1", 0, [str(a), str(b)]),
+        table_mode=TableMode.SINGLE,
+        info=fixture_publisher,
+    )
+
+    assert isinstance(out, TableFrame)
+    df = out._to_polars_lf().collect()
+    assert df["name"].to_list() == ["a", "b", "c", "d"]
+    assert df["id"].to_list() == [1, 2, None, None]
+    assert df["id"].dtype == pl.Int64
+
+
 def test_materialise_array_returns_list_of_table_frames(tmp_path):
     a = tmp_path / "a.parquet"
     b = tmp_path / "b.parquet"
