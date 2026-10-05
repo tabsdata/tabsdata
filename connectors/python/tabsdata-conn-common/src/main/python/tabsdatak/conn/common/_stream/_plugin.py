@@ -307,10 +307,10 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             raise ConnErrorCode.CONN_34.exception(
                 ingester=type(run.ingester).__name__, offset=offset
             )
-        if not self.may_checkpoint(run):
-            return
         state = self.stage_state(run, offset)
         if isinstance(state, dict):
+            if not self.may_checkpoint(run):
+                return
             run.ctx.checkpoint(state)
         else:
             state()

@@ -641,6 +641,20 @@ def test_there_is_no_checkpoint_before_a_first_stage():
     assert ctx.checkpoints == []
 
 
+def test_a_source_kept_checkpoint_is_acknowledged_even_before_a_first_stage():
+    ctx = FakeCtx(active_values=[], first_stage=True)
+    ingester = FakeIngester()
+    acknowledged = []
+    ingester.stage_state_marker = lambda: acknowledged.append("done")
+    run = run_of(ctx, ingester)
+
+    Plugin().checkpoint(run, FakeOffset("moved"))
+
+    assert acknowledged == ["done"]
+    assert ctx.checkpoints == []
+    assert run.staged.mark == "moved"
+
+
 def test_a_checkpoint_without_an_offset_is_a_bug():
     ctx = FakeCtx(active_values=[], first_stage=False, stream_state={"x": 1})
     with pytest.raises(ConnStreamException) as raised:
