@@ -47,10 +47,17 @@
 //!    pending deletion (Stop W, then Start W), the create is held until the
 //!    old workload is gone.
 //! 5. A pending create is held while its name is settling or still listed.
-//!    Otherwise every other live workload of its key (any phase but
-//!    Succeeded/Failed) is queued for deletion (self-heal: one workload per
-//!    key), and the create waits until none is left. Finished workloads are
-//!    left alone so their logs survive until their TTL.
+//!    Otherwise the create waits while any other live workload of its key
+//!    (any phase but Succeeded/Failed) is listed, and each such workload is
+//!    queued for deletion (self-heal: one workload per key) — at once, except
+//!    a function run in its final step. Function runs do all their work in
+//!    init containers and their only regular container reports completion,
+//!    so a run whose pod is running has finished its work and is exiting; it
+//!    gets `SELF_HEAL_GRACE`, counted from when it is first seen in that
+//!    step, and is deleted only if still listed after it. Streamers run their
+//!    stream in the regular container and cron jobs have no pod phase, so
+//!    they get no grace. Finished workloads are left alone so their logs
+//!    survive until their TTL.
 //! 6. Each listed deletion is issued once; after `WARN_AFTER` it warns once;
 //!    after `FORCE_AFTER` it is forced, and forced again every
 //!    `FORCE_RETRY` while the workload is still listed.
@@ -75,12 +82,14 @@ use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
 use td_bridge::observer::{ObservedWorkload, WorkloadKind, WorkloadPhase};
+use tracing::info;
 
 pub(crate) const WARN_AFTER: Duration = Duration::from_secs(30);
 pub(crate) const FORCE_AFTER: Duration = Duration::from_secs(5 * 60);
 pub(crate) const FORCE_RETRY: Duration = Duration::from_secs(60);
 pub(crate) const CREATE_SETTLE: Duration = Duration::from_secs(60);
 pub(crate) const MAX_CREATE_ATTEMPTS: u32 = 10;
+pub(crate) const SELF_HEAL_GRACE: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct Key {
@@ -134,6 +143,12 @@ impl Deletion {
     }
 }
 
+// Function runs do all their work in init containers; their only regular
+// container reports completion, so a running pod is a run that is finishing.
+fn in_final_step(workload: &ObservedWorkload) -> bool {
+    workload.kind == WorkloadKind::Function && workload.phase == WorkloadPhase::Running
+}
+
 fn live(workload: &ObservedWorkload) -> bool {
     !matches!(
         workload.phase,
@@ -146,6 +161,7 @@ pub(crate) struct State<P> {
     creates: HashMap<Key, Submission<P>>,
     deletions: BTreeMap<String, Deletion>,
     settling: HashMap<String, Instant>,
+    blocking: HashMap<String, Instant>,
 }
 
 impl<P> Default for State<P> {
@@ -154,13 +170,27 @@ impl<P> Default for State<P> {
             creates: HashMap::new(),
             deletions: BTreeMap::new(),
             settling: HashMap::new(),
+            blocking: HashMap::new(),
         }
     }
 }
 
 impl<P> State<P> {
     pub(crate) fn submit(&mut self, key: Key, submission: Submission<P>) -> Option<Submission<P>> {
-        self.creates.insert(key, submission)
+        info!(
+            workload = %submission.name,
+            function_id = %key.function_id,
+            kind = ?key.kind,
+            "reconciler: start requested"
+        );
+        let replaced = self.creates.insert(key, submission);
+        if let Some(replaced) = &replaced {
+            info!(
+                workload = %replaced.name,
+                "reconciler: queued create replaced by a newer start"
+            );
+        }
+        replaced
     }
 
     pub(crate) fn withdraw(&mut self, key: Key, worker_id: &str, name: &str) {
@@ -171,10 +201,18 @@ impl<P> State<P> {
         {
             self.creates.remove(&key);
             if !self.settling.contains_key(name) {
+                info!(workload = %name, "reconciler: stop cancelled its queued create");
                 return;
             }
+            info!(
+                workload = %name,
+                "reconciler: stop cancelled its queued create; an earlier create may still land"
+            );
         }
         let kind = key.kind;
+        if !self.deletions.contains_key(name) {
+            info!(workload = %name, "reconciler: stop queued a deletion");
+        }
         self.deletions
             .entry(name.to_owned())
             .or_insert_with(|| Deletion::new(kind, Some(worker_id.to_owned())));
@@ -186,18 +224,35 @@ impl<P> State<P> {
         mut submission: Submission<P>,
     ) -> Option<Submission<P>> {
         if self.deletions.contains_key(&submission.name) {
+            info!(
+                workload = %submission.name,
+                "reconciler: failed create not retried; a stop arrived meanwhile"
+            );
             return None;
         }
         submission.attempts += 1;
         if submission.attempts >= MAX_CREATE_ATTEMPTS {
             return Some(submission);
         }
-        self.creates.entry(key).or_insert(submission);
+        if self.creates.contains_key(&key) {
+            info!(
+                workload = %submission.name,
+                "reconciler: failed create not retried; a newer start replaced it"
+            );
+            return None;
+        }
+        info!(
+            workload = %submission.name,
+            attempts = submission.attempts,
+            "reconciler: failed create queued for retry"
+        );
+        self.creates.insert(key, submission);
         None
     }
 
     pub(crate) fn reissue(&mut self, name: &str) {
         if let Some(deletion) = self.deletions.get_mut(name) {
+            info!(workload = %name, "reconciler: failed delete queued for retry");
             deletion.issued = None;
         }
     }
@@ -213,39 +268,64 @@ impl<P> State<P> {
             .collect();
 
         self.settling.retain(|name, since| {
-            !present.contains_key(name.as_str())
-                && now.saturating_duration_since(*since) < CREATE_SETTLE
+            if present.contains_key(name.as_str()) {
+                info!(workload = %name, "reconciler: created workload is now listed");
+                return false;
+            }
+            if now.saturating_duration_since(*since) >= CREATE_SETTLE {
+                info!(workload = %name, "reconciler: created workload never listed; stops settling");
+                return false;
+            }
+            true
         });
 
         for workload in observed.iter().filter(|workload| workload.deleting) {
-            self.deletions
-                .entry(workload.name.clone())
-                .or_insert_with(|| Deletion {
+            if self.deletions.contains_key(&workload.name) {
+                continue;
+            }
+            info!(workload = %workload.name, "reconciler: adopted a deletion already in progress");
+            self.deletions.insert(
+                workload.name.clone(),
+                Deletion {
                     issued: Some(now),
                     ..Deletion::new(
                         workload.kind,
                         workload.worker_id.as_ref().map(ToString::to_string),
                     )
-                });
+                },
+            );
         }
         let settling = &self.settling;
-        self.deletions
-            .retain(|name, _| present.contains_key(name.as_str()) || settling.contains_key(name));
+        self.deletions.retain(|name, _| {
+            if present.contains_key(name.as_str()) || settling.contains_key(name) {
+                return true;
+            }
+            info!(workload = %name, "reconciler: deletion done; workload is gone");
+            false
+        });
 
         let deletions = &self.deletions;
         self.creates.retain(
             |_, submission| match present.get(submission.name.as_str()) {
-                Some(workload) => workload.deleting || deletions.contains_key(&submission.name),
-                None => true,
+                Some(workload)
+                    if !workload.deleting && !deletions.contains_key(&submission.name) =>
+                {
+                    info!(workload = %submission.name, "reconciler: create done; workload exists");
+                    false
+                }
+                _ => true,
             },
         );
 
         let mut ready = Vec::new();
         let mut healing = Vec::new();
         for (key, submission) in &self.creates {
-            if self.settling.contains_key(&submission.name)
-                || present.contains_key(submission.name.as_str())
-            {
+            if self.settling.contains_key(&submission.name) {
+                info!(workload = %submission.name, "reconciler: create held; a previous create may still land");
+                continue;
+            }
+            if present.contains_key(submission.name.as_str()) {
+                info!(workload = %submission.name, "reconciler: create held; its old workload is still listed");
                 continue;
             }
             let blockers: Vec<&ObservedWorkload> = observed
@@ -258,10 +338,44 @@ impl<P> State<P> {
                 .collect();
             if blockers.is_empty() {
                 ready.push(key.clone());
+            } else {
+                info!(
+                    workload = %submission.name,
+                    blockers = ?blockers.iter().map(|workload| &workload.name).collect::<Vec<_>>(),
+                    "reconciler: create held; other live workloads of the function"
+                );
             }
             healing.extend(blockers.into_iter().filter(|workload| !workload.deleting));
         }
+        self.blocking.retain(|name, _| {
+            let finishing = healing
+                .iter()
+                .any(|workload| &workload.name == name && in_final_step(workload));
+            if !finishing {
+                info!(workload = %name, "reconciler: workload left its final step");
+            }
+            finishing
+        });
         for workload in healing {
+            if in_final_step(workload) {
+                let since = *self.blocking.entry(workload.name.clone()).or_insert_with(|| {
+                    info!(
+                        workload = %workload.name,
+                        "reconciler: blocking run is in its final step; granted the self-heal grace"
+                    );
+                    now
+                });
+                if now.saturating_duration_since(since) < SELF_HEAL_GRACE {
+                    continue;
+                }
+            }
+            if !self.deletions.contains_key(&workload.name) {
+                info!(
+                    workload = %workload.name,
+                    final_step = in_final_step(workload),
+                    "reconciler: blocking workload queued for deletion"
+                );
+            }
             self.deletions
                 .entry(workload.name.clone())
                 .or_insert_with(|| {
@@ -278,6 +392,7 @@ impl<P> State<P> {
                 continue;
             }
             let Some(issued) = deletion.issued else {
+                info!(workload = %name, "reconciler: issuing delete");
                 deletion.issued = Some(now);
                 actions.push(Action::Delete {
                     kind: deletion.kind,
@@ -291,11 +406,15 @@ impl<P> State<P> {
                 .is_none_or(|forced| now.saturating_duration_since(forced) >= FORCE_RETRY);
             if elapsed >= FORCE_AFTER && force_due {
                 deletion.forced = Some(now);
-                if let Some(worker_id) = &deletion.worker_id {
-                    actions.push(Action::Force {
-                        name: name.clone(),
-                        worker_id: worker_id.clone(),
-                    });
+                match &deletion.worker_id {
+                    Some(worker_id) => {
+                        info!(workload = %name, "reconciler: issuing force delete");
+                        actions.push(Action::Force {
+                            name: name.clone(),
+                            worker_id: worker_id.clone(),
+                        });
+                    }
+                    None => info!(workload = %name, "reconciler: cannot force; worker id unknown"),
                 }
             } else if elapsed >= WARN_AFTER && !deletion.warned {
                 deletion.warned = true;
@@ -307,6 +426,7 @@ impl<P> State<P> {
         }
         for key in ready {
             if let Some(submission) = self.creates.remove(&key) {
+                info!(workload = %submission.name, attempts = submission.attempts, "reconciler: issuing create");
                 self.settling.insert(submission.name.clone(), now);
                 actions.push(Action::Create { key, submission });
             }

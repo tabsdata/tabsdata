@@ -124,7 +124,11 @@ fn another_live_workload_of_the_function_is_deleted_before_the_create() {
         WorkloadKind::Function,
         WorkloadPhase::Running,
     );
-    let actions = state.plan(std::slice::from_ref(&old), Instant::now());
+    let start = Instant::now();
+    let waiting = state.plan(std::slice::from_ref(&old), start);
+    assert!(deletes(&waiting).is_empty());
+    assert!(creates(&waiting).is_empty());
+    let actions = state.plan(std::slice::from_ref(&old), start + SELF_HEAL_GRACE);
     assert_eq!(deletes(&actions), vec!["pub-a".to_owned()]);
     assert!(creates(&actions).is_empty());
     let mut going = old;
@@ -405,4 +409,44 @@ fn a_create_failing_too_often_is_given_up() {
         Some(MAX_CREATE_ATTEMPTS)
     );
     assert!(state.is_idle());
+}
+
+#[test]
+fn a_run_finishing_within_the_grace_is_never_deleted() {
+    let mut state = State::default();
+    let start = Instant::now();
+    state.submit(key(WorkloadKind::Function), submission("b"));
+    let exiting = running("pub-a", WorkloadKind::Function);
+    assert!(state.plan(std::slice::from_ref(&exiting), start).is_empty());
+    let finished = ObservedWorkload {
+        phase: WorkloadPhase::Succeeded,
+        ..exiting
+    };
+    let actions = state.plan(&[finished], start + SELF_HEAL_GRACE / 2);
+    assert!(deletes(&actions).is_empty());
+    assert_eq!(creates(&actions), vec![submission("b")]);
+}
+
+#[test]
+fn a_blocking_run_still_in_init_is_deleted_at_once() {
+    let mut state = State::default();
+    state.submit(key(WorkloadKind::Function), submission("b"));
+    let working = workload(
+        "pub-a",
+        FUNCTION,
+        WorkloadKind::Function,
+        WorkloadPhase::Pending,
+    );
+    let actions = state.plan(&[working], Instant::now());
+    assert_eq!(deletes(&actions), vec!["pub-a".to_owned()]);
+    assert!(creates(&actions).is_empty());
+}
+
+#[test]
+fn a_blocking_streamer_gets_no_grace() {
+    let mut state = State::default();
+    state.submit(key(WorkloadKind::StageTrigger), submission("b"));
+    let streaming = running("stm-a", WorkloadKind::StageTrigger);
+    let actions = state.plan(&[streaming], Instant::now());
+    assert_eq!(deletes(&actions), vec!["stm-a".to_owned()]);
 }
