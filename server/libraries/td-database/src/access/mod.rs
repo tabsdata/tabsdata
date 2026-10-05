@@ -32,6 +32,7 @@ mod extract;
 mod grant;
 mod lock_instant;
 mod mode;
+mod retry;
 
 #[cfg(test)]
 mod tests;
@@ -42,6 +43,7 @@ pub use connection::GatedConnection;
 pub use grant::{Gated, Grant};
 pub use lock_instant::LockInstant;
 pub use mode::{AccessMode, OpensIn, RO, RW, WriteMode, XW};
+pub use retry::retrying;
 use sqlx::postgres::PgConnection;
 use std::fmt::Display;
 use std::marker::PhantomData;

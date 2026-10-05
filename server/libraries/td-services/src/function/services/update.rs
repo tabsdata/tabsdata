@@ -11,7 +11,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::SeesProjectRows;
-use td_database::access::{AccessMode, DbPool, InProject};
+use td_database::access::{AccessMode, DbPool, InProject, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
@@ -33,45 +33,49 @@ async fn update_function(
 ) -> Result<Function, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param), update) = request.into_parts();
-    let mut gated_trx = db.begin().await?;
-    let grant = authz
-        .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
-        .await?;
-    let conn = gated_trx.get(grant);
+    let read = retrying(|| async {
+        let mut gated_trx = db.begin_exclusive().await?;
+        let grant = authz
+            .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
+            .await?;
+        let conn = gated_trx.get(grant);
 
-    // Bare-table row lock (views with outer joins aren't lockable); the
-    // active-view fetch is the liveness check, decided under the lock.
-    let (locked, at) = conn
-        .for_update()
-        .serialize_on::<CollectionDB>(&collection_param.collection)
-        .await?;
-    let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
+        // Bare-table row lock (views with outer joins aren't lockable); the
+        // active-view fetch is the liveness check, decided under the lock.
+        let (locked, at) = conn
+            .for_update()
+            .serialize_on::<CollectionDB>(&collection_param.collection)
+            .await?;
+        let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
-    // Before-update ids: the function id does not change, the function
-    // version id does.
-    let current: FunctionDBWithNames = conn
-        .scd2()
-        .fetch_one(and!(&collection_param.collection, &function_param.function))
+        // Before-update ids: the function id does not change, the function
+        // version id does.
+        let current: FunctionDBWithNames = conn
+            .scd2()
+            .fetch_one(and!(&collection_param.collection, &function_param.function))
+            .await?;
+
+        ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
+        ensure_no_dq_summary_trends_table_types(&update.table_types)?;
+        let function = update_one(conn, &ctx, &bridge, &collection, &current, &update, at).await?;
+        reconcile_dq_summary_trend_children(
+            conn,
+            &ctx,
+            &bridge,
+            &collection,
+            &function,
+            &update.child_functions,
+            update.reuse_frozen_tables,
+            at,
+        )
         .await?;
 
-    ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
-    ensure_no_dq_summary_trends_table_types(&update.table_types)?;
-    let function = update_one(conn, &ctx, &bridge, &collection, &current, &update, at).await?;
-    reconcile_dq_summary_trend_children(
-        conn,
-        &ctx,
-        &bridge,
-        &collection,
-        &function,
-        &update.child_functions,
-        update.reuse_frozen_tables,
-        at,
-    )
+        let with_names: FunctionDBWithNames = conn.timeline().fetch_one(&function.id).await?;
+        let read = Function::from_dao(with_names)?;
+        gated_trx.commit().await?;
+        Ok(read)
+    })
     .await?;
-
-    let with_names: FunctionDBWithNames = conn.timeline().fetch_one(&function.id).await?;
-    let read = Function::from_dao(with_names)?;
-    gated_trx.commit().await?;
 
     // Wake the scheduler so worker rotations (stop old / start new cron/stage
     // workers) are picked up immediately.

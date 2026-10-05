@@ -8,7 +8,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
-use td_database::access::{DbPool, InProject};
+use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::and;
@@ -27,36 +27,40 @@ async fn delete_function(
 ) -> Result<(), TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param)) = request.into_parts();
-    let mut gated_trx = db.begin().await?;
-    let grant = authz
-        .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
-        .await?;
-    let conn = gated_trx.get(grant);
+    retrying(|| async {
+        let mut gated_trx = db.begin_exclusive().await?;
+        let grant = authz
+            .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
+            .await?;
+        let conn = gated_trx.get(grant);
 
-    // Bare-table row lock (views with outer joins aren't lockable); the
-    // active-view fetch is the liveness check, decided under the lock.
-    let (locked, at) = conn
-        .for_update()
-        .serialize_on::<CollectionDB>(&collection_param.collection)
-        .await?;
-    let _: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
+        // Bare-table row lock (views with outer joins aren't lockable); the
+        // active-view fetch is the liveness check, decided under the lock.
+        let (locked, at) = conn
+            .for_update()
+            .serialize_on::<CollectionDB>(&collection_param.collection)
+            .await?;
+        let _: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
-    let current: FunctionDBWithNames = conn
-        .scd2()
-        .fetch_one(and!(&collection_param.collection, &function_param.function))
-        .await?;
+        let current: FunctionDBWithNames = conn
+            .scd2()
+            .fetch_one(and!(&collection_param.collection, &function_param.function))
+            .await?;
 
-    ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
+        ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
 
-    let children: Vec<FunctionDB> = conn
-        .scd2()
-        .fetch_all(FunctionDB::children_of(&current.base.base.function_id))
-        .await?;
-    for child in &children {
-        delete_one(conn, &ctx, &child.base, at).await?;
-    }
-    delete_one(conn, &ctx, &current.base.base, at).await?;
-    gated_trx.commit().await?;
+        let children: Vec<FunctionDB> = conn
+            .scd2()
+            .fetch_all(FunctionDB::children_of(&current.base.base.function_id))
+            .await?;
+        for child in &children {
+            delete_one(conn, &ctx, &child.base, at).await?;
+        }
+        delete_one(conn, &ctx, &current.base.base, at).await?;
+        gated_trx.commit().await?;
+        Ok(())
+    })
+    .await?;
 
     // Wake the scheduler so cron/stage workers stop immediately instead of at
     // the next polling tick.

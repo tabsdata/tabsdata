@@ -20,7 +20,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::SeesProjectRows;
-use td_database::access::{DbPool, InProject, WriteMode};
+use td_database::access::{DbPool, InProject, WriteMode, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionParam;
@@ -60,51 +60,55 @@ async fn delete_collection(
         (collection, grant)
     };
 
-    let mut trx = db.begin().await?;
-    let conn = trx.get(grant);
-    // Bare-table row lock (views with outer joins aren't lockable): a
-    // registration landing mid-cascade would otherwise escape it.
-    let (_, at) = conn
-        .for_update()
-        .serialize_on::<CollectionDB>(&collection.id)
-        .await?;
-    // Liveness re-read under the lock: a raced delete loses with not-found
-    // instead of silently re-renaming the already-deleted row.
-    let collection: ActiveCollectionDB = conn.fetch_one(&collection.id).await?;
-    let delete_db = collection.to_delete_dao(&ctx);
-    conn.update::<CollectionDeleteDB>(&delete_db, collection.id)
-        .await?;
+    let connection_id = retrying(|| async {
+        let mut trx = db.begin_exclusive().await?;
+        let conn = trx.get(grant);
+        // Bare-table row lock (views with outer joins aren't lockable): a
+        // registration landing mid-cascade would otherwise escape it.
+        let (_, at) = conn
+            .for_update()
+            .serialize_on::<CollectionDB>(&collection.id)
+            .await?;
+        // Liveness re-read under the lock: a raced delete loses with not-found
+        // instead of silently re-renaming the already-deleted row.
+        let collection: ActiveCollectionDB = conn.fetch_one(&collection.id).await?;
+        let delete_db = collection.to_delete_dao(&ctx);
+        conn.update::<CollectionDeleteDB>(&delete_db, collection.id)
+            .await?;
 
-    let tables: Vec<TableDB> = conn.scd2().fetch_all(&collection.id).await?;
-    let table_ids: Vec<TableId> = tables.iter().map(|x| x.base.table_id).collect();
-    // Same-collection dependants are closed with the collection below; a
-    // frozen version for them would be closed in the same instant.
-    let frozen: Vec<FunctionInsertDB> = dependants_of_tables(conn, &table_ids)
-        .await?
-        .iter()
-        .filter(|f| f.base.collection_id != collection.id)
-        .map(|f| f.frozen_version(&ctx))
-        .collect();
-    conn.scd2().chunked().open(&frozen, at).await?;
-    conn.scd2()
-        .chunked()
-        .close::<TriggerDB>(&table_ids, (), at)
-        .await?;
-    conn.scd2().close::<TriggerDB>(&collection.id, at).await?;
-    conn.scd2()
-        .chunked()
-        .close::<DependencyDB>(&table_ids, (), at)
-        .await?;
-    conn.scd2()
-        .close::<DependencyDB>(&collection.id, at)
-        .await?;
-    conn.scd2().close::<TableDB>(&collection.id, at).await?;
-    conn.scd2().close::<FunctionDB>(&collection.id, at).await?;
-    update_deleted_workers(conn, &collection.id).await?;
-    trx.commit().await?;
+        let tables: Vec<TableDB> = conn.scd2().fetch_all(&collection.id).await?;
+        let table_ids: Vec<TableId> = tables.iter().map(|x| x.base.table_id).collect();
+        // Same-collection dependants are closed with the collection below; a
+        // frozen version for them would be closed in the same instant.
+        let frozen: Vec<FunctionInsertDB> = dependants_of_tables(conn, &table_ids)
+            .await?
+            .iter()
+            .filter(|f| f.base.collection_id != collection.id)
+            .map(|f| f.frozen_version(&ctx))
+            .collect();
+        conn.scd2().chunked().open(&frozen, at).await?;
+        conn.scd2()
+            .chunked()
+            .close::<TriggerDB>(&table_ids, (), at)
+            .await?;
+        conn.scd2().close::<TriggerDB>(&collection.id, at).await?;
+        conn.scd2()
+            .chunked()
+            .close::<DependencyDB>(&table_ids, (), at)
+            .await?;
+        conn.scd2()
+            .close::<DependencyDB>(&collection.id, at)
+            .await?;
+        conn.scd2().close::<TableDB>(&collection.id, at).await?;
+        conn.scd2().close::<FunctionDB>(&collection.id, at).await?;
+        update_deleted_workers(conn, &collection.id).await?;
+        trx.commit().await?;
+        Ok(collection.connection_id)
+    })
+    .await?;
 
     // Only after commit: drop the store content so its secrets aren't orphaned.
-    if let Some(connection_id) = &collection.connection_id {
+    if let Some(connection_id) = &connection_id {
         drop_connection_best_effort(bridge.connection_store(), &project, connection_id).await;
     }
     Ok(())

@@ -9,7 +9,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
-use td_database::access::{DbPool, InProject};
+use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::collection::{CollectionDB, CollectionParam};
@@ -29,53 +29,57 @@ async fn enable_function(
 ) -> Result<Function, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param), enable) = request.into_parts();
-    let mut gated_trx = db.begin().await?;
-    let grant = authz
-        .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
-        .await?;
-    let conn = gated_trx.get(grant);
+    let read = retrying(|| async {
+        let mut gated_trx = db.begin_exclusive().await?;
+        let grant = authz
+            .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
+            .await?;
+        let conn = gated_trx.get(grant);
 
-    // Bare-table row lock: the re-registration must not resurrect a function
-    // inside a collection whose delete cascade is in flight.
-    let (_, at) = conn
-        .for_update()
-        .serialize_on::<CollectionDB>(&collection_param.collection)
-        .await?;
+        // Bare-table row lock: the re-registration must not resurrect a function
+        // inside a collection whose delete cascade is in flight.
+        let (_, at) = conn
+            .for_update()
+            .serialize_on::<CollectionDB>(&collection_param.collection)
+            .await?;
 
-    // Before-update ids: the function id does not change, the function
-    // version id does.
-    let current: FunctionDBWithNames = conn
-        .scd2()
-        .fetch_one(and!(&collection_param.collection, &function_param.function))
-        .await?;
+        // Before-update ids: the function id does not change, the function
+        // version id does.
+        let current: FunctionDBWithNames = conn
+            .scd2()
+            .fetch_one(and!(&collection_param.collection, &function_param.function))
+            .await?;
 
-    ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
+        ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
 
-    let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
-    let function = previous.re_registered(&ctx, enable.enabled);
-    conn.scd2().open(&function, at).await?;
+        let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
+        let function = previous.re_registered(&ctx, enable.enabled);
+        conn.scd2().open(&function, at).await?;
 
-    let previous_version_id = Some(current.base.base.id);
-    let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
-    register_workers(conn, &function, &previous_version_id, &no_workers).await?;
+        let previous_version_id = Some(current.base.base.id);
+        let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
+        register_workers(conn, &function, &previous_version_id, &no_workers).await?;
 
-    let children: Vec<FunctionDB> = conn
-        .scd2()
-        .fetch_all(FunctionDB::children_of(&current.base.base.function_id))
-        .await?;
-    for child in children {
-        if child.base.enabled == enable.enabled {
-            continue;
+        let children: Vec<FunctionDB> = conn
+            .scd2()
+            .fetch_all(FunctionDB::children_of(&current.base.base.function_id))
+            .await?;
+        for child in children {
+            if child.base.enabled == enable.enabled {
+                continue;
+            }
+            let previous_version_id = Some(child.base.id.clone());
+            let updated = child.re_registered(&ctx, enable.enabled);
+            conn.scd2().open(&updated, at).await?;
+            register_workers(conn, &updated, &previous_version_id, &no_workers).await?;
         }
-        let previous_version_id = Some(child.base.id.clone());
-        let updated = child.re_registered(&ctx, enable.enabled);
-        conn.scd2().open(&updated, at).await?;
-        register_workers(conn, &updated, &previous_version_id, &no_workers).await?;
-    }
 
-    let with_names: FunctionDBWithNames = conn.timeline().fetch_one(&function.id).await?;
-    let read = Function::from_dao(with_names)?;
-    gated_trx.commit().await?;
+        let with_names: FunctionDBWithNames = conn.timeline().fetch_one(&function.id).await?;
+        let read = Function::from_dao(with_names)?;
+        gated_trx.commit().await?;
+        Ok(read)
+    })
+    .await?;
 
     // Wake the scheduler so worker state changes (cron Stop/Start) are picked
     // up immediately.

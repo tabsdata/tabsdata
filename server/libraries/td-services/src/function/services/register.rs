@@ -9,7 +9,7 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
-use td_database::access::{DbPool, InProject};
+use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::FromDao;
@@ -29,37 +29,41 @@ async fn register_function(
 ) -> Result<Function, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, param, register) = request.into_parts();
-    let mut gated_trx = db.begin().await?;
-    let grant = authz
-        .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
-        .await?;
-    let conn = gated_trx.get(grant);
+    let read = retrying(|| async {
+        let mut gated_trx = db.begin_exclusive().await?;
+        let grant = authz
+            .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
+            .await?;
+        let conn = gated_trx.get(grant);
 
-    // Bare-table row lock (views with outer joins aren't lockable); the
-    // active-view fetch is the liveness check, decided under the lock.
-    let (locked, at) = conn
-        .for_update()
-        .serialize_on::<CollectionDB>(&param.collection)
-        .await?;
-    let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
+        // Bare-table row lock (views with outer joins aren't lockable); the
+        // active-view fetch is the liveness check, decided under the lock.
+        let (locked, at) = conn
+            .for_update()
+            .serialize_on::<CollectionDB>(&param.collection)
+            .await?;
+        let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
-    ensure_no_dq_summary_trends_table_types(&register.table_types)?;
-    let function = register_one(conn, &ctx, &bridge, &collection, &register, None, at).await?;
-    reconcile_dq_summary_trend_children(
-        conn,
-        &ctx,
-        &bridge,
-        &collection,
-        &function,
-        &register.child_functions,
-        register.reuse_frozen_tables,
-        at,
-    )
+        ensure_no_dq_summary_trends_table_types(&register.table_types)?;
+        let function = register_one(conn, &ctx, &bridge, &collection, &register, None, at).await?;
+        reconcile_dq_summary_trend_children(
+            conn,
+            &ctx,
+            &bridge,
+            &collection,
+            &function,
+            &register.child_functions,
+            register.reuse_frozen_tables,
+            at,
+        )
+        .await?;
+
+        let with_names: FunctionDBWithNames = conn.timeline().fetch_one(&function.id).await?;
+        let read = Function::from_dao(with_names)?;
+        gated_trx.commit().await?;
+        Ok(read)
+    })
     .await?;
-
-    let with_names: FunctionDBWithNames = conn.timeline().fetch_one(&function.id).await?;
-    let read = Function::from_dao(with_names)?;
-    gated_trx.commit().await?;
 
     // Wake the scheduler so newly registered cron/stage workers start
     // immediately instead of at the next polling tick.
