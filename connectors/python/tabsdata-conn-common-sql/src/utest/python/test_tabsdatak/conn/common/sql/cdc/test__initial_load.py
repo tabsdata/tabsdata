@@ -13,9 +13,14 @@ that catches a loader reading it too early."""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from unittest.mock import MagicMock
 
 import pytest
+
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
+from tabsdatak.error import TabsdataException
 
 from tabsdatak.conn.common.sql.cdc._initial_load import InitialLoader
 from tabsdatak.conn.common.sql.cdc._model import CdcOffset, InitialLoadSession
@@ -36,10 +41,14 @@ class _Offset(CdcOffset):
         return cls(data)
 
 
+PINNED_AT = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+
+
 class _PinOnYieldSession(InitialLoadSession):
     """Fixes its position when it pins, and pins on the first yield."""
 
     def __init__(self, tables: dict):
+        super().__init__()
         self._offset: _Offset | None = None
         self._tables = tables
         self.pinned = False
@@ -57,6 +66,7 @@ class _PinOnYieldSession(InitialLoadSession):
     def tables(self, tracked_tables):
         self.pinned = True
         self._offset = _Offset("pinned")
+        self._timestamp = PINNED_AT
         for tracked_table in tracked_tables.values():
             yield tracked_table, MagicMock()
 
@@ -98,6 +108,7 @@ def test_the_position_is_read_after_a_session_that_pins_after_the_last_table(
 ):
     class _PinsAfterTheLastTable(_PinOnYieldSession):
         def tables(self, tracked_tables):
+            self._timestamp = PINNED_AT
             for tracked_table in tracked_tables.values():
                 yield tracked_table, MagicMock()
             self.pinned = True
@@ -136,3 +147,25 @@ def test_a_session_that_never_pins_surfaces_its_own_error(monkeypatch):
 
     with pytest.raises(AssertionError, match="before the tables were pinned"):
         loader.load(session)
+
+
+def test_every_loaded_row_carries_the_time_the_snapshot_began(monkeypatch):
+    tracked = {"s.t": MagicMock(), "s.u": MagicMock()}
+    session = _PinOnYieldSession(tracked)
+    loader = _loader(_ingester(tracked))
+    stamped = []
+    monkeypatch.setattr(
+        loader,
+        "_load_table",
+        lambda _table, _connection, timestamp: stamped.append(timestamp),
+    )
+
+    loader.load(session)
+
+    assert stamped == [PINNED_AT, PINNED_AT]
+
+
+def test_the_time_is_not_readable_before_the_snapshot_begins():
+    with pytest.raises(TabsdataException) as raised:
+        _ = _PinOnYieldSession({}).timestamp
+    assert raised.value.api_error is SqlCdcErrorCode.CDC_30

@@ -10,6 +10,8 @@ integration tests (``test_plugin_cdc.py``)."""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -735,6 +737,8 @@ class _Cursor:
             self._row = ("ON",)
         elif sql == "select @@global.gtid_executed":
             self._row = ("uuid:1-5",)
+        elif sql == "select utc_timestamp(6)":
+            self._row = (datetime(2026, 1, 1, 12, 0, 0),)
 
     def fetchone(self):
         return self._row
@@ -807,6 +811,17 @@ def test_the_global_read_lock_waits_as_long_as_the_server_allows(initial_load_lo
     setting = f"set session lock_wait_timeout = {INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS}"
     assert INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS == 31536000
     assert log.index(setting) < log.index("flush tables with read lock")
+
+
+def test_the_load_time_is_the_server_time_in_utc_once_the_snapshot_is_open(
+    initial_load_log,
+):
+    session = BinlogInitialLoadSession(connection_settings={})
+    log = initial_load_log
+    assert session.timestamp == datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    assert log.index("select utc_timestamp(6)") > log.index(
+        "start transaction with consistent snapshot, read only"
+    )
 
 
 def test_the_position_is_read_under_the_global_read_lock(initial_load_log):

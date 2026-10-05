@@ -446,6 +446,7 @@ class BinlogInitialLoadSession(InitialLoadSession):
     """
 
     def __init__(self, *, connection_settings: dict[str, Any]):
+        super().__init__()
         self._connection = pymysql.connect(**connection_settings)
         self._require_gtid_mode()
         # Every row the load reads must come from the transaction opened
@@ -487,6 +488,8 @@ class BinlogInitialLoadSession(InitialLoadSession):
             gtid = cursor.fetchone()[0] or ""
         finally:
             cursor.execute("unlock tables")
+        cursor.execute("select utc_timestamp(6)")
+        self._timestamp = cursor.fetchone()[0].replace(tzinfo=timezone.utc)
         self._offset = GtidOffset(gtid=gtid)
         logger.info("Initial load snapshot is consistent at GTID set %r", gtid)
 

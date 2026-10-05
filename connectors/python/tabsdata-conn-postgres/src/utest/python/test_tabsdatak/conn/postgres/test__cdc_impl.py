@@ -11,7 +11,7 @@ domain and live in the integration tests (``test_plugin_cdc.py``)."""
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -544,24 +544,6 @@ def test_truncate_of_an_untracked_table_is_ignored():
         )
         is None
     )
-
-
-def test_truncate_without_a_timestamp_falls_back_to_now():
-    """A truncate outside any transaction framing carries no commit
-    timestamp, so the row is stamped when it is captured."""
-    bi = _truncate_ready()
-
-    change = bi._truncate_change(
-        payload=_truncate_payload(),
-        xid="",
-        sequence=1,
-        timestamp=None,
-        offset=LsnOffset(lsn=900),
-        segment=900,
-    )
-
-    assert change.timestamp is not None
-    assert change.timestamp.tzinfo is not None
 
 
 def test_schema_table_filter_default_is_wildcard_when_empty():
@@ -1141,6 +1123,10 @@ class _Connection:
             return _Result(positions.pop(0) if positions else 4096)
         if "pg_export_snapshot" in sql:
             return _Result("00000003-0000001B-1")
+        if "set transaction snapshot" in sql:
+            return _Result(None)
+        if "select now()" in sql:
+            return _Result(datetime(2026, 1, 1, 12, 0, tzinfo=timezone(timedelta(hours=2))))
         raise AssertionError(f"unexpected statement: {sql}")
 
 
@@ -1175,6 +1161,19 @@ def _executed(engine: _Engine, fragment: str) -> tuple[int, int]:
         for index, entry in enumerate(engine.log)
         if entry[1] == "execute" and fragment in entry[2]
     )
+
+
+def test_the_load_time_is_the_snapshot_transaction_start_in_utc(monkeypatch):
+    engine = _Engine(monkeypatch)
+    session = _transaction_session(engine)
+
+    list(session.tables({"public.t": MagicMock()}))
+
+    assert session.timestamp == datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+    snapshot_at, snapshot_connection = _executed(engine, "set transaction snapshot")
+    now_at, now_connection = _executed(engine, "select now()")
+    assert snapshot_at < now_at
+    assert snapshot_connection == now_connection
 
 
 def _transaction_session(engine: _Engine) -> TransactionSnapshotSession:
@@ -1300,6 +1299,22 @@ def _format_2_ingester(messages: list[_Message]) -> Wal2JsonIngester:
     bi._cursor = _ReplicationCursor(messages)
     bi._poll_max_secs = 0.05
     return bi
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"action": "T", "schema": "public", "table": "t"},
+        _row(7, 1),
+    ],
+    ids=["truncate", "insert"],
+)
+def test_a_change_before_its_begin_stops_the_stream(payload):
+    messages = [_Message("0/90", payload)]
+    with pytest.raises(TabsdataException) as ei:
+        list(_format_2_ingester(messages)._poll_changes_v2(None))
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_34
+    assert "'T'" in str(ei.value) or "'I'" in str(ei.value)
 
 
 def test_a_transaction_committed_later_is_positioned_after_an_earlier_one():

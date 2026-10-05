@@ -11,6 +11,8 @@ Catalog / engine calls (``server_timezone``,
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone, tzinfo
+
 import json
 import logging
 from unittest.mock import MagicMock
@@ -469,15 +471,21 @@ def _registrations(
     return [("ASN", table, state, None, start, splits, bound) for table in tables]
 
 
-def _session(answers: dict) -> tuple[SqlReplicaInitialLoadSession, _Engine]:
+SERVER_NOW = datetime(2026, 1, 1, 12, 0, 0)
+
+
+def _session(
+    answers: dict, server_tz: tzinfo | None = timezone(timedelta(hours=2))
+) -> tuple[SqlReplicaInitialLoadSession, _Engine]:
     engine = _Engine(
         {
             "cur_commit": "ON",
             "ibmsnap_register r": _registrations("T_CD", "A_CD", "B_CD"),
+            "sysibm.sysdummy1": SERVER_NOW,
         }
         | answers
     )
-    return SqlReplicaInitialLoadSession(engine=engine), engine
+    return SqlReplicaInitialLoadSession(engine=engine, server_tz=server_tz), engine
 
 
 def _restart_rows(*rows):
@@ -487,6 +495,22 @@ def _restart_rows(*rows):
 
 def test_commitseq_lsn_is_the_second_half_of_the_commit_sequence():
     assert commitseq_lsn(_commitseq(0xAB, 0x0A3024)) == 0x0A3024
+
+
+def test_the_load_time_is_the_server_time_at_the_start_in_utc():
+    session, engine = _session({
+        "mon_get_transaction_log": 0x100,
+        "IBMSNAP_RESTART": (_commitseq(1, 0x100), None),
+        "as idx": [],
+    })
+    list(session.tables({"ASN.T_CD": _tracked("T_CD")}))
+    assert session.timestamp == datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+    executed = engine.executed()
+    first_time = next(i for i, sql in enumerate(executed) if "sysdummy1" in sql)
+    first_lsn = next(
+        i for i, sql in enumerate(executed) if "mon_get_transaction_log" in sql
+    )
+    assert first_time < first_lsn
 
 
 def test_the_initial_load_reads_under_cursor_stability():

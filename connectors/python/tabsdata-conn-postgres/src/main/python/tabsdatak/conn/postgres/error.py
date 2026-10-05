@@ -222,3 +222,8 @@ class PostgresErrorCode(ErrorCode):
         "failure names, as '<stream position>-<slot position>' (for example "
         "'0/7173FE8-0/7175C90')",
     )  # accepted_gap
+    POSTGRES_34 = ErrorDef(
+        PostgresRuntimeException,
+        "A {action!r} message arrived at WAL position {lsn} before its transaction's "
+        "BEGIN; the stream cannot time it and stops",
+    )  # _poll_changes_v2

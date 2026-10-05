@@ -588,8 +588,10 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
     read may be both loaded and replayed. No change is ever lost.
     """
 
-    def __init__(self, *, engine: Any):
+    def __init__(self, *, engine: Any, server_tz: tzinfo | None):
+        super().__init__()
         self._engine = engine
+        self._server_tz = server_tz
         self._offset: CommitSeqOffset | None = None
         self._window_end: CommitSeqOffset | None = None
         self._tracked_tables: dict[str, TrackedTable] = {}
@@ -610,6 +612,14 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
             raise Db2ErrorCode.DB2_25.exception()
         return self._window_end
 
+    def _current_time(self, connection: Any) -> datetime:
+        now: datetime = connection.execute(
+            text("select current timestamp from sysibm.sysdummy1")
+        ).scalar()
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=self._server_tz)
+        return now.astimezone(timezone.utc)
+
     def tables(
         self, tracked_tables: dict[str, TrackedTable]
     ) -> Iterator[tuple[TrackedTable, Any]]:
@@ -619,6 +629,7 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
         with self._engine.connect().execution_options(
             isolation_level=INITIAL_LOAD_ISOLATION_LEVEL
         ) as connection:
+            self._timestamp = self._current_time(connection)
             lsn = self._current_lsn(connection)
             logger.info("Initial load snapshot starts at log position %x", lsn)
             for tracked_table in tracked_tables.values():
@@ -849,7 +860,9 @@ class SqlReplicaIngester(CdcIngester):
         return engine
 
     def open_initial_load(self) -> SqlReplicaInitialLoadSession:
-        return SqlReplicaInitialLoadSession(engine=self._build_engine())
+        return SqlReplicaInitialLoadSession(
+            engine=self._build_engine(), server_tz=self._server_tz
+        )
 
     def close_session(self, session: Any) -> None:
         if session is not None:

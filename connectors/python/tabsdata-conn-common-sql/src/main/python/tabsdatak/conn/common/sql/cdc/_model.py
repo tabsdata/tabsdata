@@ -21,6 +21,7 @@ from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow
 from tabsdatak.conn.common.sql.cdc.constants import DOT
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 
 
 class CdcOffset(StreamOffset, ABC):
@@ -105,8 +106,20 @@ class InitialLoadSession(ABC):
     connection to read it through; the caller reads the table fully
     before asking for the next one, so a per-table snapshot can be closed
     when the generator resumes. :attr:`offset` is valid once every table
-    has been yielded.
+    has been yielded. :attr:`timestamp` is the database's own time, in
+    UTC, as the snapshot began: every row of the load carries it as its
+    change time, the way a captured change carries the time its
+    transaction committed. It is valid once :meth:`tables` has begun.
     """
+
+    def __init__(self) -> None:
+        self._timestamp: datetime | None = None
+
+    @property
+    def timestamp(self) -> datetime:
+        if self._timestamp is None:
+            raise SqlCdcErrorCode.CDC_30.exception()
+        return self._timestamp
 
     @property
     @abstractmethod

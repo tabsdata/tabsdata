@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 import pyarrow as pa
@@ -79,9 +79,8 @@ class InitialLoader:
         # they pin, which for some is at open and for others on the first
         # yield, and reading it earlier sees whatever preceded the pin.
         tracked_tables = self._ingester.tracked_tables
-        timestamp = datetime.now(tz=timezone.utc)
         for tracked_table, connection in session.tables(tracked_tables):
-            self._load_table(tracked_table, connection, timestamp)
+            self._load_table(tracked_table, connection, session.timestamp)
         return session.offset
 
     def _load_table(

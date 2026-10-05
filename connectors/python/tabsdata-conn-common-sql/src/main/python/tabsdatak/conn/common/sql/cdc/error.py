@@ -179,3 +179,7 @@ class SqlCdcErrorCode(ErrorCode):
         "Run the initial load again at a time with fewer changes, or raise the "
         "limit",
     )  # _read_window
+    CDC_30 = ErrorDef(
+        SqlCdcException,
+        "The initial load's time was read before its snapshot began",
+    )  # InitialLoadSession.timestamp

@@ -447,6 +447,7 @@ def identify_system(cursor: Any) -> tuple[str, int]:
 
 class Wal2JsonInitialLoadSession(InitialLoadSession):
     def __init__(self, *, engine: Any):
+        super().__init__()
         self._engine = engine
         self._offset: LsnOffset | None = None
         self._snapshot_name: str | None = None
@@ -467,6 +468,12 @@ class Wal2JsonInitialLoadSession(InitialLoadSession):
         ) as connection:
             connection.execute(
                 text(f"set transaction snapshot '{self._snapshot_name}'")
+            )
+            self._timestamp = (
+                connection
+                .execute(text("select now()"))
+                .scalar()
+                .astimezone(timezone.utc)
             )
             for tracked_table in tracked_tables.values():
                 yield tracked_table, connection
@@ -1579,6 +1586,10 @@ class Wal2JsonIngester(CdcIngester):
                     self._reach_bound()
                     break
                 continue
+            if timestamp is None:
+                raise PostgresErrorCode.POSTGRES_34.exception(
+                    action=action, lsn=message.data_start
+                )
             if action == _V2Actions.TRUNCATE:
                 sequence += 1
                 truncated = self._truncate_change(
@@ -1675,7 +1686,7 @@ class Wal2JsonIngester(CdcIngester):
         payload: dict,
         xid: str,
         sequence: int,
-        timestamp: datetime | None,
+        timestamp: datetime,
         offset: LsnOffset,
         segment: int,
     ) -> CdcDataChange | None:
@@ -1690,7 +1701,7 @@ class Wal2JsonIngester(CdcIngester):
             operation=CdcOperation.TRUNCATE,
             transaction=xid,
             sequence=sequence,
-            timestamp=timestamp or datetime.now(tz=timezone.utc),
+            timestamp=timestamp,
             table=qualified,
             new_values=dict(null_row),
             old_values=dict(null_row),
