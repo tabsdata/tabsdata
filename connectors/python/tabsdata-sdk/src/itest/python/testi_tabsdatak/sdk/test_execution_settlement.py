@@ -13,6 +13,10 @@ destinations), and the transformers' transaction holds two function runs.
 - Canceling an execution must not leave a later execution, whose runs read
   state the canceled one was going to write, with a transaction that holds
   both a canceled and a finished run and so can never settle.
+- A run that finished next to a canceled one in the same transaction must
+  end published (Committed) or discarded (Canceled), never stay Done.
+- An execution waiting for a failed run to be recovered or canceled stays
+  Stalled when one of its other transactions is canceled.
 - Triggering the publisher repeatedly while canceling recent executions and
   transactions must never leave a transaction ``Running`` once all its
   function runs have finished. When it does, the failure lists that
@@ -73,6 +77,7 @@ TRANSACTION_UNEXPECTED = transaction_status_to_mapping(
     TransactionStatus.UNEXPECTED.value
 )
 DONE = function_run_status_to_mapping(FunctionRunStatus.DONE.value)
+COMMITTED = function_run_status_to_mapping(FunctionRunStatus.COMMITTED.value)
 FAILED = function_run_status_to_mapping(FunctionRunStatus.FAILED.value)
 ON_HOLD = function_run_status_to_mapping(FunctionRunStatus.ON_HOLD.value)
 CANCELED = function_run_status_to_mapping(FunctionRunStatus.CANCELED.value)
@@ -252,17 +257,13 @@ def test_recovering_a_stalled_transaction_runs_the_failing_function_again(
 
 @tabsdata_instance(consumer="tdtest")
 @pytest.mark.timeout(1500)
+@pytest.mark.ep_case01
 def test_canceling_an_execution_does_not_half_cancel_a_later_one(
     instance_tdtest: Instance,
     collection_factory: CollectionFactory,
 ):
     functions = register(collection_factory, ["ticks", "left", "right"])
-    warm_up = functions["ticks"].trigger()
-    wait_for_status(warm_up, {FINISHED}, STALL_TIMEOUT)
-
-    first = functions["left"].trigger()
-    second = functions["ticks"].trigger()
-    first.cancel()
+    first, second = cancel_one_while_a_later_one_reads_its_state(functions)
     try:
         wait_for_status(first, EXECUTION_FINAL_STATUSES, STALL_TIMEOUT)
         deadline = time.monotonic() + SETTLE_TIMEOUT
@@ -291,10 +292,94 @@ def test_canceling_an_execution_does_not_half_cancel_a_later_one(
             )
             time.sleep(POLL_SECONDS)
     finally:
-        for execution in (first, second):
-            execution.refresh()
-            if execution.status not in EXECUTION_FINAL_STATUSES:
-                execution.cancel()
+        cancel_unfinished(first, second)
+
+
+@tabsdata_instance(consumer="tdtest")
+@pytest.mark.timeout(1500)
+@pytest.mark.ep_case02
+def test_a_finished_run_beside_a_canceled_one_is_published_or_discarded(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+):
+    functions = register(collection_factory, ["ticks", "left", "right"])
+    first, second = cancel_one_while_a_later_one_reads_its_state(functions)
+    try:
+        wait_for_status(first, EXECUTION_FINAL_STATUSES, STALL_TIMEOUT)
+        deadline = time.monotonic() + SETTLE_TIMEOUT
+        done_since = None
+        while True:
+            transformers = transaction_holding(second, "right")
+            status = runs_of(transformers)["right"]
+            if status in (COMMITTED, CANCELED):
+                break
+            if status == DONE:
+                done_since = done_since or time.monotonic()
+                assert time.monotonic() - done_since < STUCK_SECONDS, (
+                    f"{second.id}'s right finished, but in the {STUCK_SECONDS} s "
+                    "since it was neither published (Committed) nor discarded "
+                    f"(Canceled); its transaction {transformers.id} holds:\n"
+                    + describe(second)
+                )
+            assert time.monotonic() < deadline, (
+                f"{second.id}'s right never finished\n" + describe(second)
+            )
+            time.sleep(POLL_SECONDS)
+    finally:
+        cancel_unfinished(first, second)
+
+
+@tabsdata_instance(consumer="tdtest")
+@pytest.mark.timeout(1500)
+@pytest.mark.ep_case03
+def test_a_stalled_execution_stays_stalled_when_another_transaction_is_canceled(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+):
+    functions = register(
+        collection_factory, ["ticks", "left", "failing", "after_left", "after_failing"]
+    )
+    execution = functions["ticks"].trigger()
+    try:
+        wait_for_status(execution, {STALLED}, STALL_TIMEOUT)
+
+        transaction_holding(execution, "after_failing").cancel()
+
+        destinations = transaction_holding(execution, "after_failing")
+        deadline = time.monotonic() + STUCK_SECONDS
+        while destinations.status != TRANSACTION_CANCELED:
+            assert time.monotonic() < deadline, (
+                "the destinations transaction was not canceled\n" + describe(execution)
+            )
+            time.sleep(POLL_SECONDS)
+            destinations = transaction_holding(execution, "after_failing")
+        time.sleep(POLL_SECONDS)
+        execution.refresh()
+        assert execution.status == STALLED, (
+            f"{execution.id} still waits for its failed transformer to be recovered "
+            f"or canceled, so it should be {STALLED}, but it is {execution.status}\n"
+            + describe(execution)
+        )
+    finally:
+        cancel_unfinished(execution)
+
+
+def cancel_one_while_a_later_one_reads_its_state(
+    functions: dict[str, Function],
+) -> tuple[Execution, Execution]:
+    warm_up = functions["ticks"].trigger()
+    wait_for_status(warm_up, {FINISHED}, STALL_TIMEOUT)
+    first = functions["left"].trigger()
+    second = functions["ticks"].trigger()
+    first.cancel()
+    return first, second
+
+
+def cancel_unfinished(*executions: Execution) -> None:
+    for execution in executions:
+        execution.refresh()
+        if execution.status not in EXECUTION_FINAL_STATUSES:
+            execution.cancel()
 
 
 @dataclass
