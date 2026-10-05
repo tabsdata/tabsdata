@@ -71,7 +71,11 @@ _SECTION = "@@TDD@@"
 # COMMIT_INTERVAL seconds (30 by default), and it looks at the log every
 # SLEEP_INTERVAL seconds (5 by default). Each registration and each test's
 # change would wait on them, so the test system runs both at their minimum.
+# It holds a transaction in memory until the commit and spills it to disk past
+# MEMORY_LIMIT megabytes (32 by default): a bulk load of a million rows is
+# ~400 MB and took close to a minute to surface, so the test system allows 1 GB.
 _CAPTURE_INTERVAL_S = 1
+_CAPTURE_MEMORY_LIMIT_MB = 1024
 
 # The Db2 CLP returns non-zero for warnings too (e.g. SQL1363W); `db2w` treats
 # only rc >= 4 (real errors) as failure so a `set -e`/`&&` chain isn't aborted
@@ -360,7 +364,8 @@ class Db2Cdc(Db2):
             f"update {_ASN}.ibmsnap_capparms set capture_path = '{home}', "
             f"autostop = 'N', term = 'N', "
             f"commit_interval = {_CAPTURE_INTERVAL_S}, "
-            f"sleep_interval = {_CAPTURE_INTERVAL_S}",
+            f"sleep_interval = {_CAPTURE_INTERVAL_S}, "
+            f"memory_limit = {_CAPTURE_MEMORY_LIMIT_MB}",
         )
         self._exec_inst(
             container,
@@ -398,22 +403,25 @@ class Db2Cdc(Db2):
         self._setup_asncap(container)
 
     def _tune_capture(self, container: str) -> None:
-        """Bring a capture program started with other intervals to the test
-        system's: in ``IBMSNAP_CAPPARMS`` for its next start, and in the running
-        process for now."""
+        """Bring a capture program started with other intervals or memory limit
+        to the test system's: in ``IBMSNAP_CAPPARMS`` for its next start, and in
+        the running process for now."""
         interval = _CAPTURE_INTERVAL_S
+        memory = _CAPTURE_MEMORY_LIMIT_MB
         self._clp_batch(
             container,
             [
                 f"update {_ASN}.ibmsnap_capparms set commit_interval = {interval}, "
-                f"sleep_interval = {interval} where commit_interval <> {interval} "
-                f"or sleep_interval <> {interval}"
+                f"sleep_interval = {interval}, memory_limit = {memory} "
+                f"where commit_interval <> {interval} or sleep_interval <> {interval} "
+                f"or memory_limit <> {memory}"
             ],
         )
         self._exec_inst(
             container,
             f"asnccmd capture_server={_XP_DB} capture_schema={_ASN} chgparms "
-            f"commit_interval={interval} sleep_interval={interval} >/dev/null",
+            f"commit_interval={interval} sleep_interval={interval} "
+            f"memory_limit={memory} >/dev/null",
         )
 
     def restart_system(self, meta: dict[str, str]) -> str:
@@ -809,8 +817,8 @@ class Db2Cdc(Db2):
                 f"where cd_owner = '{_ASN}' and cd_table like '{like}'",
                 "existing": f"select tabname from syscat.tables where tabschema = "
                 f"'{_ASN}' and tabname like '{like}'",
-                "intervals": f"select commit_interval, sleep_interval from "
-                f"{_ASN}.ibmsnap_capparms",
+                "intervals": f"select commit_interval, sleep_interval, memory_limit "
+                f"from {_ASN}.ibmsnap_capparms",
                 "asncap": (
                     f"!asnccmd capture_schema={_ASN} capture_server={_XP_DB} status"
                 ),
@@ -823,7 +831,7 @@ class Db2Cdc(Db2):
         }
         existing = {row for row in out["existing"] if row.startswith(prefix)}
         status = "\n".join(out["asncap"])
-        want = f"{_CAPTURE_INTERVAL_S} {_CAPTURE_INTERVAL_S}"
+        want = f"{_CAPTURE_INTERVAL_S} {_CAPTURE_INTERVAL_S} {_CAPTURE_MEMORY_LIMIT_MB}"
         return _Probe(
             tables=out["tables"],
             owners=owners,

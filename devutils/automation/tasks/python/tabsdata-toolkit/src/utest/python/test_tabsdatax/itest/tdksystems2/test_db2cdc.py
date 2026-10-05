@@ -95,7 +95,11 @@ def test_the_capture_program_is_tuned_to_its_minimum_intervals(cdc, monkeypatch)
     )
     cdc._tune_capture("C")
     assert any("commit_interval = 1" in call for call in cdc.calls)
-    assert any("chgparms commit_interval=1 sleep_interval=1" in c for c in commands)
+    assert any("memory_limit = 1024" in call for call in cdc.calls)
+    assert any(
+        "chgparms commit_interval=1 sleep_interval=1 memory_limit=1024" in c
+        for c in commands
+    )
 
 
 def test_every_table_is_registered_in_one_container_call(cdc):
@@ -153,7 +157,7 @@ def test_what_an_install_needs_is_read_in_one_call(cdc):
         f"{p}EMPLOYEES",
         "SQL0100W  No row was found",
         f"{backend._SECTION}intervals",
-        "          1           1",
+        "          1           1        1024",
         f"{backend._SECTION}asncap",
         "ASN0520I  AsnCcmd : The STATUS command response: ...",
         "rc=0",
