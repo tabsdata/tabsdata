@@ -533,6 +533,13 @@ class MySQLCdcStreamSrc(StreamSrc):
             changes from the exact position of that snapshot, so no
             `start_from` may be given. Defaults to `False`.
 
+            To resynchronise a destination later, keep `initial_load=True`
+            and reset the function's stage (`tdk fn update --reset-stage`):
+            a fresh stage holds no stream state, so the stream starts again
+            with the snapshot and emits the `LOAD` rows first. A stage reset
+            without `initial_load` restarts at `start_from` and sends no
+            `LOAD` row.
+
             Beyond the privileges plain CDC needs, the connecting user
             must hold `RELOAD` (to briefly take the global read lock
             that pins the snapshot to a binlog position) and `SELECT` on

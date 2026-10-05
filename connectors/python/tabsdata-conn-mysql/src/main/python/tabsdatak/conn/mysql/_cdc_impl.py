@@ -37,6 +37,7 @@ import pymysqlreplication.constants.FIELD_TYPE as FIELD_TYPE
 import sqlalchemy.types as sa_types
 from pymysqlreplication import BinLogStreamReader
 from pymysqlreplication.event import (
+    FormatDescriptionEvent,
     GtidEvent,
     HeartbeatLogEvent,
     QueryEvent,
@@ -244,6 +245,11 @@ for _attr in ("TIMESTAMP2", "DATETIME2", "TIME2"):
     if _code is not None:
         _base_attr = _attr.rstrip("2")
         _FIELD_TYPE_MAP[_code] = _FIELD_TYPE_MAP[getattr(FIELD_TYPE, _base_attr)]
+
+
+def epoch_seconds(ts: datetime) -> int:
+    aware = ts if ts.tzinfo is not None else ts.replace(tzinfo=timezone.utc)
+    return int(aware.timestamp())
 
 
 def _parse_offset_string(value: str) -> tzinfo | None:
@@ -861,7 +867,19 @@ class BinlogIngester(CdcIngester):
                 self._executed = GtidSet()
                 self._seed_on_first_sight = True
             case TimestampPosition(ts=ts):
-                stream_kwargs["skip_to_timestamp"] = ts
+                since = epoch_seconds(ts)
+                file, _ = self._first_binlog_file()
+                retained_since = self._binlog_begins_at(file)
+                if retained_since > since:
+                    raise MysqlErrorCode.MYSQL_29.exception(
+                        timestamp=ts.isoformat(),
+                        retained=datetime.fromtimestamp(
+                            retained_since, tz=timezone.utc
+                        ).isoformat(),
+                    )
+                stream_kwargs["log_file"] = file
+                stream_kwargs["log_pos"] = BINLOG_START_POSITION
+                stream_kwargs["skip_to_timestamp"] = since
                 self._executed = GtidSet()
                 self._seed_on_first_sight = True
             case "head":
@@ -1034,6 +1052,22 @@ class BinlogIngester(CdcIngester):
             raise MysqlErrorCode.MYSQL_23.exception(
                 consumed=consumed, executed=executed
             )
+
+    def _binlog_begins_at(self, file: str) -> int:
+        reader = BinLogStreamReader(
+            connection_settings=self._stream_connection_settings(),
+            server_id=self._server_id,
+            log_file=file,
+            log_pos=BINLOG_START_POSITION,
+            blocking=False,
+            resume_stream=False,
+            only_events=[FormatDescriptionEvent],
+        )
+        try:
+            event = reader.fetchone()
+            return event.timestamp if event is not None else 0
+        finally:
+            reader.close()
 
     def _first_binlog_file(self) -> tuple[str, str]:
         settings = self._stream_connection_settings()

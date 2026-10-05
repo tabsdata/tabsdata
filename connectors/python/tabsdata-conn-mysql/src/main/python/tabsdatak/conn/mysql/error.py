@@ -182,3 +182,9 @@ class MysqlErrorCode(ErrorCode):
         "of the changes made on its source. Set log_replica_updates to ON, or "
         "stream from the source",
     )  # BinlogIngester._verify_server_settings
+    MYSQL_29 = ErrorDef(
+        MySQLRuntimeException,
+        "The start timestamp {timestamp} is before the oldest retained binlog, which "
+        "begins at {retained}; the changes in between were purged and cannot be "
+        "streamed. Start from a later timestamp, from head, or with an initial load",
+    )  # BinlogIngester.init_stream

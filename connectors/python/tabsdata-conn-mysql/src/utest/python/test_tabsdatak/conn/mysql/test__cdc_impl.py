@@ -41,6 +41,7 @@ from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mysql import _cdc_impl
 from tabsdatak.conn.mysql._cdc_impl import (
+    BINLOG_START_POSITION,
     INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS,
     BinlogIngester,
     BinlogInitialLoadSession,
@@ -1030,11 +1031,41 @@ def _init_stream(monkeypatch, bi):
     monkeypatch.setattr(bi, "_verify_gtids", lambda consumed: None)
     monkeypatch.setattr(bi, "_verify_server_settings", lambda: None)
     monkeypatch.setattr(bi, "_first_binlog_file", lambda: ("binlog.000003", "u:1-40"))
+    monkeypatch.setattr(bi, "_binlog_begins_at", lambda file: FIRST_BINLOG_AT)
     monkeypatch.setattr(
         bi, "_last_binlog_position", lambda: ("binlog.000009", 812, "u:1-90,v:1-4")
     )
     bi.init_stream()
     return captured
+
+
+FIRST_BINLOG_AT = 1_700_000_000
+
+
+def test_a_start_by_timestamp_reads_from_the_oldest_binlog_and_skips_before_it(
+    monkeypatch,
+):
+    from tabsdatak.conn.common.sql.cdc import TimestampPosition
+
+    since = datetime.fromtimestamp(FIRST_BINLOG_AT + 3_600, tz=timezone.utc)
+    bi = _ingester_with_tables(["app.users"])
+    bi._start_from = TimestampPosition(ts=since)
+    captured = _init_stream(monkeypatch, bi)
+    assert captured["log_file"] == "binlog.000003"
+    assert captured["log_pos"] == BINLOG_START_POSITION
+    assert captured["skip_to_timestamp"] == FIRST_BINLOG_AT + 3_600
+    assert "auto_position" not in captured
+
+
+def test_a_start_by_timestamp_before_the_retained_binlogs_fails(monkeypatch):
+    from tabsdatak.conn.common.sql.cdc import TimestampPosition
+
+    since = datetime.fromtimestamp(FIRST_BINLOG_AT - 1, tz=timezone.utc)
+    bi = _ingester_with_tables(["app.users"])
+    bi._start_from = TimestampPosition(ts=since)
+    with pytest.raises(TabsdataException) as ei:
+        _init_stream(monkeypatch, bi)
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_29
 
 
 def test_a_resume_asks_for_everything_after_the_full_set(monkeypatch):
