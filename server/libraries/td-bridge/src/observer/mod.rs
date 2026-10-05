@@ -26,7 +26,7 @@ pub enum ObserverError {
     } = 1,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WorkloadKind {
     Function,
     CronTrigger,

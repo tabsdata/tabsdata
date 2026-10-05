@@ -11,6 +11,7 @@ use td_bridge::observer::WorkloadObserver;
 use td_bridge::worker::WorkerHandler;
 use td_bridge::{BridgeProvider, Orchestrator};
 use td_common::crypto::install_crypto_provider;
+use tokio::task::JoinHandle;
 
 use crate::base::error::kubernetes::KubernetesError;
 use crate::client::session::pod::PodContext;
@@ -18,7 +19,10 @@ use crate::kube::context::KubeContext;
 use crate::runtime::gateway::catalog::KubernetesServerCatalog;
 use crate::runtime::gateway::datasource::KubernetesConnectionStore;
 use crate::runtime::gateway::messaging::KubernetesOrchestratorMessageQueue;
+use crate::runtime::gateway::messaging::messenger::factory::WorkloadFactory;
 use crate::runtime::gateway::messaging::messenger::template::PodTemplateIndex;
+use crate::runtime::gateway::messaging::reconciler::Reconciler;
+use crate::runtime::gateway::messaging::reconciler::run::run;
 use crate::runtime::gateway::observer::KubernetesWorkloadObserver;
 use crate::runtime::gateway::workload::KubernetesWorkerHandler;
 use crate::runtime::reporting::build_pod_kube_client;
@@ -30,6 +34,7 @@ pub struct KubernetesBridgeProvider {
     connection_store: KubernetesConnectionStore,
     message_queue: KubernetesOrchestratorMessageQueue,
     workload_observer: KubernetesWorkloadObserver,
+    reconciliation: JoinHandle<()>,
 }
 
 impl KubernetesBridgeProvider {
@@ -38,8 +43,17 @@ impl KubernetesBridgeProvider {
         let worker_handler = KubernetesWorkerHandler::new(context.clone());
         let connection_store = KubernetesConnectionStore::new(context.clone());
         let pod_templates = PodTemplateIndex::load(&context).await?;
-        let message_queue = KubernetesOrchestratorMessageQueue::new(context.clone(), pod_templates);
+        let factory = Arc::new(WorkloadFactory::new(context.clone(), pod_templates));
+        let reconciler = Arc::new(Reconciler::default());
+        let message_queue =
+            KubernetesOrchestratorMessageQueue::new(factory.clone(), reconciler.clone());
         let workload_observer = KubernetesWorkloadObserver::new(context.clone());
+        let reconciliation = tokio::spawn(run(
+            reconciler,
+            factory,
+            KubernetesWorkloadObserver::new(context.clone()),
+            context.clone(),
+        ));
         Ok(Self {
             context,
             server_catalog,
@@ -47,6 +61,7 @@ impl KubernetesBridgeProvider {
             connection_store,
             message_queue,
             workload_observer,
+            reconciliation,
         })
     }
 
@@ -59,6 +74,12 @@ impl KubernetesBridgeProvider {
 
     pub fn context(&self) -> &KubeContext {
         &self.context
+    }
+}
+
+impl Drop for KubernetesBridgeProvider {
+    fn drop(&mut self) {
+        self.reconciliation.abort();
     }
 }
 

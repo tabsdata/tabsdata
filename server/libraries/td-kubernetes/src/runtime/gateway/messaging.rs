@@ -3,5 +3,6 @@
 //
 
 pub(crate) mod messenger;
+pub(crate) mod reconciler;
 
 pub use messenger::queue::KubernetesOrchestratorMessageQueue;

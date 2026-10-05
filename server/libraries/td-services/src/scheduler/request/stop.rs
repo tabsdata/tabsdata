@@ -8,9 +8,10 @@ use td_objects::dxo::worker::WorkerUpdateDB;
 use td_objects::types::basic::AtTime;
 
 /// The stop-flip update for trigger workers. The kubernetes stop is
-/// synchronous — the queue put deletes the workload and the gateway never
-/// invokes the stop responder — so a worker whose stop message was enqueued is
-/// terminal `Stopped`. The supervisor stop is asynchronous: the row waits in
+/// put-and-forget — the queue put records the deletion, the bridge carries it
+/// out, and the gateway never invokes the stop responder — so a worker whose
+/// stop message was enqueued is terminal `Stopped`; recovery covers a deletion
+/// that never lands. The supervisor stop is asynchronous: the row waits in
 /// `StopRequested` until the exiting worker's callback flips it to `Stopped`.
 pub fn stop_worker_update(
     orchestrator: Orchestrator,
