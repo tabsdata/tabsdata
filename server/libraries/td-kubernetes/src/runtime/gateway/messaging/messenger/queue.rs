@@ -284,6 +284,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                         worker_id: id.clone(),
                         name,
                         payload: payload.clone(),
+                        attempts: 0,
                     },
                 );
             }

@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use humantime::format_duration;
 use td_bridge::observer::WorkloadObserver;
 use tokio::time::timeout;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::kube::api::domain::worker::delete_worker;
 use crate::kube::context::KubeContext;
@@ -97,7 +97,12 @@ async fn reconcile(
                         "Could not create '{}'; retrying: {outcome:?}",
                         submission.name
                     );
-                    reconciler.state().restore(key, submission);
+                    if let Some(abandoned) = reconciler.state().restore(key, submission) {
+                        error!(
+                            "Giving up creating '{}' after {} attempts; recovery takes over its run",
+                            abandoned.name, abandoned.attempts
+                        );
+                    }
                 }
             }
         }

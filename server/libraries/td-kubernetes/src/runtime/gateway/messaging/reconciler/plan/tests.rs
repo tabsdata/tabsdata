@@ -21,6 +21,7 @@ fn submission(worker_id: &str) -> Submission<&'static str> {
         worker_id: worker_id.to_owned(),
         name: format!("pub-{worker_id}"),
         payload: "payload",
+        attempts: 0,
     }
 }
 
@@ -233,7 +234,16 @@ fn a_slow_deletion_warns_then_forces() {
         forced.as_slice(),
         [Action::Force { name, worker_id }] if name == "pub-a" && worker_id == "wkr20260101-0000000009"
     ));
-    assert!(state.plan(&[running], start + FORCE_AFTER * 2).is_empty());
+    assert!(
+        state
+            .plan(
+                std::slice::from_ref(&running),
+                start + FORCE_AFTER + FORCE_RETRY / 2
+            )
+            .is_empty()
+    );
+    let forced_again = state.plan(&[running], start + FORCE_AFTER + FORCE_RETRY);
+    assert!(matches!(forced_again.as_slice(), [Action::Force { name, .. }] if name == "pub-a"));
 }
 
 #[test]
@@ -260,7 +270,10 @@ fn a_failed_create_is_restored_unless_replaced_or_withdrawn() {
     state.restore(key(WorkloadKind::Function), submission("a"));
     assert_eq!(
         creates(&state.plan(&[], Instant::now())),
-        vec![submission("a")]
+        vec![Submission {
+            attempts: 1,
+            ..submission("a")
+        }]
     );
 
     state.submit(key(WorkloadKind::Function), submission("b"));
@@ -286,5 +299,109 @@ fn a_submission_whose_workload_already_exists_is_dropped() {
         WorkloadPhase::Running,
     );
     assert!(state.plan(&[existing], Instant::now()).is_empty());
+    assert!(state.is_idle());
+}
+
+fn running(name: &str, kind: WorkloadKind) -> ObservedWorkload {
+    workload(name, FUNCTION, kind, WorkloadPhase::Running)
+}
+
+fn being_deleted(name: &str, kind: WorkloadKind) -> ObservedWorkload {
+    ObservedWorkload {
+        deleting: true,
+        ..running(name, kind)
+    }
+}
+
+#[test]
+fn a_restart_of_the_same_worker_waits_for_the_old_workload_then_creates() {
+    let mut state = State::default();
+    let old = running("pub-a", WorkloadKind::Function);
+    state.withdraw(key(WorkloadKind::Function), "a", "pub-a");
+    state.submit(key(WorkloadKind::Function), submission("a"));
+    let actions = state.plan(std::slice::from_ref(&old), Instant::now());
+    assert!(creates(&actions).is_empty());
+    let going = being_deleted("pub-a", WorkloadKind::Function);
+    assert!(creates(&state.plan(&[going], Instant::now())).is_empty());
+    assert_eq!(
+        creates(&state.plan(&[], Instant::now())),
+        vec![submission("a")]
+    );
+}
+
+#[test]
+fn a_late_stop_for_an_older_worker_leaves_the_newer_one_alone() {
+    let mut state: State<&str> = State::default();
+    let older = running("crn-a", WorkloadKind::CronTrigger);
+    let newer = running("crn-b", WorkloadKind::CronTrigger);
+    state.withdraw(key(WorkloadKind::CronTrigger), "a", "crn-a");
+    let actions = state.plan(&[older, newer], Instant::now());
+    assert_eq!(deletes(&actions), vec!["crn-a".to_owned()]);
+}
+
+#[test]
+fn a_late_stop_for_an_older_worker_does_not_drop_a_queued_newer_start() {
+    let mut state = State::default();
+    state.submit(key(WorkloadKind::CronTrigger), submission("b"));
+    state.withdraw(key(WorkloadKind::CronTrigger), "a", "crn-a");
+    let actions = state.plan(&[], Instant::now());
+    assert_eq!(creates(&actions), vec![submission("b")]);
+}
+
+#[test]
+fn a_stop_during_a_create_that_may_still_land_deletes_it_when_it_does() {
+    let mut state = State::default();
+    let start = Instant::now();
+    state.submit(key(WorkloadKind::Function), submission("a"));
+    assert_eq!(creates(&state.plan(&[], start)), vec![submission("a")]);
+    state.withdraw(key(WorkloadKind::Function), "a", "pub-a");
+    assert!(state.plan(&[], start + CREATE_SETTLE / 2).is_empty());
+    let landed = running("pub-a", WorkloadKind::Function);
+    let actions = state.plan(&[landed], start + CREATE_SETTLE / 2);
+    assert_eq!(deletes(&actions), vec!["pub-a".to_owned()]);
+}
+
+#[test]
+fn a_stop_cancelling_a_retried_create_still_deletes_a_late_landing() {
+    let mut state = State::default();
+    let start = Instant::now();
+    state.submit(key(WorkloadKind::Function), submission("a"));
+    state.plan(&[], start);
+    assert_eq!(
+        state.restore(key(WorkloadKind::Function), submission("a")),
+        None
+    );
+    state.withdraw(key(WorkloadKind::Function), "a", "pub-a");
+    let landed = running("pub-a", WorkloadKind::Function);
+    let actions = state.plan(&[landed], start + CREATE_SETTLE / 2);
+    assert_eq!(deletes(&actions), vec!["pub-a".to_owned()]);
+    assert!(creates(&actions).is_empty());
+}
+
+#[test]
+fn a_failed_create_is_retried_only_after_the_settle_window() {
+    let mut state = State::default();
+    let start = Instant::now();
+    state.submit(key(WorkloadKind::Function), submission("a"));
+    state.plan(&[], start);
+    state.restore(key(WorkloadKind::Function), submission("a"));
+    assert!(creates(&state.plan(&[], start + CREATE_SETTLE / 2)).is_empty());
+    let retried = creates(&state.plan(&[], start + CREATE_SETTLE));
+    assert_eq!(retried.len(), 1);
+    assert_eq!(retried[0].attempts, 1);
+}
+
+#[test]
+fn a_create_failing_too_often_is_given_up() {
+    let mut state = State::default();
+    let exhausted = Submission {
+        attempts: MAX_CREATE_ATTEMPTS - 1,
+        ..submission("a")
+    };
+    let abandoned = state.restore(key(WorkloadKind::Function), exhausted);
+    assert_eq!(
+        abandoned.map(|submission| submission.attempts),
+        Some(MAX_CREATE_ATTEMPTS)
+    );
     assert!(state.is_idle());
 }
