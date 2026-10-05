@@ -42,6 +42,7 @@ class StreamRun[R, O: StreamOffset]:
     stop_signal: StopSignal
     session: Any = None
     slots: list[str] = field(default_factory=list)
+    recorded: str | None = None
 
 
 class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
@@ -71,6 +72,8 @@ class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
         self.buffer.flush()
         if self.disk.due(force=True):
             self.plugin.publish(self.run, self.ledger, self.disk, self.buffer)
+        else:
+            self.plugin.record(self.run, self.ledger, self.buffer)
 
 
 class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
@@ -192,6 +195,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             )
 
             lifecycle.arm(ledger, disk_sentinel, buffer_sentinel)
+            run.recorded = buffer_sentinel.offset.write()
 
             buffer_sentinel.reset_timer()
             disk_sentinel.reset_timer()
@@ -202,6 +206,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                 )
                 if buffer_sentinel.due():
                     buffer_sentinel.flush()
+                    self.record(run, ledger, buffer_sentinel)
                 if disk_sentinel.due():
                     buffer_sentinel.flush()
                     self.publish(run, ledger, disk_sentinel, buffer_sentinel)
@@ -220,6 +225,8 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                     buffer_sentinel.flush()
                 if disk_sentinel is not None and disk_sentinel.due(force=True):
                     self.publish(run, ledger, disk_sentinel, buffer_sentinel)
+                elif buffer_sentinel is not None:
+                    self.record(run, ledger, buffer_sentinel)
             if run.session is not None:
                 if not errored:
                     self.settle_offset(run)
@@ -238,9 +245,23 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         offset = buffer_sentinel.offset
         run.ctx.stage(tables_files, self.stage_state(run, offset))
         run.ingester.acknowledge_offset(offset)
+        run.recorded = offset.write()
         ledger.clear()
         disk_sentinel.reset_timer()
         return True
+
+    def record(
+        self,
+        run: StreamRun[R, O],
+        ledger: FileLedger,
+        buffer_sentinel: BufferSentinel[R, O],
+    ) -> None:
+        if ledger.has_data:
+            return
+        offset = buffer_sentinel.offset
+        if offset.write() == run.recorded:
+            return
+        self.checkpoint(run, offset)
 
     def checkpoint(self, run: StreamRun[R, O], offset: O) -> None:
         if offset is None:
@@ -250,11 +271,11 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         if not self.may_checkpoint(run):
             return
         state = self.stage_state(run, offset)
-        if not isinstance(state, dict):
-            raise ConnErrorCode.CONN_34.exception(
-                ingester=type(run.ingester).__name__, offset=offset
-            )
-        run.ctx.checkpoint(state)
+        if isinstance(state, dict):
+            run.ctx.checkpoint(state)
+        else:
+            state()
+        run.recorded = offset.write()
 
     def settle_offset(self, run: StreamRun[R, O]) -> None:
         try:

@@ -371,9 +371,23 @@ def test_undecodable_messages_go_to_the_dlq(tmp_path):
 
     records = list(ingester.poll_changes(consumer))
 
-    assert [record.value for record in records] == [{"a": 1}]
+    assert [record.value for record in records] == [None, {"a": 1}]
+    assert records[0].message is garbled
     assert producer.produce.call_count == 1
     assert producer.produce.call_args.kwargs["topic"] == "evt_dlq"
+
+
+def test_a_dead_letter_message_leaves_a_position_only_record(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message(raw=b"bad", offset=6, partition=2), None]
+    ingester, _ = _with_dlq(consumer, tmp_path)
+
+    (record,) = ingester.poll_changes(consumer)
+    encoder = KafkaEncoder("evt", _allow_subset)
+
+    assert record.value is None and record.schema_id is None and record.size == 0
+    assert encoder.slot(record) is None
+    assert encoder.offset(record).offsets == {"evt": {2: 7}}
 
 
 def _decoding(ingester: KafkaIngester, outcomes: list):
@@ -458,7 +472,7 @@ def test_a_schema_violation_is_a_format_error_for_the_dlq(tmp_path):
 
     records = list(ingester.poll_changes(consumer))
 
-    assert [record.value for record in records] == [{"a": 2}]
+    assert [record.value for record in records] == [None, {"a": 2}]
     assert producer.produce.call_count == 1
 
 
@@ -627,7 +641,7 @@ def test_dead_letter_messages_are_produced_without_a_flush_per_message(tmp_path)
     consumer.poll.side_effect = [_message(raw=b"bad"), _message(raw=b"worse"), None]
     ingester, producer = _with_dlq(consumer, tmp_path)
 
-    assert list(ingester.poll_changes(consumer)) == []
+    assert [r.value for r in ingester.poll_changes(consumer)] == [None, None]
 
     assert producer.produce.call_count == 2
     assert producer.poll.call_count == 2
@@ -641,7 +655,7 @@ def test_a_full_producer_queue_is_flushed_once_and_the_message_retried(tmp_path)
     ingester, producer = _with_dlq(consumer, tmp_path)
     producer.produce.side_effect = [BufferError("queue full"), None]
 
-    assert list(ingester.poll_changes(consumer)) == []
+    assert [r.value for r in ingester.poll_changes(consumer)] == [None]
 
     assert producer.produce.call_count == 2
     producer.flush.assert_called_once_with(16)
@@ -693,7 +707,7 @@ def test_a_failed_dead_letter_delivery_stops_the_commit(tmp_path):
         "Unknown topic", None
     )
 
-    assert list(ingester.poll_changes(consumer)) == []
+    assert [r.value for r in ingester.poll_changes(consumer)] == [None]
     with pytest.raises(TabsdataException) as raised:
         ingester.stage_state(KafkaOffset({"evt": {0: 10}}))()
 

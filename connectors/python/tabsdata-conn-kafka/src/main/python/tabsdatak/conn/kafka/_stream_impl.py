@@ -82,8 +82,8 @@ def retriable_acknowledgement(error: BaseException) -> bool:
 
 @dataclass(frozen=True)
 class KafkaRecord:
-    value: dict
-    schema_id: SchemaIdSpec
+    value: dict | None
+    schema_id: SchemaIdSpec | None
     size: int
     message: Message
 
@@ -152,8 +152,8 @@ class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaOffset]):
         self._topic = topic
         self._compatible = compatible
 
-    def slot(self, record: KafkaRecord) -> str:
-        return self._topic
+    def slot(self, record: KafkaRecord) -> str | None:
+        return None if record.value is None else self._topic
 
     def size(self, record: KafkaRecord) -> int:
         return record.size
@@ -412,6 +412,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
                     exc,
                 )
                 self.send_to_dlq(msg, exc)
+                yield KafkaRecord(value=None, schema_id=None, size=0, message=msg)
                 continue
             yield KafkaRecord(
                 value=record,

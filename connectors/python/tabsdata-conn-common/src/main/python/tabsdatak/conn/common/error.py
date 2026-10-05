@@ -186,10 +186,8 @@ class ConnErrorCode(ErrorCode):
     )
     CONN_34 = ErrorDef(
         ConnStreamException,
-        "The ingester {ingester} reported a position to record without staging, "
-        "but gave "
-        "{offset!r}: it must report the offset the stream resumes from, and "
-        "keep that offset in Tabsdata stream state",
+        "The ingester {ingester} reported an offset to record without staging, "
+        "but gave {offset!r}: it must report the offset the stream resumes from",
     )
     CONN_35 = ErrorDef(
         ConnStreamException,

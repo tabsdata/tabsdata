@@ -104,9 +104,17 @@ class FakeDisk:
         self.cleared += 1
 
 
+class _Offset:
+    def __init__(self, mark: str = "o") -> None:
+        self.mark = mark
+
+    def write(self) -> str:
+        return self.mark
+
+
 class FakeBuffer:
     def __init__(self):
-        self.offset = object()
+        self.offset = _Offset()
         self.flushed = 0
         self.processed = 0
 
@@ -256,10 +264,9 @@ def test_a_checkpoint_keeps_the_record_of_a_done_initial_load():
         first_stage=False,
         stream_state={"cdc.offset": "staged", CDC_INITIAL_LOAD_STATE_KEY: False},
     )
-    _checkpoint(ctx, _OwnedOffsetIngester(), _cfg(initial_load=True), "moved")
-    assert ctx.checkpoints == [
-        {"cdc.offset": "moved", CDC_INITIAL_LOAD_STATE_KEY: False}
-    ]
+    moved = _Offset("moved")
+    _checkpoint(ctx, _OwnedOffsetIngester(), _cfg(initial_load=True), moved)
+    assert ctx.checkpoints == [{"cdc.offset": moved, CDC_INITIAL_LOAD_STATE_KEY: False}]
 
 
 @pytest.mark.parametrize(
@@ -277,7 +284,9 @@ def test_there_is_no_checkpoint_without_a_state_to_move_on(
     """Until a stage, or while an initial load is owed, the next run starts
     over from the configuration, so there is no resume state to move on."""
     ctx = FakeCtx(active_values=[], first_stage=first_stage, stream_state=stream_state)
-    _checkpoint(ctx, _OwnedOffsetIngester(), _cfg(initial_load=initial_load), "moved")
+    _checkpoint(
+        ctx, _OwnedOffsetIngester(), _cfg(initial_load=initial_load), _Offset("moved")
+    )
     assert ctx.checkpoints == []
 
 
@@ -311,7 +320,7 @@ def _loaded(monkeypatch, tmp_path, *, ctx, loader_raises=False, window_end=None)
     disk = FakeDisk(manifest=manifest)
     monkeypatch.setattr(_runner, "FileLedger", lambda **kw: disk)
 
-    offset = object()
+    offset = _Offset()
 
     class FakeLoader:
         def __init__(self, **kw):
@@ -530,7 +539,7 @@ def test_the_stream_seeds_the_mark_from_the_initial_load(monkeypatch, tmp_path):
     disk = FakeDisk(manifest=[[]])
     buffer = FakeBuffer()
     _patch_sentinels(monkeypatch, disk, buffer)
-    load_offset = object()
+    load_offset = _Offset()
     monkeypatch.setattr(_runner, "_load_initially", lambda **kw: (load_offset, None))
     previous = object()
     ingester = FakeIngester(resume_value=previous)

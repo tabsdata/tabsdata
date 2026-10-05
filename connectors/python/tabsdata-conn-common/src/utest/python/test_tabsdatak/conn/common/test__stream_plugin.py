@@ -92,11 +92,21 @@ class FakeDisk:
         self.cleared += 1
 
 
+class FakeOffset:
+    def __init__(self, mark: str) -> None:
+        self.mark = mark
+
+    def write(self) -> str:
+        return self.mark
+
+
 class FakeBuffer:
-    def __init__(self):
-        self.offset = object()
+    def __init__(self, *, due=False, moves_to=None):
+        self.offset = FakeOffset("base")
         self.flushed = 0
         self.processed = 0
+        self._due = due
+        self._moves_to = moves_to
 
     def reset_timer(self) -> None:
         pass
@@ -106,10 +116,12 @@ class FakeBuffer:
         return len(list(records))
 
     def due(self) -> bool:
-        return False
+        return self._due
 
     def flush(self) -> None:
         self.flushed += 1
+        if self._moves_to is not None:
+            self.offset = FakeOffset(self._moves_to)
 
 
 class FakeIngester:
@@ -489,10 +501,69 @@ def test_stream_hands_the_ingester_a_checkpoint_that_records_state(monkeypatch):
     )
 
     stream(ctx, ingester)
-    ingester.lifecycle.checkpoint("moved")
+    ingester.lifecycle.checkpoint(FakeOffset("moved"))
 
-    assert ctx.checkpoints == [{"offset": "moved"}]
+    assert [state["offset"].mark for state in ctx.checkpoints] == ["moved"]
     assert ctx.staged == []
+
+
+def test_a_flush_that_moves_the_offset_without_data_checkpoints_it(monkeypatch):
+    ctx = FakeCtx(
+        active_values=[True, False],
+        first_stage=False,
+        stream_state={"offset": "staged"},
+    )
+    disk = FakeDisk(manifest=[[]])
+    buffer = FakeBuffer(due=True, moves_to="moved")
+    patch_sentinels(monkeypatch, disk, buffer)
+
+    stream(ctx, OwnedOffsetIngester())
+
+    assert [state["offset"].mark for state in ctx.checkpoints] == ["moved"]
+    assert ctx.staged == []
+
+
+def test_a_flush_that_moves_nothing_checkpoints_nothing(monkeypatch):
+    ctx = FakeCtx(
+        active_values=[True, False],
+        first_stage=False,
+        stream_state={"offset": "staged"},
+    )
+    disk = FakeDisk(manifest=[[]])
+    patch_sentinels(monkeypatch, disk, FakeBuffer(due=True))
+
+    stream(ctx, OwnedOffsetIngester())
+
+    assert ctx.checkpoints == []
+
+
+def test_no_checkpoint_while_the_ledger_holds_unstaged_data(monkeypatch):
+    ctx = FakeCtx(
+        active_values=[True, False],
+        first_stage=False,
+        stream_state={"offset": "staged"},
+    )
+    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
+    patch_sentinels(monkeypatch, disk, FakeBuffer(due=True, moves_to="moved"))
+
+    stream(ctx, OwnedOffsetIngester())
+
+    assert ctx.checkpoints == []
+    assert ctx.staged == []
+
+
+def test_a_source_kept_checkpoint_invokes_the_state_callable():
+    ctx = FakeCtx(active_values=[], first_stage=False, stream_state={})
+    ingester = FakeIngester()
+    acknowledged = []
+    ingester.stage_state_marker = lambda: acknowledged.append("done")
+    run = run_of(ctx, ingester)
+
+    Plugin().checkpoint(run, FakeOffset("moved"))
+
+    assert acknowledged == ["done"]
+    assert ctx.checkpoints == []
+    assert run.recorded == "moved"
 
 
 def test_there_is_no_checkpoint_before_a_first_stage():
@@ -502,15 +573,10 @@ def test_there_is_no_checkpoint_before_a_first_stage():
     assert ctx.checkpoints == []
 
 
-@pytest.mark.parametrize(
-    ("ingester", "offset"),
-    [(OwnedOffsetIngester(), None), (FakeIngester(), "moved")],
-    ids=["no-offset", "source-owned-offset"],
-)
-def test_a_checkpoint_without_a_state_to_record_is_a_bug(ingester, offset):
+def test_a_checkpoint_without_an_offset_is_a_bug():
     ctx = FakeCtx(active_values=[], first_stage=False, stream_state={"x": 1})
     with pytest.raises(ConnStreamException) as raised:
-        Plugin().checkpoint(run_of(ctx, ingester), offset)
+        Plugin().checkpoint(run_of(ctx, OwnedOffsetIngester()), None)
     assert raised.value.api_error is ConnErrorCode.CONN_34
     assert ctx.checkpoints == []
 

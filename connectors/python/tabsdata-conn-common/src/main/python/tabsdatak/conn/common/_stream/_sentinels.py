@@ -167,24 +167,25 @@ class BufferSentinel[R, O: StreamOffset]:
         return count
 
     def add(self, record: R) -> None:
-        slot = self._encoder.slot(record)
-        if slot is None:
-            return
-        self._records[slot].append(record)
-        self._rows += 1
-        if self._measure_bytes:
-            self._bytes += self._encoder.size(record)
         if self._offset is None:
             raise ConnErrorCode.CONN_33.exception()
+        slot = self._encoder.slot(record)
+        if slot is not None:
+            self._records[slot].append(record)
+            self._rows += 1
+            if self._measure_bytes:
+                self._bytes += self._encoder.size(record)
         self._pending.append(self._encoder.offset(record))
         if self.due():
             self.flush()
 
     def due(self) -> bool:
+        if not self._pending:
+            return False
         rows_hit = self._max_rows is not None and self._rows >= self._max_rows
         bytes_hit = self._max_bytes is not None and self._bytes >= self._max_bytes
         time_hit = (self._clock() - self._last_flushed) >= self._max_secs
-        return self.has_data and (rows_hit or bytes_hit or time_hit)
+        return rows_hit or bytes_hit or time_hit
 
     def flush(self) -> None:
         for slot, records in self._records.items():

@@ -246,16 +246,24 @@ def _message(value: dict, offset: int, partition: int = 0):
     return message
 
 
-def _run(tmp_path, polls, *, active_calls, src_cfg=None):
+def _run(tmp_path, polls, *, active_calls, src_cfg=None, dlq_topic=None):
     from confluent_kafka import TopicPartition
 
     consumer = MagicMock()
     consumer.poll.side_effect = polls
     consumer.assignment.return_value = [TopicPartition("events", p) for p in range(8)]
+    producer = MagicMock()
+    producer.flush.return_value = 0
     ctx = _make_ctx(tmp_path, active_calls=active_calls)
+    ctx.first_stage = dlq_topic is None
     src_cfg = {"tabsdata.kafka.trigger.max_secs": unsafe_seconds(0)} | (src_cfg or {})
-    with patch("confluent_kafka.Consumer", return_value=consumer):
-        KafkaStreamSrcPlugin().run(ctx, _conn(), _src(src_cfg=src_cfg))
+    with (
+        patch("confluent_kafka.Consumer", return_value=consumer),
+        patch("confluent_kafka.Producer", return_value=producer),
+    ):
+        KafkaStreamSrcPlugin().run(
+            ctx, _conn(), _src(src_cfg=src_cfg, dlq_topic=dlq_topic)
+        )
     return ctx, consumer
 
 
@@ -308,6 +316,25 @@ def test_every_partition_read_is_committed(tmp_path):
 
     assert _staged_ids(ctx) == [[[1, 2, 3]]]
     assert _committed_offsets(consumer) == [{0: 12, 1: 21}]
+
+
+def test_a_run_of_dead_letters_alone_acknowledges_their_offsets(tmp_path):
+    bad = MagicMock()
+    bad.error.return_value = None
+    bad.value.return_value = b"not json"
+    bad.key.return_value = None
+    bad.timestamp.return_value = (0, 0)
+    bad.topic.return_value = "events"
+    bad.partition.return_value = 0
+    bad.offset.return_value = 41
+    polls = [bad, None]
+
+    ctx, consumer = _run(
+        tmp_path, polls, active_calls=[True, False], dlq_topic="events_dlq"
+    )
+
+    assert ctx.manifests == []
+    assert _committed_offsets(consumer) == [{0: 42}]
 
 
 def test_a_signalled_stop_stages_and_commits_nothing(tmp_path, monkeypatch):

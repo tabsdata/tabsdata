@@ -350,11 +350,33 @@ def buffer(
     )
 
 
-def test_a_record_without_a_slot_is_skipped(ledger: FileLedger):
+def test_a_record_without_a_slot_keeps_only_its_offset(ledger: FileLedger):
     sentinel = buffer(ledger, Clock(), max_rows=1)
     sentinel.add(Record(None, 1))
     assert sentinel.has_data is False
+    assert sentinel.due() is False
+    sentinel.flush()
     assert ids(ledger) == [[], []]
+    assert sentinel.offset.values == [1]
+
+
+def test_pending_offsets_alone_flush_on_time(ledger: FileLedger):
+    clock = Clock()
+    sentinel = buffer(ledger, clock, max_secs=5)
+    sentinel.add(Record(None, 1))
+    clock.now += 5
+    assert sentinel.due() is True
+    sentinel.flush()
+    assert ids(ledger) == [[], []]
+    assert sentinel.offset.values == [1]
+    assert sentinel.due() is False
+
+
+def test_an_empty_buffer_is_never_due(ledger: FileLedger):
+    clock = Clock()
+    sentinel = buffer(ledger, clock, max_secs=5)
+    clock.now += 50
+    assert sentinel.due() is False
 
 
 def test_records_stay_in_memory_below_every_threshold(ledger: FileLedger):
@@ -475,12 +497,12 @@ def test_offsets_are_applied_in_the_order_their_records_arrived(ledger: FileLedg
     assert offset.values == [1, 2, 3]
 
 
-def test_a_skipped_record_does_not_move_the_offset(ledger: FileLedger):
+def test_a_record_without_a_slot_still_moves_the_offset(ledger: FileLedger):
     offset = Trail()
     sentinel = buffer(ledger, Clock(), offset=offset)
     sentinel.add(Record(None, 1))
     sentinel.flush()
-    assert offset.values == []
+    assert offset.values == [1]
 
 
 def test_a_buffer_without_a_base_offset_rejects_its_first_record(ledger: FileLedger):
