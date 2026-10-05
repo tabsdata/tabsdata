@@ -19,6 +19,8 @@ import sqlalchemy.types as sa_types
 from sqlalchemy.dialects.postgresql import BYTEA, JSON, JSONB, OID, TEXT
 from sqlalchemy.types import LargeBinary, Text
 
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
@@ -944,11 +946,19 @@ def test_a_gap_failure_names_the_gap_to_accept(monkeypatch):
     assert accepted_gap("0/1F4-0/258") == (0x1F4, 0x258)
 
 
+class Recording(StreamLifecycle):
+    def __init__(self, checkpoints: list) -> None:
+        self.checkpoints = checkpoints
+
+    def checkpoint(self, offset) -> None:
+        self.checkpoints.append(offset)
+
+
 def test_the_accepted_gap_resumes_at_the_slot_and_records_it(monkeypatch):
     bi, cursor = _resume(monkeypatch, _identified(500), slot=(600, "reserved", 900))
     bi._accepted_gap = (500, 600)
     recorded = []
-    bi.watch_position(recorded.append)
+    bi.attach_lifecycle(Recording(recorded))
 
     bi.init_stream()
 
@@ -968,7 +978,6 @@ def test_another_gap_than_the_accepted_one_fails(monkeypatch, gap):
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_25
     cursor.start_replication.assert_not_called()
 
-
 # --- The slot's own moves ---------------------------------------------
 
 
@@ -987,7 +996,7 @@ def _attached(monkeypatch, *, staged: int, rows: list) -> tuple:
     answers = iter(rows)
     monkeypatch.setattr(bi, "_slot_row", lambda: next(answers))
     recorded = []
-    bi.watch_position(recorded.append)
+    bi.attach_lifecycle(Recording(recorded))
     return bi, recorded
 
 
@@ -1072,7 +1081,7 @@ def test_a_clean_stop_records_where_the_released_slot_ends(monkeypatch):
     monkeypatch.setattr(_cdc_impl.time, "sleep", lambda _: None)
     replicator, cursor = bi._replicator, bi._cursor
 
-    bi.settle()
+    bi.settle_offset()
 
     assert [o.lsn for o in recorded] == [170]
     replicator.close.assert_called_once()
@@ -1085,21 +1094,21 @@ def test_a_clean_stop_records_where_the_released_slot_ends(monkeypatch):
 )
 def test_a_clean_stop_records_nothing_it_cannot_tell_is_its_own(monkeypatch, rows):
     bi, recorded = _attached(monkeypatch, staged=100, rows=rows)
-    bi.settle()
+    bi.settle_offset()
     assert recorded == []
 
 
 def test_a_clean_stop_gives_up_on_a_slot_never_released(monkeypatch):
     bi, recorded = _attached(monkeypatch, staged=100, rows=[(150, PID)] * 3)
     monkeypatch.setattr(_cdc_impl, "SLOT_RELEASE_TIMEOUT_SECONDS", 0)
-    bi.settle()
+    bi.settle_offset()
     assert recorded == []
 
 
 def test_a_stream_never_attached_settles_nothing(monkeypatch):
     bi = _ingester_with_tables(["public.t"])
     monkeypatch.setattr(bi, "_slot_row", lambda: pytest.fail("slot read"))
-    bi.settle()
+    bi.settle_offset()
 
 
 # =====================================================================

@@ -123,7 +123,7 @@ class FakeIngester:
         self.commit_state_arg = None
         self.commit_state_marker = object()
         self.committed_offsets: list = []
-        self.checkpoint = None
+        self.lifecycle = None
         self.settled = 0
 
     def resume_offset(self, *, first_stage, stream_state):
@@ -133,10 +133,10 @@ class FakeIngester:
     def seed_offset(self, offset) -> None:
         self.seeded = offset
 
-    def watch_position(self, checkpoint) -> None:
-        self.checkpoint = checkpoint
+    def attach_lifecycle(self, lifecycle) -> None:
+        self.lifecycle = lifecycle
 
-    def settle(self) -> None:
+    def settle_offset(self) -> None:
         self.settled += 1
 
     def open_session(self, work_dir):
@@ -489,7 +489,7 @@ def test_stream_hands_the_ingester_a_checkpoint_that_records_state(monkeypatch):
     )
 
     stream(ctx, ingester)
-    ingester.checkpoint("moved")
+    ingester.lifecycle.checkpoint("moved")
 
     assert ctx.checkpoints == [{"offset": "moved"}]
     assert ctx.staged == []

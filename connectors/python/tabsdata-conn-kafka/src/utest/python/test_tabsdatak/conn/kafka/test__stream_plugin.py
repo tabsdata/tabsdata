@@ -152,7 +152,7 @@ def test_plugin_run_subscribes_to_topic(consumer_cls, tmp_path):
     plugin.run(ctx, _conn(), _src())
 
     consumer_cls.assert_called_once()
-    consumer.subscribe.assert_called_once_with(["events"])
+    assert consumer.subscribe.call_args.args == (["events"],)
     consumer.close.assert_called_once()
 
 
@@ -247,8 +247,11 @@ def _message(value: dict, offset: int, partition: int = 0):
 
 
 def _run(tmp_path, polls, *, active_calls, src_cfg=None):
+    from confluent_kafka import TopicPartition
+
     consumer = MagicMock()
     consumer.poll.side_effect = polls
+    consumer.assignment.return_value = [TopicPartition("events", p) for p in range(8)]
     ctx = _make_ctx(tmp_path, active_calls=active_calls)
     src_cfg = {"tabsdata.kafka.trigger.max_secs": unsafe_seconds(0)} | (src_cfg or {})
     with patch("confluent_kafka.Consumer", return_value=consumer):

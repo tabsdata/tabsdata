@@ -1144,7 +1144,7 @@ class Wal2JsonIngester(CdcIngester):
         self._recorded = max(self._recorded, offset.lsn)
         return super().commit_state(offset)
 
-    def settle(self) -> None:
+    def settle_offset(self) -> None:
         """Record where the slot ends up once this stream lets it go. The
         server releases it after applying every feedback message the
         stream sent, so its position then is final; releasing is the one
@@ -1169,7 +1169,7 @@ class Wal2JsonIngester(CdcIngester):
             if time.monotonic() >= deadline:
                 logger.warning(
                     "Replication slot %r was not released within %.0fs; its "
-                    "final position is not recorded",
+                    "final offset is not recorded",
                     self._replication_slot,
                     SLOT_RELEASE_TIMEOUT_SECONDS,
                 )
@@ -1207,11 +1207,11 @@ class Wal2JsonIngester(CdcIngester):
         self._record()
 
     def _record(self) -> None:
-        if self._slot_floor <= self._recorded or self._checkpoint is None:
+        if self._slot_floor <= self._recorded:
             return
         offset = self.base_offset()
         offset.lsn = self._slot_floor
-        self._checkpoint(offset)
+        self.lifecycle.checkpoint(offset)
         self._recorded = self._slot_floor
 
     def _slot_row(self) -> tuple[Any, Any] | None:

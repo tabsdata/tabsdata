@@ -15,6 +15,8 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
 
@@ -22,7 +24,7 @@ from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
 from tabsdatak.conn.kafka._stream_impl import (
     KafkaEncoder,
     KafkaIngester,
-    KafkaPosition,
+    KafkaOffset,
     KafkaRecord,
     build_kafka_configs,
 )
@@ -186,29 +188,29 @@ def test_compatibility_is_checked_against_the_first_record_of_a_run():
     assert [frame.height for frame in frames] == [3]
 
 
-# --- KafkaPosition --------------------------------------------------
+# --- KafkaOffset --------------------------------------------------
 
 
 def test_a_position_keeps_the_highest_offset_of_every_partition():
-    position = KafkaPosition({"evt": {0: 5, 1: 9}})
-    position.update(KafkaPosition({"evt": {0: 7, 1: 3, 2: 1}, "other": {0: 2}}))
+    position = KafkaOffset({"evt": {0: 5, 1: 9}})
+    position.update(KafkaOffset({"evt": {0: 7, 1: 3, 2: 1}, "other": {0: 2}}))
     assert position.offsets == {"evt": {0: 7, 1: 9, 2: 1}, "other": {0: 2}}
 
 
 def test_a_position_after_a_message_points_past_it():
-    position = KafkaPosition.after(_message({"a": 1}, offset=7, partition=2))
+    position = KafkaOffset.after(_message({"a": 1}, offset=7, partition=2))
     assert position.offsets == {"evt": {2: 8}}
 
 
 def test_a_position_is_written_as_a_topic_partition_map():
-    position = KafkaPosition({"evt": {3: 17, 0: 42}})
+    position = KafkaOffset({"evt": {3: 17, 0: 42}})
     assert json.loads(position.write()) == {"evt": {"0": 42, "3": 17}}
-    assert KafkaPosition().write() == "{}"
+    assert KafkaOffset().write() == "{}"
 
 
 def test_a_written_position_reads_back_equal():
-    position = KafkaPosition({"evt": {0: 42, 3: 17}, "other": {1: 0}})
-    assert KafkaPosition.read(position.write()).offsets == position.offsets
+    position = KafkaOffset({"evt": {0: 42, 3: 17}, "other": {1: 0}})
+    assert KafkaOffset.read(position.write()).offsets == position.offsets
 
 
 @pytest.mark.parametrize(
@@ -226,7 +228,7 @@ def test_a_written_position_reads_back_equal():
 )
 def test_a_malformed_state_raises_kafka_25(state):
     with pytest.raises(TabsdataException) as raised:
-        KafkaPosition.read(state)
+        KafkaOffset.read(state)
     assert raised.value.api_error is KafkaErrorCode.KAFKA_25
 
 
@@ -249,17 +251,42 @@ def _ingester(*, dlq_topic=None, poll_max_secs=2) -> KafkaIngester:
 
 
 def _opened(consumer, tmp_path, **kwargs) -> KafkaIngester:
+    from confluent_kafka import TopicPartition
+
+    consumer.assignment.return_value = [TopicPartition("evt", p) for p in range(4)]
     ingester = _ingester(**kwargs)
     with patch("confluent_kafka.Consumer", return_value=consumer):
         assert ingester.open_session(tmp_path) is consumer
     return ingester
 
 
+class Settling(StreamLifecycle):
+    def __init__(self) -> None:
+        self.settled = 0
+
+    def settle(self) -> None:
+        self.settled += 1
+
+
+def _retriable(reason: str):
+    from confluent_kafka import KafkaError, KafkaException
+
+    return KafkaException(KafkaError(KafkaError._TRANSPORT, reason, False, True))
+
+
+def _final(reason: str):
+    from confluent_kafka import KafkaError, KafkaException
+
+    return KafkaException(
+        KafkaError(KafkaError.UNKNOWN_MEMBER_ID, reason, False, False)
+    )
+
+
 def test_opening_a_session_subscribes_to_the_topic(tmp_path):
     consumer = MagicMock()
     _opened(consumer, tmp_path)
     consumer.list_topics.assert_called_once_with(timeout=16)
-    consumer.subscribe.assert_called_once_with(["evt"])
+    assert consumer.subscribe.call_args.args == (["evt"],)
 
 
 def test_an_unreachable_broker_raises_kafka_6(tmp_path):
@@ -442,7 +469,7 @@ def _committed(consumer) -> list[tuple[str, int, int]]:
 def test_the_commit_state_commits_every_partition_staged(tmp_path):
     consumer = MagicMock()
     ingester = _opened(consumer, tmp_path)
-    position = KafkaPosition({"evt": {0: 5, 2: 3}})
+    position = KafkaOffset({"evt": {0: 5, 2: 3}})
 
     ingester.commit_state(position)()
 
@@ -452,10 +479,10 @@ def test_the_commit_state_commits_every_partition_staged(tmp_path):
 def test_the_commit_state_commits_what_was_staged_when_it_was_taken(tmp_path):
     consumer = MagicMock()
     ingester = _opened(consumer, tmp_path)
-    position = KafkaPosition({"evt": {0: 2}})
+    position = KafkaOffset({"evt": {0: 2}})
 
     commit = ingester.commit_state(position)
-    position.update(KafkaPosition({"evt": {0: 3, 1: 1}}))
+    position.update(KafkaOffset({"evt": {0: 3, 1: 1}}))
     commit()
 
     assert _committed(consumer) == [("evt", 0, 2)]
@@ -464,8 +491,121 @@ def test_the_commit_state_commits_what_was_staged_when_it_was_taken(tmp_path):
 def test_a_commit_state_without_offsets_commits_nothing(tmp_path):
     consumer = MagicMock()
     ingester = _opened(consumer, tmp_path)
-    ingester.commit_state(KafkaPosition())()
+    ingester.commit_state(KafkaOffset())()
     consumer.commit.assert_not_called()
+
+
+def test_only_the_partitions_still_owned_are_acknowledged(tmp_path):
+    from confluent_kafka import TopicPartition
+
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    consumer.assignment.return_value = [TopicPartition("evt", 2)]
+
+    ingester.commit_state(KafkaOffset({"evt": {0: 5, 2: 3}}))()
+
+    assert _committed(consumer) == [("evt", 2, 3)]
+
+
+def test_nothing_is_acknowledged_when_no_partition_is_owned_any_more(tmp_path):
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    consumer.assignment.return_value = []
+    ingester.commit_state(KafkaOffset({"evt": {0: 5}}))()
+    consumer.commit.assert_not_called()
+
+
+def test_a_retriable_acknowledgement_error_is_retried(tmp_path):
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    consumer.commit.side_effect = [_retriable("broker away"), None]
+
+    with patch("tabsdatak.conn.kafka._stream_impl.time.sleep") as sleep:
+        ingester.commit_state(KafkaOffset({"evt": {0: 5}}))()
+
+    assert consumer.commit.call_count == 2
+    sleep.assert_called_once_with(1)
+
+
+def test_an_acknowledgement_that_keeps_failing_stops_the_stream(tmp_path):
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    consumer.commit.side_effect = _retriable("broker away")
+
+    with (
+        patch("tabsdatak.conn.kafka._stream_impl.time.sleep"),
+        pytest.raises(TabsdataException) as raised,
+    ):
+        ingester.commit_state(KafkaOffset({"evt": {0: 5}}))()
+
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_30
+    assert consumer.commit.call_count == 3
+
+
+def test_a_final_acknowledgement_error_is_not_retried(tmp_path):
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    consumer.commit.side_effect = _final("not a member")
+
+    with pytest.raises(TabsdataException) as raised:
+        ingester.commit_state(KafkaOffset({"evt": {0: 5}}))()
+
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_30
+    assert consumer.commit.call_count == 1
+
+
+def test_the_subscription_listens_for_revoked_and_lost_partitions(tmp_path):
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    kwargs = consumer.subscribe.call_args.kwargs
+    assert consumer.subscribe.call_args.args == (["evt"],)
+    assert kwargs["on_revoke"] == ingester.partitions_revoked
+    assert kwargs["on_lost"] == ingester.partitions_lost
+
+
+def test_a_revocation_settles_everything_pending(tmp_path):
+    from confluent_kafka import TopicPartition
+
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    lifecycle = Settling()
+    ingester.attach_lifecycle(lifecycle)
+
+    ingester.partitions_revoked(consumer, [TopicPartition("evt", 1)])
+
+    assert lifecycle.settled == 1
+
+
+def test_a_revocation_while_closing_settles_nothing(tmp_path):
+    from confluent_kafka import TopicPartition
+
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    lifecycle = Settling()
+    ingester.attach_lifecycle(lifecycle)
+    consumer.close.side_effect = lambda: ingester.partitions_revoked(
+        consumer, [TopicPartition("evt", 1)]
+    )
+
+    ingester.close_session(consumer)
+
+    assert lifecycle.settled == 0
+
+
+def test_losing_partitions_stops_the_stream_without_staging(tmp_path):
+    from confluent_kafka import TopicPartition
+
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+    lifecycle = Settling()
+    ingester.attach_lifecycle(lifecycle)
+
+    with pytest.raises(TabsdataException) as raised:
+        ingester.partitions_lost(consumer, [TopicPartition("evt", 1)])
+
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_31
+    assert "('evt', 1)" in str(raised.value)
+    assert lifecycle.settled == 0
 
 
 def _with_dlq(consumer, tmp_path) -> tuple[KafkaIngester, MagicMock]:
@@ -522,7 +662,7 @@ def test_the_commit_settles_the_dead_letter_topic_before_committing(tmp_path):
     producer.flush.side_effect = lambda timeout: order.append(("flush", timeout)) or 0
     consumer.commit.side_effect = lambda **_: order.append(("commit", None))
 
-    ingester.commit_state(KafkaPosition({"evt": {0: 2}}))()
+    ingester.commit_state(KafkaOffset({"evt": {0: 2}}))()
 
     assert order == [("flush", 16), ("commit", None)]
 
@@ -533,7 +673,7 @@ def test_an_undelivered_dead_letter_message_stops_the_commit(tmp_path):
     producer.flush.return_value = 1
 
     with pytest.raises(TabsdataException) as raised:
-        ingester.commit_state(KafkaPosition({"evt": {0: 2}}))()
+        ingester.commit_state(KafkaOffset({"evt": {0: 2}}))()
 
     assert raised.value.api_error is KafkaErrorCode.KAFKA_29
     consumer.commit.assert_not_called()
@@ -549,7 +689,7 @@ def test_a_failed_dead_letter_delivery_stops_the_commit(tmp_path):
 
     assert list(ingester.poll_changes(consumer)) == []
     with pytest.raises(TabsdataException) as raised:
-        ingester.commit_state(KafkaPosition({"evt": {0: 10}}))()
+        ingester.commit_state(KafkaOffset({"evt": {0: 10}}))()
 
     assert raised.value.api_error is KafkaErrorCode.KAFKA_29
     assert "offset 9 of partition 0 of topic 'evt': Unknown topic" in str(
@@ -618,6 +758,20 @@ def test_build_kafka_configs_force_auto_commit_off():
     cfg = build_kafka_configs(conn=conn)
     assert cfg["enable.auto.commit"] is False
     assert cfg["auto.offset.reset"] == "earliest"
+
+
+def test_build_kafka_configs_rebalances_cooperatively_by_default():
+    cfg = build_kafka_configs(conn=KafkaStreamSrcConn(servers="a:9092", group_id="g"))
+    assert cfg["partition.assignment.strategy"] == "cooperative-sticky"
+
+
+def test_build_kafka_configs_keeps_the_assignment_strategy_given():
+    conn = KafkaStreamSrcConn(
+        servers="a:9092",
+        group_id="g",
+        conn_cfg={"partition.assignment.strategy": "range"},
+    )
+    assert build_kafka_configs(conn=conn)["partition.assignment.strategy"] == "range"
 
 
 def test_build_kafka_configs_conn_cfg_overrides_pass_through():

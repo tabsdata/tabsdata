@@ -16,6 +16,7 @@ from tabsdatak.conn.common._stream._config import StreamRunConfig
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
 from tabsdatak.conn.common._stream._ingester import StreamIngester
 from tabsdatak.conn.common._stream._ledger import FileLedger
+from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
 from tabsdatak.conn.common._stream._offset import StreamOffset
 from tabsdatak.conn.common._stream._sentinels import BufferSentinel, DiskSentinel
 from tabsdatak.conn.common._stream._signal import StopSignal
@@ -41,6 +42,35 @@ class StreamRun[R, O: StreamOffset]:
     stop_signal: StopSignal
     session: Any = None
     slots: list[str] = field(default_factory=list)
+
+
+class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
+    def __init__(self, plugin: PipelineStreamSrcPlugin, run: StreamRun[R, O]):
+        self.plugin = plugin
+        self.run = run
+        self.ledger: FileLedger | None = None
+        self.disk: DiskSentinel | None = None
+        self.buffer: BufferSentinel[R, O] | None = None
+
+    def arm(
+        self,
+        ledger: FileLedger,
+        disk: DiskSentinel,
+        buffer: BufferSentinel[R, O],
+    ) -> None:
+        self.ledger = ledger
+        self.disk = disk
+        self.buffer = buffer
+
+    def checkpoint(self, offset: O) -> None:
+        self.plugin.checkpoint(self.run, offset)
+
+    def settle(self) -> None:
+        if self.buffer is None:
+            return
+        self.buffer.flush()
+        if self.disk.due(force=True):
+            self.plugin.publish(self.run, self.ledger, self.disk, self.buffer)
 
 
 class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
@@ -133,7 +163,8 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         cfg = run.cfg
         try:
             self.seed(run)
-            ingester.watch_position(lambda offset: self.checkpoint(run, offset))
+            lifecycle = RunLifecycle(self, run)
+            ingester.attach_lifecycle(lifecycle)
             run.session = ingester.open_session(ctx.work_dir)
             run.slots = list(self.slots(run))
             if not self.before_stream(run):
@@ -159,6 +190,8 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                 max_secs=manifest_secs(cfg.trigger_max_secs, flush_interval_secs),
                 clock=self.clock,
             )
+
+            lifecycle.arm(ledger, disk_sentinel, buffer_sentinel)
 
             buffer_sentinel.reset_timer()
             disk_sentinel.reset_timer()
@@ -189,7 +222,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                     self.publish(run, ledger, disk_sentinel, buffer_sentinel)
             if run.session is not None:
                 if not errored:
-                    self.settle(run)
+                    self.settle_offset(run)
                 ingester.close_session(run.session)
 
     def publish(
@@ -223,10 +256,10 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             )
         run.ctx.checkpoint(state)
 
-    def settle(self, run: StreamRun[R, O]) -> None:
+    def settle_offset(self, run: StreamRun[R, O]) -> None:
         try:
-            run.ingester.settle()
+            run.ingester.settle_offset()
         except Exception as exception:
             logger.warning(
-                f"Could not record the final position of the stream: {exception}"
+                f"Could not record the final offset of the stream: {exception}"
             )

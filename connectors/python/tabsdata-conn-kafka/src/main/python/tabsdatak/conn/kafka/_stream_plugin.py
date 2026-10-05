@@ -57,7 +57,7 @@ from tabsdatak.conn.kafka._stream_impl import (
     DEFAULT_CONNECT_TIMEOUT_SECS,
     KafkaEncoder,
     KafkaIngester,
-    KafkaPosition,
+    KafkaOffset,
     KafkaRecord,
 )
 from tabsdatak.spi import (
@@ -114,7 +114,7 @@ def _build_kafka_run_config(src: KafkaStreamSrc) -> KafkaRunConfig:
 
 class KafkaStreamSrcPlugin(
     PipelineStreamSrcPlugin[
-        KafkaStreamSrcConn, KafkaStreamSrc, KafkaRecord, KafkaPosition
+        KafkaStreamSrcConn, KafkaStreamSrc, KafkaRecord, KafkaOffset
     ]
 ):
     """Wires a :class:`KafkaStreamSrc` to the shared stream pipeline."""
@@ -135,10 +135,10 @@ class KafkaStreamSrcPlugin(
             connect_timeout_secs=cfg.connect_timeout_secs,
         )
 
-    def slots(self, run: StreamRun[KafkaRecord, KafkaPosition]) -> Sequence[str]:
+    def slots(self, run: StreamRun[KafkaRecord, KafkaOffset]) -> Sequence[str]:
         return [run.ingester.topic]
 
-    def build_encoder(self, run: StreamRun[KafkaRecord, KafkaPosition]) -> KafkaEncoder:
+    def build_encoder(self, run: StreamRun[KafkaRecord, KafkaOffset]) -> KafkaEncoder:
         return KafkaEncoder(run.ingester.topic, run.ingester.schema_id_compatibles())
 
 

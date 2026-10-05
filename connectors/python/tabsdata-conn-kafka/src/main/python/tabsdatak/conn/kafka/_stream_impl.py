@@ -66,8 +66,12 @@ _SASL_MECHANISM_KEY = "sasl.mechanism"
 _SASL_USERNAME_KEY = "sasl.username"
 _SASL_PASSWORD_KEY = "sasl.password"
 _GROUP_ID_KEY = "group.id"
+ASSIGNMENT_STRATEGY_KEY = "partition.assignment.strategy"
 
 DEFAULT_CONNECT_TIMEOUT_SECS = 16
+DEFAULT_ASSIGNMENT_STRATEGY = "cooperative-sticky"
+ACKNOWLEDGE_ATTEMPTS = 3
+ACKNOWLEDGE_RETRY_SECS = 1
 
 
 @dataclass(frozen=True)
@@ -78,7 +82,7 @@ class KafkaRecord:
     message: Message
 
 
-class KafkaPosition(StreamOffset):
+class KafkaOffset(StreamOffset):
     def __init__(self, offsets: dict[str, dict[int, int]] | None = None) -> None:
         self.offsets: dict[str, dict[int, int]] = {
             topic: dict(partitions) for topic, partitions in (offsets or {}).items()
@@ -137,7 +141,7 @@ class KafkaPosition(StreamOffset):
         ]
 
 
-class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaPosition]):
+class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaOffset]):
     def __init__(self, topic: str, compatible: SchemaIdCompatibles):
         self._topic = topic
         self._compatible = compatible
@@ -148,8 +152,8 @@ class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaPosition]):
     def size(self, record: KafkaRecord) -> int:
         return record.size
 
-    def offset(self, record: KafkaRecord) -> KafkaPosition:
-        return KafkaPosition.after(record.message)
+    def offset(self, record: KafkaRecord) -> KafkaOffset:
+        return KafkaOffset.after(record.message)
 
     def encode(self, slot: str, records: list[KafkaRecord]) -> Iterator[pa.Table]:
         by_topic: dict[str, list[KafkaRecord]] = {}
@@ -176,7 +180,7 @@ class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaPosition]):
         )
 
 
-class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
+class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
     def __init__(
         self,
         *,
@@ -214,7 +218,11 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
                 cause=exc,
                 servers=kafka_configs.get(_BOOTSTRAP_SERVERS_KEY),
             )
-        consumer.subscribe([self.topic])
+        consumer.subscribe(
+            [self.topic],
+            on_revoke=self.partitions_revoked,
+            on_lost=self.partitions_lost,
+        )
         self._consumer = consumer
 
         self._dlq_producer = self.build_dlq_producer(kafka_configs)
@@ -255,7 +263,31 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
                 servers=kafka_configs.get(_BOOTSTRAP_SERVERS_KEY),
             )
 
+    def partitions_revoked(
+        self,
+        consumer: Consumer,
+        partitions: list[TopicPartition],
+    ) -> None:
+        if self._consumer is None:
+            return
+        logger.info(
+            "The partitions %s are being revoked; staging and acknowledging "
+            "everything pending first",
+            [(tp.topic, tp.partition) for tp in partitions],
+        )
+        self.lifecycle.settle()
+
+    def partitions_lost(
+        self,
+        consumer: Consumer,
+        partitions: list[TopicPartition],
+    ) -> None:
+        raise KafkaErrorCode.KAFKA_31.exception(
+            partitions=[(tp.topic, tp.partition) for tp in partitions],
+        )
+
     def close_session(self, session: Consumer) -> None:
+        self._consumer = None
         try:
             session.close()
         except Exception as exc:  # pragma: no cover
@@ -273,28 +305,52 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
                         remaining,
                     )
 
-    def base_offset(self) -> KafkaPosition:
-        return KafkaPosition()
+    def base_offset(self) -> KafkaOffset:
+        return KafkaOffset()
 
     def resume_offset(
         self,
         *,
         first_stage: bool,
         stream_state: dict | None,
-    ) -> KafkaPosition | None:
+    ) -> KafkaOffset | None:
         return None
 
-    def commit_state(self, offset: KafkaPosition) -> StreamStateSpec:
+    def commit_state(self, offset: KafkaOffset) -> StreamStateSpec:
         partitions = offset.topic_partitions()
-        return lambda: self.commit(partitions)
+        return lambda: self.acknowledge_offsets(partitions)
 
-    def commit_offset(self, offset: KafkaPosition) -> None:
+    def commit_offset(self, offset: KafkaOffset) -> None:
         pass
 
-    def commit(self, partitions: list[TopicPartition]) -> None:
+    def acknowledge_offsets(self, partitions: list[TopicPartition]) -> None:
+        from confluent_kafka import KafkaException
+
         self.settle_dead_letters()
-        if partitions:
-            self._consumer.commit(offsets=partitions, asynchronous=False)
+        owned = {(tp.topic, tp.partition) for tp in self._consumer.assignment()}
+        offsets = [tp for tp in partitions if (tp.topic, tp.partition) in owned]
+        if not offsets:
+            return
+        for attempt in range(1, ACKNOWLEDGE_ATTEMPTS + 1):
+            try:
+                self._consumer.commit(offsets=offsets, asynchronous=False)
+                return
+            except KafkaException as exc:
+                error = exc.args[0]
+                if attempt == ACKNOWLEDGE_ATTEMPTS or not error.retriable():
+                    raise KafkaErrorCode.KAFKA_30.exception(
+                        cause=exc,
+                        attempts=attempt,
+                        error=error,
+                    )
+                logger.warning(
+                    "The acknowledgement of the offsets failed on attempt %s of "
+                    "%s and will be retried: %s",
+                    attempt,
+                    ACKNOWLEDGE_ATTEMPTS,
+                    error,
+                )
+                time.sleep(ACKNOWLEDGE_RETRY_SECS)
 
     def settle_dead_letters(self) -> None:
         if self._dlq_producer is None:
@@ -440,6 +496,7 @@ def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:
     cfg[_BOOTSTRAP_SERVERS_KEY] = conn._servers()
     cfg[_AUTO_OFFSET_RESET_KEY] = "earliest"
     cfg[_ENABLE_AUTO_COMMIT_KEY] = False
+    cfg.setdefault(ASSIGNMENT_STRATEGY_KEY, DEFAULT_ASSIGNMENT_STRATEGY)
     if conn.credentials is not None:
         cfg[_SECURITY_PROTOCOL_KEY] = "sasl_plaintext"
         cfg[_SASL_MECHANISM_KEY] = "SCRAM-SHA-256"

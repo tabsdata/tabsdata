@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
 from tabsdatak.conn.common._stream._offset import StreamOffset
 from tabsdatak.spi import StreamStateSpec
 
@@ -18,7 +19,7 @@ class StreamIngester[R, O: StreamOffset](ABC):
         # Resume mark seeded by :meth:`seed_offset` before the stream
         # opens; subclasses retype it to their concrete offset class.
         self._mark: O | None = None
-        self._checkpoint: Callable[[O], None] | None = None
+        self.lifecycle: StreamLifecycle[O] = StreamLifecycle()
 
     def open_session(self, work_dir: Path) -> Any: ...
 
@@ -45,18 +46,21 @@ class StreamIngester[R, O: StreamOffset](ABC):
         stream_state: dict | None,
     ) -> O | None: ...
 
-    def watch_position(self, checkpoint: Callable[[O], None]) -> None:
-        """Hand the ingester what records a resume offset between stages.
-        An ingester whose source moves the stream's position on by itself,
-        past data with nothing to stage, reports each move through it, so
-        the recorded offset keeps up with the source's. Called before
+    def attach_lifecycle(self, lifecycle: StreamLifecycle[O]) -> None:
+        """Hand the ingester the run's lifecycle: what it raises events
+        toward. An ingester whose source moves the stream's offset on by
+        itself, past data with nothing to stage, reports each move through
+        ``lifecycle.checkpoint``, so the recorded offset keeps up with the
+        source's; one whose source takes work away from it (a Kafka
+        partition revoked) asks for everything pending to be staged and
+        acknowledged through ``lifecycle.settle``. Called before
         :meth:`open_session`."""
-        self._checkpoint = checkpoint
+        self.lifecycle = lifecycle
 
-    def settle(self) -> None:
+    def settle_offset(self) -> None:
         """Called on a clean stop, after the last stage and before
-        :meth:`close_session`: report any move of the stream's position
-        not recorded yet through the :meth:`watch_position` checkpoint."""
+        :meth:`close_session`: report any move of the stream's offset
+        not recorded yet through ``lifecycle.checkpoint``."""
 
     def seed_offset(self, offset: O | None) -> None:
         """Seed the resume mark before the stream opens, so

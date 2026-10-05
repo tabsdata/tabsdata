@@ -13,6 +13,9 @@ import pytest
 from tabsdatak.conn.common._stream._ingester import StreamIngester
 
 # noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._offset import StreamOffset
 
 
@@ -80,10 +83,9 @@ def test_an_ingester_missing_a_contract_method_cannot_be_built():
         Partial()
 
 
-def test_an_ingester_starts_with_no_mark_and_no_checkpoint():
+def test_an_ingester_starts_with_no_mark():
     ingester = CounterIngester()
     assert ingester._mark is None
-    assert ingester._checkpoint is None
 
 
 def test_seeding_an_offset_sets_the_mark():
@@ -101,20 +103,34 @@ def test_seeding_none_leaves_the_mark_untouched():
     assert ingester._mark is offset
 
 
-def test_watching_the_position_keeps_the_checkpoint():
+class Recording(StreamLifecycle[Counter]):
+    def __init__(self) -> None:
+        self.checkpoints: list[Counter] = []
+
+    def checkpoint(self, offset: Counter) -> None:
+        self.checkpoints.append(offset)
+
+
+def test_an_ingester_starts_with_a_lifecycle_that_takes_no_notice():
     ingester = CounterIngester()
-    recorded: list[Counter] = []
-    ingester.watch_position(recorded.append)
-    ingester._checkpoint(Counter(5))
-    assert [offset.value for offset in recorded] == [5]
+    ingester.lifecycle.checkpoint(Counter(5))
+    ingester.lifecycle.settle()
+
+
+def test_attaching_a_lifecycle_routes_the_checkpoints_to_it():
+    ingester = CounterIngester()
+    lifecycle = Recording()
+    ingester.attach_lifecycle(lifecycle)
+    ingester.lifecycle.checkpoint(Counter(5))
+    assert [offset.value for offset in lifecycle.checkpoints] == [5]
 
 
 def test_settling_by_default_records_nothing():
     ingester = CounterIngester()
-    recorded: list[Counter] = []
-    ingester.watch_position(recorded.append)
-    ingester.settle()
-    assert recorded == []
+    lifecycle = Recording()
+    ingester.attach_lifecycle(lifecycle)
+    ingester.settle_offset()
+    assert lifecycle.checkpoints == []
 
 
 def test_opening_a_session_by_default_returns_none():
