@@ -347,8 +347,8 @@ class KafkaStreamSrc(StreamSrc):
             messages, default 2), `kafka.connect_timeout_secs` (default
             16), `kafka.logging_level`, the buffer limits
             `tabsdata.kafka.buffer.max_rows` (default 10000),
-            `tabsdata.kafka.buffer.max_bytes` (raw payload bytes, off by
-            default) and
+            `tabsdata.kafka.buffer.max_bytes` (memory the decoded records
+            hold, default 134217728, 128 MiB) and
             `tabsdata.kafka.buffer.max_secs` (default 60), and the
             trigger limits `tabsdata.kafka.trigger.max_secs` (default
             60, at least 60), `tabsdata.kafka.trigger.max_rows` and

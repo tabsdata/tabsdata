@@ -9,6 +9,7 @@ live in the integration tests."""
 from __future__ import annotations
 
 import json
+import sys
 import time
 from unittest.mock import MagicMock, patch
 
@@ -74,16 +75,16 @@ def _record(
     value: dict,
     *,
     offset: int = 0,
+    partition: int = 0,
     topic: str = "evt",
     schema_id=None,
 ) -> KafkaRecord:
-    message = _message(value, offset=offset)
-    message.topic.return_value = topic
     return KafkaRecord(
         value=value,
         schema_id=schema_id if schema_id is not None else tuple(sorted(value)),
-        size=10,
-        message=message,
+        topic=topic,
+        partition=partition,
+        offset=offset,
     )
 
 
@@ -103,8 +104,16 @@ def test_every_record_goes_to_the_topic_slot():
     assert encoder.slot(_record({"a": 1})) == "evt"
 
 
-def test_a_record_size_is_its_payload_size():
-    assert KafkaEncoder("evt", _allow_subset).size(_record({"a": 1})) == 10
+def test_a_record_size_is_the_memory_its_value_holds():
+    encoder = KafkaEncoder("evt", _allow_subset)
+    small, large = _record({"a": "x"}), _record({"a": "x" * 1000})
+    assert encoder.size(small) == sys.getsizeof(small)
+    assert encoder.size(large) - encoder.size(small) == (
+        sys.getsizeof("x" * 1000) - sys.getsizeof("x")
+    )
+    assert encoder.size(_record({"a": 1})) > encoder.size(
+        KafkaRecord(value=None, schema_id=None, topic="evt", partition=0, offset=0)
+    )
 
 
 def test_a_record_offset_is_the_next_offset_of_its_partition():
@@ -204,7 +213,7 @@ def test_a_position_keeps_the_highest_offset_of_every_partition():
 
 
 def test_a_position_after_a_message_points_past_it():
-    position = KafkaOffset.after(_message({"a": 1}, offset=7, partition=2))
+    position = KafkaOffset.after(_record({"a": 1}, offset=7, partition=2))
     assert position.offsets == {"evt": {2: 8}}
 
 
@@ -253,6 +262,7 @@ def _ingester(*, dlq_topic=None, poll_max_secs=2, conn_cfg=None) -> KafkaIngeste
         ),
         poll_max_secs=poll_max_secs,
         connect_timeout_secs=16,
+        consume_max_messages=1000,
     )
 
 
@@ -312,23 +322,27 @@ def test_an_unreachable_broker_raises_kafka_6(tmp_path):
 def test_polling_yields_the_decoded_messages_until_none_arrives(tmp_path):
     consumer = MagicMock()
     first, second = _message({"a": 1}, offset=1), _message({"a": 2}, offset=2)
-    consumer.poll.side_effect = [first, second, None]
+    consumer.consume.side_effect = [[first, second], []]
     ingester = _opened(consumer, tmp_path)
 
     records = list(ingester.poll_changes(consumer))
 
     assert [record.value for record in records] == [{"a": 1}, {"a": 2}]
-    assert [record.message for record in records] == [first, second]
-    assert records[0].size == len(first.value())
+    assert [(record.topic, record.partition, record.offset) for record in records] == [
+        ("evt", 0, 1),
+        ("evt", 0, 2),
+    ]
+    assert consumer.consume.call_args.kwargs["num_messages"] == 1000
+    assert len(ingester._contexts) == 1
 
 
 def test_polling_stops_once_the_poll_max_secs_elapse(tmp_path):
     consumer = MagicMock()
-    consumer.poll.return_value = _message({"a": 1})
+    consumer.consume.return_value = [_message({"a": 1})]
     ingester = _opened(consumer, tmp_path, poll_max_secs=0)
 
     assert list(ingester.poll_changes(consumer)) == []
-    consumer.poll.assert_not_called()
+    consumer.consume.assert_not_called()
 
 
 def _broker_error(fatal: bool = False):
@@ -341,7 +355,7 @@ def _broker_error(fatal: bool = False):
 def test_a_broker_error_is_logged_and_polling_goes_on(tmp_path, caplog):
     consumer = MagicMock()
     good = _message({"a": 1})
-    consumer.poll.side_effect = [_broker_error(), good, None]
+    consumer.consume.side_effect = [[_broker_error(), good], []]
     producer = MagicMock()
     with patch("confluent_kafka.Producer", return_value=producer):
         ingester = _opened(consumer, tmp_path, dlq_topic="evt_dlq")
@@ -356,7 +370,7 @@ def test_a_broker_error_is_logged_and_polling_goes_on(tmp_path, caplog):
 
 def test_a_fatal_broker_error_fails_the_run(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_broker_error(fatal=True)]
+    consumer.consume.side_effect = [[_broker_error(fatal=True)], []]
     ingester = _opened(consumer, tmp_path)
 
     with pytest.raises(TabsdataException) as raised:
@@ -368,7 +382,7 @@ def test_undecodable_messages_go_to_the_dlq(tmp_path):
     consumer = MagicMock()
     garbled = _message(raw=b"not json")
     good = _message({"a": 1})
-    consumer.poll.side_effect = [garbled, good, None]
+    consumer.consume.side_effect = [[garbled, good], []]
     producer = MagicMock()
     with patch("confluent_kafka.Producer", return_value=producer):
         ingester = _opened(consumer, tmp_path, dlq_topic="evt_dlq")
@@ -376,20 +390,20 @@ def test_undecodable_messages_go_to_the_dlq(tmp_path):
     records = list(ingester.poll_changes(consumer))
 
     assert [record.value for record in records] == [None, {"a": 1}]
-    assert records[0].message is garbled
+    assert records[0].offset == garbled.offset()
     assert producer.produce.call_count == 1
     assert producer.produce.call_args.kwargs["topic"] == "evt_dlq"
 
 
 def test_a_dead_letter_message_leaves_a_position_only_record(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message(raw=b"bad", offset=6, partition=2), None]
+    consumer.consume.side_effect = [[_message(raw=b"bad", offset=6, partition=2)], []]
     ingester, _ = _with_dlq(consumer, tmp_path)
 
     (record,) = ingester.poll_changes(consumer)
     encoder = KafkaEncoder("evt", _allow_subset)
 
-    assert record.value is None and record.schema_id is None and record.size == 0
+    assert record.value is None and record.schema_id is None
     assert encoder.slot(record) is None
     assert encoder.offset(record).offsets == {"evt": {2: 7}}
 
@@ -408,7 +422,7 @@ def test_a_registry_outage_stops_the_stream_without_committing(tmp_path):
     from confluent_kafka.schema_registry.error import SchemaRegistryError
 
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message({"a": 1}, offset=7, partition=2), None]
+    consumer.consume.side_effect = [[_message({"a": 1}, offset=7, partition=2)], []]
     producer = MagicMock()
     with patch("confluent_kafka.Producer", return_value=producer):
         ingester = _opened(consumer, tmp_path, dlq_topic="evt_dlq")
@@ -425,7 +439,7 @@ def test_a_registry_outage_stops_the_stream_without_committing(tmp_path):
 
 def test_a_glue_resolution_failure_is_retryable(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message({"a": 1}), None]
+    consumer.consume.side_effect = [[_message({"a": 1})], []]
     ingester = _opened(consumer, tmp_path)
     _decoding(
         ingester,
@@ -439,7 +453,7 @@ def test_a_glue_resolution_failure_is_retryable(tmp_path):
 
 def test_a_wrapped_network_error_is_retryable(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message({"a": 1}), None]
+    consumer.consume.side_effect = [[_message({"a": 1})], []]
     ingester = _opened(consumer, tmp_path)
     wrapped = ValueError("decode failed")
     wrapped.__cause__ = ConnectionError("registry unreachable")
@@ -452,7 +466,7 @@ def test_a_wrapped_network_error_is_retryable(tmp_path):
 
 def test_an_undecodable_message_without_a_dlq_stops_the_stream(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message(raw=b"not json", offset=3), None]
+    consumer.consume.side_effect = [[_message(raw=b"not json", offset=3)], []]
     ingester = _opened(consumer, tmp_path)
 
     with pytest.raises(TabsdataException) as raised:
@@ -465,7 +479,7 @@ def test_an_undecodable_message_without_a_dlq_stops_the_stream(tmp_path):
 
 def test_a_schema_violation_is_a_format_error_for_the_dlq(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message({"a": 1}), _message({"a": 2}), None]
+    consumer.consume.side_effect = [[_message({"a": 1}), _message({"a": 2})], []]
     producer = MagicMock()
     with patch("confluent_kafka.Producer", return_value=producer):
         ingester = _opened(consumer, tmp_path, dlq_topic="evt_dlq")
@@ -620,7 +634,7 @@ def test_losing_partitions_restarts_the_stream_at_the_next_poll(tmp_path):
     from confluent_kafka import TopicPartition
 
     consumer = MagicMock()
-    consumer.poll.return_value = None
+    consumer.consume.return_value = []
     ingester = _opened(consumer, tmp_path)
     lifecycle = Settling()
     ingester.attach_lifecycle(lifecycle)
@@ -636,7 +650,7 @@ def test_losing_partitions_restarts_the_stream_at_the_next_poll(tmp_path):
 
 def test_a_long_gap_between_polls_is_warned_about(tmp_path, caplog):
     consumer = MagicMock()
-    consumer.poll.return_value = None
+    consumer.consume.return_value = []
     ingester = _opened(consumer, tmp_path)
     ingester._polled_at = time.time() - 200
 
@@ -649,7 +663,7 @@ def test_a_long_gap_between_polls_is_warned_about(tmp_path, caplog):
 
 def test_a_short_gap_between_polls_is_quiet(tmp_path, caplog):
     consumer = MagicMock()
-    consumer.poll.return_value = None
+    consumer.consume.return_value = []
     ingester = _opened(consumer, tmp_path)
     ingester._polled_at = time.time() - 100
 
@@ -661,7 +675,7 @@ def test_a_short_gap_between_polls_is_quiet(tmp_path, caplog):
 
 def test_the_poll_gap_warning_follows_the_interval_given(tmp_path, caplog):
     consumer = MagicMock()
-    consumer.poll.return_value = None
+    consumer.consume.return_value = []
     ingester = _opened(consumer, tmp_path, conn_cfg={"max.poll.interval.ms": 100_000})
     ingester._polled_at = time.time() - 60
 
@@ -683,7 +697,7 @@ def _with_dlq(consumer, tmp_path) -> tuple[KafkaIngester, MagicMock]:
 
 def test_dead_letter_messages_are_produced_without_a_flush_per_message(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message(raw=b"bad"), _message(raw=b"worse"), None]
+    consumer.consume.side_effect = [[_message(raw=b"bad"), _message(raw=b"worse")], []]
     ingester, producer = _with_dlq(consumer, tmp_path)
 
     assert [r.value for r in ingester.poll_changes(consumer)] == [None, None]
@@ -696,7 +710,7 @@ def test_dead_letter_messages_are_produced_without_a_flush_per_message(tmp_path)
 
 def test_a_full_producer_queue_is_flushed_once_and_the_message_retried(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message(raw=b"bad"), None]
+    consumer.consume.side_effect = [[_message(raw=b"bad")], []]
     ingester, producer = _with_dlq(consumer, tmp_path)
     producer.produce.side_effect = [BufferError("queue full"), None]
 
@@ -708,7 +722,7 @@ def test_a_full_producer_queue_is_flushed_once_and_the_message_retried(tmp_path)
 
 def test_a_producer_queue_that_stays_full_stops_the_stream(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message(raw=b"bad"), None]
+    consumer.consume.side_effect = [[_message(raw=b"bad")], []]
     ingester, producer = _with_dlq(consumer, tmp_path)
     producer.produce.side_effect = BufferError("queue full")
     producer.__len__.return_value = 7
@@ -746,7 +760,7 @@ def test_an_undelivered_dead_letter_message_stops_the_commit(tmp_path):
 
 def test_a_failed_dead_letter_delivery_stops_the_stream_at_once(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message(raw=b"bad", offset=9), None]
+    consumer.consume.side_effect = [[_message(raw=b"bad", offset=9)], []]
     ingester, producer = _with_dlq(consumer, tmp_path)
     producer.produce.side_effect = lambda **kwargs: kwargs["on_delivery"](
         "Unknown topic", None
@@ -763,7 +777,7 @@ def test_a_failed_dead_letter_delivery_stops_the_stream_at_once(tmp_path):
 
 def test_a_failed_dead_letter_delivery_stops_the_commit(tmp_path):
     consumer = MagicMock()
-    consumer.poll.side_effect = [_message(raw=b"bad", offset=9), None]
+    consumer.consume.side_effect = [[_message(raw=b"bad", offset=9)], []]
     ingester, producer = _with_dlq(consumer, tmp_path)
     callbacks = []
     producer.produce.side_effect = lambda **kwargs: callbacks.append(

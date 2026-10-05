@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -37,6 +38,9 @@ from tabsdatak.conn.common._stream._offsets import SourceKeptOffsets
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._restart import StreamRestart
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._size import size_of_values
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
@@ -95,8 +99,12 @@ def retriable_acknowledgement(error: BaseException) -> bool:
 class KafkaRecord:
     value: dict | None
     schema_id: SchemaIdSpec | None
-    size: int
-    message: Message
+    topic: str
+    partition: int
+    offset: int
+
+    def __sizeof__(self) -> int:
+        return object.__sizeof__(self) + size_of_values(self.value)
 
 
 class KafkaOffset(StreamOffset):
@@ -106,8 +114,8 @@ class KafkaOffset(StreamOffset):
         }
 
     @classmethod
-    def after(cls, message: Message) -> Self:
-        return cls({message.topic(): {message.partition(): message.offset() + 1}})
+    def after(cls, record: KafkaRecord) -> Self:
+        return cls({record.topic: {record.partition: record.offset + 1}})
 
     def update(self, other: Self) -> None:
         for topic, partitions in other.offsets.items():
@@ -167,15 +175,15 @@ class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaOffset]):
         return None if record.value is None else self._topic
 
     def size(self, record: KafkaRecord) -> int:
-        return record.size
+        return sys.getsizeof(record)
 
     def offset(self, record: KafkaRecord) -> KafkaOffset:
-        return KafkaOffset.after(record.message)
+        return KafkaOffset.after(record)
 
     def encode(self, slot: str, records: list[KafkaRecord]) -> Iterator[pa.Table]:
         by_topic: dict[str, list[KafkaRecord]] = {}
         for record in records:
-            by_topic.setdefault(record.message.topic(), []).append(record)
+            by_topic.setdefault(record.topic, []).append(record)
         for topic, of_topic in by_topic.items():
             group = [of_topic[0]]
             for record in of_topic[1:]:
@@ -205,6 +213,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
         stream_src: KafkaStreamSrc,
         poll_max_secs: int,
         connect_timeout_secs: int,
+        consume_max_messages: int,
     ):
         super().__init__()
         self.offsets = SourceKeptOffsets(
@@ -215,6 +224,8 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
         self._stream_src = stream_src
         self._poll_max_secs = poll_max_secs
         self._connect_timeout_secs = connect_timeout_secs
+        self._consume_max_messages = consume_max_messages
+        self._contexts: dict[str, Any] = {}
         self._consumer: Consumer | None = None
         self._dlq_producer: Producer | None = None
         self._dlq_failures: list[str] = []
@@ -411,21 +422,35 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
             self._polled_at = time.time()
 
     def poll_messages(self, session: Consumer, start: float) -> Iterator[KafkaRecord]:
-        from confluent_kafka.serialization import (
-            MessageField,
-            SerializationContext,
-        )
-
-        deserialize = self._serde.deserializer_with_schema_id()
         while True:
             self.check_lost()
             remaining = self._poll_max_secs - (time.time() - start)
             if remaining <= 0:
                 return
-            msg = session.poll(remaining)
+            messages = session.consume(
+                num_messages=self._consume_max_messages,
+                timeout=remaining,
+            )
             self.check_lost()
-            if msg is None:
+            if not messages:
                 return
+            yield from self.decode_messages(messages)
+
+    def context(self, topic: str):
+        from confluent_kafka.serialization import (
+            MessageField,
+            SerializationContext,
+        )
+
+        context = self._contexts.get(topic)
+        if context is None:
+            context = SerializationContext(topic, MessageField.VALUE)
+            self._contexts[topic] = context
+        return context
+
+    def decode_messages(self, messages: list[Message]) -> Iterator[KafkaRecord]:
+        deserialize = self._serde.deserializer_with_schema_id()
+        for msg in messages:
             err = msg.error()
             if err is not None:
                 if err.fatal():
@@ -433,10 +458,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
                 logger.warning("The Kafka consumer reported an error: %s", err)
                 continue
             try:
-                record, schema_id = deserialize(
-                    msg.value(),
-                    SerializationContext(msg.topic(), MessageField.VALUE),
-                )
+                record, schema_id = deserialize(msg.value(), self.context(msg.topic()))
             except Exception as exc:  # noqa: BLE001 -- classified below
                 if classify_decode_error(exc) is DecodeErrorKind.RETRYABLE:
                     raise KafkaErrorCode.KAFKA_27.exception(
@@ -463,13 +485,20 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
                     exc,
                 )
                 self.send_to_dlq(msg, exc)
-                yield KafkaRecord(value=None, schema_id=None, size=0, message=msg)
+                yield KafkaRecord(
+                    value=None,
+                    schema_id=None,
+                    topic=msg.topic(),
+                    partition=msg.partition(),
+                    offset=msg.offset(),
+                )
                 continue
             yield KafkaRecord(
                 value=record,
                 schema_id=schema_id,
-                size=len(msg.value() or b""),
-                message=msg,
+                topic=msg.topic(),
+                partition=msg.partition(),
+                offset=msg.offset(),
             )
 
     def send_to_dlq(

@@ -133,6 +133,7 @@ class KafkaStreamSrcPlugin(
             stream_src=stream_src,
             poll_max_secs=cfg.poll_max_secs,
             connect_timeout_secs=cfg.connect_timeout_secs,
+            consume_max_messages=cfg.buffer_max_rows,
         )
 
     def slots(self, run: StreamRun[KafkaRecord, KafkaOffset]) -> Sequence[str]:

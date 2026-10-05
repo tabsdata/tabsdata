@@ -34,6 +34,7 @@ from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
 from tabsdatak.conn.kafka._stream_plugin import (
     KAFKA_STREAM_SRC,
     KafkaStreamSrcPlugin,
+    _build_kafka_run_config,
 )
 from tabsdatak.conn.kafka.constants import KAFKA_META_TOPIC
 from tabsdatak.conn.kafka.error import KafkaErrorCode
@@ -87,6 +88,13 @@ def test_kafka_stream_src_def_cardinality_always_one():
 # --- run config ----------------------------------------------------
 
 
+def test_the_buffer_bytes_default_yields_to_the_source_config():
+    cfg = _build_kafka_run_config(
+        _src(src_cfg={"tabsdata.kafka.buffer.max_bytes": 1024})
+    )
+    assert cfg.buffer_max_bytes == 1024
+
+
 def test_run_config_defaults():
     cfg = KafkaStreamSrcPlugin().build_run_config(_src())
     assert cfg.poll_max_secs == 2
@@ -96,7 +104,7 @@ def test_run_config_defaults():
     assert cfg.trigger_max_rows is None
     assert (cfg.buffer_max_rows, cfg.buffer_max_bytes, cfg.buffer_max_secs) == (
         10_000,
-        None,
+        128 * 1024 * 1024,
         60,
     )
     assert cfg.poll_idle_secs == 0
@@ -144,7 +152,7 @@ def test_a_trigger_max_secs_below_the_floor_is_rejected(seconds):
 @patch("confluent_kafka.Consumer")
 def test_plugin_run_subscribes_to_topic(consumer_cls, tmp_path):
     consumer = MagicMock()
-    consumer.poll.return_value = None
+    consumer.consume.return_value = []
     consumer_cls.return_value = consumer
 
     ctx = _make_ctx(tmp_path, active_calls=[False])
@@ -177,7 +185,7 @@ def test_plugin_run_builds_dlq_producer_when_dlq_topic_set(
     tmp_path,
 ):
     consumer = MagicMock()
-    consumer.poll.return_value = None
+    consumer.consume.return_value = []
     consumer_cls.return_value = consumer
     producer = MagicMock()
     producer_cls.return_value = producer
@@ -194,7 +202,7 @@ def test_plugin_run_builds_dlq_producer_when_dlq_topic_set(
 @patch("confluent_kafka.Consumer")
 def test_plugin_run_no_dlq_topic_skips_producer(consumer_cls, tmp_path):
     consumer = MagicMock()
-    consumer.poll.return_value = None
+    consumer.consume.return_value = []
     consumer_cls.return_value = consumer
 
     ctx = _make_ctx(tmp_path, active_calls=[False])
@@ -214,7 +222,7 @@ def test_plugin_run_applies_logging_level_to_connector_namespace(
     module; that's how the ingester + serdes loggers pick it up
     (parallels the CDC convention)."""
     consumer = MagicMock()
-    consumer.poll.return_value = None
+    consumer.consume.return_value = []
     consumer_cls.return_value = consumer
 
     pkg_logger = logging.getLogger("tabsdatak.conn.kafka")
@@ -246,13 +254,28 @@ def _message(value: dict, offset: int, partition: int = 0):
     return message
 
 
+def _batches(polls: list) -> list[list]:
+    batches, batch = [], []
+    for item in polls:
+        if item is None:
+            if batch:
+                batches.append(batch)
+                batch = []
+            batches.append([])
+        else:
+            batch.append(item)
+    if batch:
+        batches.append(batch)
+    return batches
+
+
 def _run(
     tmp_path, polls, *, active_calls, src_cfg=None, dlq_topic=None, consumer=None
 ):
     from confluent_kafka import TopicPartition
 
     consumer = consumer or MagicMock()
-    consumer.poll.side_effect = polls
+    consumer.consume.side_effect = polls if callable(polls) else _batches(polls)
     consumer.assignment.return_value = [TopicPartition("events", p) for p in range(8)]
     producer = MagicMock()
     producer.flush.return_value = 0
@@ -346,15 +369,16 @@ def test_lost_partitions_restart_the_consumer_and_the_run_goes_on(tmp_path):
     good = _message({"a": 1}, 7)
     answers = iter([good, None])
 
-    def poll(_timeout):
+    def consume(**_kwargs):
         if not consumer.close.called:
             on_lost = consumer.subscribe.call_args.kwargs["on_lost"]
             on_lost(consumer, [TopicPartition("events", 0)])
-            return None
-        return next(answers, None)
+            return []
+        message = next(answers, None)
+        return [message] if message is not None else []
 
     ctx, consumer = _run(
-        tmp_path, poll, active_calls=[True, True, True, False], consumer=consumer
+        tmp_path, consume, active_calls=[True, True, True, False], consumer=consumer
     )
 
     assert consumer.close.call_count == 2

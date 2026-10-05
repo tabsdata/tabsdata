@@ -14,6 +14,9 @@ from typing import Any, Union
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._offset import StreamOffset
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._size import size_of_values
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow
@@ -48,11 +51,8 @@ class CdcDataChange:
         size += sys.getsizeof(self.ordinal)
         size += sys.getsizeof(self.table)
         size += sys.getsizeof(self.schema)
-        size += sys.getsizeof(self.new_values)
-        size += sum(sys.getsizeof(value) for value in self.new_values.values())
-        if self.old_values:
-            size += sys.getsizeof(self.old_values)
-            size += sum(sys.getsizeof(value) for value in self.old_values.values())
+        size += size_of_values(self.new_values)
+        size += size_of_values(self.old_values)
         if self.offset:
             size += sys.getsizeof(self.offset)
         return size
