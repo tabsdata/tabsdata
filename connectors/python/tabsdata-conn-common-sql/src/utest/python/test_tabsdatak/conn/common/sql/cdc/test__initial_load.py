@@ -13,17 +13,23 @@ that catches a loader reading it too early."""
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from unittest.mock import MagicMock
 
+import pyarrow as pa
 import pytest
+import sqlalchemy.types as sa_types
 
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 from tabsdatak.error import TabsdataException
 
 from tabsdatak.conn.common.sql.cdc._initial_load import InitialLoader
 from tabsdatak.conn.common.sql.cdc._model import CdcOffset, InitialLoadSession
+from tabsdatak.conn.common.sql.cdc._schema import SchemaRegistry
+from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 
 
 class _Offset(CdcOffset):
@@ -184,3 +190,43 @@ def test_the_time_is_not_readable_before_the_snapshot_begins():
     with pytest.raises(TabsdataException) as raised:
         _ = _PinOnYieldSession({}).timestamp
     assert raised.value.api_error is SqlCdcErrorCode.CDC_30
+
+
+def test_a_loaded_column_falling_back_to_text_gets_its_values_as_text():
+    registry = SchemaRegistry(
+        type_mapper=lambda t: t,
+        large_column_classifier=lambda t: None,
+        cdc_format=CdcFormat(),
+    )
+    schema = registry.register_from_log(
+        "s.t",
+        (
+            ("id", "INTEGER", sa_types.Integer()),
+            ("doc", "JSON", sa_types.JSON()),
+            ("uid", "UUID", sa_types.Uuid()),
+            ("amount", "NUMERIC", sa_types.Numeric()),
+        ),
+    )
+    arrow_schema = pa.schema([pa.field(c.name, c.patype) for c in schema.columns])
+    loader = _loader(_ingester({"s.t": MagicMock()}))
+    rows = [
+        (
+            1,
+            {"k": 1},
+            uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            Decimal("2.5"),
+        ),
+        (2, None, None, None),
+    ]
+
+    table = loader._to_arrow(rows, schema, arrow_schema, MagicMock(qualified="s.t"))
+
+    assert table.to_pylist() == [
+        {
+            "id": 1,
+            "doc": '{"k":1}',
+            "uid": "12345678-1234-5678-1234-567812345678",
+            "amount": "2.5",
+        },
+        {"id": 2, "doc": None, "uid": None, "amount": None},
+    ]

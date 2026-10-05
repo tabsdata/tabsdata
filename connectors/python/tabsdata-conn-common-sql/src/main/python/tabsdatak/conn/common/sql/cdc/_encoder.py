@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import timezone
 from typing import Any
 
@@ -15,6 +15,7 @@ import pyarrow as pa
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
+from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
 from tabsdatak.conn.common.sql.cdc._json import orjson_default
 from tabsdatak.conn.common.sql.cdc._model import (
     CdcChange,
@@ -48,10 +49,34 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
+def converters_of(
+    schema: SchemaVersion,
+) -> tuple[tuple[str, Callable[[Any], Any]], ...]:
+    return tuple(
+        (column.name, column.converter)
+        for column in schema.columns
+        if column.converter is not None
+    )
+
+
+def converted(values: dict | None, converters) -> dict | None:
+    if not values or not converters:
+        return values
+    values = dict(values)
+    for name, converter in converters:
+        value = values.get(name)
+        if value is not None:
+            values[name] = converter(value)
+    return values
+
+
 def row_to_record(
     change: CdcDataChange,
     cdc_format: CdcFormat,
+    converters: tuple[tuple[str, Callable[[Any], Any]], ...] = (),
 ) -> dict[str, Any]:
+    new_values = converted(change.new_values, converters)
+    old_values = converted(change.old_values, converters)
     record: dict[str, Any] = {
         CDC_META_OP: change.operation,
         CDC_META_TX: change.transaction,
@@ -68,25 +93,21 @@ def row_to_record(
 
     if cdc_format.flatten_columns:
         for column in columns:
-            record[column.name] = change.new_values.get(column.name)
+            record[column.name] = new_values.get(column.name)
     else:
         match cdc_format.columns_format:
             case "columns":
                 for column in columns:
                     record[f"{CDC_DATA_COL_NEW_PREFIX}{DOT}{column.name}"] = (
-                        change.new_values.get(column.name)
+                        new_values.get(column.name)
                     )
             case "struct":
                 record[CDC_DATA_ROW_NEW] = {
-                    column.name: change.new_values.get(column.name)
-                    for column in columns
+                    column.name: new_values.get(column.name) for column in columns
                 }
             case "map":
                 record[CDC_DATA_MAP_NEW] = orjson.dumps(
-                    {
-                        column.name: change.new_values.get(column.name)
-                        for column in columns
-                    },
+                    {column.name: new_values.get(column.name) for column in columns},
                     default=orjson_default,
                 ).decode()
             case _:
@@ -98,16 +119,14 @@ def row_to_record(
         case "columns":
             prefix = CDC_DATA_COL_OLD_PREFIX
             for column in columns:
-                record[f"{prefix}{DOT}{column.name}"] = change.old_values.get(
-                    column.name
-                )
+                record[f"{prefix}{DOT}{column.name}"] = old_values.get(column.name)
         case "struct":
             record[CDC_DATA_ROW_OLD] = {
-                column.name: change.old_values.get(column.name) for column in columns
+                column.name: old_values.get(column.name) for column in columns
             }
         case "map":
             record[CDC_DATA_MAP_OLD] = orjson.dumps(
-                {column.name: change.old_values.get(column.name) for column in columns},
+                {column.name: old_values.get(column.name) for column in columns},
                 default=orjson_default,
             ).decode()
         case _:
@@ -164,9 +183,11 @@ class CdcEncoder(StreamEncoder[CdcChange, CdcOffset]):
         start: int,
         stop: int,
     ) -> pa.Table:
-        rows = [row_to_record(records[i], self._cdc_format) for i in range(start, stop)]
+        schema = records[start].schema
+        converters = converters_of(schema)
+        rows = [
+            row_to_record(records[i], self._cdc_format, converters)
+            for i in range(start, stop)
+        ]
         # noinspection PyArgumentList
-        return pa.Table.from_pylist(
-            mapping=rows,
-            schema=records[start].schema.pa_schema,
-        )
+        return pa.Table.from_pylist(mapping=rows, schema=schema.pa_schema)

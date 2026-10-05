@@ -4,11 +4,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
+import orjson
 import pyarrow as pa
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
+
+from tabsdatak.conn.common.sql.cdc._json import orjson_default
 
 # Types whose meaning differs from the generic type they reflect as. A MySQL
 # TIME is an interval of up to 838 hours either way, read as a timedelta by
@@ -90,3 +94,39 @@ def sqlalchemy_to_arrow(sa_type: Any) -> pa.DataType:
         return pa.utf8()
 
     return pa.utf8()
+
+
+def to_text(value: Any) -> Any:
+    """A value for a text column that the database typed otherwise: JSON
+    stays JSON, a MySQL SET is its members comma-joined, binary is hex,
+    anything else is its textual form."""
+    if value is None or isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        return orjson.dumps(value, default=orjson_default).decode()
+    if isinstance(value, (set, frozenset)):
+        return ",".join(sorted(str(member) for member in value))
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return bytes(value).hex()
+    return str(value)
+
+
+def value_converter(sa_type: Any) -> Callable[[Any], Any] | None:
+    """The converter the values of a column of `sa_type` need before they land
+    in its Arrow column, or ``None`` when they fit as the driver gives them.
+    Every type that falls back to a text column, unless it is textual to begin
+    with, delivers values that are not text -- a dict for JSON, a UUID, a
+    Decimal for an unconstrained numeric, a timedelta for an interval, a list
+    for an array -- and takes :func:`to_text`. A MySQL SET is textual to
+    SQLAlchemy but reaches the stream as a set of its members."""
+    if isinstance(sa_type, mysql.SET):
+        return to_text
+    if not pa.types.is_string(sqlalchemy_to_arrow(sa_type)):
+        return None
+    try:
+        gt = sa_type.as_generic()
+    except (NotImplementedError, AttributeError):
+        return to_text
+    if isinstance(gt, (sa.types.String, sa.types.Enum)):
+        return None
+    return to_text

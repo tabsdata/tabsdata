@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,6 +22,10 @@ class TrackedColumn:
             Used by IBM SQL Replication.
         sa_name: Column name after SQLAlchemy identifier normalization.
         sa_oname: Old-value column name after SQLAlchemy identifier normalization.
+        converter: Converter a value must go through before it lands in the
+            Arrow column, when the Arrow type cannot take the driver's value
+            as is -- a text column fed a dict, a UUID or a Decimal; ``None``
+            for every column whose values fit their type.
     """
 
     name: str
@@ -29,3 +34,4 @@ class TrackedColumn:
     oname: str | None = None
     sa_name: str | None = None
     sa_oname: str | None = None
+    converter: Callable[[Any], Any] | None = None

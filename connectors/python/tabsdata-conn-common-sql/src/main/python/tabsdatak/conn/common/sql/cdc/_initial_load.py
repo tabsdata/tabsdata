@@ -187,6 +187,11 @@ class InitialLoader:
             schema=schema,
             columns=columns,
         )
+        for column in schema.columns:
+            if column.converter is not None:
+                columns[column.name] = [
+                    column.converter(value) for value in columns[column.name]
+                ]
         return pa.table(
             {
                 column.name: pa.array(columns[column.name], type=column.patype)

@@ -5,14 +5,18 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 import sqlalchemy.types as sa_types
+from sqlalchemy.dialects import mysql
 
 from tabsdatak.conn.common.sql.cdc._encoder import CdcEncoder, row_to_record
 from tabsdatak.conn.common.sql.cdc._model import CdcDataChange, CdcSchemaChange
 from tabsdatak.conn.common.sql.cdc._schema import SchemaRegistry
+from tabsdatak.conn.common.sql.cdc.constants import CDC_DATA_COL_OLD_PREFIX, DOT
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode, SqlCdcException
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 
@@ -83,6 +87,75 @@ def test_a_change_without_an_offset_raises_cdc_11():
 def test_the_size_of_a_change_is_its_estimated_memory():
     record = change(1)
     assert encoder().size(record) == sys.getsizeof(record)
+
+
+TEXTUAL = REGISTRY.register_from_log(
+    TABLE,
+    (
+        ("id", "INTEGER", sa_types.Integer()),
+        ("doc", "JSON", sa_types.JSON()),
+        ("uid", "UUID", sa_types.Uuid()),
+        ("amount", "NUMERIC", sa_types.Numeric()),
+        ("span", "INTERVAL", sa_types.Interval()),
+        ("tags", "SET", mysql.SET("a", "b")),
+        ("year", "YEAR", mysql.YEAR()),
+    ),
+)
+
+
+def test_values_a_text_column_cannot_take_as_they_come_are_made_text():
+    """What the drivers hand over for the types that fall back to a text
+    column -- a dict, a UUID, a Decimal, a timedelta, a set, an int -- used
+    to fail the Arrow conversion; each lands as its text."""
+    change = CdcDataChange(
+        operation="u",
+        transaction="tx",
+        sequence=1,
+        timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        table=TABLE,
+        schema=TEXTUAL,
+        new_values={
+            "id": 1,
+            "doc": {"k": [1, 2]},
+            "uid": uuid.UUID("12345678-1234-5678-1234-567812345678"),
+            "amount": Decimal("1.50"),
+            "span": timedelta(hours=2),
+            "tags": {"b", "a"},
+            "year": 2026,
+        },
+        old_values={
+            "id": 1,
+            "doc": ["x"],
+            "uid": None,
+            "amount": None,
+            "span": None,
+            "tags": None,
+            "year": None,
+        },
+        offset=Offset(),
+    )
+
+    [table] = list(encoder().encode(TABLE, [change]))
+
+    row = table.to_pylist()[0]
+    assert (
+        row["doc"],
+        row["uid"],
+        row["amount"],
+        row["span"],
+        row["tags"],
+        row["year"],
+    ) == (
+        '{"k":[1,2]}',
+        "12345678-1234-5678-1234-567812345678",
+        "1.50",
+        "2:00:00",
+        "a,b",
+        "2026",
+    )
+    old = f"{CDC_DATA_COL_OLD_PREFIX}{DOT}"
+    assert (row["id"], row[f"{old}doc"], row[f"{old}uid"]) == (1, '["x"]', None)
+    assert change.new_values["doc"] == {"k": [1, 2]}
 
 
 def test_changes_of_one_schema_encode_into_one_table():

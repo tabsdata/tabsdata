@@ -19,7 +19,7 @@ from tabsdatak.conn.common._stream._offset import StreamOffset
 from tabsdatak.conn.common._stream._size import size_of_values
 from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._dictionary import SchemaVersion
-from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow
+from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow, value_converter
 from tabsdatak.conn.common.sql.cdc.constants import DOT
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 
@@ -91,6 +91,7 @@ class TrackedTable:
         if self.columns:
             for column in self.columns:
                 column.patype = sqlalchemy_to_arrow(column.satype)
+                column.converter = value_converter(column.satype)
 
     @property
     def qualified(self) -> str:

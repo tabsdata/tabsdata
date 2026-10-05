@@ -17,7 +17,7 @@ from tabsdatak.conn.common.sql.cdc._dictionary import (
     raw_schema_hash,
     schema_hash,
 )
-from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow
+from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow, value_converter
 from tabsdatak.conn.common.sql.cdc._model import TrackedTable
 from tabsdatak.conn.common.sql.cdc.dialect import LargeColumnKind
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
@@ -88,6 +88,7 @@ class SchemaRegistry:
                 name=raw_column_name,
                 satype=(sa_type := self._type_mapper(raw_column_type)),
                 patype=sqlalchemy_to_arrow(sa_type),
+                converter=value_converter(sa_type),
             )
             for raw_column_name, _, raw_column_type in raw_schema
         )
@@ -142,6 +143,7 @@ class SchemaRegistry:
                 oname=catalog_column.oname,
                 sa_name=catalog_column.sa_name,
                 sa_oname=catalog_column.sa_oname,
+                converter=catalog_column.converter,
             )
             for catalog_column in tracked_table.columns
         )
