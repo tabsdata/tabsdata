@@ -14,6 +14,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 import polars as pl
+import pyarrow as pa
 import pytest
 
 from tabsdatak.api import Secret
@@ -92,6 +93,14 @@ def _same_schema(a, b):
     return a == b
 
 
+def _refuse(record, error):
+    raise AssertionError(f"unexpected rejection of {record}: {error}")
+
+
+def _encoder(compatible=_allow_subset, *, topic="evt", reject=_refuse) -> KafkaEncoder:
+    return KafkaEncoder(topic, compatible, reject)
+
+
 # --- KafkaEncoder ---------------------------------------------------
 
 
@@ -100,12 +109,12 @@ def _frames(encoder: KafkaEncoder, records: list[KafkaRecord]) -> list[pl.DataFr
 
 
 def test_every_record_goes_to_the_topic_slot():
-    encoder = KafkaEncoder("evt", _allow_subset)
+    encoder = _encoder()
     assert encoder.slot(_record({"a": 1})) == "evt"
 
 
 def test_a_record_size_is_the_memory_its_value_holds():
-    encoder = KafkaEncoder("evt", _allow_subset)
+    encoder = _encoder()
     small, large = _record({"a": "x"}), _record({"a": "x" * 1000})
     assert encoder.size(small) == sys.getsizeof(small)
     assert encoder.size(large) - encoder.size(small) == (
@@ -118,12 +127,12 @@ def test_a_record_size_is_the_memory_its_value_holds():
 
 def test_a_record_offset_is_the_next_offset_of_its_partition():
     record = _record({"a": 1}, offset=4)
-    offset = KafkaEncoder("evt", _allow_subset).offset(record)
+    offset = _encoder().offset(record)
     assert offset.offsets == {"evt": {0: 5}}
 
 
 def test_compatible_records_encode_into_one_table_led_by_the_topic():
-    encoder = KafkaEncoder("evt", _allow_subset)
+    encoder = _encoder()
     (frame,) = _frames(encoder, [_record({"b": "x", "a": 1}), _record({"a": 2})])
     assert frame.columns == [KAFKA_META_TOPIC, "a", "b"]
     assert frame[KAFKA_META_TOPIC].to_list() == ["evt", "evt"]
@@ -132,7 +141,7 @@ def test_compatible_records_encode_into_one_table_led_by_the_topic():
 
 
 def test_each_run_of_compatible_records_encodes_into_its_own_table():
-    encoder = KafkaEncoder("evt", _allow_subset)
+    encoder = _encoder()
     frames = _frames(
         encoder,
         [
@@ -151,7 +160,7 @@ def test_each_run_of_compatible_records_encodes_into_its_own_table():
 
 
 def test_the_columns_are_the_union_of_the_keys_of_the_group():
-    encoder = KafkaEncoder("evt", _same_schema)
+    encoder = _encoder(_same_schema)
     (frame,) = _frames(
         encoder,
         [
@@ -166,13 +175,13 @@ def test_the_columns_are_the_union_of_the_keys_of_the_group():
 
 
 def test_the_topic_column_holds_the_topic_of_each_message():
-    encoder = KafkaEncoder("^evt.*", _allow_subset)
+    encoder = _encoder(topic="^evt.*")
     (frame,) = _frames(encoder, [_record({"a": 1}, topic="evt.a")])
     assert frame[KAFKA_META_TOPIC].to_list() == ["evt.a"]
 
 
 def test_records_are_grouped_by_topic_before_schema():
-    encoder = KafkaEncoder("^evt.*", _allow_subset)
+    encoder = _encoder(topic="^evt.*")
     frames = _frames(
         encoder,
         [
@@ -195,12 +204,92 @@ def test_records_are_grouped_by_topic_before_schema():
 
 
 def test_compatibility_is_checked_against_the_first_record_of_a_run():
-    encoder = KafkaEncoder("evt", _allow_subset)
+    encoder = _encoder()
     frames = _frames(
         encoder,
         [_record({"a": 1, "b": 1}), _record({"a": 2}), _record({"b": 3})],
     )
     assert [frame.height for frame in frames] == [3]
+
+
+# --- KafkaEncoder: schema stability and rejections -----------------
+
+
+def _encoded(encoder: KafkaEncoder, *groups: list[KafkaRecord]) -> list[pl.DataFrame]:
+    frames = []
+    for group in groups:
+        frames.extend(_frames(encoder, group))
+    return frames
+
+
+def test_a_slot_keeps_one_schema_across_groups_of_a_schema_id():
+    encoder = _encoder(_same_schema)
+    first, second = _encoded(
+        encoder,
+        [_record({"a": 1, "b": None}, schema_id=7)],
+        [_record({"a": 2.5, "b": "x"}, schema_id=7)],
+    )
+    assert first.schema["b"] == pl.Null
+    assert second["a"].dtype == pl.Float64
+    assert second["b"].dtype == pl.String
+    assert encoder.schemas[("evt", 7)].field("a").type == pa.float64()
+
+
+def test_a_column_missing_from_a_later_group_stays_typed_and_null():
+    encoder = _encoder(_same_schema)
+    _, second = _encoded(
+        encoder,
+        [_record({"a": 1, "b": "x"}, schema_id=7)],
+        [_record({"a": 2}, schema_id=7)],
+    )
+    assert second.columns == [KAFKA_META_TOPIC, "a", "b"]
+    assert second["b"].dtype == pl.String
+    assert second["b"].to_list() == [None]
+
+
+def test_a_new_schema_id_starts_its_own_schema():
+    encoder = _encoder(_same_schema)
+    _, second = _encoded(
+        encoder,
+        [_record({"a": 1}, schema_id=7)],
+        [_record({"a": "x"}, schema_id=8)],
+    )
+    assert second["a"].dtype == pl.String
+
+
+def test_a_row_that_does_not_fit_is_rejected_and_the_rest_written():
+    rejected = []
+    encoder = _encoder(_same_schema, reject=lambda r, e: rejected.append((r, e)))
+    (frame,) = _frames(
+        encoder,
+        [
+            _record({"a": 1}, offset=1, schema_id=7),
+            _record({"a": "x"}, offset=2, schema_id=7),
+            _record({"a": 3}, offset=3, schema_id=7),
+        ],
+    )
+    assert frame["a"].to_list() == [1, 3]
+    assert [record.offset for record, _ in rejected] == [2]
+    assert isinstance(rejected[0][1], (pa.ArrowInvalid, pa.ArrowTypeError))
+
+
+def test_a_row_conflicting_with_the_known_schema_is_rejected():
+    rejected = []
+    encoder = _encoder(_same_schema, reject=lambda r, e: rejected.append(r))
+    first, second = _encoded(
+        encoder,
+        [_record({"a": 1}, schema_id=7)],
+        [_record({"a": {"k": 1}}, offset=9, schema_id=7), _record({"a": 2}, schema_id=7)],
+    )
+    assert second["a"].to_list() == [2]
+    assert [record.offset for record in rejected] == [9]
+
+
+def test_a_group_rejected_entirely_writes_nothing():
+    encoder = _encoder(_same_schema, reject=lambda r, e: None)
+    first = _frames(encoder, [_record({"a": 1}, schema_id=7)])
+    nothing = _frames(encoder, [_record({"a": "x"}, schema_id=7)])
+    assert len(first) == 1 and nothing == []
 
 
 # --- KafkaOffset --------------------------------------------------
@@ -401,7 +490,7 @@ def test_a_dead_letter_message_leaves_a_position_only_record(tmp_path):
     ingester, _ = _with_dlq(consumer, tmp_path)
 
     (record,) = ingester.poll_changes(consumer)
-    encoder = KafkaEncoder("evt", _allow_subset)
+    encoder = _encoder()
 
     assert record.value is None and record.schema_id is None
     assert encoder.slot(record) is None
@@ -756,6 +845,33 @@ def test_an_undelivered_dead_letter_message_stops_the_commit(tmp_path):
 
     assert raised.value.api_error is KafkaErrorCode.KAFKA_29
     consumer.commit.assert_not_called()
+
+
+def test_a_rejected_record_is_dead_lettered_with_its_decoded_value(tmp_path):
+    consumer = MagicMock()
+    ingester, producer = _with_dlq(consumer, tmp_path)
+    record = _record({"a": "x"}, offset=4, partition=1)
+
+    ingester.reject_record(record, ValueError("not an integer"))
+
+    kwargs = producer.produce.call_args.kwargs
+    assert kwargs["topic"] == "evt_dlq"
+    envelope = json.loads(kwargs["value"])
+    assert envelope["record"] == {"a": "x"}
+    assert envelope["original_value"] is None
+    assert (envelope["topic"], envelope["partition"], envelope["offset"]) == ("evt", 1, 4)
+    assert "not an integer" in envelope["error"]
+
+
+def test_a_rejected_record_without_a_dlq_stops_the_stream(tmp_path):
+    consumer = MagicMock()
+    ingester = _opened(consumer, tmp_path)
+
+    with pytest.raises(TabsdataException) as raised:
+        ingester.reject_record(_record({"a": "x"}, offset=4), ValueError("bad"))
+
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_31
+    assert "offset 4 of partition 0 of topic 'evt'" in str(raised.value)
 
 
 def test_a_failed_dead_letter_delivery_stops_the_stream_at_once(tmp_path):

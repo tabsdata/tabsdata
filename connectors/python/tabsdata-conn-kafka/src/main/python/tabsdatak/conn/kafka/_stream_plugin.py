@@ -140,7 +140,11 @@ class KafkaStreamSrcPlugin(
         return [run.ingester.topic]
 
     def build_encoder(self, run: StreamRun[KafkaRecord, KafkaOffset]) -> KafkaEncoder:
-        return KafkaEncoder(run.ingester.topic, run.ingester.schema_id_compatibles())
+        return KafkaEncoder(
+            run.ingester.topic,
+            run.ingester.schema_id_compatibles(),
+            run.ingester.reject_record,
+        )
 
 
 KAFKA_STREAM_SRC = StreamSrcDef(

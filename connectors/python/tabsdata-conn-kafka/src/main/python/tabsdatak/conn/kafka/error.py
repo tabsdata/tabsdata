@@ -181,3 +181,9 @@ class KafkaErrorCode(ErrorCode):
         "The broker refused the acknowledgement of the consumed offsets; the "
         "stream stops and the staged messages are read again: {error}",
     )
+    KAFKA_31 = ErrorDef(
+        KafkaRuntimeException,
+        "The record at offset {offset} of partition {partition} of topic {topic!r} "
+        "does not fit the table's schema and the source has no dead-letter topic to "
+        "send it to; the stream stops without acknowledging: {error}",
+    )

@@ -17,7 +17,7 @@ import json
 import logging
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
@@ -167,12 +167,19 @@ class KafkaOffset(StreamOffset):
 
 
 class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaOffset]):
-    def __init__(self, topic: str, compatible: SchemaIdCompatibles):
-        self._topic = topic
-        self._compatible = compatible
+    def __init__(
+        self,
+        topic: str,
+        compatible: SchemaIdCompatibles,
+        reject: Callable[[KafkaRecord, Exception], None],
+    ):
+        self.topic = topic
+        self.compatible = compatible
+        self.reject = reject
+        self.schemas: dict[tuple[str, SchemaIdSpec], pa.Schema] = {}
 
     def slot(self, record: KafkaRecord) -> str | None:
-        return None if record.value is None else self._topic
+        return None if record.value is None else self.topic
 
     def size(self, record: KafkaRecord) -> int:
         return sys.getsizeof(record)
@@ -187,22 +194,62 @@ class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaOffset]):
         for topic, of_topic in by_topic.items():
             group = [of_topic[0]]
             for record in of_topic[1:]:
-                if self._compatible(group[0].schema_id, record.schema_id):
+                if self.compatible(group[0].schema_id, record.schema_id):
                     group.append(record)
                 else:
-                    yield self.encode_group(topic, group)
+                    yield from self.encode_group(topic, group)
                     group = [record]
-            yield self.encode_group(topic, group)
+            yield from self.encode_group(topic, group)
 
-    def encode_group(self, topic: str, group: list[KafkaRecord]) -> pa.Table:
-        values = [record.value for record in group]
-        column_names = sorted({key for value in values for key in value})
-        return pa.Table.from_pydict(
-            mapping={
-                KAFKA_META_TOPIC: [topic for _ in values],
-                **{k: [value.get(k) for value in values] for k in column_names},
-            },
-        )
+    def encode_group(self, topic: str, group: list[KafkaRecord]) -> Iterator[pa.Table]:
+        key = (topic, group[0].schema_id)
+        known = self.schemas.get(key)
+        try:
+            table = self.assemble([record.value for record in group], known)
+        except (pa.ArrowInvalid, pa.ArrowTypeError):
+            table = self.assemble_each(group, known)
+            if table is None:
+                return
+        self.schemas[key] = table.schema
+        yield table.add_column(0, KAFKA_META_TOPIC, pa.array([topic] * table.num_rows))
+
+    def assemble(self, rows: list[dict], known: pa.Schema | None) -> pa.Table:
+        names = {name for row in rows for name in row}
+        if known is not None:
+            names |= set(known.names)
+        columns = {}
+        for name in sorted(names):
+            array = pa.array([row.get(name) for row in rows])
+            if known is not None and name in known.names:
+                unified = pa.unify_schemas(
+                    [
+                        pa.schema([known.field(name)]),
+                        pa.schema([pa.field(name, array.type)]),
+                    ],
+                    promote_options="permissive",
+                )
+                array = array.cast(unified.field(name).type)
+            columns[name] = array
+        return pa.table(columns)
+
+    def assemble_each(
+        self,
+        group: list[KafkaRecord],
+        known: pa.Schema | None,
+    ) -> pa.Table | None:
+        tables = []
+        schema = known
+        for record in group:
+            try:
+                table = self.assemble([record.value], schema)
+            except (pa.ArrowInvalid, pa.ArrowTypeError) as error:
+                self.reject(record, error)
+                continue
+            schema = table.schema
+            tables.append(table)
+        if not tables:
+            return None
+        return pa.concat_tables(tables, promote_options="permissive")
 
 
 class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
@@ -524,7 +571,41 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
             f"offset {msg.offset()} of partition {msg.partition()} "
             f"of topic {msg.topic()!r}"
         )
+        self.produce_dead_letter(msg.key(), envelope, where)
 
+    def reject_record(self, record: KafkaRecord, error: Exception) -> None:
+        if not self._dlq_producer:
+            raise KafkaErrorCode.KAFKA_31.exception(
+                cause=error,
+                topic=record.topic,
+                partition=record.partition,
+                offset=record.offset,
+                error=error,
+            )
+        logger.error(
+            "The record at offset %s of partition %s of topic %r does not fit the "
+            "table's schema; sending it to the dead-letter topic: %s",
+            record.offset,
+            record.partition,
+            record.topic,
+            error,
+        )
+        envelope = {
+            "original_value": None,
+            "record": record.value,
+            "error": str(error),
+            "topic": record.topic,
+            "partition": record.partition,
+            "offset": record.offset,
+            "timestamp": None,
+        }
+        where = (
+            f"offset {record.offset} of partition {record.partition} "
+            f"of topic {record.topic!r}"
+        )
+        self.produce_dead_letter(None, envelope, where)
+
+    def produce_dead_letter(self, key, envelope: dict, where: str) -> None:
         def on_delivery(delivery_error, _delivered):
             if delivery_error is not None:
                 self._dlq_failures.append(f"{where}: {delivery_error}")
@@ -532,8 +613,8 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
         def produce():
             self._dlq_producer.produce(
                 topic=self._stream_src.dlq_topic,
-                key=msg.key(),
-                value=json.dumps(envelope).encode("utf-8"),
+                key=key,
+                value=json.dumps(envelope, default=str).encode("utf-8"),
                 on_delivery=on_delivery,
             )
 
