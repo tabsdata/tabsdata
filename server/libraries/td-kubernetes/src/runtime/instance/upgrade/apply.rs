@@ -134,6 +134,7 @@ async fn write_configmap(
         name,
         data,
         BTreeMap::new(),
+        BTreeMap::new(),
         None,
         Some(family.kind),
         Some(version),

@@ -380,6 +380,7 @@ async fn settle_index(
         &configmap,
         written,
         BTreeMap::new(),
+        BTreeMap::new(),
         Some(KPROFILE_CONFIGS_FAMILY.kind),
         None,
     )

@@ -13,6 +13,7 @@ use td_objects::types::basic::{
 use url::Url;
 
 use super::*;
+use crate::base::annotations::ANNOTATION_FUNCTION;
 use crate::base::labels::{LABEL_FUNCTION_ID, LABEL_FUNCTION_VERSION_ID};
 
 fn callback() -> Callback {
@@ -73,6 +74,14 @@ fn every_companion_carries_the_workload_labels() {
             Some(function_version_id.as_str())
         );
         assert_eq!(label(metadata, LABEL_WORKER_ID), Some(worker_id.as_str()));
+        assert_eq!(
+            metadata
+                .annotations
+                .as_ref()
+                .and_then(|annotations| annotations.get(ANNOTATION_FUNCTION))
+                .map(String::as_str),
+            Some("function")
+        );
     }
 }
 

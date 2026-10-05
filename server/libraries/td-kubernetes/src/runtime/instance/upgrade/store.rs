@@ -90,6 +90,7 @@ impl Store for ConfigmapStore<'_> {
             &name,
             data,
             BTreeMap::new(),
+            BTreeMap::new(),
             None,
             Some(family.kind),
             Some(&self.version),

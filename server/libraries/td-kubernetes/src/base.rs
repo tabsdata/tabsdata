@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+pub mod annotations;
 pub mod codec;
 pub mod constants;
 pub mod error;

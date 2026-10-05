@@ -28,7 +28,7 @@ use crate::runtime::gateway::messaging::messenger::kit::{
     inject_common_envfrom_into_cronjob, inject_common_envfrom_into_job,
     inject_common_envfrom_into_pod, inject_connection_envfrom_into_cronjob,
     inject_connection_envfrom_into_job, inject_connection_envfrom_into_pod,
-    inject_labels_into_cronjob, inject_labels_into_job, inject_labels_into_pod,
+    inject_metadata_into_cronjob, inject_metadata_into_job, inject_metadata_into_pod,
 };
 use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
@@ -406,7 +406,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                                         connection_envfrom,
                                     );
                                 }
-                                inject_labels_into_pod(&mut pod, &kit.labels);
+                                inject_metadata_into_pod(&mut pod, &kit.labels, &kit.annotations);
                                 self.apply_sizing_to_pod(&mut pod)?;
                                 (
                                     vec![kit.main_configmap],
@@ -433,7 +433,7 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                                         connection_envfrom,
                                     );
                                 }
-                                inject_labels_into_job(&mut job, &kit.labels);
+                                inject_metadata_into_job(&mut job, &kit.labels, &kit.annotations);
                                 self.apply_sizing_to_job(&mut job)?;
                                 (
                                     vec![kit.main_configmap],
@@ -464,7 +464,11 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
                                         connection_envfrom,
                                     );
                                 }
-                                inject_labels_into_cronjob(&mut cronjob, &kit.labels);
+                                inject_metadata_into_cronjob(
+                                    &mut cronjob,
+                                    &kit.labels,
+                                    &kit.annotations,
+                                );
                                 self.apply_sizing_to_cronjob(&mut cronjob)?;
                                 (
                                     vec![kit.main_configmap],

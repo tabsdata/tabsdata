@@ -10,10 +10,9 @@ use td_error::TdError;
 use td_objects::dxo::connection::{ConnectionHydrated, ConnectionRead, ConnectionUpsert, KeyValue};
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 
+use crate::base::annotations::ANNOTATION_COLLECTION;
 use crate::base::error::connection::KubeConnectionError;
-use crate::base::labels::{
-    LABEL_COLLECTION, LABEL_COLLECTION_ID, LABEL_CONNECTION_ID, LABEL_PROJECT_ID,
-};
+use crate::base::labels::{LABEL_COLLECTION_ID, LABEL_CONNECTION_ID, LABEL_PROJECT_ID};
 use crate::base::naming::to_connection_object_name;
 use crate::kube::api::entity::configmap;
 use crate::kube::api::entity::secret;
@@ -72,7 +71,8 @@ impl ConnectionStore for KubernetesConnectionStore {
         let old_object = self.read_object(connection_id).await?;
         let new_object = merge_kept(connection, old_object.as_ref())?;
         let name = self.name_object(connection_id)?;
-        let labels = connection_labels(project_id, connection_id, collection, collection_id);
+        let labels = connection_labels(project_id, connection_id, collection_id);
+        let annotations = connection_annotations(collection);
         let document_yaml = serde_yaml::to_string(document).map_err(|error| {
             KubeConnectionError::DocumentSerializationFailed {
                 cause: error.to_string(),
@@ -83,6 +83,7 @@ impl ConnectionStore for KubernetesConnectionStore {
             &name,
             BTreeMap::from([(CONNECTION_CONFIGMAP_KEY.to_owned(), document_yaml)]),
             labels.clone(),
+            annotations.clone(),
             None,
             None,
             None,
@@ -93,6 +94,7 @@ impl ConnectionStore for KubernetesConnectionStore {
             &name,
             entries_to_map(new_object.secrets.as_deref()),
             labels,
+            annotations,
             None,
             None,
             None,
@@ -163,15 +165,17 @@ impl ConnectionStore for KubernetesConnectionStore {
 fn connection_labels(
     project_id: &ProjectId,
     connection_id: &ConnectionId,
-    collection: &CollectionName,
     collection_id: &CollectionId,
 ) -> BTreeMap<String, String> {
     BTreeMap::from([
         (LABEL_PROJECT_ID.to_owned(), project_id.to_string()),
-        (LABEL_COLLECTION.to_owned(), collection.to_string()),
         (LABEL_COLLECTION_ID.to_owned(), collection_id.to_string()),
         (LABEL_CONNECTION_ID.to_owned(), connection_id.to_string()),
     ])
+}
+
+fn connection_annotations(collection: &CollectionName) -> BTreeMap<String, String> {
+    BTreeMap::from([(ANNOTATION_COLLECTION.to_owned(), collection.to_string())])
 }
 
 fn entries_to_map(entries: Option<&[KeyValue]>) -> BTreeMap<String, String> {

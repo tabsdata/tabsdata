@@ -5,18 +5,13 @@
 use td_bridge::messaging::{CronStartRequest, FunctionStartRequest, StageTriggerStartRequest};
 use td_common::worker::Callback;
 
-use crate::base::labels::{
-    LABEL_COLLECTION, LABEL_COLLECTION_ID, LABEL_CONNECTION, LABEL_CONNECTION_ID, LABEL_FUNCTION,
-    LABEL_FUNCTION_ID, LABEL_FUNCTION_VERSION_ID, LABEL_PROJECT, LABEL_PROJECT_ID, label_value,
+use crate::base::annotations::{
+    ANNOTATION_COLLECTION, ANNOTATION_CONNECTION, ANNOTATION_FUNCTION, ANNOTATION_PROJECT,
 };
-
-fn conn_class(kind: impl ToString) -> String {
-    let kind = kind.to_string();
-    match kind.rsplit_once(':') {
-        Some((_, class)) => class.to_owned(),
-        None => kind,
-    }
-}
+use crate::base::labels::{
+    LABEL_COLLECTION_ID, LABEL_CONNECTION_ID, LABEL_FUNCTION_ID, LABEL_FUNCTION_VERSION_ID,
+    LABEL_PROJECT_ID, label_value,
+};
 
 pub(crate) trait WorkerStartRequest {
     fn worker(&self) -> &str;
@@ -35,10 +30,6 @@ pub(crate) trait WorkerStartRequest {
     fn function_id(&self) -> String;
     fn function(&self) -> String;
 
-    fn connection_class(&self) -> Option<String> {
-        self.connection().map(conn_class)
-    }
-
     fn custom_labels(&self) -> Vec<(String, String)> {
         Vec::new()
     }
@@ -47,18 +38,10 @@ pub(crate) trait WorkerStartRequest {
         let mut labels = vec![
             (LABEL_PROJECT_ID.to_owned(), self.project_id()),
             (LABEL_COLLECTION_ID.to_owned(), self.collection_id()),
-            (LABEL_COLLECTION.to_owned(), self.collection()),
             (LABEL_FUNCTION_ID.to_owned(), self.function_id()),
-            (LABEL_FUNCTION.to_owned(), self.function()),
         ];
-        if let Some(project) = self.project() {
-            labels.push((LABEL_PROJECT.to_owned(), project));
-        }
         if let Some(connection_id) = self.connection_id() {
             labels.push((LABEL_CONNECTION_ID.to_owned(), connection_id));
-        }
-        if let Some(connection) = self.connection_class() {
-            labels.push((LABEL_CONNECTION.to_owned(), connection));
         }
         labels.extend(self.custom_labels());
         labels
@@ -66,6 +49,20 @@ pub(crate) trait WorkerStartRequest {
             .map(|(name, value)| (name, label_value(&value)))
             .filter(|(_, value)| !value.is_empty())
             .collect()
+    }
+
+    fn annotations(&self) -> Vec<(String, String)> {
+        let mut annotations = vec![
+            (ANNOTATION_COLLECTION.to_owned(), self.collection()),
+            (ANNOTATION_FUNCTION.to_owned(), self.function()),
+        ];
+        if let Some(project) = self.project() {
+            annotations.push((ANNOTATION_PROJECT.to_owned(), project));
+        }
+        if let Some(connection) = self.connection() {
+            annotations.push((ANNOTATION_CONNECTION.to_owned(), connection));
+        }
+        annotations
     }
 }
 

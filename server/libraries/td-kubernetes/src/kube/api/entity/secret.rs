@@ -20,11 +20,13 @@ use crate::kube::api::domain::labels::{
 };
 use crate::kube::context::KubeContext;
 
+#[allow(clippy::too_many_arguments)]
 pub async fn create_secret(
     context: &KubeContext,
     name: &str,
     data: BTreeMap<String, String>,
     labels: BTreeMap<String, String>,
+    annotations: BTreeMap<String, String>,
     owner: Option<OwnerReference>,
     family: Option<&str>,
     stamp: Option<&str>,
@@ -35,6 +37,7 @@ pub async fn create_secret(
         namespace: Some(context.namespace().to_owned()),
         owner_references: owner.map(|reference| vec![reference]),
         labels: Some(labels),
+        annotations: Some(annotations),
         ..Default::default()
     };
     label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
@@ -68,6 +71,7 @@ pub async fn replace_secret(
     name: &str,
     data: BTreeMap<String, String>,
     labels: BTreeMap<String, String>,
+    annotations: BTreeMap<String, String>,
     family: Option<&str>,
     stamp: Option<&str>,
 ) -> Result<(), KubernetesError> {
@@ -96,6 +100,7 @@ pub async fn replace_secret(
         resource_version: existing.metadata.resource_version,
         owner_references: existing.metadata.owner_references,
         labels: Some(labels),
+        annotations: Some(annotations),
         ..Default::default()
     };
     label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
@@ -117,11 +122,13 @@ pub async fn replace_secret(
         })
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn upsert_secret(
     context: &KubeContext,
     name: &str,
     data: BTreeMap<String, String>,
     labels: BTreeMap<String, String>,
+    annotations: BTreeMap<String, String>,
     owner: Option<OwnerReference>,
     family: Option<&str>,
     stamp: Option<&str>,
@@ -135,6 +142,7 @@ pub async fn upsert_secret(
                 resource_version: existing.metadata.resource_version,
                 owner_references: existing.metadata.owner_references,
                 labels: Some(labels),
+                annotations: Some(annotations),
                 ..Default::default()
             };
             label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
@@ -161,6 +169,7 @@ pub async fn upsert_secret(
                 namespace: Some(context.namespace().to_owned()),
                 owner_references: owner.map(|reference| vec![reference]),
                 labels: Some(labels),
+                annotations: Some(annotations),
                 ..Default::default()
             };
             label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;

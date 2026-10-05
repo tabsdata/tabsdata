@@ -52,6 +52,7 @@ pub struct FunctionRunKit {
     pub connection_envfrom: Option<EnvFromSource>,
     pub cron_schedule: Option<String>,
     pub labels: Vec<(String, String)>,
+    pub annotations: Vec<(String, String)>,
 }
 
 pub(crate) fn build_worker_run_kit(
@@ -91,6 +92,7 @@ pub(crate) fn build_worker_run_kit(
 
     let mut labels = request.labels();
     labels.push((LABEL_WORKER_ID.to_owned(), worker_id));
+    let annotations = request.annotations();
 
     let common_envfrom = vec![
         envfrom_configmap(&main_name),
@@ -116,15 +118,16 @@ pub(crate) fn build_worker_run_kit(
         };
 
     Ok(FunctionRunKit {
-        main_configmap: build_configmap(&main_name, namespace, &labels, config_data),
-        main_secret: build_secret(&main_name, namespace, &labels, secret_data),
-        latch_configmap: build_configmap(&latch_name, namespace, &labels, latch_data),
+        main_configmap: build_configmap(&main_name, namespace, &labels, &annotations, config_data),
+        main_secret: build_secret(&main_name, namespace, &labels, &annotations, secret_data),
+        latch_configmap: build_configmap(&latch_name, namespace, &labels, &annotations, latch_data),
         common_envfrom,
         connection_configmap_name,
         connection_secret_name,
         connection_envfrom,
         cron_schedule: None,
         labels,
+        annotations,
     })
 }
 
@@ -154,24 +157,40 @@ pub fn build_cron_run_kit(
     Ok(kit)
 }
 
-pub fn inject_labels_into_pod(pod: &mut Pod, labels: &[(String, String)]) {
-    apply_labels(&mut pod.metadata, labels);
+pub fn inject_metadata_into_pod(
+    pod: &mut Pod,
+    labels: &[(String, String)],
+    annotations: &[(String, String)],
+) {
+    apply_metadata(&mut pod.metadata, labels, annotations);
 }
 
-pub fn inject_labels_into_job(job: &mut Job, labels: &[(String, String)]) {
-    apply_labels(&mut job.metadata, labels);
+pub fn inject_metadata_into_job(
+    job: &mut Job,
+    labels: &[(String, String)],
+    annotations: &[(String, String)],
+) {
+    apply_metadata(&mut job.metadata, labels, annotations);
     if let Some(spec) = job.spec.as_mut() {
         let template_metadata = spec
             .template
             .metadata
             .get_or_insert_with(ObjectMeta::default);
-        apply_labels(template_metadata, labels);
+        apply_metadata(template_metadata, labels, annotations);
     }
 }
 
-fn apply_labels(metadata: &mut ObjectMeta, labels: &[(String, String)]) {
+fn apply_metadata(
+    metadata: &mut ObjectMeta,
+    labels: &[(String, String)],
+    annotations: &[(String, String)],
+) {
     let entry = metadata.labels.get_or_insert_with(BTreeMap::new);
     for (key, value) in labels {
+        entry.insert(key.clone(), value.clone());
+    }
+    let entry = metadata.annotations.get_or_insert_with(BTreeMap::new);
+    for (key, value) in annotations {
         entry.insert(key.clone(), value.clone());
     }
 }
@@ -196,20 +215,24 @@ pub fn inject_common_envfrom_into_job(job: &mut Job, envfrom: &[EnvFromSource]) 
     inject_envfrom_into_all_containers(Some(&mut template.containers), envfrom);
 }
 
-pub fn inject_labels_into_cronjob(cronjob: &mut CronJob, labels: &[(String, String)]) {
-    apply_labels(&mut cronjob.metadata, labels);
+pub fn inject_metadata_into_cronjob(
+    cronjob: &mut CronJob,
+    labels: &[(String, String)],
+    annotations: &[(String, String)],
+) {
+    apply_metadata(&mut cronjob.metadata, labels, annotations);
     if let Some(spec) = cronjob.spec.as_mut() {
         let job_template_metadata = spec
             .job_template
             .metadata
             .get_or_insert_with(ObjectMeta::default);
-        apply_labels(job_template_metadata, labels);
+        apply_metadata(job_template_metadata, labels, annotations);
         if let Some(job_spec) = spec.job_template.spec.as_mut() {
             let template_metadata = job_spec
                 .template
                 .metadata
                 .get_or_insert_with(ObjectMeta::default);
-            apply_labels(template_metadata, labels);
+            apply_metadata(template_metadata, labels, annotations);
         }
     }
 }
@@ -368,10 +391,11 @@ fn build_configmap(
     name: &str,
     namespace: &str,
     labels: &[(String, String)],
+    annotations: &[(String, String)],
     data: BTreeMap<String, String>,
 ) -> ConfigMap {
     ConfigMap {
-        metadata: build_metadata(name, namespace, labels),
+        metadata: build_metadata(name, namespace, labels, annotations),
         data: Some(data),
         ..Default::default()
     }
@@ -381,22 +405,28 @@ fn build_secret(
     name: &str,
     namespace: &str,
     labels: &[(String, String)],
+    annotations: &[(String, String)],
     data: BTreeMap<String, ByteString>,
 ) -> Secret {
     Secret {
-        metadata: build_metadata(name, namespace, labels),
+        metadata: build_metadata(name, namespace, labels, annotations),
         data: Some(data),
         ..Default::default()
     }
 }
 
-fn build_metadata(name: &str, namespace: &str, labels: &[(String, String)]) -> ObjectMeta {
+fn build_metadata(
+    name: &str,
+    namespace: &str,
+    labels: &[(String, String)],
+    annotations: &[(String, String)],
+) -> ObjectMeta {
     let mut metadata = ObjectMeta {
         name: Some(name.to_owned()),
         namespace: Some(namespace.to_owned()),
         ..Default::default()
     };
-    apply_labels(&mut metadata, labels);
+    apply_metadata(&mut metadata, labels, annotations);
     metadata
 }
 

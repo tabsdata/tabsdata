@@ -13,6 +13,9 @@ use td_objects::types::basic::{
 use url::Url;
 
 use super::*;
+use crate::base::annotations::{
+    ANNOTATION_COLLECTION, ANNOTATION_CONNECTION, ANNOTATION_FUNCTION, ANNOTATION_PROJECT,
+};
 
 const FUNCTION_ID: &str = "00000000000000000000000f00";
 
@@ -23,59 +26,6 @@ fn callback() -> Callback {
         headers: HashMap::new(),
         body: false,
     })
-}
-
-#[test]
-fn a_fully_qualified_conn_class_keeps_only_the_class() {
-    assert_eq!(
-        conn_class("tabsdatak.conn.mysql:MySQLSrcConn"),
-        "MySQLSrcConn"
-    );
-    assert_eq!(
-        conn_class("tabsdatak.conn.postgres:PostgresCdcStreamSrcConn"),
-        "PostgresCdcStreamSrcConn"
-    );
-    assert_eq!(conn_class("tabsdatak.conn.s3:S3DestConn"), "S3DestConn");
-}
-
-#[test]
-fn a_bare_class_is_left_alone() {
-    assert_eq!(conn_class("MySQLSrcConn"), "MySQLSrcConn");
-}
-
-#[test]
-fn only_the_last_colon_splits() {
-    assert_eq!(conn_class("a:b:ClassName"), "ClassName");
-}
-
-#[test]
-fn the_split_class_survives_label_sanitising() {
-    let value = label_value(&conn_class("tabsdatak.conn.mysql:MySQLSrcConn"));
-    assert_eq!(value, "MySQLSrcConn");
-}
-
-#[test]
-fn connection_keeps_the_stored_value_and_connection_class_splits_it() {
-    let request = FunctionStartRequest {
-        worker: WorkerName::Function,
-        worker_id: WorkerId::try_from("wkr20260101-0000000001").unwrap(),
-        decorator: Decorator::Publisher,
-        resolver: callback(),
-        responder: callback(),
-        project_id: ProjectId::default(),
-        project: Some(ProjectName::try_from("project").unwrap()),
-        collection_id: CollectionId::default(),
-        collection: CollectionName::try_from("collection").unwrap(),
-        connection_id: None,
-        connection: Some(ConnectionKind::try_from("tabsdatak.conn.mysql:MySQLSrcConn").unwrap()),
-        function_id: FunctionId::default(),
-        function: FunctionName::try_from("function").unwrap(),
-    };
-    assert_eq!(
-        request.connection(),
-        Some("tabsdatak.conn.mysql:MySQLSrcConn".to_owned())
-    );
-    assert_eq!(request.connection_class(), Some("MySQLSrcConn".to_owned()));
 }
 
 fn function_request() -> FunctionStartRequest {
@@ -175,4 +125,45 @@ fn triggers_also_keep_their_function_version_id() {
         label(&function_request().labels(), LABEL_FUNCTION_VERSION_ID),
         None
     );
+}
+
+#[test]
+fn labels_carry_only_ids() {
+    let labels = function_request().labels();
+    for (name, _) in &labels {
+        assert!(name.ends_with("-id"), "{name}");
+    }
+}
+
+#[test]
+fn names_go_to_annotations_without_truncation() {
+    let long_name = "n".repeat(100);
+    let request = FunctionStartRequest {
+        project: Some(ProjectName::try_from(long_name.as_str()).unwrap()),
+        collection: CollectionName::try_from(long_name.as_str()).unwrap(),
+        connection: Some(ConnectionKind::try_from("tabsdatak.conn.mysql:MySQLSrcConn").unwrap()),
+        function: FunctionName::try_from(long_name.as_str()).unwrap(),
+        ..function_request()
+    };
+    let annotations = request.annotations();
+    assert_eq!(
+        label(&annotations, ANNOTATION_PROJECT),
+        Some(long_name.clone())
+    );
+    assert_eq!(
+        label(&annotations, ANNOTATION_COLLECTION),
+        Some(long_name.clone())
+    );
+    assert_eq!(label(&annotations, ANNOTATION_FUNCTION), Some(long_name));
+    assert_eq!(
+        label(&annotations, ANNOTATION_CONNECTION),
+        Some("tabsdatak.conn.mysql:MySQLSrcConn".to_owned())
+    );
+}
+
+#[test]
+fn absent_project_and_connection_are_not_annotated() {
+    let annotations = function_request().annotations();
+    assert_eq!(label(&annotations, ANNOTATION_PROJECT), None);
+    assert_eq!(label(&annotations, ANNOTATION_CONNECTION), None);
 }

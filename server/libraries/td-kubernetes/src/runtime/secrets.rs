@@ -97,7 +97,7 @@
 //!             │        if Start ∈ gen.phases():
 //!             │          data = gen.generate(ctx)
 //!             │              ← reads kubefile, encodes bytes
-//!             │          upsert_secret(client, ns, name, data)
+//!             │          upsert_secret(client, ns, name, data, BTreeMap::new())
 //!             │              ← creates or replaces
 //!             │                  Secret "td-sys-tabsdata-secret-kubeconfig"
 //!             ↓

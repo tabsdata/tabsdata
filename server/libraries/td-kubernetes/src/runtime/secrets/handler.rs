@@ -35,6 +35,7 @@ impl SecretHandler {
                 generator.name(),
                 data,
                 BTreeMap::new(),
+                BTreeMap::new(),
                 None,
                 None,
                 None,

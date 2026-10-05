@@ -280,6 +280,7 @@ async fn process_candidate(
         &parsed.name,
         data,
         parsed.labels,
+        BTreeMap::new(),
         None,
         Some(SECRET_FAMILY_CONFIG),
         None,
