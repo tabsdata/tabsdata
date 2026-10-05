@@ -190,19 +190,21 @@ class _EndpointStageBackend(StageBackend):
 
     def exists(self, rel: str) -> bool:
         with tempfile.TemporaryDirectory() as scratch_dir:
-            return self.fetch_file(rel, Path(scratch_dir)) is not None
+            return self.find_file(rel, Path(scratch_dir)) is not None
 
     def read_text(self, rel: str) -> str | None:
         with tempfile.TemporaryDirectory() as scratch_dir:
-            path = self.fetch_file(rel, Path(scratch_dir))
+            path = self.find_file(rel, Path(scratch_dir))
             return path.read_text(encoding="utf-8") if path is not None else None
 
-    def fetch_file(self, rel: str, scratch_dir: Path) -> Path | None:
-        # A plain copy of a missing object fails the same way as one the
-        # transporter cannot reach (credentials, network), so it cannot say
-        # whether the object exists. A find for the exact name can: an empty
-        # report means the object is not there, a match downloads it, and a
-        # transporter failure raises instead of passing for absence.
+    def find_file(self, rel: str, scratch_dir: Path) -> Path | None:
+        """Look the object up by its exact name and download it into
+        ``scratch_dir``. Three outcomes: the find reports no file, so the
+        object does not exist and ``None`` is returned; the find reports it,
+        so it was downloaded and its local path is returned; the transporter
+        fails (credentials, network, binary), so the error is raised. A plain
+        copy cannot tell the first from the third: a missing object and an
+        unreachable one fail it the same way."""
         handler = make_handler()
         report = _input.wildcard_copy_one(
             handler=handler,
