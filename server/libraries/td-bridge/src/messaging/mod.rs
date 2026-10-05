@@ -13,7 +13,9 @@ pub mod memory;
 pub mod message;
 
 pub use crate::messaging::message::cron::{CronRequest, CronStartRequest, CronStopRequest};
-pub use crate::messaging::message::function::{FunctionRequest, FunctionStartRequest};
+pub use crate::messaging::message::function::{
+    FunctionRequest, FunctionStartRequest, FunctionStopRequest,
+};
 pub use crate::messaging::message::stream::{
     StageTriggerRequest, StageTriggerStartRequest, StageTriggerStopRequest,
 };

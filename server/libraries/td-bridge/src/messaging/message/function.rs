@@ -19,7 +19,7 @@ use td_objects::types::basic::{
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 pub enum FunctionRequest {
     Start(FunctionStartRequest),
-    Stop,
+    Stop(FunctionStopRequest),
     Notify,
 }
 
@@ -47,6 +47,20 @@ pub struct FunctionStartRequest {
     pub connection_id: Option<ConnectionId>,
     /// Type of the collection's connection, as its Conn class.
     pub connection: Option<ConnectionKind>,
+    /// Function id of the function being run.
+    pub function_id: FunctionId,
+    /// Function name of the function being run.
+    pub function: FunctionName,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+pub struct FunctionStopRequest {
+    /// Worker name (template key), e.g. `function`.
+    pub worker: WorkerName,
+    /// Worker id.
+    pub worker_id: WorkerId,
+    /// Function decorator (publisher / transformer / subscriber).
+    pub decorator: Decorator,
     /// Function id of the function being run.
     pub function_id: FunctionId,
     /// Function name of the function being run.

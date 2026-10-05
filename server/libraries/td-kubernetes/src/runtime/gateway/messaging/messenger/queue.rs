@@ -71,7 +71,15 @@ pub(super) fn derive_routing(
                     prefix: worker_name_prefix(&start.worker, Some(&start.decorator)).to_owned(),
                     action: MessageAction::Start,
                 }),
-                FunctionRequest::Stop => Err(unsupported(id, "Stop")),
+                FunctionRequest::Stop(stop) => Ok(PayloadRouting {
+                    template_key: format!(
+                        "{}-{}",
+                        worker_pod_stem(&stop.worker),
+                        stop.decorator.as_ref()
+                    ),
+                    prefix: worker_name_prefix(&stop.worker, Some(&stop.decorator)).to_owned(),
+                    action: MessageAction::Stop,
+                }),
                 FunctionRequest::Notify => Err(unsupported(id, "Notify")),
             }
         }
@@ -213,6 +221,9 @@ fn derive_key(id: &str, payload: &OrchestratorMessagePayload<Value>) -> Result<K
         OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
             FunctionRequest::Start(start),
         ) => (start.function_id.to_string(), WorkloadKind::Function),
+        OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+            FunctionRequest::Stop(stop),
+        ) => (stop.function_id.to_string(), WorkloadKind::Function),
         OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
             StageTriggerRequest::Start(start),
         ) => (start.function_id.to_string(), WorkloadKind::StageTrigger),

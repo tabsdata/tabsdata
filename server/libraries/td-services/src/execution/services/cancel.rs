@@ -3,13 +3,14 @@
 //
 
 use crate::execution::update_status::{
-    abandon_requested_physical_runs, update_function_run_status,
+    end_cancelled_attempts, stop_cancelled_workers, update_function_run_status,
 };
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
+use td_bridge::BridgeProviderHandle;
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
@@ -25,6 +26,7 @@ use td_queries::Queries;
 async fn execution_cancel(
     authz: Ctx<AuthzContext>,
     scheduler_notify: Ctx<SchedulerNotify>,
+    bridge: Ctx<BridgeProviderHandle>,
     msgs: &mut ReqCtx,
     db: DbPool<AcrossProjects>,
     request: UpdateRequest<(), ExecutionParam>,
@@ -49,11 +51,11 @@ async fn execution_cancel(
 
     let conn = trx.get(grant);
     let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&execution_id).await?;
-    // The attempts of Requested runs have no worker to report their end.
-    abandon_requested_physical_runs(conn, &ctx.time, &lfrs).await?;
+    let stops = end_cancelled_attempts(conn, &ctx.time, &lfrs).await?;
     update_function_run_status(msgs, conn, &lfrs, LogicalFunctionRunStatus::Canceled).await?;
     trx.commit().await?;
 
+    stop_cancelled_workers(&bridge, stops).await;
     scheduler_notify.notify_scheduler();
     Ok(())
 }
@@ -106,6 +108,47 @@ mod tests {
             }
         })
         .await
+    }
+
+    #[td_test::test(db)]
+    async fn test_cancel_ends_the_in_flight_attempt_of_a_running_run(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let run = seed_run(&db, p.id).await?;
+        let lfrs: Vec<LogicalFunctionRunDB> = db.scoped(p.id).fetch_all(&run.execution).await?;
+        let attempt: PhysicalFunctionRunDB =
+            db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
+        let mut trx = begin_exclusive(&db, p.id).await?;
+        let conn = trx.get(Grant::asserted("cancel test"));
+        conn.logical_runs()
+            .set_status(
+                &[lfrs[0].base.id.clone()],
+                LogicalFunctionRunStatus::Running,
+            )
+            .await?;
+        conn.physical_runs()
+            .dispatched(std::slice::from_ref(&attempt.base.id), &AtTime::now())
+            .await?;
+        trx.commit().await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
+            ExecutionParam {
+                execution: run.execution.clone(),
+            },
+            (),
+        );
+        Services::with_defaults(db.clone())
+            .execution_cancel(request)
+            .await?;
+
+        let attempt: PhysicalFunctionRunDB =
+            db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
+        assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Failed);
+        assert!(attempt.base.ended_on.is_some());
+        let lfr: LogicalFunctionRunDB = db.scoped(p.id).fetch_one(&lfrs[0].base.id).await?;
+        assert_eq!(lfr.base.status, LogicalFunctionRunStatus::Canceled);
+        Ok(())
     }
 
     #[td_test::test(db)]

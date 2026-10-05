@@ -3,26 +3,33 @@
 //
 
 use itertools::Itertools;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use ta_services::ctx_service::{Message, ReqCtx};
+use td_bridge::messaging::{FunctionRequest, FunctionStopRequest, OrchestratorMessagePayload};
+use td_bridge::{BridgeProviderHandle, Orchestrator};
+use td_common::worker::WorkerName;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::and;
+use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::{
     PhysicalTableDataVersionDBWithNames, PhysicalTableDataVersionUpdateDB,
 };
-use td_objects::dxo::worker::{CallbackRequest, WorkerUpdateDB};
+use td_objects::dxo::worker::{CallbackRequest, WorkerDBWithNames, WorkerUpdateDB};
 use td_objects::dxo::yaml::WorkerOutput;
 use td_objects::dxo::yaml::function::WrittenTable;
 use td_objects::types::basic::{
-    AtTime, ExecutionId, FunctionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus,
-    PhysicalFunctionRunId, PhysicalFunctionRunStatus, SchemaChanged, WorkerId,
+    AtTime, Decorator, ExecutionId, FunctionId, FunctionVersionId, HasData, LogicalFunctionRunId,
+    LogicalFunctionRunStatus, PhysicalFunctionRunId, PhysicalFunctionRunStatus, SchemaChanged,
+    WorkerId,
 };
 use td_queries::Queries;
-use tracing::{debug, instrument};
+
+use crate::recovery::failed_worker_update;
+use tracing::{debug, instrument, warn};
 
 #[td_error]
 enum UpdateStatusRunError {
@@ -112,6 +119,116 @@ pub async fn abandon_requested_physical_runs(
         "execution.recover_abandon: terminalized in-flight PFR(s) of Requested LFR(s)"
     );
     Ok(())
+}
+
+/// Ends the in-flight attempts of the runs a cancel is about to cancel the way
+/// recovery would end them once their workloads are gone: attempt and worker
+/// `Failed`. Returns the stops for the workers that have a workload.
+pub async fn end_cancelled_attempts(
+    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    at: &AtTime,
+    logical_function_runs: &[LogicalFunctionRunDB],
+) -> Result<Vec<FunctionStopRequest>, TdError> {
+    let cancelled: HashSet<(&ExecutionId, &FunctionId)> = logical_function_runs
+        .iter()
+        .filter(|lfr| {
+            matches!(
+                transition(lfr, &LogicalFunctionRunStatus::Canceled),
+                Transition::Apply
+            )
+        })
+        .map(|lfr| (&lfr.base.execution_id, &lfr.base.function_id))
+        .collect();
+    if cancelled.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let execution_ids: Vec<ExecutionId> = cancelled
+        .iter()
+        .map(|(execution_id, _)| (*execution_id).clone())
+        .unique()
+        .collect();
+    let physical_function_runs: Vec<PhysicalFunctionRunDB> = conn
+        .timeline()
+        .chunked()
+        .fetch_all::<PhysicalFunctionRunDB>(&execution_ids, ())
+        .await?;
+    let ended: Vec<PhysicalFunctionRunId> = physical_function_runs
+        .iter()
+        .filter(|pfr| {
+            PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status)
+                && cancelled.contains(&(&pfr.base.execution_id, &pfr.base.function_id))
+        })
+        .map(|pfr| pfr.base.id.clone())
+        .collect();
+    if ended.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let worker_keys: Vec<Option<PhysicalFunctionRunId>> = ended.iter().cloned().map(Some).collect();
+    let workers: Vec<WorkerDBWithNames> = conn
+        .chunked()
+        .fetch_all::<WorkerDBWithNames>(&worker_keys, ())
+        .await?;
+    conn.physical_runs().failed(&ended, at).await?;
+    if workers.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let worker_ids: Vec<WorkerId> = workers
+        .iter()
+        .map(|worker| worker.base.base.id.clone())
+        .collect();
+    conn.chunked()
+        .update(&failed_worker_update(at)?, &worker_ids)
+        .await?;
+
+    let function_version_ids: Vec<FunctionVersionId> = workers
+        .iter()
+        .map(|worker| worker.base.base.function_version_id.clone())
+        .unique()
+        .collect();
+    let decorators: HashMap<FunctionVersionId, Decorator> = conn
+        .timeline()
+        .chunked()
+        .fetch_all::<FunctionDB>(&function_version_ids, ())
+        .await?
+        .into_iter()
+        .map(|function| (function.base.id, function.base.decorator))
+        .collect();
+    Ok(workers
+        .into_iter()
+        .filter_map(|worker| {
+            let decorator = decorators.get(&worker.base.base.function_version_id)?;
+            Some(FunctionStopRequest {
+                worker: WorkerName::Function,
+                worker_id: worker.base.base.id,
+                decorator: decorator.to_message(),
+                function_id: worker.function_id,
+                function: worker.function,
+            })
+        })
+        .collect())
+}
+
+/// Best effort: a lost stop leaves a workload no attempt expects, which the
+/// recovery orphan pass removes.
+pub async fn stop_cancelled_workers(
+    bridge: &BridgeProviderHandle,
+    stops: Vec<FunctionStopRequest>,
+) {
+    if !matches!(bridge.orchestrator(), Orchestrator::Kubernetes) {
+        return;
+    }
+    for stop in stops {
+        let id = stop.worker_id.to_string();
+        let payload = OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+            FunctionRequest::Stop(stop),
+        );
+        if let Err(error) = bridge.message_queue().put(id.clone(), payload).await {
+            warn!(worker_id = %id, "cancel: stop message put failed: {error:#?}");
+        }
+    }
 }
 
 /// `Absorb` is a legal no-op, `Skip` a silent one. `Refuse` fails the request

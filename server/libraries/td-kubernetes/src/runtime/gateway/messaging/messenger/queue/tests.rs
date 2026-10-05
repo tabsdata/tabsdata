@@ -8,7 +8,7 @@ use http::Method;
 use serde_yaml::Value;
 use td_bridge::messaging::{
     CronRequest, CronStartRequest, CronStopRequest, FunctionRequest, FunctionStartRequest,
-    OrchestratorMessagePayload, StageTriggerRequest, StageTriggerStartRequest,
+    FunctionStopRequest, OrchestratorMessagePayload, StageTriggerRequest, StageTriggerStartRequest,
     StageTriggerStopRequest,
 };
 use td_common::worker::{Callback, Decorator, HttpRequest, MessageAction, WorkerName};
@@ -94,13 +94,31 @@ fn function_start_routes_with_decorator() {
     assert!(matches!(routing.action, MessageAction::Start));
 }
 
+fn function_stop() -> OrchestratorMessagePayload<Value> {
+    OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(FunctionRequest::Stop(
+        FunctionStopRequest {
+            worker: WorkerName::Function,
+            worker_id: worker_id(),
+            decorator: Decorator::Publisher,
+            function_id: FunctionId::try_from("00000000000000000000000f00").unwrap(),
+            function: FunctionName::try_from("function").unwrap(),
+        },
+    ))
+}
+
 #[test]
-fn function_stop_is_unsupported() {
-    let payload: OrchestratorMessagePayload<Value> =
-        OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
-            FunctionRequest::Stop,
-        );
-    assert!(derive_routing("process", &payload).is_err());
+fn function_stop_routes_like_its_start() {
+    let routing = derive_routing("process", &function_stop()).unwrap();
+    assert_eq!(routing.template_key, publisher_key(&WorkerName::Function));
+    assert_eq!(routing.prefix, "pub");
+    assert!(matches!(routing.action, MessageAction::Stop));
+}
+
+#[test]
+fn function_stop_is_keyed_by_its_function() {
+    let key = derive_key("process", &function_stop()).unwrap();
+    assert_eq!(key.function_id, "00000000000000000000000f00");
+    assert_eq!(key.kind, WorkloadKind::Function);
 }
 
 #[test]

@@ -3,13 +3,14 @@
 //
 
 use crate::execution::update_status::{
-    abandon_requested_physical_runs, update_function_run_status,
+    end_cancelled_attempts, stop_cancelled_workers, update_function_run_status,
 };
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
+use td_bridge::BridgeProviderHandle;
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
@@ -24,6 +25,7 @@ use td_queries::Queries;
 async fn transaction_cancel(
     authz: Ctx<AuthzContext>,
     scheduler_notify: Ctx<SchedulerNotify>,
+    bridge: Ctx<BridgeProviderHandle>,
     msgs: &mut ReqCtx,
     db: DbPool<AcrossProjects>,
     request: UpdateRequest<(), TransactionParam>,
@@ -48,10 +50,11 @@ async fn transaction_cancel(
     let conn = trx.get(grant);
 
     let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&transaction_id).await?;
-    abandon_requested_physical_runs(conn, &ctx.time, &lfrs).await?;
+    let stops = end_cancelled_attempts(conn, &ctx.time, &lfrs).await?;
     update_function_run_status(msgs, conn, &lfrs, LogicalFunctionRunStatus::Canceled).await?;
     trx.commit().await?;
 
+    stop_cancelled_workers(&bridge, stops).await;
     scheduler_notify.notify_scheduler();
     Ok(())
 }
