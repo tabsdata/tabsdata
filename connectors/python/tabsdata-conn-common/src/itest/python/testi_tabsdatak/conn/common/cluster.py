@@ -15,10 +15,20 @@ from tabsdatax.itest.fixture.instances.tabsdata import Instance
 
 WORKER_ID = "tabsdata.com/worker-id"
 FUNCTION_ID = "tabsdata.com/function-id"
+FUNCTION_VERSION_ID = "tabsdata.com/function-version-id"
+PROJECT_ID = "tabsdata.com/project-id"
 DECORATOR = "tabsdata.com/decorator"
 FUNCTION_ANNOTATION = "tabsdata.com/function"
 COLLECTION_ANNOTATION = "tabsdata.com/collection"
 LABEL_VALUE_MAX_LENGTH = 63
+ORPHAN_COUNTER_OFFSET = 1_000_000
+JOB_MANAGED_LABELS = ["controller-uid", "job-name"]
+JOB_NAME_LABELS = ["batch.kubernetes.io/job-name", "job-name"]
+FINISHED_POD_PHASES = ("Succeeded", "Failed")
+APISERVER_POD_PREFIX = "srv-apiserver-"
+SERVER_ERROR = re.compile(
+    r"method=(\S+) uri=(\S+) .*response failed classification=Status code: (5\d\d)"
+)
 
 WORKER_ID_PATTERN = re.compile(r"^([A-Za-z]+\d{8})-(\d+)$")
 
@@ -65,6 +75,25 @@ def finished(job) -> bool:
 
 def owned_by_cronjob(job) -> bool:
     return any(owner.kind == "CronJob" for owner in job.metadata.owner_references or [])
+
+
+def job_name_of(pod) -> str | None:
+    labels = pod.metadata.labels or {}
+    return next((labels[key] for key in JOB_NAME_LABELS if key in labels), None)
+
+
+def orphan_spec(job) -> tuple[str, dict, dict, str]:
+    worker_id = job.metadata.labels[WORKER_ID]
+    day, counter = worker_parts(worker_id)
+    orphan_id = f"{day}-{counter + ORPHAN_COUNTER_OFFSET}"
+    prefix = job.metadata.name.removesuffix(f"-{worker_id}")
+    labels = dict(job.metadata.labels)
+    labels[WORKER_ID] = orphan_id
+    for managed in JOB_MANAGED_LABELS:
+        labels.pop(managed, None)
+        labels.pop(f"batch.kubernetes.io/{managed}", None)
+    image = job.spec.template.spec.containers[0].image
+    return f"{prefix}-{orphan_id}", labels, dict(job.metadata.annotations or {}), image
 
 
 class Cluster:
@@ -141,6 +170,47 @@ class Cluster:
             for names in self.unfinished_by_kind(function_id).values()
             for name in names
         }
+
+    def orphan_of(self, worker_id: str) -> tuple[str, dict, dict, str]:
+        return orphan_spec(self.jobs(worker_selector(worker_id))[0])
+
+    def unfinished_in_project(self, project_id: str) -> list:
+        # A job's own status trails its pod by a moment; like the reconciler,
+        # a job whose pod has finished counts as finished.
+        selector = f"{PROJECT_ID}={label_value(project_id)}"
+        done = {
+            name
+            for pod in self.pods(selector)
+            if pod.status and pod.status.phase in FINISHED_POD_PHASES
+            for name in [job_name_of(pod)]
+            if name
+        }
+        jobs = [
+            job
+            for job in self.jobs(selector)
+            if not owned_by_cronjob(job)
+            and not finished(job)
+            and job.metadata.name not in done
+        ]
+        return jobs + self.cronjobs(selector)
+
+    def server_errors(self, since_seconds: int) -> list[tuple[str, str, str]]:
+        errors = []
+        for pod in self.core.list_namespaced_pod(self.namespace).items:
+            if not pod.metadata.name.startswith(APISERVER_POD_PREFIX):
+                continue
+            log = self.core.read_namespaced_pod_log(
+                pod.metadata.name, self.namespace, since_seconds=since_seconds
+            )
+            errors += [match.groups() for match in SERVER_ERROR.finditer(log)]
+        return errors
+
+    def delete_pod(self, name: str) -> None:
+        try:
+            self.core.delete_namespaced_pod(name, self.namespace)
+        except client.ApiException as error:
+            if error.status != 404:
+                raise
 
     def create_suspended_job(
         self, name: str, labels: dict, annotations: dict, image: str

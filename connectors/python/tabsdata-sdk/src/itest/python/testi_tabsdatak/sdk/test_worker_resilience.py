@@ -353,23 +353,6 @@ def test_a_lost_workload_is_recovered_with_a_new_worker(
         finish(execution)
 
 
-ORPHAN_COUNTER_OFFSET = 1_000_000
-
-
-def orphan_of(cluster: Cluster, worker_id: str) -> tuple[str, dict, dict, str]:
-    job = cluster.jobs(worker_selector(worker_id))[0]
-    day, counter = worker_parts(worker_id)
-    orphan_id = f"{day}-{counter + ORPHAN_COUNTER_OFFSET}"
-    prefix = job.metadata.name.removesuffix(f"-{worker_id}")
-    labels = dict(job.metadata.labels)
-    labels[WORKER_ID] = orphan_id
-    for managed in ["controller-uid", "batch.kubernetes.io/controller-uid", "job-name"]:
-        labels.pop(managed, None)
-        labels.pop(f"batch.kubernetes.io/{managed}", None)
-    image = job.spec.template.spec.containers[0].image
-    return f"{prefix}-{orphan_id}", labels, dict(job.metadata.annotations or {}), image
-
-
 @tabsdata_instance(consumer="tdtest")
 @pytest.mark.timeout(2400)
 def test_an_orphan_workload_is_removed_and_the_real_one_kept(
@@ -383,7 +366,7 @@ def test_an_orphan_workload_is_removed_and_the_real_one_kept(
     execution = function.trigger()
     try:
         worker = running_run_worker(execution, cluster)
-        orphan, labels, annotations, image = orphan_of(cluster, worker.id)
+        orphan, labels, annotations, image = cluster.orphan_of(worker.id)
 
         cluster.create_suspended_job(orphan, labels, annotations, image)
 
@@ -411,7 +394,7 @@ def test_an_orphan_without_a_function_id_is_left_in_place(
     orphan = None
     try:
         worker = running_run_worker(execution, cluster)
-        orphan, labels, annotations, image = orphan_of(cluster, worker.id)
+        orphan, labels, annotations, image = cluster.orphan_of(worker.id)
         labels.pop(FUNCTION_ID)
 
         cluster.create_suspended_job(orphan, labels, annotations, image)
