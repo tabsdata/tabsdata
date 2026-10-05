@@ -8,7 +8,8 @@ use tracing::info;
 use crate::base::constants::{SECRET_FAMILY_CONFIG, SECRET_FAMILY_LABEL};
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::{LabelFilter, list_secrets};
+use crate::kube::api::domain::labels::LabelFilter;
+use crate::kube::api::entity::secret::list_secrets;
 use crate::runtime::provider::provider_for_or_tdkcontext;
 
 #[derive(Debug, Clone, Args)]

@@ -47,7 +47,8 @@ use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::file::copy_tree;
 use crate::core::system::subprocess;
 use crate::core::system::subprocess::apply_detached_flags;
-use crate::kube::api::{get_secret, require_configmap};
+use crate::kube::api::entity::configmap::require_configmap;
+use crate::kube::api::entity::secret::get_secret;
 use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_cluster_url, resolve_current_context,

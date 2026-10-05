@@ -32,14 +32,14 @@ use crate::base::error::provider::ProviderError;
 use crate::client::tdkserver::widgets::phase_spinner_in;
 use crate::core::pod::ValidationError;
 use crate::core::system::exit::{CommandError, CommandResult};
-use crate::kube::api::Failable;
-use crate::kube::api::deployment::is_deployment_available;
+use crate::kube::api::entity::deployment::is_deployment_available;
 #[cfg(feature = "enterprise")]
-use crate::kube::api::secret::get_secret;
-use crate::kube::api::{
+use crate::kube::api::entity::secret::get_secret;
+use crate::kube::api::entity::{
     cronjob as cronjob_api, deployment as deployment_api, disruption as disruption_api,
     job as job_api, pod as pod_api, rbac as rbac_api, service as service_api,
 };
+use crate::kube::api::support::wait::Failable;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::template::TemplateKind;
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};

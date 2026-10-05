@@ -13,7 +13,7 @@ use crate::base::constants::{FOREIGN_ASSETS, Family, KPROFILE_ASSETS_FAMILY};
 use crate::base::error::upgrade::UpgradeError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::configmap::upsert_configmap;
+use crate::kube::api::entity::configmap::upsert_configmap;
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::Manifest;
 use crate::runtime::instance::profile::resolve_foreign_path;

@@ -14,7 +14,7 @@ use std::fmt::Debug;
 
 use crate::base::constants::HTTP_STATUS_NOT_FOUND;
 use crate::base::error::kubernetes::{KubeRbacError, KubernetesError};
-use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector};
+use crate::kube::api::domain::labels::{LabelFilter, label_tabsdata, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
 fn resource_name<K>(resource: &K) -> Result<String, KubeRbacError>

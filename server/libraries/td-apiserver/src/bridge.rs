@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use std::error::Error;
 use std::sync::Arc;
 use td_bridge::{BridgeProvider, BridgeProviderFactory, Orchestrator, SupervisorBridgeProvider};
-use td_kubernetes::kube::KubernetesBridgeProvider;
+use td_kubernetes::runtime::bridge::KubernetesBridgeProvider;
 
 /// Builds the bridge for whichever orchestrator the apiserver config names.
 pub(crate) struct ServerBridgeFactory;

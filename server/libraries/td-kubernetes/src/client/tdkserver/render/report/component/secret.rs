@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use tracing::{info, warn};
 
 use crate::base::error::secret::SecretError;
-use crate::kube::api::secret::get_secret;
+use crate::kube::api::entity::secret::get_secret;
 use crate::kube::context::KubeContext;
 
 pub struct ReportInput<'a> {

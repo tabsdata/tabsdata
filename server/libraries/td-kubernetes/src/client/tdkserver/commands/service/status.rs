@@ -10,10 +10,10 @@ use crate::client::tdkserver::commands::service::{
 use crate::client::tdkserver::render::report;
 use crate::core::system::exit::CommandResult;
 use crate::cwarn;
-use crate::kube::api::cronjob::list_cronjobs;
-use crate::kube::api::deployment::list_deployments;
-use crate::kube::api::job::list_jobs;
-use crate::kube::api::pod::list_pods;
+use crate::kube::api::entity::cronjob::list_cronjobs;
+use crate::kube::api::entity::deployment::list_deployments;
+use crate::kube::api::entity::job::list_jobs;
+use crate::kube::api::entity::pod::list_pods;
 use crate::runtime::provider::provider_for_instance_any_state;
 
 pub async fn command_status(

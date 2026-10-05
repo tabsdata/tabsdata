@@ -7,7 +7,7 @@ use kube::Api;
 use kube::api::PostParams;
 
 use crate::base::error::kubernetes::{KubeDisruptionError, KubernetesError};
-use crate::kube::api::label_tabsdata;
+use crate::kube::api::domain::labels::label_tabsdata;
 use crate::kube::context::KubeContext;
 
 pub async fn upsert_disruption_budget(

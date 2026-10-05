@@ -15,8 +15,8 @@ use crate::base::constants::{
 use crate::base::error::provider::ProviderError;
 use crate::client::registry::{InstanceSettings, init_stage_folder_in};
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::pod::list_pods;
-use crate::kube::api::require_configmap;
+use crate::kube::api::entity::configmap::require_configmap;
+use crate::kube::api::entity::pod::list_pods;
 use crate::kube::context::KubeContext;
 use crate::kube::kubeconfig::build_kubeconfig;
 use crate::runtime::instance::launcher::{start_workload, stop_workload};

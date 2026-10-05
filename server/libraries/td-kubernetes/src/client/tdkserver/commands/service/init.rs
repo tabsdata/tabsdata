@@ -30,8 +30,9 @@ use crate::client::tdkserver::commands::template::get::get_templates;
 use crate::client::tdkserver::common::confirm;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort, abort_with};
-use crate::kube::api::pod::probe_scheduler;
-use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists};
+use crate::kube::api::entity::namespace::ensure_namespace_exists;
+use crate::kube::api::entity::pod::probe_scheduler;
+use crate::kube::api::support::cluster::ensure_cluster_reachable;
 use crate::runtime::instance::cluster::ClusterProperties;
 use crate::runtime::provider::{ClusterProvider, provider_for};
 

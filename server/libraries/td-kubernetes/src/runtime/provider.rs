@@ -47,7 +47,7 @@ use td_error::TdError;
 use crate::client::tdkserver::render::view::InstanceView;
 use crate::core::pod::{ValidationError, container as container_pod, process as process_pod};
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::configmap::require_configmap;
+use crate::kube::api::entity::configmap::require_configmap;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};

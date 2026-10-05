@@ -3,5 +3,6 @@
 //
 
 pub(crate) mod harvester;
+pub(crate) mod log;
 
 pub use harvester::worker::KubernetesWorkerHandler;

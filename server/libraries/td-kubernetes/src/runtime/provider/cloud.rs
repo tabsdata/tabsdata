@@ -31,7 +31,9 @@ use crate::client::tdkserver::arguments::{ClusterArguments, InstanceArguments};
 use crate::client::tdkserver::common::validate_instance_name;
 use crate::client::tdkserver::render::view::InstanceView;
 use crate::core::system::exit::{CommandResult, abort_with};
-use crate::kube::api::{ensure_cluster_reachable, ensure_namespace_exists, exists_configmap};
+use crate::kube::api::entity::configmap::exists_configmap;
+use crate::kube::api::entity::namespace::ensure_namespace_exists;
+use crate::kube::api::support::cluster::ensure_cluster_reachable;
 use crate::kube::kubeconfig::{
     build_kubeconfig, resolve_cluster_name, resolve_current_context, resolve_kubefile,
 };

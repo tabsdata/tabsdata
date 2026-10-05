@@ -18,7 +18,7 @@ use crate::client::tdkserver::render::report::component::secret::{
     ReportContext, ReportInput, settlement,
 };
 use crate::core::system::exit::{CommandResult, abort_with};
-use crate::kube::api::secret::get_secret;
+use crate::kube::api::entity::secret::get_secret;
 use crate::kube::context::KubeContext;
 use crate::runtime::provider::provider_for_or_tdkcontext;
 use crate::runtime::secrets::discovery::{SecretLeaf, extract_secret_leaves};

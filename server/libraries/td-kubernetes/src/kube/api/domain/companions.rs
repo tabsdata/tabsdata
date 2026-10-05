@@ -13,10 +13,18 @@ use tracing::{error, warn};
 use crate::base::error::kubernetes::{
     KubeCompanionsError, KubeConfigMapError, KubeSecretError, KubernetesError,
 };
-use crate::kube::api::label_tabsdata;
+use crate::kube::api::domain::labels::label_tabsdata;
 use crate::kube::context::KubeContext;
 
-pub(super) async fn as_one_unit<K, Create, Attach, Remove, CreateFut, AttachFut, RemoveFut>(
+pub(in crate::kube::api) async fn as_one_unit<
+    K,
+    Create,
+    Attach,
+    Remove,
+    CreateFut,
+    AttachFut,
+    RemoveFut,
+>(
     namespace: String,
     name: String,
     create: Create,
@@ -71,7 +79,7 @@ where
     }
 }
 
-pub(super) async fn attach_companions(
+pub(in crate::kube::api) async fn attach_companions(
     context: &KubeContext,
     owner: OwnerReference,
     configmaps: Vec<ConfigMap>,

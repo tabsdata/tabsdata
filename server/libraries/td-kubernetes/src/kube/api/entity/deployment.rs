@@ -12,11 +12,12 @@ use tracing::debug;
 
 use crate::base::constants::{HTTP_STATUS_NOT_FOUND, KUBE_SPEC_FIELD, KUBE_SPEC_FIELD_PAUSED};
 use crate::base::error::kubernetes::{KubeDeploymentError, KubernetesError};
-use crate::kube::api::companions::{as_one_unit, attach_companions};
-use crate::kube::api::{
-    AwaitGoal, AwaitPatience, await_condition_with_patience, label_tabsdata,
-    owner_ref_for_deployment, tabsdata_non_ephemeral_selector, tabsdata_selector,
+use crate::kube::api::domain::companions::{as_one_unit, attach_companions};
+use crate::kube::api::domain::labels::{
+    label_tabsdata, tabsdata_non_ephemeral_selector, tabsdata_selector,
 };
+use crate::kube::api::support::owner::owner_ref_for_deployment;
+use crate::kube::api::support::wait::{AwaitGoal, AwaitPatience, await_condition_with_patience};
 use crate::kube::context::KubeContext;
 
 pub async fn create_deployment(

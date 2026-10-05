@@ -9,7 +9,9 @@ use crate::base::constants::{
 };
 use crate::base::error::secret::SecretError;
 use crate::base::naming::name_from_kube_resource_name;
-use crate::kube::api::{LabelFilter, get_configmaps, get_secret, upsert_secret};
+use crate::kube::api::domain::labels::LabelFilter;
+use crate::kube::api::entity::configmap::get_configmaps;
+use crate::kube::api::entity::secret::{get_secret, upsert_secret};
 use crate::kube::context::KubeContext;
 use crate::runtime::secrets::discovery::{
     Generator, Requirement, SecretLeaf, extract_secret_leaves,

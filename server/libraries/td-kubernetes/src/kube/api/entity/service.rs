@@ -8,7 +8,7 @@ use kube::api::{DeleteParams, ListParams, PostParams};
 
 use crate::base::constants::HTTP_STATUS_NOT_FOUND;
 use crate::base::error::kubernetes::{KubeServiceError, KubernetesError};
-use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector};
+use crate::kube::api::domain::labels::{LabelFilter, label_tabsdata, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
 pub async fn upsert_service(

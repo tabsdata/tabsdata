@@ -2,8 +2,6 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-pub mod helpers;
-
 use std::sync::Arc;
 
 use td_bridge::catalog::ServerCatalog;

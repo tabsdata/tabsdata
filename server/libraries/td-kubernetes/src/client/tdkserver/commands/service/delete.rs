@@ -18,8 +18,8 @@ use crate::client::tdkserver::common::{confirm, confirm_name};
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::CommandResult;
 use crate::cwarn;
-use crate::kube::api::configmap::delete_configmaps;
-use crate::kube::api::secret::delete_secrets;
+use crate::kube::api::entity::configmap::delete_configmaps;
+use crate::kube::api::entity::secret::delete_secrets;
 use crate::runtime::provider::provider_for_instance_mutating_any_state;
 
 #[derive(Debug, Clone, Args)]

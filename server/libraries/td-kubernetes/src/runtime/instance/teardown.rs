@@ -15,9 +15,10 @@ use crate::base::error::launcher::LauncherError;
 use crate::client::tdkserver::common::confirm_resume;
 use crate::client::tdkserver::widgets::{PhaseSpinner, phase_spinner_in};
 use crate::core::system::exit::{CommandError, CommandResult};
-use crate::kube::api::{
-    LabelFilter, cronjob as cronjob_api, deployment as deployment_api, job as job_api,
-    pod as pod_api, rbac as rbac_api, service as service_api, tabsdata_selector,
+use crate::kube::api::domain::labels::{LabelFilter, tabsdata_selector};
+use crate::kube::api::entity::{
+    cronjob as cronjob_api, deployment as deployment_api, job as job_api, pod as pod_api,
+    rbac as rbac_api, service as service_api,
 };
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::tier::Tier;

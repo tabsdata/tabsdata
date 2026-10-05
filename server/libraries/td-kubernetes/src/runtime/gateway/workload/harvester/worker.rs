@@ -5,8 +5,8 @@
 use async_trait::async_trait;
 use td_bridge::worker::{LogBridgeError, WorkerHandler, WorkerLogStream, WorkerLogTarget};
 
-use crate::kube::bridge::helpers::log::stream_worker_logs;
 use crate::kube::context::KubeContext;
+use crate::runtime::gateway::workload::log::stream_worker_logs;
 
 pub struct KubernetesWorkerHandler {
     context: KubeContext,

@@ -16,8 +16,9 @@ use crate::base::error::provider::ProviderError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::core::system::exit::CommandResult;
 use crate::core::system::file::is_hidden_or_system;
-use crate::kube::api::{
-    LabelFilter, create_configmap, delete_configmap, exists_configmap, list_configmaps,
+use crate::kube::api::domain::labels::LabelFilter;
+use crate::kube::api::entity::configmap::{
+    create_configmap, delete_configmap, exists_configmap, list_configmaps,
 };
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::MANIFEST_FILE;

@@ -27,7 +27,7 @@ use crate::client::tdkserver::commands::service::{
 use crate::client::tdkserver::common::{confirm, confirm_at_leisure};
 use crate::client::tdkserver::render::report;
 use crate::core::system::exit::{CommandResult, abort};
-use crate::kube::api::configmap::replace_configmap;
+use crate::kube::api::entity::configmap::replace_configmap;
 use crate::kube::context::KubeContext;
 use crate::runtime::provider::{ClusterProvider, Provider, provider_for_instance_mutating};
 

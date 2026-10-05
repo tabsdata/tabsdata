@@ -22,9 +22,9 @@ use crate::base::constants::{
     POD_YAML_DECORATOR_LABEL,
 };
 use crate::base::labels::LABEL_WORKER_ID;
-use crate::kube::api::cronjob::{delete_cronjob, list_cronjobs_of_workers};
-use crate::kube::api::job::{delete_job, list_jobs_of_workers};
-use crate::kube::api::pod::{delete_pod, list_pods_of_workers};
+use crate::kube::api::entity::cronjob::{delete_cronjob, list_cronjobs_of_workers};
+use crate::kube::api::entity::job::{delete_job, list_jobs_of_workers};
+use crate::kube::api::entity::pod::{delete_pod, list_pods_of_workers};
 use crate::kube::context::KubeContext;
 
 pub struct KubernetesWorkloadObserver {

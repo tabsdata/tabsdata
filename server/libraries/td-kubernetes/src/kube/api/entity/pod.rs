@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+pub mod status;
+
 use std::time::Instant;
 
 use futures::AsyncBufRead;
@@ -22,12 +24,13 @@ use crate::base::constants::{
     PROBE_POD,
 };
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
-use crate::kube::api::companions::{as_one_unit, attach_companions};
-use crate::kube::api::{
-    AwaitGoal, AwaitPatience, LabelFilter, await_condition_with_patience, label_tabsdata,
-    owner_ref_for_pod, tabsdata_ephemeral_selector, tabsdata_non_ephemeral_selector,
+use crate::kube::api::domain::companions::{as_one_unit, attach_companions};
+use crate::kube::api::domain::labels::{
+    LabelFilter, label_tabsdata, tabsdata_ephemeral_selector, tabsdata_non_ephemeral_selector,
     tabsdata_selector, tabsdata_worker_selector,
 };
+use crate::kube::api::support::owner::owner_ref_for_pod;
+use crate::kube::api::support::wait::{AwaitGoal, AwaitPatience, await_condition_with_patience};
 use crate::kube::context::KubeContext;
 use kube::core::Selector;
 

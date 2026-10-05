@@ -11,7 +11,7 @@ use kube::Config;
 
 use crate::client::registry::InstanceSettings;
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::pod::list_pods;
+use crate::kube::api::entity::pod::list_pods;
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::launcher::{start_workload, stop_workload};
 use crate::runtime::instance::ports::apply_ports;
@@ -25,7 +25,7 @@ use crate::base::constants::{
     KPROFILE_PODS_FAMILY, POD_PHASE_FAILED, POD_PHASE_SUCCEEDED,
 };
 use crate::base::error::provider::ProviderError;
-use crate::kube::api::require_configmap;
+use crate::kube::api::entity::configmap::require_configmap;
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 
 pub struct CloudInstance {

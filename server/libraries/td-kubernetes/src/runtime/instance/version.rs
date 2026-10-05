@@ -9,7 +9,7 @@ use td_python::tabsdata::tabsdata_version;
 use crate::base::constants::{CONFIGMAP_TABSDATA_MANIFEST, TD_VERSION_LABEL};
 use crate::base::error::manifest::ManifestError;
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::configmap::get_versioned_configmap;
+use crate::kube::api::entity::configmap::get_versioned_configmap;
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::{MANIFEST_FILE, Manifest, deserialize_manifest};
 

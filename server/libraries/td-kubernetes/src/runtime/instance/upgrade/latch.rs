@@ -9,7 +9,7 @@ use chrono::Utc;
 use crate::base::constants::CONFIGMAP_TABSDATA_MANIFEST;
 use crate::base::error::upgrade::UpgradeError;
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::configmap::replace_configmap_at_version;
+use crate::kube::api::entity::configmap::replace_configmap_at_version;
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::manifest::{MANIFEST_FILE, serialize_manifest};
 use crate::runtime::instance::upgrade::lock::{

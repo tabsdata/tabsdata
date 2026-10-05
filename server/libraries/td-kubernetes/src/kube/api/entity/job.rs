@@ -11,11 +11,12 @@ use tracing::debug;
 
 use crate::base::constants::{HTTP_STATUS_NOT_FOUND, KUBE_SPEC_FIELD, KUBE_SPEC_FIELD_SUSPEND};
 use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
-use crate::kube::api::companions::{as_one_unit, attach_companions};
-use crate::kube::api::{
-    AwaitGoal, AwaitPatience, await_condition_with_patience, label_tabsdata, owner_ref_for_job,
-    tabsdata_non_ephemeral_selector, tabsdata_selector, tabsdata_worker_selector,
+use crate::kube::api::domain::companions::{as_one_unit, attach_companions};
+use crate::kube::api::domain::labels::{
+    label_tabsdata, tabsdata_non_ephemeral_selector, tabsdata_selector, tabsdata_worker_selector,
 };
+use crate::kube::api::support::owner::owner_ref_for_job;
+use crate::kube::api::support::wait::{AwaitGoal, AwaitPatience, await_condition_with_patience};
 use crate::kube::context::KubeContext;
 use kube::core::Selector;
 

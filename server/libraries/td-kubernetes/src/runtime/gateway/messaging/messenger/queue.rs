@@ -18,10 +18,10 @@ use tracing::error;
 use crate::base::constants::{CONTAINER_ROOT_ENV, CONTAINER_SETTINGS_RELATIVE};
 use crate::base::naming::{to_fn_pod_name, worker_name_prefix, worker_pod_stem};
 use crate::client::registry::InstanceSettings;
-use crate::kube::api::cronjob::{create_cronjob, delete_cronjob};
-use crate::kube::api::deployment::delete_deployment;
-use crate::kube::api::job::{create_job, delete_job};
-use crate::kube::api::pod::{create_pod, delete_pod};
+use crate::kube::api::entity::cronjob::{create_cronjob, delete_cronjob};
+use crate::kube::api::entity::deployment::delete_deployment;
+use crate::kube::api::entity::job::{create_job, delete_job};
+use crate::kube::api::entity::pod::{create_pod, delete_pod};
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::messaging::messenger::kit::{
     FunctionRunKit, build_cron_run_kit, build_function_run_kit, build_stream_run_kit,

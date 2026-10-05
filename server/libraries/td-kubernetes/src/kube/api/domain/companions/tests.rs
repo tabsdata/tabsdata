@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use crate::base::error::kubernetes::{KubeJobError, KubernetesError};
-use crate::kube::api::companions::as_one_unit;
+use crate::kube::api::domain::companions::as_one_unit;
 
 const NAMESPACE: &str = "a-namespace";
 const WORKLOAD: &str = "a-workload";

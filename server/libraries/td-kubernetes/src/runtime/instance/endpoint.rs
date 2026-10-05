@@ -6,7 +6,8 @@ use serde_yaml::Value;
 
 use crate::base::constants::{CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY};
 use crate::base::naming::name_from_kube_resource_name;
-use crate::kube::api::{LabelFilter, get_configmaps};
+use crate::kube::api::domain::labels::LabelFilter;
+use crate::kube::api::entity::configmap::get_configmaps;
 use crate::kube::context::KubeContext;
 
 const APISERVER_SERVICE_CONFIG_FILE: &str = "apiserver.service.yaml";

@@ -26,7 +26,7 @@ use crate::client::tdkserver::render::view::InstanceView;
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::cwarn;
-use crate::kube::api::configmap::{get_configmap, replace_configmap};
+use crate::kube::api::entity::configmap::{get_configmap, replace_configmap};
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::index;
 use crate::runtime::instance::tabsdata::{TABSDATA_FILE, TabsdataConfig};

@@ -8,7 +8,7 @@ use tokio::time::timeout;
 use tracing::debug;
 
 use crate::base::constants::{WORKLOAD_LOG_TIMEOUT, WORKLOAD_LOG_WAIT};
-use crate::kube::api::pod::get_pods;
+use crate::kube::api::entity::pod::get_pods;
 use crate::kube::context::KubeContext;
 
 pub async fn report_workload(context: &KubeContext, workload: &str) {

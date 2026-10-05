@@ -19,7 +19,9 @@ use crate::base::naming::{id_from_file, name_from_kube_resource_name, to_kube_re
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments, InstanceArguments};
 use crate::core::system::exit::{CommandError, CommandResult, abort_with};
 use crate::core::system::file::is_hidden_or_system;
-use crate::kube::api::{LabelFilter, get_configmap, get_secret, list_configmaps, upsert_secret};
+use crate::kube::api::domain::labels::LabelFilter;
+use crate::kube::api::entity::configmap::{get_configmap, list_configmaps};
+use crate::kube::api::entity::secret::{get_secret, upsert_secret};
 use crate::kube::context::KubeContext;
 use crate::runtime::provider::{provider_for_or_tdkcontext, require_started_cluster};
 use crate::runtime::secrets::discovery::extract_secret_leaves;

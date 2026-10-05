@@ -15,7 +15,9 @@ use crate::base::constants::{
     HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, SECRET_FAMILY_LABEL, TD_VERSION_LABEL,
 };
 use crate::base::error::kubernetes::{KubeSecretError, KubernetesError};
-use crate::kube::api::{LabelFilter, label_tabsdata, tabsdata_selector, version_patch};
+use crate::kube::api::domain::labels::{
+    LabelFilter, label_tabsdata, tabsdata_selector, version_patch,
+};
 use crate::kube::context::KubeContext;
 
 pub async fn create_secret(

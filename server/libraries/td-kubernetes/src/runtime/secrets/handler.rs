@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use tracing::debug;
 
 use crate::base::error::kubernetes::KubernetesError;
-use crate::kube::api::secret::upsert_secret;
+use crate::kube::api::entity::secret::upsert_secret;
 use crate::kube::context::KubeContext;
 use crate::runtime::secrets::generator::SecretGenerator;
 use crate::runtime::secrets::phase::SecretPhase;

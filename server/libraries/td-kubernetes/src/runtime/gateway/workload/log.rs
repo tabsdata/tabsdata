@@ -10,9 +10,9 @@ use td_bridge::worker::{LogBridgeError, WorkerLogStream};
 
 use crate::base::constants::LOG_POD_POLL_INTERVAL;
 use crate::base::labels::LABEL_WORKER_ID;
-use crate::kube::api::LabelFilter;
-use crate::kube::api::helpers::pod::{is_pod_terminal, started_container_names};
-use crate::kube::api::pod::{get_pods, stream_pod_log};
+use crate::kube::api::domain::labels::LabelFilter;
+use crate::kube::api::entity::pod::status::{is_pod_terminal, started_container_names};
+use crate::kube::api::entity::pod::{get_pods, stream_pod_log};
 use crate::kube::context::KubeContext;
 
 const READ_BUFFER_LEN: usize = 64 * 1024;

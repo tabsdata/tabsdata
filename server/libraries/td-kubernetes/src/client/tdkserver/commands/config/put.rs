@@ -25,8 +25,8 @@ use crate::client::tdkserver::commands::service::{
 };
 use crate::client::tdkserver::common::confirm;
 use crate::core::system::exit::{CommandResult, abort};
-use crate::kube::api::configmap::replace_configmap;
-use crate::kube::api::secret::{get_secret, upsert_secret};
+use crate::kube::api::entity::configmap::replace_configmap;
+use crate::kube::api::entity::secret::{get_secret, upsert_secret};
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::fusion::{MergedConfig, merge};
 use crate::runtime::instance::ports::apply_ports;

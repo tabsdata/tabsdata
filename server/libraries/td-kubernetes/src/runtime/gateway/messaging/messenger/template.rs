@@ -12,7 +12,8 @@ use crate::base::constants::{
     POD_YAML_COMPONENT_LABEL, POD_YAML_FIELD_KIND, POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA,
 };
 use crate::base::error::kubernetes::{KubeMessagingError, KubernetesError};
-use crate::kube::api::{LabelFilter, get_configmaps};
+use crate::kube::api::domain::labels::LabelFilter;
+use crate::kube::api::entity::configmap::get_configmaps;
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::tabsdata::TABSDATA_FILE;
 

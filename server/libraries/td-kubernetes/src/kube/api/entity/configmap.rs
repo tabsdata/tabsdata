@@ -14,9 +14,10 @@ use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, TD_VERSION_LABEL,
 };
 use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
-use crate::kube::api::{
-    LabelFilter, label_tabsdata, retry_while_unreachable, tabsdata_selector, version_patch,
+use crate::kube::api::domain::labels::{
+    LabelFilter, label_tabsdata, tabsdata_selector, version_patch,
 };
+use crate::kube::api::support::retry::retry_while_unreachable;
 use crate::kube::context::KubeContext;
 
 pub async fn create_configmap(

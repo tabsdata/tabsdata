@@ -15,7 +15,8 @@ use crate::base::labels::{
     LABEL_COLLECTION, LABEL_COLLECTION_ID, LABEL_CONNECTION_ID, LABEL_PROJECT_ID,
 };
 use crate::base::naming::to_connection_object_name;
-use crate::kube::api::{configmap, secret};
+use crate::kube::api::entity::configmap;
+use crate::kube::api::entity::secret;
 use crate::kube::context::KubeContext;
 
 const CONNECTION_CONFIGMAP_KEY: &str = "connection.yaml";

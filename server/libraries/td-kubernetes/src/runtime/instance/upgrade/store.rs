@@ -13,7 +13,7 @@ use crate::base::constants::{
 use crate::base::error::upgrade::UpgradeError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::core::system::exit::CommandResult;
-use crate::kube::api::configmap::{
+use crate::kube::api::entity::configmap::{
     delete_configmap, exists_configmap, get_configmap, upsert_configmap,
 };
 use crate::kube::context::KubeContext;
