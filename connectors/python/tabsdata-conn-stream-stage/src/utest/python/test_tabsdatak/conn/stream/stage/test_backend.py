@@ -145,3 +145,12 @@ def test_cloud_backend_credential_env_delegates_to_run_env():
         "AWS_ACCESS_KEY_ID": "k",
         "AWS_SECRET_ACCESS_KEY": "s",
     }
+
+
+def test_the_local_backend_tells_absence_from_presence(tmp_path):
+    backend = _LocalStageBackend(LocalFileSrcConn(base_path=str(tmp_path)))
+    assert backend.exists("stream-state.json") is False
+    assert backend.read_text("stream-state.json") is None
+    (tmp_path / "stream-state.json").write_text("{}", encoding="utf-8")
+    assert backend.exists("stream-state.json") is True
+    assert backend.read_text("stream-state.json") == "{}"

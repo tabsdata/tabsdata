@@ -7,12 +7,14 @@ via ``endpoint.py``, and the ``Endpoint`` -> handler-location bridge."""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from tabsdatak.common._transporter.handler.handler import TransporterReport
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
 from tabsdatak.common._transporter.handler.handler2 import TransporterHandler2
-from tabsdatak.common._transporter.invoker import transporter1
+from tabsdatak.common._transporter.invoker import transporter1, transporter2
 from tabsdatak.server._tdrunner.function._lib import stage_backend
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureConfigs,
@@ -323,3 +325,58 @@ def test_next_after_request_carries_mounts_scheme_creds(tmp_path, monkeypatch):
         == "env:SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID"
     )
     assert captured["env"] is None
+
+
+def _finding_handler2(monkeypatch, content: str | None) -> dict:
+    """A mode-2 handler whose find-copy reports one file holding ``content``
+    (written into the target dir), or nothing when ``content`` is None."""
+    handler = TransporterHandler2()
+    captured: dict = {}
+
+    def fake_execute(request, work_dir, environment=None, extra_args=()):
+        captured["request"] = request
+        if content is None:
+            return TransporterReport(files=[], lastmod_info=None)
+        found = Path(work_dir) / "stream-state.json"
+        found.write_text(content, encoding="utf-8")
+        return TransporterReport(files=[{"to": str(found)}], lastmod_info="t1")
+
+    monkeypatch.setattr(handler, "execute", fake_execute)
+    monkeypatch.setattr(stage_backend, "make_handler", lambda *a, **k: handler)
+    return captured
+
+
+def test_cloud_read_text_returns_none_only_when_the_find_reports_nothing(
+    monkeypatch,
+):
+    captured = _finding_handler2(monkeypatch, None)
+    backend = stage_backend_from_location(
+        Location(uri="s3://bkt/stage", env_prefix=_MOUNT)
+    )
+    assert backend.exists("stream-state.json") is False
+    assert backend.read_text("stream-state.json") is None
+    assert captured["request"].source.uri == "s3://bkt/stage/stream-state.json"
+
+
+def test_cloud_read_text_returns_the_found_file(monkeypatch):
+    _finding_handler2(monkeypatch, '{"kind": "streamState"}')
+    backend = stage_backend_from_location(
+        Location(uri="s3://bkt/stage", env_prefix=_MOUNT)
+    )
+    assert backend.exists("stream-state.json") is True
+    assert backend.read_text("stream-state.json") == '{"kind": "streamState"}'
+
+
+def test_cloud_read_text_raises_when_the_transporter_fails(monkeypatch):
+    handler = TransporterHandler2()
+
+    def failing_execute(request, work_dir, environment=None, extra_args=()):
+        raise transporter2.TransporterRunError(1, "", "access denied")
+
+    monkeypatch.setattr(handler, "execute", failing_execute)
+    monkeypatch.setattr(stage_backend, "make_handler", lambda *a, **k: handler)
+    backend = stage_backend_from_location(
+        Location(uri="s3://bkt/stage", env_prefix=_MOUNT)
+    )
+    with pytest.raises(transporter2.TransporterRunError):
+        backend.read_text("stream-state.json")

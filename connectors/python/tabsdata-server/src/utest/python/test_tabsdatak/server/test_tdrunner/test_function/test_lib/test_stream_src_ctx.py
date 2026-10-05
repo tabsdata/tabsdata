@@ -32,6 +32,14 @@ import pytest
 
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
+from tabsdatak.common._transporter.handler.handler import TransporterReport
+from tabsdatak.common._transporter.handler.handler2 import TransporterHandler2
+from tabsdatak.common._transporter.invoker import transporter2
+from tabsdatak.server._tdrunner.function._lib import stage_backend
+from tabsdatak.server._tdrunner.function._lib.errors import (
+    BadStreamStateError,
+    CommandErrorCode,
+)
 from tabsdatak.server._tdrunner.function._lib.request import Location
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
     FILES_SUBDIR,
@@ -107,26 +115,43 @@ def test_load_state_returns_none_when_file_missing(tmp_path):
     assert _load_state(_local_backend(tmp_path)) is None
 
 
-def test_load_state_returns_none_on_malformed_json(tmp_path, caplog):
-    """Corrupt files don't lock the pod into a fail-loop -- fall back to
-    first-stage semantics and log."""
+def test_load_state_refuses_malformed_json(tmp_path):
+    """A corrupt file is not a first run: starting over would skip or repeat
+    changes, so the start fails and names the deliberate way out."""
     (tmp_path / STREAM_STATE_FILENAME).write_text("not-json{")
-    assert _load_state(_local_backend(tmp_path)) is None
+    with pytest.raises(BadStreamStateError) as raised:
+        _load_state(_local_backend(tmp_path))
+    assert raised.value.api_error is CommandErrorCode.CMD_7
+    assert "--reset-stage" in str(raised.value)
 
 
-def test_load_state_returns_none_on_non_dict_top_level(tmp_path):
+def test_load_state_refuses_a_non_dict_top_level(tmp_path):
     (tmp_path / STREAM_STATE_FILENAME).write_text("[1, 2, 3]")
-    assert _load_state(_local_backend(tmp_path)) is None
+    with pytest.raises(BadStreamStateError) as raised:
+        _load_state(_local_backend(tmp_path))
+    assert "a list where an envelope object is expected" in str(raised.value)
 
 
-def test_load_state_returns_none_on_envelope_mismatch(tmp_path):
-    """e.g. an envelope from a future apiVersion -- treat as unknown
-    schema, fall back to first-stage. The plugin's recovery path is
-    config.initial_values."""
+def test_load_state_refuses_an_envelope_mismatch(tmp_path):
     (tmp_path / STREAM_STATE_FILENAME).write_text(
         json.dumps({"kind": "streamState", "apiVersion": 999, "state": {}})
     )
-    assert _load_state(_local_backend(tmp_path)) is None
+    with pytest.raises(BadStreamStateError) as raised:
+        _load_state(_local_backend(tmp_path))
+    assert raised.value.api_error is CommandErrorCode.CMD_7
+
+
+def test_load_state_refuses_a_failed_read(tmp_path):
+    class _Unreadable(_LocalStageBackend):
+        def read_text(self, rel: str) -> str | None:
+            raise PermissionError("stage not mounted yet")
+
+    (tmp_path / STREAM_STATE_FILENAME).write_text("{}")
+    with pytest.raises(BadStreamStateError) as raised:
+        _load_state(_Unreadable(LocalFileSrcConn(base_path=str(tmp_path))))
+    assert raised.value.api_error is CommandErrorCode.CMD_6
+    assert isinstance(raised.value.__cause__, PermissionError)
+    assert "stage not mounted yet" in str(raised.value)
 
 
 def test_load_state_returns_view_for_valid_envelope(tmp_path):
@@ -187,12 +212,39 @@ def _construct_ctx_for(stage_uri: str, tmp_path: Path) -> StreamerPluginCtx:
     )
 
 
-def test_ctx_construction_succeeds_for_cloud_stage(tmp_path):
-    """A cloud stage now resolves (no startup read on a first run) -- the
-    streamer is no longer file://-only."""
+def _cloud_find(monkeypatch, outcome) -> None:
+    """Make the transporter's find for the cloud stage report nothing, or
+    raise ``outcome`` when it is an exception."""
+    handler = TransporterHandler2()
+
+    def fake_execute(request, work_dir, environment=None, extra_args=()):
+        if isinstance(outcome, Exception):
+            raise outcome
+        return TransporterReport(files=[], lastmod_info=None)
+
+    monkeypatch.setattr(handler, "execute", fake_execute)
+    monkeypatch.setattr(stage_backend, "make_handler", lambda *a, **k: handler)
+
+
+def test_ctx_construction_succeeds_for_a_cloud_stage_without_state(
+    tmp_path, monkeypatch
+):
+    """The storage confirms there is no state: a first run."""
+    _cloud_find(monkeypatch, None)
     ctx = _construct_ctx_for("s3://bucket/stage", tmp_path)
     assert ctx.active is True
     assert ctx.first_stage is True
+
+
+def test_ctx_construction_fails_when_the_cloud_state_cannot_be_read(
+    tmp_path, monkeypatch
+):
+    """A read the transporter could not make is not a first run."""
+    _cloud_find(monkeypatch, transporter2.TransporterRunError(1, "", "denied"))
+    with pytest.raises(BadStreamStateError) as raised:
+        _construct_ctx_for("s3://bucket/stage", tmp_path)
+    assert raised.value.api_error is CommandErrorCode.CMD_6
+    assert "denied" in str(raised.value)
 
 
 def test_ctx_construction_rejects_unsupported_scheme(tmp_path):

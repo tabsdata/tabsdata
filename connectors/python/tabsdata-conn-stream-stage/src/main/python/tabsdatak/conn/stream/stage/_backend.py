@@ -72,9 +72,14 @@ class StageBackend(ABC):
         (creating intermediate prefixes/dirs as needed)."""
         raise NotImplementedError(f"{type(self).__name__} does not support upload")
 
+    def exists(self, rel: str) -> bool:
+        """Whether the stage holds an entry at ``rel``. A failure to find
+        out raises; it is never reported as absence."""
+        raise NotImplementedError(f"{type(self).__name__} does not support exists")
+
     def read_text(self, rel: str) -> str | None:
         """Read a small stage control file at ``rel`` as UTF-8 text, or
-        ``None`` if it does not exist."""
+        ``None`` if it does not exist. A failure to read raises."""
         raise NotImplementedError(f"{type(self).__name__} does not support read_text")
 
     def next_after(
@@ -121,9 +126,13 @@ class _LocalStageBackend(StageBackend):
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(local_path), str(dst))
 
+    def exists(self, rel: str) -> bool:
+        return (Path(self._conn.base_path) / rel).exists()
+
     def read_text(self, rel: str) -> str | None:
-        src = Path(self._conn.base_path) / rel
-        return src.read_text(encoding="utf-8") if src.is_file() else None
+        if not self.exists(rel):
+            return None
+        return (Path(self._conn.base_path) / rel).read_text(encoding="utf-8")
 
     def next_after(
         self, glob: str, cursor: str | None, scratch_dir: Path

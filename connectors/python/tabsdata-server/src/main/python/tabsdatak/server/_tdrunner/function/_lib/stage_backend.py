@@ -35,12 +35,6 @@ from urllib.request import url2pathname
 from tabsdatak.common._fileformat.taxonomy import DestFileFormat
 from tabsdatak.common._transporter.facade import TRANSPORTER_MODE, make_handler
 from tabsdatak.common._transporter.handler.handler import TransporterHandler
-from tabsdatak.common._transporter.invoker.transporter1 import (
-    TransporterRunError as TransporterRunErrorV1,
-)
-from tabsdatak.common._transporter.invoker.transporter2 import (
-    TransporterRunError as TransporterRunErrorV2,
-)
 from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
@@ -194,27 +188,33 @@ class _EndpointStageBackend(StageBackend):
                 env=self.credential_env(handler),
             )
 
+    def exists(self, rel: str) -> bool:
+        with tempfile.TemporaryDirectory() as scratch_dir:
+            return self.fetch_file(rel, Path(scratch_dir)) is not None
+
     def read_text(self, rel: str) -> str | None:
+        with tempfile.TemporaryDirectory() as scratch_dir:
+            path = self.fetch_file(rel, Path(scratch_dir))
+            return path.read_text(encoding="utf-8") if path is not None else None
+
+    def fetch_file(self, rel: str, scratch_dir: Path) -> Path | None:
+        # A plain copy of a missing object fails the same way as one the
+        # transporter cannot reach (credentials, network), so it cannot say
+        # whether the object exists. A find for the exact name can: an empty
+        # report means the object is not there, a match downloads it, and a
+        # transporter failure raises instead of passing for absence.
         handler = make_handler()
-        with tempfile.TemporaryDirectory() as work_dir:
-            dst_path = Path(work_dir) / "download"
-            target = handler.local_path_location(dst_path)
-            try:
-                _output.copy_one(
-                    handler=handler,
-                    source_target_pairs=[(self.build_location(rel, handler), target)],
-                    work_dir=Path(work_dir),
-                    file_format=DestFileFormat.PARQUET,
-                    paths=[str(dst_path)],
-                    env=self.credential_env(handler),
-                )
-            except (TransporterRunErrorV1, TransporterRunErrorV2):
-                # Missing/unreadable object -> treat as absent. The streamer's
-                # state read tolerates this (falls back to first-run), matching
-                # the local "file does not exist" path. Either transporter
-                # version may raise, depending on the active handler.
-                return None
-            return dst_path.read_text(encoding="utf-8") if dst_path.is_file() else None
+        report = _input.wildcard_copy_one(
+            handler=handler,
+            source=self.build_location(rel, handler),
+            target_dir=scratch_dir,
+            initial_lastmod=_EPOCH_LASTMOD,
+            lastmod_info=None,
+            max_files=1,
+            env=self.credential_env(handler),
+        )
+        targets = [f["to"] for f in report.files if isinstance(f, dict) and f.get("to")]
+        return Path(targets[0]) if targets else None
 
     def next_after(
         self, glob: str, cursor: str | None, scratch_dir: Path

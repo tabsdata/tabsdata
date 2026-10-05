@@ -171,6 +171,11 @@ class BadManifestError(CommandRuntimeException):
     command expects (entry count, slot shape, ...)."""
 
 
+class BadStreamStateError(CommandRuntimeException):
+    """The stream state a streamer resumes from could not be read, or is not
+    what the streamer writes."""
+
+
 class ManifestMismatchError(CommandRuntimeException):
     """Manifest is structurally valid but disagrees with the
     request -- e.g. a declared output table has no manifest entry."""
@@ -260,6 +265,19 @@ class CommandErrorCode(ErrorCode):
     CMD_5 = ErrorDef(
         UnexpectedError,
         "The transporter mode '{mode}' is not supported.",
+    )
+    CMD_6 = ErrorDef(
+        BadStreamStateError,
+        "The stream state {file} could not be read ({detail}); the stream does not "
+        "start, since a failed read cannot be told from a first run. Fix the cause "
+        "and restart, or start anew by resetting the function's stage "
+        "(tdk fn update --reset-stage)",
+    )
+    CMD_7 = ErrorDef(
+        BadStreamStateError,
+        "The stream state {file} is not what the streamer writes ({detail}); the "
+        "stream does not start from it. To start anew, reset the function's stage "
+        "(tdk fn update --reset-stage)",
     )
     # Raised by ``_lib.transporter`` when TRANSPORTER_MODE is neither the
     # legacy nor the current implementation.

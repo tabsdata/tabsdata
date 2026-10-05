@@ -67,6 +67,7 @@ from typing import Any
 
 from tabsdatak.api import BasicDictSpec
 from tabsdatak.conn.stream.stage._backend import StageBackend
+from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.request import Location
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromFlowRequestCtx
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (
@@ -91,52 +92,45 @@ logger = logging.getLogger(__name__)
 
 
 def _load_state(backend: StageBackend) -> StreamStateView | None:
-    """Read the prior ``stream-state.json`` from the stage if present.
+    """Read the prior ``stream-state.json`` from the stage.
 
-    Returns ``None`` when:
-      * the file does not exist (streamer has never run for this
-        function before, or the stage was wiped)
-      * the file is unreadable / malformed JSON (log + fall back to
-        first-run semantics — the plugin's ``config.initial_values``
-        branch is the recovery path; better than fail-looping the pod)
-      * the file's envelope is structurally wrong (wrong ``kind`` /
-        unknown ``apiVersion`` / missing ``state`` -- same recovery)
-
-    The read goes through the backend (a direct file read for a local
-    stage; a transporter download for a cloud stage), so a missing or
-    unreadable object surfaces as ``None`` -> first-run semantics.
+    Returns ``None`` only when the backend confirms the file does not
+    exist (the streamer has never run for this function, or the stage was
+    reset): that is the one case that means a first run. A read that
+    fails, malformed JSON, or an envelope the streamer did not write
+    (wrong ``kind`` / unknown ``apiVersion`` / missing ``state``) raise
+    instead: a source whose offsets Tabsdata keeps would otherwise take a
+    transient failure for a first run and skip or repeat changes.
 
     A successful parse returns the full :class:`StreamStateView`; the
     caller exposes only the inner ``state`` dict (which may be ``{}``,
     the first-invocation marker) via :attr:`StreamerPluginCtx.stream_state`.
     """
-    raw_text = backend.read_text(STREAM_STATE_FILENAME)
+    try:
+        raw_text = backend.read_text(STREAM_STATE_FILENAME)
+    except Exception as error:
+        raise CommandErrorCode.CMD_6.exception(
+            cause=error, file=STREAM_STATE_FILENAME, detail=str(error)
+        )
     if raw_text is None:
         return None
     try:
         raw = json.loads(raw_text)
-    except ValueError:
-        logger.exception(
-            "stream_src_ctx: could not parse %s; treating as first-stage",
-            STREAM_STATE_FILENAME,
+    except ValueError as error:
+        raise CommandErrorCode.CMD_7.exception(
+            cause=error, file=STREAM_STATE_FILENAME, detail=f"not JSON: {error}"
         )
-        return None
     if not isinstance(raw, dict):
-        logger.warning(
-            "stream_src_ctx: %s contains %s, expected dict envelope; "
-            "treating as first-stage",
-            STREAM_STATE_FILENAME,
-            type(raw).__name__,
+        raise CommandErrorCode.CMD_7.exception(
+            file=STREAM_STATE_FILENAME,
+            detail=f"a {type(raw).__name__} where an envelope object is expected",
         )
-        return None
     try:
         return parse_state_envelope(raw)
-    except InvalidStateEnvelopeError:
-        logger.exception(
-            "stream_src_ctx: %s has unexpected envelope shape; treating as first-stage",
-            STREAM_STATE_FILENAME,
+    except InvalidStateEnvelopeError as error:
+        raise CommandErrorCode.CMD_7.exception(
+            cause=error, file=STREAM_STATE_FILENAME, detail=str(error)
         )
-        return None
 
 
 class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
