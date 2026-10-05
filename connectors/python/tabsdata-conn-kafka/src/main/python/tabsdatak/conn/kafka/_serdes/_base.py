@@ -161,5 +161,11 @@ class KafkaSerde(ABC):
         callable that yields ``(record, schema_id)`` in one call."""
         return self._deserializer_with_schema_id
 
+    def batch_decoder(self):
+        """A callable decoding a whole fetched batch -- the payloads, in order --
+        into one Arrow table, or returning None when that batch must be decoded
+        message by message; None when this serde has no batch path."""
+        return None
+
     @abstractmethod
     def schema_id_compatibles_checker(self) -> SchemaIdCompatibles: ...

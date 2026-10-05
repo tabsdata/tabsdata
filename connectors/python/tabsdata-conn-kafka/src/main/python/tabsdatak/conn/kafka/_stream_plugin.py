@@ -80,9 +80,11 @@ _KEY_BUFFER_MAX_SECS: SrcCfgKey = "tabsdata.kafka.buffer.max_secs"
 _KEY_TRIGGER_MAX_ROWS: SrcCfgKey = "tabsdata.kafka.trigger.max_rows"
 _KEY_TRIGGER_MAX_BYTES: SrcCfgKey = "tabsdata.kafka.trigger.max_bytes"
 _KEY_TRIGGER_MAX_SECS: SrcCfgKey = "tabsdata.kafka.trigger.max_secs"
+_KEY_CONSUME_MAX_MESSAGES: SrcCfgKey = "tabsdata.kafka.consume.max_messages"
 
 
 KAFKA_DEFAULT_POLL_MAX_SECS = 2
+KAFKA_DEFAULT_CONSUME_MAX_MESSAGES = 10_000
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -90,6 +92,7 @@ class KafkaRunConfig(StreamRunConfig):
     poll_max_secs: int = KAFKA_DEFAULT_POLL_MAX_SECS
     poll_idle_secs: int = 0
     connect_timeout_secs: int = DEFAULT_CONNECT_TIMEOUT_SECS
+    consume_max_messages: int = KAFKA_DEFAULT_CONSUME_MAX_MESSAGES
 
 
 def _build_kafka_run_config(src: KafkaStreamSrc) -> KafkaRunConfig:
@@ -107,6 +110,9 @@ def _build_kafka_run_config(src: KafkaStreamSrc) -> KafkaRunConfig:
         poll_max_secs=cfg.get(_KEY_POLL_MAX_SECS, KAFKA_DEFAULT_POLL_MAX_SECS),
         connect_timeout_secs=cfg.get(
             _KEY_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT_SECS
+        ),
+        consume_max_messages=cfg.get(
+            _KEY_CONSUME_MAX_MESSAGES, KAFKA_DEFAULT_CONSUME_MAX_MESSAGES
         ),
         logging_level=int(cfg.get(_KEY_LOGGING_LEVEL, logging.ERROR)),
     )
@@ -133,7 +139,7 @@ class KafkaStreamSrcPlugin(
             stream_src=stream_src,
             poll_max_secs=cfg.poll_max_secs,
             connect_timeout_secs=cfg.connect_timeout_secs,
-            consume_max_messages=cfg.buffer_max_rows,
+            consume_max_messages=cfg.consume_max_messages,
         )
 
     def slots(self, run: StreamRun[KafkaRecord, KafkaOffset]) -> Sequence[str]:

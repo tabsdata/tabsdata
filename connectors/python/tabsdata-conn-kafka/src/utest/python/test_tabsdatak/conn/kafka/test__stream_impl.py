@@ -29,6 +29,7 @@ from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.kafka._stream_impl import (
+    MIN_BATCH_MESSAGES,
     KafkaEncoder,
     KafkaIngester,
     KafkaOffset,
@@ -343,11 +344,13 @@ def _conn(conn_cfg=None) -> KafkaStreamSrcConn:
     return KafkaStreamSrcConn(servers="broker:9092", group_id="g1", conn_cfg=conn_cfg)
 
 
-def _ingester(*, dlq_topic=None, poll_max_secs=2, conn_cfg=None) -> KafkaIngester:
+def _ingester(
+    *, dlq_topic=None, poll_max_secs=2, conn_cfg=None, schema=""
+) -> KafkaIngester:
     return KafkaIngester(
         conn=_conn(conn_cfg),
         stream_src=KafkaStreamSrc(
-            topic="evt", data_format="json", schema="", dlq_topic=dlq_topic
+            topic="evt", data_format="json", schema=schema, dlq_topic=dlq_topic
         ),
         poll_max_secs=poll_max_secs,
         connect_timeout_secs=16,
@@ -465,6 +468,159 @@ def test_a_fatal_broker_error_fails_the_run(tmp_path):
     with pytest.raises(TabsdataException) as raised:
         list(ingester.poll_changes(consumer))
     assert raised.value.api_error is KafkaErrorCode.KAFKA_26
+
+
+# --- KafkaIngester: a whole fetch decoded at once --------------------
+
+_BATCH_SCHEMA = json.dumps({
+    "type": "object",
+    "properties": {"id": {"type": "integer"}, "name": {"type": "string"}},
+    "required": ["id", "name"],
+})
+
+
+def _batch(n: int, *, partitions: int = 2, topic: str = "evt"):
+    messages = [
+        _message(
+            {"id": i, "name": f"n{i}"}, offset=i // partitions, partition=i % partitions
+        )
+        for i in range(n)
+    ]
+    for message in messages:
+        message.topic.return_value = topic
+    return messages
+
+
+def test_a_whole_valid_fetch_is_decoded_as_one_batch(tmp_path):
+    consumer = MagicMock()
+    messages = _batch(100)
+    consumer.consume.side_effect = [messages, []]
+    ingester = _opened(consumer, tmp_path, schema=_BATCH_SCHEMA)
+
+    [record] = list(ingester.poll_changes(consumer))
+
+    assert record.table is not None and record.rows == 100
+    assert record.table.column("id").to_pylist() == list(range(100))
+    assert record.after.offsets == {"evt": {0: 50, 1: 50}}
+    assert (record.partition, record.offset) == (1, 49)
+    assert record.schema_id == ("id", "name")
+    assert sys.getsizeof(record) > record.table.nbytes
+
+
+def test_a_fetch_with_one_invalid_message_goes_message_by_message(tmp_path):
+    consumer = MagicMock()
+    messages = _batch(99) + [_message({"id": "not an integer", "name": "x"}, offset=99)]
+    consumer.consume.side_effect = [messages, []]
+    producer = MagicMock()
+    with patch("confluent_kafka.Producer", return_value=producer):
+        ingester = _opened(consumer, tmp_path, schema=_BATCH_SCHEMA, dlq_topic="dead")
+
+    records = list(ingester.poll_changes(consumer))
+
+    assert len(records) == 100 and all(r.table is None for r in records)
+    assert [r.value for r in records].count(None) == 1
+    assert producer.produce.call_count == 1
+
+
+@pytest.mark.parametrize(
+    ("extra", "dead"),
+    [
+        ({"id": 1, "name": "x", "more": True}, 0),
+        ({"id": 1}, 1),
+        ({"id": 1, "name": None}, 1),
+        ({"id": 1.5, "name": "x"}, 1),
+    ],
+    ids=["an extra field", "a required field missing", "a null", "a number"],
+)
+def test_a_fetch_the_batch_path_cannot_vouch_for_falls_back(tmp_path, extra, dead):
+    """The per-message path then decides: an extra field is valid, the rest
+    are dead letters, as they would be without the batch path."""
+    consumer = MagicMock()
+    consumer.consume.side_effect = [_batch(99) + [_message(extra, offset=99)], []]
+    producer = MagicMock()
+    with patch("confluent_kafka.Producer", return_value=producer):
+        ingester = _opened(consumer, tmp_path, schema=_BATCH_SCHEMA, dlq_topic="dead")
+
+    records = list(ingester.poll_changes(consumer))
+
+    assert len(records) == 100 and all(r.table is None for r in records)
+    assert producer.produce.call_count == dead
+
+
+def test_a_small_fetch_is_decoded_message_by_message(tmp_path):
+    consumer = MagicMock()
+    consumer.consume.side_effect = [_batch(MIN_BATCH_MESSAGES - 1), []]
+    ingester = _opened(consumer, tmp_path, schema=_BATCH_SCHEMA)
+
+    records = list(ingester.poll_changes(consumer))
+
+    assert len(records) == MIN_BATCH_MESSAGES - 1
+    assert all(r.table is None for r in records)
+
+
+def test_a_fetch_spanning_topics_is_decoded_a_batch_a_topic(tmp_path):
+    consumer = MagicMock()
+    consumer.consume.side_effect = [
+        _batch(100, topic="evt.a") + _batch(80, topic="evt.b"),
+        [],
+    ]
+    ingester = _opened(consumer, tmp_path, schema=_BATCH_SCHEMA)
+
+    records = list(ingester.poll_changes(consumer))
+
+    assert [(r.topic, r.rows) for r in records] == [("evt.a", 100), ("evt.b", 80)]
+    assert records[1].after.offsets == {"evt.b": {0: 40, 1: 40}}
+
+
+def test_a_schema_without_a_batch_path_decodes_message_by_message(tmp_path):
+    consumer = MagicMock()
+    consumer.consume.side_effect = [_batch(100), []]
+    ingester = _opened(consumer, tmp_path, schema="")
+
+    records = list(ingester.poll_changes(consumer))
+
+    assert len(records) == 100 and all(r.table is None for r in records)
+
+
+def test_a_batch_encodes_as_its_messages_would(tmp_path):
+    """The file a decoded batch makes is the one its messages, one by one,
+    would have made: same columns, order, types and rows."""
+    consumer = MagicMock()
+    messages = _batch(100)
+    consumer.consume.side_effect = [messages, []]
+    ingester = _opened(consumer, tmp_path, schema=_BATCH_SCHEMA)
+    encoder = _encoder()
+
+    [batch] = list(ingester.poll_changes(consumer))
+    one_by_one = [_record(json.loads(m.value())) for m in messages]
+
+    [from_batch] = list(encoder.encode("evt", [batch]))
+    [from_messages] = list(_encoder().encode("evt", one_by_one))
+    assert from_batch.equals(from_messages)
+    tables = list(encoder.encode("evt", [batch, batch, one_by_one[0], batch]))
+    assert [t.num_rows for t in tables] == [200, 1, 100]
+
+
+def test_a_batch_takes_the_types_of_the_slot_s_known_schema():
+    encoder = _encoder()
+    first = _record({"id": 1.5, "name": "a"})
+    [from_message] = list(encoder.encode("evt", [first]))
+    table = pa.table({"id": pa.array([1, 2]), "name": pa.array(["b", "c"])})
+    batch = KafkaRecord(
+        value=None,
+        schema_id=("id", "name"),
+        topic="evt",
+        partition=0,
+        offset=2,
+        table=table,
+        rows=2,
+        after=KafkaOffset({"evt": {0: 3}}),
+    )
+
+    [from_batch] = list(encoder.encode("evt", [batch]))
+
+    assert from_batch.schema.equals(from_message.schema)
+    assert from_batch.column("id").to_pylist() == [1.0, 2.0]
 
 
 def test_undecodable_messages_go_to_the_dlq(tmp_path):

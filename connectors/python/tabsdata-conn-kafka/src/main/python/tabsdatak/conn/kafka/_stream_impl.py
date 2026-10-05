@@ -82,6 +82,10 @@ KEEPALIVE_KEY = "socket.keepalive.enable"
 POLL_INTERVAL_KEY = "max.poll.interval.ms"
 
 DEFAULT_CONNECT_TIMEOUT_SECS = 16
+
+# Fewer messages than this are decoded one by one: a batch decode has a fixed
+# cost, and a trickle of messages does not need it.
+MIN_BATCH_MESSAGES = 64
 DEFAULT_ASSIGNMENT_STRATEGY = "cooperative-sticky"
 DEFAULT_METADATA_REFRESH_MS = 30_000
 DEFAULT_FETCH_BACKOFF_MS = 0
@@ -97,13 +101,23 @@ def retriable_acknowledgement(error: BaseException) -> bool:
 
 @dataclass(frozen=True)
 class KafkaRecord:
+    """One message, decoded -- or, with `table` set, a whole fetched batch
+    decoded at once: `rows` messages as one Arrow table, `after` the offset
+    past the last of them in every partition, `partition` and `offset` those
+    of the last message."""
+
     value: dict | None
     schema_id: SchemaIdSpec | None
     topic: str
     partition: int
     offset: int
+    table: pa.Table | None = None
+    rows: int = 1
+    after: KafkaOffset | None = None
 
     def __sizeof__(self) -> int:
+        if self.table is not None:
+            return object.__sizeof__(self) + self.table.nbytes
         return object.__sizeof__(self) + size_of_values(self.value)
 
 
@@ -179,26 +193,56 @@ class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaOffset]):
         self.schemas: dict[tuple[str, SchemaIdSpec], pa.Schema] = {}
 
     def slot(self, record: KafkaRecord) -> str | None:
-        return None if record.value is None else self.topic
+        if record.value is None and record.table is None:
+            return None
+        return self.topic
 
     def size(self, record: KafkaRecord) -> int:
         return sys.getsizeof(record)
 
     def offset(self, record: KafkaRecord) -> KafkaOffset:
+        if record.after is not None:
+            return record.after
         return KafkaOffset.after(record)
+
+    def rows(self, record: KafkaRecord) -> int:
+        return record.rows
 
     def encode(self, slot: str, records: list[KafkaRecord]) -> Iterator[pa.Table]:
         by_topic: dict[str, list[KafkaRecord]] = {}
         for record in records:
             by_topic.setdefault(record.topic, []).append(record)
         for topic, of_topic in by_topic.items():
-            group = [of_topic[0]]
-            for record in of_topic[1:]:
-                if self.compatible(group[0].schema_id, record.schema_id):
-                    group.append(record)
-                else:
+            yield from self.encode_topic(topic, of_topic)
+
+    def encode_topic(
+        self, topic: str, records: list[KafkaRecord]
+    ) -> Iterator[pa.Table]:
+        """Decoded batches of one schema in a row join into one table; the
+        messages around them group as compatible runs, one table each."""
+        group: list[KafkaRecord] = []
+        batches: list[KafkaRecord] = []
+        for record in records:
+            if record.table is not None:
+                if group:
                     yield from self.encode_group(topic, group)
-                    group = [record]
+                    group = []
+                if batches and batches[0].schema_id != record.schema_id:
+                    yield self.encode_batches(topic, batches)
+                    batches = []
+                batches.append(record)
+                continue
+            if batches:
+                yield self.encode_batches(topic, batches)
+                batches = []
+            if not group or self.compatible(group[0].schema_id, record.schema_id):
+                group.append(record)
+            else:
+                yield from self.encode_group(topic, group)
+                group = [record]
+        if batches:
+            yield self.encode_batches(topic, batches)
+        if group:
             yield from self.encode_group(topic, group)
 
     def encode_group(self, topic: str, group: list[KafkaRecord]) -> Iterator[pa.Table]:
@@ -210,8 +254,38 @@ class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaOffset]):
             table = self.assemble_each(group, known)
             if table is None:
                 return
+        yield self.finish(key, table)
+
+    def encode_batches(self, topic: str, batches: list[KafkaRecord]) -> pa.Table:
+        """Batches of one schema id, laid out as a run of their messages would
+        be: the columns sorted, the types widened to the slot's known schema."""
+        tables = [record.table for record in batches]
+        table = tables[0] if len(tables) == 1 else pa.concat_tables(tables)
+        table = table.select(sorted(table.column_names))
+        key = (topic, batches[0].schema_id)
+        known = self.schemas.get(key)
+        if known is not None:
+            columns = [
+                self.widen(table.column(name), known.field(name), name)
+                if name in known.names
+                else table.column(name)
+                for name in table.column_names
+            ]
+            table = pa.table(dict(zip(table.column_names, columns)))
+        return self.finish(key, table)
+
+    def finish(self, key: tuple[str, SchemaIdSpec], table: pa.Table) -> pa.Table:
         self.schemas[key] = table.schema
-        yield table.add_column(0, KAFKA_META_TOPIC, pa.array([topic] * table.num_rows))
+        topic = pa.array([key[0]] * table.num_rows)
+        return table.add_column(0, KAFKA_META_TOPIC, topic)
+
+    @staticmethod
+    def widen(column: pa.ChunkedArray, known: pa.Field, name: str) -> pa.ChunkedArray:
+        unified = pa.unify_schemas(
+            [pa.schema([known]), pa.schema([pa.field(name, column.type)])],
+            promote_options="permissive",
+        )
+        return column.cast(unified.field(name).type)
 
     def assemble(self, rows: list[dict], known: pa.Schema | None) -> pa.Table:
         names = {name for row in rows for name in row}
@@ -221,14 +295,7 @@ class KafkaEncoder(StreamEncoder[KafkaRecord, KafkaOffset]):
         for name in sorted(names):
             array = pa.array([row.get(name) for row in rows])
             if known is not None and name in known.names:
-                unified = pa.unify_schemas(
-                    [
-                        pa.schema([known.field(name)]),
-                        pa.schema([pa.field(name, array.type)]),
-                    ],
-                    promote_options="permissive",
-                )
-                array = array.cast(unified.field(name).type)
+                array = self.widen(array, known.field(name), name)
             columns[name] = array
         return pa.table(columns)
 
@@ -277,6 +344,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
         self._dlq_producer: Producer | None = None
         self._dlq_failures: list[str] = []
         self._serde: KafkaSerde | None = None
+        self._batch_decode = None
         self._lost: list[TopicPartition] | None = None
         self._polled_at: float | None = None
         self._poll_interval_secs: float = DEFAULT_POLL_INTERVAL_MS / 1000
@@ -334,6 +402,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
             sr_client=sr_client,
             sr_client_alt=sr_client_alt,
         )
+        self._batch_decode = self._serde.batch_decoder()
         return consumer
 
     def build_dlq_producer(self, kafka_configs: dict) -> Producer | None:
@@ -481,7 +550,46 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaOffset]):
             self.check_lost()
             if not messages:
                 return
-            yield from self.decode_messages(messages)
+            yield from self.decode_batches(messages)
+
+    def decode_batches(self, messages: list[Message]) -> Iterator[KafkaRecord]:
+        """Each topic's share of the fetch as one record when the serde can
+        decode it at once; otherwise its messages one by one."""
+        by_topic: dict[str, list[Message]] = {}
+        for msg in messages:
+            by_topic.setdefault(msg.topic(), []).append(msg)
+        for topic, of_topic in by_topic.items():
+            batch = self.decode_batch(topic, of_topic)
+            if batch is not None:
+                yield batch
+            else:
+                yield from self.decode_messages(of_topic)
+
+    def decode_batch(self, topic: str, messages: list[Message]) -> KafkaRecord | None:
+        decode = self._batch_decode
+        if decode is None or len(messages) < MIN_BATCH_MESSAGES:
+            return None
+        values = []
+        offsets: dict[int, int] = {}
+        for msg in messages:
+            if msg.error() is not None:
+                return None
+            values.append(msg.value())
+            offsets[msg.partition()] = msg.offset() + 1
+        table = decode(values)
+        if table is None:
+            return None
+        last = messages[-1]
+        return KafkaRecord(
+            value=None,
+            schema_id=tuple(sorted(table.column_names)),
+            topic=topic,
+            partition=last.partition(),
+            offset=last.offset(),
+            table=table,
+            rows=table.num_rows,
+            after=KafkaOffset({topic: offsets}),
+        )
 
     def context(self, topic: str):
         from confluent_kafka.serialization import (

@@ -108,6 +108,7 @@ def test_run_config_defaults():
         60,
     )
     assert cfg.poll_idle_secs == 0
+    assert cfg.consume_max_messages == 10_000
     assert cfg.logging_level == logging.ERROR
 
 

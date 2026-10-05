@@ -111,6 +111,67 @@ def test_json_serde_validates_every_message_with_one_validator():
     assert ei.value.api_error is KafkaErrorCode.KAFKA_15
 
 
+_TYPED = {
+    "type": "object",
+    "properties": {
+        "id": {"type": "integer"},
+        "name": {"type": "string", "format": "email"},
+        "score": {"type": "number"},
+        "ok": {"type": "boolean"},
+        "note": {"type": ["string", "null"]},
+    },
+    "required": ["id", "name"],
+}
+
+
+@pytest.mark.parametrize(
+    "record, valid",
+    [
+        ({"id": 1, "name": "a"}, True),
+        ({"id": 1, "name": "a", "score": 1.5, "ok": True, "note": None}, True),
+        ({"id": 1, "name": "a", "extra": [1]}, True),
+        ({"id": 1.0, "name": "a"}, True),
+        ({"id": True, "name": "a"}, False),
+        ({"id": 1, "name": "a", "score": False}, False),
+        ({"id": 1}, False),
+        ({"id": "1", "name": "a"}, False),
+        ({"id": 1, "name": "a", "note": 3}, False),
+    ],
+)
+def test_the_fast_path_agrees_with_the_full_validator(record, valid):
+    """The fast check only ever accepts; anything it does not accept goes to
+    the validator, so a serde with it accepts and refuses exactly as before:
+    ``1.0`` is an integer to JSON Schema and only the validator says so, a
+    bool is never one, extra properties are allowed."""
+    import jsonschema
+
+    serde = JsonKafkaSerde(json_schema=json.dumps(_TYPED))
+    assert jsonschema.validators.validator_for(_TYPED)(_TYPED).is_valid(record) is valid
+    accept = JsonKafkaSerde._fast_accept(_TYPED)
+    assert not accept(record) or valid
+    if valid:
+        assert serde.deserializer()(json.dumps(record).encode(), None) == record
+    else:
+        with pytest.raises(TabsdataException) as ei:
+            serde.deserializer()(json.dumps(record).encode(), None)
+        assert ei.value.api_error is KafkaErrorCode.KAFKA_15
+
+
+@pytest.mark.parametrize(
+    "schema",
+    [
+        {"type": "object", "properties": {"id": {"type": "integer", "minimum": 0}}},
+        {"type": "object", "additionalProperties": False},
+        {"type": "object", "patternProperties": {"^x": {"type": "string"}}},
+        {"type": "object", "properties": {"id": {"type": "custom"}}},
+        {"anyOf": [{"type": "object"}]},
+        {"type": "array"},
+    ],
+)
+def test_the_fast_path_steps_aside_for_any_other_schema(schema):
+    assert JsonKafkaSerde._fast_accept(schema) is None
+
+
 # --- AvroKafkaSerde -------------------------------------------------
 
 

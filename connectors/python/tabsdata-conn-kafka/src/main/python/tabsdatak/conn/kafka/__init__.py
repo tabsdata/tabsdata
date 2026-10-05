@@ -299,6 +299,7 @@ SrcCfgKey: TypeAlias = Literal[
     "tabsdata.kafka.trigger.max_rows",
     "tabsdata.kafka.trigger.max_bytes",
     "tabsdata.kafka.trigger.max_secs",
+    "tabsdata.kafka.consume.max_messages",
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
@@ -313,6 +314,7 @@ SrcCfgSpec: TypeAlias = Annotated[
         "tabsdata.kafka.trigger.max_bytes",
         "tabsdata.kafka.poll.max_secs",
         "kafka.connect_timeout_secs",
+        "tabsdata.kafka.consume.max_messages",
     ),
 ]
 
@@ -376,6 +378,14 @@ class KafkaStreamSrc(StreamSrc):
             Every limit is a positive whole number. A byte limit is
             measured on every record and slows ingestion down; bounding
             by rows is the cheap option and the preferred one.
+            `tabsdata.kafka.consume.max_messages` (default 10000) is how
+            many messages one fetch from the consumer hands over at once;
+            a JSON schema of plain typed properties lets such a fetch be
+            decoded as one Arrow table, so a backlog reads faster with a
+            larger fetch, up to what librdkafka prefetches into its local
+            queue (`queued.min.messages`, 100000 by default, within
+            `queued.max.messages.kbytes`, 64 MiB by default); a fetch
+            asking for more waits out the poll.
 
     Examples:
         Consume Avro payloads, staging a batch as soon as 500 messages
