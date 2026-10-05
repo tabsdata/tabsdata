@@ -188,6 +188,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
         self._connect_timeout_secs = connect_timeout_secs
         self._consumer: Consumer | None = None
         self._dlq_producer: Producer | None = None
+        self._dlq_failures: list[str] = []
         self._serde: KafkaSerde | None = None
 
     @property
@@ -212,7 +213,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
         consumer.subscribe([self.topic])
         self._consumer = consumer
 
-        self._dlq_producer = self._build_dlq_producer(kafka_configs)
+        self._dlq_producer = self.build_dlq_producer(kafka_configs)
 
         sr_client = build_schema_registry_client(
             schema_registry=self._conn.schema_registry,
@@ -235,7 +236,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
         )
         return consumer
 
-    def _build_dlq_producer(self, kafka_configs: dict) -> Producer | None:
+    def build_dlq_producer(self, kafka_configs: dict) -> Producer | None:
         if self._stream_src.dlq_topic is None:
             return None
         from confluent_kafka import Producer
@@ -257,9 +258,16 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
             logger.warning("Failed to close kafka consumer: %s", exc)
         if self._dlq_producer is not None:
             try:
-                self._dlq_producer.flush()
+                remaining = self._dlq_producer.flush(self._connect_timeout_secs)
             except Exception as exc:  # pragma: no cover
                 logger.warning("Failed to flush DLQ producer: %s", exc)
+            else:
+                if remaining:
+                    logger.warning(
+                        "%s messages to the dead-letter topic were still "
+                        "undelivered when the session closed",
+                        remaining,
+                    )
 
     def base_offset(self) -> KafkaPosition:
         return KafkaPosition()
@@ -274,14 +282,40 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
 
     def commit_state(self, offset: KafkaPosition) -> StreamStateSpec:
         partitions = offset.topic_partitions()
-        return lambda: self._commit(partitions)
+        return lambda: self.commit(partitions)
 
     def commit_offset(self, offset: KafkaPosition) -> None:
         pass
 
-    def _commit(self, partitions: list[TopicPartition]) -> None:
+    def commit(self, partitions: list[TopicPartition]) -> None:
+        self.settle_dead_letters()
         if partitions:
             self._consumer.commit(offsets=partitions, asynchronous=False)
+
+    def settle_dead_letters(self) -> None:
+        if self._dlq_producer is None:
+            return
+        undelivered = self._dlq_producer.flush(self._connect_timeout_secs)
+        if undelivered or self._dlq_failures:
+            raise self.dead_letter_failure(undelivered)
+
+    def dead_letter_failure(
+        self,
+        undelivered: int,
+        cause: BaseException | None = None,
+    ) -> Exception:
+        error = cause or (
+            self._dlq_failures[0]
+            if self._dlq_failures
+            else "the broker did not acknowledge the delivery in time"
+        )
+        return KafkaErrorCode.KAFKA_29.exception(
+            cause=cause,
+            topic=self._stream_src.dlq_topic,
+            undelivered=undelivered,
+            failed=len(self._dlq_failures),
+            error=error,
+        )
 
     def poll_changes(self, session: Consumer) -> Iterator[KafkaRecord]:
         from confluent_kafka.serialization import (
@@ -334,7 +368,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
                     msg.topic(),
                     exc,
                 )
-                self._send_to_dlq(msg, exc)
+                self.send_to_dlq(msg, exc)
                 continue
             yield KafkaRecord(
                 value=record,
@@ -343,7 +377,7 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
                 message=msg,
             )
 
-    def _send_to_dlq(
+    def send_to_dlq(
         self,
         msg: Message,
         error: Exception | Any,
@@ -362,13 +396,32 @@ class KafkaIngester(StreamIngester[KafkaRecord, KafkaPosition]):
             "offset": msg.offset(),
             "timestamp": msg.timestamp(),
         }
-        self._dlq_producer.produce(
-            topic=self._stream_src.dlq_topic,
-            key=msg.key(),
-            value=json.dumps(envelope).encode("utf-8"),
+        where = (
+            f"offset {msg.offset()} of partition {msg.partition()} "
+            f"of topic {msg.topic()!r}"
         )
+
+        def on_delivery(delivery_error, _delivered):
+            if delivery_error is not None:
+                self._dlq_failures.append(f"{where}: {delivery_error}")
+
+        def produce():
+            self._dlq_producer.produce(
+                topic=self._stream_src.dlq_topic,
+                key=msg.key(),
+                value=json.dumps(envelope).encode("utf-8"),
+                on_delivery=on_delivery,
+            )
+
+        try:
+            produce()
+        except BufferError:
+            self._dlq_producer.flush(self._connect_timeout_secs)
+            try:
+                produce()
+            except BufferError as exc:
+                raise self.dead_letter_failure(len(self._dlq_producer), cause=exc)
         self._dlq_producer.poll(0)
-        self._dlq_producer.flush()
 
 
 def build_kafka_configs(*, conn: KafkaStreamSrcConn) -> dict:

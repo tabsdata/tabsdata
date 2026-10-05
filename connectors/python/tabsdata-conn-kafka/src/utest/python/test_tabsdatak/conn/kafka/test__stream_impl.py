@@ -412,14 +412,102 @@ def test_a_commit_state_without_offsets_commits_nothing(tmp_path):
     consumer.commit.assert_not_called()
 
 
-def test_closing_the_session_closes_the_consumer_and_flushes_the_dlq(tmp_path):
-    consumer = MagicMock()
+def _with_dlq(consumer, tmp_path) -> tuple[KafkaIngester, MagicMock]:
     producer = MagicMock()
+    producer.flush.return_value = 0
     with patch("confluent_kafka.Producer", return_value=producer):
         ingester = _opened(consumer, tmp_path, dlq_topic="evt_dlq")
+    return ingester, producer
+
+
+def test_dead_letter_messages_are_produced_without_a_flush_per_message(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message(raw=b"bad"), _message(raw=b"worse"), None]
+    ingester, producer = _with_dlq(consumer, tmp_path)
+
+    assert list(ingester.poll_changes(consumer)) == []
+
+    assert producer.produce.call_count == 2
+    assert producer.poll.call_count == 2
+    producer.flush.assert_not_called()
+    assert callable(producer.produce.call_args.kwargs["on_delivery"])
+
+
+def test_a_full_producer_queue_is_flushed_once_and_the_message_retried(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message(raw=b"bad"), None]
+    ingester, producer = _with_dlq(consumer, tmp_path)
+    producer.produce.side_effect = [BufferError("queue full"), None]
+
+    assert list(ingester.poll_changes(consumer)) == []
+
+    assert producer.produce.call_count == 2
+    producer.flush.assert_called_once_with(16)
+
+
+def test_a_producer_queue_that_stays_full_stops_the_stream(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message(raw=b"bad"), None]
+    ingester, producer = _with_dlq(consumer, tmp_path)
+    producer.produce.side_effect = BufferError("queue full")
+    producer.__len__.return_value = 7
+
+    with pytest.raises(TabsdataException) as raised:
+        list(ingester.poll_changes(consumer))
+
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_29
+    assert isinstance(raised.value.__cause__, BufferError)
+
+
+def test_the_commit_settles_the_dead_letter_topic_before_committing(tmp_path):
+    consumer = MagicMock()
+    ingester, producer = _with_dlq(consumer, tmp_path)
+    order = []
+    producer.flush.side_effect = lambda timeout: order.append(("flush", timeout)) or 0
+    consumer.commit.side_effect = lambda **_: order.append(("commit", None))
+
+    ingester.commit_state(KafkaPosition({"evt": {0: 2}}))()
+
+    assert order == [("flush", 16), ("commit", None)]
+
+
+def test_an_undelivered_dead_letter_message_stops_the_commit(tmp_path):
+    consumer = MagicMock()
+    ingester, producer = _with_dlq(consumer, tmp_path)
+    producer.flush.return_value = 1
+
+    with pytest.raises(TabsdataException) as raised:
+        ingester.commit_state(KafkaPosition({"evt": {0: 2}}))()
+
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_29
+    consumer.commit.assert_not_called()
+
+
+def test_a_failed_dead_letter_delivery_stops_the_commit(tmp_path):
+    consumer = MagicMock()
+    consumer.poll.side_effect = [_message(raw=b"bad", offset=9), None]
+    ingester, producer = _with_dlq(consumer, tmp_path)
+    producer.produce.side_effect = lambda **kwargs: kwargs["on_delivery"](
+        "Unknown topic", None
+    )
+
+    assert list(ingester.poll_changes(consumer)) == []
+    with pytest.raises(TabsdataException) as raised:
+        ingester.commit_state(KafkaPosition({"evt": {0: 10}}))()
+
+    assert raised.value.api_error is KafkaErrorCode.KAFKA_29
+    assert "offset 9 of partition 0 of topic 'evt': Unknown topic" in str(
+        raised.value
+    )
+    consumer.commit.assert_not_called()
+
+
+def test_closing_the_session_closes_the_consumer_and_flushes_the_dlq(tmp_path):
+    consumer = MagicMock()
+    ingester, producer = _with_dlq(consumer, tmp_path)
     ingester.close_session(consumer)
     consumer.close.assert_called_once()
-    producer.flush.assert_called()
+    producer.flush.assert_called_once_with(16)
 
 
 # --- build_kafka_configs --------------------------------------------

@@ -170,3 +170,9 @@ class KafkaErrorCode(ErrorCode):
         "could not be decoded and the source has no dead-letter topic to send it "
         "to; the stream stops without committing: {error}",
     )
+    KAFKA_29 = ErrorDef(
+        KafkaRuntimeException,
+        "The delivery of messages to the dead-letter topic {topic!r} did not "
+        "complete (undelivered: {undelivered}, failed: {failed}); the stream stops "
+        "without committing so the messages are read again: {error}",
+    )
