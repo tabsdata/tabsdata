@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -46,12 +47,15 @@ def src_conn(
     domain: RedpandaDomain,
     *,
     schema_registry: SchemaRegistrySpec | None = None,
+    group: str | None = None,
+    conn_cfg: dict | None = None,
 ) -> KafkaStreamSrcConn:
     return KafkaStreamSrcConn(
         servers=servers(domain),
         credentials=credentials(domain),
-        group_id=group_id(),
+        group_id=group or group_id(),
         schema_registry=schema_registry,
+        conn_cfg=conn_cfg,
     )
 
 
@@ -82,13 +86,13 @@ class Broker:
             })
         return conf
 
-    def create_topic(self, topic: str) -> None:
+    def create_topic(self, topic: str, partitions: int = 1) -> None:
         from confluent_kafka.admin import AdminClient
         from confluent_kafka.cimpl import NewTopic
 
         admin = AdminClient(self.config)
         for _topic, future in admin.create_topics([
-            NewTopic(topic, num_partitions=1, replication_factor=1)
+            NewTopic(topic, num_partitions=partitions, replication_factor=1)
         ]).items():
             try:
                 future.result(timeout=ADMIN_TIMEOUT_SECONDS)
@@ -107,37 +111,118 @@ class Broker:
                 pass
 
     @contextmanager
-    def fresh_topic(self, name: str | None = None) -> Iterator[str]:
+    def fresh_topic(
+        self, name: str | None = None, *, partitions: int = 1
+    ) -> Iterator[str]:
         """A topic created for the caller and dropped afterwards. A checked-in
         function names its topic at decoration time, so `name` is dropped first --
         a leftover from an aborted run must not be re-consumed."""
         topic = name or f"{TOPIC_PREFIX}_{uuid.uuid4().hex[:12]}"
         if name:
             self.delete_topic(topic)
-        self.create_topic(topic)
+        self.create_topic(topic, partitions)
         try:
             yield topic
         finally:
             self.delete_topic(topic)
 
-    def produce(self, topic: str, messages: list[dict], serde=None) -> None:
+    def produce(
+        self,
+        topic: str,
+        messages: list[dict],
+        serde=None,
+        *,
+        keys: list[bytes] | None = None,
+    ) -> None:
         """Produce `messages` to `topic`, serialised by `serde` -- or as plain JSON
-        bytes when none is given, which is what a registry-less JSON source reads."""
-        from confluent_kafka import Producer
+        bytes when none is given, which is what a registry-less JSON source reads.
+        `keys`, one per message, spread them over the topic's partitions."""
         from confluent_kafka.serialization import MessageField, SerializationContext
 
-        producer = Producer(self.config)
         ctx = SerializationContext(topic, MessageField.VALUE)
         serialize = serde.serializer() if serde is not None else None
-        for message in messages:
-            value = (
-                serialize(message, ctx)
-                if serialize is not None
-                else json.dumps(message).encode()
-            )
-            producer.produce(topic, value=value)
+        payloads = [
+            serialize(message, ctx)
+            if serialize is not None
+            else json.dumps(message).encode()
+            for message in messages
+        ]
+        self.produce_raw(topic, payloads, keys=keys)
+
+    def produce_raw(
+        self,
+        topic: str,
+        payloads: list[bytes],
+        *,
+        keys: list[bytes] | None = None,
+    ) -> None:
+        from confluent_kafka import Producer
+
+        producer = Producer(self.config)
+        for index, payload in enumerate(payloads):
+            key = keys[index] if keys is not None else None
+            producer.produce(topic, value=payload, key=key)
             producer.poll(0)
         producer.flush()
+
+    def acknowledged(self, group: str, topic: str, partitions: int) -> dict[int, int]:
+        """The offsets `group` has acknowledged on the broker, per partition that
+        has any."""
+        from confluent_kafka import Consumer, TopicPartition
+
+        consumer = Consumer({
+            **self.config,
+            "group.id": group,
+            "enable.auto.commit": False,
+        })
+        try:
+            found = consumer.committed(
+                [TopicPartition(topic, partition) for partition in range(partitions)],
+                timeout=ADMIN_TIMEOUT_SECONDS,
+            )
+        finally:
+            consumer.close()
+        return {tp.partition: tp.offset for tp in found if tp.offset >= 0}
+
+    def ends(self, topic: str, partitions: int) -> dict[int, int]:
+        """The end offset of every partition of `topic` that holds messages."""
+        from confluent_kafka import Consumer, TopicPartition
+
+        consumer = Consumer({**self.config, "group.id": group_id()})
+        try:
+            highs = {
+                partition: consumer.get_watermark_offsets(
+                    TopicPartition(topic, partition), timeout=ADMIN_TIMEOUT_SECONDS
+                )[1]
+                for partition in range(partitions)
+            }
+        finally:
+            consumer.close()
+        return {partition: high for partition, high in highs.items() if high > 0}
+
+    def read_back(self, topic: str, count: int, *, timeout: float = 20.0) -> list[dict]:
+        """Up to `count` JSON messages of `topic` from its beginning, waiting at most
+        `timeout` seconds for them."""
+        from confluent_kafka import Consumer
+
+        consumer = Consumer({
+            **self.config,
+            "group.id": group_id(),
+            "auto.offset.reset": "earliest",
+            "enable.auto.commit": False,
+        })
+        consumer.subscribe([topic])
+        deadline = time.monotonic() + timeout
+        messages: list[dict] = []
+        try:
+            while len(messages) < count and time.monotonic() < deadline:
+                msg = consumer.poll(1.0)
+                if msg is None or msg.error() is not None:
+                    continue
+                messages.append(json.loads(msg.value()))
+        finally:
+            consumer.close()
+        return messages
 
     def schema_registry_client(self):
         from confluent_kafka.schema_registry import SchemaRegistryClient
