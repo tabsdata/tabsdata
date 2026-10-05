@@ -330,7 +330,7 @@ def test_a_lost_workload_is_recovered_with_a_new_worker(
                         for candidate in execution.workers
                         if candidate.id != lost.id
                         and candidate.status == RUNNING
-                        and cluster.running_pod_of_worker(candidate.id) is not None
+                        and cluster.unfinished_job_of_worker(candidate.id) is not None
                     ),
                     None,
                 )
@@ -380,7 +380,7 @@ def test_an_orphan_workload_is_removed_and_the_real_one_kept(
             RECOVERY_TIMEOUT,
             "recovery did not remove the orphan workload",
         )
-        assert cluster.running_pod_of_worker(worker.id) is not None
+        assert cluster.unfinished_job_of_worker(worker.id) is not None
     finally:
         finish(execution)
 
@@ -408,7 +408,7 @@ def test_an_orphan_without_a_function_id_is_left_in_place(
         assert cluster.jobs(f"{WORKER_ID}={labels[WORKER_ID]}"), (
             "an inconsistent orphan must be reported, not stopped"
         )
-        assert cluster.running_pod_of_worker(worker.id) is not None
+        assert cluster.unfinished_job_of_worker(worker.id) is not None
     finally:
         cluster.delete_job(orphan)
         finish(execution)

@@ -64,12 +64,12 @@ def running_run_worker(execution: Execution, cluster: Cluster) -> Worker:
         if (
             worker is not None
             and worker.status == RUNNING
-            and cluster.running_pod_of_worker(worker.id) is not None
+            and cluster.unfinished_job_of_worker(worker.id) is not None
         ):
             return worker
         return None
 
-    return eventually(ready, STARTUP_TIMEOUT, "the run never got a running pod")
+    return eventually(ready, STARTUP_TIMEOUT, "the run never got an unfinished job")
 
 
 def current_status(execution: Execution, worker_id: str) -> str:

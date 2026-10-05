@@ -99,6 +99,13 @@ class Cluster:
             None,
         )
 
+    def unfinished_job_of_worker(self, worker_id: str):
+        selector = f"{WORKER_ID}={label_value(worker_id)}"
+        return next(
+            (job for job in self.jobs(selector) if not finished(job)),
+            None,
+        )
+
     def cronjobs_of_function(self, function_id: str) -> list:
         return self.cronjobs(f"{FUNCTION_ID}={label_value(function_id)}")
 
