@@ -7,9 +7,11 @@ use std::collections::HashSet;
 use bytes::Bytes;
 use futures::AsyncReadExt;
 use td_bridge::worker::{LogBridgeError, WorkerLogStream};
+use td_objects::types::basic::WorkerId;
 
 use crate::base::constants::LOG_POD_POLL_INTERVAL;
 use crate::base::labels::LABEL_WORKER_ID;
+use crate::base::naming::worker_id_text;
 use crate::kube::api::domain::labels::LabelFilter;
 use crate::kube::api::entity::pod::status::{is_pod_terminal, started_container_names};
 use crate::kube::api::entity::pod::{get_pods, stream_pod_log};
@@ -24,9 +26,13 @@ fn container_header(container: &str) -> Bytes {
     Bytes::from(format!("{line}\ncontainer: {container}\n{line}\n"))
 }
 
-pub fn stream_worker_logs(context: &KubeContext, worker_id: &str, follow: bool) -> WorkerLogStream {
+pub fn stream_worker_logs(
+    context: &KubeContext,
+    worker_id: &WorkerId,
+    follow: bool,
+) -> WorkerLogStream {
     let context = context.clone();
-    let worker_id = worker_id.to_owned();
+    let worker_id = worker_id_text(worker_id);
 
     Box::pin(async_stream::stream! {
         let mut streamed: HashSet<String> = HashSet::new();

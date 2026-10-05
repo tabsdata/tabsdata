@@ -5,6 +5,7 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
 use td_common::worker::{Decorator, WorkerName};
+use td_objects::types::basic::WorkerId;
 
 use crate::base::constants::{KUBE_NAME_SEPARATOR, Scope, TABSDATA_NAME_PREFIX};
 use crate::base::error::naming::{NameSegment, NamingError};
@@ -98,11 +99,15 @@ pub fn to_connection_object_name(connection_id: &str) -> Result<String, NamingEr
     Ok(assembled)
 }
 
-pub fn to_fn_pod_name(prefix: &str, worker_id: &str) -> Result<String, NamingError> {
+pub fn worker_id_text(worker_id: &WorkerId) -> String {
+    worker_id.unpadded_str()
+}
+
+pub fn to_fn_pod_name(prefix: &str, worker_id: &WorkerId) -> Result<String, NamingError> {
     let assembled = format!(
         "{}{KUBE_NAME_SEPARATOR}{}",
         normalize_segment(NameSegment::Component, prefix)?,
-        normalize_segment(NameSegment::WorkerId, worker_id)?,
+        normalize_segment(NameSegment::WorkerId, &worker_id_text(worker_id))?,
     );
     if !DNS_SUBDOMAIN_PATTERN.is_match(&assembled) {
         return Err(NamingError::AssembledIdentifierInvalid {
@@ -142,15 +147,15 @@ pub fn name_from_kube_resource_name<'a>(
 }
 
 fn normalize_segment(segment: NameSegment, value: &str) -> Result<String, NamingError> {
-    // Reduce the value to a valid Kubernetes name segment: lowercase, keep only
-    // ASCII alphanumerics. Logical ids carry separators (e.g. `WKR20260713.3`)
-    // that a name segment forbids but that survive on labels/env, so drop them
-    // here rather than reject. Callers passing already-clean ids are unaffected.
-    let normalized: String = value
-        .to_lowercase()
-        .chars()
-        .filter(char::is_ascii_alphanumeric)
-        .collect();
+    let mut normalized = String::with_capacity(value.len());
+    for character in value.to_lowercase().chars() {
+        if character.is_ascii_alphanumeric() {
+            normalized.push(character);
+        } else if !normalized.is_empty() && !normalized.ends_with('-') {
+            normalized.push('-');
+        }
+    }
+    let normalized = normalized.trim_end_matches('-').to_owned();
     if normalized.is_empty() {
         return Err(NamingError::InvalidNameSegment {
             segment,

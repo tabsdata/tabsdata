@@ -26,7 +26,7 @@ from testi_tabsdatak.conn.common.cluster import (
     WORKER_ID,
     Cluster,
     eventually,
-    label_value,
+    worker_selector,
 )
 from testi_tabsdatak.sdk.workloads import (
     CANCELED,
@@ -119,8 +119,8 @@ def test_finished_runs_keep_their_workloads(
     second_worker = run_worker(second)
 
     assert first_worker is not None and second_worker is not None
-    assert cluster.jobs(f"{WORKER_ID}={label_value(first_worker.id)}")
-    assert cluster.jobs(f"{WORKER_ID}={label_value(second_worker.id)}")
+    assert cluster.jobs(worker_selector(first_worker.id))
+    assert cluster.jobs(worker_selector(second_worker.id))
 
 
 @tabsdata_instance(consumer="tdtest")
@@ -137,7 +137,7 @@ def test_names_are_annotations_and_labels_carry_only_ids(
     wait_for_completion(execution)
     worker = run_worker(execution)
     assert worker is not None
-    selector = f"{WORKER_ID}={label_value(worker.id)}"
+    selector = worker_selector(worker.id)
     objects = (
         cluster.jobs(selector)
         + cluster.configmaps(selector)

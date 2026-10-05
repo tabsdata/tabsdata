@@ -25,7 +25,8 @@ from testi_tabsdatak.conn.common.cluster import (
     Cluster,
     Monitor,
     eventually,
-    label_value,
+    worker_parts,
+    worker_selector,
 )
 from testi_tabsdatak.sdk.workloads import (
     FAILED,
@@ -215,13 +216,16 @@ def test_updating_a_cron_function_repeatedly_keeps_the_newest_cron_job(
                     "ticker", info=lifecycle.ticker, project_root=str(FUNCTIONS)
                 )
                 time.sleep(pause)
-            newest = max(worker.id for worker in cron_workers(function))
+            newest = max(
+                (worker.id for worker in cron_workers(function)), key=worker_parts
+            )
 
             def settled_on_newest():
                 cronjobs = cluster.cronjobs_of_function(function_id)
-                return len(cronjobs) == 1 and cronjobs[0].metadata.labels[
-                    WORKER_ID
-                ] == label_value(newest)
+                return (
+                    len(cronjobs) == 1
+                    and cronjobs[0].metadata.labels[WORKER_ID] == newest
+                )
 
             eventually(
                 settled_on_newest,
@@ -262,13 +266,16 @@ def test_mixed_operations_on_a_cron_function_settle_on_the_last_request(
                 update,
             ]:
                 operation()
-            newest = max(worker.id for worker in cron_workers(function))
+            newest = max(
+                (worker.id for worker in cron_workers(function)), key=worker_parts
+            )
 
             def settled_on_newest():
                 cronjobs = cluster.cronjobs_of_function(function_id)
-                return len(cronjobs) == 1 and cronjobs[0].metadata.labels[
-                    WORKER_ID
-                ] == label_value(newest)
+                return (
+                    len(cronjobs) == 1
+                    and cronjobs[0].metadata.labels[WORKER_ID] == newest
+                )
 
             eventually(
                 settled_on_newest,
@@ -318,7 +325,7 @@ def test_a_lost_workload_is_recovered_with_a_new_worker(
     try:
         lost = running_run_worker(execution, cluster)
         function_id = function_id_of(cluster, lost.id)
-        job = cluster.jobs(f"{WORKER_ID}={label_value(lost.id)}")[0]
+        job = cluster.jobs(worker_selector(lost.id))[0]
 
         with Monitor(cluster, function_id) as monitor:
             cluster.delete_job(job.metadata.name)
@@ -346,15 +353,21 @@ def test_a_lost_workload_is_recovered_with_a_new_worker(
         finish(execution)
 
 
-def orphan_labels(cluster: Cluster, worker_id: str) -> tuple[dict, dict, str]:
-    job = cluster.jobs(f"{WORKER_ID}={label_value(worker_id)}")[0]
+ORPHAN_COUNTER_OFFSET = 1_000_000
+
+
+def orphan_of(cluster: Cluster, worker_id: str) -> tuple[str, dict, dict, str]:
+    job = cluster.jobs(worker_selector(worker_id))[0]
+    day, counter = worker_parts(worker_id)
+    orphan_id = f"{day}-{counter + ORPHAN_COUNTER_OFFSET}"
+    prefix = job.metadata.name.removesuffix(f"-{worker_id}")
     labels = dict(job.metadata.labels)
-    labels[WORKER_ID] = labels[WORKER_ID][:-10] + "9" * 10
+    labels[WORKER_ID] = orphan_id
     for managed in ["controller-uid", "batch.kubernetes.io/controller-uid", "job-name"]:
         labels.pop(managed, None)
         labels.pop(f"batch.kubernetes.io/{managed}", None)
     image = job.spec.template.spec.containers[0].image
-    return labels, dict(job.metadata.annotations or {}), image
+    return f"{prefix}-{orphan_id}", labels, dict(job.metadata.annotations or {}), image
 
 
 @tabsdata_instance(consumer="tdtest")
@@ -370,8 +383,7 @@ def test_an_orphan_workload_is_removed_and_the_real_one_kept(
     execution = function.trigger()
     try:
         worker = running_run_worker(execution, cluster)
-        labels, annotations, image = orphan_labels(cluster, worker.id)
-        orphan = f"pub-orphan-{int(time.time())}"
+        orphan, labels, annotations, image = orphan_of(cluster, worker.id)
 
         cluster.create_suspended_job(orphan, labels, annotations, image)
 
@@ -396,10 +408,10 @@ def test_an_orphan_without_a_function_id_is_left_in_place(
         source_collection(collection_factory), lifecycle.sleeper, "sleeper"
     )
     execution = function.trigger()
-    orphan = f"pub-orphan-{int(time.time())}"
+    orphan = None
     try:
         worker = running_run_worker(execution, cluster)
-        labels, annotations, image = orphan_labels(cluster, worker.id)
+        orphan, labels, annotations, image = orphan_of(cluster, worker.id)
         labels.pop(FUNCTION_ID)
 
         cluster.create_suspended_job(orphan, labels, annotations, image)
@@ -410,5 +422,6 @@ def test_an_orphan_without_a_function_id_is_left_in_place(
         )
         assert cluster.unfinished_job_of_worker(worker.id) is not None
     finally:
-        cluster.delete_job(orphan)
+        if orphan is not None:
+            cluster.delete_job(orphan)
         finish(execution)

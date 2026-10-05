@@ -20,11 +20,11 @@ from tabsdatax.itest.fixture.functions.harness import CollectionFactory
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
 from testi_tabsdatak.conn.common.cluster import (
     FUNCTION_ID,
-    WORKER_ID,
     Cluster,
     Monitor,
     eventually,
-    label_value,
+    worker_parts,
+    worker_selector,
 )
 from testi_tabsdatak.conn.common.function_project import function_module
 from testi_tabsdatak.conn.kafka.backend import broker, src_conn
@@ -70,11 +70,11 @@ def running_streamer_function_id(function: Function, cluster: Cluster) -> str:
 
 
 def settled_on_newest(function: Function, cluster: Cluster, function_id: str) -> bool:
-    newest = max(worker.id for worker in stage_workers(function))
+    newest = max((worker.id for worker in stage_workers(function)), key=worker_parts)
     unfinished = cluster.unfinished_of_function(function_id)
     if len(unfinished) != 1:
         return False
-    jobs = cluster.jobs(f"{WORKER_ID}={label_value(newest)}")
+    jobs = cluster.jobs(worker_selector(newest))
     return any(job.metadata.name in unfinished for job in jobs)
 
 

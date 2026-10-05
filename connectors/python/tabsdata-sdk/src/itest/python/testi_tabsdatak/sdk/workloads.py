@@ -18,10 +18,9 @@ from tabsdatak.sdk.status_utils.worker import WorkerStatus, worker_status_to_map
 from tabsdatak.sdk.tabsdata_server import Collection, Execution, Function, Worker
 from testi_tabsdatak.conn.common.cluster import (
     FUNCTION_ID,
-    WORKER_ID,
     Cluster,
     eventually,
-    label_value,
+    worker_selector,
 )
 from testi_tabsdatak.conn.common.function_project import function_module
 
@@ -87,7 +86,7 @@ def cron_job_of(function: Function, cluster: Cluster):
         for worker in function.workers:
             if worker.type != CRON_TRIGGER:
                 continue
-            cronjobs = cluster.cronjobs(f"{WORKER_ID}={label_value(worker.id)}")
+            cronjobs = cluster.cronjobs(worker_selector(worker.id))
             if cronjobs:
                 return cronjobs[0]
         return None

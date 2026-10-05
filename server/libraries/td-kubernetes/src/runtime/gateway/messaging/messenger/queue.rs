@@ -13,9 +13,10 @@ use td_bridge::messaging::{
 };
 use td_bridge::observer::WorkloadKind;
 use td_common::worker::{Decorator, MessageAction};
+use td_objects::types::basic::WorkerId;
 use tracing::error;
 
-use crate::base::naming::{to_fn_pod_name, worker_name_prefix, worker_pod_stem};
+use crate::base::naming::{to_fn_pod_name, worker_id_text, worker_name_prefix, worker_pod_stem};
 use crate::runtime::gateway::messaging::messenger::factory::WorkloadFactory;
 use crate::runtime::gateway::messaging::messenger::kit::{
     FunctionRunKit, build_cron_run_kit, build_function_run_kit, build_stream_run_kit,
@@ -202,14 +203,23 @@ pub(super) fn kit_for_payload(
     }
 }
 
-pub(super) fn derive_kube_name(id: &str, prefix: &str) -> Result<String, QueueError> {
-    to_fn_pod_name(prefix, id).map_err(|error| {
+pub(super) fn derive_kube_name(worker_id: &WorkerId, prefix: &str) -> Result<String, QueueError> {
+    to_fn_pod_name(prefix, worker_id).map_err(|error| {
         error!(
-            id = %id,
+            id = %worker_id_text(worker_id),
             prefix = %prefix,
             error = %error,
             "Failed to derive kube name from worker and id."
         );
+        QueueError::BackendError {
+            cause: error.to_string(),
+        }
+    })
+}
+
+pub(super) fn parse_worker_id(id: &str) -> Result<WorkerId, QueueError> {
+    WorkerId::try_from(id).map_err(|error| {
+        error!(id = %id, error = %error, "Message id is not a worker id.");
         QueueError::BackendError {
             cause: error.to_string(),
         }
@@ -258,12 +268,13 @@ impl KubernetesOrchestratorMessageQueue {
         &self,
         id: &str,
         payload: &OrchestratorMessagePayload<Value>,
-    ) -> Result<(PayloadRouting, String, Key), QueueError> {
+    ) -> Result<(PayloadRouting, WorkerId, String, Key), QueueError> {
+        let worker_id = parse_worker_id(id)?;
         let routing = derive_routing(id, payload)?;
         lookup_template(self.factory.templates(), id, &routing.template_key)?;
-        let name = derive_kube_name(id, &routing.prefix)?;
+        let name = derive_kube_name(&worker_id, &routing.prefix)?;
         let key = derive_key(id, payload)?;
-        Ok((routing, name, key))
+        Ok((routing, worker_id, name, key))
     }
 }
 
@@ -274,21 +285,21 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
         id: String,
         payload: OrchestratorMessagePayload<Value>,
     ) -> Result<OrchestratorMessage<Value>, QueueError> {
-        let (routing, name, key) = self.locate(&id, &payload)?;
+        let (routing, worker_id, name, key) = self.locate(&id, &payload)?;
         match routing.action {
             MessageAction::Start => {
                 kit_for_payload(&name, self.factory.namespace(), &payload)?;
                 self.reconciler.submit(
                     key,
                     Submission {
-                        worker_id: id.clone(),
+                        worker_id,
                         name,
                         payload: payload.clone(),
                         attempts: 0,
                     },
                 );
             }
-            MessageAction::Stop => self.reconciler.withdraw(key, &id, &name),
+            MessageAction::Stop => self.reconciler.withdraw(key, &worker_id, &name),
             MessageAction::Notify => return Err(unsupported(&id, "Notify")),
         }
         Ok(OrchestratorMessage::new(
@@ -304,8 +315,8 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
     }
 
     async fn rollback(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
-        let (_, name, key) = self.locate(&message.id, &message.payload)?;
-        self.reconciler.withdraw(key, &message.id, &name);
+        let (_, worker_id, name, key) = self.locate(&message.id, &message.payload)?;
+        self.reconciler.withdraw(key, &worker_id, &name);
         Ok(())
     }
 

@@ -20,12 +20,26 @@ FUNCTION_ANNOTATION = "tabsdata.com/function"
 COLLECTION_ANNOTATION = "tabsdata.com/collection"
 LABEL_VALUE_MAX_LENGTH = 63
 
+WORKER_ID_PATTERN = re.compile(r"^([A-Za-z]+\d{8})-(\d+)$")
+
 T = TypeVar("T")
 
 
 def label_value(value: str) -> str:
     mapped = re.sub(r"[^A-Za-z0-9._-]", "-", value)[:LABEL_VALUE_MAX_LENGTH]
     return re.sub(r"^[^A-Za-z0-9]+|[^A-Za-z0-9]+$", "", mapped)
+
+
+def worker_parts(worker_id: str) -> tuple[str, int]:
+    match = WORKER_ID_PATTERN.match(worker_id)
+    if match is None:
+        raise ValueError(f"not a worker id: {worker_id}")
+    prefix, counter = match.groups()
+    return prefix, int(counter)
+
+
+def worker_selector(worker_id: str) -> str:
+    return f"{WORKER_ID}={worker_id}"
 
 
 def eventually(
@@ -89,20 +103,19 @@ class Cluster:
         ).items
 
     def of_worker(self, worker_id: str) -> list:
-        selector = f"{WORKER_ID}={label_value(worker_id)}"
+        selector = worker_selector(worker_id)
         return self.jobs(selector) + self.cronjobs(selector) + self.pods(selector)
 
     def running_pod_of_worker(self, worker_id: str):
-        selector = f"{WORKER_ID}={label_value(worker_id)}"
+        selector = worker_selector(worker_id)
         return next(
             (pod for pod in self.pods(selector) if pod.status.phase == "Running"),
             None,
         )
 
     def unfinished_job_of_worker(self, worker_id: str):
-        selector = f"{WORKER_ID}={label_value(worker_id)}"
         return next(
-            (job for job in self.jobs(selector) if not finished(job)),
+            (job for job in self.jobs(worker_selector(worker_id)) if not finished(job)),
             None,
         )
 
@@ -146,9 +159,13 @@ class Cluster:
         self.batch.create_namespaced_job(self.namespace, body)
 
     def delete_job(self, name: str) -> None:
-        self.batch.delete_namespaced_job(
-            name, self.namespace, propagation_policy="Foreground"
-        )
+        try:
+            self.batch.delete_namespaced_job(
+                name, self.namespace, propagation_policy="Foreground"
+            )
+        except client.ApiException as error:
+            if error.status != 404:
+                raise
 
 
 class Monitor:

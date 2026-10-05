@@ -5,6 +5,8 @@
 use td_bridge::messaging::{CronStartRequest, FunctionStartRequest, StageTriggerStartRequest};
 use td_common::worker::Callback;
 
+use crate::base::naming::worker_id_text;
+
 use crate::base::annotations::{
     ANNOTATION_COLLECTION, ANNOTATION_CONNECTION, ANNOTATION_FUNCTION, ANNOTATION_PROJECT,
 };
@@ -72,7 +74,7 @@ impl WorkerStartRequest for FunctionStartRequest {
     }
 
     fn worker_id(&self) -> String {
-        self.worker_id.to_string()
+        worker_id_text(&self.worker_id)
     }
 
     fn decorator(&self) -> Option<&str> {
@@ -130,7 +132,7 @@ impl WorkerStartRequest for StageTriggerStartRequest {
     }
 
     fn worker_id(&self) -> String {
-        self.worker_id.to_string()
+        worker_id_text(&self.worker_id)
     }
 
     fn decorator(&self) -> Option<&str> {
@@ -195,7 +197,7 @@ impl WorkerStartRequest for CronStartRequest {
     }
 
     fn worker_id(&self) -> String {
-        self.worker_id.to_string()
+        worker_id_text(&self.worker_id)
     }
 
     fn decorator(&self) -> Option<&str> {

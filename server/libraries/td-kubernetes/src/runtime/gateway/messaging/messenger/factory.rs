@@ -8,8 +8,10 @@ use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{Pod, PodSpec};
 use serde_yaml::Value;
 use td_bridge::messaging::{OrchestratorMessagePayload, QueueError};
+use td_objects::types::basic::WorkerId;
 
 use crate::base::constants::{CONTAINER_ROOT_ENV, CONTAINER_SETTINGS_RELATIVE};
+use crate::base::naming::worker_id_text;
 use crate::client::registry::InstanceSettings;
 use crate::kube::api::entity::cronjob::create_cronjob;
 use crate::kube::api::entity::job::create_job;
@@ -55,12 +57,13 @@ impl WorkloadFactory {
 
     pub(crate) async fn create(
         &self,
-        id: &str,
+        worker_id: &WorkerId,
         payload: &OrchestratorMessagePayload<Value>,
     ) -> Result<(), QueueError> {
+        let id = &worker_id_text(worker_id);
         let routing = derive_routing(id, payload)?;
         let template = lookup_template(&self.templates, id, &routing.template_key)?;
-        let name = derive_kube_name(id, &routing.prefix)?;
+        let name = derive_kube_name(worker_id, &routing.prefix)?;
         let kit = kit_for_payload(&name, self.context.namespace(), payload)?;
         match template.kind {
             TemplateKind::Pod => {

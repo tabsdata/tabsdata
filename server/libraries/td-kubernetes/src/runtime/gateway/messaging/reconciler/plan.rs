@@ -82,6 +82,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
 use td_bridge::observer::{ObservedWorkload, WorkloadKind, WorkloadPhase};
+use td_objects::types::basic::WorkerId;
 use tracing::info;
 
 pub(crate) const WARN_AFTER: Duration = Duration::from_secs(30);
@@ -108,7 +109,7 @@ impl Key {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Submission<P> {
-    pub worker_id: String,
+    pub worker_id: WorkerId,
     pub name: String,
     pub payload: P,
     pub attempts: u32,
@@ -117,7 +118,7 @@ pub(crate) struct Submission<P> {
 #[derive(Debug, PartialEq)]
 pub(crate) enum Action<P> {
     Delete { kind: WorkloadKind, name: String },
-    Force { name: String, worker_id: String },
+    Force { name: String, worker_id: WorkerId },
     Warn { name: String, elapsed: Duration },
     Create { key: Key, submission: Submission<P> },
 }
@@ -125,14 +126,14 @@ pub(crate) enum Action<P> {
 #[derive(Debug)]
 struct Deletion {
     kind: WorkloadKind,
-    worker_id: Option<String>,
+    worker_id: Option<WorkerId>,
     issued: Option<Instant>,
     warned: bool,
     forced: Option<Instant>,
 }
 
 impl Deletion {
-    fn new(kind: WorkloadKind, worker_id: Option<String>) -> Self {
+    fn new(kind: WorkloadKind, worker_id: Option<WorkerId>) -> Self {
         Self {
             kind,
             worker_id,
@@ -193,11 +194,11 @@ impl<P> State<P> {
         replaced
     }
 
-    pub(crate) fn withdraw(&mut self, key: Key, worker_id: &str, name: &str) {
+    pub(crate) fn withdraw(&mut self, key: Key, worker_id: &WorkerId, name: &str) {
         if self
             .creates
             .get(&key)
-            .is_some_and(|submission| submission.worker_id == worker_id)
+            .is_some_and(|submission| &submission.worker_id == worker_id)
         {
             self.creates.remove(&key);
             if !self.settling.contains_key(name) {
@@ -215,7 +216,7 @@ impl<P> State<P> {
         }
         self.deletions
             .entry(name.to_owned())
-            .or_insert_with(|| Deletion::new(kind, Some(worker_id.to_owned())));
+            .or_insert_with(|| Deletion::new(kind, Some(worker_id.clone())));
     }
 
     pub(crate) fn restore(
@@ -288,10 +289,7 @@ impl<P> State<P> {
                 workload.name.clone(),
                 Deletion {
                     issued: Some(now),
-                    ..Deletion::new(
-                        workload.kind,
-                        workload.worker_id.as_ref().map(ToString::to_string),
-                    )
+                    ..Deletion::new(workload.kind, workload.worker_id.clone())
                 },
             );
         }
@@ -378,12 +376,7 @@ impl<P> State<P> {
             }
             self.deletions
                 .entry(workload.name.clone())
-                .or_insert_with(|| {
-                    Deletion::new(
-                        workload.kind,
-                        workload.worker_id.as_ref().map(ToString::to_string),
-                    )
-                });
+                .or_insert_with(|| Deletion::new(workload.kind, workload.worker_id.clone()));
         }
 
         let mut actions = Vec::new();

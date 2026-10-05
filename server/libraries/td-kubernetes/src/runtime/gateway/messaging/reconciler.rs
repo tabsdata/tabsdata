@@ -9,6 +9,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use serde_yaml::Value;
 use td_bridge::messaging::OrchestratorMessagePayload;
+use td_objects::types::basic::WorkerId;
 use tokio::sync::Notify;
 
 use crate::runtime::gateway::messaging::reconciler::plan::{Key, State, Submission};
@@ -27,7 +28,7 @@ impl Reconciler {
         self.wake.notify_one();
     }
 
-    pub(crate) fn withdraw(&self, key: Key, worker_id: &str, name: &str) {
+    pub(crate) fn withdraw(&self, key: Key, worker_id: &WorkerId, name: &str) {
         self.state().withdraw(key, worker_id, name);
         self.wake.notify_one();
     }
