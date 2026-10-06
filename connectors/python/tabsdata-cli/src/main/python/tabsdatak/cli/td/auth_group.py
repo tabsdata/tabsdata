@@ -19,6 +19,7 @@ from tabsdatak.cli.cli_utils import (
     render,
     verify_login_or_prompt,
 )
+from tabsdatak.common._datetime import _convert_timestamp_to_string
 
 
 @cli_command
@@ -195,3 +196,132 @@ def password_change(
         click.echo("Password changed successfully.")
     except Exception as e:
         raise click.ClickException(f"Failed to change password: {e}")
+
+
+def _moment(timestamp: int | None, missing: str) -> str:
+    return _convert_timestamp_to_string(timestamp) if timestamp else missing
+
+
+def _whole_number(ctx: click.Context, message: str) -> int:
+    answer = logical_prompt(ctx, message)
+    try:
+        return int(str(answer).strip())
+    except ValueError:
+        raise click.ClickException(f"{message}: '{answer}' is not a whole number.")
+
+
+@auth.group(name="service-token")
+def service_token():
+    """Service token management commands"""
+
+
+@service_token.command(name="create")
+@click.option("--slot", type=click.IntRange(1, 2), help="Which slot to fill, 1 or 2.")
+@click.option(
+    "--expires-in-days",
+    type=int,
+    help=(
+        "Days until the token expires, or -1 for a token that never expires "
+        "(only where the deployment permits it). There is no default."
+    ),
+)
+@click.option("--comment", help="A label, so the two slots tell themselves apart.")
+@format_option
+@click.pass_context
+def service_token_create(
+    ctx: click.Context, slot: int, expires_in_days: int, comment: str
+):
+    """Create a service token in one of your two slots.
+
+    The token is shown once, here, and cannot be recovered afterwards: the
+    server keeps only a SHA-256 digest of it.
+    """
+    verify_login_or_prompt(ctx)
+    slot = slot or _whole_number(ctx, "Slot to fill (1 or 2)")
+    if expires_in_days is None:
+        expires_in_days = _whole_number(ctx, "Days until it expires (-1 for never)")
+    try:
+        created = ctx.obj["tabsdataserver"].create_service_token(
+            slot, expires_in_days, comment=comment
+        )
+
+        def _table():
+            table = Table(title="Service token created")
+            table.add_column("Slot", style="cyan", no_wrap=True)
+            table.add_column("Token")
+            table.add_column("Expires on")
+            table.add_row(
+                str(created["slot"]),
+                created["token"],
+                _moment(created.get("expires_on"), "never"),
+            )
+            click.echo()
+            make_console().print(table)
+            click.echo()
+            click.echo(
+                "Store it now: this is the only time the token is shown. Pass "
+                "it to 'tdk login --token', or export it as TDK_TOKEN and run "
+                "'tdk login --token' with no value."
+            )
+            click.echo()
+
+        render(ctx, data=created, table=_table)
+    except Exception as e:
+        raise click.ClickException(f"Failed to create the token: {e}")
+
+
+@service_token.command(name="list")
+@format_option
+@click.pass_context
+def service_token_list(ctx: click.Context):
+    """List your service tokens.
+
+    `Last used` has a resolution of ten minutes, which is what the rotation
+    runbook needs to tell a retired token from one still in production.
+    """
+    verify_login_or_prompt(ctx)
+    try:
+        tokens = ctx.obj["tabsdataserver"].list_service_tokens()
+
+        def _table():
+            table = Table(title="Service tokens")
+            table.add_column("Slot", style="cyan", no_wrap=True)
+            table.add_column("Hint")
+            table.add_column("Comment")
+            table.add_column("Created on")
+            table.add_column("Expires on")
+            table.add_column("Last used")
+            for entry in tokens:
+                table.add_row(
+                    str(entry["slot"]),
+                    entry["hint"],
+                    entry.get("comment") or "",
+                    _moment(entry["created_on"], "-"),
+                    _moment(entry.get("expires_on"), "never"),
+                    _moment(entry.get("last_used_on"), "never"),
+                )
+            click.echo()
+            make_console().print(table)
+            click.echo()
+
+        render(ctx, data=tokens, table=_table)
+    except Exception as e:
+        raise click.ClickException(f"Failed to list the tokens: {e}")
+
+
+@service_token.command(name="revoke")
+@click.option("--slot", type=click.IntRange(1, 2), help="Which slot to free, 1 or 2.")
+@click.pass_context
+def service_token_revoke(ctx: click.Context, slot: int):
+    """Revoke the service token in one of your slots.
+
+    The slot becomes free for the next rotation, and the token stops working
+    immediately.
+    """
+    verify_login_or_prompt(ctx)
+    slot = slot or _whole_number(ctx, "Slot to revoke (1 or 2)")
+    try:
+        ctx.obj["tabsdataserver"].revoke_service_token(slot)
+        click.echo(f"Token in slot {slot} revoked successfully")
+    except Exception as e:
+        raise click.ClickException(f"Failed to revoke the token: {e}")

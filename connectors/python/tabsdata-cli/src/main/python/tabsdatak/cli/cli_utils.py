@@ -197,7 +197,13 @@ def logical_prompt(
         raise click.exceptions.Exit(0)
 
 
-def utils_login(ctx: click.Context, server_url: str, username: str, password: str):
+def utils_login(
+    ctx: click.Context,
+    server_url: str,
+    username: str,
+    password: str,
+    token: str = None,
+):
     import requests
 
     # noinspection PyProtectedMember
@@ -209,6 +215,7 @@ def utils_login(ctx: click.Context, server_url: str, username: str, password: st
             username,
             password,
             credentials_file=get_credentials_file_path(ctx),
+            token=token,
         )
     except Exception as e:
         if isinstance(e, requests.exceptions.ConnectionError):
@@ -224,9 +231,18 @@ def utils_login(ctx: click.Context, server_url: str, username: str, password: st
         elif isinstance(e, APIServerError):
             show_hint(
                 ctx,
-                "It seems like the Tabsdata server is running but refusing "
-                "to login. Please ensure that the credentials are correct and "
-                "the server is healthy.",
+                (
+                    "It seems like the Tabsdata server is running but refusing "
+                    "the token. A token stops working once it expires or is "
+                    "revoked; check 'tdk auth service-token list' from a password "
+                    "session."
+                )
+                if token
+                else (
+                    "It seems like the Tabsdata server is running but refusing "
+                    "to login. Please ensure that the credentials are correct and "
+                    "the server is healthy."
+                ),
             )
         raise click.ClickException(f"Failed to login: {e}")
     click.echo("Login successful.")

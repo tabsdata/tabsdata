@@ -4589,6 +4589,74 @@ class TabsdataServer:
         }
         return info
 
+    def auth_service_token(self) -> dict:
+        """
+        Information about the service token making this request.
+
+        Returns:
+            dict: The presenting token's slot, label, owner and expiry.
+        """
+        return self.connection.authentication_service_token().json().get("data")
+
+    def create_service_token(
+        self,
+        slot: int,
+        expires_in_days: int,
+        comment: str = None,
+        raise_for_status: bool = True,
+    ) -> dict:
+        """
+        Create a service token in one of the caller's two slots.
+
+        The token itself is in the response and is not recoverable
+        afterwards: the server stores only a SHA-256 digest of it.
+
+        Args:
+            slot (int): Which slot to fill, 1 or 2.
+            expires_in_days (int): Days until it expires, or -1 for never
+                (only where the deployment permits it).
+            comment (str, optional): A label, so the two slots tell
+                themselves apart in a listing.
+            raise_for_status (bool, optional): Whether to raise on a non-2xx
+                response.
+
+        Returns:
+            dict: The created token, including its plaintext.
+        """
+        response = self.connection.service_token_create(
+            slot,
+            expires_in_days,
+            comment=comment,
+            raise_for_status=raise_for_status,
+        )
+        return response.json().get("data")
+
+    def list_service_tokens(self, raise_for_status: bool = True) -> List[dict]:
+        """
+        The caller's own service tokens.
+
+        Args:
+            raise_for_status (bool, optional): Whether to raise on a non-2xx
+                response.
+
+        Returns:
+            List[dict]: One entry per occupied slot.
+        """
+        response = self.connection.service_token_list(raise_for_status=raise_for_status)
+        return response.json().get("data", {}).get("data", [])
+
+    def revoke_service_token(self, slot: int, raise_for_status: bool = True) -> None:
+        """
+        Revoke the service token in one of the caller's slots, freeing
+        the slot for the next rotation.
+
+        Args:
+            slot (int): Which slot to free, 1 or 2.
+            raise_for_status (bool, optional): Whether to raise on a non-2xx
+                response.
+        """
+        self.connection.service_token_revoke(slot, raise_for_status=raise_for_status)
+
     def create_group(
         self, name: str, description: str = None, raise_for_status: bool = True
     ) -> Group:

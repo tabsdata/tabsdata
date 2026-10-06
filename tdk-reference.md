@@ -26,7 +26,7 @@ Session
   login                  Log in to a Tabsdata server
   logout                 Log out and clear cached credentials
   status                 Show server status
-  auth                   Manage certificates and change password
+  auth                   Manage certificates, password and service tokens
 
 Work
   project                Manage projects
@@ -346,12 +346,48 @@ auth info
 auth add-cert        --server S --pem FILE
 auth delete-cert     --server S
 auth password-change --server S --old-password OLD --new-password NEW
+auth service-token create    --slot 1|2 --expires-in-days N|-1 [--comment C]
+auth service-token list
+auth service-token revoke    --slot 1|2
 ```
+
+### Service tokens
+
+A service token authenticates automation without a password. An account
+holds at most two, in slots `1` and `2`, so a rotation always has a free slot
+to fill while the other stays in production.
+
+`auth service-token create` prints the token once and never again — the server keeps
+only a SHA-256 digest of it. `--expires-in-days` has no default: pass a positive
+number of days, or `-1` for a token that never expires, which only works where
+the deployment permits it. Creating into an occupied slot is refused; revoke it
+first. The whole lifecycle needs a password session: a token can neither create,
+list nor revoke a token, so it cannot mint its own successor.
+
+What a token may do is its owner's live permissions narrowed to project
+development work: reading and changing collections, functions and tables, and
+triggering and recovering runs, in the projects its owner can already reach.
+Everything else answers `403` with `This operation cannot be performed with a
+service token`, the same answer whether or not the owner holds that
+permission. Removing a project grant from the account removes it from the
+account's tokens.
+
+A deployment may also hold server-managed system tokens, seeded at boot from its
+configuration. They never expire, and revoking one is refused: replacing its
+configured value and restarting is the only way to retire it.
+
+Rotating a token, with both slots valid throughout so no request is ever
+refused:
+
+1. Create a token in the free slot and move consumers to it one at a time.
+2. Wait for `auth service-token list` to show the old slot's `Last used` going quiet.
+   That column has a resolution of a few minutes.
+3. Revoke the old slot, freeing it for the next rotation.
 
 ## Root commands
 
 ```
-login    [--server S] [--user U] [--password P]
+login    [--server S] [--user U] [--password P] [--token[=T]]
 logout
 status
 info     [--license] [--third-party] [--release-notes]
@@ -365,6 +401,12 @@ examples [--dir D] [--guide]
 omitted, and prompts only when neither is set. The URL defaults to the `http://`
 protocol and port `2457` when it carries neither. `login --profile NAME` stores
 the session in the profile's own connection file (see Profiles).
+
+`--token` logs in with a service token instead of a username and password,
+and cannot be combined with either. Given no value it reads `TDK_TOKEN`, so the
+token need not appear in a command line or shell history. A token session is
+never renewed: it works until the token expires or is revoked, and then `login`
+runs again.
 
 ## Environment
 
@@ -388,6 +430,11 @@ Tabsdata tdk command does not support running within an AI agent, use Tabsdata M
 ```
 
 to stderr and exits with status `1`.
+
+### `TDK_TOKEN`
+
+The service token `tdk login --token` reads when the option is given no
+value. See [Service tokens](#service-tokens).
 
 ### `TDK_IN_AGENT`
 

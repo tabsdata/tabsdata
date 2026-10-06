@@ -431,6 +431,68 @@ class APIServer:
         response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def authentication_service_token(self, raise_for_status: bool = True):
+        """The service token making this request.
+
+        The one endpoint a token may call about itself; a session is refused
+        with a 403.
+        """
+        endpoint = "/auth/service-token"
+        response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def authentication_service_token_login(self, token: str):
+        """Authenticate with a service token instead of a password.
+
+        A token neither expires into a refresh nor can be renewed, so there
+        is nothing to store but the token itself; it is validated against
+        `/auth/service-token` so a bad one is reported here rather than on the first
+        real call.
+        """
+        self.bearer_token = token
+        self.refresh_token = None
+        self.token_type = "Bearer"
+        self.expires_in = None
+        self.expiration_time = None
+        response = self.authentication_service_token(raise_for_status=True)
+        if self.credentials_file:
+            self._store_in_file(self.credentials_file)
+        return response
+
+    def service_token_create(
+        self,
+        slot: int,
+        expires_in_days: int,
+        comment: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = f"/auth/service-tokens/{slot}"
+        json = {"expires_in_days": expires_in_days, "comment": comment}
+        response = self.post(endpoint, json=json)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def service_token_list(
+        self,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = "/auth/service-tokens"
+        params = self.get_params_dict(
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
+            [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params=params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def service_token_revoke(self, slot: int, raise_for_status: bool = True):
+        endpoint = f"/auth/service-tokens/{slot}"
+        response = self.delete(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def authentication_login(self, name: str, password: str):
         endpoint = "/auth/login"
         data = self.get_params_dict(["name", "password"], [name, password])
@@ -1580,8 +1642,11 @@ def obtain_connection(
     name: str = None,
     password: str = None,
     credentials_file: str = None,
+    token: str = None,
 ) -> APIServer:
     connection = APIServer(url, credentials_file=credentials_file)
-    if name and password:
+    if token:
+        connection.authentication_service_token_login(token)
+    elif name and password:
         connection.authentication_login(name, password)
     return connection

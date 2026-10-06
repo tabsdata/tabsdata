@@ -90,6 +90,8 @@ CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 _AI_AGENT_ENV_VARS = ("GEMINI_CLI", "CLAUDECODE", "CODEX_THREAD_ID")
 # Escape hatch: set to 1/true/yes to bypass the guard (warns instead of failing).
 _AI_AGENT_BYPASS_ENV_VAR = "TDK_IN_AGENT"
+
+TOKEN_ENV_VAR = "TDK_TOKEN"
 _AI_AGENT_ERROR_MESSAGE = (
     "Tabsdata tdk command does not support running within an AI agent, "
     "use Tabsdata MCP instead"
@@ -490,19 +492,43 @@ def release_notes():
         "provided."
     ),
 )
+@click.option(
+    "--token",
+    help=(
+        "Log in with a service token instead of a username and password, "
+        "for automation. Reads TDK_TOKEN when the option is given no value. A "
+        "token session is never renewed: it works until the token expires or "
+        "is revoked."
+    ),
+    is_flag=False,
+    flag_value=TOKEN_ENV_VAR,
+)
 @click.pass_context
-def login(ctx: click.Context, server: str, user: str, password: str):
+def login(ctx: click.Context, server: str, user: str, password: str, token: str):
     """Login to the Tabsdata Server"""
     server = (
         server or configured_server(ctx) or logical_prompt(ctx, "Tabsdata Server URL")
     )
-    user = user or logical_prompt(ctx, "Username for the Tabsdata Server")
-    password = password or logical_prompt(
-        ctx,
-        "Password",
-        hide_input=True,
-    )
-    utils_login(ctx, server, user, password)
+    if token:
+        if token == TOKEN_ENV_VAR:
+            token = os.environ.get(TOKEN_ENV_VAR)
+            if not token:
+                raise click.ClickException(
+                    f"'--token' was given no value and {TOKEN_ENV_VAR} is not set."
+                )
+        if user or password:
+            raise click.ClickException(
+                "'--token' authenticates on its own; drop '--user' and '--password'."
+            )
+        utils_login(ctx, server, None, None, token=token)
+    else:
+        user = user or logical_prompt(ctx, "Username for the Tabsdata Server")
+        password = password or logical_prompt(
+            ctx,
+            "Password",
+            hide_input=True,
+        )
+        utils_login(ctx, server, user, password)
     from tabsdatak.cli.td.config_utils import execute_actions_for_command
 
     execute_actions_for_command("login")
