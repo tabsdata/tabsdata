@@ -39,6 +39,7 @@ pub enum Tables {
     Status,
     TableType,
     ValidTo,
+    ParentTableId,
 }
 
 pub(super) struct Defs;
@@ -63,6 +64,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Tables::Status).text().not_null())
                 .col(ColumnDef::new(Tables::TableType).text().not_null().default("R"))
                 .col(ColumnDef::new(Tables::ValidTo).timestamp_with_time_zone().not_null())
+                .col(id_column(Tables::ParentTableId).null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Tables::Table, Tables::CollectionId)

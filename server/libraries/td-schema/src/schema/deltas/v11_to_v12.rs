@@ -41,6 +41,12 @@ enum Sessions {
     AccessTokenId,
 }
 
+#[derive(Iden, Clone, Copy)]
+enum Tables {
+    Table,
+    ParentTableId,
+}
+
 const RETIRED_INSTANCE_TOKEN_SESSION: &str = "k0000000000000000000000004";
 
 const SLOTS: [i32; 2] = [1, 2];
@@ -80,6 +86,7 @@ impl SchemaDelta for Migration {
                     )
                     .to_owned(),
             ),
+            render_schema(Table::alter().table(Tables::Table).add_column(id_column(Tables::ParentTableId).null()).to_owned()),
             render_query(
                 Query::delete()
                     .from_table(Sessions::Table)
