@@ -38,18 +38,22 @@ async fn table_list(
 #[cfg(test)]
 mod tests {
     use crate::Services;
+    use std::str::FromStr;
     use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::{TdError, assert_service_error};
+    use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::function::{ChildFunction, FunctionRegister};
+    use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, Description, RoleName, TableName,
-        TableNameDto, UserEnabled, UserId, UserName,
+        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description,
+        FunctionType, Parent, RoleName, TableName, TableNameDto, UserEnabled, UserId, UserName,
     };
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -102,6 +106,91 @@ mod tests {
         assert_eq!(data.len(), 2);
         assert_eq!(data[0].name, TableName::try_from("table_1")?);
         assert_eq!(data[1].name, TableName::try_from("table_2")?);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_list_current_tables_reports_the_parent(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("parented")?;
+        db.scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let child = ChildFunction {
+            function_type: FunctionType::DQSummaryTrends,
+            bundle_id: BundleId::default(),
+            snippet: "trend snippet".try_into()?,
+            dependencies: None,
+            tables: Some(vec![TableNameDto::try_from("tt")?]),
+            parent_table: TableNameDto::try_from("t0")?,
+        };
+        let create = FunctionRegister {
+            child_functions: Some(vec![child]),
+            name: "owner".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t0")?]),
+            table_types: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+
+        let service = Services::with_defaults(db.clone());
+        service
+            .register_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(
+                        CollectionParam {
+                            collection: CollectionIdName::from_str(&collection_name.to_string())?,
+                        },
+                        create,
+                    )
+                    .in_project(p.id),
+            )
+            .await?;
+
+        let owner_table: TableDB = db
+            .scd2()
+            .fetch_all::<TableDB>(&TableName::try_from("t0")?)
+            .await?
+            .into_iter()
+            .next()
+            .expect("owner table is live");
+
+        let data = service
+            .table_list(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .list((), ListParams::default())
+                    .in_project(p.id),
+            )
+            .await?
+            .data
+            .data;
+
+        let trend = data
+            .iter()
+            .find(|table| table.name == TableName::try_from("tt").unwrap())
+            .expect("trend table is listed");
+        assert_eq!(
+            trend.parent_table_id,
+            Some(Parent::from(owner_table.base.table_id))
+        );
+        let owner = data
+            .iter()
+            .find(|table| table.name == TableName::try_from("t0").unwrap())
+            .expect("owner table is listed");
+        assert_eq!(owner.parent_table_id, None);
         Ok(())
     }
 

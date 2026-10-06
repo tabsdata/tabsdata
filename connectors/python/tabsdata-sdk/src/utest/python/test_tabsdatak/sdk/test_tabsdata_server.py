@@ -804,12 +804,13 @@ class _FakeArchive:
         self.table_types = {}
 
 
-def _trend(output_table: str):
+def _trend(output_table: str, parent_table: str = "owned"):
     from tabsdatak.common._actions.dataquality.processor import TrendTransformerInfo
 
     return TrendTransformerInfo(
         info=_FakeInfo(output_table),
         project_root=_FakeRoot(),
+        parent_table=parent_table,
     )
 
 

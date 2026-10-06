@@ -246,6 +246,7 @@ fn desired_table(
 ) -> Result<TableInsertDB, TdError> {
     Ok(TableInsertDB {
         id: TableVersionId::default(),
+        parent_table_id: table.parent_table_id.clone(),
         collection_id: function.collection_id,
         table_id: table.table_id,
         name: table.name.clone(),
@@ -269,6 +270,7 @@ fn same_table(current: &TableInsertDB, desired: &TableInsertDB) -> bool {
         && current.private == desired.private
         && current.partitioned == desired.partitioned
         && current.table_type == desired.table_type
+        && current.parent_table_id == desired.parent_table_id
 }
 
 pub(crate) fn is_system_table(table: &TableDB) -> bool {

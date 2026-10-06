@@ -41,10 +41,14 @@ class TrendTransformerInfo(NamedTuple):
 
     ``project_root`` is the temporary directory holding the module that implements the
     trend tfr.
+
+    ``parent_table`` is the action's own output table -- the one the data
+    quality action ran on.
     """
 
     info: TransformerInfo
     project_root: TemporaryDirectory
+    parent_table: str
 
 
 class ExtendedTable:
@@ -306,6 +310,7 @@ class DataQualityProcessor:
                             on_tables=None,
                         ),
                         project_root=project_root,
+                        parent_table=table,
                     )
                 )
         return transformers

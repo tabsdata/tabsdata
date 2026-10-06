@@ -57,7 +57,7 @@ async fn update_function(
 
         ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
         ensure_no_dq_summary_trends_table_types(&update.table_types)?;
-        let function = update_one(conn, &ctx, &bridge, &collection, &current, &update, at).await?;
+        let function = update_one(conn, &ctx, &bridge, &collection, &current, &update, None, at).await?;
         reconcile_dq_summary_trend_children(
             conn,
             &ctx,

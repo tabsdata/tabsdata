@@ -68,6 +68,16 @@ pub enum RegisterFunctionError {
         "Trend table '{0}' in collection '{1}' is frozen from a trend function that was removed; re-register with reuse_tables to adopt it back"
     )]
     TrendChildTableFrozen(TableName, CollectionName) = 18,
+    #[error("Parent table '{0}' does not exist in collection '{1}'")]
+    ParentTableDoesNotExist(TableName, CollectionName) = 19,
+    #[error(
+        "Table '{0}' is not produced by function '{1}', so a trend of it cannot be parented to it"
+    )]
+    ChildFunctionParentTableNotOwned(TableNameDto, FunctionName) = 20,
+    #[error("Table '{0}' is a {1:?} table, so it cannot be the parent of another table")]
+    ParentTableMustBeRegular(TableName, TableType) = 21,
+    #[error("Table '{0}' is a Regular table, so it cannot be derived from a parent table")]
+    RegularTableCannotHaveParent(TableName) = 22,
 }
 
 pub fn ensure_no_dq_summary_trends_table_types(

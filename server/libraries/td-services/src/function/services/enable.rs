@@ -349,6 +349,7 @@ mod tests {
             snippet: "a snippet".try_into()?,
             dependencies: None,
             tables: Some(vec![TableNameDto::try_from(table.as_str())?]),
+            parent_table: TableNameDto::try_from(format!("{OWNER}_table").as_str())?,
         })
     }
 

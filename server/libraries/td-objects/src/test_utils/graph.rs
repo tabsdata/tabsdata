@@ -193,6 +193,7 @@ pub fn table(function: &FunctionName, table: &TableName) -> TableDBWithNames {
                 defined_by_id: UserId::default(),
                 status: TableStatus::Active,
                 table_type: TableType::Regular,
+                parent_table_id: None,
             },
             project_id: *PROJECT_ID,
             interval: Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default())),

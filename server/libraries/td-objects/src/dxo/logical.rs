@@ -13,7 +13,7 @@ use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CollectionName, CollectionWhenDeleted, ColumnCount,
     DataChanged, DependencyPos, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName,
     FunctionVersionId, GroupId, GroupName, HasData, InputIdx, LogicalFunctionRunId,
-    LogicalFunctionRunInputId, LogicalFunctionRunStatus, LogicalTableDataVersionId, Patch,
+    LogicalFunctionRunInputId, LogicalFunctionRunStatus, LogicalTableDataVersionId, Parent, Patch,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private,
     ProjectId, ProjectName, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash, Started,
     StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
@@ -300,6 +300,7 @@ pub struct TableDataVersionDBWithNames {
     pub physical_status: Option<PhysicalFunctionRunStatus>,
     pub function: Option<FunctionName>,
     pub storage_version: Option<StorageVersion>,
+    pub parent_table_id: Option<Parent<TableId>>,
 }
 
 /// One row per LTDV identity: the logical identity merged with the
@@ -373,6 +374,8 @@ pub struct TableDataVersion {
     #[dto(list(filter, filter_like, order_by))]
     pub function: Option<FunctionName>,
     pub storage_version: Option<StorageVersion>,
+    #[dto(list(filter, order_by))]
+    pub parent_table_id: Option<Parent<TableId>>,
 }
 
 impl FromDao for TableDataVersion {
@@ -411,6 +414,7 @@ impl FromDao for TableDataVersion {
             physical_status: dao.physical_status,
             function: dao.function,
             storage_version: dao.storage_version,
+            parent_table_id: dao.parent_table_id,
         })
     }
 }

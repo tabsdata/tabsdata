@@ -94,6 +94,7 @@ pub(crate) async fn seed_function_of_class(
                 defined_by_id: request_context.user_id,
                 status: TableStatus::Active,
                 table_type: TableType::default(),
+                parent_table_id: None,
             };
 
             executor.reuse().scd2().open(&table, at).await?;

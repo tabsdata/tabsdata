@@ -58,15 +58,152 @@ mod tests {
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
-    use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::function::{ChildFunction, FunctionDB, FunctionRegister};
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, BundleId, CollectionIdName, CollectionName, Decorator,
-        FunctionRuntimeValues, LogicalFunctionRunStatus, ReuseFrozen, TableIdName, TableNameDto,
-        TransactionKey, UserId,
+        AccessTokenId, AtTime, BundleId, CollectionIdName, CollectionName, Decorator, FunctionName,
+        FunctionRuntimeValues, FunctionType, LogicalFunctionRunStatus, Parent, ReuseFrozen,
+        TableIdName, TableName, TableNameDto, TransactionKey, UserId,
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
+
+    #[td_test::test(db)]
+    async fn test_list_data_versions_reports_the_parent_table(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("trendy")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let child = ChildFunction {
+            function_type: FunctionType::DQSummaryTrends,
+            bundle_id: BundleId::default(),
+            snippet: "trend snippet".try_into()?,
+            dependencies: None,
+            tables: Some(vec![TableNameDto::try_from("tt")?]),
+            parent_table: TableNameDto::try_from("t0")?,
+        };
+        let create = FunctionRegister {
+            child_functions: Some(vec![child]),
+            name: "owner".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t0")?]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+
+        let service = Services::with_defaults(db.clone());
+        let collection_param = CollectionParam {
+            collection: CollectionIdName::from_str(&collection_name.to_string())?,
+        };
+        service
+            .register_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(collection_param.clone(), create)
+                    .in_project(p.id),
+            )
+            .await?;
+
+        let live_function = async |name: &str| -> Result<FunctionDB, TdError> {
+            let rows: Vec<FunctionDB> = db
+                .scd2()
+                .fetch_all::<FunctionDB>(&FunctionName::try_from(name)?)
+                .await?;
+            Ok(rows.into_iter().next().expect("function is live"))
+        };
+        let live_table = async |name: &str| -> Result<TableDB, TdError> {
+            let rows: Vec<TableDB> = db
+                .scd2()
+                .fetch_all::<TableDB>(&TableName::try_from(name)?)
+                .await?;
+            Ok(rows.into_iter().next().expect("table is live"))
+        };
+
+        let owner = live_function("owner").await?;
+        let trend = live_function("tt_trend").await?;
+        let owner_table = live_table("t0").await?;
+        let trend_table = live_table("tt").await?;
+
+        let execution = db.scoped(p.id).seed().execution(&owner).await?;
+        let transaction = db
+            .scoped(p.id)
+            .seed()
+            .transaction(&execution, &TransactionKey::try_from("ANY")?)
+            .await?;
+        for (function, table) in [(&owner, &owner_table), (&trend, &trend_table)] {
+            let run = db
+                .scoped(p.id)
+                .seed()
+                .physical_function_run(
+                    &collection,
+                    function,
+                    &execution,
+                    &transaction,
+                    &LogicalFunctionRunStatus::Scheduled,
+                )
+                .await?;
+            db.scoped(p.id)
+                .seed()
+                .physical_table_data_version(&collection, &execution, &transaction, &run, table)
+                .await?;
+        }
+        let written_at = AtTime::now();
+
+        let versions_of = async |table: &str| {
+            service
+                .table_list_data_versions(
+                    RequestContext::with(AccessTokenId::default(), UserId::admin())
+                        .list(
+                            (
+                                CollectionParam {
+                                    collection: CollectionIdName::from_str(
+                                        &collection_name.to_string(),
+                                    )
+                                    .unwrap(),
+                                },
+                                TableParam {
+                                    table: TableIdName::from_str(table).unwrap(),
+                                },
+                                AtTimeParam { at: written_at },
+                            ),
+                            ListParams::default(),
+                        )
+                        .in_project(p.id),
+                )
+                .await
+                .map(|response| response.data.data)
+        };
+
+        let trend_versions = versions_of("tt").await?;
+        assert_eq!(trend_versions.len(), 1);
+        assert_eq!(
+            trend_versions[0].parent_table_id,
+            Some(Parent::from(owner_table.base.table_id)),
+            "the trend table reports the owner table it derives from"
+        );
+
+        let owner_versions = versions_of("t0").await?;
+        assert_eq!(owner_versions.len(), 1);
+        assert_eq!(
+            owner_versions[0].parent_table_id, None,
+            "a Regular table has no parent to report"
+        );
+        Ok(())
+    }
 
     #[td_test::test(db)]
     async fn test_list_data_versions_after_collection_delete(db: TdPool) -> Result<(), TdError> {

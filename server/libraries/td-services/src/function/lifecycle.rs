@@ -27,11 +27,12 @@ use td_objects::types::basic::{
 use td_queries::Queries;
 
 /// What the platform stamps on a function it registers on another's behalf.
-/// A request cannot express either, so this is the only way a function gets a
-/// class other than `Regular`, or a parent.
+/// A request cannot express any of these, so this is the only way a function
+/// gets a type other than `Regular`, a parent, or parented tables.
 pub struct PlatformOwned<'a> {
     pub function_type: FunctionType,
     pub parent: &'a FunctionId,
+    pub parent_tables: HashMap<TableNameDto, TableNameDto>,
 }
 
 pub async fn register_one(
@@ -51,16 +52,19 @@ pub async fn register_one(
     // own, else the project's -- already resolved by the collections_active view).
     let mut function =
         register.to_dao(ctx, collection.id, collection.effective_base_path.clone())?;
+    let mut parent_tables = None;
     if let Some(platform) = platform {
         function.function_type = platform.function_type;
         function.parent_function_id = Some(Parent::from(*platform.parent));
+        parent_tables = Some(platform.parent_tables);
     }
     ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
     conn.scd2().open(&function, at).await?;
     claim_bundle(conn, &function).await?;
 
     let state = FunctionState::empty();
-    let spec = FunctionSpec::from(register);
+    let mut spec = FunctionSpec::from(register);
+    spec.parent_tables = parent_tables;
     register_version(
         conn,
         ctx,
@@ -83,6 +87,7 @@ pub async fn update_one(
     collection: &ActiveCollectionDB,
     current: &FunctionDBWithNames,
     update: &FunctionUpdate,
+    parent_tables: Option<HashMap<TableNameDto, TableNameDto>>,
     at: LockInstant,
 ) -> Result<FunctionInsertDB, TdError> {
     assert_function_name_not_exists(conn, &collection.id, current, update).await?;
@@ -95,7 +100,8 @@ pub async fn update_one(
 
     let previous_version_id = Some(current.base.base.id.clone());
     let state = FunctionState::load(conn, &function.function_id).await?;
-    let spec = FunctionSpec::from(update);
+    let mut spec = FunctionSpec::from(update);
+    spec.parent_tables = parent_tables;
     register_version(
         conn,
         ctx,
@@ -203,6 +209,20 @@ pub async fn reconcile_dq_summary_trend_children(
         declared_children.push((name, table.clone(), child));
     }
 
+    if !declared_children.is_empty() {
+        let owned = FunctionState::load(conn, &owner.function_id).await?;
+        let owned: HashSet<&TableName> = owned.tables.iter().map(|t| &t.base.name).collect();
+        for (_, _, child) in &declared_children {
+            let parent = TableName::try_from(&child.parent_table)?;
+            if !owned.contains(&parent) {
+                Err(RegisterFunctionError::ChildFunctionParentTableNotOwned(
+                    child.parent_table.clone(),
+                    owner.name.clone(),
+                ))?
+            }
+        }
+    }
+
     let parent = Some(Parent::from(owner.function_id));
     let existing: Vec<FunctionDBWithNames> =
         conn.scd2().fetch_all(and!(&parent, &collection.id)).await?;
@@ -223,7 +243,17 @@ pub async fn reconcile_dq_summary_trend_children(
                 ensure_trend_table_is_adoptable(conn, collection, table, reuse_frozen_tables)
                     .await?;
                 let update = child.to_update(name, reuse_frozen_tables, owner.enabled)?;
-                update_one(conn, ctx, bridge, collection, current, &update, at).await?;
+                update_one(
+                    conn,
+                    ctx,
+                    bridge,
+                    collection,
+                    current,
+                    &update,
+                    Some(child.parent_tables(table)),
+                    at,
+                )
+                .await?;
             }
             None => {
                 let taken: Vec<FunctionDBWithNames> =
@@ -241,6 +271,7 @@ pub async fn reconcile_dq_summary_trend_children(
                 let platform = PlatformOwned {
                     function_type: child.function_type.clone(),
                     parent: &owner.function_id,
+                    parent_tables: child.parent_tables(table),
                 };
                 register_one(conn, ctx, bridge, collection, &register, Some(platform), at).await?;
             }

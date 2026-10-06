@@ -467,6 +467,7 @@ class Collection:
                 "snippet": archive.function_snippet,
                 "dependencies": archive.string_dependencies,
                 "tables": archive.tables,
+                "parent_table": trend.parent_table,
             })
         return children
 

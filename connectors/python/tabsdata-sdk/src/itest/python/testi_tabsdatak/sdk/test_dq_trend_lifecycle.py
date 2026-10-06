@@ -95,6 +95,14 @@ def is_enabled(collection: Collection, name: str) -> bool:
     return collection.get_function(name).enabled
 
 
+def table_id(collection: Collection, name: str) -> str:
+    return collection.get_table(name).kwargs.get("table_id")
+
+
+def parent_table_id(collection: Collection, name: str) -> str | None:
+    return collection.get_table(name).kwargs.get("parent_table_id")
+
+
 def trend_functions(collection: Collection, owner_id: str) -> list:
     """The trend functions the server says belong to ``owner_id`` -- found by
     the parent link, which is what the reconciler itself keys on."""
@@ -157,6 +165,105 @@ def test_the_trend_table_is_typed_as_a_summary_trend(
 
     trend_table = collection.get_table(publisher.DEFAULT_TREND_TABLE)
     assert trend_table.kwargs.get("table_type") == TableType.DQSummaryTrends.value
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_the_trend_table_is_parented_to_the_published_table(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    # The parent is the table the data-quality action ran on, not the summary
+    # the trend actually reads: that is what links a trend back to the data it
+    # describes.
+    collection = source_collection(collection_factory)
+    register(collection, publisher.pub_with_default_trend)
+
+    assert parent_table_id(collection, publisher.DEFAULT_TREND_TABLE) == table_id(
+        collection, publisher.PUBLISHED_TABLE
+    )
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_a_published_table_has_no_parent(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    # Only a derived table carries a parent, and the server refuses the link on
+    # a Regular table outright.
+    collection = source_collection(collection_factory)
+    register(collection, publisher.pub_with_default_trend)
+
+    assert parent_table_id(collection, publisher.PUBLISHED_TABLE) is None
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_the_summary_table_has_no_parent(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    # The trend is the only table registration parents; the summary is an
+    # output of the owner like any other.
+    collection = source_collection(collection_factory)
+    register(collection, publisher.pub_with_default_trend)
+
+    assert parent_table_id(collection, publisher.SUMMARY_TABLE) is None
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_a_custom_named_trend_table_is_parented_the_same_way(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    # The parent follows the action's table, so naming the trend explicitly
+    # does not change what it hangs off.
+    collection = source_collection(collection_factory)
+    register(collection, publisher.pub_with_custom_trend)
+
+    assert parent_table_id(collection, publisher.CUSTOM_TREND_TABLE) == table_id(
+        collection, publisher.PUBLISHED_TABLE
+    )
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_the_parent_link_survives_an_owner_update(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    # The link is rebuilt from every request, so an unrelated change to the
+    # owner must leave it where it was rather than dropping it.
+    collection = source_collection(collection_factory)
+    register(collection, publisher.pub_with_default_trend)
+    update(collection, publisher.pub_with_custom_retention, reuse_tables=True)
+
+    assert parent_table_id(collection, publisher.DEFAULT_TREND_TABLE) == table_id(
+        collection, publisher.PUBLISHED_TABLE
+    )
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_deleting_the_published_table_takes_the_trend_table(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    # Moving the owner off the published table freezes it and retires the
+    # trend function, which freezes the trend table too. Deleting the parent
+    # then takes the derived table with it, rather than leaving it pointing at
+    # nothing.
+    collection = source_collection(collection_factory)
+    register(collection, publisher.pub_with_default_trend)
+    update(collection, publisher.pub_elsewhere)
+
+    def status(name: str) -> str:
+        return collection.get_table(name).kwargs.get("status")
+
+    assert status(publisher.PUBLISHED_TABLE) == FROZEN
+    assert status(publisher.DEFAULT_TREND_TABLE) == FROZEN
+
+    collection.get_table(publisher.PUBLISHED_TABLE).delete()
+
+    remaining = table_names(collection)
+    assert publisher.PUBLISHED_TABLE not in remaining
+    assert publisher.DEFAULT_TREND_TABLE not in remaining
 
 
 @tabsdata_instance(consumer="tdtest")
@@ -483,6 +590,33 @@ def test_disabling_an_owner_without_a_trend_function_is_unaffected(
 
     assert is_enabled(collection, OWNER) is False
     assert function_names(collection) == {OWNER}
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_a_trend_data_version_reports_the_parent_table(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    # The link is on the data-version listing too, so a reader of the trend's
+    # history can tell which table it describes without a second lookup.
+    collection = source_collection(collection_factory)
+    owner = register(collection, publisher.pub_with_default_trend)
+
+    execution = owner.trigger()
+    assert wait_for_completion(execution) in EXECUTION_SUCCESSFUL_FINAL_STATUSES
+
+    published = table_id(collection, publisher.PUBLISHED_TABLE)
+    versions = collection.get_table(publisher.DEFAULT_TREND_TABLE).list_dataversions()
+    assert versions
+    assert [version.kwargs.get("parent_table_id") for version in versions] == [
+        published
+    ] * len(versions)
+
+    own_versions = collection.get_table(publisher.PUBLISHED_TABLE).list_dataversions()
+    assert own_versions
+    assert all(
+        version.kwargs.get("parent_table_id") is None for version in own_versions
+    )
 
 
 @tabsdata_instance(consumer="tdtest")

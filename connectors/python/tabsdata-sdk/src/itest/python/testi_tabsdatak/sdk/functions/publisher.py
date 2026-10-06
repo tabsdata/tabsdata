@@ -25,6 +25,10 @@ SUMMARY_TABLE = f"{PUBLISHED_TABLE}_dq_summary"
 DEFAULT_TREND_TABLE = f"{PUBLISHED_TABLE}_dq_summary_trends"
 CUSTOM_TREND_TABLE = "trend_source_custom_trends"
 
+# Published by `pub_elsewhere`, whose only job is to stop publishing
+# PUBLISHED_TABLE so it freezes and becomes deletable.
+MOVED_TABLE = "trend_source_moved"
+
 GENERATED_FRAME = pl.DataFrame({"amount": [1, -2, 3]})
 
 _SOURCE = DataGenSrc(data=[Data(GENERATED_FRAME)])
@@ -76,4 +80,9 @@ def pub_without_trend(frame: TableFrameSpec) -> TableFrameSpec:
 
 @publisher(source=_SOURCE, output_tables=[PUBLISHED_TABLE])
 def pub_without_data_quality(frame: TableFrameSpec) -> TableFrameSpec:
+    return frame
+
+
+@publisher(source=_SOURCE, output_tables=[MOVED_TABLE])
+def pub_elsewhere(frame: TableFrameSpec) -> TableFrameSpec:
     return frame

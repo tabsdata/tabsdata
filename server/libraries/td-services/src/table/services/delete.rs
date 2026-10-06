@@ -16,13 +16,17 @@ use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::dxo::table::TableParam;
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDB;
-use td_objects::types::basic::{CollectionName, TableName, TableStatus};
+use td_objects::types::basic::{CollectionName, Parent, TableName, TableStatus};
 use td_queries::Queries;
 
 #[td_error]
 enum DeleteTableError {
     #[error("Table '{0}' in collection '{1}' is not frozen; only a frozen table can be deleted")]
     TableNotFrozen(TableName, CollectionName) = 0,
+    #[error(
+        "Table '{0}' in collection '{2}' is a child of '{1}' and is not frozen; freeze it before deleting '{1}'"
+    )]
+    DerivedTableNotFrozen(TableName, TableName, CollectionName) = 1,
 }
 
 #[service_factory]
@@ -60,13 +64,29 @@ async fn table_delete(
     }
     let table_id = table.base.base.table_id;
 
-    let functions = dependants_of_tables(conn, &[table_id]).await?;
+    let parent = Some(Parent::from(table_id));
+    let children: Vec<TableDB> = conn.scd2().fetch_all(and!(&parent, &collection.id)).await?;
+    for child in &children {
+        if !matches!(child.base.status, TableStatus::Frozen) {
+            Err(DeleteTableError::DerivedTableNotFrozen(
+                child.base.name.clone(),
+                table.base.base.name.clone(),
+                collection.name.clone(),
+            ))?
+        }
+    }
+    let mut table_ids = Vec::with_capacity(children.len() + 1);
+    table_ids.push(table_id);
+    table_ids.extend(children.iter().map(|child| child.base.table_id));
+
+    let functions = dependants_of_tables(conn, &table_ids).await?;
     let frozen: Vec<FunctionInsertDB> = functions.iter().map(|f| f.frozen_version(&ctx)).collect();
     conn.scd2().chunked().open(&frozen, at).await?;
 
-    conn.scd2().close::<TriggerDB>(&table_id, at).await?;
-
-    conn.scd2().close::<TableDB>(&table_id, at).await?;
+    for table_id in &table_ids {
+        conn.scd2().close::<TriggerDB>(table_id, at).await?;
+        conn.scd2().close::<TableDB>(table_id, at).await?;
+    }
     Ok(())
 }
 
@@ -80,10 +100,12 @@ mod tests {
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::{FunctionParam, FunctionRegister, FunctionUpdate};
+    use td_objects::dxo::function::{
+        ChildFunction, FunctionParam, FunctionRegister, FunctionUpdate,
+    };
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, Decorator, FunctionIdName, FunctionRuntimeValues, TableName,
-        TableNameDto, UserId,
+        AccessTokenId, BundleId, Decorator, FunctionIdName, FunctionRuntimeValues, FunctionType,
+        TableName, TableNameDto, UserId,
     };
     use td_objects::types::basic::{CollectionIdName, TableIdName};
     use td_objects::types::basic::{CollectionName, ReuseFrozen};
@@ -179,6 +201,230 @@ mod tests {
             &TableName::try_from("super_table")?,
         )
         .await
+    }
+
+    /// A derived table goes with the table it was derived from: deleting the
+    /// parent leaves no trend table behind to point at nothing.
+    #[td_test::test(db)]
+    async fn test_delete_table_cascades_to_derived_tables(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("cascade")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let child = ChildFunction {
+            function_type: FunctionType::DQSummaryTrends,
+            bundle_id: BundleId::default(),
+            snippet: "trend snippet".try_into()?,
+            dependencies: None,
+            tables: Some(vec![TableNameDto::try_from("trend_table")?]),
+            parent_table: TableNameDto::try_from("super_table")?,
+        };
+        let create = FunctionRegister {
+            child_functions: Some(vec![child]),
+            name: "owner_fn".try_into()?,
+            description: "owner".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "owner snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![
+                TableNameDto::try_from("super_table")?,
+                TableNameDto::try_from("keep_this_one")?,
+            ]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+
+        let service = Services::with_defaults(db.clone());
+        let collection_param = CollectionParam {
+            collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+        };
+        service
+            .register_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(collection_param.clone(), create)
+                    .in_project(p.id),
+            )
+            .await?;
+
+        // Only a frozen table can be deleted, and dropping it from the owner is
+        // what freezes it.
+        let update = FunctionUpdate {
+            name: Some("owner_fn".try_into()?),
+            description: Some("owner".try_into()?),
+            snippet: Some("owner snippet".try_into()?),
+            decorator: Some(Decorator::Transformer),
+            tables: Some(vec![TableNameDto::try_from("keep_this_one")?]),
+            runtime_values: Some(FunctionRuntimeValues::try_from("mock runtime values")?),
+            ..Default::default()
+        };
+        service
+            .update_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(
+                        (
+                            collection_param.clone(),
+                            FunctionParam {
+                                function: FunctionIdName::from_str("owner_fn")?,
+                            },
+                        ),
+                        update,
+                    )
+                    .in_project(p.id),
+            )
+            .await?;
+
+        service
+            .table_delete(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .delete((
+                        collection_param,
+                        TableParam {
+                            table: TableIdName::from_str("super_table")?,
+                        },
+                    ))
+                    .in_project(p.id),
+            )
+            .await?;
+
+        let parent: Vec<TableDB> = db
+            .scd2()
+            .fetch_all(&TableName::try_from("super_table")?)
+            .await?;
+        assert!(parent.is_empty(), "the parent table is deleted");
+        let derived: Vec<TableDB> = db
+            .scd2()
+            .fetch_all(&TableName::try_from("trend_table")?)
+            .await?;
+        assert!(derived.is_empty(), "the derived table goes with it");
+        let kept: Vec<TableDB> = db
+            .scd2()
+            .fetch_all(&TableName::try_from("keep_this_one")?)
+            .await?;
+        assert!(!kept.is_empty(), "an unrelated table is untouched");
+        Ok(())
+    }
+
+    /// The frozen bar covers the whole cascade: a live derived table refuses
+    /// the delete rather than being swept away with its parent.
+    #[td_test::test(db)]
+    async fn test_delete_table_refused_while_a_derived_table_is_live(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("cascade_live")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let child = ChildFunction {
+            function_type: FunctionType::DQSummaryTrends,
+            bundle_id: BundleId::default(),
+            snippet: "trend snippet".try_into()?,
+            dependencies: None,
+            tables: Some(vec![TableNameDto::try_from("trend_table")?]),
+            parent_table: TableNameDto::try_from("super_table")?,
+        };
+        let create = FunctionRegister {
+            child_functions: Some(vec![child.clone()]),
+            name: "owner_fn".try_into()?,
+            description: "owner".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "owner snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![
+                TableNameDto::try_from("super_table")?,
+                TableNameDto::try_from("keep_this_one")?,
+            ]),
+            table_types: None,
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+
+        let service = Services::with_defaults(db.clone());
+        let collection_param = CollectionParam {
+            collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+        };
+        service
+            .register_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(collection_param.clone(), create)
+                    .in_project(p.id),
+            )
+            .await?;
+
+        // The parent freezes, but the trend function keeps producing its table,
+        // so the derived table stays live.
+        let update = FunctionUpdate {
+            name: Some("owner_fn".try_into()?),
+            description: Some("owner".try_into()?),
+            snippet: Some("owner snippet".try_into()?),
+            decorator: Some(Decorator::Transformer),
+            tables: Some(vec![TableNameDto::try_from("keep_this_one")?]),
+            child_functions: Some(vec![child]),
+            runtime_values: Some(FunctionRuntimeValues::try_from("mock runtime values")?),
+            ..Default::default()
+        };
+        service
+            .update_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(
+                        (
+                            collection_param.clone(),
+                            FunctionParam {
+                                function: FunctionIdName::from_str("owner_fn")?,
+                            },
+                        ),
+                        update,
+                    )
+                    .in_project(p.id),
+            )
+            .await?;
+
+        let err = service
+            .table_delete(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .delete((
+                        collection_param,
+                        TableParam {
+                            table: TableIdName::from_str("super_table")?,
+                        },
+                    ))
+                    .in_project(p.id),
+            )
+            .await
+            .expect_err("a live derived table refuses the delete");
+        assert!(matches!(
+            err.domain_err::<DeleteTableError>(),
+            DeleteTableError::DerivedTableNotFrozen(_, _, _)
+        ));
+
+        let parent: Vec<TableDB> = db
+            .scd2()
+            .fetch_all(&TableName::try_from("super_table")?)
+            .await?;
+        assert!(!parent.is_empty(), "nothing was deleted");
+        Ok(())
     }
 
     #[td_test::test(db)]

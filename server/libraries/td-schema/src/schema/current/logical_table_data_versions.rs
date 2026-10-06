@@ -21,6 +21,7 @@ use super::groups::Groups;
 use super::logical_function_runs::LogicalFunctionRuns;
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::physical_table_data_versions::PhysicalTableDataVersions;
+use super::tables::Tables;
 use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
@@ -242,6 +243,7 @@ impl Entity for Defs {
                     .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Status)), Alias::new("physical_status"))
                     .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                     .expr_as(Expr::col((Functions::Table, Functions::StorageVersion)), Alias::new("storage_version"))
+                    .expr_as(Expr::col((Tables::Table, Tables::ParentTableId)), Alias::new("parent_table_id"))
                     .from(LogicalTableDataVersions::Table)
                     .join(
                         JoinType::LeftJoin,
@@ -288,6 +290,12 @@ impl Entity for Defs {
                         Functions::Table,
                         Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::FunctionVersionId))
                             .equals((Functions::Table, Functions::Id)),
+                    )
+                    .join(
+                        JoinType::LeftJoin,
+                        Tables::Table,
+                        Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::TableVersionId))
+                            .equals((Tables::Table, Tables::Id)),
                     )
                     .join_as(
                         JoinType::LeftJoin,

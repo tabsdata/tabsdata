@@ -55,6 +55,7 @@ pub struct ChildFunction {
     pub dependencies: Option<Vec<TableDependencyDto>>,
     #[serde(default)]
     pub tables: Option<Vec<TableNameDto>>,
+    pub parent_table: TableNameDto,
 }
 
 pub(crate) fn deserialize_child_function_type<'de, D>(
@@ -81,6 +82,10 @@ impl ChildFunction {
             Some([table]) => Some(table),
             _ => None,
         }
+    }
+
+    pub fn parent_tables(&self, table: &TableNameDto) -> HashMap<TableNameDto, TableNameDto> {
+        HashMap::from([(table.clone(), self.parent_table.clone())])
     }
 
     pub fn platform_name(&self, table: &TableNameDto) -> Option<FunctionName> {

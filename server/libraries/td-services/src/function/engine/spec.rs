@@ -18,8 +18,8 @@ use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES, TD_FN_STATE_PREFIX,
 };
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionId, ResetState, ReuseFrozen, System, TableId,
-    TableName, TableNameDto, TableStatus, TableType,
+    AtTime, CollectionId, CollectionName, FunctionId, Parent, ResetState, ReuseFrozen, System,
+    TableId, TableName, TableNameDto, TableStatus, TableType,
 };
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -33,6 +33,7 @@ use td_queries::Queries;
 pub struct FunctionSpec<'a> {
     pub tables: Option<&'a [TableNameDto]>,
     pub table_types: Option<&'a HashMap<TableNameDto, TableType>>,
+    pub parent_tables: Option<HashMap<TableNameDto, TableNameDto>>,
     pub dependencies: Option<&'a [TableDependencyDto]>,
     pub triggers: Option<&'a [TableTriggerDto]>,
     pub reuse_frozen: ReuseFrozen,
@@ -44,6 +45,7 @@ impl<'a> From<&'a FunctionRegister> for FunctionSpec<'a> {
         Self {
             tables: register.tables.as_deref(),
             table_types: register.table_types.as_ref(),
+            parent_tables: None,
             dependencies: register.dependencies.as_deref(),
             triggers: register.triggers.as_deref(),
             reuse_frozen: register.reuse_frozen_tables,
@@ -57,6 +59,7 @@ impl<'a> From<&'a FunctionUpdate> for FunctionSpec<'a> {
         Self {
             tables: update.tables.as_deref(),
             table_types: update.table_types.as_ref(),
+            parent_tables: None,
             dependencies: update.dependencies.as_deref(),
             triggers: update.triggers.as_deref(),
             reuse_frozen: update.reuse_frozen_tables,
@@ -74,6 +77,7 @@ pub struct ResolvedTable {
     pub table_type: TableType,
     pub table_id: TableId,
     pub adopted_frozen: bool,
+    pub parent_table_id: Option<Parent<TableId>>,
 }
 
 /// A table another relation points at, as the request named it.
@@ -232,6 +236,8 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
 ) -> Result<Vec<ResolvedTable>, TdError> {
     let empty_types = HashMap::new();
     let table_types = spec.table_types.unwrap_or(&empty_types);
+    let empty_parents = HashMap::new();
+    let parent_names = spec.parent_tables.as_ref().unwrap_or(&empty_parents);
 
     let user_tables: Vec<(TableName, TableType)> = spec
         .tables
@@ -263,6 +269,46 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
         .map(|t| (&t.base.base.name, &t.base.base))
         .collect();
 
+    let mut parents: HashMap<TableName, Parent<TableId>> = HashMap::new();
+    if !parent_names.is_empty() {
+        let wanted: Vec<TableName> = parent_names
+            .values()
+            .unique()
+            .map(TableName::try_from)
+            .try_collect()?;
+        let lookups: Vec<_> = wanted
+            .iter()
+            .map(|name| and!(&collection.id, name))
+            .collect();
+        let found: Vec<TableDBWithNames> = conn.scd2().chunked().fetch_all(&lookups, ()).await?;
+        let found: HashMap<&TableName, (TableId, &TableType)> = found
+            .iter()
+            .map(|t| {
+                (
+                    &t.base.base.name,
+                    (t.base.base.table_id, &t.base.base.table_type),
+                )
+            })
+            .collect();
+        for (child, parent) in parent_names {
+            let parent = TableName::try_from(parent)?;
+            let (table_id, parent_type) = found.get(&parent).ok_or_else(|| {
+                RegisterFunctionError::ParentTableDoesNotExist(
+                    parent.clone(),
+                    collection.name.clone(),
+                )
+            })?;
+
+            if !matches!(parent_type, TableType::Regular) {
+                Err(RegisterFunctionError::ParentTableMustBeRegular(
+                    parent.clone(),
+                    (*parent_type).clone(),
+                ))?
+            }
+            parents.insert(TableName::try_from(child)?, (*table_id).into());
+        }
+    }
+
     let mut owned_elsewhere = Vec::new();
     let mut tables = Vec::new();
     for (pos, (name, table_type)) in positioned(&user_tables, &system_tables) {
@@ -283,12 +329,20 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
                 continue;
             }
         };
+        let parent_table_id = parents.get(name).cloned();
+
+        if parent_table_id.is_some() && matches!(table_type, TableType::Regular) {
+            Err(RegisterFunctionError::RegularTableCannotHaveParent(
+                name.clone(),
+            ))?
+        }
         tables.push(ResolvedTable {
             pos,
             name: name.clone(),
             table_type: table_type.clone(),
             table_id,
             adopted_frozen,
+            parent_table_id,
         });
     }
     if !owned_elsewhere.is_empty() {

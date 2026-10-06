@@ -297,6 +297,7 @@ mod tests {
             defined_by_id: request_context.user_id,
             status: TableStatus::Active,
             table_type: TableType::default(),
+            parent_table_id: None,
         };
         db.scoped(p.id)
             .scd2()

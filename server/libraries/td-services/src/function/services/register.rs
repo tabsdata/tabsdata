@@ -2169,6 +2169,8 @@ mod tests {
 
     const CHILD_OWNER: &str = "child_owner";
 
+    const OWNER_TABLE: &str = "owned";
+
     fn child(table: &str) -> Result<ChildFunction, TdError> {
         Ok(ChildFunction {
             function_type: FunctionType::DQSummaryTrends,
@@ -2176,6 +2178,7 @@ mod tests {
             snippet: "s".try_into()?,
             dependencies: None,
             tables: Some(vec![TableNameDto::try_from(table)?]),
+            parent_table: TableNameDto::try_from(OWNER_TABLE)?,
         })
     }
 
@@ -2258,6 +2261,14 @@ mod tests {
         Ok(rows.into_iter().next())
     }
 
+    async fn active_table(db: &TdPool, name: &str) -> Result<TableDB, TdError> {
+        let rows: Vec<TableDB> = db
+            .scd2()
+            .fetch_all::<TableDB>(&TableName::try_from(name)?)
+            .await?;
+        Ok(rows.into_iter().next().expect("table is live"))
+    }
+
     fn owner_update(child_functions: Option<Vec<ChildFunction>>) -> FunctionUpdate {
         owner_update_reusing(child_functions, ReuseFrozen::TRUE)
     }
@@ -2287,6 +2298,91 @@ mod tests {
         assert_eq!(
             child.base.parent_function_id,
             Some(Parent::from(owner.function_id))
+        );
+
+        // The trend table points back at the owner table the summary was taken
+        // from, which is what links the two in the catalog.
+        let parent_table = active_table(&db, OWNER_TABLE).await?;
+        let child_table = active_table(&db, "m").await?;
+        assert_eq!(
+            child_table.base.parent_table_id,
+            Some(Parent::from(parent_table.base.table_id))
+        );
+        Ok(())
+    }
+
+    /// The parent is checked against the owner's own outputs: a trend cannot be
+    /// hung off a table the owner does not produce.
+    #[td_test::test(db)]
+    async fn test_register_child_parent_table_must_be_owned(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_parent", None).await;
+        let mut stray = child("s")?;
+        stray.parent_table = TableNameDto::try_from("not_owned")?;
+        let create = owner_register(&["owned"], Some(vec![stray]))?;
+
+        let err = register_err(&db, p.id, "mgd_parent", create).await?;
+        assert!(matches!(
+            err.domain_err::<RegisterFunctionError>(),
+            RegisterFunctionError::ChildFunctionParentTableNotOwned(_, _)
+        ));
+        Ok(())
+    }
+
+    /// A parent describes a table that holds data, so only a Regular table can
+    /// be one. Nothing hangs off a table that is itself derived.
+    #[td_test::test(db)]
+    async fn test_register_child_parent_table_must_be_regular(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_ptype", None).await;
+        let mut derived = child("d")?;
+        derived.parent_table = TableNameDto::try_from("summary")?;
+        let mut create = owner_register(&["owned", "summary"], Some(vec![derived]))?;
+        create.table_types = Some(HashMap::from([(
+            TableNameDto::try_from("summary")?,
+            TableType::DQSummary,
+        )]));
+
+        let err = register_err(&db, p.id, "mgd_ptype", create).await?;
+        assert!(matches!(
+            err.domain_err::<RegisterFunctionError>(),
+            RegisterFunctionError::ParentTableMustBeRegular(_, _)
+        ));
+        Ok(())
+    }
+
+    /// Re-pointing a trend at another of the owner's tables is an update of the
+    /// same function, not a delete and re-register.
+    #[td_test::test(db)]
+    async fn test_update_reparenting_a_child_table_keeps_the_function(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_reparent", None).await;
+        let create = owner_register(&["owned", "other"], Some(vec![child("a")?]))?;
+        register_ok(&db, p.id, "mgd_reparent", create).await?;
+        let before = live_by_name(&db, &child_name("a"))
+            .await?
+            .expect("registered");
+
+        let mut moved = child("a")?;
+        moved.parent_table = TableNameDto::try_from("other")?;
+        let mut update = owner_update(Some(vec![moved]));
+        update.tables = Some(vec![
+            TableNameDto::try_from("owned")?,
+            TableNameDto::try_from("other")?,
+        ]);
+        update_ok(&db, p.id, "mgd_reparent", CHILD_OWNER, update).await?;
+
+        let after = live_by_name(&db, &child_name("a"))
+            .await?
+            .expect("still registered");
+        assert_eq!(after.base.function_id, before.base.function_id);
+        let other = active_table(&db, "other").await?;
+        let child_table = active_table(&db, "a").await?;
+        assert_eq!(
+            child_table.base.parent_table_id,
+            Some(Parent::from(other.base.table_id))
         );
         Ok(())
     }
