@@ -99,7 +99,10 @@ mod tests {
     #[test]
     fn test_sea_value() {
         let v = Status::Active;
-        assert_eq!(v.as_sea_value(), sea_query::Value::String(Some("A".into())));
+        assert_eq!(
+            v.as_sea_expr(),
+            sea_query::Expr::from(sea_query::Value::String(Some("A".into())))
+        );
     }
 
     // ----- SqlCondition -------------------------------------------------------

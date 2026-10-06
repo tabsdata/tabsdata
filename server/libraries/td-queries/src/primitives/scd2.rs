@@ -17,13 +17,13 @@ use ta_objects::{
     SameInner, Scd2Dao, Scd2OpenDao, SeaValue, SelectDao, TableDao, TimelineDao, TypedInner,
     UpdateDao,
 };
-use td_common::datetime::Timestamp;
+use td_common::datetime::{IntervalEnd, Timestamp};
 use td_database::access::LockInstant;
 
-/// The `'infinity'` literal, never a bind parameter, is what matches the
+/// The literal, never a bind parameter, is what matches the
 /// `WHERE valid_to = 'infinity'` partial indexes.
 pub(crate) fn open_interval_at(valid_to: impl IntoColumnRef) -> Expr {
-    Expr::col(valid_to).eq(Expr::cust("'infinity'::timestamptz"))
+    Expr::col(valid_to).eq(Expr::cust(IntervalEnd::SQL_INFINITY))
 }
 
 pub(crate) fn open_interval_cond<D: Scd2Dao>() -> Expr {
@@ -36,8 +36,8 @@ pub(crate) fn visible_at<V: SeaValue>(
     on: &V,
 ) -> Condition {
     Condition::all()
-        .add(Expr::col(version_order).lte(on.as_sea_value()))
-        .add(Expr::col(valid_to).gt(on.as_sea_value()))
+        .add(Expr::col(version_order).lte(on.as_sea_expr()))
+        .add(Expr::col(valid_to).gt(on.as_sea_expr()))
 }
 
 pub(crate) fn visible_at_cond<D: Scd2Dao + TimelineDao, V: SameInner<D::VersionOrder>>(
@@ -49,23 +49,23 @@ pub(crate) fn visible_at_cond<D: Scd2Dao + TimelineDao, V: SameInner<D::VersionO
 /// An instant already rendered to its bound value: what a builder keeps once
 /// the caller's newtype has been checked against the column.
 #[derive(Debug, Clone)]
-pub(crate) struct Instant(sea_query::Value);
+pub(crate) struct Instant(Expr);
 
 impl Instant {
     pub(crate) fn of<V: SeaValue>(on: &V) -> Self {
-        Self(on.as_sea_value())
+        Self(on.as_sea_expr())
     }
 }
 
 impl SeaValue for Instant {
-    fn as_sea_value(&self) -> sea_query::Value {
+    fn as_sea_expr(&self) -> Expr {
         self.0.clone()
     }
 }
 
 /// The lock instant as the bound value of `valid_from` / `valid_to`.
-pub(crate) fn stamp(at: LockInstant) -> sea_query::Value {
-    <Timestamp as TypedInner>::sea_value(&at.timestamp())
+pub(crate) fn stamp(at: LockInstant) -> Expr {
+    <Timestamp as TypedInner>::sea_expr(&at.timestamp())
 }
 
 /// A new version: the payload plus `valid_from = at`; the trigger closes the
@@ -78,7 +78,7 @@ pub(crate) fn open_query<D: Scd2OpenDao>(
     query
         .into_table(D::TABLE)
         .columns(D::columns().into_iter().chain([D::VALID_FROM]))
-        .values(dao.insert_values().into_iter().chain([stamp(at).into()]))?;
+        .values(dao.insert_values().into_iter().chain([stamp(at)]))?;
     Ok(query)
 }
 
@@ -100,7 +100,7 @@ pub(crate) fn select_until<D: SelectDao + TimelineDao, V: SameInner<D::VersionOr
 ) -> SelectStatement {
     select_where::<D>(
         condition,
-        Condition::all().add(Expr::col(D::VERSION_ORDER).lte(on.as_sea_value())),
+        Condition::all().add(Expr::col(D::VERSION_ORDER).lte(on.as_sea_expr())),
     )
 }
 

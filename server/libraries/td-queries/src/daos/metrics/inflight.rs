@@ -73,7 +73,7 @@ pub(crate) fn inflight_query(
             Expr::col(lfr(LogicalFunctionRunDBIden::Status)).is_in(
                 LogicalFunctionRunStatus::IN_FLIGHT
                     .iter()
-                    .map(SeaValue::as_sea_value),
+                    .map(SeaValue::as_sea_expr),
             ),
         )
         .cond_where(visible_projects.narrows(Expr::col(lfr(LogicalFunctionRunDBIden::ProjectId))))
@@ -101,7 +101,7 @@ pub(crate) fn inflight_query(
     if !req.statuses.is_empty() {
         stmt.and_where(
             Expr::col(lfr(LogicalFunctionRunDBIden::Status))
-                .is_in(req.statuses.iter().map(SeaValue::as_sea_value)),
+                .is_in(req.statuses.iter().map(SeaValue::as_sea_expr)),
         );
     }
     stmt

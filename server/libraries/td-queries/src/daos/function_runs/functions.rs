@@ -50,7 +50,7 @@ where
 
 fn fvid_in(fvids: &[FunctionVersionId]) -> sea_query::SimpleExpr {
     Expr::col((FunctionDBIden::Table, FunctionDBIden::Id))
-        .is_in(fvids.iter().map(SeaValue::as_sea_value))
+        .is_in(fvids.iter().map(SeaValue::as_sea_expr))
 }
 
 /// `(id, base_path)`, decoded positionally into a tuple. The collection's

@@ -82,15 +82,15 @@ pub(crate) fn latest_with_data_query(
             LogicalTableDataVersionDBIden::Table,
             LogicalTableDataVersionDBIden::TableId,
         ))
-        .eq(table_id.as_sea_value()),
+        .eq(table_id.as_sea_expr()),
     )
-    .and_where(Expr::col(ltdv_triggered_on).lte(triggered_on.as_sea_value()))
+    .and_where(Expr::col(ltdv_triggered_on).lte(triggered_on.as_sea_expr()))
     .and_where(
         Expr::col((
             PhysicalTableDataVersionDBWithNamesIden::Table,
             PhysicalTableDataVersionDBIden::HasData,
         ))
-        .eq(HasData::TRUE.as_sea_value()),
+        .eq(HasData::TRUE.as_sea_expr()),
     )
     .order_by(ltdv_triggered_on, Order::Desc)
     .order_by(ltdv_id, Order::Desc)

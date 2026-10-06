@@ -48,7 +48,7 @@ pub fn leaf_display_values<D: HasColumn<T>, T: SeaValue>(sv: &T) -> Vec<(String,
 }
 
 pub fn resolve_leaf_eq<D: HasColumn<T>, T: SeaValue>(sv: &T) -> sea_query::Condition {
-    sea_query::Condition::all().add(Expr::col(D::COL).eq(sv.as_sea_value()))
+    sea_query::Condition::all().add(Expr::col(D::COL).eq(sv.as_sea_expr()))
 }
 
 impl<D: Dao, T: SqlCondition<D> + ?Sized> SqlCondition<D> for &T {
@@ -219,7 +219,7 @@ pub struct Lte<T>(pub T);
 
 impl<D: HasColumn<T>, T: SeaValue> SqlCondition<D> for Lte<T> {
     fn resolve(&self) -> sea_query::Condition {
-        sea_query::Condition::all().add(Expr::col(D::COL).lte(self.0.as_sea_value()))
+        sea_query::Condition::all().add(Expr::col(D::COL).lte(self.0.as_sea_expr()))
     }
 
     fn display_values(&self) -> Vec<(String, String)> {

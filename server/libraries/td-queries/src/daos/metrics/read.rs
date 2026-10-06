@@ -78,11 +78,11 @@ pub(crate) fn apply_dim_filter<Id: SeaValue>(
         stmt.and_where(
             column
                 .clone()
-                .is_in(filter.include.iter().map(SeaValue::as_sea_value)),
+                .is_in(filter.include.iter().map(SeaValue::as_sea_expr)),
         );
     }
     if !filter.exclude.is_empty() {
-        stmt.and_where(column.is_not_in(filter.exclude.iter().map(SeaValue::as_sea_value)));
+        stmt.and_where(column.is_not_in(filter.exclude.iter().map(SeaValue::as_sea_expr)));
     }
 }
 
@@ -95,7 +95,7 @@ fn apply_either_endpoint_filter<Id: SeaValue>(
     target: SimpleExpr,
 ) {
     if !filter.include.is_empty() {
-        let values: Vec<_> = filter.include.iter().map(SeaValue::as_sea_value).collect();
+        let values: Vec<_> = filter.include.iter().map(SeaValue::as_sea_expr).collect();
         stmt.and_where(
             source
                 .clone()
@@ -104,7 +104,7 @@ fn apply_either_endpoint_filter<Id: SeaValue>(
         );
     }
     if !filter.exclude.is_empty() {
-        let values: Vec<_> = filter.exclude.iter().map(SeaValue::as_sea_value).collect();
+        let values: Vec<_> = filter.exclude.iter().map(SeaValue::as_sea_expr).collect();
         stmt.and_where(
             source
                 .clone()
@@ -126,7 +126,7 @@ pub(crate) fn per_table_query(
 ) -> Result<SelectStatement, TdError> {
     use MetricsFactDBIden as F;
     let f = F::Table;
-    let attempt = || col(f, F::Side).eq(FactSide::Attempt.as_sea_value());
+    let attempt = || col(f, F::Side).eq(FactSide::Attempt.as_sea_expr());
     let edge_first = match req.dim {
         Dimension::Collection => col(f, F::EdgeFirst),
         Dimension::Group => col(f, F::EdgeFirstGroup),
@@ -143,14 +143,14 @@ pub(crate) fn per_table_query(
         .expr_as(
             count_where(
                 col(f, F::Side)
-                    .eq(FactSide::Written.as_sea_value())
+                    .eq(FactSide::Written.as_sea_expr())
                     .and(col(f, F::HasData)),
             ),
             Aggregate::VersionsWithData,
         )
         .expr_as(
             count_where(
-                col(f, F::Side).eq(FactSide::Written.as_sea_value()).and(
+                col(f, F::Side).eq(FactSide::Written.as_sea_expr()).and(
                     col(f, F::FirstConsumedOn)
                         .is_null()
                         .or(col(f, F::FirstConsumedOn).gte(window_end)),
@@ -163,13 +163,13 @@ pub(crate) fn per_table_query(
         .from(f)
         .and_where(col(f, F::Ts).gte(at(*req.window.start_ms)?))
         .and_where(col(f, F::Ts).lt(window_end))
-        .and_where(col(f, F::RunStatus).is_in(req.statuses.iter().map(SeaValue::as_sea_value)))
+        .and_where(col(f, F::RunStatus).is_in(req.statuses.iter().map(SeaValue::as_sea_expr)))
         .cond_where(visible_projects.narrows(col(f, F::ProjectId)));
     if !*req.include_replaced {
-        stmt.and_where(col(f, F::Current).eq(CurrentAttempt::TRUE.as_sea_value()));
+        stmt.and_where(col(f, F::Current).eq(CurrentAttempt::TRUE.as_sea_expr()));
     }
     if !*req.include_private {
-        stmt.and_where(col(f, F::Private).eq(Private::FALSE.as_sea_value()));
+        stmt.and_where(col(f, F::Private).eq(Private::FALSE.as_sea_expr()));
     }
     apply_either_endpoint_filter(
         &mut stmt,

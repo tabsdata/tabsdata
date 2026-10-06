@@ -40,7 +40,7 @@ async fn recompute(
     }
     warn_if_chunked::<ExecutionDB>(ids.len());
     for chunk in ids.chunks(MAX_QUERY_CONDITIONS) {
-        let values = || chunk.iter().map(SeaValue::as_sea_value);
+        let values = || chunk.iter().map(SeaValue::as_sea_expr);
         execution_rollup()
             .recompute_for(changed, values())
             .build_query()

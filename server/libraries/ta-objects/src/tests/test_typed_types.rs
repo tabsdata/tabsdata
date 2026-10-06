@@ -480,8 +480,8 @@ mod tests {
 
         let v = MyStr::try_from("hello").unwrap();
         assert_eq!(
-            v.as_sea_value(),
-            sea_query::Value::String(Some("hello".into()))
+            v.as_sea_expr(),
+            sea_query::Expr::from(sea_query::Value::String(Some("hello".into())))
         );
     }
 
@@ -491,7 +491,10 @@ mod tests {
         struct MyI32(i32);
 
         let v = MyI32::try_from(42i32).unwrap();
-        assert_eq!(v.as_sea_value(), sea_query::Value::Int(Some(42)));
+        assert_eq!(
+            v.as_sea_expr(),
+            sea_query::Expr::from(sea_query::Value::Int(Some(42)))
+        );
     }
 
     #[test]
@@ -500,7 +503,10 @@ mod tests {
         struct MyI64(i64);
 
         let v = MyI64::try_from(99i64).unwrap();
-        assert_eq!(v.as_sea_value(), sea_query::Value::BigInt(Some(99)));
+        assert_eq!(
+            v.as_sea_expr(),
+            sea_query::Expr::from(sea_query::Value::BigInt(Some(99)))
+        );
     }
 
     #[test]
@@ -509,9 +515,15 @@ mod tests {
         struct MyBool(bool);
 
         let v = MyBool::TRUE;
-        assert_eq!(v.as_sea_value(), sea_query::Value::Bool(Some(true)));
+        assert_eq!(
+            v.as_sea_expr(),
+            sea_query::Expr::from(sea_query::Value::Bool(Some(true)))
+        );
         let v = MyBool::FALSE;
-        assert_eq!(v.as_sea_value(), sea_query::Value::Bool(Some(false)));
+        assert_eq!(
+            v.as_sea_expr(),
+            sea_query::Expr::from(sea_query::Value::Bool(Some(false)))
+        );
     }
 
     #[test]
@@ -520,7 +532,10 @@ mod tests {
         struct MyF64(f64);
 
         let v = MyF64::try_from(2.72f64).unwrap();
-        assert_eq!(v.as_sea_value(), sea_query::Value::Double(Some(2.72)));
+        assert_eq!(
+            v.as_sea_expr(),
+            sea_query::Expr::from(sea_query::Value::Double(Some(2.72)))
+        );
     }
 
     // ---- NullableSeaValue for basic typed types ------------------------------
@@ -564,8 +579,8 @@ mod tests {
 
         let v: Option<OptStr> = Some(OptStr::try_from("val").unwrap());
         assert_eq!(
-            v.as_sea_value(),
-            sea_query::Value::String(Some("val".into()))
+            v.as_sea_expr(),
+            sea_query::Expr::from(sea_query::Value::String(Some("val".into())))
         );
     }
 
@@ -575,7 +590,10 @@ mod tests {
         struct OptStr2(String);
 
         let v: Option<OptStr2> = None;
-        assert_eq!(v.as_sea_value(), sea_query::Value::String(None));
+        assert_eq!(
+            v.as_sea_expr(),
+            sea_query::Expr::from(sea_query::Value::String(None))
+        );
     }
 
     // ---- SqlCondition for basic typed types ----------------------------------

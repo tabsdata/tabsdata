@@ -31,8 +31,8 @@ where
     V: SameInner<D::VersionOrder>,
 {
     Condition::all()
-        .add(Expr::col(D::PARTITION).eq(partition.as_sea_value()))
-        .add(Expr::col(D::VERSION_ORDER).lte(on.as_sea_value()))
+        .add(Expr::col(D::PARTITION).eq(partition.as_sea_expr()))
+        .add(Expr::col(D::VERSION_ORDER).lte(on.as_sea_expr()))
 }
 
 fn key_expr<D>() -> Expr
@@ -114,7 +114,7 @@ where
     match version {
         Version::Fixed(id) => {
             let col = <D as HasColumn<LogicalTableDataVersionId>>::COL;
-            Expr::col(col).eq(id.as_sea_value())
+            Expr::col(col).eq(id.as_sea_expr())
         }
         Version::Head(back) => match desc_offset(*back) {
             Some(offset) => key_expr::<D>().eq(key_at::<D, V>(partition, on, true, offset)),
@@ -272,7 +272,7 @@ where
                 .column(D::PK)
                 .from(D::TABLE)
                 .cond_where(timeline_cond::<D, V>(partition, on))
-                .and_where(Expr::col(col).eq(id.as_sea_value()))
+                .and_where(Expr::col(col).eq(id.as_sea_expr()))
                 .limit(1);
             let rn =
                 count_from_key::<D, E, V>(executor, partition, on, subquery_expr(key_probe.take()))
@@ -440,7 +440,7 @@ impl<E, V, P> DataVersion<'_, E, V, P> {
                     .columns(D::columns())
                     .from(D::TABLE)
                     .cond_where(timeline_cond::<D, V>(partition, on))
-                    .and_where(Expr::col(col).eq(id.as_sea_value()))
+                    .and_where(Expr::col(col).eq(id.as_sea_expr()))
                     .limit(1);
                 query.take()
             }

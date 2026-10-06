@@ -138,11 +138,11 @@ pub(crate) fn downstream_one_hop_query(
                 LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
             )),
         )
-        .and_where(Expr::col(producer).is_in(producer_lfrs.iter().map(SeaValue::as_sea_value)))
+        .and_where(Expr::col(producer).is_in(producer_lfrs.iter().map(SeaValue::as_sea_expr)))
         .and_where(Expr::col(consumer).ne(Expr::col(producer)));
     if !exclude_consumers.is_empty() {
         stmt.and_where(
-            Expr::col(consumer).is_not_in(exclude_consumers.iter().map(SeaValue::as_sea_value)),
+            Expr::col(consumer).is_not_in(exclude_consumers.iter().map(SeaValue::as_sea_expr)),
         );
     }
     stmt.take()
@@ -191,7 +191,7 @@ pub(crate) fn blocked_ids_query(execution_id: &ExecutionId) -> SelectStatement {
                 LogicalFunctionRunDBIden::Table,
                 LogicalFunctionRunDBIden::ExecutionId,
             ))
-            .eq(execution_id.as_sea_value()),
+            .eq(execution_id.as_sea_expr()),
         )
         .and_where(Expr::exists(chain))
         .take()
@@ -204,8 +204,8 @@ pub(crate) fn previous_lfr_query(
     Query::select()
         .columns(LogicalFunctionRunDB::columns())
         .from(LogicalFunctionRunDB::TABLE)
-        .and_where(Expr::col(LogicalFunctionRunDBIden::FunctionId).eq(function_id.as_sea_value()))
-        .and_where(Expr::col(LogicalFunctionRunDBIden::TriggeredOn).lt(before_time.as_sea_value()))
+        .and_where(Expr::col(LogicalFunctionRunDBIden::FunctionId).eq(function_id.as_sea_expr()))
+        .and_where(Expr::col(LogicalFunctionRunDBIden::TriggeredOn).lt(before_time.as_sea_expr()))
         .order_by(LogicalFunctionRunDBIden::TriggeredOn, Order::Desc)
         .order_by(LogicalFunctionRunDBIden::Id, Order::Desc)
         .limit(1)
@@ -228,7 +228,7 @@ fn not_done_or_committed() -> sea_query::SimpleExpr {
 /// Commit sees whatever is materialized right now, so the chain is unbounded
 /// in time, unlike readiness.
 pub(crate) fn fetch_ids_to_commit_query(execution_ids: &[ExecutionId]) -> WithQuery {
-    let exec_values: Vec<_> = execution_ids.iter().map(SeaValue::as_sea_value).collect();
+    let exec_values: Vec<_> = execution_ids.iter().map(SeaValue::as_sea_expr).collect();
 
     let done_runs = Query::select()
         .column(LogicalFunctionRunDBIden::TransactionId)
@@ -239,7 +239,7 @@ pub(crate) fn fetch_ids_to_commit_query(execution_ids: &[ExecutionId]) -> WithQu
             Expr::expr(Func::sum(
                 Expr::case(
                     Expr::col(LogicalFunctionRunDBIden::Status)
-                        .ne(LogicalFunctionRunStatus::Done.as_sea_value()),
+                        .ne(LogicalFunctionRunStatus::Done.as_sea_expr()),
                     1,
                 )
                 .finally(0),
@@ -349,8 +349,8 @@ pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime, limit: u64) -> SelectStat
                 LogicalFunctionRunDBIden::Status,
             ))
             .is_in([
-                LogicalFunctionRunStatus::Scheduled.as_sea_value(),
-                LogicalFunctionRunStatus::ReScheduled.as_sea_value(),
+                LogicalFunctionRunStatus::Scheduled.as_sea_expr(),
+                LogicalFunctionRunStatus::ReScheduled.as_sea_expr(),
             ]),
         )
         .and_where(Expr::exists(pending_input).not())

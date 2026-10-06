@@ -48,10 +48,10 @@ async fn inherit_consumption(
                 Alias::new("consumed_on"),
             )
             .from(MetricsFactDBIden::Table)
-            .and_where(Expr::col(MetricsFactDBIden::Side).eq(FactSide::Read.as_sea_value()))
+            .and_where(Expr::col(MetricsFactDBIden::Side).eq(FactSide::Read.as_sea_expr()))
             .and_where(
                 Expr::col(MetricsFactDBIden::TableVersionId)
-                    .is_in(chunk.iter().map(SeaValue::as_sea_value)),
+                    .is_in(chunk.iter().map(SeaValue::as_sea_expr)),
             )
             .group_by_col(MetricsFactDBIden::TableVersionId);
         let rows: Vec<Consumption> = select
@@ -82,10 +82,10 @@ async fn attempts_with_facts(
         select
             .column(MetricsFactDBIden::AttemptId)
             .from(MetricsFactDBIden::Table)
-            .and_where(Expr::col(MetricsFactDBIden::Side).eq(FactSide::Attempt.as_sea_value()))
+            .and_where(Expr::col(MetricsFactDBIden::Side).eq(FactSide::Attempt.as_sea_expr()))
             .and_where(
                 Expr::col(MetricsFactDBIden::AttemptId)
-                    .is_in(chunk.iter().map(SeaValue::as_sea_value)),
+                    .is_in(chunk.iter().map(SeaValue::as_sea_expr)),
             );
         let rows: Vec<AttemptRef> = select
             .build_query_as()
@@ -153,18 +153,18 @@ pub async fn versions_consumed(
             .table(MetricsFactDBIden::Table)
             .value(
                 MetricsFactDBIden::FirstConsumedOn,
-                consumed_on.as_sea_value(),
+                consumed_on.as_sea_expr(),
             )
-            .and_where(Expr::col(MetricsFactDBIden::Side).eq(FactSide::Written.as_sea_value()))
+            .and_where(Expr::col(MetricsFactDBIden::Side).eq(FactSide::Written.as_sea_expr()))
             .and_where(
                 Expr::col(MetricsFactDBIden::TableVersionId)
-                    .is_in(chunk.iter().map(SeaValue::as_sea_value)),
+                    .is_in(chunk.iter().map(SeaValue::as_sea_expr)),
             )
             .and_where(
                 Expr::col(MetricsFactDBIden::FirstConsumedOn)
                     .is_null()
                     .or(Expr::col(MetricsFactDBIden::FirstConsumedOn)
-                        .gt(consumed_on.as_sea_value())),
+                        .gt(consumed_on.as_sea_expr())),
             );
         update
             .build_query()
@@ -191,17 +191,17 @@ pub async fn runs_status_changed(
         let mut update = Query::update();
         update
             .table(MetricsFactDBIden::Table)
-            .value(MetricsFactDBIden::RunStatus, status.as_sea_value())
+            .value(MetricsFactDBIden::RunStatus, status.as_sea_expr())
             .and_where(
                 Expr::col(MetricsFactDBIden::FunctionRunId)
-                    .is_in(chunk.iter().map(SeaValue::as_sea_value)),
+                    .is_in(chunk.iter().map(SeaValue::as_sea_expr)),
             )
             .and_where(
                 Expr::col(MetricsFactDBIden::AttemptOutcome)
-                    .eq(PhysicalFunctionRunStatus::Done.as_sea_value()),
+                    .eq(PhysicalFunctionRunStatus::Done.as_sea_expr()),
             )
             .and_where(
-                Expr::col(MetricsFactDBIden::Current).eq(CurrentAttempt::TRUE.as_sea_value()),
+                Expr::col(MetricsFactDBIden::Current).eq(CurrentAttempt::TRUE.as_sea_expr()),
             );
         update
             .build_query()
@@ -228,14 +228,14 @@ pub async fn runs_reattempted(
             .table(MetricsFactDBIden::Table)
             .value(
                 MetricsFactDBIden::Current,
-                CurrentAttempt::FALSE.as_sea_value(),
+                CurrentAttempt::FALSE.as_sea_expr(),
             )
             .and_where(
                 Expr::col(MetricsFactDBIden::FunctionRunId)
-                    .is_in(chunk.iter().map(SeaValue::as_sea_value)),
+                    .is_in(chunk.iter().map(SeaValue::as_sea_expr)),
             )
             .and_where(
-                Expr::col(MetricsFactDBIden::Current).eq(CurrentAttempt::TRUE.as_sea_value()),
+                Expr::col(MetricsFactDBIden::Current).eq(CurrentAttempt::TRUE.as_sea_expr()),
             );
         update
             .build_query()

@@ -271,10 +271,10 @@ mod tests {
             .table(PhysicalFunctionRunDBIden::Table)
             .value(
                 PhysicalFunctionRunDBIden::FunctionVersionPatchId,
-                patch.id.as_sea_value(),
+                patch.id.as_sea_expr(),
             )
             .and_where(
-                Expr::col(PhysicalFunctionRunDBIden::Id).eq(function_run_3.base.id.as_sea_value()),
+                Expr::col(PhysicalFunctionRunDBIden::Id).eq(function_run_3.base.id.as_sea_expr()),
             )
             .build_query()
             .execute(&db)

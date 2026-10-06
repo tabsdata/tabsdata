@@ -51,7 +51,7 @@ impl VisibleProjects {
         if ids.is_empty() {
             return Condition::all().add(Expr::cust("1 = 0"));
         }
-        let values: Vec<_> = ids.iter().map(|id| id.as_sea_value()).collect();
+        let values: Vec<_> = ids.iter().map(|id| id.as_sea_expr()).collect();
         Condition::all().add(project_id.into().is_in(values))
     }
 }

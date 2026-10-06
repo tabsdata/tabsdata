@@ -37,7 +37,7 @@ where
 pub(crate) fn purge_query(now: &AtTime) -> DeleteStatement {
     Query::delete()
         .from_table(SessionDB::TABLE)
-        .cond_where(Expr::col(SessionDBIden::ExpiresOn).lt(now.as_sea_value()))
+        .cond_where(Expr::col(SessionDBIden::ExpiresOn).lt(now.as_sea_expr()))
         .take()
 }
 

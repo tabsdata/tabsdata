@@ -488,7 +488,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         None => (
             quote! { let mut __values: Vec<(String, String)> = Vec::new(); },
             quote! { [#(#table_iden::#field_iden_variants),*] #interval_columns },
-            quote! { [#(self.#field_names.as_sea_value().into()),*] },
+            quote! { [#(self.#field_names.as_sea_expr()),*] },
         ),
         Some(fi) => {
             let b = &fi.base_ty;
@@ -505,7 +505,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
                 quote! {
                     ta_objects::Insertable::insert_values(&self.#bf)
                         .into_iter()
-                        .chain([#(self.#field_names.as_sea_value().into()),*])
+                        .chain([#(self.#field_names.as_sea_expr()),*])
                 },
             )
         }
@@ -1045,7 +1045,7 @@ fn update_statement(f: &Field, marks: &FieldMarks, table_iden: &Ident) -> proc_m
                 #table_iden::#variant,
                 sea_query::Expr::case(
                     sea_query::Expr::col(#table_iden::#variant).is_null(),
-                    self.#name.as_sea_value()
+                    self.#name.as_sea_expr()
                 )
                 .finally(sea_query::Expr::col(#table_iden::#variant))
                 .into()
@@ -1055,12 +1055,12 @@ fn update_statement(f: &Field, marks: &FieldMarks, table_iden: &Ident) -> proc_m
     if option_inner_type(&f.ty).is_some() {
         return quote! {
             if let Some(ref __v) = self.#name {
-                __values.push((#table_iden::#variant, __v.as_sea_value().into()));
+                __values.push((#table_iden::#variant, __v.as_sea_expr()));
             }
         };
     }
     quote! {
-        __values.push((#table_iden::#variant, self.#name.as_sea_value().into()));
+        __values.push((#table_iden::#variant, self.#name.as_sea_expr()));
     }
 }
 

@@ -87,7 +87,7 @@ pub(crate) fn list_by_tdv_query(tdv_id: &LogicalTableDataVersionId) -> SelectSta
                 LogicalFunctionRunInputDBIden::Table,
                 LogicalFunctionRunInputDBIden::RequirementLogicalTableDataVersionId,
             ))
-            .eq(tdv_id.as_sea_value()),
+            .eq(tdv_id.as_sea_expr()),
         )
         .take();
     executions_where(Expr::exists(consumed))
@@ -108,7 +108,7 @@ pub(crate) fn list_by_fv_query(fv_id: &FunctionVersionId) -> SelectStatement {
                 LogicalFunctionRunDBIden::Table,
                 LogicalFunctionRunDBIden::FunctionVersionId,
             ))
-            .eq(fv_id.as_sea_value()),
+            .eq(fv_id.as_sea_expr()),
         )
         .take();
     let as_patch = Query::select()
@@ -123,7 +123,7 @@ pub(crate) fn list_by_fv_query(fv_id: &FunctionVersionId) -> SelectStatement {
                 PhysicalFunctionRunDBIden::Table,
                 PhysicalFunctionRunDBIden::FunctionVersionPatchId,
             ))
-            .eq(fv_id.as_sea_value()),
+            .eq(fv_id.as_sea_expr()),
         )
         .take();
     executions_where(Expr::exists(as_head).or(Expr::exists(as_patch)))

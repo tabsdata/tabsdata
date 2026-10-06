@@ -84,7 +84,7 @@ pub(crate) fn open_vec_query<D: Scd2OpenDao>(
         .into_table(D::TABLE)
         .columns(D::columns().into_iter().chain([D::VALID_FROM]));
     for dao in daos {
-        query.values(dao.insert_values().into_iter().chain([stamp(at).into()]))?;
+        query.values(dao.insert_values().into_iter().chain([stamp(at)]))?;
     }
     Ok(query)
 }

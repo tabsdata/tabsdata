@@ -76,8 +76,8 @@ fn producer_status() -> Expr {
     Expr::col((ProducerLfr, LogicalFunctionRunDBIden::Status))
 }
 
-fn status_values(statuses: &[LogicalFunctionRunStatus]) -> Vec<sea_query::Value> {
-    statuses.iter().map(SeaValue::as_sea_value).collect()
+fn status_values(statuses: &[LogicalFunctionRunStatus]) -> Vec<Expr> {
+    statuses.iter().map(SeaValue::as_sea_expr).collect()
 }
 
 /// Producer present and in `statuses`; a NULL producer never qualifies.

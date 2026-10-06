@@ -64,8 +64,8 @@ where
             .into_table(D::TABLE)
             .columns(D::columns().into_iter().chain([D::VALID_FROM]));
         for (dao, at) in batch {
-            let stamp = <Timestamp as TypedInner>::sea_value(&at.timestamp());
-            query.values(dao.insert_values().into_iter().chain([stamp.into()]))?;
+            let stamp = <Timestamp as TypedInner>::sea_expr(&at.timestamp());
+            query.values(dao.insert_values().into_iter().chain([stamp]))?;
         }
         let result = query
             .build_query()

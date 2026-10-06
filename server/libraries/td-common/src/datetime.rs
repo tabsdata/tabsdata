@@ -94,6 +94,10 @@ pub enum IntervalEnd {
 const PG_EPOCH_MICROS: i64 = 946_684_800_000_000;
 
 impl IntervalEnd {
+    /// No client-side value type carries `infinity`, so it travels as this
+    /// literal.
+    pub const SQL_INFINITY: &str = "'infinity'::timestamptz";
+
     pub fn at(&self) -> Option<&Timestamp> {
         match self {
             IntervalEnd::At(t) => Some(t),

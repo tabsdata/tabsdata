@@ -65,7 +65,7 @@ where
 
 /// A primitive that a `#[derive(Typed)]` newtype can wrap.
 pub trait TypedInner: Clone + Display {
-    fn sea_value(&self) -> sea_query::Value;
+    fn sea_expr(&self) -> sea_query::Expr;
     fn null_sea_value() -> sea_query::Value;
     fn parse_str(s: &str) -> Result<Self, TdError>;
     fn schema() -> RefOr<Schema>;
@@ -173,8 +173,8 @@ pub fn check_max<T: PartialOrd + Display>(
 }
 
 impl TypedInner for String {
-    fn sea_value(&self) -> sea_query::Value {
-        sea_query::Value::String(Some(self.clone()))
+    fn sea_expr(&self) -> sea_query::Expr {
+        sea_query::Value::String(Some(self.clone())).into()
     }
     fn null_sea_value() -> sea_query::Value {
         sea_query::Value::String(None)
@@ -190,8 +190,8 @@ impl TypedInner for String {
 macro_rules! numeric_typed_inner {
     ($ty:ty, $variant:ident) => {
         impl TypedInner for $ty {
-            fn sea_value(&self) -> sea_query::Value {
-                sea_query::Value::$variant(Some(*self))
+            fn sea_expr(&self) -> sea_query::Expr {
+                sea_query::Value::$variant(Some(*self)).into()
             }
             fn null_sea_value() -> sea_query::Value {
                 sea_query::Value::$variant(None)
@@ -215,8 +215,8 @@ numeric_typed_inner!(f32, Float);
 numeric_typed_inner!(f64, Double);
 
 impl TypedInner for bool {
-    fn sea_value(&self) -> sea_query::Value {
-        sea_query::Value::Bool(Some(*self))
+    fn sea_expr(&self) -> sea_query::Expr {
+        sea_query::Value::Bool(Some(*self)).into()
     }
     fn null_sea_value() -> sea_query::Value {
         sea_query::Value::Bool(None)
@@ -231,8 +231,8 @@ impl TypedInner for bool {
 }
 
 impl TypedInner for Id {
-    fn sea_value(&self) -> sea_query::Value {
-        sea_query::Value::String(Some(self.to_string()))
+    fn sea_expr(&self) -> sea_query::Expr {
+        sea_query::Value::String(Some(self.to_string())).into()
     }
     fn null_sea_value() -> sea_query::Value {
         sea_query::Value::String(None)
@@ -252,8 +252,8 @@ impl TypedInner for Id {
 }
 
 impl<K: KeyId> TypedInner for IdL<K> {
-    fn sea_value(&self) -> sea_query::Value {
-        sea_query::Value::BigInt(Some(self.as_i64()))
+    fn sea_expr(&self) -> sea_query::Expr {
+        sea_query::Value::BigInt(Some(self.as_i64())).into()
     }
     fn null_sea_value() -> sea_query::Value {
         sea_query::Value::BigInt(None)
@@ -267,8 +267,8 @@ impl<K: KeyId> TypedInner for IdL<K> {
 }
 
 impl TypedInner for Timestamp {
-    fn sea_value(&self) -> sea_query::Value {
-        sea_query::Value::ChronoDateTimeUtc(Some(**self))
+    fn sea_expr(&self) -> sea_query::Expr {
+        sea_query::Value::ChronoDateTimeUtc(Some(**self)).into()
     }
     fn null_sea_value() -> sea_query::Value {
         sea_query::Value::ChronoDateTimeUtc(None)
@@ -282,11 +282,11 @@ impl TypedInner for Timestamp {
 }
 
 impl TypedInner for IntervalEnd {
-    // Infinity has no sea-query value (it binds NULL here), which is why the
-    // derive emits no condition leaf for interval-end wrappers: the
-    // open-interval predicate is the 'infinity' literal, never a bound value.
-    fn sea_value(&self) -> sea_query::Value {
-        sea_query::Value::ChronoDateTimeUtc(self.at().map(|t| **t))
+    fn sea_expr(&self) -> sea_query::Expr {
+        match self.at() {
+            Some(at) => sea_query::Value::ChronoDateTimeUtc(Some(**at)).into(),
+            None => sea_query::Expr::cust(IntervalEnd::SQL_INFINITY),
+        }
     }
     fn null_sea_value() -> sea_query::Value {
         sea_query::Value::ChronoDateTimeUtc(None)

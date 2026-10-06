@@ -36,12 +36,12 @@ impl<'a, R: Dao> Start<'a, R> {
     }
 
     pub(crate) fn matches(&self) -> Expr {
-        Expr::col(self.col).is_in(self.values.iter().map(|v| v.as_sea_value()))
+        Expr::col(self.col).is_in(self.values.iter().map(|v| v.as_sea_expr()))
     }
 
     pub(crate) fn matches_in(&self, table: impl IntoIden) -> Expr {
         Expr::col((table.into_iden(), self.col.into_iden()))
-            .is_in(self.values.iter().map(|v| v.as_sea_value()))
+            .is_in(self.values.iter().map(|v| v.as_sea_expr()))
     }
 }
 
@@ -260,7 +260,7 @@ where
         .expr_as(Expr::col((Rv, recursion_ref)), PartitionId)
         .from_as(R::TABLE, Rv)
         .and_where(start.matches_in(Rv))
-        .and_where(Expr::col((Rv, R::VALID_FROM)).lte(on.as_sea_value()))
+        .and_where(Expr::col((Rv, R::VALID_FROM)).lte(on.as_sea_expr()))
         .take();
 
     // Postgres rejects recursive references in the anchor term and multiple
@@ -301,7 +301,7 @@ where
         .expr_as(emit_col, PartitionId)
         .from_as(D::TABLE, Rcv)
         .join_as(JoinType::InnerJoin, Cte::Reachable, Fx, join_cond)
-        .and_where(Expr::col((Rcv, D::VALID_FROM)).lte(on.as_sea_value()))
+        .and_where(Expr::col((Rcv, D::VALID_FROM)).lte(on.as_sea_expr()))
         .take();
 
     let combined = {

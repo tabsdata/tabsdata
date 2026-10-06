@@ -2,11 +2,12 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-/// A domain type usable as a bound value. The orphan rule rules out blanket
-/// `From<MyType> for sea_query::Value` impls, so call sites convert
+/// A domain type usable in a query: a bound value, or an SQL literal for the
+/// few with none (an interval end's infinity). The orphan rule rules out
+/// blanket `From<MyType> for sea_query::Expr` impls, so call sites convert
 /// explicitly.
 pub trait SeaValue: std::fmt::Debug + Send + Sync {
-    fn as_sea_value(&self) -> sea_query::Value;
+    fn as_sea_expr(&self) -> sea_query::Expr;
 
     /// True for `Option<T>`: the column may hold SQL NULL.
     fn is_nullable(&self) -> bool {
@@ -20,8 +21,13 @@ pub trait SeaValue: std::fmt::Debug + Send + Sync {
 
     /// For error messages: strings single-quoted, `None` as `"null"`.
     fn display_value(&self) -> String {
-        use sea_query::Value;
-        match self.as_sea_value() {
+        use sea_query::{Expr, Value};
+        let value = match self.as_sea_expr() {
+            Expr::Value(value) => value,
+            Expr::Custom(literal) => return literal.to_string(),
+            _ => return "null".to_string(),
+        };
+        match value {
             Value::Bool(Some(b)) => b.to_string(),
             Value::TinyInt(Some(i)) => i.to_string(),
             Value::SmallInt(Some(i)) => i.to_string(),
@@ -42,8 +48,8 @@ pub trait SeaValue: std::fmt::Debug + Send + Sync {
 
 /// Delegates through references.
 impl<T: SeaValue> SeaValue for &T {
-    fn as_sea_value(&self) -> sea_query::Value {
-        (**self).as_sea_value()
+    fn as_sea_expr(&self) -> sea_query::Expr {
+        (**self).as_sea_expr()
     }
 
     fn is_nullable(&self) -> bool {
@@ -71,10 +77,10 @@ impl<T: NullableSeaValue + 'static> NullableSeaValue for Option<T> {
 
 /// `Option<T>` is a value whenever `T` opts in to being nullable.
 impl<T: NullableSeaValue + 'static> SeaValue for Option<T> {
-    fn as_sea_value(&self) -> sea_query::Value {
+    fn as_sea_expr(&self) -> sea_query::Expr {
         match self {
-            Some(v) => v.as_sea_value(),
-            None => T::null_sea_value(),
+            Some(v) => v.as_sea_expr(),
+            None => T::null_sea_value().into(),
         }
     }
 

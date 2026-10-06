@@ -27,7 +27,7 @@
 
 use sea_query::{
     CaseStatement, DynIden, Expr, ExprTrait, Func, Iden, IntoIden, IntoTableRef, JoinType, Query, SelectStatement, TableRef,
-    UpdateStatement, Value,
+    UpdateStatement,
 };
 
 pub enum RollupArm {
@@ -119,7 +119,7 @@ impl RollupDef {
         self.update(None)
     }
 
-    pub fn recompute_for(&self, changed: Changed, ids: impl IntoIterator<Item = Value>) -> UpdateStatement {
+    pub fn recompute_for(&self, changed: Changed, ids: impl IntoIterator<Item = Expr>) -> UpdateStatement {
         let (table, id, parent) = match changed {
             Changed::LogicalRuns => (&self.logical.table, &self.logical.id, &self.logical.parent),
             Changed::PhysicalRuns => (&self.physical.table, &self.physical.id, &self.physical.parent),

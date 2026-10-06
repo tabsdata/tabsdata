@@ -611,12 +611,7 @@ fn expand_primitive(
     };
 
     let sea_value = impl_sea_value_typed(name, inner);
-    // An interval end's Infinity has no bindable value: as a condition leaf
-    // it would render `= NULL` and match nothing, so it gets none.
-    let sql_condition = match kind {
-        Kind::IntervalEnd => quote! {},
-        _ => impl_sql_condition(name),
-    };
+    let sql_condition = impl_sql_condition(name);
     let common = impl_common_traits(name, inner, args.secret);
     let try_from_str = impl_try_from_str(name);
 
@@ -649,10 +644,7 @@ fn expand_sealed(name: &Ident, inner: &Type, kind: &Kind) -> proc_macro2::TokenS
     )
     .then(|| impl_copy(name));
     let sea_value = impl_sea_value_typed(name, inner);
-    let sql_condition = match kind {
-        Kind::IntervalEnd => quote! {},
-        _ => impl_sql_condition(name),
-    };
+    let sql_condition = impl_sql_condition(name);
     quote! {
         #copy
         #sea_value
@@ -763,9 +755,9 @@ fn expand_composed(name: &Ident, inner: &Type) -> proc_macro2::TokenStream {
         }
 
         impl ta_objects::SeaValue for #name {
-            fn as_sea_value(&self) -> sea_query::Value {
+            fn as_sea_expr(&self) -> sea_query::Expr {
                 use ta_objects::ComposedString;
-                sea_query::Value::String(Some(self.compose()))
+                sea_query::Value::String(Some(self.compose())).into()
             }
         }
         impl ta_objects::NullableSeaValue for #name {
@@ -1078,8 +1070,8 @@ fn impl_redacted_debug(name: &Ident) -> proc_macro2::TokenStream {
 fn impl_sea_value_typed(name: &Ident, inner: &Type) -> proc_macro2::TokenStream {
     quote! {
         impl ta_objects::SeaValue for #name {
-            fn as_sea_value(&self) -> sea_query::Value {
-                ta_objects::TypedInner::sea_value(&self.0)
+            fn as_sea_expr(&self) -> sea_query::Expr {
+                ta_objects::TypedInner::sea_expr(&self.0)
             }
         }
         impl ta_objects::NullableSeaValue for #name {
@@ -1313,8 +1305,8 @@ fn expand_typed_enum(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStrea
         }
 
         impl ta_objects::SeaValue for #name {
-            fn as_sea_value(&self) -> sea_query::Value {
-                sea_query::Value::String(Some(self.to_string()))
+            fn as_sea_expr(&self) -> sea_query::Expr {
+                sea_query::Value::String(Some(self.to_string())).into()
             }
         }
 
@@ -1535,7 +1527,7 @@ fn expand_typed_tag(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream
 
     let sea_value_arms = variants.iter().map(|v| {
         let ident = &v.ident;
-        quote! { Self::#ident(inner) => inner.as_sea_value(), }
+        quote! { Self::#ident(inner) => inner.as_sea_expr(), }
     });
 
     // FromStr: try longer tags first so the empty-tag variant is the catch-all.
@@ -1649,7 +1641,7 @@ fn expand_typed_tag(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream
         #(#tagged_impls)*
 
         impl ta_objects::SeaValue for #name {
-            fn as_sea_value(&self) -> sea_query::Value {
+            fn as_sea_expr(&self) -> sea_query::Expr {
                 match self {
                     #(#sea_value_arms)*
                 }

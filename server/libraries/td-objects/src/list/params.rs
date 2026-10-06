@@ -214,7 +214,7 @@ where
             (true, SeaOrder::Asc) | (false, SeaOrder::Desc)
         );
         let past = if towards_end { Expr::gt } else { Expr::lt };
-        let past_id = past(Expr::col(*id_col), Expr::val(id_val.as_sea_value()));
+        let past_id = past(Expr::col(*id_col), id_val.as_sea_expr());
 
         // Same column: the composite degenerates to the single comparison.
         if order_col.to_string() == id_col.to_string() {
@@ -233,11 +233,10 @@ where
         } else {
             // WHERE order_col > order_val
             //    OR (order_col = order_val AND id_col > id_val)
-            let composite = past(Expr::col(*order_col), Expr::val(order_val.as_sea_value())).or(
-                Expr::col(*order_col)
-                    .eq(Expr::val(order_val.as_sea_value()))
-                    .and(past_id),
-            );
+            let composite =
+                past(Expr::col(*order_col), order_val.as_sea_expr()).or(Expr::col(*order_col)
+                    .eq(order_val.as_sea_expr())
+                    .and(past_id));
             if order_val.is_nullable() && towards_end {
                 composite.or(Expr::col(*order_col).is_null())
             } else {
@@ -388,42 +387,42 @@ pub(crate) fn parse_condition<D: ListDto>(
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).eq(parse_cond_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).eq(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
             )
         }
         NE => {
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).ne(parse_cond_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).ne(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
             )
         }
         GT => {
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).gt(parse_cond_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).gt(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
             )
         }
         GE => {
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).gte(parse_cond_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).gte(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
             )
         }
         LT => {
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).lt(parse_cond_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).lt(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
             )
         }
         LE => {
             let col = resolve_col(field)?;
             (
                 col,
-                Expr::col(col).lte(parse_cond_val::<D>(&col, value)?.as_sea_value()),
+                Expr::col(col).lte(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
             )
         }
         LK => {
@@ -444,8 +443,8 @@ pub(crate) fn parse_condition<D: ListDto>(
             (
                 col,
                 Expr::col(col).between(
-                    parse_cond_val::<D>(&col, parts[0])?.as_sea_value(),
-                    parse_cond_val::<D>(&col, parts[1])?.as_sea_value(),
+                    parse_cond_val::<D>(&col, parts[0])?.as_sea_expr(),
+                    parse_cond_val::<D>(&col, parts[1])?.as_sea_expr(),
                 ),
             )
         }

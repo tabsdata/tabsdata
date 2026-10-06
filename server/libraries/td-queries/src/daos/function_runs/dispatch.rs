@@ -225,7 +225,7 @@ pub(crate) fn fetch_runs_for_dispatch_query(fr_ids: &[PhysicalFunctionRunId]) ->
             PhysicalFunctionRunDBIden::Table,
             PhysicalFunctionRunDBIden::Id,
         ))
-        .is_in(fr_ids.iter().map(SeaValue::as_sea_value)),
+        .is_in(fr_ids.iter().map(SeaValue::as_sea_expr)),
     );
     stmt
 }

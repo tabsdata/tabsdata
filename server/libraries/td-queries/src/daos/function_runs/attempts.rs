@@ -66,7 +66,7 @@ pub(crate) fn fetch_pfrs_to_dispatch_query(limit: u64) -> SelectStatement {
                 PhysicalFunctionRunDBIden::Table,
                 PhysicalFunctionRunDBIden::Status,
             ))
-            .eq(PhysicalFunctionRunStatus::Requested.as_sea_value()),
+            .eq(PhysicalFunctionRunStatus::Requested.as_sea_expr()),
         )
         .and_where(Expr::col((WorkerDBIden::Table, WorkerDBIden::Id)).is_null())
         .order_by(
@@ -87,9 +87,9 @@ pub(crate) fn dispatched_before_query(cutoff: &AtTime) -> SelectStatement {
         .from(PhysicalFunctionRunDBIden::Table)
         .and_where(
             Expr::col(PhysicalFunctionRunDBIden::Status)
-                .eq(PhysicalFunctionRunStatus::Dispatched.as_sea_value()),
+                .eq(PhysicalFunctionRunStatus::Dispatched.as_sea_expr()),
         )
-        .and_where(Expr::col(PhysicalFunctionRunDBIden::DispatchedOn).lt(cutoff.as_sea_value()))
+        .and_where(Expr::col(PhysicalFunctionRunDBIden::DispatchedOn).lt(cutoff.as_sea_expr()))
         .order_by(PhysicalFunctionRunDBIden::DispatchedOn, Order::Asc)
         .take()
 }

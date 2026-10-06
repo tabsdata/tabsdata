@@ -100,8 +100,8 @@ pub fn expand_typed(name: &Ident, t: &Ident) -> proc_macro2::TokenStream {
         where
             #t: ta_objects::SeaValue + 'static,
         {
-            fn as_sea_value(&self) -> sea_query::Value {
-                self.0.as_sea_value()
+            fn as_sea_expr(&self) -> sea_query::Expr {
+                self.0.as_sea_expr()
             }
         }
 

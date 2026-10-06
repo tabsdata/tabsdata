@@ -20,7 +20,7 @@ where
 {
     let result = Query::delete()
         .from_table(D::TABLE)
-        .and_where(Expr::col(D::PK).eq(pk.as_sea_value()))
+        .and_where(Expr::col(D::PK).eq(pk.as_sea_expr()))
         .build_query()
         .execute(executor)
         .await

@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use sea_query::Value;
+use sea_query::{Expr, Value};
 use serde::Serialize;
 use std::fmt::Debug;
 use std::ops::Deref;
@@ -21,7 +21,7 @@ impl<T> Deref for Json<T> {
 }
 
 impl<T: Serialize + Debug + Send + Sync + 'static> SeaValue for Json<T> {
-    fn as_sea_value(&self) -> Value {
+    fn as_sea_expr(&self) -> Expr {
         serde_json::to_value(&self.0)
             .map(|v| Value::Json(Some(Box::new(v))))
             .unwrap_or_else(|e| {
@@ -29,6 +29,7 @@ impl<T: Serialize + Debug + Send + Sync + 'static> SeaValue for Json<T> {
                 error!("Error converting json value {self:?} to a sea value: {e}");
                 Value::Json(None)
             })
+            .into()
     }
 }
 
