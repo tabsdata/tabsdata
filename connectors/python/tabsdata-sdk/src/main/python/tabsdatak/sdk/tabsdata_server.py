@@ -462,11 +462,13 @@ class Collection:
                 requirements,
             )
             children.append({
+                "name": trend.function_name,
                 "function_type": FunctionType.DQSummaryTrends.value,
                 "bundle_id": bundle_id,
                 "snippet": archive.function_snippet,
                 "dependencies": archive.string_dependencies,
                 "tables": archive.tables,
+                "table_types": trend.table_types,
                 "parent_table": trend.parent_table,
             })
         return children

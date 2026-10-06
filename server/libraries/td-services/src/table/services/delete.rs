@@ -95,6 +95,7 @@ mod tests {
     use super::*;
     use crate::Services;
     use crate::table::services::tests::{assert_delete, assert_not_deleted};
+    use std::collections::HashMap;
     use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
@@ -103,6 +104,7 @@ mod tests {
     use td_objects::dxo::function::{
         ChildFunction, FunctionParam, FunctionRegister, FunctionUpdate,
     };
+    use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionIdName, FunctionRuntimeValues, FunctionType,
         TableName, TableNameDto, UserId,
@@ -216,11 +218,16 @@ mod tests {
             .await?;
 
         let child = ChildFunction {
+            name: "trend_table_fn".try_into()?,
             function_type: FunctionType::DQSummaryTrends,
             bundle_id: BundleId::default(),
             snippet: "trend snippet".try_into()?,
             dependencies: None,
             tables: Some(vec![TableNameDto::try_from("trend_table")?]),
+            table_types: Some(HashMap::from([(
+                TableNameDto::try_from("trend_table")?,
+                TableType::DQSummaryTrends,
+            )])),
             parent_table: TableNameDto::try_from("super_table")?,
         };
         let create = FunctionRegister {
@@ -267,6 +274,7 @@ mod tests {
             decorator: Some(Decorator::Transformer),
             tables: Some(vec![TableNameDto::try_from("keep_this_one")?]),
             runtime_values: Some(FunctionRuntimeValues::try_from("mock runtime values")?),
+            child_functions: Some(vec![]),
             ..Default::default()
         };
         service
@@ -331,11 +339,16 @@ mod tests {
             .await?;
 
         let child = ChildFunction {
+            name: "trend_table_fn".try_into()?,
             function_type: FunctionType::DQSummaryTrends,
             bundle_id: BundleId::default(),
             snippet: "trend snippet".try_into()?,
             dependencies: None,
             tables: Some(vec![TableNameDto::try_from("trend_table")?]),
+            table_types: Some(HashMap::from([(
+                TableNameDto::try_from("trend_table")?,
+                TableType::DQSummaryTrends,
+            )])),
             parent_table: TableNameDto::try_from("super_table")?,
         };
         let create = FunctionRegister {

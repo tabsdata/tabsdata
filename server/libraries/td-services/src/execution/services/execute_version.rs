@@ -4,6 +4,7 @@
 
 use crate::execution::execute;
 use crate::execution::execution_version::assert_function_version;
+use crate::function::children::ensure_user_managed;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -57,6 +58,7 @@ async fn execute_function_version(
         .fetch_one(&requested.base.base.function_id)
         .await?;
     assert_function_version(&function_version_id, &function)?;
+    ensure_user_managed(&function.base.base)?;
 
     let trigger_type = internal_request.trigger_type.clone();
     let execution_request = ExecutionRequest::from(&internal_request);
@@ -82,6 +84,7 @@ async fn execute_function_version(
 mod tests {
     use super::*;
     use crate::Services;
+    use crate::function::children::ChildFunctionError;
     use std::collections::HashSet;
     use std::str::FromStr;
     use td_database::pool::TdPool;
@@ -560,6 +563,76 @@ mod tests {
             .fetch_all::<ExecutionDB>(&function.base.function_id)
             .await?;
         assert_eq!(executions.len(), 1, "only one execution row must exist");
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_execute_version_of_a_child_function_is_refused(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
+            .await?;
+        let register = |name: &str, table: &str| -> Result<FunctionRegister, TdError> {
+            Ok(FunctionRegister {
+                child_functions: None,
+                name: FunctionName::try_from(name)?,
+                description: "foo description".try_into()?,
+                bundle_id: BundleId::default(),
+                snippet: "foo snippet".try_into()?,
+                decorator: Decorator::Transformer,
+                connector: None,
+                connection: None,
+                base_path: None,
+                dependencies: None,
+                triggers: None,
+                tables: vec![TableNameDto::try_from(table)?].into(),
+                table_types: None,
+                runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
+                reuse_frozen_tables: ReuseFrozen::FALSE,
+                enabled: None,
+                workers: None,
+            })
+        };
+        let parent = db
+            .scoped(p.id)
+            .seed()
+            .function(&collection, &register("parent_0", "table_0")?)
+            .await?;
+        let child = db
+            .scoped(p.id)
+            .seed()
+            .child_function(
+                &collection,
+                &register("child_0", "table_1")?,
+                &parent.base.function_id,
+            )
+            .await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
+            FunctionVersionParam {
+                function_version: child.base.id.clone(),
+            },
+            InternalExecutionRequest {
+                name: None,
+                function_only: FunctionOnly::default(),
+                skip_if_running: SkipIfRunning::FALSE,
+                external_uid: None,
+                trigger_type: TriggerType::CronTrigger,
+            },
+        );
+        let err = Services::with_defaults(db.clone())
+            .execute_function_version(request)
+            .await
+            .expect_err("a child function must not be triggerable");
+
+        assert!(matches!(
+            err.domain_err::<ChildFunctionError>(),
+            ChildFunctionError::NotUserManaged(_)
+        ));
         Ok(())
     }
 }

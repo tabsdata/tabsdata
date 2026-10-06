@@ -35,19 +35,22 @@ DerivedTableFrameSpec: TypeAlias = list
 
 logger = logging.getLogger(__name__)
 
+TREND_FUNCTION_SUFFIX = "_trend"
+
 
 class TrendTransformerInfo(NamedTuple):
     """A trend transformer paired with the directory holding its module.
 
     ``project_root`` is the temporary directory holding the module that implements the
-    trend tfr.
-
-    ``parent_table`` is the action's own output table -- the one the data
-    quality action ran on.
+    trend tfr. ``function_name`` and ``table_types`` are what the owner's
+    registration declares the trend child under, and ``parent_table`` is the
+    action's own output table -- the one the data quality action ran on.
     """
 
     info: TransformerInfo
     project_root: TemporaryDirectory
+    function_name: str
+    table_types: dict[str, str]
     parent_table: str
 
 
@@ -265,8 +268,8 @@ class DataQualityProcessor:
         output action. Each reads that operator's summary table plus its own
         previous version, and writes the trend table named by
         ``SummaryTrend.table``, falling back to ``<target>_dq_summary_trends``
-        when it is ``None``. A ``Summary`` whose ``trend`` is ``None``
-        contributes nothing.
+        when it is ``None``. Each is named ``<trend table>_trend``. A
+        ``Summary`` whose ``trend`` is ``None`` contributes nothing.
         """
         transformers: list[TrendTransformerInfo] = []
         for action in self._output_actions:
@@ -310,6 +313,10 @@ class DataQualityProcessor:
                             on_tables=None,
                         ),
                         project_root=project_root,
+                        function_name=f"{trend_table.table}{TREND_FUNCTION_SUFFIX}",
+                        table_types={
+                            trend_table.table: TableKind.DQ_SUMMARY_TRENDS.code
+                        },
                         parent_table=table,
                     )
                 )

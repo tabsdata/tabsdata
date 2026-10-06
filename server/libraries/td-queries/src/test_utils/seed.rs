@@ -17,7 +17,7 @@
 
 use crate::test_utils::seed_collection::{seed_collection, seed_collection_in_group};
 use crate::test_utils::seed_execution::{seed_cron_execution, seed_execution};
-use crate::test_utils::seed_function::{seed_function, seed_function_of_class};
+use crate::test_utils::seed_function::{seed_child_function, seed_function};
 use crate::test_utils::seed_group::seed_group;
 use crate::test_utils::seed_logical_function_run::seed_logical_function_run;
 use crate::test_utils::seed_logical_input::seed_logical_input;
@@ -54,7 +54,7 @@ use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
-    CollectionName, DependencyPos, Description, EntityId, EntityName, FunctionType, GroupName,
+    CollectionName, DependencyPos, Description, EntityId, EntityName, FunctionId, GroupName,
     LogicalFunctionRunStatus, PermissionType, ProjectId, ProjectName, RoleId, RoleName,
     TransactionKey, UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus, WorkerStatus,
     WorkerType,
@@ -147,16 +147,16 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
         seed_function(self.executor, collection, function_create).await
     }
 
-    pub async fn function_of_class(
+    pub async fn child_function(
         self,
         collection: &ActiveCollectionDB,
         function_create: &FunctionRegister,
-        function_type: FunctionType,
+        parent: &FunctionId,
     ) -> Result<FunctionDB, TdError>
     where
         E: Domained<Scope = InProject>,
     {
-        seed_function_of_class(self.executor, collection, function_create, function_type).await
+        seed_child_function(self.executor, collection, function_create, parent).await
     }
 
     #[allow(clippy::too_many_arguments)]

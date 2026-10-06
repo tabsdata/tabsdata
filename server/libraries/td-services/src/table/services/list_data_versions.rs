@@ -53,6 +53,7 @@ async fn table_list_data_versions(
 mod tests {
     use super::*;
     use crate::Services;
+    use std::collections::HashMap;
     use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
@@ -60,6 +61,7 @@ mod tests {
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::{ChildFunction, FunctionDB, FunctionRegister};
     use td_objects::dxo::table::TableDB;
+    use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionIdName, CollectionName, Decorator, FunctionName,
         FunctionRuntimeValues, FunctionType, LogicalFunctionRunStatus, Parent, ReuseFrozen,
@@ -79,11 +81,16 @@ mod tests {
             .await?;
 
         let child = ChildFunction {
+            name: "tt_fn".try_into()?,
             function_type: FunctionType::DQSummaryTrends,
             bundle_id: BundleId::default(),
             snippet: "trend snippet".try_into()?,
             dependencies: None,
             tables: Some(vec![TableNameDto::try_from("tt")?]),
+            table_types: Some(HashMap::from([(
+                TableNameDto::try_from("tt")?,
+                TableType::DQSummaryTrends,
+            )])),
             parent_table: TableNameDto::try_from("t0")?,
         };
         let create = FunctionRegister {
@@ -134,7 +141,7 @@ mod tests {
         };
 
         let owner = live_function("owner").await?;
-        let trend = live_function("tt_trend").await?;
+        let trend = live_function("tt_fn").await?;
         let owner_table = live_table("t0").await?;
         let trend_table = live_table("tt").await?;
 

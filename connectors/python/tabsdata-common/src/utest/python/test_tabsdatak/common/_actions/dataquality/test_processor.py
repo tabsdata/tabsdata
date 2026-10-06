@@ -151,9 +151,6 @@ def test_a_table_holding_data_among_empty_slots_is_still_processed():
     assert len(derived) == 1
 
 
-# ---------------------------------------------------------------------------
-# Trend tables and the system transformers that maintain them
-# ---------------------------------------------------------------------------
 def _processor(*actions, output_tables=("out",)):
     return DataQualityProcessor.from_actions(
         collection="c", output_tables=list(output_tables), actions=list(actions)
@@ -255,6 +252,13 @@ def test_build_trend_transformers_info_follows_a_custom_summary_table(transforme
     processor = _processor(_action("out", Summary(table="my_summary")))
     (built,) = transformers(processor)
     assert built.info.input_tables[0] == "c/my_summary@HEAD"
+
+
+def test_build_trend_transformers_info_names_the_child_after_its_table(transformers):
+    processor = _processor(_action("out", Summary()))
+    (built,) = transformers(processor)
+    assert built.function_name == "out_dq_summary_trends_trend"
+    assert built.table_types == {"out_dq_summary_trends": "DQST"}
 
 
 def test_build_trend_transformers_info_follows_a_custom_trend_table(transformers):

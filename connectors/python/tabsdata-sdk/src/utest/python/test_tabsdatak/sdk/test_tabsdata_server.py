@@ -777,12 +777,6 @@ def test_lazy_data_refetch_spans_projects(monkeypatch, entity, endpoint, row):
     assert connection.project == "acme"
 
 
-# ---------------------------------------------------------------------------
-# _trend_child_functions
-#
-# The reconcile itself is the server's now; what is left here is turning each
-# declared trend transformer into a bundle and the spec that carries it.
-# ---------------------------------------------------------------------------
 class _FakeInfo:
     def __init__(self, output_table: str):
         self.output_tables = [output_table]
@@ -810,6 +804,8 @@ def _trend(output_table: str, parent_table: str = "owned"):
     return TrendTransformerInfo(
         info=_FakeInfo(output_table),
         project_root=_FakeRoot(),
+        function_name=f"{output_table}_trend",
+        table_types={output_table: "DQST"},
         parent_table=parent_table,
     )
 
@@ -843,17 +839,12 @@ def test_child_functions_of_nothing_declared_is_empty():
     assert harness.bundled == []
 
 
-def test_child_function_carries_only_what_the_server_cannot_derive():
+def test_child_function_declares_its_name_type_and_table_types():
     harness = _BundleHarness()
     [spec] = harness._trend_child_functions([_trend("a")])
+    assert spec["name"] == "a_trend"
     assert spec["function_type"] == "DQST"
-    assert set(spec) == {
-        "function_type",
-        "bundle_id",
-        "snippet",
-        "dependencies",
-        "tables",
-    }
+    assert spec["table_types"] == {"a": "DQST"}
 
 
 def test_child_function_carries_its_own_bundle_and_snippet():

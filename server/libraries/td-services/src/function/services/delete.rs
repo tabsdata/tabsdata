@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::ensure_user_managed;
+use crate::function::children::ensure_user_managed;
 use crate::function::lifecycle::delete_one;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -47,7 +47,7 @@ async fn delete_function(
             .fetch_one(and!(&collection_param.collection, &function_param.function))
             .await?;
 
-        ensure_user_managed(&current.base.base.name, &current.base.base.function_type)?;
+        ensure_user_managed(&current.base.base)?;
 
         let children: Vec<FunctionDB> = conn
             .scd2()
@@ -73,7 +73,7 @@ async fn delete_function(
 mod tests {
     use super::*;
     use crate::Services;
-    use crate::function::PlatformFunctionError;
+    use crate::function::children::ChildFunctionError;
     use crate::function::services::tests::{assert_delete, assert_register};
     use std::collections::HashMap;
     use std::str::FromStr;
@@ -83,12 +83,11 @@ mod tests {
     use td_objects::FromDao;
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::{
-        ChildFunction, DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX, Function, FunctionDB, FunctionRegister,
-    };
+    use td_objects::dxo::function::{ChildFunction, Function, FunctionDB, FunctionRegister};
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::types::basic::ReuseFrozen;
+    use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, UserId, WorkerConfig,
         WorkerMessageStatus, WorkerStatus, WorkerType, WorkerTypeDto,
@@ -602,7 +601,8 @@ mod tests {
         Ok(())
     }
 
-    const OWNER: &str = "trend_owner";
+    const OWNER: &str = "parent_fn";
+    const CHILD: &str = "child_fn";
 
     fn register_dto(
         name: &str,
@@ -684,23 +684,23 @@ mod tests {
         Ok(names)
     }
 
-    /// Owner and trend transformer, the shape registration produces.
-    fn trend_child(table: &str) -> Result<ChildFunction, TdError> {
+    fn child(name: &str, table: &str) -> Result<ChildFunction, TdError> {
         Ok(ChildFunction {
-            function_type: FunctionType::DQSummaryTrends,
+            name: name.try_into()?,
+            function_type: FunctionType::default(),
             bundle_id: BundleId::default(),
             snippet: "a snippet".try_into()?,
             dependencies: None,
             tables: Some(vec![TableNameDto::try_from(table)?]),
+            table_types: Some(HashMap::from([(
+                TableNameDto::try_from(table)?,
+                TableType::DQSummaryTrends,
+            )])),
             parent_table: TableNameDto::try_from("owned_table")?,
         })
     }
 
-    fn trend_child_name(table: &str) -> String {
-        format!("{table}{DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX}")
-    }
-
-    async fn seed_owner_and_trend(
+    async fn seed_parent_and_child(
         db: &TdPool,
         project: ProjectId,
         collection: &CollectionName,
@@ -711,7 +711,7 @@ mod tests {
             collection,
             register_dto(
                 OWNER,
-                Some(vec![trend_child("trend_table")?]),
+                Some(vec![child(CHILD, "child_table")?]),
                 &["owned_table"],
             )?,
         )
@@ -731,14 +731,11 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_delete_cascades_to_the_trend_function(db: TdPool) -> Result<(), TdError> {
+    async fn test_delete_cascades_to_the_child_function(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = a_collection(&db, p.id, "cascade").await?;
-        seed_owner_and_trend(&db, p.id, &collection.name).await?;
-        assert_eq!(
-            live_names(&db, &collection.id).await?,
-            ["trend_owner", trend_child_name("trend_table").as_str()]
-        );
+        seed_parent_and_child(&db, p.id, &collection.name).await?;
+        assert_eq!(live_names(&db, &collection.id).await?, [CHILD, OWNER]);
 
         delete(&db, p.id, &collection.name, OWNER).await?;
 
@@ -747,7 +744,7 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_delete_cascades_to_every_trend_function(db: TdPool) -> Result<(), TdError> {
+    async fn test_delete_cascades_to_every_child_function(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = a_collection(&db, p.id, "cascade_many").await?;
         register(
@@ -757,8 +754,8 @@ mod tests {
             register_dto(
                 OWNER,
                 Some(vec![
-                    trend_child("trend_table")?,
-                    trend_child("second_trend_table")?,
+                    child(CHILD, "child_table")?,
+                    child("second_child_fn", "second_child_table")?,
                 ]),
                 &["owned_table"],
             )?,
@@ -772,46 +769,38 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_deleting_a_trend_function_directly_is_refused(db: TdPool) -> Result<(), TdError> {
+    async fn test_deleting_a_child_function_directly_is_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = a_collection(&db, p.id, "cascade_child").await?;
-        seed_owner_and_trend(&db, p.id, &collection.name).await?;
+        seed_parent_and_child(&db, p.id, &collection.name).await?;
 
-        let err = delete(
-            &db,
-            p.id,
-            &collection.name,
-            &trend_child_name("trend_table"),
-        )
-        .await
-        .expect_err("a platform function must not be deletable directly");
+        let err = delete(&db, p.id, &collection.name, CHILD)
+            .await
+            .expect_err("a child function must not be deletable directly");
 
         assert!(matches!(
-            err.domain_err::<PlatformFunctionError>(),
-            PlatformFunctionError::NotUserManaged(_, FunctionType::DQSummaryTrends)
+            err.domain_err::<ChildFunctionError>(),
+            ChildFunctionError::NotUserManaged(_)
         ));
-        assert_eq!(
-            live_names(&db, &collection.id).await?,
-            [OWNER, trend_child_name("trend_table").as_str()]
-        );
+        assert_eq!(live_names(&db, &collection.id).await?, [CHILD, OWNER]);
         Ok(())
     }
 
     /// The child's tables freeze rather than vanish, which is what lets a
     /// re-registration with `reuse_tables` adopt them back.
     #[td_test::test(db)]
-    async fn test_the_cascade_freezes_the_trend_functions_tables(
+    async fn test_the_cascade_freezes_the_child_functions_tables(
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = a_collection(&db, p.id, "cascade_tables").await?;
-        seed_owner_and_trend(&db, p.id, &collection.name).await?;
+        seed_parent_and_child(&db, p.id, &collection.name).await?;
 
         delete(&db, p.id, &collection.name, OWNER).await?;
 
         let frozen: Vec<TableDB> = db
             .scd2()
-            .fetch_all::<TableDB>(&TableName::try_from("trend_table")?)
+            .fetch_all::<TableDB>(&TableName::try_from("child_table")?)
             .await?;
         assert_eq!(frozen.len(), 1);
         assert_eq!(frozen[0].base.status, TableStatus::Frozen);

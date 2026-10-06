@@ -19,9 +19,9 @@ execution test at the end, which checks the owner's run still reaches its
 trend function.
 
 The collections are ``sources`` collections on purpose: a transformer is
-normally refused there, and the trend transformer's ``DQSummaryTrends`` class
-is what exempts it. Registering into a data-factory collection would not
-exercise that rule.
+normally refused there, and being its owner's child is what exempts the trend
+transformer. Registering into a data-factory collection would not exercise
+that rule.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ TREND_SUFFIX = "_trend"
 # `TableStatus::Frozen` on the wire; the SDK exposes no symbol for it.
 FROZEN = "F"
 
-NOT_USER_MANAGED = "PlatformFunctionError::2000"
+NOT_USER_MANAGED = "ChildFunctionError::2000"
 DEFAULT_TREND_FUNCTION = f"{publisher.DEFAULT_TREND_TABLE}{TREND_SUFFIX}"
 CUSTOM_TREND_FUNCTION = f"{publisher.CUSTOM_TREND_TABLE}{TREND_SUFFIX}"
 
@@ -114,9 +114,6 @@ def trend_functions(collection: Collection, owner_id: str) -> list:
     )
 
 
-# --------------------------------------------------------------------------- #
-# Registration
-# --------------------------------------------------------------------------- #
 @tabsdata_instance(consumer="tdtest")
 def test_registering_a_summary_registers_its_trend_function(
     instance_tdtest: Instance,
@@ -133,8 +130,6 @@ def test_the_trend_function_is_registered_as_a_platform_function(
     instance_tdtest: Instance,
     collection_factory: CollectionFactory,
 ) -> None:
-    # `DQST` is what exempts it from the rule refusing a transformer in a
-    # source collection, so a regression here fails registration outright.
     collection = source_collection(collection_factory)
     register(collection, publisher.pub_with_default_trend)
 
@@ -313,9 +308,6 @@ def test_a_function_without_data_quality_registers_no_trend_function(
     assert function_names(collection) == {OWNER}
 
 
-# --------------------------------------------------------------------------- #
-# Update
-# --------------------------------------------------------------------------- #
 @tabsdata_instance(consumer="tdtest")
 def test_updating_an_unchanged_declaration_keeps_one_trend_function(
     instance_tdtest: Instance,
@@ -371,9 +363,6 @@ def test_adding_a_trend_to_an_existing_summary_registers_one(
     assert function_names(collection) == {OWNER, DEFAULT_TREND_FUNCTION}
 
 
-# --------------------------------------------------------------------------- #
-# Deletion
-# --------------------------------------------------------------------------- #
 @tabsdata_instance(consumer="tdtest")
 def test_dropping_the_trend_deletes_its_function(
     instance_tdtest: Instance,
@@ -416,13 +405,6 @@ def test_a_deleted_trend_function_leaves_its_table_behind(
     assert trend_table.kwargs.get("status") == FROZEN
 
 
-# --------------------------------------------------------------------------- #
-# Deleting the owner
-#
-# Nothing cascades in the database -- the parent link is a plain column -- so
-# deleting an owner has to follow it, or the trend function is left behind
-# reading a summary table nobody writes any more.
-# --------------------------------------------------------------------------- #
 @tabsdata_instance(consumer="tdtest")
 def test_deleting_the_owner_deletes_its_trend_function(
     instance_tdtest: Instance,
@@ -522,14 +504,6 @@ def test_re_registering_after_a_delete_restores_the_trend_function(
     assert function_names(collection) == {OWNER, DEFAULT_TREND_FUNCTION}
 
 
-# --------------------------------------------------------------------------- #
-# Enabling and disabling the owner
-#
-# A disabled function is dropped from the execution graph, so a trend function
-# left enabled under a disabled owner would never be reached anyway. What the
-# cascade settles is the recorded state, and the cron/stage workers that are
-# stamped from it.
-# --------------------------------------------------------------------------- #
 @tabsdata_instance(consumer="tdtest")
 def test_disabling_the_owner_disables_its_trend_function(
     instance_tdtest: Instance,

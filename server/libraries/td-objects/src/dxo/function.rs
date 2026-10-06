@@ -47,7 +47,8 @@ pub struct FunctionRegister {
 
 #[ta_objects::Dto]
 pub struct ChildFunction {
-    #[serde(deserialize_with = "deserialize_child_function_type")]
+    pub name: FunctionName,
+    #[serde(default)]
     pub function_type: FunctionType,
     pub bundle_id: BundleId,
     pub snippet: RawSnippet,
@@ -55,70 +56,28 @@ pub struct ChildFunction {
     pub dependencies: Option<Vec<TableDependencyDto>>,
     #[serde(default)]
     pub tables: Option<Vec<TableNameDto>>,
+    #[serde(default)]
+    pub table_types: Option<HashMap<TableNameDto, TableType>>,
     pub parent_table: TableNameDto,
 }
 
-pub(crate) fn deserialize_child_function_type<'de, D>(
-    deserializer: D,
-) -> Result<FunctionType, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::Deserialize;
-    let function_type = FunctionType::deserialize(deserializer)?;
-    if matches!(function_type, FunctionType::Regular) {
-        return Err(serde::de::Error::custom(
-            "a child function cannot declare a Regular function_type",
-        ));
-    }
-    Ok(function_type)
-}
-
-pub const DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX: &str = "_trend";
-
 impl ChildFunction {
-    pub fn output_table(&self) -> Option<&TableNameDto> {
-        match self.tables.as_deref() {
-            Some([table]) => Some(table),
-            _ => None,
-        }
-    }
-
-    pub fn parent_tables(&self, table: &TableNameDto) -> HashMap<TableNameDto, TableNameDto> {
-        HashMap::from([(table.clone(), self.parent_table.clone())])
-    }
-
-    pub fn platform_name(&self, table: &TableNameDto) -> Option<FunctionName> {
-        let suffix = match self.function_type {
-            FunctionType::DQSummaryTrends => DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX,
-            FunctionType::Regular => return None,
-        };
-        FunctionName::try_from(format!("{table}{suffix}")).ok()
-    }
-
-    fn platform_table_types(&self) -> Option<HashMap<TableNameDto, TableType>> {
-        let table_type = match self.function_type {
-            FunctionType::DQSummaryTrends => TableType::DQSummaryTrends,
-            FunctionType::Regular => return None,
-        };
-        Some(
-            self.tables
-                .iter()
-                .flatten()
-                .map(|table| (table.clone(), table_type.clone()))
-                .collect(),
-        )
+    pub fn parent_tables(&self) -> HashMap<TableNameDto, TableNameDto> {
+        self.tables
+            .iter()
+            .flatten()
+            .map(|table| (table.clone(), self.parent_table.clone()))
+            .collect()
     }
 
     pub fn to_register(
         &self,
-        name: &FunctionName,
         reuse_frozen_tables: ReuseFrozen,
         enabled: Enabled,
     ) -> Result<FunctionRegister, TdError> {
         Ok(FunctionRegister {
-            name: name.clone(),
-            description: Description::try_from(name.to_string())?,
+            name: self.name.clone(),
+            description: Description::try_from(self.name.to_string())?,
             bundle_id: self.bundle_id,
             snippet: self.snippet.clone(),
             decorator: Decorator::Transformer,
@@ -128,7 +87,7 @@ impl ChildFunction {
             dependencies: self.dependencies.clone(),
             triggers: None,
             tables: self.tables.clone(),
-            table_types: self.platform_table_types(),
+            table_types: self.table_types.clone(),
             runtime_values: FunctionRuntimeValues::default(),
             reuse_frozen_tables,
             enabled: Some(enabled),
@@ -139,20 +98,19 @@ impl ChildFunction {
 
     pub fn to_update(
         &self,
-        name: &FunctionName,
         reuse_frozen_tables: ReuseFrozen,
         enabled: Enabled,
     ) -> Result<FunctionUpdate, TdError> {
         Ok(FunctionUpdate {
-            name: Some(name.clone()),
-            description: Some(Description::try_from(name.to_string())?),
+            name: Some(self.name.clone()),
+            description: Some(Description::try_from(self.name.to_string())?),
             bundle_id: Some(self.bundle_id),
             snippet: Some(self.snippet.clone()),
             decorator: Some(Decorator::Transformer),
             dependencies: self.dependencies.clone(),
             triggers: None,
             tables: self.tables.clone(),
-            table_types: self.platform_table_types(),
+            table_types: self.table_types.clone(),
             runtime_values: Some(FunctionRuntimeValues::default()),
             reuse_frozen_tables,
             enabled: Some(enabled),
@@ -222,6 +180,7 @@ pub struct FunctionUpdate {
     /// When true, regenerate the function's stage id (a fresh stage/checkpoint
     /// dir) instead of carrying it forward, discarding accumulated stage state.
     pub reset_stage: ResetStage,
+    /// None keeps the current children; an empty list removes them all.
     pub child_functions: Option<Vec<ChildFunction>>,
 }
 
@@ -739,21 +698,14 @@ pub struct FunctionVersionParam {
 }
 
 #[cfg(test)]
-mod child_function_type_tests {
+mod child_function_tests {
     use super::ChildFunction;
     use crate::types::basic::FunctionType;
 
     #[test]
-    fn test_a_child_function_cannot_declare_the_regular_class() {
-        let json = r#"{"function_type":"R","bundle_id":"00000000000000000000000000","snippet":"s","tables":["t"]}"#;
-        let err = serde_json::from_str::<ChildFunction>(json).unwrap_err();
-        assert!(err.to_string().contains("Regular"));
-    }
-
-    #[test]
-    fn test_a_child_function_may_declare_the_trends_class() {
-        let json = r#"{"function_type":"DQST","bundle_id":"00000000000000000000000000","snippet":"s","tables":["t"]}"#;
+    fn test_a_child_function_type_defaults_to_regular() {
+        let json = r#"{"name":"c","bundle_id":"00000000000000000000000000","snippet":"s","tables":["t"],"parent_table":"p"}"#;
         let child: ChildFunction = serde_json::from_str(json).unwrap();
-        assert!(matches!(child.function_type, FunctionType::DQSummaryTrends));
+        assert!(matches!(child.function_type, FunctionType::Regular));
     }
 }

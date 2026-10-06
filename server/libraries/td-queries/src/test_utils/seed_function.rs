@@ -18,9 +18,9 @@ use td_objects::dxo::trigger::TriggerInsertDB;
 use td_objects::dxo::worker::WorkerInsertDB;
 use td_objects::types::basic::{
     AccessTokenId, BasePath, DependencyId, DependencyPos, DependencyVersionId, FunctionId,
-    FunctionStatus, FunctionType, FunctionVersionId, Partitioned, Private, Snippet, StageId,
-    StorageVersion, System, TableFunctionParamPos, TableId, TableName, TableStatus, TableType,
-    TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, WorkerId,
+    FunctionStatus, FunctionType, FunctionVersionId, Parent, Partitioned, Private, Snippet,
+    StageId, StorageVersion, System, TableFunctionParamPos, TableId, TableName, TableStatus,
+    TableType, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, WorkerId,
     WorkerMessageStatus, WorkerStatus,
 };
 
@@ -32,35 +32,44 @@ pub(crate) async fn seed_function(
     collection: &ActiveCollectionDB,
     function_create: &FunctionRegister,
 ) -> Result<FunctionDB, TdError> {
-    seed_function_of_class(
+    seed_function_with_parent(executor, collection, function_create, None).await
+}
+
+/// A child function row. A request cannot express a parent, so a test needing
+/// a platform-owned row states it here rather than going through the
+/// reconcile that would normally create one.
+pub(crate) async fn seed_child_function(
+    executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    collection: &ActiveCollectionDB,
+    function_create: &FunctionRegister,
+    parent: &FunctionId,
+) -> Result<FunctionDB, TdError> {
+    seed_function_with_parent(
         executor,
         collection,
         function_create,
-        FunctionType::default(),
+        Some(Parent::from(*parent)),
     )
     .await
 }
 
-/// A function row of a given class. A request cannot express a class, so a
-/// test needing a platform-owned row states it here rather than going through
-/// the reconcile that would normally create one.
-pub(crate) async fn seed_function_of_class(
+async fn seed_function_with_parent(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     collection: &ActiveCollectionDB,
     function_create: &FunctionRegister,
-    function_type: FunctionType,
+    parent_function_id: Option<Parent<FunctionId>>,
 ) -> Result<FunctionDB, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
     let at = LockInstant::asserted(*request_context.time);
 
     let function_db = FunctionInsertDB {
         id: FunctionVersionId::new(),
-        parent_function_id: None,
+        parent_function_id,
         collection_id: collection.id,
         name: function_create.name.clone(),
         description: function_create.description.clone(),
         decorator: function_create.decorator.clone(),
-        function_type,
+        function_type: FunctionType::default(),
         connector: function_create.connector.clone(),
         connection: function_create.connection.clone(),
         runtime_values: function_create.runtime_values.clone(),

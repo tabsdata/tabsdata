@@ -2,8 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::lifecycle::{reconcile_dq_summary_trend_children, register_one};
-use crate::function::register::ensure_no_dq_summary_trends_table_types;
+use crate::function::children::reconcile_children;
+use crate::function::lifecycle::register_one;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -44,9 +44,8 @@ async fn register_function(
             .await?;
         let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
-        ensure_no_dq_summary_trends_table_types(&register.table_types)?;
         let function = register_one(conn, &ctx, &bridge, &collection, &register, None, at).await?;
-        reconcile_dq_summary_trend_children(
+        reconcile_children(
             conn,
             &ctx,
             &bridge,
@@ -77,7 +76,7 @@ mod tests {
     use super::*;
     use crate::Services;
     use crate::collection::services::connection::test_support::create_collection;
-    use crate::function::PlatformFunctionError;
+    use crate::function::children::ChildFunctionError;
     use crate::function::register::RegisterFunctionError;
     use crate::function::services::tests::assert_register;
     use std::collections::HashMap;
@@ -90,7 +89,6 @@ mod tests {
     use td_objects::dxo::bundle::BundleDB;
     use td_objects::dxo::collection::CollectionUpdate;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::function::DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX;
     use td_objects::dxo::function::{ChildFunction, FunctionDB, FunctionParam, FunctionUpdate};
     use td_objects::dxo::table::TableDB;
     use td_objects::dxo::trigger::TriggerDB;
@@ -1997,12 +1995,9 @@ mod tests {
         Ok(())
     }
 
-    const OWNER: &str = "trend_owner_fn";
+    const OWNER: &str = "parent_fn";
 
-    /// An owner declaring one trend child, registered under Kubernetes where
-    /// the admission contract actually runs. A request cannot name a class or
-    /// a parent, so the reconcile is the only way a trend function is born.
-    async fn register_owner_with_trend(
+    async fn register_parent_with_child(
         db: &TdPool,
         project: ProjectId,
         collection: &str,
@@ -2013,80 +2008,65 @@ mod tests {
         create_collection(db, project, collection, group).await;
         let mut create = pubsub_register(OWNER, decorator, connection)?;
         create.tables = Some(vec![TableNameDto::try_from("owned")?]);
-        create.child_functions = Some(vec![child("trend")?]);
+        create.child_functions = Some(vec![child("child_fn")?]);
         register_in_kubernetes(db, project, collection, create).await
     }
 
     #[td_test::test(db)]
-    async fn test_dq_trend_transformer_in_data_factory_ok(db: TdPool) -> Result<(), TdError> {
+    async fn test_a_child_transformer_in_a_data_factory_ok(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let owner =
-            register_owner_with_trend(&db, p.id, "fct_trend", None, Decorator::Transformer, None)
+        let parent =
+            register_parent_with_child(&db, p.id, "fct_child", None, Decorator::Transformer, None)
                 .await?;
 
-        let trend = live_by_name(&db, &child_name("trend"))
-            .await?
-            .expect("registered");
-        assert_eq!(trend.base.function_type, FunctionType::DQSummaryTrends);
+        let child = live_by_name(&db, "child_fn").await?.expect("registered");
         assert_eq!(
-            trend.base.parent_function_id,
-            Some(Parent::from(owner.function_id))
+            child.base.parent_function_id,
+            Some(Parent::from(parent.function_id))
         );
         Ok(())
     }
 
     #[td_test::test(db)]
-    async fn test_dq_trend_transformer_in_source_collection_ok(db: TdPool) -> Result<(), TdError> {
+    async fn test_a_child_transformer_lives_in_its_parents_source_collection(
+        db: TdPool,
+    ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        register_owner_with_trend(
+        register_parent_with_child(
             &db,
             p.id,
-            "src_trend",
+            "src_child",
             Some(GroupName::source()),
             Decorator::Publisher,
             Some("mysqlSrcConn"),
         )
         .await?;
 
-        let trend = live_by_name(&db, &child_name("trend"))
-            .await?
-            .expect("registered");
-        assert_eq!(trend.base.function_type, FunctionType::DQSummaryTrends);
+        assert!(live_by_name(&db, "child_fn").await?.is_some());
         Ok(())
     }
 
-    /// The exemption is for sources only: a trend transformer follows the
-    /// publisher whose summaries it reads, and no publisher lives here.
     #[td_test::test(db)]
-    async fn test_dq_trend_transformer_in_destination_collection_err(
+    async fn test_a_child_transformer_lives_in_its_parents_destination_collection(
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let err = register_owner_with_trend(
+        register_parent_with_child(
             &db,
             p.id,
-            "dst_trend",
+            "dst_child",
             Some(GroupName::destination()),
             Decorator::Subscriber,
             Some("mysqlDestConn"),
         )
-        .await
-        .unwrap_err();
+        .await?;
 
-        let err = err.domain_err::<RegisterFunctionError>();
-        assert!(matches!(
-            err,
-            RegisterFunctionError::TrendChildInUnsupportedCollection(
-                _,
-                CollectionType::Destination
-            )
-        ));
-        assert!(live_by_name(&db, &child_name("trend")).await?.is_none());
+        assert!(live_by_name(&db, "child_fn").await?.is_some());
         Ok(())
     }
 
     #[td_test::test(db)]
-    async fn test_a_regular_transformer_in_a_source_collection_is_still_refused(
+    async fn test_a_parentless_transformer_in_a_source_collection_is_still_refused(
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
@@ -2150,16 +2130,14 @@ mod tests {
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
         let owner = register_ok(&db, p.id, "parent_stable", create).await?;
         let expected = Some(Parent::from(owner.function_id));
-        let before = live_by_name(&db, &child_name("a"))
-            .await?
-            .expect("child registered");
+        let before = live_by_name(&db, "a").await?.expect("child registered");
         assert_eq!(before.base.parent_function_id, expected);
 
         let mut update = owner_update(Some(vec![child("a")?]));
         update.name = Some("owner_renamed".try_into()?);
         update_ok(&db, p.id, "parent_stable", CHILD_OWNER, update).await?;
 
-        let after = live_by_name(&db, &child_name("a"))
+        let after = live_by_name(&db, "a")
             .await?
             .expect("child still registered");
         assert_ne!(after.base.id, before.base.id);
@@ -2171,19 +2149,20 @@ mod tests {
 
     const OWNER_TABLE: &str = "owned";
 
-    fn child(table: &str) -> Result<ChildFunction, TdError> {
+    fn child(name: &str) -> Result<ChildFunction, TdError> {
         Ok(ChildFunction {
-            function_type: FunctionType::DQSummaryTrends,
+            name: name.try_into()?,
+            function_type: FunctionType::default(),
             bundle_id: BundleId::default(),
             snippet: "s".try_into()?,
             dependencies: None,
-            tables: Some(vec![TableNameDto::try_from(table)?]),
+            tables: Some(vec![TableNameDto::try_from(format!("{name}_table"))?]),
+            table_types: Some(HashMap::from([(
+                TableNameDto::try_from(format!("{name}_table"))?,
+                TableType::DQSummaryTrends,
+            )])),
             parent_table: TableNameDto::try_from(OWNER_TABLE)?,
         })
-    }
-
-    fn child_name(table: &str) -> String {
-        format!("{table}{DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX}")
     }
 
     fn owner_register(
@@ -2288,12 +2267,12 @@ mod tests {
     async fn test_register_with_a_child_function_registers_it(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         create_collection(&db, p.id, "mgd", None).await;
-        let create = owner_register(&["owned"], Some(vec![child("m")?]))?;
+        let mut declared = child("m")?;
+        declared.function_type = FunctionType::DQSummaryTrends;
+        let create = owner_register(&["owned"], Some(vec![declared]))?;
         let owner = register_ok(&db, p.id, "mgd", create).await?;
 
-        let child = live_by_name(&db, &child_name("m"))
-            .await?
-            .expect("child registered");
+        let child = live_by_name(&db, "m").await?.expect("child registered");
         assert_eq!(child.base.function_type, FunctionType::DQSummaryTrends);
         assert_eq!(
             child.base.parent_function_id,
@@ -2303,7 +2282,7 @@ mod tests {
         // The trend table points back at the owner table the summary was taken
         // from, which is what links the two in the catalog.
         let parent_table = active_table(&db, OWNER_TABLE).await?;
-        let child_table = active_table(&db, "m").await?;
+        let child_table = active_table(&db, "m_table").await?;
         assert_eq!(
             child_table.base.parent_table_id,
             Some(Parent::from(parent_table.base.table_id))
@@ -2361,9 +2340,7 @@ mod tests {
         create_collection(&db, p.id, "mgd_reparent", None).await;
         let create = owner_register(&["owned", "other"], Some(vec![child("a")?]))?;
         register_ok(&db, p.id, "mgd_reparent", create).await?;
-        let before = live_by_name(&db, &child_name("a"))
-            .await?
-            .expect("registered");
+        let before = live_by_name(&db, "a").await?.expect("registered");
 
         let mut moved = child("a")?;
         moved.parent_table = TableNameDto::try_from("other")?;
@@ -2374,12 +2351,10 @@ mod tests {
         ]);
         update_ok(&db, p.id, "mgd_reparent", CHILD_OWNER, update).await?;
 
-        let after = live_by_name(&db, &child_name("a"))
-            .await?
-            .expect("still registered");
+        let after = live_by_name(&db, "a").await?.expect("still registered");
         assert_eq!(after.base.function_id, before.base.function_id);
         let other = active_table(&db, "other").await?;
-        let child_table = active_table(&db, "a").await?;
+        let child_table = active_table(&db, "a_table").await?;
         assert_eq!(
             child_table.base.parent_table_id,
             Some(Parent::from(other.base.table_id))
@@ -2394,63 +2369,49 @@ mod tests {
         let create = owner_register(&["owned"], Some(vec![child("a")?, child("b")?]))?;
         register_ok(&db, p.id, "mgd2", create).await?;
 
-        assert!(live_by_name(&db, &child_name("a")).await?.is_some());
-        assert!(live_by_name(&db, &child_name("b")).await?.is_some());
+        assert!(live_by_name(&db, "a").await?.is_some());
+        assert!(live_by_name(&db, "b").await?.is_some());
         Ok(())
     }
 
     #[td_test::test(db)]
-    async fn test_a_table_too_long_to_name_a_trend_function_is_refused(
+    async fn test_a_childs_function_type_follows_its_declaration(
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.id, "tt_long", None).await;
-        let table = "t".repeat(100 - DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX.len() + 1);
-        let create = owner_register(&["owned"], Some(vec![child(&table)?]))?;
+        create_collection(&db, p.id, "mgd_retype", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        register_ok(&db, p.id, "mgd_retype", create).await?;
 
-        let err = register_err(&db, p.id, "tt_long", create).await?;
-        assert!(matches!(
-            err.domain_err::<RegisterFunctionError>(),
-            RegisterFunctionError::ChildFunctionNameTooLong(_, _)
-        ));
+        let mut declared = child("a")?;
+        declared.function_type = FunctionType::DQSummaryTrends;
+        update_ok(
+            &db,
+            p.id,
+            "mgd_retype",
+            CHILD_OWNER,
+            owner_update(Some(vec![declared])),
+        )
+        .await?;
+
+        let child = live_by_name(&db, "a").await?.expect("child registered");
+        assert_eq!(child.base.function_type, FunctionType::DQSummaryTrends);
         Ok(())
     }
 
     #[td_test::test(db)]
-    async fn test_a_trend_function_name_already_taken_is_refused(
-        db: TdPool,
-    ) -> Result<(), TdError> {
+    async fn test_a_child_name_already_taken_is_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.id, "tt_taken", None).await;
-        let mut squatter = pubsub_register(&child_name("a"), Decorator::Transformer, None)?;
+        create_collection(&db, p.id, "mgd_taken", None).await;
+        let mut squatter = pubsub_register("a", Decorator::Transformer, None)?;
         squatter.tables = Some(vec![TableNameDto::try_from("squatted")?]);
-        register_ok(&db, p.id, "tt_taken", squatter).await?;
+        register_ok(&db, p.id, "mgd_taken", squatter).await?;
 
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        let err = register_err(&db, p.id, "tt_taken", create).await?;
+        let err = register_err(&db, p.id, "mgd_taken", create).await?;
         assert!(matches!(
-            err.domain_err::<RegisterFunctionError>(),
-            RegisterFunctionError::ChildFunctionNameTaken(_, _, _)
-        ));
-        Ok(())
-    }
-
-    #[td_test::test(db)]
-    async fn test_a_function_cannot_type_its_own_table_as_a_trend(
-        db: TdPool,
-    ) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?;
-        create_collection(&db, p.id, "tt_dqst", None).await;
-        let mut create = owner_register(&["owned"], None)?;
-        create.table_types = Some(HashMap::from([(
-            TableNameDto::try_from("owned")?,
-            TableType::DQSummaryTrends,
-        )]));
-
-        let err = register_err(&db, p.id, "tt_dqst", create).await?;
-        assert!(matches!(
-            err.domain_err::<RegisterFunctionError>(),
-            RegisterFunctionError::DQSummaryTrendsTableTypeNotAllowed(_, _)
+            err.domain_err::<SqlError>(),
+            SqlError::EntityAlreadyExists(_, _)
         ));
         Ok(())
     }
@@ -2472,21 +2433,23 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_a_trend_childs_tables_are_typed_as_trends(db: TdPool) -> Result<(), TdError> {
+    async fn test_a_childs_table_types_are_stored_as_declared(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         create_collection(&db, p.id, "tt_child", None).await;
-        let declared = child("t")?;
+        let mut declared = child("t")?;
+        declared.table_types = Some(HashMap::from([(
+            TableNameDto::try_from("t_table")?,
+            TableType::DQSummaryTrends,
+        )]));
         let create = owner_register(&["owned"], Some(vec![declared]))?;
         register_ok(&db, p.id, "tt_child", create).await?;
 
-        let child = live_by_name(&db, &child_name("t"))
-            .await?
-            .expect("child registered");
+        let child = live_by_name(&db, "t").await?.expect("child registered");
         let tables: Vec<TableDB> = db
             .scd2()
             .fetch_all::<TableDB>(and!(
                 &child.base.function_id,
-                TableName::try_from("t")?,
+                TableName::try_from("t_table")?,
                 TableDB::active()
             ))
             .await?;
@@ -2505,9 +2468,7 @@ mod tests {
         create.enabled = Some(Enabled::FALSE);
         register_ok(&db, p.id, "mgd_off", create).await?;
 
-        let child = live_by_name(&db, &child_name("d"))
-            .await?
-            .expect("child registered");
+        let child = live_by_name(&db, "d").await?.expect("child registered");
         assert_eq!(child.base.enabled, Enabled::FALSE);
         Ok(())
     }
@@ -2522,11 +2483,7 @@ mod tests {
         create.enabled = Some(Enabled::FALSE);
         register_ok(&db, p.id, "mgd_back", create).await?;
         assert_eq!(
-            live_by_name(&db, &child_name("r"))
-                .await?
-                .expect("child")
-                .base
-                .enabled,
+            live_by_name(&db, "r").await?.expect("child").base.enabled,
             Enabled::FALSE
         );
 
@@ -2537,11 +2494,7 @@ mod tests {
         update_ok(&db, p.id, "mgd_back", CHILD_OWNER, update).await?;
 
         assert_eq!(
-            live_by_name(&db, &child_name("r"))
-                .await?
-                .expect("child")
-                .base
-                .enabled,
+            live_by_name(&db, "r").await?.expect("child").base.enabled,
             Enabled::TRUE
         );
         Ok(())
@@ -2556,11 +2509,7 @@ mod tests {
         let create = owner_register(&["owned"], Some(vec![child("x")?]))?;
         register_ok(&db, p.id, "mgd_down", create).await?;
         assert_eq!(
-            live_by_name(&db, &child_name("x"))
-                .await?
-                .expect("child")
-                .base
-                .enabled,
+            live_by_name(&db, "x").await?.expect("child").base.enabled,
             Enabled::TRUE
         );
 
@@ -2571,11 +2520,7 @@ mod tests {
         update_ok(&db, p.id, "mgd_down", CHILD_OWNER, update).await?;
 
         assert_eq!(
-            live_by_name(&db, &child_name("x"))
-                .await?
-                .expect("child")
-                .base
-                .enabled,
+            live_by_name(&db, "x").await?.expect("child").base.enabled,
             Enabled::FALSE
         );
         Ok(())
@@ -2591,15 +2536,13 @@ mod tests {
         let update = owner_update(Some(vec![child("a")?]));
         update_ok(&db, p.id, "mgd_drop", CHILD_OWNER, update).await?;
 
-        assert!(live_by_name(&db, &child_name("a")).await?.is_some());
-        assert!(live_by_name(&db, &child_name("b")).await?.is_none());
+        assert!(live_by_name(&db, "a").await?.is_some());
+        assert!(live_by_name(&db, "b").await?.is_none());
         Ok(())
     }
 
-    /// The trend table survives the trend being dropped, so re-declaring it
-    /// lands on a frozen table the caller never named.
     #[td_test::test(db)]
-    async fn test_re_adding_a_trend_without_reuse_tables_names_the_trend_table(
+    async fn test_re_adding_a_child_without_reuse_tables_is_refused(
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
@@ -2620,13 +2563,13 @@ mod tests {
 
         assert!(matches!(
             err.domain_err::<RegisterFunctionError>(),
-            RegisterFunctionError::TrendChildTableFrozen(_, _)
+            RegisterFunctionError::FrozenTableAlreadyExists(_, _)
         ));
         Ok(())
     }
 
     #[td_test::test(db)]
-    async fn test_re_adding_a_trend_with_reuse_tables_adopts_its_table(
+    async fn test_re_adding_a_child_with_reuse_tables_adopts_its_table(
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
@@ -2641,91 +2584,105 @@ mod tests {
             owner_update(Some(vec![])),
         )
         .await?;
-        assert!(live_by_name(&db, &child_name("a")).await?.is_none());
+        assert!(live_by_name(&db, "a").await?.is_none());
 
         let update = owner_update_reusing(Some(vec![child("a")?]), ReuseFrozen::TRUE);
         update_ok(&db, p.id, "mgd_readopt", CHILD_OWNER, update).await?;
 
-        assert!(live_by_name(&db, &child_name("a")).await?.is_some());
+        assert!(live_by_name(&db, "a").await?.is_some());
         Ok(())
     }
 
     #[td_test::test(db)]
-    async fn test_update_without_child_functions_deletes_them(db: TdPool) -> Result<(), TdError> {
+    async fn test_update_without_child_functions_keeps_them(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         create_collection(&db, p.id, "mgd_none", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
         register_ok(&db, p.id, "mgd_none", create).await?;
+        let before = live_by_name(&db, "a").await?.expect("registered");
 
         let mut update = owner_update(None);
         update.description = Some("touched".try_into()?);
         update_ok(&db, p.id, "mgd_none", CHILD_OWNER, update).await?;
 
-        assert!(live_by_name(&db, &child_name("a")).await?.is_none());
-        Ok(())
-    }
-
-    #[td_test::test(db)]
-    async fn test_a_child_function_declaring_a_regular_class_is_refused(
-        db: TdPool,
-    ) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?;
-        create_collection(&db, p.id, "mgd_class", None).await;
-        let mut child = child("plain_table")?;
-        child.function_type = FunctionType::Regular;
-        let create = owner_register(&["owned"], Some(vec![child]))?;
-
-        let err = register_err(&db, p.id, "mgd_class", create).await?;
-        assert!(matches!(
-            err.domain_err::<RegisterFunctionError>(),
-            RegisterFunctionError::ChildFunctionTypeNotAllowed(FunctionType::Regular)
-        ));
-        Ok(())
-    }
-
-    /// A trend function is the reconcile's to maintain, not the caller's.
-    #[td_test::test(db)]
-    async fn test_updating_a_platform_function_is_refused(db: TdPool) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?;
-        create_collection(&db, p.id, "usr_upd", None).await;
-        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        register_ok(&db, p.id, "usr_upd", create).await?;
-        let before = live_by_name(&db, &child_name("a"))
-            .await?
-            .expect("registered");
-
-        let err = update_err(&db, p.id, "usr_upd", &child_name("a"), owner_update(None)).await?;
-
-        assert!(matches!(
-            err.domain_err::<PlatformFunctionError>(),
-            PlatformFunctionError::NotUserManaged(_, FunctionType::DQSummaryTrends)
-        ));
-        // Refused before the write: the version it had is the version it has.
-        let after = live_by_name(&db, &child_name("a"))
-            .await?
-            .expect("still registered");
+        let after = live_by_name(&db, "a").await?.expect("still registered");
         assert_eq!(after.base.id, before.base.id);
         Ok(())
     }
 
-    /// The guard is on the service, so the reconcile -- which lands children
-    /// through the lifecycle primitives -- still updates them.
+    #[td_test::test(db)]
+    async fn test_update_without_child_functions_still_cascades_enabled(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_none_off", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        register_ok(&db, p.id, "mgd_none_off", create).await?;
+
+        let update = FunctionUpdate {
+            enabled: Some(Enabled::FALSE),
+            ..owner_update(None)
+        };
+        update_ok(&db, p.id, "mgd_none_off", CHILD_OWNER, update).await?;
+
+        assert_eq!(
+            live_by_name(&db, "a").await?.expect("child").base.enabled,
+            Enabled::FALSE
+        );
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_with_no_child_functions_deletes_them(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_empty", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        register_ok(&db, p.id, "mgd_empty", create).await?;
+
+        update_ok(
+            &db,
+            p.id,
+            "mgd_empty",
+            CHILD_OWNER,
+            owner_update(Some(vec![])),
+        )
+        .await?;
+
+        assert!(live_by_name(&db, "a").await?.is_none());
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_updating_a_child_function_is_refused(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "usr_upd", None).await;
+        let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        register_ok(&db, p.id, "usr_upd", create).await?;
+        let before = live_by_name(&db, "a").await?.expect("registered");
+
+        let err = update_err(&db, p.id, "usr_upd", "a", owner_update(None)).await?;
+
+        assert!(matches!(
+            err.domain_err::<ChildFunctionError>(),
+            ChildFunctionError::NotUserManaged(_)
+        ));
+        let after = live_by_name(&db, "a").await?.expect("still registered");
+        assert_eq!(after.base.id, before.base.id);
+        Ok(())
+    }
+
     #[td_test::test(db)]
     async fn test_the_reconcile_still_updates_its_children(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         create_collection(&db, p.id, "usr_recon", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
         register_ok(&db, p.id, "usr_recon", create).await?;
-        let before = live_by_name(&db, &child_name("a"))
-            .await?
-            .expect("registered");
+        let before = live_by_name(&db, "a").await?.expect("registered");
 
         let update = owner_update(Some(vec![child("a")?]));
         update_ok(&db, p.id, "usr_recon", CHILD_OWNER, update).await?;
 
-        let after = live_by_name(&db, &child_name("a"))
-            .await?
-            .expect("still registered");
+        let after = live_by_name(&db, "a").await?.expect("still registered");
         assert_eq!(after.base.function_id, before.base.function_id);
         assert_ne!(after.base.id, before.base.id);
         Ok(())

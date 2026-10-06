@@ -3,7 +3,7 @@
 //
 
 use crate::execution::execute;
-use crate::function::ensure_user_managed;
+use crate::function::children::ensure_user_managed;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -50,7 +50,7 @@ async fn execute_function(
         .fetch_one(and!(&collection_param.collection, &function_param.function))
         .await?;
 
-    ensure_user_managed(&function.base.base.name, &function.base.base.function_type)?;
+    ensure_user_managed(&function.base.base)?;
     let response = execute(
         conn,
         msgs,
@@ -72,7 +72,9 @@ async fn execute_function(
 pub(crate) mod tests {
     use super::*;
     use crate::Services;
-    use crate::function::PlatformFunctionError;
+    use crate::collection::services::connection::test_support::create_collection;
+    use crate::function::children::ChildFunctionError;
+    use std::collections::HashMap;
     use std::collections::HashSet;
     use std::error::Error;
     use std::str::FromStr;
@@ -89,7 +91,9 @@ pub(crate) mod tests {
     use td_objects::dxo::execution::{
         ExecutionDB, ExecutionDBWithNames, ExecutionResponse, ResolvedVersionResponse,
     };
-    use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames, FunctionRegister};
+    use td_objects::dxo::function::{
+        ChildFunction, FunctionDB, FunctionDBWithNames, FunctionRegister,
+    };
     use td_objects::dxo::graph::GraphEdge;
     use td_objects::dxo::group::GroupDB;
     use td_objects::dxo::logical::{
@@ -107,6 +111,7 @@ pub(crate) mod tests {
     use td_objects::types::basic::AtTime;
     use td_objects::types::basic::FunctionType;
     use td_objects::types::basic::ReuseFrozen;
+    use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
         AccessTokenId, AllowDisabled, BundleId, CollectionName, Decorator, Depth, Description,
         Enabled, ExecutionName, ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues,
@@ -1619,51 +1624,73 @@ pub(crate) mod tests {
         Ok(())
     }
 
-    /// A platform function runs as part of its owner's plan; naming it
-    /// directly is refused.
-    #[td_test::test(db)]
-    async fn test_triggering_a_platform_function_is_refused(db: TdPool) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?;
-        let collection_name = CollectionName::try_from("trigger_guard")?;
-        let collection = db
-            .scoped(p.id)
-            .seed()
-            .collection(&collection_name, &UserId::admin())
-            .await?;
-
-        let create = FunctionRegister {
-            child_functions: None,
-            name: FunctionName::try_from("a_dqst_tfr")?,
-            description: "a trend function".try_into()?,
+    fn parent_with_child() -> Result<FunctionRegister, TdError> {
+        Ok(FunctionRegister {
+            child_functions: Some(vec![ChildFunction {
+                name: FunctionName::try_from("child_fn")?,
+                function_type: FunctionType::default(),
+                bundle_id: BundleId::default(),
+                snippet: "child snippet".try_into()?,
+                dependencies: Some(vec![TableDependencyDto::try_from("parent_table")?]),
+                tables: Some(vec![TableNameDto::try_from("child_table")?]),
+                table_types: Some(HashMap::from([(
+                    TableNameDto::try_from("child_table")?,
+                    TableType::DQSummaryTrends,
+                )])),
+                parent_table: TableNameDto::try_from("parent_table")?,
+            }]),
+            name: FunctionName::try_from("parent_fn")?,
+            description: "parent".try_into()?,
             bundle_id: BundleId::default(),
-            snippet: "trend snippet".try_into()?,
+            snippet: "parent snippet".try_into()?,
             decorator: Decorator::Transformer,
             connector: None,
             connection: None,
             base_path: None,
             dependencies: None,
             triggers: None,
-            tables: vec![TableNameDto::try_from("a")?].into(),
+            tables: vec![TableNameDto::try_from("parent_table")?].into(),
             table_types: None,
             runtime_values: FunctionRuntimeValues::try_from("rt")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
             workers: None,
-        };
-        let _ = db
-            .scoped(p.id)
-            .seed()
-            .function_of_class(&collection, &create, FunctionType::DQSummaryTrends)
+        })
+    }
+
+    async fn register_parent_with_child(
+        db: &TdPool,
+        project: ProjectId,
+        collection: &str,
+    ) -> Result<(), TdError> {
+        create_collection(db, project, collection, None).await;
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection)?,
+                },
+                parent_with_child()?,
+            )
+            .in_project(project);
+        Services::with_defaults(db.clone())
+            .register_function(request)
             .await?;
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_triggering_a_child_function_is_refused(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        register_parent_with_child(&db, p.id, "trigger_guard").await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str("trigger_guard")?,
                     },
                     FunctionParam {
-                        function: FunctionIdName::from_str("a_dqst_tfr")?,
+                        function: FunctionIdName::from_str("child_fn")?,
                     },
                 ),
                 ExecutionRequest {
@@ -1675,15 +1702,14 @@ pub(crate) mod tests {
                 },
             )
             .in_project(p.id);
-
         let err = Services::with_defaults(db.clone())
             .execute_function(request)
             .await
-            .expect_err("a platform function must not be triggerable");
+            .expect_err("a child function must not be triggerable");
 
         assert!(matches!(
-            err.domain_err::<PlatformFunctionError>(),
-            PlatformFunctionError::NotUserManaged(_, FunctionType::DQSummaryTrends)
+            err.domain_err::<ChildFunctionError>(),
+            ChildFunctionError::NotUserManaged(_)
         ));
         Ok(())
     }

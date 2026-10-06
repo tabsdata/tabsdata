@@ -3,10 +3,10 @@
 //
 
 use crate::function::engine::{Changes, FunctionSpec, FunctionState, apply, register_version};
-use crate::function::register::{RegisterFunctionError, ensure_connection_kind_matches};
+use crate::function::register::ensure_connection_kind_matches;
 use crate::function::services::update::assert_function_name_not_exists;
 use crate::function::workers::register_workers;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use td_bridge::BridgeProviderHandle;
 use td_database::access::{InProject, LockInstant, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
@@ -16,23 +16,28 @@ use td_objects::dxo::bundle::BundleStatusUpdateDB;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{
-    ChildFunction, DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX, FunctionDB, FunctionDBWithNames,
-    FunctionInsertDB, FunctionRegister, FunctionUpdate,
+    FunctionDB, FunctionDBWithNames, FunctionInsertDB, FunctionRegister, FunctionUpdate,
 };
-use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::{
-    FunctionId, FunctionName, FunctionType, Parent, ReuseFrozen, TableName, TableNameDto,
-    TableStatus, WorkerConfig, WorkerTypeDto,
+    FunctionId, FunctionType, Parent, TableNameDto, WorkerConfig, WorkerTypeDto,
 };
 use td_queries::Queries;
 
-/// What the platform stamps on a function it registers on another's behalf.
-/// A request cannot express any of these, so this is the only way a function
-/// gets a type other than `Regular`, a parent, or parented tables.
-pub struct PlatformOwned<'a> {
+/// What the platform stamps on a child it registers on its parent's behalf.
+/// A request cannot express a parent or parented tables, so this is the only
+/// way a function gets them.
+pub struct ChildOf<'a> {
     pub function_type: FunctionType,
     pub parent: &'a FunctionId,
     pub parent_tables: HashMap<TableNameDto, TableNameDto>,
+}
+
+impl ChildOf<'_> {
+    fn stamp(self, function: &mut FunctionInsertDB) -> HashMap<TableNameDto, TableNameDto> {
+        function.function_type = self.function_type;
+        function.parent_function_id = Some(Parent::from(*self.parent));
+        self.parent_tables
+    }
 }
 
 pub async fn register_one(
@@ -41,7 +46,7 @@ pub async fn register_one(
     bridge: &BridgeProviderHandle,
     collection: &ActiveCollectionDB,
     register: &FunctionRegister,
-    platform: Option<PlatformOwned<'_>>,
+    child_of: Option<ChildOf<'_>>,
     at: LockInstant,
 ) -> Result<FunctionInsertDB, TdError> {
     conn.scd2()
@@ -52,12 +57,7 @@ pub async fn register_one(
     // own, else the project's -- already resolved by the collections_active view).
     let mut function =
         register.to_dao(ctx, collection.id, collection.effective_base_path.clone())?;
-    let mut parent_tables = None;
-    if let Some(platform) = platform {
-        function.function_type = platform.function_type;
-        function.parent_function_id = Some(Parent::from(*platform.parent));
-        parent_tables = Some(platform.parent_tables);
-    }
+    let parent_tables = child_of.map(|child_of| child_of.stamp(&mut function));
     ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
     conn.scd2().open(&function, at).await?;
     claim_bundle(conn, &function).await?;
@@ -80,6 +80,7 @@ pub async fn register_one(
     Ok(function)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn update_one(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ctx: &RequestContext,
@@ -87,13 +88,14 @@ pub async fn update_one(
     collection: &ActiveCollectionDB,
     current: &FunctionDBWithNames,
     update: &FunctionUpdate,
-    parent_tables: Option<HashMap<TableNameDto, TableNameDto>>,
+    child_of: Option<ChildOf<'_>>,
     at: LockInstant,
 ) -> Result<FunctionInsertDB, TdError> {
     assert_function_name_not_exists(conn, &collection.id, current, update).await?;
 
     let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
-    let function = update.to_dao(&previous, ctx)?;
+    let mut function = update.to_dao(&previous, ctx)?;
+    let parent_tables = child_of.map(|child_of| child_of.stamp(&mut function));
     ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
     conn.scd2().open(&function, at).await?;
     claim_bundle(conn, &function).await?;
@@ -146,136 +148,5 @@ async fn claim_bundle(
     let bundle_registered = BundleStatusUpdateDB::registered();
     conn.update::<BundleStatusUpdateDB>(&bundle_registered, function.bundle_id)
         .await?;
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn ensure_trend_table_is_adoptable(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    collection: &ActiveCollectionDB,
-    table: &TableNameDto,
-    reuse_frozen_tables: ReuseFrozen,
-) -> Result<(), TdError> {
-    if *reuse_frozen_tables {
-        return Ok(());
-    }
-    let table_name = TableName::try_from(table.clone())?;
-    let frozen: Vec<TableDB> = conn
-        .scd2()
-        .fetch_all(and!(
-            &collection.id,
-            table_name.clone(),
-            TableStatus::Frozen
-        ))
-        .await?;
-    if !frozen.is_empty() {
-        Err(RegisterFunctionError::TrendChildTableFrozen(
-            table_name,
-            collection.name.clone(),
-        ))?
-    }
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-pub async fn reconcile_dq_summary_trend_children(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    ctx: &RequestContext,
-    bridge: &BridgeProviderHandle,
-    collection: &ActiveCollectionDB,
-    owner: &FunctionInsertDB,
-    desired: &Option<Vec<ChildFunction>>,
-    reuse_frozen_tables: ReuseFrozen,
-    at: LockInstant,
-) -> Result<(), TdError> {
-    let desired: &[ChildFunction] = desired.as_deref().unwrap_or(&[]);
-    let mut declared_children: Vec<(FunctionName, TableNameDto, &ChildFunction)> =
-        Vec::with_capacity(desired.len());
-    for child in desired {
-        if !matches!(child.function_type, FunctionType::DQSummaryTrends) {
-            Err(RegisterFunctionError::ChildFunctionTypeNotAllowed(
-                child.function_type.clone(),
-            ))?
-        }
-        let table = child.output_table().ok_or_else(|| {
-            RegisterFunctionError::ChildFunctionMustDeclareOneTable(child.function_type.clone())
-        })?;
-        let name = child.platform_name(table).ok_or_else(|| {
-            RegisterFunctionError::ChildFunctionNameTooLong(
-                table.clone(),
-                DQ_SUMMARY_TRENDS_FUNCTION_SUFFIX,
-            )
-        })?;
-        declared_children.push((name, table.clone(), child));
-    }
-
-    if !declared_children.is_empty() {
-        let owned = FunctionState::load(conn, &owner.function_id).await?;
-        let owned: HashSet<&TableName> = owned.tables.iter().map(|t| &t.base.name).collect();
-        for (_, _, child) in &declared_children {
-            let parent = TableName::try_from(&child.parent_table)?;
-            if !owned.contains(&parent) {
-                Err(RegisterFunctionError::ChildFunctionParentTableNotOwned(
-                    child.parent_table.clone(),
-                    owner.name.clone(),
-                ))?
-            }
-        }
-    }
-
-    let parent = Some(Parent::from(owner.function_id));
-    let existing: Vec<FunctionDBWithNames> =
-        conn.scd2().fetch_all(and!(&parent, &collection.id)).await?;
-
-    let declared: HashSet<&FunctionName> =
-        declared_children.iter().map(|(name, _, _)| name).collect();
-    for child in &existing {
-        if !declared.contains(&child.base.base.name) {
-            delete_one(conn, ctx, &child.base.base, at).await?;
-        }
-    }
-
-    let by_name: HashMap<&FunctionName, &FunctionDBWithNames> =
-        existing.iter().map(|f| (&f.base.base.name, f)).collect();
-    for (name, table, child) in &declared_children {
-        match by_name.get(name) {
-            Some(current) => {
-                ensure_trend_table_is_adoptable(conn, collection, table, reuse_frozen_tables)
-                    .await?;
-                let update = child.to_update(name, reuse_frozen_tables, owner.enabled)?;
-                update_one(
-                    conn,
-                    ctx,
-                    bridge,
-                    collection,
-                    current,
-                    &update,
-                    Some(child.parent_tables(table)),
-                    at,
-                )
-                .await?;
-            }
-            None => {
-                let taken: Vec<FunctionDBWithNames> =
-                    conn.scd2().fetch_all(and!(&collection.id, name)).await?;
-                if !taken.is_empty() {
-                    Err(RegisterFunctionError::ChildFunctionNameTaken(
-                        table.clone(),
-                        name.clone(),
-                        collection.name.clone(),
-                    ))?
-                }
-                ensure_trend_table_is_adoptable(conn, collection, table, reuse_frozen_tables)
-                    .await?;
-                let register = child.to_register(name, reuse_frozen_tables, owner.enabled)?;
-                let platform = PlatformOwned {
-                    function_type: child.function_type.clone(),
-                    parent: &owner.function_id,
-                    parent_tables: child.parent_tables(table),
-                };
-                register_one(conn, ctx, bridge, collection, &register, Some(platform), at).await?;
-            }
-        }
-    }
     Ok(())
 }

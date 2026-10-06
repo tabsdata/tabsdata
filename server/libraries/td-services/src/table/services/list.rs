@@ -38,6 +38,7 @@ async fn table_list(
 #[cfg(test)]
 mod tests {
     use crate::Services;
+    use std::collections::HashMap;
     use std::str::FromStr;
     use td_authz::rbac::RbacError;
     use td_database::pool::TdPool;
@@ -49,6 +50,7 @@ mod tests {
     use td_objects::dxo::function::{ChildFunction, FunctionRegister};
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::ReuseFrozen;
+    use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description,
         FunctionType, Parent, RoleName, TableName, TableNameDto, UserEnabled, UserId, UserName,
@@ -119,11 +121,16 @@ mod tests {
             .await?;
 
         let child = ChildFunction {
+            name: "tt_fn".try_into()?,
             function_type: FunctionType::DQSummaryTrends,
             bundle_id: BundleId::default(),
             snippet: "trend snippet".try_into()?,
             dependencies: None,
             tables: Some(vec![TableNameDto::try_from("tt")?]),
+            table_types: Some(HashMap::from([(
+                TableNameDto::try_from("tt")?,
+                TableType::DQSummaryTrends,
+            )])),
             parent_table: TableNameDto::try_from("t0")?,
         };
         let create = FunctionRegister {
