@@ -20,7 +20,7 @@ const WORKERS_TAG: &str = "Workers";
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/workers",
     tag(WORKERS_TAG),
@@ -38,7 +38,7 @@ pub async fn list_workers(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/workers/{worker}/logs",
     tag(WORKERS_TAG),
@@ -59,7 +59,7 @@ pub async fn logs(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/workers/{worker}/logs/tail",
     tag(WORKERS_TAG),

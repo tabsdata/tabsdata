@@ -27,7 +27,7 @@ const COLLECTIONS_TAG: &str = "Collections";
 // list filter.
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/collections",
     tag(COLLECTIONS_TAG),
@@ -46,7 +46,7 @@ pub async fn list_collections(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}",
     tag(COLLECTIONS_TAG),
@@ -66,7 +66,7 @@ pub async fn get_collection(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/projects/{project}/collections",
     tag(COLLECTIONS_TAG),
@@ -86,7 +86,7 @@ pub async fn create_collection(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/projects/{project}/collections/{collection}",
     tag(COLLECTIONS_TAG),
@@ -107,7 +107,7 @@ pub async fn update_collection(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(delete),
     path = "/projects/{project}/collections/{collection}",
     tag(COLLECTIONS_TAG),
@@ -155,7 +155,7 @@ pub async fn upsert_collection_connection(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/connection",
     tag(COLLECTIONS_TAG),

@@ -24,6 +24,7 @@ pub(crate) mod roles;
 pub(crate) mod server_status;
 pub(crate) mod simple_permissions;
 pub(crate) mod tables;
+pub(crate) mod tokens;
 pub(crate) mod transactions;
 pub(crate) mod user_roles;
 pub(crate) mod users;
@@ -40,7 +41,7 @@ mod tests {
     use std::collections::HashSet;
     use ta_apiserver::router::{
         Auth, AuthClass, Position, RouterRegistration, RouterStates, Scope, SecurityMode,
-        Server as Listener, Version, mount_router, registered,
+        Server as Listener, Version, mount_router, registered, routes_accepting,
     };
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
@@ -336,6 +337,12 @@ mod tests {
             (PROJECT, "update_group"),
             (PROJECT, "upload"),
             (PROJECT, "upsert_collection_connection"),
+            (FLAT, "create_service_token"),
+            (FLAT, "list_service_tokens"),
+            (FLAT, "read_own_service_token"),
+            (FLAT, "revoke_service_token"),
+            (FLAT, "list_user_service_tokens"),
+            (FLAT, "revoke_user_service_token"),
             (INTERNAL, "download_state"),
             (INTERNAL, "function_run_callback"),
             (INTERNAL, "function_version_execute"),
@@ -350,6 +357,146 @@ mod tests {
         for entry in expected {
             assert!(actual.contains(&entry), "missing registration: {entry:?}");
         }
+    }
+
+    /// Opening a route to tokens is a decision recorded here.
+    #[test]
+    fn service_token_routes_are_declared() {
+        let expected: Vec<(&str, &str)> = vec![
+            ("DELETE", "/projects/{project}/collections/{collection}"),
+            (
+                "DELETE",
+                "/projects/{project}/collections/{collection}/functions/{function}",
+            ),
+            (
+                "DELETE",
+                "/projects/{project}/collections/{collection}/tables/{table}",
+            ),
+            ("GET", "/auth/info"),
+            ("GET", "/auth/service-token"),
+            ("GET", "/collections"),
+            ("GET", "/executions"),
+            ("GET", "/executions/{execution}"),
+            ("GET", "/executions/{execution}/details"),
+            ("GET", "/function-runs"),
+            ("GET", "/function-versions/{function_version}/bundle"),
+            ("GET", "/function-versions/{function_version}/executions"),
+            ("GET", "/inflight"),
+            ("GET", "/metrics"),
+            ("GET", "/projects"),
+            ("GET", "/projects/{project}"),
+            ("GET", "/projects/{project}/collections/{collection}"),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/connection",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/raw-data",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/functions",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/functions/{function}",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/functions/{function}/executions/{execution}",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/functions/{function}/history",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/functions/{function}/patches",
+            ),
+            ("GET", "/projects/{project}/collections/{collection}/tables"),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/tables/{table}/data-versions",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/tables/{table}/download",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/tables/{table}/flow",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/tables/{table}/sample",
+            ),
+            (
+                "GET",
+                "/projects/{project}/collections/{collection}/tables/{table}/schema",
+            ),
+            ("GET", "/projects/{project}/functions"),
+            ("GET", "/projects/{project}/groups"),
+            ("GET", "/projects/{project}/groups/{group}"),
+            ("GET", "/projects/{project}/inflight"),
+            ("GET", "/projects/{project}/metrics"),
+            ("GET", "/projects/{project}/snapshot"),
+            ("GET", "/projects/{project}/synchrotron"),
+            ("GET", "/projects/{project}/tables"),
+            ("GET", "/runtime-info"),
+            ("GET", "/snapshot"),
+            (
+                "GET",
+                "/table-data-versions/{table_data_version}/executions",
+            ),
+            ("GET", "/transactions"),
+            ("GET", "/workers"),
+            ("GET", "/workers/{worker}/logs"),
+            ("GET", "/workers/{worker}/logs/tail"),
+            ("POST", "/executions/{execution}/cancel"),
+            ("POST", "/executions/{execution}/recover"),
+            (
+                "POST",
+                "/logical-function-runs/{logical_function_run}/replay",
+            ),
+            ("POST", "/projects/{project}/collections"),
+            ("POST", "/projects/{project}/collections/{collection}"),
+            (
+                "POST",
+                "/projects/{project}/collections/{collection}/function-bundle-upload",
+            ),
+            (
+                "POST",
+                "/projects/{project}/collections/{collection}/functions",
+            ),
+            (
+                "POST",
+                "/projects/{project}/collections/{collection}/functions/{function}",
+            ),
+            (
+                "POST",
+                "/projects/{project}/collections/{collection}/functions/{function}/enable",
+            ),
+            (
+                "POST",
+                "/projects/{project}/collections/{collection}/functions/{function}/execute",
+            ),
+            (
+                "POST",
+                "/projects/{project}/collections/{collection}/functions/{function}/patch",
+            ),
+            ("POST", "/transactions/{transaction}/cancel"),
+            ("POST", "/transactions/{transaction}/recover"),
+        ];
+        let own: Vec<_> = routes_accepting(Auth::ServiceToken)
+            .into_iter()
+            .filter(|(_, path)| {
+                !te_apiserver::EDITION_PATH_PREFIXES
+                    .iter()
+                    .any(|prefix| path.starts_with(prefix))
+            })
+            .collect();
+        assert_eq!(own, expected);
     }
 
     /// A route's URL template and its documented parameters must agree: every

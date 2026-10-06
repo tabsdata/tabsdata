@@ -27,7 +27,7 @@ pub async fn status(State(state): State<Services>) -> Result<GetStatus<ApiStatus
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/runtime-info",
     tag(SYSTEM_TAG),

@@ -19,7 +19,7 @@ const LOGICAL_VERSIONS_TAG: &str = "Logical Versions";
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/logical-function-runs/{logical_function_run}/replay",
     tag(LOGICAL_VERSIONS_TAG),

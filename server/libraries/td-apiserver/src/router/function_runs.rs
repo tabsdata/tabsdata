@@ -32,7 +32,7 @@ const FUNCTION_RUNS_TAG: &str = "Function Runs";
 // `started_on`, `ended_on`, …). No separate logical-only endpoint.
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/function-runs",
     tag(FUNCTION_RUNS_TAG),
@@ -51,7 +51,7 @@ pub async fn list_function_runs(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/functions/{function}/executions/{execution}",
     tag(FUNCTION_RUNS_TAG),
@@ -75,7 +75,7 @@ pub async fn read_run(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/function-runs/{function_run}/inputs/{input_idx}/raw-data",
     tag(FUNCTION_RUNS_TAG),

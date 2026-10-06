@@ -12,6 +12,7 @@ use ta_services::factory::FieldAccessors;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
+use td_authz::token_provider::ServiceTokens;
 use td_bridge::BridgeProviderHandle;
 use td_common::jwt::JwtConfig;
 use td_database::access::{DbPool, Global};
@@ -19,6 +20,9 @@ use td_database::domain::DomainPools;
 use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify, TransactionBy};
 use td_objects::types::addresses::ApiServerAddresses;
 use td_security::config::PasswordHashingConfig;
+#[cfg(feature = "test-utils")]
+use td_security::token::config::MaxTokenDays;
+use td_security::token::config::ServiceTokenConfig;
 use td_storage::Storage;
 
 pub mod auth;
@@ -41,6 +45,7 @@ pub mod system;
 pub mod table;
 #[cfg(test)]
 mod tests;
+pub mod token;
 pub mod transaction;
 pub mod user;
 pub mod user_role;
@@ -56,6 +61,8 @@ pub struct Services {
     pub jwt_config: Ctx<JwtConfig>,
     pub auth_context: Ctx<AuthzContext>,
     pub sessions: Ctx<Sessions>,
+    pub tokens: Ctx<ServiceTokens>,
+    pub token_settings: Ctx<ServiceTokenConfig>,
     pub password_settings: Ctx<PasswordHashingConfig>,
     pub ssl_folder: Ctx<PathBuf>,
     /// Root served by `GET /resources/{*path}`; `None` 404s every request.
@@ -93,6 +100,10 @@ impl Default for Services {
             jwt_config: jwt_config.clone(),
             auth_context: Ctx::new(AuthzContext::default()),
             sessions: Ctx::new(Sessions::default()),
+            tokens: Ctx::new(ServiceTokens::default()),
+            token_settings: Ctx::new(ServiceTokenConfig {
+                max_days: Some(MaxTokenDays::Unbounded),
+            }),
             password_settings: Ctx::new(PasswordHashingConfig::default()),
             ssl_folder: Ctx::new(PathBuf::default()),
             resources_dir: Ctx::new(None),

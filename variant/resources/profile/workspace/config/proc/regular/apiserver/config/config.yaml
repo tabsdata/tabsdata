@@ -19,6 +19,8 @@ jwt:
   #secret: null # by default a UUID is generated
   secret: tabsdata-pytest-fixed-jwt-signing-key
   access_token_expiration: 3600
+service_tokens:
+  max_days: -1
 request_timeout: 60
 check_frequency: 60
 stuck_requested_timeout: 1800

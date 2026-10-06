@@ -26,7 +26,7 @@ const EXECUTION_TAG: &str = "Execution";
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/executions/{execution}/cancel",
     tag(EXECUTION_TAG),
@@ -44,7 +44,7 @@ pub async fn cancel_execution(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/executions/{execution}/details",
     tag(EXECUTION_TAG),
@@ -62,7 +62,7 @@ pub async fn details(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/executions",
     tag(EXECUTION_TAG),
@@ -80,7 +80,7 @@ pub async fn lists(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/function-versions/{function_version}/executions",
     tag(EXECUTION_TAG),
@@ -99,7 +99,7 @@ pub async fn list_by_function_version(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/table-data-versions/{table_data_version}/executions",
     tag(EXECUTION_TAG),
@@ -118,7 +118,7 @@ pub async fn list_by_table_data_version(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/executions/{execution}",
     tag(EXECUTION_TAG),
@@ -137,7 +137,7 @@ pub async fn read_execution(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/executions/{execution}/recover",
     tag(EXECUTION_TAG),

@@ -26,6 +26,7 @@ use td_objects::types::addresses::{
     ApiServerAddresses, InternalServerAddresses, NonEmptyAddresses,
 };
 use td_security::config::PasswordHashingConfig;
+use td_security::token::config::ServiceTokenConfig;
 use td_storage::{MountDef, StorageError};
 use te_apiserver::config::{ExtendedConfig, ExtendedParams};
 
@@ -75,6 +76,9 @@ pub struct Config {
     pub advertised_internal_host: Option<Authority>,
     pub password: PasswordHashingConfig,
     pub jwt: JwtConfig,
+    /// Unset by default, which refuses token creation.
+    #[serde(default)]
+    pub service_tokens: ServiceTokenConfig,
     pub request_timeout: i64, // in seconds
     #[serde(default)]
     pub check_frequency: SchedulerCheckFrequency,
@@ -164,6 +168,7 @@ impl Default for Config {
             advertised_internal_host: None,
             password: PasswordHashingConfig::default(),
             jwt: JwtConfig::default(),
+            service_tokens: ServiceTokenConfig::default(),
             request_timeout: 60,
             check_frequency: SchedulerCheckFrequency::default(),
             stuck_requested_timeout: StuckRequestedTimeout::default(),
@@ -343,6 +348,7 @@ impl Params {
                 .unwrap_or(config.internal_addresses.clone()),
             advertised_internal_host: config.advertised_internal_host.clone(),
             password: config.password.clone(),
+            service_tokens: config.service_tokens.clone(),
             jwt: {
                 let secret = self
                     .jwt_secret

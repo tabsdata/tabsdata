@@ -24,3 +24,5 @@ stuck_requested_timeout: 1800
 max_functions_per_tick: 50
 tick_timeout: 10
 orchestrator: kubernetes
+service_tokens:
+  max_days: 90

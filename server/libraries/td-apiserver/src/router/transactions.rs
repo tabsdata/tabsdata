@@ -23,7 +23,7 @@ const TRANSACTIONS_TAG: &str = "Transactions";
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/transactions/{transaction}/cancel",
     tag(TRANSACTIONS_TAG),
@@ -41,7 +41,7 @@ pub async fn cancel_transaction(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/transactions",
     tag(TRANSACTIONS_TAG),
@@ -59,7 +59,7 @@ pub async fn list_transactions(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/transactions/{transaction}/recover",
     tag(TRANSACTIONS_TAG),
@@ -78,7 +78,7 @@ pub async fn recover_transaction(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/synchrotron",
     tag(TRANSACTIONS_TAG),

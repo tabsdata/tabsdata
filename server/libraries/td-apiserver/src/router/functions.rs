@@ -32,7 +32,7 @@ const FUNCTIONS_TAG: &str = "Functions";
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/projects/{project}/collections/{collection}/functions/{function}/execute",
     tag(FUNCTIONS_TAG),
@@ -56,7 +56,7 @@ pub async fn execute(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(delete),
     path = "/projects/{project}/collections/{collection}/functions/{function}",
     tag(FUNCTIONS_TAG),
@@ -79,7 +79,7 @@ pub async fn delete_function(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/functions/{function}/history",
     tag(FUNCTIONS_TAG),
@@ -104,7 +104,7 @@ pub async fn history(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/functions",
     tag(FUNCTIONS_TAG),
@@ -124,7 +124,7 @@ pub async fn list_functions(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/functions",
     tag(FUNCTIONS_TAG),
@@ -145,7 +145,7 @@ pub async fn list_functions_by_collection(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/functions/{function}",
     tag(FUNCTIONS_TAG),
@@ -169,7 +169,7 @@ pub async fn read_function(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/projects/{project}/collections/{collection}/functions",
     tag(FUNCTIONS_TAG),
@@ -190,7 +190,7 @@ pub async fn register(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/projects/{project}/collections/{collection}/functions/{function}",
     tag(FUNCTIONS_TAG),
@@ -214,7 +214,7 @@ pub async fn update_function(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/projects/{project}/collections/{collection}/functions/{function}/enable",
     tag(FUNCTIONS_TAG),
@@ -238,7 +238,7 @@ pub async fn enable(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/projects/{project}/collections/{collection}/functions/{function}/patch",
     tag(FUNCTIONS_TAG),
@@ -262,7 +262,7 @@ pub async fn patch(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/functions/{function}/patches",
     tag(FUNCTIONS_TAG),
@@ -287,7 +287,7 @@ pub async fn list_patches(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(post),
     path = "/projects/{project}/collections/{collection}/function-bundle-upload",
     tag(FUNCTIONS_TAG),
@@ -313,7 +313,7 @@ pub async fn upload(
 // been deleted is not exposed.
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/function-versions/{function_version}/bundle",
     tag(FUNCTIONS_TAG),

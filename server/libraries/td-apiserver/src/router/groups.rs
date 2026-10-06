@@ -62,7 +62,7 @@ pub async fn delete_group(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/groups",
     tag(GROUPS_TAG),
@@ -82,7 +82,7 @@ pub async fn list_group(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/groups/{group}",
     tag(GROUPS_TAG),

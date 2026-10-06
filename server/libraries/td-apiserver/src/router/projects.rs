@@ -24,7 +24,7 @@ const PROJECTS_TAG: &str = "Projects";
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects",
     tag(PROJECTS_TAG),
@@ -42,7 +42,7 @@ pub async fn list_projects(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}",
     tag(PROJECTS_TAG),

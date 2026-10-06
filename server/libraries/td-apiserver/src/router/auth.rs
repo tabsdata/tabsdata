@@ -52,7 +52,7 @@ pub async fn refresh(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/auth/info",
     tag(AUTH_TAG),

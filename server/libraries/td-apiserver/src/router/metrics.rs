@@ -126,7 +126,7 @@ pub(crate) fn inflight_query_into_request(q: InflightQuery) -> Result<InflightRe
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/metrics",
     tag(METRICS_TAG),
@@ -148,7 +148,7 @@ pub async fn get_metrics(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/inflight",
     tag(METRICS_TAG),
@@ -170,7 +170,7 @@ pub async fn get_inflight(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/snapshot",
     tag(METRICS_TAG),
@@ -485,7 +485,7 @@ mod tests {
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/metrics",
     tag(METRICS_TAG),
@@ -503,7 +503,7 @@ pub async fn get_metrics_global(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/inflight",
     tag(METRICS_TAG),
@@ -521,7 +521,7 @@ pub async fn get_inflight_global(
 
 #[apiserver_path(
     version(v1),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/snapshot",
     tag(METRICS_TAG),

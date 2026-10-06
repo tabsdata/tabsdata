@@ -13,6 +13,7 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::AuthzRegistry;
 use td_authz::session_provider::Sessions;
+use td_authz::token_provider::ServiceTokens;
 use td_bridge::BridgeProviderHandle;
 use td_common::server_runner::ServerRunnable;
 use td_database::components::ServingPools;
@@ -89,6 +90,8 @@ impl ApiServerCtx {
             // Built-in authz kinds plus extensions (e.g. te-authz's `ai`).
             auth_context: Ctx::new(AuthzContext::with_registry(authz_registry)),
             sessions: Ctx::new(Sessions::default()),
+            tokens: Ctx::new(ServiceTokens::default()),
+            token_settings: Ctx::new(config.service_tokens.clone()),
             password_settings: {
                 // to verify up front configuration is OK.
                 let password_hash_config = config.password.clone();

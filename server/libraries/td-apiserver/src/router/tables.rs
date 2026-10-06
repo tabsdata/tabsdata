@@ -25,7 +25,7 @@ const TABLES_TAG: &str = "Tables";
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(delete),
     path = "/projects/{project}/collections/{collection}/tables/{table}",
     tag(TABLES_TAG),
@@ -46,7 +46,7 @@ pub async fn delete_table(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/download",
     tag(TABLES_TAG),
@@ -72,7 +72,7 @@ pub async fn download(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/tables",
     tag(TABLES_TAG),
@@ -92,7 +92,7 @@ pub async fn list_tables(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables",
     tag(TABLES_TAG),
@@ -118,7 +118,7 @@ pub async fn list_tables_by_collection(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/data-versions",
     tag(TABLES_TAG),
@@ -143,7 +143,7 @@ pub async fn list_data_versions(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/sample",
     tag(TABLES_TAG),
@@ -185,7 +185,7 @@ pub async fn sample(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/schema",
     tag(TABLES_TAG),
@@ -212,7 +212,7 @@ pub async fn schema(
 #[apiserver_path(
     version(v1),
     scope(project),
-    auth(session),
+    auth(session, service_token),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/flow",
     tag(TABLES_TAG),
