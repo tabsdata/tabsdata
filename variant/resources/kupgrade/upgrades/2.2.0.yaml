@@ -16,6 +16,12 @@ configs:
           leaf: internal_addresses
           pattern: ^0\.0\.0\.0:(?<port>.+)$
           item: '[::]:${port}'
+        - op: insert-sibling-if-existing
+          leaf: orchestrator
+          sibling: service_tokens
+          placement: after
+          value:
+            max_days: 90
     apiserver.service_docker.yaml:
       action: modify
       changes:
@@ -27,6 +33,12 @@ configs:
           leaf: internal_addresses
           pattern: ^0\.0\.0\.0:(?<port>.+)$
           item: '[::]:${port}'
+        - op: insert-sibling-if-existing
+          leaf: orchestrator
+          sibling: service_tokens
+          placement: after
+          value:
+            max_days: 90
     apiserver.service_eks.yaml:
       action: modify
       changes:
@@ -38,6 +50,12 @@ configs:
           leaf: internal_addresses
           pattern: ^0\.0\.0\.0:(?<port>.+)$
           item: '[::]:${port}'
+        - op: insert-sibling-if-existing
+          leaf: orchestrator
+          sibling: service_tokens
+          placement: after
+          value:
+            max_days: 90
     apiserver.service_fargate.yaml:
       action: modify
       changes:
@@ -49,6 +67,12 @@ configs:
           leaf: internal_addresses
           pattern: ^0\.0\.0\.0:(?<port>.+)$
           item: '[::]:${port}'
+        - op: insert-sibling-if-existing
+          leaf: orchestrator
+          sibling: service_tokens
+          placement: after
+          value:
+            max_days: 90
     apiserver.service_gke.yaml:
       action: modify
       changes:
@@ -60,6 +84,12 @@ configs:
           leaf: internal_addresses
           pattern: ^0\.0\.0\.0:(?<port>.+)$
           item: '[::]:${port}'
+        - op: insert-sibling-if-existing
+          leaf: orchestrator
+          sibling: service_tokens
+          placement: after
+          value:
+            max_days: 90
     apiserver.service_kminus.yaml:
       action: modify
       changes:
@@ -71,3 +101,9 @@ configs:
           leaf: internal_addresses
           pattern: ^127\.0\.0\.1:(?<port>.+)$
           item: '[::1]:${port}'
+        - op: insert-sibling-if-existing
+          leaf: orchestrator
+          sibling: service_tokens
+          placement: after
+          value:
+            max_days: 90
