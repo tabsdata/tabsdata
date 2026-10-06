@@ -50,8 +50,12 @@ ignored = ["td-build", "td-security", "toml"]
 argon2 = { workspace = true, features = ["std"] }
 derive_builder = { workspace = true }
 getset = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+sha2 = { workspace = true }
 
 [dev-dependencies]
+serde_yaml = { workspace = true }
 td-security = { workspace = true, features = ["td-test"] }
 

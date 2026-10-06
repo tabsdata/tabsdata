@@ -9317,6 +9317,7 @@ name = "ta-apiserver"
 version = "2.2.0"
 dependencies = [
  "axum",
+ "clap 4.6.7",
  "http",
  "inventory",
  "serde",
@@ -9538,6 +9539,7 @@ dependencies = [
  "td-error",
  "td-objects",
  "td-queries",
+ "td-security",
  "td-test",
  "thiserror 2.0.21",
  "tokio",
@@ -9786,6 +9788,7 @@ dependencies = [
  "td-kubernetes",
  "td-objects",
  "td-python",
+ "td-security",
  "te-system",
  "tempfile",
  "tera",
@@ -9937,7 +9940,11 @@ dependencies = [
  "argon2",
  "derive_builder",
  "getset",
+ "hex",
+ "rand 0.10.3",
  "serde",
+ "serde_yaml 0.9.34+deprecated",
+ "sha2 0.10.9",
  "td-security",
 ]
 
@@ -10207,6 +10214,7 @@ dependencies = [
  "ta-services",
  "td-build",
  "td-error",
+ "td-objects",
  "te-apiserver",
 ]
 
@@ -10218,6 +10226,7 @@ dependencies = [
  "td-authz",
  "td-database",
  "td-error",
+ "td-objects",
  "td-security",
  "te-authz",
  "thiserror 2.0.21",

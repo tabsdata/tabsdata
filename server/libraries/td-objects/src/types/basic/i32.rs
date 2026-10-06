@@ -43,3 +43,8 @@ impl VersionPos {
     pub const SINGLE_VERSION: Self = Self(-1);
     pub const NO_VERSIONS: Self = Self(-2);
 }
+
+/// `(user_id, slot)` is unique, so these bounds cap an account at two tokens.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typed(min = 1, max = 2)]
+pub struct TokenSlot(i32);

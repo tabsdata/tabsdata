@@ -398,6 +398,10 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Constraint,
     },
     IndexCase {
+        index: "service_tokens___user_id__slot___idx",
+        served_by: Constraint,
+    },
+    IndexCase {
         index: "sessions___expires_on___idx",
         served_by: Queries(&["Sessions::purge"]),
     },

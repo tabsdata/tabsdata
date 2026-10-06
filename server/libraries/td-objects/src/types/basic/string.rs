@@ -8,6 +8,7 @@ use crate::parse::{
 };
 use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_error::{ApiError, api_error};
+use td_security::token::HINT_LENGTH;
 use td_security::{
     ADMIN_USER, DEFAULT_GROUP, DEFAULT_ROLE, DESTINATION_GROUP, PROJECT_CREATOR_ROLE, SOURCE_GROUP,
     SYS_ADMIN_ROLE, SYSTEM_USER,
@@ -380,3 +381,21 @@ mod tests {
         assert_eq!(BasePath::default().0, "/");
     }
 }
+
+/// Shown once, at creation; the row keeps a [`TokenDigest`].
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(secret)]
+pub struct ServiceToken(String);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(len = 64)]
+pub struct TokenDigest(String);
+
+/// Head of the token body, to match a found token to its slot.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(len = HINT_LENGTH)]
+pub struct TokenHint(String);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(max_len = 200)]
+pub struct TokenComment(String);

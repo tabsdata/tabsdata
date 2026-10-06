@@ -6865,7 +6865,10 @@ dependencies = [
  "argon2",
  "derive_builder",
  "getset",
+ "hex",
+ "rand 0.10.3",
  "serde",
+ "sha2 0.10.9",
 ]
 
 [[package]]

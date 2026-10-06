@@ -20,6 +20,7 @@ mod physical_function_runs;
 mod physical_table_data_versions;
 mod projects;
 mod roles;
+mod service_tokens;
 mod sessions;
 mod system;
 mod table_partitions;
@@ -40,7 +41,7 @@ use sea_query::{DynIden, IntoIden};
 /// Schema revision within the current major; resets to 1 at each major bump
 /// (cross-major upgrade is refused via `tabsdata_version`). To evolve the
 /// schema, follow the README runbook; `test_schema_ddl_snapshot` gates the DDL.
-pub const VERSION: usize = 11;
+pub const VERSION: usize = 12;
 
 pub use crate::schema::sql::{Changed, Logical, Parent, Physical, RollupArm, RollupDef};
 pub use executions::rollup as execution_rollup;
@@ -56,6 +57,7 @@ pub use transactions::rollup as transaction_rollup;
 pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &system::Defs,
     &users::Defs,
+    &service_tokens::Defs,
     &groups::Defs,
     &projects::Defs,
     &connections::Defs,

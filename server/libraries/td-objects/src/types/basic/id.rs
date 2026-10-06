@@ -166,3 +166,6 @@ pub struct UserRoleId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct WorkerId(IdL<WKR>);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct ServiceTokenId(Id);

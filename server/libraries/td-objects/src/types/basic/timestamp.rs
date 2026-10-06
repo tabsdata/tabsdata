@@ -85,3 +85,20 @@ impl Scd2ValidTo {
         self.0.is_infinity()
     }
 }
+
+/// `infinity` for a token that never expires; never NULL.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+pub struct TokenExpiresOn(IntervalEnd);
+
+impl TokenExpiresOn {
+    pub fn never() -> Self {
+        Self(IntervalEnd::Infinity)
+    }
+
+    pub fn is_live_at(&self, at: &AtTime) -> bool {
+        match self.0.at() {
+            Some(end) => at.0 < *end,
+            None => true,
+        }
+    }
+}

@@ -556,6 +556,17 @@ pub enum ReplayKind {
     Void,
 }
 
+/// What a service token carries of its owner's grants.
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Copy)]
+pub enum TokenScope {
+    /// Only the permissions a token may use: project view and develop.
+    #[typed_enum(rename = "delegated")]
+    Delegated,
+    /// Every grant the owner holds. No API creates one.
+    #[typed_enum(rename = "identity")]
+    Identity,
+}
+
 #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub enum SessionStatus {
     #[typed_enum(rename = "a")]

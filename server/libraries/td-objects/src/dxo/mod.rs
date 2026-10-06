@@ -46,6 +46,7 @@ pub mod query_filters;
 pub mod role;
 pub mod runtime_info;
 pub mod scd2_interval;
+pub mod service_token;
 pub mod simple_permission;
 pub mod synchrotron;
 pub mod system;

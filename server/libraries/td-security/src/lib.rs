@@ -4,6 +4,7 @@
 
 pub mod config;
 pub mod password;
+pub mod token;
 
 /// Predefined username for the system user.
 pub const SYSTEM_USER: &str = "system";

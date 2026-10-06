@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::types::basic::{AccessTokenId, AtTime, ProjectId, UserId};
+use crate::types::basic::{AccessTokenId, AtTime, ProjectId, TokenScope, UserId};
 use serde_valid::Validate;
 use std::fmt::Debug;
 
@@ -15,6 +15,9 @@ pub enum Provenance {
     /// A validated internal-endpoint token: the token itself binds
     /// `(method, scope, bindings)`, so RBAC does not apply.
     InternalToken,
+    /// Subject to RBAC; a delegated token also to the allowlist of
+    /// permissions a token may carry.
+    ServiceToken(TokenScope),
 }
 
 /// Identity of the caller making a request: who and when. Carries no project —
@@ -38,6 +41,20 @@ impl RequestContext {
             user_id: user_id.into(),
             time: AtTime::default(),
             provenance: Provenance::Session,
+        }
+    }
+
+    /// `access_token_id` is the token row's id.
+    pub fn service_token(
+        access_token_id: impl Into<AccessTokenId>,
+        user_id: impl Into<UserId>,
+        scope: TokenScope,
+    ) -> Self {
+        Self {
+            access_token_id: access_token_id.into(),
+            user_id: user_id.into(),
+            time: AtTime::default(),
+            provenance: Provenance::ServiceToken(scope),
         }
     }
 

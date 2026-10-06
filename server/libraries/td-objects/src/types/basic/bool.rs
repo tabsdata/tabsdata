@@ -149,3 +149,8 @@ pub struct UserEnabled(bool);
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 #[typed(default = false)]
 pub struct UserSystem(bool);
+
+/// Written and removed only by the server, never through the token API.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct TokenSystem(bool);

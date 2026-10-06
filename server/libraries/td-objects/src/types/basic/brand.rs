@@ -67,3 +67,6 @@ pub struct OfExecution<T>(T);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct OfFunction<T>(T);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct LastUsed<T>(T);

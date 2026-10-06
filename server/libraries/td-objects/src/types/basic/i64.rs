@@ -53,3 +53,13 @@ pub struct TimeoutThresholdMin(i64);
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 #[typed(default = 10000)]
 pub struct SizeThreshold(i64);
+
+/// Days, or [`ExpiresInDays::NEVER`]; whether never is permitted is decided
+/// against the configured ceiling, not here.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(min = -1)]
+pub struct ExpiresInDays(i64);
+
+impl ExpiresInDays {
+    pub const NEVER: Self = Self(-1);
+}
