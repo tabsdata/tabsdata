@@ -20,8 +20,9 @@ use std::hash::Hash;
 use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
+use td_objects::dxo::crudl::Provenance;
 use td_objects::dxo::project::ActiveProjectDB;
-use td_objects::types::basic::UserId;
+use td_objects::types::basic::{TokenScope, UserId};
 use td_objects::types::visible_projects::VisibleProjects;
 use td_queries::Queries;
 
@@ -64,6 +65,10 @@ pub trait GrantedPermission: Copy + Eq + Debug + Send + Sync + 'static {
     fn satisfies(self, required: Self) -> bool {
         self == required
     }
+
+    /// Whether a service token may carry this permission. Required, with
+    /// an exhaustive match, so a permission cannot be added without deciding.
+    fn usable_by_token(self) -> bool;
 
     /// Every permission of this kind. The catalog the registry exposes for
     /// introspection and the basis for name-based parsing
@@ -258,6 +263,14 @@ impl GrantedPermission for SystemPermission {
         }
     }
 
+    fn usable_by_token(self) -> bool {
+        match self {
+            SystemPermission::ManageAccess
+            | SystemPermission::CreateProjects
+            | SystemPermission::ManageRoles => false,
+        }
+    }
+
     fn all() -> &'static [Self] {
         &[
             SystemPermission::ManageAccess,
@@ -306,6 +319,13 @@ impl GrantedPermission for ProjectPermission {
             ProjectPermission::ViewProject => "view_project",
             ProjectPermission::DevelopProject => "develop_project",
             ProjectPermission::ManageProject => "manage_project",
+        }
+    }
+
+    fn usable_by_token(self) -> bool {
+        match self {
+            ProjectPermission::ViewProject | ProjectPermission::DevelopProject => true,
+            ProjectPermission::ManageProject => false,
         }
     }
 
@@ -374,6 +394,12 @@ pub enum IdentityClaim {
 impl GrantedPermission for IdentityClaim {
     fn name(self) -> &'static str {
         "requester"
+    }
+
+    fn usable_by_token(self) -> bool {
+        match self {
+            IdentityClaim::Requester => false,
+        }
     }
 
     fn all() -> &'static [Self] {
@@ -525,18 +551,32 @@ pub struct EffectiveGrants<'a> {
     pub user: &'a Grants,
     /// Implicit grants injected for this request (requester identity).
     pub request: &'a Grants,
+    /// How the request was authenticated: a service token satisfies
+    /// only the permissions a token may use, whatever is held.
+    pub provenance: Provenance,
 }
 
 impl EffectiveGrants<'_> {
+    fn carriable<P: GrantedPermission>(&self, permission: P) -> bool {
+        match self.provenance {
+            Provenance::ServiceToken(TokenScope::Delegated) => permission.usable_by_token(),
+            Provenance::ServiceToken(TokenScope::Identity)
+            | Provenance::Session
+            | Provenance::InternalToken => true,
+        }
+    }
+
     /// [`Grants::allows`] over both stored and implicit grants.
     pub fn allows<E: EntityKind>(&self, required: &Requires<E>) -> bool {
-        self.user.allows(required) || self.request.allows(required)
+        self.carriable(required.permission)
+            && (self.user.allows(required) || self.request.allows(required))
     }
 
     /// [`Grants::allows_somewhere`] over both stored and implicit grants.
     pub fn allows_somewhere<E: EntityKind>(&self, permission: E::Permission) -> bool {
-        self.user.allows_somewhere::<E>(permission)
-            || self.request.allows_somewhere::<E>(permission)
+        self.carriable(permission)
+            && (self.user.allows_somewhere::<E>(permission)
+                || self.request.allows_somewhere::<E>(permission))
     }
 }
 

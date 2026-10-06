@@ -73,6 +73,7 @@
 //!
 //! impl GrantedPermission for ContainerPermission {
 //!     fn name(self) -> &'static str { ... }
+//!     fn usable_by_token(self) -> bool { ... }
 //!     fn satisfies(self, required: Self) -> bool { self >= required }
 //!     fn all() -> &'static [Self] { &[Self::ViewContainer, Self::ManageContainer] }
 //! }

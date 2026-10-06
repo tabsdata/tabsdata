@@ -19,6 +19,8 @@ use crate::rbac::SqlRbacSource;
 pub mod rbac;
 pub mod security;
 pub mod session_provider;
+pub mod system_token;
+pub mod token_provider;
 
 /// The authorization context services check against.
 ///

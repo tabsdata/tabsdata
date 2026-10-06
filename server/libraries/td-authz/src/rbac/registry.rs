@@ -386,6 +386,10 @@ mod tests {
             }
         }
 
+        fn usable_by_token(self) -> bool {
+            false
+        }
+
         fn all() -> &'static [Self] {
             &[WidgetPermission::View, WidgetPermission::Manage]
         }
@@ -466,6 +470,9 @@ mod tests {
         impl GrantedPermission for ClashPermission {
             fn name(self) -> &'static str {
                 "manage_access"
+            }
+            fn usable_by_token(self) -> bool {
+                false
             }
             fn all() -> &'static [Self] {
                 &[ClashPermission::ManageAccess]

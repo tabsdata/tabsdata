@@ -18,6 +18,7 @@ use td_database::access::{Global, RO, RW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::{TdError, td_error};
+use td_objects::types::basic::ServiceToken;
 use td_security::config::PasswordHashingConfig;
 use tracing::{error, info};
 
@@ -45,13 +46,14 @@ pub enum AuthzBootstrapError {
 /// in `simple` security mode — verify the RBAC configuration is representable on
 /// the Simple surface. Returns the shared registry for the API server context.
 ///
-/// `pw_cfg` is unused in the OS build (no extension identities to seed); it is
-/// accepted so the signature matches the EE crate and the shared `td-apiserver`
-/// compiles against either.
+/// `pw_cfg` and `instance_token` are unused in the OS build (no extension
+/// identities to seed); they are accepted so the signature matches the EE crate
+/// and the shared `td-apiserver` compiles against either.
 pub async fn enable_extensions(
     db: &TdPool,
     simple_mode: bool,
     _pw_cfg: &PasswordHashingConfig,
+    _instance_token: Option<&ServiceToken>,
 ) -> Result<Arc<AuthzRegistry>, TdError> {
     let registry = register_ext(AuthzRegistry::default());
 

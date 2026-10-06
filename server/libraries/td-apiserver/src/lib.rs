@@ -134,13 +134,15 @@ pub fn run() {
 
             // Bring the authz subsystem online behind one call so run() stays
             // free of authz wiring: build the (extension-augmented) registry,
-            // reconcile sys_admin, seed any extension identities/sessions, and
-            // run the simple-mode representability gate. The OS and EE builds
-            // each supply their own `te-authz` with this same entry point.
+            // reconcile sys_admin, seed any extension identities and system
+            // tokens, and run the simple-mode representability gate. The OS
+            // and EE builds each supply their own `te-authz` with this same
+            // entry point.
             let authz_registry = te_authz::enable_extensions(
                 &db,
                 config.security_mode.is_simple(),
                 &config.password,
+                config.extended_config.instance_token(),
             )
             .await
             .map_err(|e| {

@@ -7,9 +7,17 @@ use getset::Getters;
 use serde::{Deserialize, Serialize};
 use ta_services::factory::FieldAccessors;
 use td_error::TdError;
+use td_objects::types::basic::ServiceToken;
 
 #[derive(Clone, Default, Serialize, Deserialize, FieldAccessors)]
 pub struct ExtendedConfig {}
+
+impl ExtendedConfig {
+    /// The token the server seeds as a system token at boot, if any.
+    pub fn instance_token(&self) -> Option<&ServiceToken> {
+        None
+    }
+}
 
 #[derive(Debug, Default, Clone, Getters, Args)]
 #[getset(get = "pub")]

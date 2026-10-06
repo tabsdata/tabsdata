@@ -60,6 +60,7 @@ td-common = { workspace = true }
 td-database = { workspace = true }
 td-objects = { workspace = true }
 td-queries = { workspace = true }
+td-security = { workspace = true }
 
 # External dependencies
 

@@ -43,6 +43,7 @@ ignored = ["strum", "te-authz", "thiserror"]
 td-authz = { workspace = true }
 td-database = { workspace = true }
 td-error = { workspace = true }
+td-objects = { workspace = true }
 td-security = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }

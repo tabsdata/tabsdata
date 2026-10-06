@@ -64,6 +64,13 @@ pub enum RbacError {
     /// gone and never-existed are indistinguishable on purpose.
     #[error("{0} `{1}` not found")]
     EntityNotFound(String, String) = 1000,
+
+    /// Fixed wording: a token must not learn whether its owner could do this
+    /// from a session.
+    #[error("This operation cannot be performed with a service token")]
+    ServiceTokenUnsupported = 3001,
+    #[error("This operation cannot be performed with a session")]
+    SessionUnsupported = 3002,
     /// The requester's effective grants do not satisfy the requirement
     /// (requirement type, scope) of the operation.
     #[error("Forbidden: requester does not satisfy {0} on {1}")]
@@ -224,7 +231,14 @@ pub fn enforce<E: EntityKind, R: Requirement<E>>(
     request: &Grants,
     scope: &On<E>,
 ) -> bool {
-    R::allowed(&EffectiveGrants { user, request }, scope)
+    R::allowed(
+        &EffectiveGrants {
+            user,
+            request,
+            provenance: Provenance::Session,
+        },
+        scope,
+    )
 }
 
 /// Service authorization enforcer: checks a requirement against the
@@ -264,7 +278,12 @@ impl<S: RbacSource, E: EntityKind, R: Requirement<E>> Enforce<S, E, R> {
         }
         let user_grants = source.user_grants(conn, &request.user_id).await?;
         let request_grants = identity_grants(request);
-        if enforce::<E, R>(&user_grants, &request_grants, &scope.0) {
+        let grants = EffectiveGrants {
+            user: &user_grants,
+            request: &request_grants,
+            provenance: request.provenance,
+        };
+        if R::allowed(&grants, &scope.0) {
             Ok(())
         } else {
             Err(RbacError::Forbidden(
@@ -352,10 +371,14 @@ mod tests {
     use crate::rbac::source::FixedRbacSource;
     use td_database::access::{InProject, RW};
     use td_database::pool::TdPool;
-    use td_objects::types::basic::{AccessTokenId, UserId};
+    use td_objects::types::basic::{AccessTokenId, TokenScope, UserId};
 
     fn request(user_id: UserId) -> RequestContext {
         RequestContext::with(AccessTokenId::default(), user_id)
+    }
+
+    fn service_token_request(user_id: UserId) -> RequestContext {
+        RequestContext::service_token(AccessTokenId::default(), user_id, TokenScope::Delegated)
     }
 
     fn identity(user_id: UserId) -> Grants {
@@ -505,6 +528,86 @@ mod tests {
         let viewer = ProjectRole::View.grants(p);
         assert!(!enforce::<Project, ThreeWay>(&viewer, &none, &scope));
         assert!(!enforce::<Project, FiveWay>(&viewer, &none, &scope));
+    }
+
+    fn as_token<E: EntityKind, R: Requirement<E>>(user: &Grants, scope: &On<E>) -> bool {
+        as_scoped_token::<E, R>(TokenScope::Delegated, user, scope)
+    }
+
+    fn as_scoped_token<E: EntityKind, R: Requirement<E>>(
+        token: TokenScope,
+        user: &Grants,
+        scope: &On<E>,
+    ) -> bool {
+        let none = Grants::new();
+        R::allowed(
+            &EffectiveGrants {
+                user,
+                request: &none,
+                provenance: Provenance::ServiceToken(token),
+            },
+            scope,
+        )
+    }
+
+    #[test]
+    fn test_service_token_carries_only_view_and_develop() {
+        let p = ProjectId::default();
+        let scope = On::Entity(p);
+        let admin = ProjectRole::Admin.grants(p);
+        assert!(as_token::<Project, ViewProject>(&admin, &scope));
+        assert!(as_token::<Project, DevelopProject>(&admin, &scope));
+        assert!(!as_token::<Project, ManageProject>(&admin, &scope));
+
+        let sys_admin = SystemRole::SysAdmin.grants();
+        let system = On::Entity(SystemEntity);
+        assert!(!as_token::<System, ManageAccess>(&sys_admin, &system));
+        assert!(!as_token::<System, CreateProjects>(&sys_admin, &system));
+        assert!(!as_token::<System, ManageRoles>(&sys_admin, &system));
+        assert!(as_token::<System, OnAnyProject<ViewProject>>(
+            &sys_admin, &system
+        ));
+        assert!(!as_token::<System, OnAnyProject<ManageProject>>(
+            &sys_admin, &system
+        ));
+    }
+
+    #[test]
+    fn test_identity_token_carries_every_grant_its_owner_holds() {
+        let p = ProjectId::default();
+        let scope = On::Entity(p);
+        let admin = ProjectRole::Admin.grants(p);
+        let identity = TokenScope::Identity;
+        assert!(as_scoped_token::<Project, ManageProject>(
+            identity, &admin, &scope
+        ));
+
+        let sys_admin = SystemRole::SysAdmin.grants();
+        let system = On::Entity(SystemEntity);
+        assert!(as_scoped_token::<System, ManageAccess>(
+            identity, &sys_admin, &system
+        ));
+        assert!(as_scoped_token::<System, OnAnyProject<ManageProject>>(
+            identity, &sys_admin, &system
+        ));
+
+        let viewer = ProjectRole::View.grants(p);
+        assert!(!as_scoped_token::<Project, DevelopProject>(
+            identity, &viewer, &scope
+        ));
+    }
+
+    #[test]
+    fn test_service_tuple_passes_only_through_a_carriable_alternative() {
+        let p = ProjectId::default();
+        let scope = On::Entity(p);
+        let admin = ProjectRole::Admin.grants(p);
+        assert!(as_token::<Project, (ViewProject, ManageProject)>(
+            &admin, &scope
+        ));
+        assert!(!as_token::<Project, (ManageProject, ManageProject)>(
+            &admin, &scope
+        ));
     }
 
     // ---- integration tests: authorize wired like a real service ----
@@ -660,6 +763,49 @@ mod tests {
         )
         .await
         .unwrap();
+    }
+
+    #[td_test::test(db)]
+    async fn test_service_token_is_refused_beyond_view_and_develop(db: TdPool) {
+        let admin_id = UserId::default();
+        let dev_id = UserId::default();
+        let p = ProjectId::default();
+        let source = FixedRbacSource::new()
+            .with_user_roles(admin_id, [SystemRole::SysAdmin.grants()])
+            .with_user_roles(dev_id, [ProjectRole::Dev.grants(p)]);
+        let scope = Scope::<Project>(On::Entity(p));
+        let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+
+        for user in [admin_id, dev_id] {
+            let err = Enforce::<FixedRbacSource, Project, ManageProject>::authorize(
+                &source,
+                &mut conn,
+                &service_token_request(user),
+                &scope,
+            )
+            .await
+            .unwrap_err();
+            assert!(matches!(err.domain_err(), RbacError::Forbidden(_, _)));
+        }
+
+        Enforce::<FixedRbacSource, Project, DevelopProject>::authorize(
+            &source,
+            &mut conn,
+            &service_token_request(dev_id),
+            &scope,
+        )
+        .await
+        .unwrap();
+
+        let err = Enforce::<FixedRbacSource, Project, DevelopProject>::authorize(
+            &source,
+            &mut conn,
+            &service_token_request(UserId::default()),
+            &scope,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err.domain_err(), RbacError::Forbidden(_, _)));
     }
 
     #[td_test::test(db)]
