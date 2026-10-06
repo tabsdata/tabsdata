@@ -3,6 +3,7 @@
 //
 
 use crate::graph::{FunctionOrTable, GraphConfig};
+use crate::graph::{TdGraph, TdGraphBuilder};
 use itertools::Itertools;
 use std::collections::HashMap;
 use td_database::access::{AccessMode, SeesProjectRows};
@@ -12,7 +13,6 @@ use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBWithNames;
-use td_objects::graph::{TdGraph, TdGraphBuilder};
 use td_objects::sql_condition::SqlCondition;
 use td_objects::types::basic::{AtTime, FunctionId, Scd2ValidFrom, TableId};
 use td_objects::types::recursion::RecursionOptions;
@@ -20,7 +20,7 @@ use td_objects::{ReachableFrom, Scd2Dao, SelectDao, TimelineDao};
 use td_queries::Queries;
 
 pub struct GraphBuilder {
-    pub(crate) config: GraphConfig,
+    pub config: GraphConfig,
 }
 
 impl GraphBuilder {

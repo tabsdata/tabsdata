@@ -53,6 +53,7 @@ ignored = ["strum", "td-services", "thiserror"]
 
 ## Libraries
 
+ta-execution = { workspace = true }
 ta-services = { workspace = true }
 td-authz = { workspace = true }
 td-common = { workspace = true }

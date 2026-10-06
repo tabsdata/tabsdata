@@ -39,6 +39,7 @@ ignored = ["te-execution", "tokio"]
 
 # Internal dependencies
 
+ta-execution = { workspace = true }
 td-error = { workspace = true }
 td-objects = { workspace = true }
 

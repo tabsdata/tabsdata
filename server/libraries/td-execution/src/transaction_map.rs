@@ -2,35 +2,13 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::execution::ExecutionInsertDB;
-use crate::dxo::graph::FunctionNode;
-use crate::dxo::transaction::TransactionValue;
-use crate::types::basic::{TransactionByStr, TransactionId, TransactionKey};
 use std::collections::HashMap;
-use std::fmt::Display;
-use std::str::FromStr;
-use td_error::{TdError, td_error};
-
-#[td_error]
-pub enum TransactionMapperError {
-    #[error("Missing transaction key: {0}")]
-    MissingTransactionKey(TransactionKey) = 5000,
-    #[error("Invalid transaction by: {0}")]
-    InvalidTransactionBy(#[from] strum::ParseError) = 5001,
-}
-
-/// TransactionMapper trait is used to map a function version node to a transaction key.
-/// Depending on the mapper, the key can have different forms. This will mark to which
-/// transaction the function version node belongs.
-pub trait TransactionMapper:
-    Default + FromStr + for<'a> TryFrom<&'a str> + Display + Sized
-{
-    fn key(&self, node: &FunctionNode) -> Result<TransactionKey, TdError>;
-
-    fn transaction_by(&self) -> Result<TransactionByStr, TdError> {
-        TransactionByStr::try_from(self.to_string())
-    }
-}
+use ta_execution::{TransactionMapper, TransactionMapperError};
+use td_error::TdError;
+use td_objects::dxo::execution::ExecutionInsertDB;
+use td_objects::dxo::graph::FunctionNode;
+use td_objects::dxo::transaction::TransactionValue;
+use td_objects::types::basic::{TransactionId, TransactionKey};
 
 /// TransactionMap is a map that stores transaction keys and their corresponding transaction IDs.
 /// It uses a generic TransactionMapper to determine the key for each function version node.
@@ -85,11 +63,11 @@ impl<T: TransactionMapper> TransactionMap<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::graph::{FUNCTION_NAMES, function_node};
-    use crate::test_utils::transaction::TestTransactionBy;
-    use crate::types::basic::TriggeredOn;
-    use crate::types::basic::{ExecutionId, FunctionVersionId, TriggerType};
+    use crate::test_utils::TestTransactionBy;
     use td_common::datetime::Timestamp;
+    use td_objects::test_utils::graph::{FUNCTION_NAMES, function_node};
+    use td_objects::types::basic::TriggeredOn;
+    use td_objects::types::basic::{ExecutionId, FunctionVersionId, TriggerType};
 
     fn dummy_execution() -> ExecutionInsertDB {
         ExecutionInsertDB {

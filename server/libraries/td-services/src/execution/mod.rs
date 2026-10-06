@@ -12,13 +12,13 @@ use crate::execution::plan::{
     resolve_execution_plan_versions, update_initial_function_run_status, validate_execution_plan,
     with_recursion_options,
 };
-use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use ta_services::ctx_service::ReqCtx;
 use td_database::access::LockInstant;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::TransactionBy;
+use td_execution::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use td_objects::and;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{

@@ -36,7 +36,7 @@ test_logging = []
 test-utils = []
 
 [package.metadata.cargo-machete]
-ignored = ["td-build", "td-objects", "thiserror", "toml"]
+ignored = ["strum", "td-build", "td-objects", "thiserror", "toml"]
 
 # Build dependencies
 
@@ -76,7 +76,6 @@ headers = { workspace = true }
 http = { workspace = true }
 itertools = { workspace = true }
 nonempty = { workspace = true }
-petgraph = { workspace = true, features = ["serde-1"] }
 polars = { workspace = true }
 regex = { workspace = true }
 sea-query = { workspace = true, features = ["sqlx-utils"] }

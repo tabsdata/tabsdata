@@ -9336,6 +9336,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ta-execution"
+version = "2.2.0"
+dependencies = [
+ "strum 0.28.0",
+ "td-build",
+ "td-error",
+ "td-objects",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "ta-objects"
 version = "2.2.0"
 dependencies = [
@@ -9724,10 +9735,13 @@ name = "td-execution"
 version = "2.2.0"
 dependencies = [
  "derive_builder",
+ "futures",
  "itertools 0.14.0",
  "petgraph",
  "serde",
  "strum 0.28.0",
+ "ta-execution",
+ "td-common",
  "td-database",
  "td-error",
  "td-execution",
@@ -9820,7 +9834,6 @@ dependencies = [
  "http",
  "itertools 0.14.0",
  "nonempty",
- "petgraph",
  "polars",
  "regex",
  "sea-query",
@@ -10000,6 +10013,7 @@ dependencies = [
  "sqlx",
  "strum 0.28.0",
  "sync_wrapper",
+ "ta-execution",
  "ta-services",
  "td-apiserver",
  "td-authz",
@@ -10247,6 +10261,7 @@ version = "2.2.0"
 dependencies = [
  "serde",
  "strum 0.28.0",
+ "ta-execution",
  "td-database",
  "td-error",
  "td-objects",

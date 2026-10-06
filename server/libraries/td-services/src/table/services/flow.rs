@@ -2,7 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use crate::table::flow::build_response;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -10,6 +9,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
+use td_execution::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{OptionalAtTimeParam, ReadRequest, WithinProject};

@@ -8,7 +8,6 @@ use crate::dxo::graph::{FunctionNode, TableNode};
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::table::{TableDB, TableDBWithNames, TableInsertDB};
 use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames, TriggerInsertDB};
-use crate::graph::{TdGraph, TdGraphBuilder};
 use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
     BasePath, BundleId, CollectionId, CollectionName, Decorator, DependencyId, DependencyPos,
@@ -94,58 +93,6 @@ pub static TABLE_VERSION_IDS: LazyLock<HashMap<TableName, TableVersionId>> = Laz
     }
     map
 });
-
-pub fn test_graph() -> TdGraph {
-    let all_tables = vec![
-        table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]),
-        table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]),
-        table(&FUNCTION_NAMES[1], &TABLE_NAMES[2]),
-        table(&FUNCTION_NAMES[2], &TABLE_NAMES[3]),
-    ];
-    let all_functions = [
-        function(&FUNCTION_NAMES[0]),
-        function(&FUNCTION_NAMES[1]),
-        function(&FUNCTION_NAMES[2]),
-    ];
-
-    let all_tables_map = all_tables
-        .iter()
-        .map(|t| (t.base.base.table_id, t.clone()))
-        .collect();
-    let all_functions_map = all_functions
-        .iter()
-        .map(|f| (f.base.base.function_id, f.clone()))
-        .collect();
-
-    let output_tables = all_tables;
-    let dependencies = vec![
-        dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]),
-        dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[1]),
-        dependency(&TABLE_NAMES[1], &FUNCTION_NAMES[2]),
-    ];
-    let triggers = vec![trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1])];
-
-    let graph = TdGraphBuilder::new(&all_tables_map, &all_functions_map)
-        .with_triggers(&triggers)
-        .unwrap()
-        .with_dependencies(&dependencies)
-        .unwrap()
-        .with_outputs(&output_tables)
-        .unwrap()
-        .build();
-
-    assert_eq!(
-        graph.inner.node_count(),
-        FUNCTION_NAMES.len() + TABLE_NAMES.len()
-    );
-
-    assert_eq!(
-        graph.inner.edge_count(),
-        triggers.len() + dependencies.len() + output_tables.len()
-    );
-
-    graph
-}
 
 pub fn function_node(function: &FunctionName) -> FunctionNode {
     FunctionNode {

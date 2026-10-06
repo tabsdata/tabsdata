@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::graph::TdGraph;
 use crate::graph::build::GraphBuilder;
 use std::collections::HashMap;
 use td_database::access::{AccessMode, SeesProjectRows};
@@ -10,13 +11,10 @@ use td_error::TdError;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::trigger::TriggerDBWithNames;
-use td_objects::graph::TdGraph;
 use td_objects::sql_condition::SqlCondition;
 use td_objects::types::basic::AtTime;
 use td_objects::types::basic::{FunctionId, TableId};
 use td_objects::types::recursion::RecursionOptions;
-
-pub mod build;
 
 /// Knobs for [`GraphBuilder`] / [`generate_td_graph`]. Build one with
 /// [`GraphConfig::defaults`] and override what differs via struct update:

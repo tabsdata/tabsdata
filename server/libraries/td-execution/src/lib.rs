@@ -15,8 +15,12 @@ pub use te_execution::{EXECUTION_GRAPH_OPTIONS, transaction::TransactionBy};
 pub use version_resolver::{VersionResolver, VersionResolverError};
 
 mod execution;
+pub mod graph;
 mod knob;
 mod recovery_config;
 mod scheduler_config;
 mod scheduler_notify;
+#[cfg(test)]
+mod test_utils;
+pub mod transaction_map;
 mod version_resolver;

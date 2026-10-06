@@ -2,12 +2,12 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::graph::{GraphEdge, GraphNode};
 use crate::graph::TdGraph;
 use petgraph::prelude::EdgeRef;
 use petgraph::visit::IntoNodeReferences;
 use std::collections::HashMap;
 use td_error::TdError;
+use td_objects::dxo::graph::{GraphEdge, GraphNode};
 
 pub trait MapGraph<F, T, V> {
     type Output<FF, TT, VV>: MapGraph<FF, TT, VV>;

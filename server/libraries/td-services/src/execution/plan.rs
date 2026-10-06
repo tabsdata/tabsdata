@@ -11,6 +11,7 @@ use ta_services::ctx_service::ReqCtx;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
+use td_execution::graph::{MapGraph, TdGraph};
 use td_execution::{
     EXECUTION_GRAPH_OPTIONS, ExecutionPlan, ExecutionPlanner, ResolvedExecutionPlan, TransactionBy,
     VersionResolver,
@@ -28,8 +29,6 @@ use td_objects::dxo::logical::{
     LogicalTableDataVersionInsertDB, TableDataVersion, TableDataVersionDBWithNames,
 };
 use td_objects::dxo::transaction::TransactionInsertDB;
-use td_objects::graph::{MapGraph, TdGraph};
-use td_objects::transaction::map::{TransactionMap, TransactionMapper};
 use td_objects::types::basic::{
     AtTime, DependencyPos, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, InputIdx,
     LogicalFunctionRunId, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
@@ -39,6 +38,7 @@ use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
 use td_queries::Queries;
 use tracing::{debug, instrument};
+use {ta_execution::TransactionMapper, td_execution::transaction_map::TransactionMap};
 
 pub fn assert_function_status(
     msgs: &mut ReqCtx,

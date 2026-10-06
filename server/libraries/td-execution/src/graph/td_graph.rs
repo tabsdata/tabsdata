@@ -2,17 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::dependency::DependencyDBWithNames;
-use crate::dxo::function::FunctionDBWithNames;
-use crate::dxo::graph::{
-    FunctionNode, GraphDependency, GraphEdge, GraphNode, GraphOutput, TableNode,
-};
-use crate::dxo::table::TableDBWithNames;
-use crate::dxo::trigger::TriggerDBWithNames;
-use crate::transaction::map::TransactionMapper;
-use crate::types::basic::SelfDependency;
-use crate::types::basic::{FunctionId, TableId, TransactionKey};
-use crate::types::table_ref::Versions;
 use petgraph::dot::{Config, Dot};
 use petgraph::prelude::{DiGraph, EdgeRef, NodeIndex};
 use petgraph::visit::IntoNodeReferences;
@@ -22,7 +11,18 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::Deref;
+use ta_execution::TransactionMapper;
 use td_error::{TdError, td_error};
+use td_objects::dxo::dependency::DependencyDBWithNames;
+use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::graph::{
+    FunctionNode, GraphDependency, GraphEdge, GraphNode, GraphOutput, TableNode,
+};
+use td_objects::dxo::table::TableDBWithNames;
+use td_objects::dxo::trigger::TriggerDBWithNames;
+use td_objects::types::basic::SelfDependency;
+use td_objects::types::basic::{FunctionId, TableId, TransactionKey};
+use td_objects::types::table_ref::Versions;
 
 #[td_error]
 enum GraphError {
@@ -389,14 +389,13 @@ impl PartialGraph<FunctionNode> {
 mod tests {
     use super::*;
     use crate::graph::MapGraph;
-    use crate::test_utils::graph::{
-        FUNCTION_NAMES, TABLE_NAMES, dependency, function, function_node, table, table_node,
-        test_graph,
-    };
-    use crate::test_utils::transaction::TestTransactionBy;
-    use crate::types::basic::FunctionVersionId;
+    use crate::test_utils::{TestTransactionBy, test_graph};
     use itertools::Itertools;
     use std::collections::HashSet;
+    use td_objects::test_utils::graph::{
+        FUNCTION_NAMES, TABLE_NAMES, dependency, function, function_node, table, table_node,
+    };
+    use td_objects::types::basic::FunctionVersionId;
 
     fn expected_function_nodes() -> HashSet<FunctionNode> {
         FUNCTION_NAMES.iter().map(function_node).collect()

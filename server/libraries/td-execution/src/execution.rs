@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::graph::{MapGraph, PartialGraph, TdGraph};
 use petgraph::algo::toposort;
 use petgraph::prelude::{Direction, EdgeRef, NodeIndex};
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
@@ -9,10 +10,9 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
+use ta_execution::TransactionMapper;
 use td_error::{TdError, td_error};
 use td_objects::dxo::graph::{FunctionNode, GraphEdge, GraphNode, ResolvedVersion, TableNode};
-use td_objects::graph::{MapGraph, PartialGraph, TdGraph};
-use td_objects::transaction::map::TransactionMapper;
 use td_objects::types::basic::{FunctionName, TableName, TransactionByStr, TransactionKey};
 use td_objects::types::table_ref::Versions;
 
@@ -264,11 +264,9 @@ impl<F, T, V> MapGraph<F, T, V> for ExecutionPlan<F, T, V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_utils::{TestTransactionBy, test_graph};
     use td_error::TdError;
-    use td_objects::test_utils::graph::{
-        FUNCTION_NAMES, TABLE_NAMES, function_node, table_node, test_graph,
-    };
-    use td_objects::test_utils::transaction::TestTransactionBy;
+    use td_objects::test_utils::graph::{FUNCTION_NAMES, TABLE_NAMES, function_node, table_node};
 
     #[tokio::test]
     async fn test_execution_plan_map_async() {
