@@ -109,9 +109,7 @@ impl Vault {
                 if self.secrets.contains_key(category) {
                     return false;
                 }
-                let value = generator
-                    .generate(&BTreeMap::new())
-                    .unwrap_or_else(|_| td_common::random::password());
+                let value = generator.generate();
                 self.secrets.insert(category.to_owned(), value);
                 true
             }

@@ -3,6 +3,7 @@
 //
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::str;
 
 use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY, SECRET_FAMILY_CONFIG,
@@ -86,46 +87,10 @@ pub async fn auto_fill_generated_secrets(context: &KubeContext) -> Result<(), Se
         leaves_by_secret.push((secret_name, leaves));
     }
     let mut existing = collect_existing_values(context, &leaves_by_secret).await?;
-    let invalidated = invalidated_generators(&leaves_by_secret, &existing);
-    for generator in &invalidated {
-        existing.remove(generator);
-    }
     for (secret_name, leaves) in &leaves_by_secret {
-        fill_generated_keys(context, secret_name, leaves, &mut existing, &invalidated).await?;
+        fill_generated_keys(context, secret_name, leaves, &mut existing).await?;
     }
     Ok(())
-}
-
-fn invalidated_generators(
-    leaves_by_secret: &[(String, Vec<SecretLeaf>)],
-    existing: &BTreeMap<Generator, String>,
-) -> BTreeSet<Generator> {
-    let declared: BTreeSet<Generator> = leaves_by_secret
-        .iter()
-        .flat_map(|(_, leaves)| leaves.iter().filter_map(|leaf| leaf.generator))
-        .collect();
-    let mut invalidated: BTreeSet<Generator> = declared
-        .iter()
-        .copied()
-        .filter(|generator| !existing.contains_key(generator))
-        .collect();
-    loop {
-        let cascade: Vec<Generator> = declared
-            .iter()
-            .copied()
-            .filter(|generator| !invalidated.contains(generator))
-            .filter(|generator| {
-                generator
-                    .dependencies()
-                    .iter()
-                    .any(|dependency| invalidated.contains(dependency))
-            })
-            .collect();
-        if cascade.is_empty() {
-            return invalidated;
-        }
-        invalidated.extend(cascade);
-    }
 }
 
 async fn collect_existing_values(
@@ -147,13 +112,17 @@ async fn collect_existing_values(
             let Ok(value) = String::from_utf8(bytes.clone()) else {
                 continue;
             };
-            if value.is_empty() {
+            if !usable(generator, &value) {
                 continue;
             }
             merge_existing_value(&mut existing, generator, value)?;
         }
     }
     Ok(existing)
+}
+
+fn usable(generator: Generator, value: &str) -> bool {
+    !value.is_empty() && generator.accepts(value)
 }
 
 fn merge_existing_value(
@@ -177,7 +146,6 @@ async fn fill_generated_keys(
     secret_name: &str,
     leaves: &[SecretLeaf],
     existing: &mut BTreeMap<Generator, String>,
-    invalidated: &BTreeSet<Generator>,
 ) -> Result<(), SecretError> {
     let generated: Vec<(&str, Generator)> = leaves
         .iter()
@@ -193,13 +161,12 @@ async fn fill_generated_keys(
     let needs_fill: Vec<(&str, Generator)> = generated
         .iter()
         .copied()
-        .filter(|(key, generator)| {
-            invalidated.contains(generator)
-                || match live.as_ref().and_then(|data| data.get(*key)) {
-                    None => true,
-                    Some(value) => value.is_empty(),
-                }
-        })
+        .filter(
+            |(key, generator)| match live.as_ref().and_then(|data| data.get(*key)) {
+                None => true,
+                Some(value) => !str::from_utf8(value).is_ok_and(|value| usable(*generator, value)),
+            },
+        )
         .collect();
     if needs_fill.is_empty() {
         return Ok(());
@@ -211,7 +178,7 @@ async fn fill_generated_keys(
             .collect(),
         None => BTreeMap::new(),
     };
-    for (key, value) in resolve_generated_values(&needs_fill, existing)? {
+    for (key, value) in resolve_generated_values(&needs_fill, existing) {
         data.insert(key.to_owned(), value);
     }
     upsert_secret(
@@ -231,46 +198,17 @@ async fn fill_generated_keys(
 fn resolve_generated_values<'a>(
     needs_fill: &[(&'a str, Generator)],
     resolved: &mut BTreeMap<Generator, String>,
-) -> Result<Vec<(&'a str, String)>, SecretError> {
-    let mut pending = needs_fill.to_vec();
-    let mut filled: Vec<(&'a str, String)> = Vec::with_capacity(pending.len());
-    while let Some(index) = pending.iter().position(|(_, generator)| {
-        resolved.contains_key(generator)
-            || generator
-                .dependencies()
-                .iter()
-                .all(|dependency| resolved.contains_key(dependency))
-    }) {
-        let (key, generator) = pending.remove(index);
-        let value = match resolved.get(&generator) {
-            Some(existing) => existing.clone(),
-            None => generator.generate(resolved)?,
-        };
-        resolved.insert(generator, value.clone());
-        filled.push((key, value));
-    }
-    if let Some((_, generator)) = pending.first() {
-        let unresolved = generator
-            .dependencies()
-            .iter()
-            .copied()
-            .find(|dependency| !resolved.contains_key(dependency));
-        return match unresolved {
-            Some(dependency) if pending.iter().any(|(_, waiting)| *waiting == dependency) => {
-                Err(SecretError::SecretDependencyCyclic {
-                    generator: generator.name().to_owned(),
-                })
-            }
-            Some(dependency) => Err(SecretError::SecretDependencyMissing {
-                generator: generator.name().to_owned(),
-                dependency: dependency.name().to_owned(),
-            }),
-            None => Err(SecretError::SecretDependencyCyclic {
-                generator: generator.name().to_owned(),
-            }),
-        };
-    }
-    Ok(filled)
+) -> Vec<(&'a str, String)> {
+    needs_fill
+        .iter()
+        .map(|(key, generator)| {
+            let value = resolved
+                .entry(*generator)
+                .or_insert_with(|| generator.generate())
+                .clone();
+            (*key, value)
+        })
+        .collect()
 }
 
 pub struct PendingSecret {

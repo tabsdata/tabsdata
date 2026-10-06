@@ -133,7 +133,7 @@ fn self_contained_generators_are_produced() {
         ("USER", Generator::PostgresSystemUser),
         ("PASSWORD", Generator::PostgresSystemPassword),
     ];
-    let filled = resolve_generated_values(&needs_fill, &mut BTreeMap::new()).expect("resolve");
+    let filled = resolve_generated_values(&needs_fill, &mut BTreeMap::new());
     let filled: BTreeMap<&str, String> = filled.into_iter().collect();
     assert_eq!(filled.get("USER").map(String::as_str), Some("postgres"));
     assert!(!filled.get("PASSWORD").expect("password").is_empty());
@@ -143,66 +143,12 @@ fn self_contained_generators_are_produced() {
 fn leaf_value_from_seed_is_reused_not_regenerated() {
     let needs_fill = [("KEY", Generator::JwtSigningKey)];
     let mut existing = seed(&[(Generator::JwtSigningKey, "existing-signing-key")]);
-    let filled = resolve_generated_values(&needs_fill, &mut existing).expect("resolve");
+    let filled = resolve_generated_values(&needs_fill, &mut existing);
     let filled: BTreeMap<&str, String> = filled.into_iter().collect();
     assert_eq!(
         filled.get("KEY").map(String::as_str),
         Some("existing-signing-key")
     );
-}
-
-#[test]
-fn derived_token_resolves_from_cross_config_dependency() {
-    let needs_fill = [("AGENT_TOKEN", Generator::APIServerServiceToken)];
-    let mut existing = seed(&[(Generator::JwtSigningKey, "the-signing-key")]);
-    let filled = resolve_generated_values(&needs_fill, &mut existing).expect("resolve");
-    let filled: BTreeMap<&str, String> = filled.into_iter().collect();
-    let token = filled.get("AGENT_TOKEN").expect("token");
-    assert!(!token.is_empty());
-}
-
-#[test]
-fn derived_and_dependency_resolve_together_in_one_pass() {
-    let needs_fill = [
-        ("AGENT_TOKEN", Generator::APIServerServiceToken),
-        ("SIGNING_KEY", Generator::JwtSigningKey),
-    ];
-    let filled = resolve_generated_values(&needs_fill, &mut BTreeMap::new()).expect("resolve");
-    let filled: BTreeMap<&str, String> = filled.into_iter().collect();
-    assert!(!filled.get("SIGNING_KEY").expect("key").is_empty());
-    assert!(!filled.get("AGENT_TOKEN").expect("token").is_empty());
-}
-
-#[test]
-fn derived_token_signed_with_seeded_key_matches_that_key() {
-    use td_common::jwt::{JwtConfig, decode_token};
-
-    let signing_key = "stable-signing-key";
-    let needs_fill = [("AGENT_TOKEN", Generator::APIServerServiceToken)];
-    let mut existing = seed(&[(Generator::JwtSigningKey, signing_key)]);
-    let filled = resolve_generated_values(&needs_fill, &mut existing).expect("resolve");
-    let filled: BTreeMap<&str, String> = filled.into_iter().collect();
-    let token = filled.get("AGENT_TOKEN").expect("token");
-
-    let jwt = JwtConfig::new(signing_key.to_owned(), 4_102_444_800);
-    decode_token(&jwt, token).expect("token verifies against the seeded signing key");
-}
-
-#[test]
-fn derived_token_missing_dependency_fails() {
-    let needs_fill = [("AGENT_TOKEN", Generator::APIServerServiceToken)];
-    let error =
-        resolve_generated_values(&needs_fill, &mut BTreeMap::new()).expect_err("missing dep");
-    match error {
-        SecretError::SecretDependencyMissing {
-            generator,
-            dependency,
-        } => {
-            assert_eq!(generator, "apiserver_service_token");
-            assert_eq!(dependency, "jwt_signing_key");
-        }
-        other => panic!("unexpected variant: {other:?}"),
-    }
 }
 
 #[test]
@@ -235,51 +181,12 @@ fn filled_map(pairs: Vec<(&str, String)>) -> BTreeMap<&str, String> {
 }
 
 #[test]
-fn derived_before_dependency_in_list_still_resolves() {
-    let token_first = [
-        ("AGENT_TOKEN", Generator::APIServerServiceToken),
-        ("SIGNING_KEY", Generator::JwtSigningKey),
-    ];
-    let key_first = [
-        ("SIGNING_KEY", Generator::JwtSigningKey),
-        ("AGENT_TOKEN", Generator::APIServerServiceToken),
-    ];
-    let a = filled_map(resolve_generated_values(&token_first, &mut BTreeMap::new()).expect("a"));
-    let b = filled_map(resolve_generated_values(&key_first, &mut BTreeMap::new()).expect("b"));
-    for map in [&a, &b] {
-        assert!(!map.get("SIGNING_KEY").expect("key").is_empty());
-        assert!(!map.get("AGENT_TOKEN").expect("token").is_empty());
-    }
-}
-
-#[test]
-fn freshly_generated_token_matches_its_own_fresh_key() {
-    use td_common::jwt::{JwtConfig, decode_token};
-
-    let needs_fill = [
-        ("SIGNING_KEY", Generator::JwtSigningKey),
-        ("AGENT_TOKEN", Generator::APIServerServiceToken),
-    ];
-    let filled =
-        filled_map(resolve_generated_values(&needs_fill, &mut BTreeMap::new()).expect("run"));
-    let key = filled.get("SIGNING_KEY").expect("key");
-    let token = filled.get("AGENT_TOKEN").expect("token");
-
-    let good = JwtConfig::new(key.clone(), 4_102_444_800);
-    decode_token(&good, token).expect("token verifies against its own key");
-
-    let wrong = JwtConfig::new(format!("{key}-tampered"), 4_102_444_800);
-    decode_token(&wrong, token).expect_err("token must NOT verify against a different key");
-}
-
-#[test]
 fn same_generator_two_keys_gets_same_value() {
     let needs_fill = [
         ("KEY_A", Generator::JwtSigningKey),
         ("KEY_B", Generator::JwtSigningKey),
     ];
-    let filled =
-        filled_map(resolve_generated_values(&needs_fill, &mut BTreeMap::new()).expect("run"));
+    let filled = filled_map(resolve_generated_values(&needs_fill, &mut BTreeMap::new()));
     let a = filled.get("KEY_A").expect("A");
     let b = filled.get("KEY_B").expect("B");
     assert_eq!(a, b);
@@ -287,37 +194,13 @@ fn same_generator_two_keys_gets_same_value() {
 }
 
 #[test]
-fn derived_signs_with_seeded_dependency_not_a_fresh_one() {
-    use td_common::jwt::{JwtConfig, decode_token};
-
-    let signing_key = "seeded-key-from-another-config";
-    let needs_fill = [
-        ("AGENT_TOKEN", Generator::APIServerServiceToken),
-        ("SIGNING_KEY", Generator::JwtSigningKey),
-    ];
-    let mut existing = seed(&[(Generator::JwtSigningKey, signing_key)]);
-    let filled = filled_map(resolve_generated_values(&needs_fill, &mut existing).expect("run"));
-
-    assert_eq!(
-        filled.get("SIGNING_KEY").map(String::as_str),
-        Some(signing_key)
-    );
-    let jwt = JwtConfig::new(signing_key.to_owned(), 4_102_444_800);
-    decode_token(&jwt, filled.get("AGENT_TOKEN").expect("token"))
-        .expect("token must verify against the seeded key");
-}
-
-#[test]
 fn second_run_reuses_first_runs_values() {
-    use td_common::jwt::{JwtConfig, decode_token};
-
     let needs_fill = [
         ("SIGNING_KEY", Generator::JwtSigningKey),
         ("PASSWORD", Generator::PostgresSystemPassword),
-        ("AGENT_TOKEN", Generator::APIServerServiceToken),
+        ("SERVICE_TOKEN", Generator::ServiceToken),
     ];
-    let first =
-        filled_map(resolve_generated_values(&needs_fill, &mut BTreeMap::new()).expect("first"));
+    let first = filled_map(resolve_generated_values(&needs_fill, &mut BTreeMap::new()));
 
     let mut reseed = seed(&[
         (Generator::JwtSigningKey, first.get("SIGNING_KEY").unwrap()),
@@ -325,60 +208,45 @@ fn second_run_reuses_first_runs_values() {
             Generator::PostgresSystemPassword,
             first.get("PASSWORD").unwrap(),
         ),
+        (Generator::ServiceToken, first.get("SERVICE_TOKEN").unwrap()),
     ]);
-    let second = filled_map(resolve_generated_values(&needs_fill, &mut reseed).expect("second"));
+    let second = filled_map(resolve_generated_values(&needs_fill, &mut reseed));
 
     assert_eq!(first.get("SIGNING_KEY"), second.get("SIGNING_KEY"));
     assert_eq!(first.get("PASSWORD"), second.get("PASSWORD"));
-    let key = second.get("SIGNING_KEY").unwrap();
-    let jwt = JwtConfig::new(key.clone(), 4_102_444_800);
-    decode_token(&jwt, second.get("AGENT_TOKEN").unwrap())
-        .expect("re-derived token still verifies against the reused key");
-}
-
-#[test]
-fn partial_fill_only_missing_derived_key() {
-    use td_common::jwt::{JwtConfig, decode_token};
-
-    let signing_key = "already-present-key";
-    let needs_fill = [("AGENT_TOKEN", Generator::APIServerServiceToken)];
-    let mut existing = seed(&[(Generator::JwtSigningKey, signing_key)]);
-    let filled = filled_map(resolve_generated_values(&needs_fill, &mut existing).expect("run"));
-
-    assert!(!filled.contains_key("SIGNING_KEY"));
-    assert_eq!(filled.len(), 1);
-    let jwt = JwtConfig::new(signing_key.to_owned(), 4_102_444_800);
-    decode_token(&jwt, filled.get("AGENT_TOKEN").expect("token")).expect("verifies");
+    assert_eq!(first.get("SERVICE_TOKEN"), second.get("SERVICE_TOKEN"));
 }
 
 #[test]
 fn sequential_fills_share_freshly_generated_values() {
     let mut resolved = BTreeMap::new();
-    let first = filled_map(
-        resolve_generated_values(
-            &[("PASSWORD", Generator::PostgresSystemPassword)],
-            &mut resolved,
-        )
-        .expect("first"),
-    );
-    let second = filled_map(
-        resolve_generated_values(
-            &[("OTHER_PASSWORD", Generator::PostgresSystemPassword)],
-            &mut resolved,
-        )
-        .expect("second"),
-    );
+    let first = filled_map(resolve_generated_values(
+        &[("PASSWORD", Generator::PostgresSystemPassword)],
+        &mut resolved,
+    ));
+    let second = filled_map(resolve_generated_values(
+        &[("OTHER_PASSWORD", Generator::PostgresSystemPassword)],
+        &mut resolved,
+    ));
     assert!(!first.get("PASSWORD").expect("first value").is_empty());
     assert_eq!(first.get("PASSWORD"), second.get("OTHER_PASSWORD"));
 }
 
 #[test]
-fn derived_token_reuses_existing_value_across_configs() {
-    let needs_fill = [("AGENT_TOKEN", Generator::APIServerServiceToken)];
-    let mut existing = seed(&[(Generator::APIServerServiceToken, "already-issued-token")]);
-    let filled = filled_map(resolve_generated_values(&needs_fill, &mut existing).expect("run"));
+fn a_generated_service_token_is_a_well_formed_token() {
+    let needs_fill = [("SERVICE_TOKEN", Generator::ServiceToken)];
+    let filled = filled_map(resolve_generated_values(&needs_fill, &mut BTreeMap::new()));
+    let token = filled.get("SERVICE_TOKEN").expect("token");
+    assert!(td_security::token::parse(token).is_some());
+}
+
+#[test]
+fn a_service_token_reuses_the_existing_value_across_configs() {
+    let needs_fill = [("SERVICE_TOKEN", Generator::ServiceToken)];
+    let mut existing = seed(&[(Generator::ServiceToken, "already-issued-token")]);
+    let filled = filled_map(resolve_generated_values(&needs_fill, &mut existing));
     assert_eq!(
-        filled.get("AGENT_TOKEN").map(String::as_str),
+        filled.get("SERVICE_TOKEN").map(String::as_str),
         Some("already-issued-token")
     );
 }
@@ -386,7 +254,7 @@ fn derived_token_reuses_existing_value_across_configs() {
 #[test]
 fn empty_needs_fill_yields_empty() {
     let mut existing = seed(&[(Generator::JwtSigningKey, "k")]);
-    let filled = resolve_generated_values(&[], &mut existing).expect("run");
+    let filled = resolve_generated_values(&[], &mut existing);
     assert!(filled.is_empty());
 }
 
@@ -421,77 +289,19 @@ fn merge_treats_distinct_nonempty_values_as_divergent_only() {
 }
 
 #[test]
-fn validation_accepts_generated_and_derived_keys_together() {
+fn validation_accepts_two_generated_keys_together() {
     let config_yaml = "\
 jwt:
   secret: ${{secretAuto:jwt_signing_key}}
-agent_token: ${{secretAuto:apiserver_service_token}}
+service_token: ${{secretAuto:service_token}}
 ";
     let input = Settlement {
         config: "apiserver.service.yaml",
         config_yaml,
         secret: "td-app-apiserver-service-secret-config-apiserver.service.yaml",
-        actual_keys: Some(keys(&["JWT__SECRET", "AGENT_TOKEN"])),
+        actual_keys: Some(keys(&["JWT__SECRET", "SERVICE_TOKEN"])),
     };
     settle_secret_keys(&input).expect("both generated keys accepted");
-}
-
-fn declared(pairs: &[(&str, &str, Generator)]) -> Vec<(String, Vec<SecretLeaf>)> {
-    let mut by_secret: Vec<(String, Vec<SecretLeaf>)> = Vec::new();
-    for (secret, key, generator) in pairs {
-        let leaf = SecretLeaf {
-            path: Vec::new(),
-            key: (*key).to_owned(),
-            generator: Some(*generator),
-            requirement: Requirement::Mandatory,
-        };
-        match by_secret.iter_mut().find(|(name, _)| name == secret) {
-            Some((_, leaves)) => leaves.push(leaf),
-            None => by_secret.push(((*secret).to_owned(), vec![leaf])),
-        }
-    }
-    by_secret
-}
-
-#[test]
-fn invalidated_generators_include_declared_but_missing() {
-    let leaves = declared(&[
-        ("a", "PASSWORD", Generator::PostgresSystemPassword),
-        ("b", "KEY", Generator::JwtSigningKey),
-    ]);
-    let existing = seed(&[(Generator::JwtSigningKey, "key")]);
-    let invalidated = invalidated_generators(&leaves, &existing);
-    assert!(invalidated.contains(&Generator::PostgresSystemPassword));
-    assert!(!invalidated.contains(&Generator::JwtSigningKey));
-}
-
-#[test]
-fn invalidated_generators_cascade_to_stored_dependents() {
-    let leaves = declared(&[
-        ("a", "KEY", Generator::JwtSigningKey),
-        ("b", "AGENT_TOKEN", Generator::APIServerServiceToken),
-    ]);
-    let existing = seed(&[(Generator::APIServerServiceToken, "stale-token")]);
-    let invalidated = invalidated_generators(&leaves, &existing);
-    assert!(invalidated.contains(&Generator::JwtSigningKey));
-    assert!(
-        invalidated.contains(&Generator::APIServerServiceToken),
-        "a stored dependent must be regenerated when its dependency is regenerated"
-    );
-}
-
-#[test]
-fn invalidated_generators_empty_when_all_values_exist() {
-    let leaves = declared(&[
-        ("a", "KEY", Generator::JwtSigningKey),
-        ("b", "AGENT_TOKEN", Generator::APIServerServiceToken),
-    ]);
-    let existing = seed(&[
-        (Generator::JwtSigningKey, "key"),
-        (Generator::APIServerServiceToken, "token"),
-    ]);
-    let invalidated = invalidated_generators(&leaves, &existing);
-    assert!(invalidated.is_empty());
 }
 
 fn leaf(key: &str, generator: Option<Generator>) -> SecretLeaf {
@@ -579,4 +389,18 @@ fn an_optional_key_beside_a_mandatory_one_reports_only_the_mandatory() {
         required_leaf("password", None, Requirement::Mandatory),
     ];
     assert_eq!(unsupplied_keys(&leaves, None), vec!["password".to_owned()]);
+}
+
+#[test]
+fn a_held_value_of_a_retired_format_is_not_usable() {
+    assert!(!usable(
+        Generator::ServiceToken,
+        "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.e30.sig"
+    ));
+    assert!(!usable(Generator::ServiceToken, ""));
+    assert!(usable(
+        Generator::ServiceToken,
+        &td_security::token::generate()
+    ));
+    assert!(usable(Generator::JwtSigningKey, "held-key"));
 }

@@ -82,7 +82,7 @@ fn provisioning_fills_a_known_storable_category() {
 fn provisioning_skips_the_non_storable_generators() {
     let mut vault = vault();
     assert!(!vault.provision_category("jwt_signing_key"));
-    assert!(!vault.provision_category("apiserver_service_token"));
+    assert!(!vault.provision_category("service_token"));
     assert!(vault.is_empty());
 }
 
@@ -138,7 +138,7 @@ fn storing_reports_no_change_when_the_value_matches() {
 fn storing_keeps_the_non_storable_generators_out() {
     let mut vault = vault();
     assert!(!vault.store("jwt_signing_key", "signing"));
-    assert!(!vault.store("apiserver_service_token", "token"));
+    assert!(!vault.store("service_token", "token"));
     assert!(vault.is_empty());
 }
 

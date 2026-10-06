@@ -443,7 +443,7 @@ pub const SECRET_GENERATOR_POSTGRES_SYSTEM_PASSWORD: &str = "postgres_system_pas
 pub const SECRET_GENERATOR_POSTGRES_APISERVER_PASSWORD: &str = "postgres_apiserver_password";
 #[cfg(feature = "enterprise")]
 pub const SECRET_GENERATOR_POSTGRES_AIAGENT_PASSWORD: &str = "postgres_aiagent_password";
-pub const SECRET_GENERATOR_APISERVER_SERVICE_TOKEN: &str = "apiserver_service_token";
+pub const SECRET_GENERATOR_SERVICE_TOKEN: &str = "service_token";
 
 pub const PART_OF_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "part-of");
 pub const PART_OF_TABSDATA: &str = "tabsdata";

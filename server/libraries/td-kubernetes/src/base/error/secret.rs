@@ -147,22 +147,6 @@ pub enum SecretError {
         name: String,
         supported: String,
     } = 5015,
-    #[error("Could not sign the '{generator}' service token: {cause}.")]
-    TokenSigningFailed { generator: String, cause: String } = 5016,
-    #[error(
-        "Cannot derive the '{generator}' secret: its dependency '{dependency}' is not declared by \
-         any config (no '${{secretAuto:{dependency}}}' placeholder exists to generate it)."
-    )]
-    SecretDependencyMissing {
-        generator: String,
-        dependency: String,
-    } = 5017,
-    #[error(
-        "Cannot derive the '{generator}' secret: its dependency chain is cyclic \
-         (it transitively depends on itself). Fix the generator dependency declarations \
-         so the dependency graph is acyclic."
-    )]
-    SecretDependencyCyclic { generator: String } = 5018,
     #[error(
         "Generated secret '{generator}' has divergent values across configs: two configs \
          declare '${{secretAuto:{generator}}}' but their stored secret values differ. \

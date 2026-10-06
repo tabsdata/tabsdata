@@ -63,6 +63,7 @@ td-database = { workspace = true }
 td-error = { workspace = true }
 td-objects = { workspace = true }
 td-python = { workspace = true }
+td-security = { workspace = true }
 
 ## Extensions
 

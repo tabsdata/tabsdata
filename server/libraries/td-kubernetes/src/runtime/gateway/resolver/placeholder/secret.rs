@@ -2,7 +2,6 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::collections::BTreeMap;
 use std::env;
 
 use crate::base::error::gateway::ResolverError;
@@ -60,24 +59,13 @@ impl SecretResolver {
         context: &ResolveContext,
         key: String,
     ) -> Result<Option<SecretEntry>, ResolverError> {
-        fn generate_once(
-            context: &ResolveContext,
-            generator: Generator,
-            category: &str,
-        ) -> Result<String, ResolverError> {
-            let mut vault = context.vault.borrow_mut();
-            if let Some(value) = vault.get(category) {
-                return Ok(value.clone());
-            }
-            let value = generator.generate(&BTreeMap::new()).map_err(|cause| {
-                ResolverError::GeneratorFailed {
-                    path: context.displayed(),
-                    generator: category.to_owned(),
-                    cause: cause.to_string(),
-                }
-            })?;
-            vault.insert(category.to_owned(), value.clone());
-            Ok(value)
+        fn generate_once(context: &ResolveContext, generator: Generator, category: &str) -> String {
+            context
+                .vault
+                .borrow_mut()
+                .entry(category.to_owned())
+                .or_insert_with(|| generator.generate())
+                .clone()
         }
 
         let category = context.placeholder.category.as_deref().ok_or_else(|| {
@@ -92,12 +80,9 @@ impl SecretResolver {
                 generator: category.to_owned(),
                 supported: Generator::supported().join(", "),
             })?;
-        if generator.has_dependencies() {
-            return Ok(None);
-        }
         let value = match context.auto_value.filter(|value| !value.is_empty()) {
             Some(value) => value.to_owned(),
-            None => generate_once(context, generator, category)?,
+            None => generate_once(context, generator, category),
         };
         Ok(Some(SecretEntry {
             key,

@@ -46,7 +46,7 @@ fn optional_placeholders_are_marked_optional() {
 fn auto_placeholders_are_delegated_not_pending() {
     let entries = collect_entries(sources(&[(
         "apiserver.service.yaml",
-        "a: ${{secretAuto:jwt_signing_key}}\nb: ${{secretAuto:apiserver_service_token?}}\n",
+        "a: ${{secretAuto:jwt_signing_key}}\nb: ${{secretAuto:service_token?}}\n",
     )]));
     assert_eq!(entries.len(), 2);
     assert!(entries.iter().all(|e| e.rule == CheckRule::Delegated));
