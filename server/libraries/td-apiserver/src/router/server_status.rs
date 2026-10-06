@@ -13,7 +13,8 @@ use td_services::Services;
 const SYSTEM_TAG: &str = "System";
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/status",
     tag(SYSTEM_TAG),
@@ -25,7 +26,8 @@ pub async fn status(State(state): State<Services>) -> Result<GetStatus<ApiStatus
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/runtime-info",
     tag(SYSTEM_TAG),

@@ -24,7 +24,9 @@ use td_services::internal_api::InternalRoutes;
 const INTERNAL_TAG: &str = "Internal";
 
 #[apiserver_path(
-    mount(internal),
+    internal,
+    version(v1),
+    auth(internal),
     method(post),
     path = "/internal/function-runs/{function_run}/workers/{worker}",
     tag(INTERNAL_TAG),
@@ -43,7 +45,9 @@ pub async fn function_run_callback(
 }
 
 #[apiserver_path(
-    mount(internal),
+    internal,
+    version(v1),
+    auth(internal),
     method(post),
     path = "/internal/workers/{worker}",
     tag(INTERNAL_TAG),
@@ -61,7 +65,9 @@ pub async fn worker_callback(
 }
 
 #[apiserver_path(
-    mount(internal),
+    internal,
+    version(v1),
+    auth(internal),
     method(get),
     path = "/internal/workers/{worker}/message",
     tag(INTERNAL_TAG),
@@ -78,7 +84,9 @@ pub async fn worker_message(
 }
 
 #[apiserver_path(
-    mount(internal),
+    internal,
+    version(v1),
+    auth(internal),
     method(post),
     path = "/internal/function-versions/{function_version}/execute",
     tag(INTERNAL_TAG),
@@ -96,7 +104,9 @@ pub async fn function_version_execute(
 }
 
 #[apiserver_path(
-    mount(internal),
+    internal,
+    version(v1),
+    auth(internal),
     method(get),
     path = "/internal/function-versions/{function_version}/execution-status",
     tag(INTERNAL_TAG),
@@ -114,7 +124,9 @@ pub async fn function_version_execution_status(
 }
 
 #[apiserver_path(
-    mount(internal),
+    internal,
+    version(v1),
+    auth(internal),
     method(get),
     path = "/internal/function-versions/{function_version}/download-state",
     tag(INTERNAL_TAG),

@@ -31,33 +31,201 @@ pub(crate) mod workers;
 
 #[cfg(test)]
 mod tests {
+    use crate::router::roles::LIST_ROLE_PATH;
+    use crate::router::simple_permissions::LIST_BY_USER_PATH;
+    use axum::body::Body;
+    use axum::extract::Request;
+    use axum::{Extension, Router};
+    use http::{Method, StatusCode};
     use std::collections::HashSet;
-    use ta_apiserver::router::{Mount, RouterStates, mount_router, registered};
+    use ta_apiserver::router::{
+        Auth, AuthClass, Position, RouterRegistration, RouterStates, Scope, SecurityMode,
+        Server as Listener, Version, mount_router, registered,
+    };
+    use td_database::pool::TdPool;
+    use td_objects::dxo::crudl::RequestContext;
+    use td_objects::types::basic::{AccessTokenId, UserId};
     use td_services::Services;
     use te_services::ExtendedServices;
+    use tower::ServiceExt;
     use utoipa::openapi::path::ParameterIn;
+
+    type Placement = (Listener, Option<Version>, Scope, &'static [SecurityMode]);
+
+    const FLAT: Placement = (
+        Listener::Public,
+        Some(Version::V1),
+        Scope::Flat,
+        SecurityMode::ALL,
+    );
+    const PROJECT: Placement = (
+        Listener::Public,
+        Some(Version::V1),
+        Scope::Project,
+        SecurityMode::ALL,
+    );
+    const RBAC: Placement = (
+        Listener::Public,
+        Some(Version::V1),
+        Scope::Flat,
+        &[SecurityMode::Rbac],
+    );
+    const SIMPLE: Placement = (
+        Listener::Public,
+        Some(Version::V1),
+        Scope::Flat,
+        &[SecurityMode::Simple],
+    );
+    const INTERNAL: Placement = (
+        Listener::Internal,
+        Some(Version::V1),
+        Scope::Flat,
+        SecurityMode::ALL,
+    );
+
+    fn placement(r: &RouterRegistration) -> Placement {
+        (r.server, r.version, r.scope, r.modes)
+    }
+
+    /// Every position the topology composes, in both modes.
+    fn all_positions() -> Vec<Position> {
+        let mut positions = Vec::new();
+        for mode in SecurityMode::ALL.iter().copied() {
+            for class in [AuthClass::Open, AuthClass::Internal, AuthClass::Bearer] {
+                for (server, version, scope) in [
+                    (Listener::Public, Some(Version::V1), Scope::Flat),
+                    (Listener::Public, Some(Version::V1), Scope::Project),
+                    (Listener::Public, None, Scope::Flat),
+                    (Listener::Internal, Some(Version::V1), Scope::Flat),
+                ] {
+                    positions.push(Position {
+                        server,
+                        version,
+                        scope,
+                        mode,
+                        class,
+                    });
+                }
+            }
+        }
+        positions
+    }
+
+    /// The macro checks these rules at compile time; this covers hand-written
+    /// registrations (ee's UI fallback).
+    #[test]
+    fn placements_are_valid() {
+        for route in registered() {
+            route.validate().unwrap();
+        }
+    }
+
+    /// Every registered route is reachable from some composed position.
+    #[test]
+    fn every_route_is_composed() {
+        let positions = all_positions();
+        for route in registered() {
+            assert!(
+                positions.iter().any(|p| p.selects(route)),
+                "{} is at a position the topology never mounts",
+                route.name
+            );
+        }
+    }
+
+    /// A route absent from the OpenAPI doc still serves, so nothing else
+    /// would notice it missing. Unversioned routes sit at the site root,
+    /// outside the API.
+    #[test]
+    fn every_api_route_is_documented() {
+        let documented: HashSet<String> = all_doc_paths().into_iter().collect();
+        for route in registered()
+            .into_iter()
+            .filter(|route| route.version.is_some())
+        {
+            assert!(
+                documented.contains(route.path),
+                "{} ({}) is missing from the OpenAPI doc",
+                route.name,
+                route.path
+            );
+        }
+    }
 
     fn all_doc_paths() -> Vec<String> {
         let states = RouterStates::default()
             .with(Services::default())
             .with(ExtendedServices::default());
-        let mut paths: Vec<String> = [
-            Mount::Unauthenticated,
-            Mount::Global,
-            Mount::Rbac,
-            Mount::Simple,
-            Mount::Project,
-            Mount::Internal,
-            Mount::Root,
-        ]
-        .into_iter()
-        .flat_map(|m| {
-            let (_, api) = mount_router(m, &states).split_for_parts();
-            api.paths.paths.keys().cloned().collect::<Vec<_>>()
-        })
-        .collect();
+        let mut paths: Vec<String> = all_positions()
+            .into_iter()
+            .flat_map(|p| {
+                let (_, api) = mount_router(p, &states).split_for_parts();
+                api.paths.paths.keys().cloned().collect::<Vec<_>>()
+            })
+            .collect();
         paths.sort();
+        paths.dedup();
         paths
+    }
+
+    fn flat(mode: SecurityMode, states: &RouterStates) -> (Router, utoipa::openapi::OpenApi) {
+        let position = Position {
+            server: Listener::Public,
+            version: Some(Version::V1),
+            scope: Scope::Flat,
+            mode,
+            class: AuthClass::Bearer,
+        };
+        let (router, openapi) = mount_router(position, states).split_for_parts();
+        let context = RequestContext::with(AccessTokenId::default(), UserId::admin());
+        (router.layer(Extension(context)), openapi)
+    }
+
+    async fn get_status(router: Router, uri: &str) -> StatusCode {
+        router
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri(uri)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+    }
+
+    /// The inactive mode's routes are absent (404, not 403) and out of the
+    /// OpenAPI doc.
+    #[td_test::test(db)]
+    async fn test_each_mode_exposes_only_its_own_routes(db: TdPool) {
+        let states = RouterStates::default()
+            .with(Services::with_defaults(db))
+            .with(ExtendedServices::default());
+
+        let (router, openapi) = flat(SecurityMode::Simple, &states);
+        assert!(!openapi.paths.paths.contains_key(LIST_ROLE_PATH));
+        assert!(openapi.paths.paths.contains_key(LIST_BY_USER_PATH));
+        assert_eq!(
+            get_status(router.clone(), LIST_ROLE_PATH).await,
+            StatusCode::NOT_FOUND
+        );
+        assert_ne!(
+            get_status(router, LIST_BY_USER_PATH).await,
+            StatusCode::NOT_FOUND
+        );
+
+        let (router, openapi) = flat(SecurityMode::Rbac, &states);
+        assert!(openapi.paths.paths.contains_key(LIST_ROLE_PATH));
+        assert!(!openapi.paths.paths.contains_key(LIST_BY_USER_PATH));
+        assert_ne!(
+            get_status(router.clone(), LIST_ROLE_PATH).await,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            get_status(router, LIST_BY_USER_PATH).await,
+            StatusCode::NOT_FOUND
+        );
     }
 
     /// Route names double as OpenAPI operation ids; a duplicate breaks
@@ -70,112 +238,115 @@ mod tests {
         }
     }
 
-    /// Every route in this crate reaches the registry with its mount — the
+    /// Every route in this crate reaches the registry at its placement — the
     /// canary against linker dead-code elimination.
     #[test]
     fn expected_routes_registered() {
         let expected = [
-            (Mount::Unauthenticated, "cert_download"),
-            (Mount::Unauthenticated, "login"),
-            (Mount::Unauthenticated, "password_change"),
-            (Mount::Unauthenticated, "ping"),
-            (Mount::Global, "cancel_execution"),
-            (Mount::Global, "cancel_transaction"),
-            (Mount::Global, "create_project"),
-            (Mount::Global, "create_user"),
-            (Mount::Global, "delete_project"),
-            (Mount::Global, "delete_user"),
-            (Mount::Global, "details"),
-            (Mount::Global, "download_bundle"),
-            (Mount::Global, "get_inflight_global"),
-            (Mount::Global, "get_metrics_global"),
-            (Mount::Global, "get_project"),
-            (Mount::Global, "get_resource"),
-            (Mount::Global, "get_snapshot_global"),
-            (Mount::Global, "get_user"),
-            (Mount::Global, "info"),
-            (Mount::Global, "list_by_function_version"),
-            (Mount::Global, "list_by_table_data_version"),
-            (Mount::Global, "list_collections"),
-            (Mount::Global, "list_function_runs"),
-            (Mount::Global, "list_projects"),
-            (Mount::Global, "list_transactions"),
-            (Mount::Global, "list_users"),
-            (Mount::Global, "list_workers"),
-            (Mount::Global, "lists"),
-            (Mount::Global, "logout"),
-            (Mount::Global, "logs"),
-            (Mount::Global, "logs_tail"),
-            (Mount::Global, "read_execution"),
-            (Mount::Global, "recover_execution"),
-            (Mount::Global, "recover_transaction"),
-            (Mount::Global, "refresh"),
-            (Mount::Global, "replay"),
-            (Mount::Global, "status"),
-            (Mount::Global, "update_project"),
-            (Mount::Global, "update_user"),
-            (Mount::Global, "user_info"),
-            (Mount::Rbac, "create_permission"),
-            (Mount::Rbac, "create_role"),
-            (Mount::Rbac, "create_user_role"),
-            (Mount::Rbac, "delete_permission"),
-            (Mount::Rbac, "delete_role"),
-            (Mount::Rbac, "delete_user_role"),
-            (Mount::Rbac, "list_permissions"),
-            (Mount::Rbac, "list_role"),
-            (Mount::Rbac, "list_user_roles"),
-            (Mount::Rbac, "read_role"),
-            (Mount::Rbac, "read_user_role"),
-            (Mount::Rbac, "update_role"),
-            (Mount::Simple, "grant"),
-            (Mount::Simple, "list_by_project"),
-            (Mount::Simple, "list_by_user"),
-            (Mount::Simple, "revoke"),
-            (Mount::Project, "create_collection"),
-            (Mount::Project, "create_group"),
-            (Mount::Project, "delete_collection"),
-            (Mount::Project, "delete_function"),
-            (Mount::Project, "delete_group"),
-            (Mount::Project, "delete_table"),
-            (Mount::Project, "download"),
-            (Mount::Project, "enable"),
-            (Mount::Project, "execute"),
-            (Mount::Project, "get_collection"),
-            (Mount::Project, "get_collection_connection"),
-            (Mount::Project, "get_inflight"),
-            (Mount::Project, "get_metrics"),
-            (Mount::Project, "get_snapshot"),
-            (Mount::Project, "graph"),
-            (Mount::Project, "history"),
-            (Mount::Project, "list_data_versions"),
-            (Mount::Project, "list_functions"),
-            (Mount::Project, "list_functions_by_collection"),
-            (Mount::Project, "list_group"),
-            (Mount::Project, "list_patches"),
-            (Mount::Project, "list_tables"),
-            (Mount::Project, "list_tables_by_collection"),
-            (Mount::Project, "patch"),
-            (Mount::Project, "raw_data"),
-            (Mount::Project, "read_function"),
-            (Mount::Project, "read_group"),
-            (Mount::Project, "read_run"),
-            (Mount::Project, "register"),
-            (Mount::Project, "sample"),
-            (Mount::Project, "schema"),
-            (Mount::Project, "synchrotron"),
-            (Mount::Project, "update_collection"),
-            (Mount::Project, "update_function"),
-            (Mount::Project, "update_group"),
-            (Mount::Project, "upload"),
-            (Mount::Project, "upsert_collection_connection"),
-            (Mount::Internal, "download_state"),
-            (Mount::Internal, "function_run_callback"),
-            (Mount::Internal, "function_version_execute"),
-            (Mount::Internal, "function_version_execution_status"),
-            (Mount::Internal, "worker_callback"),
-            (Mount::Internal, "worker_message"),
+            (FLAT, "cert_download"),
+            (FLAT, "login"),
+            (FLAT, "password_change"),
+            (FLAT, "ping"),
+            (FLAT, "cancel_execution"),
+            (FLAT, "cancel_transaction"),
+            (FLAT, "create_project"),
+            (FLAT, "create_user"),
+            (FLAT, "delete_project"),
+            (FLAT, "delete_user"),
+            (FLAT, "details"),
+            (FLAT, "download_bundle"),
+            (FLAT, "get_inflight_global"),
+            (FLAT, "get_metrics_global"),
+            (FLAT, "get_project"),
+            (FLAT, "get_resource"),
+            (FLAT, "get_snapshot_global"),
+            (FLAT, "get_user"),
+            (FLAT, "info"),
+            (FLAT, "list_by_function_version"),
+            (FLAT, "list_by_table_data_version"),
+            (FLAT, "list_collections"),
+            (FLAT, "list_function_runs"),
+            (FLAT, "list_projects"),
+            (FLAT, "list_transactions"),
+            (FLAT, "list_users"),
+            (FLAT, "list_workers"),
+            (FLAT, "lists"),
+            (FLAT, "logout"),
+            (FLAT, "logs"),
+            (FLAT, "logs_tail"),
+            (FLAT, "read_execution"),
+            (FLAT, "recover_execution"),
+            (FLAT, "recover_transaction"),
+            (FLAT, "refresh"),
+            (FLAT, "replay"),
+            (FLAT, "status"),
+            (FLAT, "update_project"),
+            (FLAT, "update_user"),
+            (FLAT, "user_info"),
+            (RBAC, "create_permission"),
+            (RBAC, "create_role"),
+            (RBAC, "create_user_role"),
+            (RBAC, "delete_permission"),
+            (RBAC, "delete_role"),
+            (RBAC, "delete_user_role"),
+            (RBAC, "list_permissions"),
+            (RBAC, "list_role"),
+            (RBAC, "list_user_roles"),
+            (RBAC, "read_role"),
+            (RBAC, "read_user_role"),
+            (RBAC, "update_role"),
+            (SIMPLE, "grant"),
+            (SIMPLE, "list_by_project"),
+            (SIMPLE, "list_by_user"),
+            (SIMPLE, "revoke"),
+            (PROJECT, "create_collection"),
+            (PROJECT, "create_group"),
+            (PROJECT, "delete_collection"),
+            (PROJECT, "delete_function"),
+            (PROJECT, "delete_group"),
+            (PROJECT, "delete_table"),
+            (PROJECT, "download"),
+            (PROJECT, "enable"),
+            (PROJECT, "execute"),
+            (PROJECT, "get_collection"),
+            (PROJECT, "get_collection_connection"),
+            (PROJECT, "get_inflight"),
+            (PROJECT, "get_metrics"),
+            (PROJECT, "get_snapshot"),
+            (PROJECT, "graph"),
+            (PROJECT, "history"),
+            (PROJECT, "list_data_versions"),
+            (PROJECT, "list_functions"),
+            (PROJECT, "list_functions_by_collection"),
+            (PROJECT, "list_group"),
+            (PROJECT, "list_patches"),
+            (PROJECT, "list_tables"),
+            (PROJECT, "list_tables_by_collection"),
+            (PROJECT, "patch"),
+            (PROJECT, "raw_data"),
+            (PROJECT, "read_function"),
+            (PROJECT, "read_group"),
+            (PROJECT, "read_run"),
+            (PROJECT, "register"),
+            (PROJECT, "sample"),
+            (PROJECT, "schema"),
+            (PROJECT, "synchrotron"),
+            (PROJECT, "update_collection"),
+            (PROJECT, "update_function"),
+            (PROJECT, "update_group"),
+            (PROJECT, "upload"),
+            (PROJECT, "upsert_collection_connection"),
+            (INTERNAL, "download_state"),
+            (INTERNAL, "function_run_callback"),
+            (INTERNAL, "function_version_execute"),
+            (INTERNAL, "function_version_execution_status"),
+            (INTERNAL, "worker_callback"),
+            (INTERNAL, "worker_message"),
         ];
-        let actual: HashSet<_> = registered().iter().map(|r| (r.mount, r.name)).collect();
+        let actual: HashSet<_> = registered()
+            .iter()
+            .map(|r| (placement(r), r.name))
+            .collect();
         for entry in expected {
             assert!(actual.contains(&entry), "missing registration: {entry:?}");
         }
@@ -193,16 +364,8 @@ mod tests {
             .with(Services::default())
             .with(ExtendedServices::default());
         let mut checked = 0;
-        for mount in [
-            Mount::Unauthenticated,
-            Mount::Global,
-            Mount::Rbac,
-            Mount::Simple,
-            Mount::Project,
-            Mount::Internal,
-            Mount::Root,
-        ] {
-            let (_, api) = mount_router(mount, &states).split_for_parts();
+        for position in all_positions() {
+            let (_, api) = mount_router(position, &states).split_for_parts();
             for (path, item) in api.paths.paths.iter() {
                 // `{*path}` is axum's greedy wildcard; the parameter it
                 // documents is named without the star.
@@ -256,6 +419,9 @@ mod tests {
             "/auth/logout",
             "/auth/password_change",
             "/auth/refresh",
+            "/auth/service-token",
+            "/auth/service-tokens",
+            "/auth/service-tokens/{slot}",
             "/collections",
             "/executions",
             "/executions/{execution}",
@@ -274,6 +440,7 @@ mod tests {
             "/internal/workers/{worker}/message",
             "/logical-function-runs/{logical_function_run}/replay",
             "/metrics",
+            "/ping",
             "/permission-grants",
             "/permission-grants/by-project",
             "/permission-grants/by-user",
@@ -324,6 +491,8 @@ mod tests {
             "/transactions/{transaction}/recover",
             "/users",
             "/users/{user}",
+            "/users/{user}/service-tokens",
+            "/users/{user}/service-tokens/{slot}",
             "/workers",
             "/workers/{worker}/logs",
             "/workers/{worker}/logs/tail",
@@ -337,7 +506,7 @@ mod tests {
         for path in &actual {
             assert!(
                 expected_set.contains(path.as_str())
-                    || te_apiserver::DOC_PATH_PREFIXES
+                    || te_apiserver::EDITION_PATH_PREFIXES
                         .iter()
                         .any(|prefix| path.starts_with(prefix)),
                 "undeclared doc path: {path}"

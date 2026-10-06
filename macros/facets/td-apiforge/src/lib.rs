@@ -8,7 +8,8 @@ use proc_macro::TokenStream;
 use crate::attributes::utoipa_path;
 
 mod attributes;
-mod mount;
+mod auth;
+mod placement;
 mod word;
 
 #[proc_macro_attribute]

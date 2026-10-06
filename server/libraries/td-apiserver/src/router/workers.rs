@@ -19,7 +19,8 @@ use td_services::Services;
 const WORKERS_TAG: &str = "Workers";
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/workers",
     tag(WORKERS_TAG),
@@ -36,7 +37,8 @@ pub async fn list_workers(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/workers/{worker}/logs",
     tag(WORKERS_TAG),
@@ -56,7 +58,8 @@ pub async fn logs(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/workers/{worker}/logs/tail",
     tag(WORKERS_TAG),

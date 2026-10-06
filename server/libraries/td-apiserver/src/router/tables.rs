@@ -23,7 +23,9 @@ use td_services::Services;
 const TABLES_TAG: &str = "Tables";
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(delete),
     path = "/projects/{project}/collections/{collection}/tables/{table}",
     tag(TABLES_TAG),
@@ -42,7 +44,9 @@ pub async fn delete_table(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/download",
     tag(TABLES_TAG),
@@ -66,7 +70,9 @@ pub async fn download(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/tables",
     tag(TABLES_TAG),
@@ -84,7 +90,9 @@ pub async fn list_tables(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables",
     tag(TABLES_TAG),
@@ -108,7 +116,9 @@ pub async fn list_tables_by_collection(
 // historical point in time for the LTDV row filter. Committed-only
 // filtering is via the standard `?filter=status:…` mechanism.
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/data-versions",
     tag(TABLES_TAG),
@@ -131,7 +141,9 @@ pub async fn list_data_versions(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/sample",
     tag(TABLES_TAG),
@@ -171,7 +183,9 @@ pub async fn sample(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/schema",
     tag(TABLES_TAG),
@@ -196,7 +210,9 @@ pub async fn schema(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/flow",
     tag(TABLES_TAG),

@@ -59,6 +59,7 @@ td-objects = { workspace = true }
 # External dependencies
 
 axum = { workspace = true, features = ["macros"] }
+clap = { workspace = true }
 http = { workspace = true }
 inventory = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

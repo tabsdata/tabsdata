@@ -13,6 +13,12 @@ use std::fmt::Debug;
 use td_error::{TdError, td_error};
 use tracing::{error, trace};
 
+/// Documents a raw or multipart upload body in the OpenAPI schema; emitted by
+/// `#[apiserver_path]` for handlers taking `Request` or `Multipart`.
+#[allow(dead_code)]
+#[derive(utoipa::ToSchema)]
+pub struct FileUpload(Vec<u8>);
+
 #[td_error]
 pub enum JsonError {
     #[error("Error deserializing JSON request: {0}")]

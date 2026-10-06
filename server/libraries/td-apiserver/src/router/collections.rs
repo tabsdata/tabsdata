@@ -26,7 +26,8 @@ const COLLECTIONS_TAG: &str = "Collections";
 // Spans every project the caller can view; narrow with the `project`
 // list filter.
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/collections",
     tag(COLLECTIONS_TAG),
@@ -43,7 +44,9 @@ pub async fn list_collections(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}",
     tag(COLLECTIONS_TAG),
@@ -61,7 +64,9 @@ pub async fn get_collection(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/collections",
     tag(COLLECTIONS_TAG),
@@ -79,7 +84,9 @@ pub async fn create_collection(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/collections/{collection}",
     tag(COLLECTIONS_TAG),
@@ -98,7 +105,9 @@ pub async fn update_collection(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(delete),
     path = "/projects/{project}/collections/{collection}",
     tag(COLLECTIONS_TAG),
@@ -123,7 +132,9 @@ pub async fn delete_collection(
 // connection id. POST updates an existing connection; GET reads back names
 // only. Both require manage_project ("CRUD sources and destinations").
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/collections/{collection}/connection",
     tag(COLLECTIONS_TAG),
@@ -142,7 +153,9 @@ pub async fn upsert_collection_connection(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/connection",
     tag(COLLECTIONS_TAG),

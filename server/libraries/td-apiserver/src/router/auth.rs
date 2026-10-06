@@ -17,7 +17,8 @@ use td_objects::dxo::user::UserInfo;
 use td_services::Services;
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(post),
     path = "/auth/logout",
     tag(AUTH_TAG),
@@ -32,7 +33,8 @@ pub async fn logout(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(post),
     path = "/auth/refresh",
     tag(AUTH_TAG),
@@ -49,7 +51,8 @@ pub async fn refresh(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/auth/info",
     tag(AUTH_TAG),
@@ -64,7 +67,8 @@ pub async fn user_info(
 }
 
 #[apiserver_path(
-    mount(unauthenticated),
+    version(v1),
+    auth(none),
     method(post),
     path = "/auth/login",
     tag(AUTH_TAG),
@@ -79,7 +83,8 @@ pub async fn login(
 }
 
 #[apiserver_path(
-    mount(unauthenticated),
+    version(v1),
+    auth(none),
     method(post),
     path = "/auth/password_change",
     tag(AUTH_TAG),
@@ -94,7 +99,8 @@ pub async fn password_change(
 }
 
 #[apiserver_path(
-    mount(unauthenticated),
+    version(v1),
+    auth(none),
     method(get),
     path = "/ssl-cert",
     tag(AUTH_TAG),

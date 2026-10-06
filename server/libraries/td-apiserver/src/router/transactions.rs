@@ -22,7 +22,8 @@ use td_services::Services;
 const TRANSACTIONS_TAG: &str = "Transactions";
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(post),
     path = "/transactions/{transaction}/cancel",
     tag(TRANSACTIONS_TAG),
@@ -39,7 +40,8 @@ pub async fn cancel_transaction(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/transactions",
     tag(TRANSACTIONS_TAG),
@@ -56,7 +58,8 @@ pub async fn list_transactions(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(post),
     path = "/transactions/{transaction}/recover",
     tag(TRANSACTIONS_TAG),
@@ -73,7 +76,9 @@ pub async fn recover_transaction(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/synchrotron",
     tag(TRANSACTIONS_TAG),

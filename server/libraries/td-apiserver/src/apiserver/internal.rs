@@ -13,7 +13,10 @@ use axum::middleware::from_fn_with_state;
 use http::StatusCode;
 use std::error::Error;
 use std::time::Duration;
-use ta_apiserver::router::{Mount, RouterStates, mount_router, require_registered};
+use ta_apiserver::router::{
+    AuthClass, Position, RouterStates, Scope, Server as Listener, Version, mount_router,
+    require_registered,
+};
 use ta_apiserver::status::error_status::ErrorStatus;
 use td_common::server_runner::ServerRunnable;
 use td_error::{ApiError, api_error};
@@ -61,7 +64,16 @@ impl InternalServer {
             let states = RouterStates::default()
                 .with(context.services.clone())
                 .with(context.extended_services.clone());
-            let internal = mount_router(Mount::Internal, &states);
+            let internal = mount_router(
+                Position {
+                    server: Listener::Internal,
+                    version: Some(Version::V1),
+                    scope: Scope::Flat,
+                    mode: context.config.security_mode,
+                    class: AuthClass::Internal,
+                },
+                &states,
+            );
             let router = utoipa_axum::router::OpenApiRouter::default().merge(
                 internal
                     // Internal authorization gate: validate the per-request

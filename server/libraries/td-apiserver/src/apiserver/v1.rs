@@ -37,12 +37,14 @@ use crate::layers::authorization::authorization_layer;
 use crate::layers::compression::CompressionService;
 use crate::layers::cors::CorsService;
 use crate::layers::project_resolver::project_resolver_layer;
-use crate::layers::security_mode::mode_authz_router;
 use crate::layers::tracing::TraceService;
 use axum::middleware::from_fn_with_state;
 use http::StatusCode;
 use std::time::Duration;
-use ta_apiserver::router::{Mount, RouterStates, mount_router, require_registered};
+use ta_apiserver::router::{
+    AuthClass, Position, RouterStates, Scope, Server as Listener, Version, mount_router,
+    require_registered,
+};
 use ta_apiserver::status::error_status::ErrorStatus;
 use td_error::{ApiError, api_error};
 use tower_http::timeout::TimeoutLayer;
@@ -64,48 +66,34 @@ impl ApiServerV1 {
             let states = RouterStates::default()
                 .with(context.services.clone())
                 .with(context.extended_services.clone());
-            let mount = |m: Mount| mount_router(m, &states);
+            let mode = context.config.security_mode;
+            let at = |scope: Scope, class: AuthClass| {
+                mount_router(
+                    Position {
+                        server: Listener::Public,
+                        version: Some(Version::V1),
+                        scope,
+                        mode,
+                        class,
+                    },
+                    &states,
+                )
+            };
 
             let router = utoipa_axum::router::OpenApiRouter::default()
-                .merge(mount(Mount::Unauthenticated))
-                // secure endpoints — split into:
-                //   - global subtree: routes with no `{project}` segment —
-                //     system-scoped routes and the id-keyed routes whose
-                //     services resolve the owning project from the row itself.
-                //   - project subtree: routes under `/projects/{project}/...`,
-                //     where the project_resolver_layer turns the URL segment
-                //     into a real ProjectId on the RequestContext; the
-                //     service's DbPool<InProject> handle then sets the RLS GUC.
-                // Both subtrees sit behind the shared authorization layer.
+                .merge(at(Scope::Flat, AuthClass::Open))
                 .merge({
-                    let global = mount(Mount::Global)
-                        // Mount only the active security mode's authz surface;
-                        // the other mode's endpoints are dropped — absent from
-                        // routing AND the OpenAPI doc. So `simple` mode exposes
-                        // only `Permissions (Simple)` (Roles / Permissions /
-                        // User Roles are hidden), and `rbac` mode the reverse.
-                        .merge(mode_authz_router(
-                            context.config.security_mode,
-                            mount(Mount::Rbac),
-                            mount(Mount::Simple),
-                        ));
-
-                    let project = mount(Mount::Project)
-                        // resolver runs after auth, before any service stack;
-                        // 404s unknown projects before any RLS-scoped table
-                        // is touched.
-                        .layer(from_fn_with_state(
-                            context.services.clone(),
-                            project_resolver_layer,
-                        ));
-
-                    global
-                        .merge(project)
-                        // authorization layer wraps both subtrees.
-                        .layer(from_fn_with_state(
-                            context.services.clone(),
-                            authorization_layer,
-                        ))
+                    let flat = at(Scope::Flat, AuthClass::Bearer);
+                    // The resolver runs after auth and 404s unknown projects
+                    // before any RLS-scoped table is touched.
+                    let project = at(Scope::Project, AuthClass::Bearer).layer(from_fn_with_state(
+                        context.services.clone(),
+                        project_resolver_layer,
+                    ));
+                    flat.merge(project).layer(from_fn_with_state(
+                        context.services.clone(),
+                        authorization_layer,
+                    ))
                 });
 
             let router = utoipa_axum::router::OpenApiRouter::default()
@@ -114,8 +102,16 @@ impl ApiServerV1 {
                 .fallback(api_not_found_handler);
             let router = utoipa_axum::router::OpenApiRouter::default().nest(BASE_API_URL, router);
 
-            // Root-mounted routers sit outside the `/api` nests.
-            let router = router.merge(mount(Mount::Root));
+            let router = router.merge(mount_router(
+                Position {
+                    server: Listener::Public,
+                    version: None,
+                    scope: Scope::Flat,
+                    mode,
+                    class: AuthClass::Open,
+                },
+                &states,
+            ));
 
             #[allow(unused_mut, unused_variables)]
             let (mut router, openapi) = router.split_for_parts();
@@ -172,18 +168,27 @@ mod tests {
     use crate::router::collections::LIST_COLLECTIONS_PATH;
     use crate::router::server_status::STATUS_PATH;
     use crate::router::users::LIST_USERS_PATH;
+    use ta_apiserver::router::SecurityMode;
     use td_services::Services;
     use te_services::ExtendedServices;
 
-    /// Folding the registry's Global mount yields the routes AND their
-    /// utoipa docs, exactly as the hand merge chain did.
+    /// Folding a registry position yields the routes AND their utoipa docs.
     #[test]
-    fn global_mount_carries_routes_and_docs() {
+    fn flat_position_carries_routes_and_docs() {
         let states = RouterStates::default()
             .with(Services::default())
             .with(ExtendedServices::default());
-        let global = mount_router(Mount::Global, &states);
-        let (_, openapi) = global.split_for_parts();
+        let flat = mount_router(
+            Position {
+                server: Listener::Public,
+                version: Some(Version::V1),
+                scope: Scope::Flat,
+                mode: SecurityMode::default(),
+                class: AuthClass::Bearer,
+            },
+            &states,
+        );
+        let (_, openapi) = flat.split_for_parts();
         for path in [LIST_USERS_PATH, LIST_COLLECTIONS_PATH, STATUS_PATH] {
             assert!(
                 openapi.paths.paths.contains_key(path),

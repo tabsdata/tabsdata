@@ -30,7 +30,9 @@ use td_services::Services;
 const FUNCTIONS_TAG: &str = "Functions";
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/collections/{collection}/functions/{function}/execute",
     tag(FUNCTIONS_TAG),
@@ -52,7 +54,9 @@ pub async fn execute(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(delete),
     path = "/projects/{project}/collections/{collection}/functions/{function}",
     tag(FUNCTIONS_TAG),
@@ -73,7 +77,9 @@ pub async fn delete_function(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/functions/{function}/history",
     tag(FUNCTIONS_TAG),
@@ -96,7 +102,9 @@ pub async fn history(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/functions",
     tag(FUNCTIONS_TAG),
@@ -114,7 +122,9 @@ pub async fn list_functions(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/functions",
     tag(FUNCTIONS_TAG),
@@ -133,7 +143,9 @@ pub async fn list_functions_by_collection(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/functions/{function}",
     tag(FUNCTIONS_TAG),
@@ -155,7 +167,9 @@ pub async fn read_function(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/collections/{collection}/functions",
     tag(FUNCTIONS_TAG),
@@ -174,7 +188,9 @@ pub async fn register(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/collections/{collection}/functions/{function}",
     tag(FUNCTIONS_TAG),
@@ -196,7 +212,9 @@ pub async fn update_function(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/collections/{collection}/functions/{function}/enable",
     tag(FUNCTIONS_TAG),
@@ -218,7 +236,9 @@ pub async fn enable(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/collections/{collection}/functions/{function}/patch",
     tag(FUNCTIONS_TAG),
@@ -240,7 +260,9 @@ pub async fn patch(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/collections/{collection}/functions/{function}/patches",
     tag(FUNCTIONS_TAG),
@@ -262,14 +284,10 @@ pub async fn list_patches(
     Ok(ListStatus::OK(response))
 }
 
-/// This struct is just used to document FileUpload in the OpenAPI schema.
-/// It allows for a single file upload, of any kind, in binary format.
-#[allow(dead_code)]
-#[derive(utoipa::ToSchema)]
-pub struct FileUpload(Vec<u8>);
-
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/collections/{collection}/function-bundle-upload",
     tag(FUNCTIONS_TAG),
@@ -294,7 +312,8 @@ pub async fn upload(
 // the immutable artifact of a specific version. A version whose function has
 // been deleted is not exposed.
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/function-versions/{function_version}/bundle",
     tag(FUNCTIONS_TAG),

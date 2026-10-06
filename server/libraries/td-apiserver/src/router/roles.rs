@@ -18,7 +18,9 @@ use td_services::Services;
 const ROLES_TAG: &str = "Roles";
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(post),
     path = "/roles",
     tag(ROLES_TAG),
@@ -35,7 +37,9 @@ pub async fn create_role(
 }
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(delete),
     path = "/roles/{role}",
     tag(ROLES_TAG),
@@ -52,7 +56,9 @@ pub async fn delete_role(
 }
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(get),
     path = "/roles",
     tag(ROLES_TAG),
@@ -69,7 +75,9 @@ pub async fn list_role(
 }
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(get),
     path = "/roles/{role}",
     tag(ROLES_TAG),
@@ -86,7 +94,9 @@ pub async fn read_role(
 }
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(post),
     path = "/roles/{role}",
     tag(ROLES_TAG),

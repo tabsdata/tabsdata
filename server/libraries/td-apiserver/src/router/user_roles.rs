@@ -20,7 +20,9 @@ use td_services::Services;
 const USER_ROLES_TAG: &str = "User Roles";
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(post),
     path = "/roles/{role}/users",
     tag(USER_ROLES_TAG),
@@ -38,7 +40,9 @@ pub async fn create_user_role(
 }
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(delete),
     path = "/roles/{role}/users/{user}",
     tag(USER_ROLES_TAG),
@@ -56,7 +60,9 @@ pub async fn delete_user_role(
 }
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(get),
     path = "/roles/{role}/users",
     tag(USER_ROLES_TAG),
@@ -74,7 +80,9 @@ pub async fn list_user_roles(
 }
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(get),
     path = "/roles/{role}/users/{user}",
     tag(USER_ROLES_TAG),

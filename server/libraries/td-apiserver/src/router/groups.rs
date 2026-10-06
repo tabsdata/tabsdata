@@ -20,7 +20,9 @@ use td_services::Services;
 const GROUPS_TAG: &str = "Groups";
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/groups",
     tag(GROUPS_TAG),
@@ -38,7 +40,9 @@ pub async fn create_group(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(delete),
     path = "/projects/{project}/groups/{group}",
     tag(GROUPS_TAG),
@@ -56,7 +60,9 @@ pub async fn delete_group(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/groups",
     tag(GROUPS_TAG),
@@ -74,7 +80,9 @@ pub async fn list_group(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(get),
     path = "/projects/{project}/groups/{group}",
     tag(GROUPS_TAG),
@@ -92,7 +100,9 @@ pub async fn read_group(
 }
 
 #[apiserver_path(
-    mount(project),
+    version(v1),
+    scope(project),
+    auth(session),
     method(post),
     path = "/projects/{project}/groups/{group}",
     tag(GROUPS_TAG),

@@ -57,7 +57,8 @@ fn not_found() -> ErrorStatus {
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/resources/{*path}",
     tag(SYSTEM_TAG),

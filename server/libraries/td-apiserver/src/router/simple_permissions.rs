@@ -26,7 +26,9 @@ use td_services::Services;
 const SIMPLE_PERMISSIONS_TAG: &str = "Permissions (Simple)";
 
 #[apiserver_path(
-    mount(simple),
+    version(v1),
+    security_mode(simple),
+    auth(session),
     method(post),
     path = "/permission-grants",
     tag(SIMPLE_PERMISSIONS_TAG),
@@ -43,7 +45,9 @@ pub async fn grant(
 }
 
 #[apiserver_path(
-    mount(simple),
+    version(v1),
+    security_mode(simple),
+    auth(session),
     method(delete),
     path = "/permission-grants",
     tag(SIMPLE_PERMISSIONS_TAG),
@@ -61,7 +65,9 @@ pub async fn revoke(
 
 // Two list shapes (different response types), so two routes.
 #[apiserver_path(
-    mount(simple),
+    version(v1),
+    security_mode(simple),
+    auth(session),
     method(get),
     path = "/permission-grants/by-user",
     tag(SIMPLE_PERMISSIONS_TAG),
@@ -78,7 +84,9 @@ pub async fn list_by_user(
 }
 
 #[apiserver_path(
-    mount(simple),
+    version(v1),
+    security_mode(simple),
+    auth(session),
     method(get),
     path = "/permission-grants/by-project",
     tag(SIMPLE_PERMISSIONS_TAG),

@@ -6,20 +6,28 @@ use proc_macro::TokenStream;
 
 use darling::FromMeta;
 use darling::ast::NestedMeta;
+use darling::util::Flag;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{FnArg, GenericArgument, ItemFn, LitStr, PathArguments, ReturnType, Type};
 
-use crate::mount::Mount;
+use crate::auth::AuthSet;
+use crate::placement::{Method, Placement, Scope, SecurityMode, Version};
 use crate::word::Word;
 
 #[derive(FromMeta)]
 pub struct UtoipaPathArguments {
-    mount: Mount,
+    version: Version,
+    #[darling(default)]
+    scope: Option<Scope>,
+    #[darling(default)]
+    security_mode: Option<SecurityMode>,
+    #[darling(default)]
+    internal: Flag,
     /// The endpoint's one-line description; becomes the fn's doc comment and,
     /// through it, the OpenAPI summary.
     doc: LitStr,
-    method: Word,
+    method: Method,
     path: LitStr,
     tag: Word,
     /// Document the OK response inline with this content type instead of
@@ -27,6 +35,7 @@ pub struct UtoipaPathArguments {
     /// `Vec<u8>` (opaque bytes).
     #[darling(default)]
     content_type: Option<String>,
+    auth: AuthSet,
 }
 
 /// Utoipa path attribute macro generator. It takes the Axum fn as an argument, as well as
@@ -42,13 +51,23 @@ pub fn utoipa_path(args: TokenStream, item: TokenStream) -> TokenStream {
 fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<TokenStream2> {
     let nested = NestedMeta::parse_meta_list(args.into())?;
     let UtoipaPathArguments {
-        mount,
+        version,
+        scope,
+        security_mode,
+        internal,
         doc,
         method,
         path,
         tag,
         content_type,
+        auth,
     } = UtoipaPathArguments::from_list(&nested)?;
+    let placement = Placement {
+        version,
+        scope,
+        security_mode,
+        internal,
+    };
 
     let input: ItemFn = syn::parse(item)?;
 
@@ -75,12 +94,12 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
         .with_span(&input.sig.ident));
     }
 
-    // Extract the response types from the Result type in the function signature
-    let (ok_response, err_response) = extract_result_types(&input)?;
+    let responses = extract_result_types(&input)?;
 
     // Generate the `#[utoipa::path(...)]` attribute
+    let verb = method.utoipa_verb();
     let mut utoipa_attr = quote! {
-        #method,
+        #verb,
         path = #path,
         tag = #tag,
     };
@@ -98,6 +117,7 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
         .with_span(offender));
     }
     let project_scoped = has_project_extractor(&input);
+    placement.validate(&auth, &path.value(), project_scoped)?;
 
     let mut params = quote! {};
 
@@ -138,30 +158,42 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
     if has_multipart {
         utoipa_attr = quote! {
             #utoipa_attr
-            request_body(content_type = "multipart/form-data", content = FileUpload),
+            request_body(content_type = "multipart/form-data", content = ::ta_apiserver::status::extractors::FileUpload),
         };
     }
 
     if has_request {
         utoipa_attr = quote! {
             #utoipa_attr
-            request_body(content_type = "application/octet-stream", content = FileUpload),
+            request_body(content_type = "application/octet-stream", content = ::ta_apiserver::status::extractors::FileUpload),
         };
     }
 
-    if let Some(ct) = content_type.as_deref() {
-        utoipa_attr = quote! {
-            #utoipa_attr
-            responses(
-                (status = 200, description = "OK", body = Vec<u8>, content_type = #ct),
-                #err_response
-            ),
-        };
-    } else {
-        utoipa_attr = quote! {
-            #utoipa_attr
-            responses(#ok_response, #err_response),
-        };
+    let mut schema_components = Vec::new();
+    match (&responses, content_type.as_deref()) {
+        (Some((ok_response, err_response)), Some(ct)) => {
+            schema_components.extend([ok_response.clone(), err_response.clone()]);
+            utoipa_attr = quote! {
+                #utoipa_attr
+                responses(
+                    (status = 200, description = "OK", body = Vec<u8>, content_type = #ct),
+                    #err_response
+                ),
+            };
+        }
+        (Some((ok_response, err_response)), None) => {
+            schema_components.extend([ok_response.clone(), err_response.clone()]);
+            utoipa_attr = quote! {
+                #utoipa_attr
+                responses(#ok_response, #err_response),
+            };
+        }
+        (None, _) => {
+            utoipa_attr = quote! {
+                #utoipa_attr
+                responses((status = 200, description = "Response forwarded as produced")),
+            };
+        }
     }
 
     utoipa_attr = quote! {
@@ -193,10 +225,17 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
     };
     let fn_ident = &input.sig.ident;
     let fn_name = fn_ident.to_string();
+    let server = placement.server();
+    let version = placement.version();
+    let scope = placement.scope();
+    let modes = placement.modes();
     let path_const = format_ident!("{}_PATH", fn_name.to_uppercase());
     let api_ident = format_ident!("__api_{}", fn_ident);
     let build_ident = format_ident!("__registry_build_{}", fn_ident);
-    let mut schema_components = vec![ok_response.clone(), err_response.clone()];
+    let path_ident = format_ident!("__path_{}", fn_ident);
+    let operation_ident = format_ident!("__registry_operation_{}", fn_ident);
+    let components_ident = format_ident!("__registry_components_{}", fn_ident);
+    let routing = method.axum_routing();
     schema_components.extend(query_params.iter().cloned());
     schema_components.extend(path_params.iter().cloned());
 
@@ -217,21 +256,47 @@ fn try_utoipa_path(args: TokenStream, item: TokenStream) -> darling::Result<Toke
         #[openapi(components(schemas( #(#schema_components),* )))]
         struct #api_ident;
 
-        fn #build_ident(
-            states: &::ta_apiserver::router::RouterStates,
-        ) -> utoipa_axum::router::OpenApiRouter {
+        fn #operation_ident() -> utoipa::openapi::path::Operation {
+            let mut operation = <#path_ident as utoipa::Path>::operation();
+            let tags = <#path_ident as utoipa::__dev::Tags>::tags();
+            if !tags.is_empty() {
+                operation
+                    .tags
+                    .get_or_insert_with(Vec::new)
+                    .extend(tags.into_iter().map(String::from));
+            }
+            operation
+        }
+
+        fn #components_ident() -> utoipa::openapi::Components {
+            let mut components = <#api_ident as utoipa::OpenApi>::openapi()
+                .components
+                .unwrap_or_default();
+            let mut schemas = Vec::new();
+            <#path_ident as utoipa::__dev::SchemaReferences>::schemas(&mut schemas);
+            components.schemas.extend(schemas);
+            components
+        }
+
+        fn #build_ident(states: &::ta_apiserver::router::RouterStates) -> axum::Router {
             #state_application
-            utoipa_axum::router::OpenApiRouter::with_openapi(
-                <#api_ident as utoipa::OpenApi>::openapi(),
-            )
-            .routes(utoipa_axum::routes!(#fn_ident))
-            .with_state(state)
+            axum::Router::new()
+                .route(#path, #routing(#fn_ident))
+                .with_state(state)
         }
 
         ::ta_apiserver::router::inventory::submit! {
             ::ta_apiserver::router::RouterRegistration {
                 name: #fn_name,
-                mount: ::ta_apiserver::router::Mount::#mount,
+                server: #server,
+                version: #version,
+                scope: #scope,
+                modes: #modes,
+                method: #method,
+                path: #path,
+                auth: #auth,
+                operation: #operation_ident,
+                components: #components_ident,
                 build: #build_ident,
             }
         }
@@ -332,9 +397,11 @@ fn extract_first_generic_argument(path: &syn::Path) -> Option<Type> {
 }
 
 /// Extracts the Ok and Err response types from the Result type in the function signature.
-pub fn extract_result_types(input: &ItemFn) -> darling::Result<(Type, Type)> {
+/// `Result<Ok, Err>` yields both schemas; a bare `Response` (a proxy that
+/// forwards upstream's answer) yields none.
+pub fn extract_result_types(input: &ItemFn) -> darling::Result<Option<(Type, Type)>> {
     let err = || {
-        darling::Error::custom("apiserver handlers must return `Result<Ok, Err>`")
+        darling::Error::custom("apiserver handlers return `Result<Ok, Err>` or `Response`")
             .with_span(&input.sig)
     };
 
@@ -345,6 +412,12 @@ pub fn extract_result_types(input: &ItemFn) -> darling::Result<(Type, Type)> {
         return Err(err());
     };
     let segment = type_path.path.segments.last().ok_or_else(err)?;
+    if segment.ident == "Response" {
+        return Ok(None);
+    }
+    if segment.ident != "Result" {
+        return Err(err());
+    }
     let PathArguments::AngleBracketed(args) = &segment.arguments else {
         return Err(err());
     };
@@ -354,5 +427,5 @@ pub fn extract_result_types(input: &ItemFn) -> darling::Result<(Type, Type)> {
         return Err(err());
     };
 
-    Ok((ok_response.clone(), err_response.clone()))
+    Ok(Some((ok_response.clone(), err_response.clone())))
 }

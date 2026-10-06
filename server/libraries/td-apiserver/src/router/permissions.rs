@@ -17,7 +17,9 @@ use td_services::Services;
 const PERMISSIONS_TAG: &str = "Permissions";
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(post),
     path = "/roles/{role}/permissions",
     tag(PERMISSIONS_TAG),
@@ -35,7 +37,9 @@ pub async fn create_permission(
 }
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(delete),
     path = "/roles/{role}/permissions/{permission}",
     tag(PERMISSIONS_TAG),
@@ -53,7 +57,9 @@ pub async fn delete_permission(
 }
 
 #[apiserver_path(
-    mount(rbac),
+    version(v1),
+    security_mode(rbac),
+    auth(session),
     method(get),
     path = "/roles/{role}/permissions",
     tag(PERMISSIONS_TAG),

@@ -18,7 +18,8 @@ use td_services::Services;
 const LOGICAL_VERSIONS_TAG: &str = "Logical Versions";
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(post),
     path = "/logical-function-runs/{logical_function_run}/replay",
     tag(LOGICAL_VERSIONS_TAG),

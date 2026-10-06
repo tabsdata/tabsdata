@@ -3,6 +3,9 @@
 //
 
 #[ta_objects::Dto]
+pub struct Pong {}
+
+#[ta_objects::Dto]
 pub struct ApiStatus {
     pub status: HealthStatus,
     pub latency_as_nanos: u128,

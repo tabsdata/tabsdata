@@ -2,14 +2,15 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use clap::{Args, ValueEnum};
+use clap::Args;
 use http::uri::Authority;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::net::{AddrParseError, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
-use strum::{Display, EnumString, ParseError};
+use strum::ParseError;
+use ta_apiserver::router::SecurityMode;
 use ta_services::factory::FieldAccessors;
 use td_bridge::Orchestrator;
 use td_common::jwt::JwtConfig;
@@ -122,42 +123,6 @@ pub struct Config {
     pub security_mode: SecurityMode,
     #[serde(flatten)]
     pub extended_config: ExtendedConfig,
-}
-
-/// The security view the apiserver exposes. See [`Config::security_mode`].
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Serialize,
-    Deserialize,
-    ValueEnum,
-    Display,
-    EnumString,
-    Default,
-)]
-#[serde(rename_all = "lowercase")]
-#[strum(serialize_all = "lowercase")]
-pub enum SecurityMode {
-    /// Simple Security Mode View — flat permissions, `/permission-grants`
-    /// facade available, RBAC management endpoints blocked.
-    #[default]
-    Simple,
-    /// RBAC Mode View — role/permission/user-role management endpoints
-    /// available, `/permission-grants` facade blocked.
-    Rbac,
-}
-
-impl SecurityMode {
-    pub fn is_simple(&self) -> bool {
-        matches!(self, SecurityMode::Simple)
-    }
-
-    pub fn is_rbac(&self) -> bool {
-        matches!(self, SecurityMode::Rbac)
-    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default)]

@@ -23,7 +23,8 @@ use td_services::Services;
 const PROJECTS_TAG: &str = "Projects";
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/projects",
     tag(PROJECTS_TAG),
@@ -40,7 +41,8 @@ pub async fn list_projects(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/projects/{project}",
     tag(PROJECTS_TAG),
@@ -57,7 +59,8 @@ pub async fn get_project(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(post),
     path = "/projects",
     tag(PROJECTS_TAG),
@@ -74,7 +77,8 @@ pub async fn create_project(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(post),
     path = "/projects/{project}",
     tag(PROJECTS_TAG),
@@ -92,7 +96,8 @@ pub async fn update_project(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(delete),
     path = "/projects/{project}",
     tag(PROJECTS_TAG),

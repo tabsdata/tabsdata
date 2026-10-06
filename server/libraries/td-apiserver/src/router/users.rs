@@ -18,7 +18,8 @@ use td_services::Services;
 const USERS_TAG: &str = "Users";
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/users",
     tag(USERS_TAG),
@@ -35,7 +36,8 @@ async fn list_users(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(get),
     path = "/users/{user}",
     tag(USERS_TAG),
@@ -52,7 +54,8 @@ pub async fn get_user(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(post),
     path = "/users",
     tag(USERS_TAG),
@@ -69,7 +72,8 @@ pub async fn create_user(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(post),
     path = "/users/{user}",
     tag(USERS_TAG),
@@ -87,7 +91,8 @@ pub async fn update_user(
 }
 
 #[apiserver_path(
-    mount(global),
+    version(v1),
+    auth(session),
     method(delete),
     path = "/users/{user}",
     tag(USERS_TAG),
