@@ -4,7 +4,7 @@
 
 use crate::types::basic::{
     AtTime, EntityId, EntityName, Fixed, PermissionEntityType, PermissionId, PermissionType,
-    RoleId, RoleName, UserId, UserName,
+    RoleId, RoleName, UserId, UserLabel,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -44,7 +44,7 @@ pub struct PermissionDBWithNames {
     pub granted_by_id: UserId,
     pub granted_on: AtTime,
     pub fixed: Fixed,
-    pub granted_by: UserName,
+    pub granted_by: UserLabel,
     pub role: RoleName,
     pub entity: Option<EntityName>,
 }
@@ -68,7 +68,7 @@ pub struct Permission {
     pub granted_by_id: UserId,
     pub granted_on: AtTime,
     pub fixed: Fixed,
-    pub granted_by: UserName,
+    pub granted_by: UserLabel,
 
     #[dto(list(filter, filter_like, order_by))]
     pub role: RoleName,

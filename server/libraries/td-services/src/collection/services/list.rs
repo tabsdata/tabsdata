@@ -32,12 +32,14 @@ async fn list_collections(
 #[cfg(test)]
 mod tests {
     use crate::Services;
+    use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
+    use td_objects::dxo::user::UserParam;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, Description, ProjectName, RoleName, UserEnabled, UserId,
-        UserName,
+        UserIdName, UserLabel, UserName,
     };
     use td_queries::test_utils::{SeedEntry, seed_project_viewer};
 
@@ -61,6 +63,37 @@ mod tests {
         let list = response.unwrap().data;
         assert_eq!(list.len, 1);
         assert_eq!(list.data[0].name, name);
+    }
+
+    #[td_test::test(db)]
+    async fn test_list_collection_whose_author_was_deleted(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let author = db
+            .seed()
+            .user(&UserName::try_from("u0")?, &UserEnabled::TRUE)
+            .await?;
+        db.scoped(p.id)
+            .seed()
+            .collection(&CollectionName::try_from("ds0")?, &author.id)
+            .await?;
+
+        let service = Services::with_defaults(db);
+        let admin = RequestContext::with(AccessTokenId::default(), UserId::admin());
+        service
+            .delete_user(admin.delete(UserParam {
+                user: UserIdName::from_str("u0")?,
+            }))
+            .await?;
+
+        let list = service
+            .list_collections(admin.list((), ListParams::default()))
+            .await?
+            .data;
+        assert_eq!(list.len, 1);
+        let deleted = UserLabel::try_from(format!("[{}]", author.id))?;
+        assert_eq!(*list.data[0].created_by, deleted);
+        assert_eq!(*list.data[0].modified_by, deleted);
+        Ok(())
     }
 
     #[td_test::test(db)]

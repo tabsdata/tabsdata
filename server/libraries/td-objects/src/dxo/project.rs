@@ -9,7 +9,7 @@
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, BasePath, Created, Description, Modified, ProjectId, ProjectIdName, ProjectName,
-    ProjectWhenDeleted, UserId, UserName, WhenDeleted,
+    ProjectWhenDeleted, UserId, UserLabel, WhenDeleted,
 };
 use ta_objects::FromDao;
 use td_common::id::Id;
@@ -90,8 +90,8 @@ pub fn generate_deleted_name() -> ProjectName {
 pub struct ActiveProjectDBWithNames {
     #[dao(flatten)]
     pub base: ActiveProjectDB,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
 }
 
 #[ta_objects::Dto]
@@ -150,8 +150,8 @@ pub struct ProjectRead {
     pub created_by_id: Created<UserId>,
     pub modified_on: Modified<AtTime>,
     pub modified_by_id: Modified<UserId>,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
 }
 
 impl FromDao for ProjectRead {

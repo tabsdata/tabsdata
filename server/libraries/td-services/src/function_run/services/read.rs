@@ -66,7 +66,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Enabled, FunctionName,
         LogicalFunctionRunStatus, PhysicalFunctionRunStatus, ProjectId, TableNameDto,
-        TransactionKey, UserId, UserName,
+        TransactionKey, UserId, UserLabel, UserName,
     };
     use td_objects::types::basic::{AtTime, ReuseFrozen};
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
@@ -190,7 +190,7 @@ mod tests {
         assert_eq!(response.name, FunctionName::try_from(FUNCTION)?);
         assert_eq!(response.collection, collection.name);
         assert_eq!(response.execution, execution.base.name);
-        assert_eq!(response.triggered_by, UserName::admin());
+        assert_eq!(response.triggered_by, UserLabel::from(UserName::admin()));
         assert_eq!(function.base.name, response.name);
         Ok(())
     }

@@ -217,7 +217,7 @@ mod tests {
     use td_objects::dxo::function_upload::FunctionUpload;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, CollectionName, Decorator, Description, FunctionName,
-        FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, UserId, UserName,
+        FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, UserId, UserLabel, UserName,
     };
     use td_objects::types::basic::{CollectionIdName, ReuseFrozen};
     use td_queries::Queries;
@@ -281,10 +281,10 @@ mod tests {
         assert_eq!(updated.description, description);
         assert!(*updated.created_on < before_update);
         assert_eq!(*updated.created_by_id, UserId::admin());
-        assert_eq!(*updated.created_by, UserName::admin());
+        assert_eq!(*updated.created_by, UserLabel::from(UserName::admin()));
         assert!(*updated.modified_on > before_update);
         assert_eq!(*updated.modified_by_id, UserId::admin());
-        assert_eq!(*updated.modified_by, UserName::admin());
+        assert_eq!(*updated.modified_by, UserLabel::from(UserName::admin()));
     }
 
     async fn update_collection(

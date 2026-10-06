@@ -3,14 +3,14 @@
 //
 
 use td_error::td_error;
-use td_objects::types::basic::{RoleName, UserName};
+use td_objects::types::basic::{RoleName, UserLabel, UserName};
 
 pub mod services;
 
 #[td_error]
 pub enum UserRoleError {
     #[error("The role [{0}] for user [{1}] is a fixed user role and cannot be deleted")]
-    FixedUserRole(UserName, RoleName) = 0,
+    FixedUserRole(UserLabel, RoleName) = 0,
 
     #[error("Roles cannot be granted to system user [{0}]")]
     CannotGrantRoleToSystemUser(UserName) = 2000,

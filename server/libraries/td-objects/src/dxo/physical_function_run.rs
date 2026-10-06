@@ -10,7 +10,7 @@ use crate::types::basic::{
     Decorator, Dispatched, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName,
     FunctionVersionId, InputIdx, LogicalFunctionRunId, OfExecution, Patch, PhysicalFunctionRunId,
     PhysicalFunctionRunStatus, ProjectId, ProjectName, StageId, Started, StorageVersion,
-    TransactionId, Trigger, UserId, UserName,
+    TransactionId, Trigger, UserId, UserLabel,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -71,7 +71,7 @@ pub struct PhysicalFunctionRunDBWithNames {
     pub execution: Option<ExecutionName>,
     pub execution_function_version_id: OfExecution<FunctionVersionId>,
     pub storage_version: StorageVersion,
-    pub triggered_by: UserName,
+    pub triggered_by: UserLabel,
 }
 
 #[ta_objects::Dlo]
@@ -124,7 +124,7 @@ pub struct PhysicalFunctionRun {
     pub execution: Option<ExecutionName>,
     #[dto(list(filter, order_by))]
     pub execution_function_version_id: OfExecution<FunctionVersionId>,
-    pub triggered_by: UserName,
+    pub triggered_by: UserLabel,
     // TODO exception info
     // pub kind: Option<String>,
     // pub message: Option<String>,

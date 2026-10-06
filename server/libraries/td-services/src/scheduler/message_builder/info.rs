@@ -142,7 +142,7 @@ mod tests {
                 execution: None,
                 execution_function_version_id: FunctionVersionId::new().into(),
                 storage_version: StorageVersion::V1,
-                triggered_by: UserName::try_from("u0").unwrap(),
+                triggered_by: UserName::try_from("u0").unwrap().into(),
                 connection: None,
             },
             bundle_id: BundleId::default(),

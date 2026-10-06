@@ -10,7 +10,7 @@ use crate::types::basic::{
     Ended, ExecutionId, ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName,
     FunctionOnly, FunctionVersionId, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
     OverrideDisabledTrigger, ProjectId, ProjectName, SkipIfRunning, Started, StatusCount, System,
-    TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserName,
+    TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserLabel,
 };
 use crate::types::composed::TableVersions;
 use crate::types::json::Json;
@@ -109,7 +109,7 @@ pub struct ExecutionDBWithNames {
     // carries the real pre-deletion name (resolved view).
     pub collection_deleted: CollectionWhenDeleted,
     pub function: FunctionName,
-    pub triggered_by: UserName,
+    pub triggered_by: UserLabel,
     pub project: Option<ProjectName>,
     pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
 }
@@ -139,7 +139,7 @@ pub struct Execution {
     #[dto(list(filter, filter_like, order_by))]
     pub function: FunctionName,
     #[dto(list(filter, filter_like, order_by))]
-    pub triggered_by: UserName,
+    pub triggered_by: UserLabel,
     #[dto(list(filter, filter_like, order_by))]
     pub project: Option<ProjectName>,
     #[dto(list(filter))]

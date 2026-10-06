@@ -16,7 +16,7 @@
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, Created, Description, GroupId, GroupIdName, GroupKind, GroupName, Modified, ProjectId,
-    System, UserId, UserName,
+    System, UserId, UserLabel,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -74,8 +74,8 @@ pub struct GroupDB {
 pub struct GroupDBWithNames {
     #[dao(flatten)]
     pub base: GroupDB,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
 }
 
 #[ta_objects::Dto]
@@ -131,8 +131,8 @@ pub struct Group {
     pub modified_by_id: Modified<UserId>,
     pub system: System,
     pub kind: GroupKind,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
 }
 
 impl FromDao for Group {

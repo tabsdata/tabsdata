@@ -10,7 +10,7 @@ use crate::types::basic::{
     Connector, Decorator, Description, Enabled, FunctionId, FunctionIdName, FunctionName,
     FunctionRuntimeValues, FunctionStatus, FunctionType, FunctionVersionId, GroupId, Parent,
     ProjectId, RawSnippet, ResetStage, ResetState, ReuseFrozen, Snippet, StageId, StorageVersion,
-    TableName, TableNameDto, TableType, UserId, UserName, WorkerConfig, WorkerId, WorkerTypeDto,
+    TableName, TableNameDto, TableType, UserId, UserLabel, WorkerConfig, WorkerId, WorkerTypeDto,
 };
 use crate::types::composed::{TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto};
 use std::collections::HashMap;
@@ -434,7 +434,7 @@ impl FunctionPatchDB {
 pub struct FunctionPatchDBWithNames {
     #[dao(flatten)]
     pub base: FunctionPatchDB,
-    pub defined_by: UserName,
+    pub defined_by: UserLabel,
 }
 
 #[ta_objects::Dto]
@@ -460,7 +460,7 @@ pub struct FunctionPatchRecord {
     #[dto(list(filter, order_by))]
     pub status: FunctionStatus,
     #[dto(list(filter, filter_like, order_by))]
-    pub defined_by: UserName,
+    pub defined_by: UserLabel,
 }
 
 impl FromDao for FunctionPatchRecord {
@@ -501,7 +501,7 @@ pub struct FunctionDBWithNames {
     /// Threaded into LFR/LTDV stamping via FunctionNode at plan-build.
     /// No default: the group is project-scoped and must be set explicitly.
     pub group_id: GroupId,
-    pub defined_by: UserName,
+    pub defined_by: UserLabel,
 }
 
 impl FunctionDBWithNames {
@@ -542,7 +542,7 @@ pub struct FunctionVersionDBWithNames {
     pub function_type: FunctionType,
     pub parent_function_id: Option<Parent<FunctionId>>,
     pub collection: CollectionName,
-    pub defined_by: UserName,
+    pub defined_by: UserLabel,
     pub patch_of: Option<FunctionVersionId>,
 }
 
@@ -588,7 +588,7 @@ pub struct FunctionVersion {
     #[dto(list(filter, filter_like, order_by))]
     pub collection: CollectionName,
     #[dto(list(filter, filter_like, order_by))]
-    pub defined_by: UserName,
+    pub defined_by: UserLabel,
     #[dto(list(filter, order_by))]
     pub patch_of: Option<FunctionVersionId>,
 }
@@ -677,7 +677,7 @@ pub struct Function {
     pub collection: CollectionName,
     pub group_id: GroupId,
     #[dto(list(filter, filter_like, order_by))]
-    pub defined_by: UserName,
+    pub defined_by: UserLabel,
 }
 
 impl FromDao for Function {

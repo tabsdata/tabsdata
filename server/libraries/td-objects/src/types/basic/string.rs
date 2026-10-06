@@ -3,7 +3,9 @@
 //
 
 use crate::dxo::table::TableDBWithNames;
-use crate::parse::{DATA_LOCATION_REGEX, NAME_PATTERN, UNDERSCORE_NAME_PATTERN, parse_email};
+use crate::parse::{
+    DATA_LOCATION_REGEX, NAME_PATTERN, UNDERSCORE_NAME_PATTERN, USER_LABEL_PATTERN, parse_email,
+};
 use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_error::{ApiError, api_error};
 use td_security::{
@@ -264,6 +266,21 @@ pub struct TransactionKey(String);
 #[typed(regex = NAME_PATTERN, expected = "a [A-Za-z0-9] word of up to 100 characters")]
 pub struct UserName(String);
 
+/// How a row names the user who touched it: the name while the account
+/// exists, `[<id>]` after it is deleted.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[typed(
+    regex = USER_LABEL_PATTERN,
+    expected = "a user name, or the bracketed id of a deleted user"
+)]
+pub struct UserLabel(String);
+
+impl From<UserName> for UserLabel {
+    fn from(name: UserName) -> Self {
+        UserLabel(name.0)
+    }
+}
+
 impl UserName {
     pub fn admin() -> Self {
         Self(ADMIN_USER.to_string())
@@ -310,6 +327,16 @@ pub struct WorkerVersion(String);
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_user_label_is_a_name_or_a_bracketed_id() {
+        assert!(UserLabel::try_from("admin").is_ok());
+        assert!(UserLabel::try_from("[06gcsccq9hpjl7iqa38ocao15s]").is_ok());
+        assert!(UserLabel::try_from("06gcsccq9hpjl7iqa38ocao15s").is_err());
+        assert!(UserLabel::try_from("[admin]").is_err());
+        assert!(UserLabel::try_from("").is_err());
+        assert_eq!(*UserLabel::from(UserName::admin()), "admin");
+    }
 
     // BasePath is validated by DATA_LOCATION_REGEX:
     //   ^(/|(/[a-zA-Z][a-zA-Z0-9_]{0,99})*)$

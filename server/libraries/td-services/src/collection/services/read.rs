@@ -41,7 +41,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::types::basic::CollectionIdName;
     use td_objects::types::basic::{
-        AccessTokenId, AtTime, CollectionName, Description, UserId, UserName,
+        AccessTokenId, AtTime, CollectionName, Description, UserId, UserLabel, UserName,
     };
     use td_queries::test_utils::SeedEntry;
 
@@ -71,9 +71,9 @@ mod tests {
         assert_eq!(created.description, Description::default());
         assert!(*created.created_on >= before);
         assert_eq!(*created.created_by_id, UserId::admin());
-        assert_eq!(*created.created_by, UserName::admin());
+        assert_eq!(*created.created_by, UserLabel::from(UserName::admin()));
         assert_eq!(*created.modified_on, *created.created_on);
         assert_eq!(*created.modified_by_id, UserId::admin());
-        assert_eq!(*created.modified_by, UserName::admin());
+        assert_eq!(*created.modified_by, UserLabel::from(UserName::admin()));
     }
 }

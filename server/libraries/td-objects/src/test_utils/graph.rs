@@ -198,7 +198,7 @@ pub fn table(function: &FunctionName, table: &TableName) -> TableDBWithNames {
             interval: Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default())),
         },
         system: System::FALSE,
-        defined_by: UserName::try_from("joaquin").unwrap(),
+        defined_by: UserName::try_from("joaquin").unwrap().into(),
         collection: COLLECTION_NAME.clone(),
         function: function.clone(),
     }
@@ -234,7 +234,7 @@ pub fn function(function: &FunctionName) -> FunctionDBWithNames {
         },
         collection: COLLECTION_NAME.clone(),
         group_id: *GROUP_ID,
-        defined_by: UserName::try_from("joaquin").unwrap(),
+        defined_by: UserName::try_from("joaquin").unwrap().into(),
     }
 }
 

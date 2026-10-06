@@ -150,7 +150,7 @@ mod tests {
     use td_objects::dxo::project::ProjectParam;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, CollectionName, CollectionType, Description, GroupName, ProjectId,
-        ProjectIdName, ProjectName, UserId, UserName,
+        ProjectIdName, ProjectName, UserId, UserLabel, UserName,
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -198,10 +198,10 @@ mod tests {
         assert_eq!(created.collection_type, CollectionType::DataFactory);
         assert!(*created.created_on >= before);
         assert_eq!(*created.created_by_id, UserId::admin());
-        assert_eq!(*created.created_by, UserName::admin());
+        assert_eq!(*created.created_by, UserLabel::from(UserName::admin()));
         assert_eq!(*created.modified_on, *created.created_on);
         assert_eq!(*created.modified_by_id, UserId::admin());
-        assert_eq!(*created.modified_by, UserName::admin());
+        assert_eq!(*created.modified_by, UserLabel::from(UserName::admin()));
 
         let found: Vec<CollectionDB> = db.fetch_all::<CollectionDB>(&name).await.unwrap();
         assert_eq!(found.len(), 1);

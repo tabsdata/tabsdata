@@ -48,7 +48,7 @@ mod tests {
     use td_objects::dxo::function::{FunctionRegister, FunctionVersionParam};
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, LogicalFunctionRunStatus,
-        PhysicalFunctionRunStatus, TableNameDto, TransactionKey, UserId, UserName,
+        PhysicalFunctionRunStatus, TableNameDto, TransactionKey, UserId, UserLabel, UserName,
     };
     use td_objects::types::basic::{AtTime, ReuseFrozen};
     use td_queries::test_utils::SeedEntry;
@@ -150,7 +150,7 @@ mod tests {
         assert_eq!(response.name, FunctionName::try_from("joaquin")?);
         assert_eq!(response.collection, collection.name);
         assert_eq!(response.execution, execution.base.name);
-        assert_eq!(response.triggered_by, UserName::admin());
+        assert_eq!(response.triggered_by, UserLabel::from(UserName::admin()));
         Ok(())
     }
 }

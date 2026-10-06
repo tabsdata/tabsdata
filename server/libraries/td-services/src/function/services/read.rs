@@ -166,7 +166,7 @@ mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, TableNameDto,
-        UserId, UserName, WorkerConfig,
+        UserId, UserLabel, UserName, WorkerConfig,
     };
     use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
     use td_objects::types::composed::{TableDependency, TableDependencyDto, TableTriggerDto};
@@ -254,7 +254,10 @@ mod tests {
             response.function.collection,
             CollectionName::try_from("cofnig")?
         );
-        assert_eq!(response.function.defined_by, UserName::try_from("admin")?);
+        assert_eq!(
+            response.function.defined_by,
+            UserLabel::from(UserName::try_from("admin")?)
+        );
 
         assert_eq!(
             response.dependencies,

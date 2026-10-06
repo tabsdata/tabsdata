@@ -7,7 +7,7 @@ use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, BasePath, CollectionId, CollectionIdName, CollectionName, CollectionType,
     CollectionWhenDeleted, ConnectionId, Created, Description, GroupId, GroupName, Modified,
-    ProjectId, ProjectName, UserId, UserName, WhenDeleted,
+    ProjectId, ProjectName, UserId, UserLabel, WhenDeleted,
 };
 use ta_objects::FromDao;
 use td_common::id::Id;
@@ -121,8 +121,8 @@ pub struct ActiveCollectionDBWithNames {
     pub base: ActiveCollectionDB,
     // Owning project's name, from the view's join to projects_resolved.
     pub project: ProjectName,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
     // Resolved group display name from the joined groups row.
     pub group: GroupName,
 }
@@ -216,8 +216,8 @@ pub struct CollectionRead {
     // Disambiguates same-named collections across projects in wildcard listings.
     #[dto(list(filter, filter_like, order_by))]
     pub project: ProjectName,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
     #[dto(list(filter, filter_like, order_by))]
     pub group: GroupName,
 }

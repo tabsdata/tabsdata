@@ -9,7 +9,7 @@ use crate::types::basic::{
     ExecutionId, FunctionName, FunctionVersionId, HasData, LogicalTableDataVersionId, Patch,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId,
     RowCount, SchemaChanged, SchemaDataChanged, SchemaHash, Started, StorageVersion,
-    TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId, UserId, UserName,
+    TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId, UserId, UserLabel,
     WithData,
 };
 use ta_objects::FromDao;
@@ -108,7 +108,7 @@ pub struct PhysicalTableDataVersionDBWithNames {
     pub base: PhysicalTableDataVersionDBWithFunction,
     pub collection: CollectionName,
     pub function: FunctionName,
-    pub created_by: UserName,
+    pub created_by: UserLabel,
 }
 
 #[ta_objects::Dto]
@@ -155,7 +155,7 @@ pub struct PhysicalTableDataVersion {
     #[dto(list(filter, filter_like, order_by))]
     pub function: FunctionName,
     #[dto(list(filter, filter_like, order_by))]
-    pub created_by: UserName,
+    pub created_by: UserLabel,
 
     pub column_count: Option<ColumnCount>,
     pub row_count: Option<RowCount>,

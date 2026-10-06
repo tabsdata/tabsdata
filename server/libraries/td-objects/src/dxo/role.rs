@@ -5,7 +5,7 @@
 use crate::dxo::crudl::RequestContext;
 use crate::types::basic::{
     AtTime, Created, Description, Fixed, Modified, ProjectId, RoleId, RoleIdName, RoleKind,
-    RoleName, UserId, UserName,
+    RoleName, UserId, UserLabel,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -34,8 +34,8 @@ pub struct RoleDB {
 pub struct RoleDBWithNames {
     #[dao(flatten)]
     pub base: RoleDB,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
 }
 
 #[ta_objects::Dto]
@@ -96,8 +96,8 @@ pub struct Role {
     pub kind: RoleKind,
     pub project_id: Option<ProjectId>,
     pub fixed: Fixed,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
 }
 
 impl FromDao for Role {

@@ -6,7 +6,7 @@ use crate::dxo::crudl::RequestContext;
 use crate::dxo::role::Role;
 use crate::types::basic::{
     AtTime, Created, Email, FullName, Modified, Password, PasswordChangeTime, PasswordHash,
-    PasswordMustChange, UserEnabled, UserId, UserIdName, UserName, UserSystem,
+    PasswordMustChange, UserEnabled, UserId, UserIdName, UserLabel, UserName, UserSystem,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -38,8 +38,8 @@ pub struct UserDB {
 pub struct UserDBWithNames {
     #[dao(flatten)]
     pub base: UserDB,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
 }
 
 #[ta_objects::Dto]
@@ -160,8 +160,8 @@ pub struct UserRead {
     pub password_must_change: PasswordMustChange,
     pub enabled: UserEnabled,
     pub system: UserSystem,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
 }
 
 impl FromDao for UserRead {
@@ -201,8 +201,8 @@ pub struct UserInfo {
     pub password_must_change: PasswordMustChange,
     pub enabled: UserEnabled,
     pub system: UserSystem,
-    pub created_by: Created<UserName>,
-    pub modified_by: Modified<UserName>,
+    pub created_by: Created<UserLabel>,
+    pub modified_by: Modified<UserLabel>,
 
     pub user_roles: Vec<Role>,
 }

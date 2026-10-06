@@ -17,7 +17,7 @@ use crate::types::basic::{
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private,
     ProjectId, ProjectName, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash, Started,
     StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
-    Trigger, TriggeredOn, UserId, UserName, VersionPos, WithData,
+    Trigger, TriggeredOn, UserId, UserLabel, VersionPos, WithData,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -94,7 +94,7 @@ pub struct FunctionRunDBWithNames {
     // carries the real pre-deletion name (resolved view).
     pub collection_deleted: CollectionWhenDeleted,
     pub execution: Option<ExecutionName>,
-    pub triggered_by: UserName,
+    pub triggered_by: UserLabel,
     pub group: Option<GroupName>,
     pub project: Option<ProjectName>,
     // This LFR's current PFR; NULL while none was minted, or after a void.
@@ -145,7 +145,7 @@ pub struct FunctionRun {
     pub execution: Option<ExecutionName>,
     #[dto(list(filter, filter_like, order_by))]
     pub project: Option<ProjectName>,
-    pub triggered_by: UserName,
+    pub triggered_by: UserLabel,
     // Per-attempt fields from the current PFR;
     // `physical_function_run_id` is NULL while there is none.
     #[dto(list(filter, order_by))]
@@ -275,7 +275,7 @@ pub struct TableDataVersionDBWithNames {
     pub base: LogicalTableDataVersionDB,
     pub collection: CollectionName,
     pub execution: Option<ExecutionName>,
-    pub triggered_by: UserName,
+    pub triggered_by: UserLabel,
     pub group: Option<GroupName>,
     // This LTDV's current PTDV; NULL while none was minted, or after a void.
     pub physical_table_data_version_id: Option<PhysicalTableDataVersionId>,
@@ -333,7 +333,7 @@ pub struct TableDataVersion {
     pub collection: CollectionName,
     #[dto(list(filter, filter_like))]
     pub execution: Option<ExecutionName>,
-    pub created_by: UserName,
+    pub created_by: UserLabel,
 
     // Current PTDV identity + derived per-attempt audit; NULL while there
     // is none.

@@ -10,7 +10,7 @@ use crate::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionName,
     FunctionVersionId, Partitioned, Private, ProjectId, SampleLen, SampleOffset, SchemaFieldName,
     SchemaFieldType, Sql, System, TableFunctionParamPos, TableId, TableIdName, TableName,
-    TableStatus, TableType, TableVersionId, UncommittedStatus, UserId, UserName,
+    TableStatus, TableType, TableVersionId, UncommittedStatus, UserId, UserLabel,
 };
 use crate::types::composed::TableVersions;
 use polars::prelude::Field;
@@ -79,7 +79,7 @@ pub struct TableDBWithNames {
     #[dao(flatten)]
     pub base: TableDB,
     pub system: System,
-    pub defined_by: UserName,
+    pub defined_by: UserLabel,
     pub collection: CollectionName,
     pub function: FunctionName,
 }
@@ -124,7 +124,7 @@ pub struct Table {
     #[dto(list(filter, order_by))]
     pub table_type: TableType,
     pub system: System,
-    pub defined_by: UserName,
+    pub defined_by: UserLabel,
     #[dto(list(filter, filter_like, order_by))]
     pub collection: CollectionName,
     #[dto(list(filter, filter_like, order_by))]

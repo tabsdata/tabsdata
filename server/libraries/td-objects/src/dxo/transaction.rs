@@ -5,7 +5,7 @@
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, Ended, ExecutionId, ExecutionName, GroupId, GroupName,
     LogicalFunctionRunStatus, ProjectId, ProjectName, Started, StatusCount, TransactionByStr,
-    TransactionId, TransactionKey, TransactionStatus, TriggeredOn, UserId, UserName,
+    TransactionId, TransactionKey, TransactionStatus, TriggeredOn, UserId, UserLabel,
 };
 use crate::types::json::Json;
 use crate::types::status_count::FunctionRunStatusCount;
@@ -61,7 +61,7 @@ pub struct TransactionDBWithNames {
     pub base: TransactionDB,
     pub collection: CollectionName,
     pub execution: Option<ExecutionName>,
-    pub triggered_by: UserName,
+    pub triggered_by: UserLabel,
     pub group: Option<GroupName>,
     pub project: Option<ProjectName>,
 
@@ -98,7 +98,7 @@ pub struct Transaction {
     #[dto(list(filter, filter_like))]
     pub execution: Option<ExecutionName>,
     #[dto(list(filter, filter_like, order_by))]
-    pub triggered_by: UserName,
+    pub triggered_by: UserLabel,
     #[dto(list(filter, filter_like))]
     pub group: Option<GroupName>,
     #[dto(list(filter, filter_like, order_by))]
