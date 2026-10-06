@@ -10,15 +10,15 @@ use crate::execution::plan::{
     build_logical_function_runs, build_logical_table_data_versions, build_response,
     build_transaction_map, build_transactions, fetch_relations_info,
     resolve_execution_plan_versions, update_initial_function_run_status, validate_execution_plan,
-    with_recursion_options,
 };
+use ta_execution::PlanScope;
 use ta_services::ctx_service::ReqCtx;
 use td_database::access::LockInstant;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_execution::TransactionBy;
-use td_execution::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
+use td_execution::graph::{GraphConfig, generate_plan_graph};
+use td_execution::{ExecutionScope, TransactionBy};
 use td_objects::and;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{
@@ -96,11 +96,11 @@ pub(crate) async fn execute(
     let override_disabled_trigger = request.override_disabled_trigger;
     assert_function_status(msgs, &function, &override_disabled_trigger)?;
 
-    let entrypoint = FunctionOrTable::from(&function_id);
     let function_only = request.function_only;
-    let recursion_options = with_recursion_options(&function_only, &override_disabled_trigger)?;
+    let recursion_options =
+        ExecutionScope::execution_recursion_options(function_only, override_disabled_trigger);
     let config = GraphConfig::defaults(FunctionDB::executable());
-    let graph = generate_td_graph(conn, config, None, &entrypoint, &recursion_options).await?;
+    let graph = generate_plan_graph(conn, config, None, &function_id, &recursion_options).await?;
 
     let execution_plan = build_execution_plan(&graph, &function)?;
     validate_execution_plan(transaction_by, &execution_plan)?;

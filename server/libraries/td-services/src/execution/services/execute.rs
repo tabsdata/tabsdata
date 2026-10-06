@@ -77,11 +77,12 @@ pub(crate) mod tests {
     use std::error::Error;
     use std::str::FromStr;
     use std::sync::LazyLock;
+    use ta_execution::PlanScope;
     use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_error::{ApiError, TdError};
-    use td_execution::EXECUTION_GRAPH_OPTIONS;
+    use td_execution::ExecutionScope;
     use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionParam;
@@ -791,7 +792,11 @@ pub(crate) mod tests {
         let graph_depth = if single_function {
             Some(Depth::ZERO)
         } else {
-            EXECUTION_GRAPH_OPTIONS.max_downstream_depth()
+            ExecutionScope::execution_recursion_options(
+                FunctionOnly::FALSE,
+                OverrideDisabledTrigger::FALSE,
+            )
+            .max_downstream_depth()
         };
 
         // collection_0/function_0 triggers function_1 and function_2, which
@@ -1404,7 +1409,11 @@ pub(crate) mod tests {
         let response = response?;
 
         // test_execute_disabled_trigger only creates functions 0 and 1.
-        let graph_depth = EXECUTION_GRAPH_OPTIONS.max_downstream_depth();
+        let graph_depth = ExecutionScope::execution_recursion_options(
+            FunctionOnly::FALSE,
+            OverrideDisabledTrigger::FALSE,
+        )
+        .max_downstream_depth();
 
         assert_eq!(
             response.name,

@@ -2,16 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use td_objects::types::basic::Depth;
-use td_objects::types::recursion::{RecursionOptions, RecursionOptionsV1};
-
+pub mod plan;
 pub mod transaction;
-
-pub const EXECUTION_GRAPH_OPTIONS: RecursionOptions = RecursionOptions::V1(RecursionOptionsV1 {
-    max_upstream_depth: Some(Depth::ZERO),
-    max_downstream_depth: Some(Depth::ZERO),
-    override_disabled_trigger: None,
-});
 
 #[cfg(test)]
 mod plan_shape;

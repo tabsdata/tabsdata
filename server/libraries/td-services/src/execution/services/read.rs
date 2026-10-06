@@ -6,15 +6,16 @@ use crate::execution::plan::{
     build_execution_plan, build_response, fetch_relations_info, resolve_execution_plan_versions,
 };
 use std::collections::HashMap;
+use ta_execution::PlanScope;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
-use td_execution::EXECUTION_GRAPH_OPTIONS;
+use td_execution::ExecutionScope;
 use td_execution::TransactionBy;
-use td_execution::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
+use td_execution::graph::{GraphConfig, generate_plan_graph};
 use td_execution::transaction_map::TransactionMap;
 use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
@@ -28,7 +29,7 @@ use td_objects::dxo::logical::{
 use td_objects::dxo::transaction::TransactionValue;
 use td_objects::dxo::transaction::{TransactionDB, TransactionInsertDB};
 use td_objects::sql_condition::SqlCondition;
-use td_objects::types::basic::{AllowDisabled, AtTime};
+use td_objects::types::basic::{AllowDisabled, AtTime, FunctionOnly, OverrideDisabledTrigger};
 use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
 
@@ -59,7 +60,6 @@ async fn execution_read(
         .fetch_one(&execution.base.function_version_id)
         .await?;
     let function_id = function.base.base.function_id;
-    let entrypoint = FunctionOrTable::from(&function_id);
     let recursion_options = with_existing_recursion_options(&execution)?;
     let function_state: Box<dyn SqlCondition<FunctionDB>> = if *allow_disabled {
         Box::new(FunctionDB::active())
@@ -67,7 +67,8 @@ async fn execution_read(
         Box::new(FunctionDB::executable())
     };
     let config = GraphConfig::defaults(function_state);
-    let graph = generate_td_graph(conn, config, Some(&at), &entrypoint, &recursion_options).await?;
+    let graph =
+        generate_plan_graph(conn, config, Some(&at), &function_id, &recursion_options).await?;
 
     let execution_plan = build_execution_plan(&graph, &function)?;
     let transactions: Vec<TransactionInsertDB> = conn
@@ -111,13 +112,17 @@ async fn execution_read(
 pub fn with_existing_recursion_options(
     execution: &ExecutionDB,
 ) -> Result<RecursionOptions, TdError> {
-    // We are using the depth defined, if any, or defaulting to EXECUTION_GRAPH_DEPTH.
     let options = execution
         .base
         .recursion_options
         .as_deref()
         .cloned()
-        .unwrap_or(EXECUTION_GRAPH_OPTIONS);
+        .unwrap_or_else(|| {
+            ExecutionScope::execution_recursion_options(
+                FunctionOnly::FALSE,
+                OverrideDisabledTrigger::FALSE,
+            )
+        });
     Ok(options)
 }
 

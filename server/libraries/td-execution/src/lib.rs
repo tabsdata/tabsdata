@@ -11,7 +11,8 @@ pub use scheduler_config::{
     MaxFunctionsPerTick, SchedulerCheckFrequency, SchedulerConfig, SchedulerTickTimeout,
 };
 pub use scheduler_notify::SchedulerNotify;
-pub use te_execution::{EXECUTION_GRAPH_OPTIONS, transaction::TransactionBy};
+pub use te_execution::plan::ExecutionScope;
+pub use te_execution::transaction::TransactionBy;
 pub use version_resolver::{VersionResolver, VersionResolverError};
 
 mod execution;

@@ -3,10 +3,38 @@
 //
 
 use std::fmt::Display;
+use std::future::Future;
 use std::str::FromStr;
 use td_error::{TdError, td_error};
 use td_objects::dxo::graph::FunctionNode;
-use td_objects::types::basic::{TransactionByStr, TransactionKey};
+use td_objects::dxo::trigger::TriggerDBWithNames;
+use td_objects::types::basic::{
+    FunctionId, FunctionOnly, OverrideDisabledTrigger, TransactionByStr, TransactionKey,
+};
+use td_objects::types::recursion::RecursionOptions;
+
+/// The trigger lookups an edition composes into its execution plans.
+pub trait GraphSource: Send {
+    fn walk(
+        &mut self,
+        start: &FunctionId,
+        options: &RecursionOptions,
+    ) -> impl Future<Output = Result<Vec<TriggerDBWithNames>, TdError>> + Send;
+}
+
+/// Which functions an execution runs: each edition provides one.
+pub trait PlanScope {
+    fn execution_recursion_options(
+        function_only: FunctionOnly,
+        override_disabled_trigger: OverrideDisabledTrigger,
+    ) -> RecursionOptions;
+
+    fn plan_triggers(
+        source: &mut impl GraphSource,
+        start: &FunctionId,
+        options: &RecursionOptions,
+    ) -> impl Future<Output = Result<Vec<TriggerDBWithNames>, TdError>> + Send;
+}
 
 #[td_error]
 pub enum TransactionMapperError {

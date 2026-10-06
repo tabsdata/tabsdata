@@ -13,8 +13,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::graph::{MapGraph, TdGraph};
 use td_execution::{
-    EXECUTION_GRAPH_OPTIONS, ExecutionPlan, ExecutionPlanner, ResolvedExecutionPlan, TransactionBy,
-    VersionResolver,
+    ExecutionPlan, ExecutionPlanner, ResolvedExecutionPlan, TransactionBy, VersionResolver,
 };
 use td_objects::FromDao;
 use td_objects::dxo::execution::{
@@ -30,11 +29,10 @@ use td_objects::dxo::logical::{
 };
 use td_objects::dxo::transaction::TransactionInsertDB;
 use td_objects::types::basic::{
-    AtTime, DependencyPos, Depth, Dot, FunctionId, FunctionOnly, FunctionStatus, InputIdx,
-    LogicalFunctionRunId, LogicalFunctionRunInputId, LogicalFunctionRunStatus,
-    LogicalTableDataVersionId, OverrideDisabledTrigger, TableId, Trigger, VersionPos,
+    AtTime, DependencyPos, Dot, FunctionId, FunctionStatus, InputIdx, LogicalFunctionRunId,
+    LogicalFunctionRunInputId, LogicalFunctionRunStatus, LogicalTableDataVersionId,
+    OverrideDisabledTrigger, TableId, Trigger, VersionPos,
 };
-use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
 use td_queries::Queries;
 use tracing::{debug, instrument};
@@ -68,19 +66,6 @@ pub fn assert_function_status(
         }
     }
     Ok(())
-}
-
-pub fn with_recursion_options(
-    function_only: &FunctionOnly,
-    override_disabled_trigger: &OverrideDisabledTrigger,
-) -> Result<RecursionOptions, TdError> {
-    let mut recursion_options = if **function_only {
-        RecursionOptions::new(Some(Depth::ZERO), Some(Depth::ZERO))
-    } else {
-        EXECUTION_GRAPH_OPTIONS
-    };
-    recursion_options.with_override_disabled_trigger(*override_disabled_trigger);
-    Ok(recursion_options)
 }
 
 pub fn build_execution_plan(

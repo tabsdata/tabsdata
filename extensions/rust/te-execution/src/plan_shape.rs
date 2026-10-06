@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The plan shape this edition's `EXECUTION_GRAPH_OPTIONS` yields when a
+//! The plan shape this edition's plan scope yields when a
 //! function whose table another collection's function triggers on is run.
 
 use std::str::FromStr;
