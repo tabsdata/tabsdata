@@ -5,7 +5,7 @@
 use crate::graph::{FunctionOrTable, GraphConfig};
 use crate::graph::{TdGraph, TdGraphBuilder};
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -14,7 +14,7 @@ use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::sql_condition::SqlCondition;
-use td_objects::types::basic::{AtTime, FunctionId, Scd2ValidFrom, TableId};
+use td_objects::types::basic::{AtTime, FunctionId, Scd2ValidFrom, TableId, TriggerVersionId};
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::{ReachableFrom, Scd2Dao, SelectDao, TimelineDao};
 use td_queries::Queries;
@@ -112,6 +112,53 @@ impl GraphBuilder {
         };
 
         Ok(trigger_graph)
+    }
+
+    /// Children run with their parent whatever the walk depth, and follow an
+    /// override of a disabled start.
+    pub async fn find_children_triggers<S: SeesProjectRows, M: AccessMode>(
+        &self,
+        conn: &mut DomainConnection<Apiserver, S, M>,
+        at_time: Option<&AtTime>,
+        function_id: &FunctionId,
+        trigger_graph: &[TriggerDBWithNames],
+        recursion_options: &RecursionOptions,
+    ) -> Result<Vec<TriggerDBWithNames>, TdError> {
+        let in_graph: HashSet<FunctionId> = trigger_graph
+            .iter()
+            .flat_map(|t| [*t.base.base.trigger_by_function_id, t.base.base.function_id])
+            .chain(std::iter::once(*function_id))
+            .collect();
+        let parents: Vec<_> = in_graph.iter().map(FunctionDB::children_of).collect();
+        let mut children: Vec<FunctionDB> = self
+            .chunked_at(conn, at_time, &parents, &self.config.function_state)
+            .await?;
+        if recursion_options.override_disabled_trigger() {
+            let start = [FunctionDB::children_of(function_id)];
+            let overridden: Vec<FunctionDB> = self
+                .chunked_at(conn, at_time, &start, FunctionDB::active())
+                .await?;
+            children.extend(overridden);
+        }
+        if children.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let child_ids: Vec<FunctionId> = children
+            .iter()
+            .map(|c| c.base.function_id)
+            .unique()
+            .collect();
+        let triggers: Vec<TriggerDBWithNames> = self
+            .chunked_at(conn, at_time, &child_ids, &self.config.trigger_state)
+            .await?;
+        let known: HashSet<&TriggerVersionId> =
+            trigger_graph.iter().map(|t| &t.base.base.id).collect();
+        Ok(triggers
+            .into_iter()
+            .filter(|t| in_graph.contains(&t.base.base.trigger_by_function_id))
+            .filter(|t| !known.contains(&t.base.base.id))
+            .collect())
     }
 
     pub async fn find_recursive_dependency_graph<S: SeesProjectRows, M: AccessMode>(

@@ -6,7 +6,7 @@ use crate::dxo::function::FunctionDBWithNames;
 use crate::dxo::table::TableDBWithNames;
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
-    FunctionVersionId, GroupId, LogicalTableDataVersionId, Private, SelfDependency, System,
+    FunctionVersionId, GroupId, LogicalTableDataVersionId, Parent, Private, SelfDependency, System,
     TableFunctionParamPos, TableId, TableName, TableVersionId,
 };
 use crate::types::composed::TableVersions;
@@ -26,6 +26,8 @@ pub struct FunctionNode {
     pub name: FunctionName,
     pub enabled: Enabled,
     pub group_id: GroupId,
+    #[serde(default)]
+    pub parent_function_id: Option<Parent<FunctionId>>,
 }
 
 impl Display for FunctionNode {
@@ -82,6 +84,7 @@ impl GraphNode<FunctionNode, TableNode> {
                 name: function.base.base.name.clone(),
                 enabled: function.base.base.enabled,
                 group_id: function.group_id,
+                parent_function_id: function.base.base.parent_function_id,
             }),
             GraphNode::Table(TableNode {
                 collection_id: table.base.base.collection_id,

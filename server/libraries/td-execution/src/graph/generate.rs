@@ -65,7 +65,8 @@ impl From<&TableId> for FunctionOrTable {
 }
 
 /// Generate the trigger/dependency graph around `function_or_table`, per the
-/// [`GraphConfig`] knobs, live (`None`) or as it existed at `at_time`.
+/// [`GraphConfig`] knobs, live (`None`) or as it existed at `at_time`. The
+/// children of every function in it are always included, whatever the depth.
 /// Authorization is owned by the calling service (see [`GraphConfig`]).
 pub async fn generate_td_graph<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -75,13 +76,23 @@ pub async fn generate_td_graph<S: SeesProjectRows, M: AccessMode>(
     recursion_options: &RecursionOptions,
 ) -> Result<TdGraph, TdError> {
     let builder = GraphBuilder { config };
-    let trigger_graph = builder
+    let mut trigger_graph = builder
         .find_recursive_trigger_graph(conn, at_time, function_or_table, recursion_options)
         .await?;
     // The main function is always shown, even in a table-centered graph.
     let function_id = builder
         .main_function_id(conn, at_time, function_or_table)
         .await?;
+    let children_triggers = builder
+        .find_children_triggers(
+            conn,
+            at_time,
+            &function_id,
+            &trigger_graph,
+            recursion_options,
+        )
+        .await?;
+    trigger_graph.extend(children_triggers);
     complete_graph(
         conn,
         &builder,

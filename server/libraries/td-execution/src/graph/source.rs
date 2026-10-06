@@ -33,4 +33,15 @@ impl<S: SeesProjectRows, M: AccessMode> GraphSource for ConnGraphSource<'_, S, M
             )
             .await
     }
+
+    async fn children_triggers(
+        &mut self,
+        start: &FunctionId,
+        triggers: &[TriggerDBWithNames],
+        options: &RecursionOptions,
+    ) -> Result<Vec<TriggerDBWithNames>, TdError> {
+        self.builder
+            .find_children_triggers(self.conn, self.at_time, start, triggers, options)
+            .await
+    }
 }

@@ -103,6 +103,7 @@ pub fn function_node(function: &FunctionName) -> FunctionNode {
         name: function.clone(),
         enabled: Enabled::TRUE,
         group_id: *GROUP_ID,
+        parent_function_id: None,
     }
 }
 

@@ -279,6 +279,7 @@ impl From<&FunctionDBWithNames> for FunctionNode {
             name: src.base.base.name.clone(),
             enabled: src.base.base.enabled,
             group_id: src.group_id,
+            parent_function_id: src.base.base.parent_function_id,
         }
     }
 }

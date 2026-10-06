@@ -12,6 +12,7 @@ use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::graph::{MapGraph, TdGraph};
+use td_execution::transaction_map::TransactionMap;
 use td_execution::{
     ExecutionPlan, ExecutionPlanner, ResolvedExecutionPlan, TransactionBy, VersionResolver,
 };
@@ -36,7 +37,6 @@ use td_objects::types::basic::{
 use td_objects::types::table_ref::Versions;
 use td_queries::Queries;
 use tracing::{debug, instrument};
-use {ta_execution::TransactionMapper, td_execution::transaction_map::TransactionMap};
 
 pub fn assert_function_status(
     msgs: &mut ReqCtx,
@@ -95,7 +95,7 @@ pub fn build_transaction_map(
     let mut transaction_map = TransactionMap::empty(transaction_by.clone());
 
     for function in execution_plan.triggered_functions() {
-        transaction_map.add(execution, function)?;
+        transaction_map.add(execution, execution_plan.transaction_root(function))?;
     }
 
     Ok(transaction_map)
@@ -137,7 +137,8 @@ pub fn build_logical_function_runs(
         .triggered_functions()
         .into_iter()
         .map(|f| {
-            let transaction = transaction_map.get(&transaction_by.key(f)?)?;
+            let transaction =
+                transaction_map.get(&execution_plan.transaction_key(transaction_by, f)?)?;
             let trigger = if f == main_trigger {
                 Trigger::Manual
             } else {
@@ -181,7 +182,8 @@ pub fn build_logical_table_data_versions(
         .table_function_output_versions()
         .iter()
         .map(|(t, f, edge)| {
-            let transaction = transaction_map.get(&transaction_by.key(f)?)?;
+            let transaction =
+                transaction_map.get(&execution_plan.transaction_key(transaction_by, f)?)?;
             let (producer, group_id) = ffr_by_function.get(&f.function_id).ok_or_else(|| {
                 api_error!(
                     ApiError::InternalError,
@@ -372,7 +374,8 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows, M: AccessMode
                 function.function_id
             ));
         };
-        let transaction = transaction_map.get(&transaction_by.key(function)?)?;
+        let transaction =
+            transaction_map.get(&execution_plan.transaction_key(transaction_by, function)?)?;
 
         let dependency_pos = edge.dependency_pos().cloned();
 
@@ -517,7 +520,8 @@ pub async fn build_response(
         .into_iter()
         .chain(std::iter::once(execution_plan.main_trigger()))
         .try_fold(HashMap::new(), |mut acc, f| {
-            let transaction = transaction_map.get(&transaction_by.key(f)?)?;
+            let transaction =
+                transaction_map.get(&execution_plan.transaction_key(transaction_by, f)?)?;
             let entry: &mut HashSet<_> = acc.entry(transaction.id.clone()).or_default();
             entry.insert(f.function_version_id.clone());
             Ok::<_, TdError>(acc)

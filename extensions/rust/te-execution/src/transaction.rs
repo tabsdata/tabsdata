@@ -56,6 +56,7 @@ mod tests {
             name: FunctionName::try_from("name")?,
             enabled: Enabled::TRUE,
             group_id: GroupId::default(),
+            parent_function_id: None,
         };
 
         assert_eq!(

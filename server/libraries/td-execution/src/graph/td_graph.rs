@@ -210,6 +210,30 @@ where
     }
 }
 
+impl<T, V> TdGraph<FunctionNode, T, V> {
+    /// Linear scan per call: planning is quadratic in graph size.
+    pub fn transaction_root<'a>(&'a self, node: &'a FunctionNode) -> &'a FunctionNode {
+        let Some(parent) = &node.parent_function_id else {
+            return node;
+        };
+        self.inner
+            .node_weights()
+            .find_map(|n| match n {
+                GraphNode::Function(f) if f.function_id == **parent => Some(f),
+                _ => None,
+            })
+            .unwrap_or(node)
+    }
+
+    pub fn transaction_key(
+        &self,
+        mapper: &impl TransactionMapper,
+        node: &FunctionNode,
+    ) -> Result<TransactionKey, TdError> {
+        mapper.key(self.transaction_root(node))
+    }
+}
+
 impl<F: Display, T: Display, V: Display> TdGraph<F, T, V> {
     pub fn dot(&self) -> Dot<'_, &Graph<GraphNode<F, T>, GraphEdge<V>>> {
         Dot::with_attr_getters(
@@ -363,7 +387,7 @@ impl PartialGraph<FunctionNode> {
 
         let mut node_map = HashMap::new();
         for node in trigger_graph.inner.node_indices() {
-            let key = transaction_mapper.key(trigger_graph.inner[node])?;
+            let key = dgraph.transaction_key(transaction_mapper, trigger_graph.inner[node])?;
             node_map
                 .entry(key.clone())
                 .or_insert_with(|| new_graph.add_node(key));
@@ -371,8 +395,10 @@ impl PartialGraph<FunctionNode> {
 
         let mut edge_map = HashMap::new();
         for edge in trigger_graph.inner.edge_references() {
-            let source_key = transaction_mapper.key(trigger_graph.inner[edge.source()])?;
-            let target_key = transaction_mapper.key(trigger_graph.inner[edge.target()])?;
+            let source_key =
+                dgraph.transaction_key(transaction_mapper, trigger_graph.inner[edge.source()])?;
+            let target_key =
+                dgraph.transaction_key(transaction_mapper, trigger_graph.inner[edge.target()])?;
             let source = node_map[&source_key];
             let target = node_map[&target_key];
             if source != target && !edge_map.contains_key(&(source, target)) {
@@ -395,7 +421,7 @@ mod tests {
     use td_objects::test_utils::graph::{
         FUNCTION_NAMES, TABLE_NAMES, dependency, function, function_node, table, table_node,
     };
-    use td_objects::types::basic::FunctionVersionId;
+    use td_objects::types::basic::{FunctionVersionId, Parent};
 
     fn expected_function_nodes() -> HashSet<FunctionNode> {
         FUNCTION_NAMES.iter().map(function_node).collect()
@@ -724,5 +750,26 @@ mod tests {
         assert_eq!(new_graph.functions().len(), functions.len());
         assert_eq!(new_graph.tables().len(), tables.len());
         Ok(())
+    }
+
+    #[test]
+    fn test_transaction_root_is_the_parent_when_in_the_graph() {
+        let graph = test_graph();
+        let parent = function_node(&FUNCTION_NAMES[0]);
+        let mut child = function_node(&FUNCTION_NAMES[1]);
+        child.parent_function_id = Some(Parent::from(parent.function_id));
+
+        assert_eq!(graph.transaction_root(&child), &parent);
+    }
+
+    #[test]
+    fn test_transaction_root_is_itself_without_a_parent_in_the_graph() {
+        let graph = test_graph();
+        let mut child = function_node(&FUNCTION_NAMES[1]);
+        child.parent_function_id = Some(Parent::from(FunctionId::default()));
+        assert_eq!(graph.transaction_root(&child), &child);
+
+        let orphan = function_node(&FUNCTION_NAMES[1]);
+        assert_eq!(graph.transaction_root(&orphan), &orphan);
     }
 }

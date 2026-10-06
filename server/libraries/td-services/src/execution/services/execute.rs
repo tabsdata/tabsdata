@@ -1658,6 +1658,39 @@ pub(crate) mod tests {
         })
     }
 
+    async fn execute_by_name(
+        db: &TdPool,
+        project: ProjectId,
+        collection: &str,
+        function: &str,
+        function_only: FunctionOnly,
+        override_disabled_trigger: OverrideDisabledTrigger,
+    ) -> Result<ExecutionResponse, TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(collection)?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str(function)?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: None,
+                    function_only,
+                    override_disabled_trigger,
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
+            )
+            .in_project(project);
+        Ok(Services::with_defaults(db.clone())
+            .execute_function(request)
+            .await?
+            .data)
+    }
+
     async fn register_parent_with_child(
         db: &TdPool,
         project: ProjectId,
@@ -1678,34 +1711,207 @@ pub(crate) mod tests {
         Ok(())
     }
 
+    fn planned_names(response: &ExecutionResponse) -> HashSet<String> {
+        response
+            .triggered_functions
+            .iter()
+            .map(|f| response.all_functions[f].name.to_string())
+            .collect()
+    }
+
+    fn shares_one_transaction(response: &ExecutionResponse) -> bool {
+        response.transactions.len() == 1
+            && response
+                .transactions
+                .values()
+                .all(|functions| functions.len() == 2)
+    }
+
+    #[td_test::test(db)]
+    async fn test_executing_the_parent_plans_its_children(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        register_parent_with_child(&db, p.id, "plan_children").await?;
+
+        let response = execute_by_name(
+            &db,
+            p.id,
+            "plan_children",
+            "parent_fn",
+            FunctionOnly::FALSE,
+            OverrideDisabledTrigger::FALSE,
+        )
+        .await?;
+
+        assert_eq!(
+            planned_names(&response),
+            HashSet::from(["parent_fn".to_string(), "child_fn".to_string()])
+        );
+        assert!(shares_one_transaction(&response));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_reading_the_execution_shows_its_children(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        register_parent_with_child(&db, p.id, "read_children").await?;
+        let executed = execute_by_name(
+            &db,
+            p.id,
+            "read_children",
+            "parent_fn",
+            FunctionOnly::FALSE,
+            OverrideDisabledTrigger::FALSE,
+        )
+        .await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
+            ExecutionParam {
+                execution: executed.id.clone(),
+            },
+            AllowDisabled::FALSE,
+        ));
+        let read = Services::with_defaults(db.clone())
+            .execution_read(request)
+            .await?
+            .data;
+
+        assert_eq!(planned_names(&read), planned_names(&executed));
+        assert!(shares_one_transaction(&read));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_function_only_still_plans_the_children(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        register_parent_with_child(&db, p.id, "plan_only").await?;
+
+        let response = execute_by_name(
+            &db,
+            p.id,
+            "plan_only",
+            "parent_fn",
+            FunctionOnly::TRUE,
+            OverrideDisabledTrigger::FALSE,
+        )
+        .await?;
+
+        assert_eq!(
+            planned_names(&response),
+            HashSet::from(["parent_fn".to_string(), "child_fn".to_string()])
+        );
+        assert!(shares_one_transaction(&response));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_overriding_a_disabled_parent_runs_its_children(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "plan_override", None).await;
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                CollectionParam {
+                    collection: CollectionIdName::from_str("plan_override")?,
+                },
+                FunctionRegister {
+                    enabled: Some(Enabled::FALSE),
+                    ..parent_with_child()?
+                },
+            )
+            .in_project(p.id);
+        Services::with_defaults(db.clone())
+            .register_function(request)
+            .await?;
+
+        let response = execute_by_name(
+            &db,
+            p.id,
+            "plan_override",
+            "parent_fn",
+            FunctionOnly::FALSE,
+            OverrideDisabledTrigger::TRUE,
+        )
+        .await?;
+
+        assert_eq!(
+            planned_names(&response),
+            HashSet::from(["parent_fn".to_string(), "child_fn".to_string()])
+        );
+        assert!(shares_one_transaction(&response));
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_a_disabled_child_is_not_planned(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(
+                &CollectionName::try_from("plan_disabled")?,
+                &UserId::admin(),
+            )
+            .await?;
+        let mut parent = parent_with_child()?;
+        let declared = parent.child_functions.take().expect("child").remove(0);
+        let parent = db
+            .scoped(p.id)
+            .seed()
+            .function(&collection, &parent)
+            .await?;
+        let child = FunctionRegister {
+            name: declared.name,
+            tables: declared.tables,
+            dependencies: declared.dependencies,
+            triggers: Some(vec![TableTriggerDto::try_from("parent_table")?]),
+            enabled: Some(Enabled::FALSE),
+            ..parent_with_child()?
+        };
+        db.scoped(p.id)
+            .seed()
+            .child_function(
+                &collection,
+                &FunctionRegister {
+                    child_functions: None,
+                    ..child
+                },
+                &parent.base.function_id,
+            )
+            .await?;
+
+        let response = execute_by_name(
+            &db,
+            p.id,
+            "plan_disabled",
+            "parent_fn",
+            FunctionOnly::FALSE,
+            OverrideDisabledTrigger::FALSE,
+        )
+        .await?;
+
+        assert_eq!(
+            planned_names(&response),
+            HashSet::from(["parent_fn".to_string()])
+        );
+        Ok(())
+    }
+
     #[td_test::test(db)]
     async fn test_triggering_a_child_function_is_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         register_parent_with_child(&db, p.id, "trigger_guard").await?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .create(
-                (
-                    CollectionParam {
-                        collection: CollectionIdName::from_str("trigger_guard")?,
-                    },
-                    FunctionParam {
-                        function: FunctionIdName::from_str("child_fn")?,
-                    },
-                ),
-                ExecutionRequest {
-                    name: None,
-                    function_only: FunctionOnly::FALSE,
-                    override_disabled_trigger: OverrideDisabledTrigger::default(),
-                    skip_if_running: SkipIfRunning::default(),
-                    external_uid: None,
-                },
-            )
-            .in_project(p.id);
-        let err = Services::with_defaults(db.clone())
-            .execute_function(request)
-            .await
-            .expect_err("a child function must not be triggerable");
+        let err = execute_by_name(
+            &db,
+            p.id,
+            "trigger_guard",
+            "child_fn",
+            FunctionOnly::FALSE,
+            OverrideDisabledTrigger::FALSE,
+        )
+        .await
+        .expect_err("a child function must not be triggerable");
 
         assert!(matches!(
             err.domain_err::<ChildFunctionError>(),

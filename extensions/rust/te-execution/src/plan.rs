@@ -20,11 +20,12 @@ impl PlanScope for ExecutionScope {
         options
     }
 
+    /// An execution runs its start function and the start's children.
     async fn plan_triggers(
         source: &mut impl GraphSource,
         start: &FunctionId,
         options: &RecursionOptions,
     ) -> Result<Vec<TriggerDBWithNames>, TdError> {
-        source.walk(start, options).await
+        source.children_triggers(start, &[], options).await
     }
 }

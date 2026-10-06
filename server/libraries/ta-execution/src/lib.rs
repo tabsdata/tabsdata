@@ -20,6 +20,15 @@ pub trait GraphSource: Send {
         start: &FunctionId,
         options: &RecursionOptions,
     ) -> impl Future<Output = Result<Vec<TriggerDBWithNames>, TdError>> + Send;
+
+    /// The triggers tying `start` and the functions in `triggers` to their
+    /// children, minus the ones already in `triggers`.
+    fn children_triggers(
+        &mut self,
+        start: &FunctionId,
+        triggers: &[TriggerDBWithNames],
+        options: &RecursionOptions,
+    ) -> impl Future<Output = Result<Vec<TriggerDBWithNames>, TdError>> + Send;
 }
 
 /// Which functions an execution runs: each edition provides one.
