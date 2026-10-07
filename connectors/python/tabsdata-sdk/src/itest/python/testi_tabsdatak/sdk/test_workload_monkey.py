@@ -21,9 +21,10 @@ The defaults keep a run to about two minutes. Tuning: ``MONKEY_SEED``,
 ``MONKEY_OPS`` (60), ``MONKEY_LANES`` (4), ``MONKEY_SCALE`` (0.25, fleet size
 factor), ``MONKEY_MAX_SECONDS`` (20, longest publisher sleep),
 ``MONKEY_FAULTS`` (1) and ``MONKEY_TIMEOUT`` (300 seconds, to raise with the
-others); ``monkey.md`` in tabsdata-ee lists heavier profiles. Live
-progress, off by default: ``MONKEY_PROGRESS=tty`` writes it to the terminal the
-run was launched from, any other value is a file it is appended to.
+others). The developer guide in tabsdata-ee lists heavier profiles, under
+Development Techniques, "Monkey Tests for Execution Plans". Live progress, off
+by default: ``MONKEY_PROGRESS=tty`` writes it to the terminal the run was
+launched from, any other value is a file it is appended to.
 """
 
 from __future__ import annotations
