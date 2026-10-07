@@ -140,7 +140,7 @@ def test_a_type_falling_back_to_text_converts_its_values_to_text(sa_type):
         ("as is", "as is"),
         ({"k": [1, 2]}, '{"k":[1,2]}'),
         ([1, "two", None], '[1,"two",null]'),
-        ({"b", "a"}, "a,b"),
+        pytest.param({"b", "a"}, "a,b", id="set"),
         (b"\x01\xff", "01ff"),
         (
             uuid.UUID("12345678-1234-5678-1234-567812345678"),
