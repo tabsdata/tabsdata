@@ -473,9 +473,17 @@ class Wal2JsonInitialLoadSession(InitialLoadSession):
 
 
 class SlotSnapshotSession(Wal2JsonInitialLoadSession):
-    """Loads from the snapshot the server exports as it creates the slot,
+    """Loads from the snapshot the server exports as it creates a slot,
     consistent at the point the slot streams from: no change is both
-    loaded and streamed, and none is missed."""
+    loaded and streamed, and none is missed. The slot is the stream's own
+    when the load creates it, and otherwise a temporary one beside the
+    stream's, which the server drops with the connection: when the stream
+    reuses its slot, or when the slot the load was to create is already
+    there, as after an attempt that died before staging. A snapshot taken
+    beside the slot between two readings of the WAL position would instead
+    miss a transaction whose commit is written but not yet visible, for as
+    long as a synchronous standby takes to answer: before the first
+    reading, so never streamed, and not in the snapshot."""
 
     def __init__(
         self,
@@ -483,6 +491,7 @@ class SlotSnapshotSession(Wal2JsonInitialLoadSession):
         engine: Any,
         replication_settings: dict[str, Any],
         replication_slot: str,
+        create: bool,
     ):
         super().__init__(engine=engine)
         self._replicator = psycopg2.connect(**replication_settings)
@@ -490,7 +499,9 @@ class SlotSnapshotSession(Wal2JsonInitialLoadSession):
         # Before the slot: its exported snapshot lasts only until the next
         # command on this connection.
         system_identifier, timeline = identify_system(self._cursor)
-        consistent_point, snapshot_name = self._export_snapshot(replication_slot)
+        consistent_point, snapshot_name = self._export_snapshot(
+            replication_slot, create
+        )
         self._offset = LsnOffset(
             lsn=lsn_to_int(consistent_point),
             system_identifier=system_identifier,
@@ -503,19 +514,40 @@ class SlotSnapshotSession(Wal2JsonInitialLoadSession):
             consistent_point,
         )
 
-    def _export_snapshot(self, replication_slot: str) -> tuple[str, str]:
-        try:
-            self._cursor.execute(
-                f"CREATE_REPLICATION_SLOT {replication_slot} LOGICAL "
-                f"{WAL2JSON_PLUGIN} EXPORT_SNAPSHOT"
-            )
-        except psycopg2.errors.DuplicateObject as error:
-            raise PostgresErrorCode.POSTGRES_21.exception(
-                cause=error,
-                slot=replication_slot,
-            )
+    def _export_snapshot(self, replication_slot: str, create: bool) -> tuple[str, str]:
+        if create:
+            try:
+                self._cursor.execute(
+                    f"CREATE_REPLICATION_SLOT {replication_slot} LOGICAL "
+                    f"{WAL2JSON_PLUGIN} EXPORT_SNAPSHOT"
+                )
+                return self._exported()
+            except psycopg2.errors.DuplicateObject:
+                logger.info(
+                    "Replication slot %r already exists; the initial load "
+                    "snapshots beside it and the stream resumes it",
+                    replication_slot,
+                )
+        elif not self._slot_exists(replication_slot):
+            raise PostgresErrorCode.POSTGRES_22.exception(slot=replication_slot)
+        self._cursor.execute(
+            f"CREATE_REPLICATION_SLOT {_snapshot_slot(replication_slot)} TEMPORARY "
+            f"LOGICAL {WAL2JSON_PLUGIN} EXPORT_SNAPSHOT"
+        )
+        return self._exported()
+
+    def _exported(self) -> tuple[str, str]:
         _, consistent_point, snapshot_name, _ = self._cursor.fetchone()
         return consistent_point, snapshot_name
+
+    def _slot_exists(self, replication_slot: str) -> bool:
+        with self._engine.connect() as connection:
+            return bool(
+                connection.execute(
+                    text("select 1 from pg_replication_slots where slot_name = :slot"),
+                    {"slot": replication_slot},
+                ).scalar()
+            )
 
     def close(self) -> None:
         for closeable, what in (
@@ -531,31 +563,6 @@ class SlotSnapshotSession(Wal2JsonInitialLoadSession):
         self._cursor = None
         self._replicator = None
         super().close()
-
-
-class ReusedSlotSnapshotSession(SlotSnapshotSession):
-    """Loads from the snapshot of a slot created for the load alone, and
-    temporary, so the server drops it with the connection, when the slot
-    the stream reuses is left to whoever provisioned it. A snapshot taken
-    beside the slot instead, between two readings of the WAL position,
-    misses a transaction whose commit is written but not yet visible, for
-    as long as a synchronous standby takes to answer: it is before the
-    first reading, so never streamed, and not in the snapshot."""
-
-    def _export_snapshot(self, replication_slot: str) -> tuple[str, str]:
-        with self._engine.connect() as connection:
-            exists = connection.execute(
-                text("select 1 from pg_replication_slots where slot_name = :slot"),
-                {"slot": replication_slot},
-            ).scalar()
-        if not exists:
-            raise PostgresErrorCode.POSTGRES_22.exception(slot=replication_slot)
-        self._cursor.execute(
-            f"CREATE_REPLICATION_SLOT {_snapshot_slot(replication_slot)} TEMPORARY "
-            f"LOGICAL {WAL2JSON_PLUGIN} EXPORT_SNAPSHOT"
-        )
-        _, consistent_point, snapshot_name, _ = self._cursor.fetchone()
-        return consistent_point, snapshot_name
 
 
 SLOT_NAME_MAX_LENGTH = 63
@@ -790,16 +797,11 @@ class Wal2JsonIngester(CdcIngester):
                 )
 
     def open_initial_load(self) -> Wal2JsonInitialLoadSession:
-        if self._replication_slot_behavior == "create":
-            return SlotSnapshotSession(
-                engine=self._build_engine(),
-                replication_settings=self._replication_connection_settings(),
-                replication_slot=self._replication_slot,
-            )
-        return ReusedSlotSnapshotSession(
+        return SlotSnapshotSession(
             engine=self._build_engine(),
             replication_settings=self._replication_connection_settings(),
             replication_slot=self._replication_slot,
+            create=self._replication_slot_behavior == "create",
         )
 
     def close_session(self, session: Any) -> None:

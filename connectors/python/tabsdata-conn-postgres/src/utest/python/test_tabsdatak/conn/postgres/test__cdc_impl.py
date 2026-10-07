@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock
 
+import psycopg2
 import pytest
 import sqlalchemy.types as sa_types
 from sqlalchemy.dialects.postgresql import BYTEA, JSON, JSONB, OID, TEXT
@@ -34,7 +35,6 @@ from tabsdatak.conn.postgres._cdc_impl import (
     DEFAULT_WAL2JSON_FORMAT_VERSION,
     LsnOffset,
     PostgresDialect,
-    ReusedSlotSnapshotSession,
     SlotSnapshotSession,
     Wal2JsonIngester,
     accepted_gap,
@@ -1088,7 +1088,7 @@ def test_a_stream_never_attached_settles_nothing(monkeypatch):
 
 
 # =====================================================================
-# ReusedSlotSnapshotSession
+# SlotSnapshotSession
 # =====================================================================
 
 
@@ -1139,7 +1139,7 @@ class _Engine:
         self.commands: list[str] = []
         self._connections = 0
         cursor = MagicMock()
-        cursor.execute.side_effect = self.commands.append
+        cursor.execute.side_effect = self._command
         cursor.fetchone.side_effect = [
             (SYSTEM_ID, 4, "0/0", "d"),
             ("slot_snapshot", "0/1000", "00000003-0000001B-1", "wal2json"),
@@ -1150,6 +1150,12 @@ class _Engine:
             "tabsdatak.conn.postgres._cdc_impl.psycopg2.connect",
             lambda **settings: replicator,
         )
+
+    def _command(self, command: str) -> None:
+        self.commands.append(command)
+        creating = command.startswith("CREATE_REPLICATION_SLOT slot LOGICAL")
+        if creating and self.slot_exists:
+            raise psycopg2.errors.DuplicateObject()
 
     def connect(self):
         self._connections += 1
@@ -1180,9 +1186,15 @@ def test_the_load_time_is_the_snapshot_transaction_start_in_utc(monkeypatch):
     assert snapshot_connection == now_connection
 
 
-def _reused_session(engine: _Engine) -> ReusedSlotSnapshotSession:
-    return ReusedSlotSnapshotSession(
-        engine=engine, replication_settings={}, replication_slot="slot"
+def _reused_session(engine: _Engine) -> SlotSnapshotSession:
+    return SlotSnapshotSession(
+        engine=engine, replication_settings={}, replication_slot="slot", create=False
+    )
+
+
+def _creating_session(engine: _Engine) -> SlotSnapshotSession:
+    return SlotSnapshotSession(
+        engine=engine, replication_settings={}, replication_slot="slot", create=True
     )
 
 
@@ -1216,6 +1228,35 @@ def test_a_reused_slot_must_exist_before_its_snapshot_slot_is_created(monkeypatc
     assert engine.commands == ["IDENTIFY_SYSTEM"]
 
 
+def test_a_creating_load_snapshots_beside_a_slot_that_is_already_there(monkeypatch):
+    """An attempt that created the slot and died before staging leaves it
+    there; the next one loads beside it and the stream resumes it, rather
+    than refusing until someone drops the slot by hand."""
+    engine = _Engine(monkeypatch, slot_exists=True)
+    session = _creating_session(engine)
+
+    assert engine.commands == [
+        "IDENTIFY_SYSTEM",
+        "CREATE_REPLICATION_SLOT slot LOGICAL wal2json EXPORT_SNAPSHOT",
+        "CREATE_REPLICATION_SLOT slot_snapshot TEMPORARY LOGICAL wal2json "
+        "EXPORT_SNAPSHOT",
+    ]
+    assert session.offset.lsn == 0x1000
+    assert session.window_end is None
+
+
+def test_a_creating_load_snapshots_from_the_slot_it_creates(monkeypatch):
+    engine = _Engine(monkeypatch, slot_exists=False)
+    session = _creating_session(engine)
+
+    assert engine.commands == [
+        "IDENTIFY_SYSTEM",
+        "CREATE_REPLICATION_SLOT slot LOGICAL wal2json EXPORT_SNAPSHOT",
+    ]
+    assert session.offset.lsn == 0x1000
+    assert not any("pg_replication_slots" in entry[2] for entry in engine.log)
+
+
 def test_the_snapshot_slot_name_stays_within_what_the_server_accepts():
     assert _cdc_impl._snapshot_slot("slot") == "slot_snapshot"
     longest = _cdc_impl._snapshot_slot("s" * 80)
@@ -1247,7 +1288,10 @@ def test_a_created_slot_is_identified_before_it_exports_its_snapshot(monkeypatch
         lambda **settings: replicator,
     )
     session = SlotSnapshotSession(
-        engine=MagicMock(), replication_settings={}, replication_slot="slot"
+        engine=MagicMock(),
+        replication_settings={},
+        replication_slot="slot",
+        create=True,
     )
     assert commands[0] == "IDENTIFY_SYSTEM"
     assert commands[1].startswith("CREATE_REPLICATION_SLOT slot LOGICAL")

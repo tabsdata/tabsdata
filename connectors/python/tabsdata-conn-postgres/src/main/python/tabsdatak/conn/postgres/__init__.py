@@ -530,15 +530,13 @@ class PostgresCdcStreamSrc(StreamSrc):
             snapshot reads the tables themselves rather than the
             write-ahead log. No table is locked.
 
-            How the snapshot is taken follows
-            `replication_slot_behavior`. With `"create"` the load creates
-            the slot, which exports the snapshot and the position it is
-            consistent at in one operation, so no change is repeated or
-            missed; the named slot must not already exist. With `"reuse"`
-            the load leaves that slot to whoever provisioned it -- it must
-            already exist -- and exports its snapshot the same way from a
-            temporary slot of its own, which the server drops once the
-            load is read.
+            The snapshot is the one the server exports as it creates a
+            slot, together with the position it is consistent at, so no
+            change is repeated or missed. With `"create"` that slot is the
+            stream's own; with `"reuse"`, which leaves the stream's slot to
+            whoever provisioned it -- it must already exist -- or when the
+            slot to create is already there, it is a temporary slot beside
+            the stream's, which the server drops once the load is read.
         replication_slot_behavior: `"reuse"` (default, slot must
             exist) or `"create"` (create it, no-op if it exists). It
             also selects how `initial_load` snapshots -- see there.

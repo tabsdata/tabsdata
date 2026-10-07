@@ -852,9 +852,11 @@ def test_a_creating_load_snapshots_from_the_slot_it_creates(
 
 
 @postgrescdc_domain("postgrescdc_employees_xs")
-def test_a_creating_load_refuses_a_slot_that_already_exists(
+def test_a_creating_load_snapshots_beside_a_slot_that_already_exists(
     domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
 ):
+    """What a retry meets after an attempt created the slot and died before
+    staging: the load snapshots beside the slot and the stream resumes it."""
     domain = domain_postgrescdc_employees_xs
     with cdc_probe(domain, "td_il_create_dup") as probe:
         probe.insert(1, "seed")
@@ -862,12 +864,15 @@ def test_a_creating_load_refuses_a_slot_that_already_exists(
         with replication_slot(domain, "td_il_create_dup_slot") as slot:
             src = _creating_stream_src([cdc_table(probe.name)], slot)
             ctx = _CdcCtx(work_dir(tmp_path))
-            with pytest.raises(PostgresRuntimeException, match="POSTGRES_21"):
-                with _running(ctx, cdc_src_conn(domain), src):
-                    time.sleep(POLL_SECONDS)
+            with _running(ctx, cdc_src_conn(domain), src):
+                _await(ctx, "the snapshot", lambda f: _loaded_ids(f) == [1])
+                probe.insert(2, "after-the-load")
+                frame = _await(
+                    ctx, "the change after the load", lambda f: 2 in _captured_ids(f)
+                )
 
-    assert ctx.manifests() == []
-    assert ctx.persisted_state() == {}
+    assert _loaded_ids(frame) == [1]
+    assert 2 in _captured_ids(frame)
 
 
 @postgrescdc_domain("postgrescdc_employees_xs")
