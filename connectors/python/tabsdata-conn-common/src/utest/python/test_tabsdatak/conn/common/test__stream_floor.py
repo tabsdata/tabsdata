@@ -13,6 +13,8 @@ from pydantic import TypeAdapter, ValidationError
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._floor import (
     decode_seconds,
+    manifest_bounds,
+    manifest_bounds_validator,
     seconds_floor_validator,
     unsafe_seconds,
 )
@@ -101,3 +103,60 @@ def test_the_validator_accepts_what_decodes(cfg):
 def test_the_validator_rejects_what_does_not_decode(cfg):
     with pytest.raises(ValidationError):
         Spec.validate_python(cfg)
+
+
+MIN = "tabsdata.test.manifest.min_secs"
+MAX = "tabsdata.test.manifest.max_secs"
+
+
+def bounds(cfg):
+    return manifest_bounds(cfg, min_key=MIN, max_key=MAX, trigger_key=KEY)
+
+
+@pytest.mark.parametrize(
+    ("cfg", "expected"),
+    [
+        (None, (MANIFEST_FLOOR_SECS, None)),
+        ({}, (MANIFEST_FLOOR_SECS, None)),
+        ({MIN: None}, (MANIFEST_FLOOR_SECS, None)),
+        ({MIN: None, MAX: None}, (MANIFEST_FLOOR_SECS, None)),
+        ({MIN: 60}, (60, None)),
+        ({MIN: 120}, (120, None)),
+        ({MIN: 120, MAX: 120}, (120, 120)),
+        ({MAX: 3600}, (MANIFEST_FLOOR_SECS, 3600)),
+        ({MIN: 90, KEY: 90}, (90, None)),
+        ({MIN: 90, KEY: unsafe_seconds(1)}, (90, None)),
+    ],
+)
+def test_the_manifest_bounds_default_to_the_floor_and_no_heartbeat(cfg, expected):
+    assert bounds(cfg) == expected
+
+
+@pytest.mark.parametrize(
+    "cfg",
+    [
+        {MIN: 59},
+        {MIN: 0},
+        {MIN: "60"},
+        {MIN: True},
+        {MAX: 59},
+        {MIN: 120, MAX: 119},
+        {MAX: "3600"},
+        {MIN: 90, KEY: 60},
+    ],
+    ids=lambda cfg: repr(cfg),
+)
+def test_the_manifest_bounds_refuse_what_breaks_their_order(cfg):
+    with pytest.raises(ValueError):
+        bounds(cfg)
+
+
+Bounds = TypeAdapter(
+    Annotated[dict[str, Any] | None, manifest_bounds_validator(MIN, MAX, KEY)],
+)
+
+
+def test_the_bounds_validator_accepts_and_refuses_as_the_decoding_does():
+    assert Bounds.validate_python({MIN: 60, MAX: 600}) == {MIN: 60, MAX: 600}
+    with pytest.raises(ValidationError):
+        Bounds.validate_python({MIN: 60, MAX: 30})

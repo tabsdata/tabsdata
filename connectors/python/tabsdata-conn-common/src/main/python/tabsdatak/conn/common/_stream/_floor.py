@@ -53,3 +53,62 @@ def seconds_floor_validator(key: str) -> AfterValidator:
         return cfg
 
     return AfterValidator(validate)
+
+
+def manifest_bounds(
+    cfg: Mapping[str, Any] | None,
+    *,
+    min_key: str,
+    max_key: str,
+    trigger_key: str,
+) -> tuple[int, int | None]:
+    """The manifest bounds a config sets: the seconds no manifest may follow
+    the previous one within (at least the manifest floor, which an absent or
+    ``None`` value means) and, when given, the seconds no stream may go
+    without one (at least the first; absent or ``None`` means never). A plain
+    trigger wait below the first is refused too; a marked one lowers the
+    floor for a test as before."""
+    cfg = cfg or {}
+    minimum = cfg.get(min_key)
+    if minimum is None:
+        minimum = MANIFEST_FLOOR_SECS
+    if isinstance(minimum, bool) or not isinstance(minimum, int):
+        raise ValueError(
+            f"The value of {min_key} must be a whole number of seconds; "
+            f"it is {minimum!r}"
+        )
+    if minimum < MANIFEST_FLOOR_SECS:
+        raise ValueError(
+            f"The value of {min_key} must be at least {MANIFEST_FLOOR_SECS} "
+            f"seconds; it is {minimum}"
+        )
+    maximum = cfg.get(max_key)
+    if maximum is not None:
+        if isinstance(maximum, bool) or not isinstance(maximum, int):
+            raise ValueError(
+                f"The value of {max_key} must be a whole number of seconds; "
+                f"it is {maximum!r}"
+            )
+        if maximum < minimum:
+            raise ValueError(
+                f"The value of {max_key} must be at least {min_key} "
+                f"({minimum} seconds); it is {maximum}"
+            )
+    trigger = cfg.get(trigger_key)
+    if isinstance(trigger, int) and not isinstance(trigger, bool):
+        if trigger < SECONDS_BASE and trigger < minimum:
+            raise ValueError(
+                f"The value of {trigger_key} must be at least {min_key} "
+                f"({minimum} seconds); it is {trigger}"
+            )
+    return minimum, maximum
+
+
+def manifest_bounds_validator(
+    min_key: str, max_key: str, trigger_key: str
+) -> AfterValidator:
+    def validate(cfg: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+        manifest_bounds(cfg, min_key=min_key, max_key=max_key, trigger_key=trigger_key)
+        return cfg
+
+    return AfterValidator(validate)

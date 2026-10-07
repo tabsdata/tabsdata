@@ -26,7 +26,7 @@ import logging
 from typing import TYPE_CHECKING
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._floor import decode_seconds
+from tabsdatak.conn.common._stream._floor import decode_seconds, manifest_bounds
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream.constants import (
@@ -80,6 +80,8 @@ _KEY_CDC_BUFFER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.buffer.max_secs"
 _KEY_CDC_TRIGGER_MAX_ROWS: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_rows"
 _KEY_CDC_TRIGGER_MAX_BYTES: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_bytes"
 _KEY_CDC_TRIGGER_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.trigger.max_secs"
+_KEY_CDC_MANIFEST_MIN_SECS: CdcSrcCfgKey = "tabsdata.cdc.manifest.min_secs"
+_KEY_CDC_MANIFEST_MAX_SECS: CdcSrcCfgKey = "tabsdata.cdc.manifest.max_secs"
 _KEY_CDC_POLL_IDLE_SECS: CdcSrcCfgKey = "tabsdata.cdc.poll.idle_secs"
 _KEY_CDC_MAX_LARGE_TEXT_LENGTH: CdcSrcCfgKey = "tabsdata.cdc.max_large_text_length"
 _KEY_CDC_INITIAL_LOAD_MAX_WINDOW_CHANGES: CdcSrcCfgKey = (
@@ -105,6 +107,12 @@ def _build_cdc_run_config(
     """Translate the user-facing ``src_cfg`` mapping into a runner
     ``CdcRunConfig``. Missing keys fall back to common-sql defaults."""
     cfg = dict(src.src_cfg or {})
+    manifest_min_secs, manifest_max_secs = manifest_bounds(
+        cfg,
+        min_key=_KEY_CDC_MANIFEST_MIN_SECS,
+        max_key=_KEY_CDC_MANIFEST_MAX_SECS,
+        trigger_key=_KEY_CDC_TRIGGER_MAX_SECS,
+    )
     return CdcRunConfig(
         cdc_format=_CommonCdcFormat(
             columns_format=src.columns_format,
@@ -117,6 +125,8 @@ def _build_cdc_run_config(
         trigger_max_bytes=cfg.get(
             _KEY_CDC_TRIGGER_MAX_BYTES, DEFAULT_TRIGGER_MAX_BYTES
         ),
+        manifest_min_secs=manifest_min_secs,
+        manifest_max_secs=manifest_max_secs,
         trigger_max_secs=decode_seconds(
             _KEY_CDC_TRIGGER_MAX_SECS,
             cfg.get(_KEY_CDC_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),

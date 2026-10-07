@@ -76,6 +76,7 @@ def test_run_config_uses_defaults_when_no_src_cfg():
     assert cfg.buffer_max_rows == 10_000
     assert cfg.buffer_max_secs == 60
     assert cfg.poll_idle_secs == 1
+    assert (cfg.manifest_min_secs, cfg.manifest_max_secs) == (60, None)
     assert cfg.max_large_text_length == 1024
 
 

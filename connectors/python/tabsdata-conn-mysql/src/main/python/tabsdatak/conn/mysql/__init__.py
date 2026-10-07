@@ -450,6 +450,8 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.trigger.max_rows",
     "tabsdata.cdc.trigger.max_bytes",
     "tabsdata.cdc.trigger.max_secs",
+    "tabsdata.cdc.manifest.min_secs",
+    "tabsdata.cdc.manifest.max_secs",
     "tabsdata.cdc.poll.idle_secs",
     "tabsdata.cdc.max_large_text_length",
     "tabsdata.cdc.fetch_size",
@@ -460,6 +462,11 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
     Mapping[CdcSrcCfgKey, Any],
     _common_validation.CONN_CFG_VALIDATION,
     _floor.seconds_floor_validator("tabsdata.cdc.trigger.max_secs"),
+    _floor.manifest_bounds_validator(
+        "tabsdata.cdc.manifest.min_secs",
+        "tabsdata.cdc.manifest.max_secs",
+        "tabsdata.cdc.trigger.max_secs",
+    ),
     _stream_validation.positive_integers_validator(
         "tabsdata.cdc.buffer.max_rows",
         "tabsdata.cdc.buffer.max_bytes",
@@ -559,7 +566,13 @@ class MySQLCdcStreamSrc(StreamSrc):
             an ordinary tabular row and `columns_format` then only
             affects the old-columns layout.
         src_cfg: Optional config mapping over the allowed CDC keys only
-            -- buffer / trigger thresholds and polling cadence. The
+            -- buffer / trigger thresholds, the manifest bounds
+            (`tabsdata.cdc.manifest.min_secs`, default 60 and never less,
+            which `trigger.max_secs` may not go below; and
+            `tabsdata.cdc.manifest.max_secs`, unset by default, which
+            stages an empty batch once that long has passed without one,
+            so the publisher runs with empty inputs as a heartbeat) and
+            polling cadence. The
             plugin falls back to its built-in defaults for missing keys.
             A byte threshold is measured on every change and slows
             ingestion down; bounding by rows is the cheap option and the

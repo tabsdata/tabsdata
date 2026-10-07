@@ -75,8 +75,9 @@ class FakeCtx:
 
 
 class FakeDisk:
-    def __init__(self, *, manifest, due_force=False, due_normal=False):
+    def __init__(self, *, manifest, due_force=False, due_normal=False, heartbeat=False):
         self._manifest = manifest
+        self._heartbeat = heartbeat
         self.has_data = bool(manifest and any(manifest))
         self._force = due_force
         self._normal = due_normal
@@ -92,6 +93,9 @@ class FakeDisk:
 
     def due(self, force: bool = False) -> bool:
         return self._force if force else self._normal
+
+    def heartbeat_due(self) -> bool:
+        return self._heartbeat
 
     def manifest(self):
         return self._manifest
@@ -257,6 +261,18 @@ def test_publish_empty_manifest_does_not_stage():
     assert publish(ctx, disk, FakeBuffer(), FakeIngester()) is False
     assert ctx.staged == []
     assert disk.cleared == 0
+
+
+def test_a_due_heartbeat_stages_an_empty_manifest_with_the_offset():
+    ctx = FakeCtx(active_values=[])
+    disk = FakeDisk(manifest=[[], []], heartbeat=True)
+    ingester = OwnedOffsetIngester()
+    buffer = FakeBuffer()
+
+    assert publish(ctx, disk, buffer, ingester) is True
+    assert ctx.staged == [([[], []], {"offset": buffer.offset})]
+    assert ingester.acknowledged_offsets == [buffer.offset]
+    assert disk.cleared == 1
 
 
 def test_publish_stages_manifest_and_commits_offset():

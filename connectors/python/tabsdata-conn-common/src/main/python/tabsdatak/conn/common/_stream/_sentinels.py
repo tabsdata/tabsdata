@@ -70,14 +70,18 @@ class DiskSentinel:
         max_bytes: int | None,
         max_secs: float,
         floor_secs: float = MANIFEST_FLOOR_SECS,
+        heartbeat_secs: float | None = None,
         clock: Callable[[], float] = time.time,
     ):
         self._ledger = ledger
         self._buffer = buffer
         self._max_rows = max_rows
         self._max_bytes = max_bytes
-        self._max_secs = max_secs
-        self._floor_secs = min(floor_secs, max_secs)
+        self._max_secs = (
+            max_secs if heartbeat_secs is None else min(max_secs, heartbeat_secs)
+        )
+        self._floor_secs = min(floor_secs, self._max_secs)
+        self._heartbeat_secs = heartbeat_secs
         self._clock = clock
         self._last_flushed: float = clock()
 
@@ -99,9 +103,16 @@ class DiskSentinel:
     def reset_timer(self) -> None:
         self._last_flushed = self._clock()
 
+    def heartbeat_due(self) -> bool:
+        """Whether the stream has gone without a manifest for the heartbeat
+        bound, so an empty one is due even with nothing to stage."""
+        if self._heartbeat_secs is None or self.has_data:
+            return False
+        return self._clock() - self._last_flushed >= self._heartbeat_secs
+
     def due(self, force: bool = False) -> bool:
         if not self.has_data:
-            return False
+            return self.heartbeat_due()
         if force:
             return True
         elapsed = self._clock() - self._last_flushed

@@ -423,6 +423,8 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.trigger.max_rows",
     "tabsdata.cdc.trigger.max_bytes",
     "tabsdata.cdc.trigger.max_secs",
+    "tabsdata.cdc.manifest.min_secs",
+    "tabsdata.cdc.manifest.max_secs",
     "tabsdata.cdc.poll.idle_secs",
     "tabsdata.cdc.max_large_text_length",
     "tabsdata.cdc.fetch_size",
@@ -434,6 +436,11 @@ CdcSrcCfgSpec: TypeAlias = Annotated[
     Mapping[CdcSrcCfgKey, Any],
     _common_validation.CONN_CFG_VALIDATION,
     _floor.seconds_floor_validator("tabsdata.cdc.trigger.max_secs"),
+    _floor.manifest_bounds_validator(
+        "tabsdata.cdc.manifest.min_secs",
+        "tabsdata.cdc.manifest.max_secs",
+        "tabsdata.cdc.trigger.max_secs",
+    ),
     _stream_validation.positive_integers_validator(
         "tabsdata.cdc.buffer.max_rows",
         "tabsdata.cdc.buffer.max_bytes",
@@ -541,7 +548,13 @@ class PostgresCdcStreamSrc(StreamSrc):
         flatten_columns: When `True` (default), the new columns are
             inlined as top-level columns.
         src_cfg: Optional config mapping over the allowed CDC keys only
-            -- buffer / trigger thresholds, polling cadence, wal2json
+            -- buffer / trigger thresholds, the manifest bounds
+            (`tabsdata.cdc.manifest.min_secs`, default 60 and never less,
+            which `trigger.max_secs` may not go below; and
+            `tabsdata.cdc.manifest.max_secs`, unset by default, which
+            stages an empty batch once that long has passed without one,
+            so the publisher runs with empty inputs as a heartbeat),
+            polling cadence, wal2json
             format version, the large text length limit and
             `postgres.cdc.unchanged_large_text_as_null`. A byte
             threshold is measured on every change and slows ingestion

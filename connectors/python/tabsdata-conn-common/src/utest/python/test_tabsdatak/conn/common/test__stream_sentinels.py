@@ -64,6 +64,7 @@ def disk(
     max_bytes: int | None = None,
     max_secs: float = math.inf,
     floor_secs: float = 0,
+    heartbeat_secs: float | None = None,
     buffer: BufferSentinel | None = None,
 ) -> DiskSentinel:
     return DiskSentinel(
@@ -73,6 +74,7 @@ def disk(
         max_bytes=max_bytes,
         max_secs=max_secs,
         floor_secs=floor_secs,
+        heartbeat_secs=heartbeat_secs,
         clock=clock,
     )
 
@@ -186,6 +188,48 @@ def test_the_default_floor_is_the_manifest_floor(ledger: FileLedger):
     )
     ledger.write("s.a", table(1))
     clock.now += MANIFEST_FLOOR_SECS - 0.1
+    assert sentinel.due() is False
+    clock.now += 0.1
+    assert sentinel.due() is True
+
+
+def test_without_a_heartbeat_an_empty_disk_is_never_due(ledger: FileLedger):
+    clock = Clock()
+    sentinel = disk(ledger, clock, max_secs=5)
+    clock.now += 100_000
+    assert sentinel.due() is False
+    assert sentinel.heartbeat_due() is False
+
+
+def test_an_empty_disk_is_due_once_the_heartbeat_elapses(ledger: FileLedger):
+    clock = Clock()
+    sentinel = disk(ledger, clock, max_secs=60, heartbeat_secs=600)
+    clock.now += 599.9
+    assert (sentinel.due(), sentinel.heartbeat_due()) == (False, False)
+    clock.now += 0.1
+    assert (sentinel.due(), sentinel.heartbeat_due()) == (True, True)
+    sentinel.reset_timer()
+    assert sentinel.due() is False
+
+
+def test_the_heartbeat_is_not_due_while_data_waits_its_own_threshold(
+    ledger: FileLedger,
+):
+    clock = Clock()
+    sentinel = disk(ledger, clock, max_secs=60, heartbeat_secs=600)
+    ledger.write("s.a", table(1))
+    clock.now += 600
+    assert sentinel.heartbeat_due() is False
+    assert sentinel.due() is True
+
+
+def test_a_heartbeat_shorter_than_the_time_threshold_bounds_the_wait_with_data(
+    ledger: FileLedger,
+):
+    clock = Clock()
+    sentinel = disk(ledger, clock, max_secs=600, heartbeat_secs=120)
+    ledger.write("s.a", table(1))
+    clock.now += 119.9
     assert sentinel.due() is False
     clock.now += 0.1
     assert sentinel.due() is True

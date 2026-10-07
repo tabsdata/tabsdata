@@ -299,6 +299,8 @@ SrcCfgKey: TypeAlias = Literal[
     "tabsdata.kafka.trigger.max_rows",
     "tabsdata.kafka.trigger.max_bytes",
     "tabsdata.kafka.trigger.max_secs",
+    "tabsdata.kafka.manifest.min_secs",
+    "tabsdata.kafka.manifest.max_secs",
     "tabsdata.kafka.consume.max_messages",
 ]
 
@@ -306,6 +308,11 @@ SrcCfgSpec: TypeAlias = Annotated[
     Mapping[SrcCfgKey, Any],
     _common_validation.CONN_CFG_VALIDATION,
     _floor.seconds_floor_validator("tabsdata.kafka.trigger.max_secs"),
+    _floor.manifest_bounds_validator(
+        "tabsdata.kafka.manifest.min_secs",
+        "tabsdata.kafka.manifest.max_secs",
+        "tabsdata.kafka.trigger.max_secs",
+    ),
     _stream_validation.positive_integers_validator(
         "tabsdata.kafka.buffer.max_rows",
         "tabsdata.kafka.buffer.max_bytes",
@@ -335,7 +342,10 @@ class KafkaStreamSrc(StreamSrc):
     `flush_interval_mins`, when shorter) have passed since the last one,
     or earlier when `tabsdata.kafka.trigger.max_rows` or
     `tabsdata.kafka.trigger.max_bytes` is reached -- but never sooner
-    than 60 seconds after the previous batch. Messages of incompatible
+    than `tabsdata.kafka.manifest.min_secs` after the previous batch (60
+    by default, never less). `tabsdata.kafka.manifest.max_secs`, unset by
+    default, stages an empty batch once that long has passed without one,
+    so the publisher runs with empty inputs as a heartbeat. Messages of incompatible
     schemas land in separate files of the same batch; the files of one
     schema keep the column types of the run's earlier files of that
     schema, and a row whose values do not fit them is a dead letter.
@@ -374,7 +384,12 @@ class KafkaStreamSrc(StreamSrc):
             (default 60), and the trigger limits
             `tabsdata.kafka.trigger.max_secs` (default 60, at least 60),
             `tabsdata.kafka.trigger.max_rows` and
-            `tabsdata.kafka.trigger.max_bytes` (both off by default).
+            `tabsdata.kafka.trigger.max_bytes` (both off by default), and
+            the manifest bounds `tabsdata.kafka.manifest.min_secs`
+            (default 60, at least 60, `None` for the default;
+            `trigger.max_secs` may not be below it) and
+            `tabsdata.kafka.manifest.max_secs` (off by default; at least
+            `min_secs` when set).
             Every limit is a positive whole number. A byte limit is
             measured on every record and slows ingestion down; bounding
             by rows is the cheap option and the preferred one.

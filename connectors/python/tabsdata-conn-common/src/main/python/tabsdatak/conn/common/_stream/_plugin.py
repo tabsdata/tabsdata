@@ -200,6 +200,8 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                 max_rows=cfg.trigger_max_rows,
                 max_bytes=cfg.trigger_max_bytes,
                 max_secs=manifest_secs(cfg.trigger_max_secs, flush_interval_secs),
+                floor_secs=cfg.manifest_min_secs,
+                heartbeat_secs=cfg.manifest_max_secs,
                 clock=self.clock,
             )
 
@@ -256,7 +258,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         buffer_sentinel: BufferSentinel[R, O],
     ) -> bool:
         tables_files = ledger.manifest()
-        if not any(tables_files):
+        if not any(tables_files) and not disk_sentinel.heartbeat_due():
             return False
         offset = buffer_sentinel.offset
         run.ctx.stage(tables_files, self.stage_state(run, offset))

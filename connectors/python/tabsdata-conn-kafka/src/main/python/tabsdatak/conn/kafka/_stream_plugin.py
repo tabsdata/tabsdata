@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from tabsdatak.conn.common._stream._config import StreamRunConfig
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._floor import decode_seconds
+from tabsdatak.conn.common._stream._floor import decode_seconds, manifest_bounds
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._plugin import PipelineStreamSrcPlugin, StreamRun
@@ -80,6 +80,8 @@ _KEY_BUFFER_MAX_SECS: SrcCfgKey = "tabsdata.kafka.buffer.max_secs"
 _KEY_TRIGGER_MAX_ROWS: SrcCfgKey = "tabsdata.kafka.trigger.max_rows"
 _KEY_TRIGGER_MAX_BYTES: SrcCfgKey = "tabsdata.kafka.trigger.max_bytes"
 _KEY_TRIGGER_MAX_SECS: SrcCfgKey = "tabsdata.kafka.trigger.max_secs"
+_KEY_MANIFEST_MIN_SECS: SrcCfgKey = "tabsdata.kafka.manifest.min_secs"
+_KEY_MANIFEST_MAX_SECS: SrcCfgKey = "tabsdata.kafka.manifest.max_secs"
 _KEY_CONSUME_MAX_MESSAGES: SrcCfgKey = "tabsdata.kafka.consume.max_messages"
 
 
@@ -97,12 +99,20 @@ class KafkaRunConfig(StreamRunConfig):
 
 def _build_kafka_run_config(src: KafkaStreamSrc) -> KafkaRunConfig:
     cfg = dict(src.src_cfg or {})
+    manifest_min_secs, manifest_max_secs = manifest_bounds(
+        cfg,
+        min_key=_KEY_MANIFEST_MIN_SECS,
+        max_key=_KEY_MANIFEST_MAX_SECS,
+        trigger_key=_KEY_TRIGGER_MAX_SECS,
+    )
     return KafkaRunConfig(
         buffer_max_rows=cfg.get(_KEY_BUFFER_MAX_ROWS, DEFAULT_BUFFER_MAX_ROWS),
         buffer_max_bytes=cfg.get(_KEY_BUFFER_MAX_BYTES, DEFAULT_BUFFER_MAX_BYTES),
         buffer_max_secs=cfg.get(_KEY_BUFFER_MAX_SECS, DEFAULT_BUFFER_MAX_SECS),
         trigger_max_rows=cfg.get(_KEY_TRIGGER_MAX_ROWS, DEFAULT_TRIGGER_MAX_ROWS),
         trigger_max_bytes=cfg.get(_KEY_TRIGGER_MAX_BYTES, DEFAULT_TRIGGER_MAX_BYTES),
+        manifest_min_secs=manifest_min_secs,
+        manifest_max_secs=manifest_max_secs,
         trigger_max_secs=decode_seconds(
             _KEY_TRIGGER_MAX_SECS,
             cfg.get(_KEY_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
