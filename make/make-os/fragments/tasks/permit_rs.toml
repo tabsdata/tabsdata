@@ -112,6 +112,7 @@ script = [
         array_push ${crates_array} "mdbook"
         array_push ${crates_array} "mdbook-d2"
         array_push ${crates_array} "mdbook-mermaid"
+        array_push ${crates_array} "pagefind"
         crates = array_join ${crates_array} " "
 
         td_cargo_install_jobs = get_env TD_CARGO_INSTALL_JOBS

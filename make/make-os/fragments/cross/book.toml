@@ -12,5 +12,19 @@ script = [
     export D2_NO_XML_TAG=true
     python ${TEDS_PY_SCRIPT}
     cd "${BOOK_DEVELOPER_GUIDE_FOLDER}"
-    mdbook serve --open
+    if ! command -v pagefind >/dev/null 2>&1; then
+        echo "pagefind not found; serving the book without search ('cargo make permit' installs it)." >&2
+        exec mdbook serve --open
+    fi
+    # Each rebuild empties the book folder, so the search index is regenerated
+    # whenever mdbook reports a finished build.
+    mdbook serve --open 2>&1 | while IFS= read -r line; do
+        printf '%s\n' "${line}"
+        case "${line}" in
+            *"HTML book written to"*)
+                pagefind --site book --root-selector main \
+                    --glob "{index.html,chapters/**/*.html,book.os/**/*.html}" --silent
+                ;;
+        esac
+    done
     ''']

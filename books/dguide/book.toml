@@ -9,7 +9,11 @@ src = "src"
 title = "Tabsdata Developer Guide"
 
 [output.html]
-additional-css = ["./theme/custom.css"]
+additional-css = ["./theme/custom.css", "./theme/pagefind.css"]
+additional-js = ["./theme/pagefind.js"]
+
+[output.html.search]
+enable = false
 
 [output.html.fold]
 enable = true

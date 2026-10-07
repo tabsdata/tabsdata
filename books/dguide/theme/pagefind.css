@@ -1,0 +1,17 @@
+/*
+ * Copyright 2026 Tabsdata Inc.
+ */
+
+html:root {
+    --pf-text: var(--fg);
+    --pf-text-secondary: var(--sidebar-fg);
+    --pf-text-muted: var(--icons);
+    --pf-background: var(--bg);
+    --pf-border: var(--theme-popup-border);
+    --pf-border-focus: var(--links);
+    --pf-outline-focus: var(--links);
+    --pf-hover: var(--theme-hover);
+    --pf-mark: var(--fg);
+    --pf-skeleton: var(--theme-hover);
+    --pf-skeleton-shine: var(--quote-bg);
+}
