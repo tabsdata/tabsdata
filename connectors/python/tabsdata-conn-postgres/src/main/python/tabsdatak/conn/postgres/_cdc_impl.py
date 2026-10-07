@@ -643,8 +643,6 @@ class LsnOffset(CdcOffset):
 # ---------------------------------------------------------------------
 
 
-
-
 def _to_decimal(value: Any) -> Decimal:
     return value if isinstance(value, Decimal) else Decimal(str(value))
 

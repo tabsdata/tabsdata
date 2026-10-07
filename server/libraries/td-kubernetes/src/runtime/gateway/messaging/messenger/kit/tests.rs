@@ -85,8 +85,7 @@ fn every_companion_carries_the_workload_labels() {
 
 #[test]
 fn companions_keep_their_names_and_namespace() {
-    let kit =
-        build_worker_run_kit("crn-wkr20260101-1", "tabsdata", &cron_request()).unwrap();
+    let kit = build_worker_run_kit("crn-wkr20260101-1", "tabsdata", &cron_request()).unwrap();
     assert_eq!(
         kit.main_configmap.metadata.name.as_deref(),
         Some("crn-wkr20260101-1-main")
