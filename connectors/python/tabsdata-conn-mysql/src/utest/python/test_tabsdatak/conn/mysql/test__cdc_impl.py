@@ -10,7 +10,7 @@ integration tests (``test_plugin_cdc.py``)."""
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from unittest.mock import MagicMock
 
@@ -417,6 +417,53 @@ def test_as_gtid_set_no_colon_passes_through():
 
 
 # --- schema_table_filter -------------------------------------------
+
+
+def test_a_timestamp_reading_becomes_the_server_clock_and_a_datetime_stays():
+    """The binlog reader hands a TIMESTAMP as a naive UTC reading while a batch
+    read of the row gives the server zone's clock; a DATETIME is that clock
+    in both. The stream publishes both as the batch read does."""
+    import pymysqlreplication.constants.FIELD_TYPE as FT
+
+    bi = _ingester_with_tables(["app.users"])
+    bi._server_tz = timezone(timedelta(hours=2))
+    event = _event(
+        object,
+        columns=[_Col(FT.TIMESTAMP2, name="at"), _Col(FT.DATETIME2, name="when")],
+    )
+    values = {
+        "at": datetime(2026, 1, 1, 10, 0),
+        "when": datetime(2026, 1, 1, 10, 0),
+        "n": 1,
+    }
+
+    bi._to_server_clock(values, bi._timestamp_columns(event))
+
+    assert values == {
+        "at": datetime(2026, 1, 1, 12, 0),
+        "when": datetime(2026, 1, 1, 10, 0),
+        "n": 1,
+    }
+    assert values["at"].tzinfo is None
+
+
+def test_without_a_known_server_zone_a_timestamp_stays_utc_and_is_warned_once(
+    caplog,
+):
+    import pymysqlreplication.constants.FIELD_TYPE as FT
+
+    bi = _ingester_with_tables(["app.users"])
+    assert bi._server_tz is None
+    event = _event(object, columns=[_Col(FT.TIMESTAMP, name="at")])
+    stamps = bi._timestamp_columns(event)
+    values = {"at": datetime(2026, 1, 1, 10, 0)}
+
+    with caplog.at_level("WARNING"):
+        bi._to_server_clock(values, stamps)
+        bi._to_server_clock(values, stamps)
+
+    assert values == {"at": datetime(2026, 1, 1, 10, 0)}
+    assert caplog.text.count("server zone is unknown") == 1
 
 
 def _ingester_with_tables(qualified: list[str]) -> BinlogIngester:

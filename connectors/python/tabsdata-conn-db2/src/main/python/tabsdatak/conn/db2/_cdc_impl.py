@@ -35,7 +35,7 @@ import logging
 import time
 from collections.abc import Generator, Iterable, Iterator
 from dataclasses import dataclass
-from datetime import datetime, timezone, tzinfo
+from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import Any, Literal, TypeAlias, Union
 
@@ -62,6 +62,7 @@ from tabsdatak.conn.common.sql.cdc._model import (
     TableObject,
     TrackedTable,
 )
+from tabsdatak.conn.common.sql.cdc._tz import parse_timezone, utc_instant
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_FETCH_SIZE,
     DOT,
@@ -180,25 +181,6 @@ except ImportError:
     _LARGE_OBJECT_TYPES = (LargeBinary, CLOB)
 
 
-def _parse_offset_string(value: str) -> tzinfo | None:
-    """Parse ``"+05:30"`` / ``"-08:00"`` style offsets into a
-    ``timezone``. Returns ``None`` on unparseable input."""
-    from datetime import timedelta, timezone
-
-    value = value.strip()
-    if not value or value[0] not in "+-":
-        return None
-    sign = 1 if value[0] == "+" else -1
-    try:
-        hh, _, mm = value[1:].partition(":")
-        hours = int(hh)
-        minutes = int(mm or 0)
-    except ValueError:
-        return None
-    delta = timedelta(hours=hours, minutes=minutes) * sign
-    return timezone(delta)
-
-
 class Db2Dialect(Dialect):
     """``Dialect`` for the Db2 SQL Replication CDC ingester."""
 
@@ -261,7 +243,7 @@ class Db2Dialect(Dialect):
                 text("select current timezone from sysibm.sysdummy1")
             ).fetchone()
         if row and row[0] is not None:
-            return _parse_offset_string(str(row[0]))
+            return parse_timezone(row[0])
         return None
 
     def large_column_kind(self, satype: Any) -> LargeColumnKind | None:
@@ -616,9 +598,7 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
         now: datetime = connection.execute(
             text("select current timestamp from sysibm.sysdummy1")
         ).scalar()
-        if now.tzinfo is None:
-            now = now.replace(tzinfo=self._server_tz)
-        return now.astimezone(timezone.utc)
+        return utc_instant(now, self._server_tz)
 
     def tables(
         self, tracked_tables: dict[str, TrackedTable]
@@ -1244,12 +1224,8 @@ class SqlReplicaIngester(CdcIngester):
                 )
             commit_seq = row_map[IBMSNAP_COMMITSEQ.sa_name]
             intent_seq = row_map[IBMSNAP_INTENTSEQ.sa_name]
-            logmarker: datetime = row_map[IBMSNAP_LOGMARKER.sa_name]
-            if logmarker.tzinfo is None:
-                logmarker = logmarker.replace(tzinfo=self._server_tz)
-            commit_ts = logmarker.astimezone(timezone.utc)
+            commit_ts = utc_instant(row_map[IBMSNAP_LOGMARKER.sa_name], self._server_tz)
             new_values = {col.name: row_map.get(col.sa_name) for col in tracked.columns}
-            self.localize_values(new_values)
             if op == CdcOperation.UPDATE:
                 old_values = {}
                 for column in tracked.columns:
@@ -1257,7 +1233,6 @@ class SqlReplicaIngester(CdcIngester):
                         old_values[column.name] = row_map[column.sa_oname]
                     else:
                         old_values[column.name] = None
-                self.localize_values(old_values)
             else:
                 old_values = {col.name: None for col in tracked.columns}
             segment = int.from_bytes(commit_seq, byteorder="big")

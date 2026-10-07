@@ -95,6 +95,7 @@ from tabsdatak.conn.common.sql.cdc._model import (
     InitialLoadSession,
     TrackedTable,
 )
+from tabsdatak.conn.common.sql.cdc._tz import parse_timezone
 from tabsdatak.conn.common.sql.cdc.constants import (
     DOT,
     CdcOperation,
@@ -240,6 +241,12 @@ _INTEGER_TYPES = (TINYINT, SMALLINT, MEDIUMINT, INTEGER, BIGINT)
 # Some MySQL versions distinguish ``TIMESTAMP2`` / ``DATETIME2`` /
 # ``TIME2`` (fractional-second variants). Alias them to the same
 # SA types.
+_TIMESTAMP_CODES = frozenset(
+    code
+    for code in (FIELD_TYPE.TIMESTAMP, getattr(FIELD_TYPE, "TIMESTAMP2", None))
+    if code is not None
+)
+
 for _attr in ("TIMESTAMP2", "DATETIME2", "TIME2"):
     _code = getattr(FIELD_TYPE, _attr, None)
     if _code is not None:
@@ -250,23 +257,6 @@ for _attr in ("TIMESTAMP2", "DATETIME2", "TIME2"):
 def epoch_seconds(ts: datetime) -> int:
     aware = ts if ts.tzinfo is not None else ts.replace(tzinfo=timezone.utc)
     return int(aware.timestamp())
-
-
-def _parse_offset_string(value: str) -> tzinfo | None:
-    """Parse ``"+05:30"`` / ``"-08:00"`` style offsets into a
-    ``timezone``. Returns ``None`` on unparseable input."""
-    value = value.strip()
-    if not value or value[0] not in "+-":
-        return None
-    sign = 1 if value[0] == "+" else -1
-    try:
-        hh, _, mm = value[1:].partition(":")
-        hours = int(hh)
-        minutes = int(mm or 0)
-    except ValueError:
-        return None
-    delta = timedelta(hours=hours, minutes=minutes) * sign
-    return timezone(delta)
 
 
 class MySQLDialect(Dialect):
@@ -333,9 +323,9 @@ class MySQLDialect(Dialect):
                 td = row[0]
                 if isinstance(td, timedelta):
                     return timezone(td)
-                return _parse_offset_string(str(td))
+                return parse_timezone(td)
             return None
-        return _parse_offset_string(tz_value)
+        return parse_timezone(tz_value)
 
     def large_column_kind(self, satype: Any) -> LargeColumnKind | None:
         if isinstance(satype, _LARGE_OBJECT_TYPES):
@@ -736,6 +726,7 @@ class BinlogIngester(CdcIngester):
         # it would tag the whole transaction with an empty GTID, and segment 0
         # sits below every real one, and would leave it out of the offset.
         self._carry_gtid: str | None = None
+        self._warned_zone = False
         # Every transaction read so far, seeded with those before the start.
         self._executed = GtidSet()
         # A start by binlog position or timestamp has no set to seed from, so
@@ -1193,6 +1184,36 @@ class BinlogIngester(CdcIngester):
         schema = getattr(event, "schema", "") or ""
         return schema.decode() if isinstance(schema, bytes) else schema
 
+    def _timestamp_columns(self, event: Any) -> frozenset[str]:
+        return frozenset(
+            column.name for column in event.columns if column.type in _TIMESTAMP_CODES
+        )
+
+    def _to_server_clock(self, values: dict | None, stamps: frozenset[str]) -> None:
+        """A TIMESTAMP column reaches the binlog as an instant and its reader
+        hands it over as a naive UTC reading; a batch read of the same row
+        gives the server zone's wall clock, so the stream does the same. Without
+        a known server zone the UTC reading stays, said once."""
+        if not values or not stamps:
+            return
+        if self._server_tz is None:
+            if not self._warned_zone:
+                self._warned_zone = True
+                logger.warning(
+                    "The MySQL server zone is unknown; TIMESTAMP values are "
+                    "published as UTC wall clock"
+                )
+            return
+        for name in stamps:
+            value = values.get(name)
+            if isinstance(value, datetime) and value.tzinfo is None:
+                values[name] = (
+                    value
+                    .replace(tzinfo=timezone.utc)
+                    .astimezone(self._server_tz)
+                    .replace(tzinfo=None)
+                )
+
     def _extract_raw_schema(self, event: Any) -> tuple[tuple[str, str, Any], ...]:
         # Build the per-event raw-schema tuple the registry de-dupes
         # on. Names come from the event's table-map; type-string
@@ -1283,6 +1304,7 @@ class BinlogIngester(CdcIngester):
                     qualified,
                     raw_schema,
                 )
+                stamps = self._timestamp_columns(event)
                 for row in event.rows:
                     seq += 1
                     match event:
@@ -1297,8 +1319,8 @@ class BinlogIngester(CdcIngester):
                             old_values = {column: None for column in new_values}
                         case _:  # pragma: no cover - unreachable
                             continue
-                    self.localize_values(new_values)
-                    self.localize_values(old_values)
+                    self._to_server_clock(new_values, stamps)
+                    self._to_server_clock(old_values, stamps)
                     yield CdcDataChange(
                         operation=op,
                         transaction=gtid or "",
@@ -1396,6 +1418,7 @@ class BinlogIngester(CdcIngester):
                     qualified,
                     raw_schema,
                 )
+                stamps = self._timestamp_columns(event)
                 for row in event.rows:
                     seq += 1
                     match event:
@@ -1410,8 +1433,8 @@ class BinlogIngester(CdcIngester):
                             old_values = {column: None for column in new_values}
                         case _:  # pragma: no cover - unreachable
                             continue
-                    self.localize_values(new_values)
-                    self.localize_values(old_values)
+                    self._to_server_clock(new_values, stamps)
+                    self._to_server_clock(old_values, stamps)
                     pending.append(
                         CdcDataChange(
                             operation=op,

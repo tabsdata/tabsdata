@@ -1408,6 +1408,44 @@ def test_a_source_silent_mid_transaction_fails_the_stream(monkeypatch):
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_18
 
 
+def test_a_naive_timestamp_keeps_its_wall_clock_whatever_the_server_zone():
+    """A ``timestamp without time zone`` is a wall-clock reading: the stream
+    publishes it as the initial load does, untouched, rather than tagging it
+    with the server zone, which the naive Arrow column would then shift."""
+    begin = {
+        "action": "B",
+        "xid": 9,
+        "timestamp": "2026-09-29 19:15:18+00",
+        "lsn": "0/100",
+    }
+    naive = {"name": "at", "type": "timestamp without time zone"}
+    aware = {"name": "seen", "type": "timestamp with time zone"}
+    row = {
+        "action": "I",
+        "xid": 9,
+        "schema": "public",
+        "table": "t",
+        "columns": [
+            {"name": "id", "type": "integer", "value": "1"},
+            naive | {"value": "2026-01-01 12:00:00"},
+            aware | {"value": "2026-01-01 12:00:00+02"},
+        ],
+    }
+    messages = [
+        _Message("0/90", begin),
+        _Message("0/90", row),
+        _Message("0/120", {"action": "C", "xid": 9, "lsn": "0/100"}),
+    ]
+    bi = _format_2_ingester(messages)
+    bi._server_tz = timezone(timedelta(hours=2))
+
+    [change] = list(bi._poll_changes_v2(None))
+
+    assert change.new_values["at"] == datetime(2026, 1, 1, 12, 0)
+    assert change.new_values["at"].tzinfo is None
+    assert change.new_values["seen"] == datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+
+
 def test_the_stream_asks_wal2json_for_commit_positions(monkeypatch):
     bi = _ingester_with_tables(["public.users"])
     cursor = _replication_cursor(monkeypatch, bi)

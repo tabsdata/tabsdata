@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from datetime import datetime, tzinfo
+from datetime import tzinfo
 from typing import Any
 
 import sqlalchemy as sa
@@ -72,14 +72,6 @@ class CdcIngester(StreamIngester[CdcChange, CdcOffset], ABC):
     @property
     def server_tz(self) -> tzinfo | None:
         return self._server_tz
-
-    def localize_values(self, values: dict | None) -> dict | None:
-        if values is None or self._server_tz is None:
-            return values
-        for key, value in values.items():
-            if isinstance(value, datetime) and value.tzinfo is None:
-                values[key] = value.replace(tzinfo=self._server_tz)
-        return values
 
     @property
     @abstractmethod

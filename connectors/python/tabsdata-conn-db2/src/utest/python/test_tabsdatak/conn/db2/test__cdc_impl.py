@@ -12,6 +12,7 @@ Catalog / engine calls (``server_timezone``,
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone, tzinfo
+from decimal import Decimal
 
 import json
 import logging
@@ -453,6 +454,23 @@ class _Engine:
 
     def executed(self) -> list[str]:
         return [entry[1] for entry in self.log if entry[0] == "execute"]
+
+
+@pytest.mark.parametrize(
+    ("reported", "expected"),
+    [
+        (Decimal("0"), timezone.utc),
+        (Decimal("20000"), timezone(timedelta(hours=2))),
+        (Decimal("-50000"), timezone(timedelta(hours=-5))),
+    ],
+    ids=["utc", "east", "west"],
+)
+def test_the_server_zone_is_read_from_db2_s_decimal_hhmmss(d, reported, expected):
+    """``current timezone`` is a decimal ``hhmmss``, negative west of UTC; the
+    offset parser used to read none of them, so Db2 commit times were taken
+    as the worker's own clock."""
+    engine = _Engine({"current timezone": (reported,)})
+    assert d.server_timezone(engine) == expected
 
 
 def _tracked(cd_table: str) -> TrackedTable:

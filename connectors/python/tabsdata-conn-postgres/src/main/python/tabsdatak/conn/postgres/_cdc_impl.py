@@ -69,6 +69,7 @@ from tabsdatak.conn.common.sql.cdc._model import (
     InitialLoadSession,
     TrackedTable,
 )
+from tabsdatak.conn.common.sql.cdc._tz import parse_timezone
 from tabsdatak.conn.common.sql.cdc.constants import (
     DOT,
     CdcOperation,
@@ -166,25 +167,6 @@ _V2_OPERATION_MAP = {
 
 _LARGE_OBJECT_TYPES = (LargeBinary, OID)
 _LARGE_TEXT_TYPES = (Text, JSON)
-
-
-def _parse_offset_string(value: str) -> tzinfo | None:
-    """Parse ``"+05:30"`` / ``"-08:00"`` style offsets into a
-    ``timezone``. Returns ``None`` on unparseable input."""
-    from datetime import timedelta, timezone
-
-    value = value.strip()
-    if not value or value[0] not in "+-":
-        return None
-    sign = 1 if value[0] == "+" else -1
-    try:
-        hh, _, mm = value[1:].partition(":")
-        hours = int(hh)
-        minutes = int(mm or 0)
-    except ValueError:
-        return None
-    delta = timedelta(hours=hours, minutes=minutes) * sign
-    return timezone(delta)
 
 
 # wal2json type strings are Postgres DDL-shaped (``integer``,
@@ -316,7 +298,7 @@ class PostgresDialect(Dialect):
         with engine.connect() as connection:
             row = connection.execute(text("show timezone")).fetchone()
         if row and row[0] is not None:
-            return _parse_offset_string(str(row[0]))
+            return parse_timezone(row[0])
         return None
 
     def large_column_kind(self, satype: Any) -> LargeColumnKind | None:
@@ -1343,8 +1325,6 @@ class Wal2JsonIngester(CdcIngester):
             old_values = dict(null_row)
         self._coerce_values(new_values, columns)
         self._coerce_values(old_values, columns)
-        self.localize_values(new_values)
-        self.localize_values(old_values)
         return CdcDataChange(
             operation=op,
             transaction=xid,
