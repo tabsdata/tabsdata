@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 # noinspection PyProtectedMember
+from tabsdatak.api import BatchThresholds, PollThresholds, StreamThresholds
 from tabsdatak.conn.common._stream import _plugin
 
 # noinspection PyProtectedMember
@@ -26,9 +27,6 @@ from tabsdatak.conn.common._stream.constants import (
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
     DEFAULT_POLL_IDLE_SECS,
-    DEFAULT_TRIGGER_MAX_BYTES,
-    DEFAULT_TRIGGER_MAX_ROWS,
-    DEFAULT_TRIGGER_MAX_SECS,
 )
 from tabsdatak.conn.common.sql.cdc import _runner
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_INITIAL_LOAD_STATE_KEY
@@ -54,12 +52,14 @@ class FakeCtx:
         self,
         *,
         active_values,
-        flush_interval_mins=0,
+        thresholds=None,
         first_stage=True,
         stream_state=None,
     ):
         self._active = iter(active_values)
-        self.flush_interval_mins = flush_interval_mins
+        self.thresholds = thresholds or StreamThresholds(
+            batch=BatchThresholds(max_rows=1 << 62)
+        )
         self.first_stage = first_stage
         self.stream_state = stream_state
         self.work_dir = Path("/tmp")
@@ -227,9 +227,9 @@ def _patch_sentinels(monkeypatch, disk, buffer):
 
 
 def _cfg(**overrides) -> CdcRunConfig:
-    # poll_idle_secs=0 so the loop's stop_signal.wait() returns
+    # An idle wait of 0 so the loop's stop_signal.wait() returns
     # immediately and the test never blocks.
-    base = dict(poll_idle_secs=0)
+    base = dict(poll=PollThresholds(max_secs=1, idle_secs=0))
     base.update(overrides)
     return CdcRunConfig(**base)
 
@@ -585,13 +585,10 @@ def test_the_stream_skips_a_completed_initial_load(monkeypatch, tmp_path):
 
 def test_cdc_run_config_uses_package_defaults():
     cfg = CdcRunConfig()
-    assert cfg.buffer_max_rows == DEFAULT_BUFFER_MAX_ROWS
-    assert cfg.buffer_max_bytes == DEFAULT_BUFFER_MAX_BYTES
-    assert cfg.buffer_max_secs == DEFAULT_BUFFER_MAX_SECS
-    assert cfg.trigger_max_rows == DEFAULT_TRIGGER_MAX_ROWS
-    assert cfg.trigger_max_bytes == DEFAULT_TRIGGER_MAX_BYTES
-    assert cfg.trigger_max_secs == DEFAULT_TRIGGER_MAX_SECS
-    assert cfg.poll_idle_secs == DEFAULT_POLL_IDLE_SECS
+    assert cfg.buffer.max_rows == DEFAULT_BUFFER_MAX_ROWS
+    assert cfg.buffer.max_bytes == DEFAULT_BUFFER_MAX_BYTES
+    assert cfg.buffer.max_secs == DEFAULT_BUFFER_MAX_SECS
+    assert cfg.poll.idle_secs == DEFAULT_POLL_IDLE_SECS
     assert cfg.max_large_text_length == DEFAULT_MAX_LARGE_TEXT_LENGTH
     assert cfg.initial_load is False
     assert cfg.fetch_size == DEFAULT_FETCH_SIZE

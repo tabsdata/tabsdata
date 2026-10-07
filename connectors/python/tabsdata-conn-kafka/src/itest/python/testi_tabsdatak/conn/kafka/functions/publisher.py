@@ -6,10 +6,9 @@
 
 import json
 
-from tabsdatak.api import TableFrameSpec, TableFramesSpec, stream_publisher
-
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._floor import unsafe_seconds
+from tabsdatak._api import unsafe_seconds
+from tabsdatak.api import TableFrameSpec, TableFramesSpec, stream_publisher
 from tabsdatak.conn.kafka import KafkaStreamSrc
 
 PUBLISHED_TABLE = "kafka_published"
@@ -33,13 +32,11 @@ SCHEMA = json.dumps({
         topic=TOPIC,
         data_format="json",
         schema=SCHEMA,
-        src_cfg={
-            "tabsdata.kafka.trigger.max_rows": len(ROWS),
-            "tabsdata.kafka.poll.max_secs": 2,
-            "tabsdata.kafka.trigger.max_secs": unsafe_seconds(1),
-        },
+        src_cfg={"tabsdata.kafka.poll.max_secs": 2},
     ),
-    flush_interval_mins=1,
+    batch_min_secs=unsafe_seconds(1),
+    batch_max_secs=unsafe_seconds(1),
+    batch_max_rows=len(ROWS),
     output_tables=[PUBLISHED_TABLE],
 )
 def pub_stream_publisher_reads_topic_from_redpanda_domain(

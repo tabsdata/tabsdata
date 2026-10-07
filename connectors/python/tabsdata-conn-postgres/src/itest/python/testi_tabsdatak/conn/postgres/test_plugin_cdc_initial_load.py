@@ -32,7 +32,7 @@ from testi_tabsdatak.conn.postgres.backend import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._floor import unsafe_seconds
+from tabsdatak.api import BatchThresholds, StreamThresholds
 from tabsdatak.conn.postgres import PostgresCdcStreamSrc, PostgresCdcStreamSrcConn
 
 # noinspection PyProtectedMember
@@ -62,8 +62,6 @@ INITIAL_LOAD_SEG = -1
 CDC_CFG = {
     "tabsdata.cdc.buffer.max_rows": 1,
     "tabsdata.cdc.buffer.max_secs": 1,
-    "tabsdata.cdc.trigger.max_rows": 1,
-    "tabsdata.cdc.trigger.max_secs": unsafe_seconds(1),
     "tabsdata.cdc.poll.idle_secs": 1,
     "tabsdata.cdc.poll.max_secs": 2,
 }
@@ -144,8 +142,10 @@ class _CdcCtx(StreamSrcPluginCtx):
             return dict(self._state) if self._state else None
 
     @property
-    def flush_interval_mins(self) -> int:
-        return 0
+    def thresholds(self) -> StreamThresholds:
+        return StreamThresholds(
+            batch=BatchThresholds(min_secs=1, max_secs=1, max_rows=1)
+        )
 
     def stage(self, tables_files, new_state):
         with self._lock:

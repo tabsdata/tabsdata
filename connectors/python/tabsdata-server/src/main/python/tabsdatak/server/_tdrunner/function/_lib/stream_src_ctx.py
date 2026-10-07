@@ -65,7 +65,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from tabsdatak.api import BasicDictSpec
+from tabsdatak.api import BasicDictSpec, StreamThresholds
 from tabsdatak.conn.stream.stage._backend import StageBackend
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.request import Location
@@ -159,7 +159,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         function_id: str,
         function_name: str,
         function_stage: Location,
-        flush_interval_mins: int,
+        thresholds: StreamThresholds,
         tabsdata_version: str,
     ) -> None:
         super().__init__(
@@ -170,7 +170,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
             function_name=function_name,
         )
         self._backend = stage_backend_from_location(function_stage)
-        self._flush_interval_mins = flush_interval_mins
+        self._thresholds = thresholds
         self._tabsdata_version = tabsdata_version
         self._active = True
         self._state_view: StreamStateView | None = _load_state(self._backend)
@@ -206,8 +206,8 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
         return self._state_view.state
 
     @property
-    def flush_interval_mins(self) -> int:
-        return self._flush_interval_mins
+    def thresholds(self) -> StreamThresholds:
+        return self._thresholds
 
     def stage(
         self,

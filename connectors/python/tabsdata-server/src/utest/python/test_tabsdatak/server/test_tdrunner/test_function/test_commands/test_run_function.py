@@ -265,7 +265,7 @@ from tabsdatak.conn.kafka import KafkaStreamSrc
 
 @stream_publisher(
     source=KafkaStreamSrc(data_format="json", schema="{}", topic="people"),
-    flush_interval_mins=1,
+    batch_max_secs=60,
     output_tables=["people_streamed"],
 )
 def my_stream_publisher(t: TableFramesSpec) -> TableFrameSpec:

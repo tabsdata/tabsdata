@@ -6,7 +6,7 @@ Copyright 2026 Tabsdata Inc.
 
 This doc is written for **an LLM generating user code with
 `tabsdatak`** — wiring `@publisher` / `@transformer` /
-`@subscriber` / `@auto_publisher` against the shipped connectors.
+`@subscriber` / `@stream_publisher` against the shipped connectors.
 
 It is **not** a guide to implementing new connectors. The connector
 implementer surface (`tabsdatak.spi`, the `<connector>/_validation.py`
@@ -56,7 +56,7 @@ from tabsdatak._connectors import avail_srcs, avail_stream_srcs, avail_dests
 # Each returns a fresh dict keyed by type_ (unique across all
 # plugins: "mysql-sql-in", "s3-file-in", "salesforce-report-in",
 # ...). Values are SrcDef /
-# AutoSrcDef / DestDef instances exposing the concrete config
+# StreamSrcDef / DestDef instances exposing the concrete config
 # class (.src / .dest), .table_mode (for sources), .cardinality,
 # .plugin, and .explorer.
 
@@ -160,8 +160,8 @@ Four decorators, all with the same skeleton (`source` or
 @publisher(source=..., output_tables=[...], trigger_by=..., on_tables=...)
 @transformer(input_tables=[...], output_tables=[...], trigger_by=..., on_tables=...)
 @subscriber(destination=..., input_tables=[...], trigger_by=...)
-@auto_publisher(source=..., use_existing_data=..., fallback_rollover_mins=...,
-                output_tables=[...], on_tables=...)
+@stream_publisher(source=..., output_tables=[...], batch_max_secs=...,
+                  batch_max_rows=..., on_tables=...)
 ```
 
 Once you've seen one, you've seen all four.
@@ -238,7 +238,7 @@ src = MySQLSrc(queries=["SELECT 1"])   # no conn anywhere
 
 ### 1. The function-signature shape is mandatory and easy to get wrong
 
-Every publisher / auto_publisher / transformer / subscriber function
+Every publisher / stream_publisher / transformer / subscriber function
 has a **flat** signature:
 
 ```python
@@ -249,7 +249,7 @@ has a **flat** signature:
 def f(
     in_1: TableFrame,           # one positional param per input slot.
     in_2: TableFrame,           # input_count = source's cardinality
-                                #   for publisher / auto_publisher;
+                                #   for publisher / stream_publisher;
                                 #   = len(input_tables) for transformer / subscriber.
     # extra params (config, logger, ...) are allowed past in_N
     # and are not type-checked.
@@ -260,7 +260,7 @@ def f(
 Specifically:
 
 * The first `N` positional parameters are the input slots:
-  - For `@publisher` / `@auto_publisher`, each is `TableFrame` if
+  - For `@publisher`, each is `TableFrame` if
     `source.table_mode is SINGLE` or `list[TableFrame]` if
     `source.table_mode is ARRAY`. SQL-shaped sources
     (`MySQLSrc`, `PostgresSrc`, `OracleSrc`, `MSSQLSrc`, `Db2Src`,
@@ -269,6 +269,9 @@ Specifically:
     (`LocalFileSrc`, `S3Src`, `GCSSrc`, `AzureBlobSrc`) are
     ARRAY-mode -- each path entry may glob to multiple files, so
     the slot binds to a `list[TableFrame]`.
+  - For `@stream_publisher`, each is always `list[TableFrame]`: a
+    stream source hands over the files of one batch per slot. The
+    function must not declare a `ctx` parameter.
   - For `@transformer` / `@subscriber`, each is either
     `TableFrame` or `list[TableFrame]` (the framework does not yet
     enforce a mode here).
@@ -276,7 +279,7 @@ Specifically:
     (auto-nullable). For `list[TableFrame]` the list is required
     but its elements may be `None`.
 * The return must be a fixed-length tuple of `TableFrame` of arity:
-  - `len(output_tables)` for `@publisher`, `@auto_publisher`,
+  - `len(output_tables)` for `@publisher`, `@stream_publisher`,
     `@transformer`.
   - `DestDef.cardinality(destination)` for `@subscriber` (the
     framework looks the binding up via the
@@ -532,11 +535,11 @@ Without a discovery surface, a generated
 **Mitigation in place.** Two complementary discovery surfaces:
 
 * :mod:`tabsdatak.connectors` -- the *runtime* binding registry.
-  ``avail_srcs() / avail_auto_srcs() / avail_dests()`` each return
+  ``avail_srcs() / avail_stream_srcs() / avail_dests()`` each return
   a fresh ``dict[str, <Def>]`` keyed by ``type_``
   (unique across all plugins), populated lazily on first call from the
   ``tabsdatak.connectors`` entry-point group. Each ``SrcDef`` /
-  ``AutoSrcDef`` / ``DestDef`` exposes the concrete config class
+  ``StreamSrcDef`` / ``DestDef`` exposes the concrete config class
   (``.src`` / ``.dest``), ``.table_mode`` (sources), ``.cardinality``,
   ``.plugin``, and ``.explorer``.
 * :mod:`tabsdatak.conn.connectors` -- the *vendor-level* index.
@@ -575,14 +578,14 @@ list_connectors(role="src", tag="object-storage")
 ```
 
 The mechanism is open: third-party connector packages that declare
-the same entry-point group and expose ``SrcDef`` / ``AutoSrcDef``
+the same entry-point group and expose ``SrcDef`` / ``StreamSrcDef``
 / ``DestDef`` constants get picked up automatically with no change
 to
 :mod:`tabsdatak`.
 
 #### Diagnosis 2: The flat-signature shape is the #1 mistake source  **[Implemented]**
 
-**Problem.** Every publisher / auto_publisher / transformer /
+**Problem.** Every publisher / stream_publisher / transformer /
 subscriber function has to spell out the right number of slot-typed
 parameters and a matching `tuple[TableFrame, ...]` return. LLMs
 routinely:
@@ -922,27 +925,20 @@ each connector's docstring. Additive, non-breaking, one-line
 per connector. Today the workaround is the ``staging`` string
 field on :class:`ConnectorInfo` (free-form description).
 
-#### Diagnosis 13: No concrete `AutoSrc` or `OnTablesAction` ships  **[Open]**
+#### Diagnosis 13: Stream sources and on-tables actions ship  **[Resolved]**
 
-**Problem.** The framework defines :class:`AutoSrc` (the source
-abstraction backing ``@auto_publisher``) and
-:class:`OnTablesAction` (the hook abstraction for
-``on_tables=[...]``) plus the matching SPI machinery
-(:class:`AutoSrcDef`, :class:`AutoSrcPlugin`,
-:class:`AutoSrcContext`). None of the 17 shipped ``tabsdatak``
-connectors declares an ``AutoSrc`` subclass, and no
-``OnTablesAction`` subclasses ship anywhere.
-An LLM asked to write code using these features has nothing
-concrete to instantiate.
+**Problem, as first written.** The framework defined the source
+abstraction behind ``@stream_publisher`` and the
+``OnTablesAction`` hook with no concrete implementation to
+instantiate.
 
-**Status.** Structural -- these are framework hooks waiting for
-their first implementations, not really an "API friendliness"
-miss. The shape works (the test suite covers
-``AutoPublisherInfo`` end-to-end with a test-only ``AutoSrc``);
-the gap is purely "first concrete subclass per connector". Pick
-a connector with a polling / file-watch source first
-(``LocalFileSrc`` is the obvious candidate) and ship a
-``LocalFileAutoSrc`` to seed the pattern.
+**Status.** Four stream sources ship -- ``KafkaStreamSrc``,
+``PostgresCdcStreamSrc``, ``MySQLCdcStreamSrc`` and
+``Db2CdcStreamSrc`` -- each bound through a ``StreamSrcDef`` to a
+``StreamSrcPlugin`` that stages batches by the decorator's
+``batch_*`` thresholds; ``DataQuality`` in ``tabsdatak.dataquality``
+is a shipped ``OnTablesAction``. An LLM has concrete classes for
+both.
 
 #### Diagnosis 14: Field-name asymmetry across source / destination classes  **[Implemented]**
 

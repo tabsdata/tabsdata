@@ -18,15 +18,17 @@ user-facing decorators:
 - `@publisher(source, output_tables, ...)` — reads from a `Src`,
   writes named tables. Triggered by upstream events / cron / table
   arrivals.
-- `@auto_publisher(source, use_existing_data, fallback_rollover_mins,
-  output_tables, ...)` — reads from an `AutoSrc` (file-watch /
-  polling). Runs on a rollover cadence; `fallback_rollover_mins >= 1`.
+- `@stream_publisher(source, output_tables, batch_min_secs=..,
+  batch_max_secs=.., batch_idle_secs=.., batch_max_rows=..,
+  batch_max_bytes=.., ...)` — reads from a `StreamSrc` (CDC, Kafka).
+  Runs a long-lived stream loop and stages batches by its thresholds;
+  one of the three `batch_max_*` is required.
 - `@transformer(input_tables, output_tables, ...)` — reads tables,
   writes tables.
 - `@subscriber(destination, input_tables, ...)` — reads tables,
   writes to a `Dest`.
 
-`Src` / `AutoSrc` / `Dest` are abstract bases in `tabsdatak.api`;
+`Src` / `StreamSrc` / `Dest` are abstract bases in `tabsdatak.api`;
 `Conn` is the abstract connection base in `tabsdatak.spi`. Connector
 packages (`tabsdata-conn-mysql`, etc.) ship concrete subclasses —
 a `<Vendor>Conn` per connector, plus `<Vendor>Src` / `<Vendor>Dest`.
@@ -45,10 +47,10 @@ and must not be imported.
 
 | Kind        | Symbols |
 | ----------- | ------- |
-| Decorators  | `publisher`, `auto_publisher`, `transformer`, `subscriber` |
+| Decorators  | `publisher`, `stream_publisher`, `transformer`, `subscriber` |
 | Triggers    | `Trigger` (abstract), `CronTrigger`, `TablesTrigger`, `AllTablesTrigger` |
 | Value refs  | `Secret` |
-| Bases       | `Src` (abstract), `AutoSrc` (abstract), `Dest` (abstract), `OnTablesAction` (abstract), `TableFrame` |
+| Bases       | `Src` (abstract), `StreamSrc` (abstract), `Dest` (abstract), `OnTablesAction` (abstract), `TableFrame` |
 | Specs (validated string types) | `TableNameSpec`, `TableNamesSpec`, `CollTableNameSpec`, `CollTableNamesSpec`, `CronMaskSpec`, `SecretRefSpec` |
 | Specs (composed) | `PublisherTriggerBySpec`, `TransformerTriggerBySpec`, `SubscriberTriggerBySpec`, `OnTablesActionSpec`, `FallbackRolloverMinsSpec` (`Annotated[int, ge=1]`) |
 
@@ -62,7 +64,7 @@ public `tabsdatak.conn.<x>_error` module with its own
 
 ### `from tabsdatak.connectors import …`  (runtime kind-binding registry)
 
-Opt-in registry of every installed `SrcDef` / `AutoSrcDef` /
+Opt-in registry of every installed `SrcDef` / `StreamSrcDef` /
 `DestDef` binding. Populated lazily from the
 ``tabsdatak.connectors`` entry-point group on the first call to
 one of the discovery functions; importing :mod:`tabsdatak.api`
@@ -72,14 +74,14 @@ warns and is skipped rather than breaking the registry.
 | Kind        | Symbols |
 | ----------- | ------- |
 | Discovery   | `avail_srcs() -> dict[str, SrcDef]` |
-|             | `avail_auto_srcs() -> dict[str, AutoSrcDef]` |
+|             | `avail_stream_srcs() -> dict[str, StreamSrcDef]` |
 |             | `avail_dests() -> dict[str, DestDef]` |
 
 Each dict is keyed by ``type_``, unique across all plugins (e.g.
 ``"mysql-sql-in"``, ``"salesforce-report-in"``). Each binding exposes the
 concrete config class (``.src`` / ``.dest``), ``cardinality``
 helper, ``plugin``, ``explorer``, and ``table_mode`` (for
-``SrcDef`` / ``AutoSrcDef``).
+``SrcDef`` / ``StreamSrcDef``).
 
 ### `from tabsdatak.conn.connectors import …`  (vendor-level index)
 
@@ -120,16 +122,16 @@ import the connector modules. Resolve to actual classes via
 ### `from tabsdatak.spi import …`  (connector implementer surface)
 
 `spi` re-exports only the symbols a connector author needs. If you
-also need `Src` / `AutoSrc` / `Dest`, import them from
+also need `Src` / `StreamSrc` / `Dest`, import them from
 `tabsdatak.api`; if you need `ApiErrorCode`, import it from
 `tabsdatak.api_error`.
 
 | Kind          | Symbols |
 | ------------- | ------- |
 | Connection    | `Conn` (abstract; subclass as `<Name>Conn`). Connections are not declared in user flow code — they are registered on the function's collection and resolved by the runtime; the descriptor (`Src` / `Dest`) carries no `conn` field. |
-| Kind bindings | `SrcDef[C, S]`, `AutoSrcDef[C, AS]`, `DestDef[C, D]` (frozen pydantic dataclasses; instantiate one per concrete `Src` / `AutoSrc` / `Dest` subclass and expose it via the `tabsdatak.connectors` entry-point group; `conn=<Name>Conn` on each binds it to its connection type) |
-| Plugins       | `SrcPlugin[C, S]`, `AutoSrcPlugin[C, AS]`, `DestPlugin[C, D]` (abstract; subclass and implement `read_in` / `write_out`) |
-| Contexts      | `SrcContext`, `AutoSrcContext`, `DestContext` (per-call handles passed to plugins; expose `work_dir()` etc.) |
+| Kind bindings | `SrcDef[C, S]`, `StreamSrcDef[C, AS]`, `DestDef[C, D]` (frozen pydantic dataclasses; instantiate one per concrete `Src` / `StreamSrc` / `Dest` subclass and expose it via the `tabsdatak.connectors` entry-point group; `conn=<Name>Conn` on each binds it to its connection type) |
+| Plugins       | `SrcPlugin[C, S]`, `StreamSrcPlugin[C, AS]`, `DestPlugin[C, D]` (abstract; subclass and implement `read_in` / `write_out`) |
+| Contexts      | `SrcContext`, `StreamSrcPluginCtx`, `DestContext` (per-call handles passed to plugins; expose `work_dir()` etc.) |
 | Helper        | `Explorer[C]` (abstract — schema / metadata extractor) |
 | Enum          | `TableMode` (`SINGLE` / `ARRAY`) |
 | File aliases  | `ParquetFile` (`pathlib.Path` subtype), `TableFileSpec`, `ManifestFileSpec` |
@@ -192,7 +194,7 @@ Notes the framework enforces:
 - Shape mismatches and argument-type mismatches both raise
   `ApiParamTypeException(api_error=API_4)` at decoration time
   (when `PublisherInfo` is constructed). The same applies for
-  `@auto_publisher` (API_10), `@transformer` (API_5), and
+  `@stream_publisher` (API_18), `@transformer` (API_5), and
   `@subscriber` (API_6). There is no separate factory-level
   validation layer; the `*Info` dataclass is the single
   validation surface.
@@ -337,12 +339,12 @@ The vendor itself is registered separately, in
 
 Key decisions:
 
-- **Keep descriptor subclasses pure.** `Conn` / `Src` / `AutoSrc` /
+- **Keep descriptor subclasses pure.** `Conn` / `Src` / `StreamSrc` /
   `Dest` / `Trigger` subclasses are data classes — typed fields,
   optional read-only `@property` for derived values, and (ideally)
   no other methods. Runtime behaviour belongs on the
-  `SrcPlugin` / `AutoSrcPlugin` / `DestPlugin` classes referenced
-  by the connector's `SrcDef` / `AutoSrcDef` / `DestDef`, not on
+  `SrcPlugin` / `StreamSrcPlugin` / `DestPlugin` classes referenced
+  by the connector's `SrcDef` / `StreamSrcDef` / `DestDef`, not on
   the descriptor itself. The only exception is `validate(self)`,
   which the framework calls automatically post-construction so
   you can enforce cross-field invariants:
@@ -381,8 +383,8 @@ Key decisions:
 ## JSON serde
 
 Every public class round-trips through JSON automatically. The
-`@publisher` / `@auto_publisher` / `@transformer` / `@subscriber`
-decorators each return a `PublisherInfo` / `AutoPublisherInfo` /
+`@publisher` / `@stream_publisher` / `@transformer` / `@subscriber`
+decorators each return a `PublisherInfo` / `StreamPublisherInfo` /
 `TransformerInfo` / `SubscriberInfo` instance (framework-internal
 class; reachable via `from tabsdatak._info import PublisherInfo`
 when you need the type for `from_json`).
@@ -458,7 +460,7 @@ assert excinfo.value.api_error is ApiErrorCode.API_2
 
 ### Field-value rules on descriptor subclasses
 
-Every **pydantic-managed** `Src` / `AutoSrc` / `Dest` / `Conn`
+Every **pydantic-managed** `Src` / `StreamSrc` / `Dest` / `Conn`
 (and `Trigger`) subclass inherits a shared
 `@model_validator(mode="after")` that enforces:
 
@@ -504,7 +506,7 @@ installed sibling packages via `pkgutil.extend_path`.
 
 - Don't import from `tabsdatak._info` or `tabsdatak._api` in user
   code. They're framework-internal and the interface is not stable.
-  The public bases (`Src` / `AutoSrc` / `Dest` / `Trigger` /
+  The public bases (`Src` / `StreamSrc` / `Dest` / `Trigger` /
   `OnTablesAction`, plus `Conn` on the connector-implementer `spi`
   surface) provide everything you need, including JSON serde via
   inheritance.

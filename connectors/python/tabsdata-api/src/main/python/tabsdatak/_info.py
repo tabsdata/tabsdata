@@ -135,20 +135,37 @@ class StreamPublisherInfo(_api.JsonSerde):
     """Descriptor for a ``@stream_publisher``-decorated function.
 
     Captures the :class:`~tabsdatak.api.StreamSrc`, the
-    ``fallback_rollover_mins`` batching window, and the output-table
-    contract. Stream-publisher inputs are always array-mode (one
-    event fans out across rows)."""
+    :class:`~tabsdatak.api.StreamThresholds` bounding its data flow, and
+    the output-table contract. Stream-publisher inputs are always
+    array-mode (one event fans out across rows). ``flush_interval_mins``
+    is the deprecated window a definition may still name, already folded
+    into ``thresholds.batch.max_secs``; it is kept so the runtime can say
+    so."""
 
     __kind__ = KIND_STREAM_PUBLISHER_DEF
 
     func: Callable
     source: api.StreamSrc
-    fallback_rollover_mins: api.FlushIntervalSpec
+    thresholds: api.StreamThresholds
     output_tables: api.TableNamesSpec
     on_tables: api.OnTablesActionSpec | None
+    flush_interval_mins: api.FlushIntervalSpec | None = None
 
     _ser_func = field_serializer("func")(_ser_func)
     _val_func = field_validator("func", mode="before")(_val_func)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _thresholds_from_rollover(cls, data):
+        """A descriptor written before the thresholds existed carries
+        ``fallback_rollover_mins`` alone; it is read as the window it was."""
+        if not isinstance(data, dict) or "fallback_rollover_mins" not in data:
+            return data
+        data = dict(data)
+        mins = data.pop("fallback_rollover_mins")
+        data.setdefault("flush_interval_mins", mins)
+        data.setdefault("thresholds", {"batch": {"max_secs": mins * 60}})
+        return data
 
     def __call__(self, *args, **kwargs):
         raise TypeError(

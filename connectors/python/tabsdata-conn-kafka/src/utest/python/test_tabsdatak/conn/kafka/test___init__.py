@@ -240,13 +240,10 @@ def test_kafka_stream_src_accepts_known_src_cfg_keys():
             "tabsdata.kafka.buffer.max_rows": 100,
             "tabsdata.kafka.buffer.max_bytes": 1024,
             "tabsdata.kafka.buffer.max_secs": 5,
-            "tabsdata.kafka.trigger.max_secs": 60,
-            "tabsdata.kafka.trigger.max_bytes": 16,
-            "tabsdata.kafka.trigger.max_rows": 1000,
             "kafka.logging_level": 20,
         },
     )
-    assert src.src_cfg["tabsdata.kafka.trigger.max_bytes"] == 16
+    assert src.src_cfg["tabsdata.kafka.buffer.max_bytes"] == 1024
 
 
 def test_kafka_stream_src_json_round_trip():
@@ -257,25 +254,10 @@ def test_kafka_stream_src_json_round_trip():
         data_format="json",
         schema='{"type": "object"}',
         dlq_topic="events_dlq",
-        src_cfg={"tabsdata.kafka.trigger.max_rows": 500},
+        src_cfg={"tabsdata.kafka.buffer.max_rows": 500},
     )
     loaded = KafkaStreamSrc.from_json(src.to_json())
     assert loaded == src
-
-
-def test_kafka_stream_src_json_round_trip_keeps_a_marked_trigger_max_secs():
-    from tabsdatak.conn.common._stream._floor import unsafe_seconds
-    from tabsdatak.conn.kafka import KafkaStreamSrc
-
-    marked = unsafe_seconds(1)
-    src = KafkaStreamSrc(
-        topic="events",
-        data_format="json",
-        schema="",
-        src_cfg={"tabsdata.kafka.trigger.max_secs": marked},
-    )
-    loaded = KafkaStreamSrc.from_json(src.to_json())
-    assert loaded.src_cfg["tabsdata.kafka.trigger.max_secs"] == marked
 
 
 @pytest.mark.parametrize(
@@ -293,14 +275,24 @@ def test_kafka_stream_src_rejects_the_removed_rollover_keys(key):
         KafkaStreamSrc(topic="events", data_format="json", schema="", src_cfg={key: 60})
 
 
+def test_kafka_stream_src_rejects_a_negative_idle_wait():
+    from tabsdatak.conn.kafka import KafkaStreamSrc
+
+    with pytest.raises(ConnInitException, match="must be a whole number"):
+        KafkaStreamSrc(
+            topic="events",
+            data_format="json",
+            schema="",
+            src_cfg={"tabsdata.kafka.poll.idle_secs": -1},
+        )
+
+
 @pytest.mark.parametrize(
     "key",
     [
         "tabsdata.kafka.buffer.max_rows",
         "tabsdata.kafka.buffer.max_bytes",
         "tabsdata.kafka.buffer.max_secs",
-        "tabsdata.kafka.trigger.max_rows",
-        "tabsdata.kafka.trigger.max_bytes",
     ],
 )
 @pytest.mark.parametrize("value", [0, -1, 2.5])

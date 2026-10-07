@@ -5769,10 +5769,9 @@ def _workers(info: FunctionInfo) -> dict[str, str] | None:
       (``TimeoutThresholdMin``/``SizeThreshold`` are typed-int wrappers
       with built-in defaults; ``start``/``end`` are ``Option``); an
       empty JSON object is enough to enqueue the long-running
-      stream-publisher worker. The function-level
-      ``fallback_rollover_mins`` lives in the bundle's
-      ``function_def.json`` and is consumed by ``run_streamer`` in
-      the pod, not via this worker config.
+      stream-publisher worker. The function-level batch settings
+      live in the bundle's ``function_def.json`` and are consumed by
+      ``run_streamer`` in the pod, not via this worker config.
     * Anything else → ``None`` (no orchestrator-managed worker).
 
     Stream-publisher MUST emit ``"ST"``; otherwise the apiserver never

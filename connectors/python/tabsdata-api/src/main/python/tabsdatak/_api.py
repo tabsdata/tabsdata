@@ -44,6 +44,7 @@ import importlib.machinery
 import importlib.util
 import inspect
 import json
+import logging
 import os
 import re
 import sys
@@ -71,6 +72,45 @@ from tabsdatak.error import ApiErrorCode, ConstraintError, ErrorCode
 
 _C = TypeVar("_C", bound=type)
 _F = TypeVar("_F", bound=Callable[..., Any])
+
+logger = logging.getLogger(__name__)
+
+# The batches of a stream publisher are spaced at least this far apart. A
+# test lowers the floor with a marked value, `unsafe_seconds`, which
+# `decode_seconds` reads back; nothing else ever does.
+BATCH_FLOOR_SECS = 60
+SECONDS_BASE = 31_415_926_535
+
+
+def decode_seconds(key: str, value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(
+            f"The value of {key} must be a whole number of seconds; it is {value!r}"
+        )
+    if SECONDS_BASE <= value < SECONDS_BASE + BATCH_FLOOR_SECS:
+        seconds = value - SECONDS_BASE
+        logger.warning(
+            f"The value of {key} lowers the batch floor to {seconds} "
+            "second(s); this is not for production use"
+        )
+        return seconds
+    if value < BATCH_FLOOR_SECS:
+        raise ValueError(
+            f"The value of {key} must be at least {BATCH_FLOOR_SECS} seconds; "
+            f"it is {value}"
+        )
+    if value >= SECONDS_BASE:
+        raise ValueError(f"The value of {key} is out of range: {value}")
+    return value
+
+
+def unsafe_seconds(seconds: int) -> int:
+    if not 0 <= seconds < BATCH_FLOOR_SECS:
+        raise ValueError(
+            f"The seconds to mark must be in [0, {BATCH_FLOOR_SECS}); "
+            f"they are {seconds}"
+        )
+    return SECONDS_BASE + seconds
 
 
 # PEP 681: tells type checkers and IDEs that this decorator produces a

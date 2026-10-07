@@ -169,8 +169,8 @@ def _load_initially(
         ledger = FileLedger(landing=landing, slots=tracked_tables)
         chunk_sentinel = ChunkSentinel(
             ledger=ledger,
-            max_rows=cfg.buffer_max_rows,
-            max_bytes=cfg.buffer_max_bytes,
+            max_rows=cfg.buffer.max_rows,
+            max_bytes=cfg.buffer.max_bytes,
         )
         loader = InitialLoader(
             ingester=ingester,
@@ -227,8 +227,8 @@ def _read_window(
         ledger=ledger,
         encoder=CdcEncoder(cfg.cdc_format, tracked_tables),
         slots=tracked_tables,
-        max_rows=cfg.buffer_max_rows,
-        max_bytes=cfg.buffer_max_bytes,
+        max_rows=cfg.buffer.max_rows,
+        max_bytes=cfg.buffer.max_bytes,
         max_secs=NO_TIME_LIMIT,
         offset=ingester.base_offset(),
     )
@@ -328,6 +328,7 @@ class CdcPlugin[C: Conn, SS: StreamSrc](
             ctx=ctx,
             ingester=ingester,
             cfg=cfg,
+            thresholds=self.thresholds(ctx, cfg),
             stop_signal=stop_signal,
             large_column_policy=LargeColumnPolicy(
                 max_text_length=cfg.max_large_text_length,

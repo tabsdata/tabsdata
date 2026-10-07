@@ -970,40 +970,60 @@ def test_cron_mask_rejects_invalid(mask):
 def test_auto_publisher_dataclass_constructs_ok():
     src = _auto_src()
     p = _info.StreamPublisherInfo(
-        _good_1in_1out_stream,
-        src,
-        5,
-        ["t1"],
-        None,
+        func=_good_1in_1out_stream,
+        source=src,
+        thresholds=m.StreamThresholds(batch=m.BatchThresholds(max_secs=300)),
+        output_tables=["t1"],
+        on_tables=None,
     )
     assert p.source is src
-    assert p.fallback_rollover_mins == 5
+    assert p.thresholds.batch.max_secs == 300
+    assert p.flush_interval_mins is None
     assert p.output_tables == ["t1"]
     assert p.on_tables is None
 
 
 def test_auto_publisher_dataclass_rollover_below_one_raises_api_10():
-    # Field-level Field(ge=1) on FallbackRolloverMinsSpec triggers
-    # AutoPublisherInfo's @_api.dataclass tag.
+    # Field-level Field(ge=1) on FlushIntervalSpec triggers
+    # StreamPublisherInfo's @_api.dataclass tag.
     with pytest.raises(ApiException) as excinfo:
         _info.StreamPublisherInfo(
-            _good_1in_1out,
-            _auto_src(),
-            0,
-            ["t1"],
-            None,
+            func=_good_1in_1out,
+            source=_auto_src(),
+            thresholds=m.StreamThresholds(batch=m.BatchThresholds(max_secs=300)),
+            output_tables=["t1"],
+            on_tables=None,
+            batch_max_secs=0,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_18
+
+
+def test_a_descriptor_from_before_the_thresholds_loads_as_the_window_it_named():
+    """A bundle written with ``fallback_rollover_mins`` alone still runs:
+    the window becomes the batch ceiling, and the deprecated value stays
+    on the descriptor so the runtime can say so."""
+    loaded = _info.StreamPublisherInfo.from_dict({
+        "func": _api.callable_to_str(_good_1in_1out_stream),
+        "source": _auto_src().to_dict(),
+        "fallback_rollover_mins": 5,
+        "output_tables": ["t1"],
+        "on_tables": None,
+    })
+    assert loaded.thresholds == m.StreamThresholds(
+        batch=m.BatchThresholds(max_secs=300)
+    )
+    assert loaded.flush_interval_mins == 5
 
 
 def test_auto_publisher_dataclass_negative_rollover_raises_api_10():
     with pytest.raises(ApiException) as excinfo:
         _info.StreamPublisherInfo(
-            _good_1in_1out,
-            _auto_src(),
-            -1,
-            ["t1"],
-            None,
+            func=_good_1in_1out,
+            source=_auto_src(),
+            thresholds=m.StreamThresholds(batch=m.BatchThresholds(max_secs=300)),
+            output_tables=["t1"],
+            on_tables=None,
+            flush_interval_mins=-1,
         )
     assert excinfo.value.api_error is ApiErrorCode.API_18
 
@@ -1043,8 +1063,8 @@ def test_auto_publisher_dataclass_signature_mismatch_raises_api_10():
 def test_auto_publisher_decorator_returns_auto_publisher_instance():
     @m.stream_publisher(
         source=_auto_src(),
-        flush_interval_mins=10,
         output_tables=["t1"],
+        batch_max_secs=600,
     )
     def my_pub(
         t1: list[tableframe.TableFrame | None] | None,
@@ -1052,30 +1072,132 @@ def test_auto_publisher_decorator_returns_auto_publisher_instance():
         return None
 
     assert isinstance(my_pub, _info.StreamPublisherInfo)
-    assert my_pub.fallback_rollover_mins == 10
+    assert my_pub.thresholds.batch == m.BatchThresholds(max_secs=600)
+    assert my_pub.flush_interval_mins is None
 
 
-def test_auto_publisher_decorator_rejects_rollover_below_one_with_api_10():
-    # Field-level Field(ge=1) failure surfaces as API_18 when the
-    # AutoPublisherInfo _api.dataclass is constructed (i.e. when the
-    # factory's returned decorator is applied to a function).
-    with pytest.raises(ApiException) as excinfo:
+def test_the_deprecated_flush_interval_is_taken_as_the_batch_ceiling_with_a_warning():
+    with pytest.warns(DeprecationWarning, match="batch_max_secs"):
 
         @m.stream_publisher(
             source=_auto_src(),
-            flush_interval_mins=0,
             output_tables=["t1"],
+            flush_interval_mins=10,
         )
-        def _f(t1: tableframe.TableFrame | None) -> tuple[tableframe.TableFrame | None]:
-            return (t1,)
+        def my_pub(
+            t1: list[tableframe.TableFrame | None] | None,
+        ) -> tableframe.TableFrame | None:
+            return None
 
-    assert excinfo.value.api_error is ApiErrorCode.API_18
+    assert my_pub.thresholds.batch == m.BatchThresholds(max_secs=600)
+    assert my_pub.flush_interval_mins == 10
+
+
+def test_the_deprecated_flush_interval_is_refused_next_to_a_batch_setting():
+    with pytest.raises(ApiException) as excinfo:
+        m.stream_publisher(
+            source=_auto_src(),
+            output_tables=["t1"],
+            batch_max_rows=100,
+            flush_interval_mins=10,
+        )
+    assert excinfo.value.api_error is ApiErrorCode.API_30
+
+
+def test_auto_publisher_decorator_rejects_rollover_below_one_with_api_10():
+    """A window of zero minutes is a batch ceiling of zero seconds, below
+    the floor."""
+    with pytest.raises(ApiException) as excinfo:
+        m.stream_publisher(
+            source=_auto_src(),
+            output_tables=["t1"],
+            flush_interval_mins=0,
+        )
+    assert excinfo.value.api_error is ApiErrorCode.API_29
+
+
+def test_a_stream_publisher_needs_one_batch_limit():
+    with pytest.raises(ApiException) as excinfo:
+        m.stream_publisher(source=_auto_src(), output_tables=["t1"])
+    assert excinfo.value.api_error is ApiErrorCode.API_29
+    assert "batch_max_secs, batch_max_rows and batch_max_bytes" in str(
+        excinfo.value.__cause__
+    )
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"batch_min_secs": 10, "batch_max_rows": 1},
+        {"batch_max_secs": 10},
+        {"batch_min_secs": 120, "batch_max_secs": 60},
+        {"batch_max_secs": 120, "batch_idle_secs": 60},
+        {"batch_max_rows": 1, "batch_idle_secs": 30},
+        {"batch_max_rows": 0},
+        {"batch_max_bytes": 0},
+        {"batch_min_secs": "60", "batch_max_rows": 1},
+    ],
+    ids=[
+        "min below the floor",
+        "max below the floor",
+        "max below min",
+        "idle below max",
+        "idle below min",
+        "zero rows",
+        "zero bytes",
+        "not a number",
+    ],
+)
+def test_inconsistent_batch_thresholds_are_refused(settings):
+    with pytest.raises(ApiException) as excinfo:
+        m.stream_publisher(source=_auto_src(), output_tables=["t1"], **settings)
+    assert excinfo.value.api_error is ApiErrorCode.API_29
+
+
+def test_the_batch_thresholds_are_kept_as_given_with_the_defaults_filled():
+    @m.stream_publisher(
+        source=_auto_src(),
+        output_tables=["t1"],
+        batch_min_secs=120,
+        batch_max_secs=600,
+        batch_idle_secs=3600,
+        batch_max_rows=50_000,
+        batch_max_bytes=1 << 30,
+    )
+    def my_pub(
+        t1: list[tableframe.TableFrame | None] | None,
+    ) -> tableframe.TableFrame | None:
+        return None
+
+    assert my_pub.thresholds.batch == m.BatchThresholds(
+        min_secs=120,
+        max_secs=600,
+        idle_secs=3600,
+        max_rows=50_000,
+        max_bytes=1 << 30,
+    )
+
+
+def test_a_test_may_lower_the_floor_with_a_marked_value():
+    @m.stream_publisher(
+        source=_auto_src(),
+        output_tables=["t1"],
+        batch_min_secs=_api.unsafe_seconds(5),
+        batch_max_secs=_api.unsafe_seconds(10),
+    )
+    def my_pub(
+        t1: list[tableframe.TableFrame | None] | None,
+    ) -> tableframe.TableFrame | None:
+        return None
+
+    batch = my_pub.thresholds.batch
+    assert (batch.min_secs, batch.max_secs) == (5, 10)
 
 
 def test_auto_publisher_decorator_accepts_on_tables_hooks():
     @m.stream_publisher(
         source=_auto_src(),
-        flush_interval_mins=15,
+        batch_max_secs=900,
         output_tables=["t1"],
         on_tables=[_OnTab()],
     )
@@ -1091,7 +1213,7 @@ def test_auto_publisher_decorator_accepts_on_tables_hooks():
 def test_auto_publisher_decorator_default_none_on_tables():
     @m.stream_publisher(
         source=_auto_src(),
-        flush_interval_mins=1,
+        batch_max_secs=60,
         output_tables=["t1"],
     )
     def my_pub(
@@ -1111,7 +1233,7 @@ def test_stream_publisher_rejects_trailing_trx_ctx_param():
 
         @m.stream_publisher(
             source=_auto_src(),
-            flush_interval_mins=1,
+            batch_max_secs=60,
             output_tables=["t1"],
         )
         def _my_pub(
@@ -1132,7 +1254,7 @@ def test_stream_publisher_rejects_any_extra_trailing_param():
 
         @m.stream_publisher(
             source=_auto_src(),
-            flush_interval_mins=1,
+            batch_max_secs=60,
             output_tables=["t1"],
         )
         def _my_pub(
@@ -1201,7 +1323,7 @@ def test_subscriber_signature_allows_bare_tableframe_return():
 def test_stream_publisher_signature_allows_bare_tableframe_return():
     @m.stream_publisher(
         source=_auto_src(),
-        flush_interval_mins=10,
+        batch_max_secs=600,
         output_tables=["t1"],
     )
     def my_pub(

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import sys
 from dataclasses import FrozenInstanceError
 
@@ -1170,3 +1171,72 @@ def test_parse_invalid_table_refs():
     for value in invalid_table_refs:
         with pytest.raises(ConstraintError):
             _api.COLL_TABLE_NAME_VALIDATION.validate(value)
+
+
+# --- Batch seconds: the floor and its test backdoor ---------------------
+
+KEY = "batch_max_secs"
+
+
+@pytest.mark.parametrize(
+    "value", [_api.BATCH_FLOOR_SECS, 61, 3_600, _api.SECONDS_BASE - 1]
+)
+def test_a_plain_value_from_the_floor_up_is_itself(value):
+    assert _api.decode_seconds(KEY, value) == value
+
+
+@pytest.mark.parametrize("seconds", [0, 1, 5, _api.BATCH_FLOOR_SECS - 1])
+def test_a_marked_value_is_its_offset_from_the_base(seconds):
+    assert _api.decode_seconds(KEY, _api.SECONDS_BASE + seconds) == seconds
+
+
+def test_a_marked_value_is_warned_of(caplog):
+    with caplog.at_level(logging.WARNING):
+        _api.decode_seconds(KEY, _api.unsafe_seconds(5))
+    assert KEY in caplog.text
+    assert "5 second(s)" in caplog.text
+
+
+def test_a_plain_value_is_not_warned_of(caplog):
+    with caplog.at_level(logging.WARNING):
+        _api.decode_seconds(KEY, 120)
+    assert caplog.text == ""
+
+
+@pytest.mark.parametrize("value", [-1, 0, 1, _api.BATCH_FLOOR_SECS - 1])
+def test_a_value_below_the_floor_is_rejected_plainly(value):
+    with pytest.raises(ValueError) as raised:
+        _api.decode_seconds(KEY, value)
+    assert str(raised.value) == (
+        f"The value of {KEY} must be at least {_api.BATCH_FLOOR_SECS} seconds; "
+        f"it is {value}"
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        _api.SECONDS_BASE + _api.BATCH_FLOOR_SECS,
+        _api.SECONDS_BASE + _api.BATCH_FLOOR_SECS + 1,
+        2**63 - 1,
+    ],
+)
+def test_a_value_past_the_marked_zone_is_out_of_range(value):
+    with pytest.raises(ValueError, match="out of range"):
+        _api.decode_seconds(KEY, value)
+
+
+@pytest.mark.parametrize("value", [60.0, "60", True, None])
+def test_a_value_that_is_not_a_whole_number_is_rejected(value):
+    with pytest.raises(ValueError, match="whole number of seconds"):
+        _api.decode_seconds(KEY, value)
+
+
+@pytest.mark.parametrize("seconds", [-1, _api.BATCH_FLOOR_SECS])
+def test_only_seconds_below_the_floor_can_be_marked(seconds):
+    with pytest.raises(ValueError):
+        _api.unsafe_seconds(seconds)
+
+
+def test_a_marked_value_round_trips():
+    assert _api.decode_seconds(KEY, _api.unsafe_seconds(7)) == 7

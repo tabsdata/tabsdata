@@ -96,7 +96,7 @@ from tabsdatak.conn.kafka import KafkaStreamSrc as _KafkaStreamSrc  # noqa: E402
 
 @_stream_publisher_decorator(
     source=_KafkaStreamSrc(data_format="json", schema="{}", topic="t"),
-    flush_interval_mins=1,
+    batch_max_secs=60,
     output_tables=["t"],
 )
 def _module_level_stream_pub(t: TableFramesSpec) -> TableFrameSpec:
@@ -558,7 +558,7 @@ def test_resolve_plugin_and_io_stream_publisher_substitutes_to_manifest_stage(
 
     @stream_publisher(
         source=KafkaStreamSrc(data_format="json", schema="{}", topic="t"),
-        flush_interval_mins=1,
+        batch_max_secs=60,
         output_tables=["t"],
     )
     def _my_stream_pub(t: TableFramesSpec) -> TableFrameSpec:

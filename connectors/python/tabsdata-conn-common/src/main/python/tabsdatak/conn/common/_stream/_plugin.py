@@ -11,7 +11,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from tabsdatak.api import StreamSrc
+from tabsdatak.api import StreamSrc, StreamThresholds
 from tabsdatak.conn.common._stream._config import StreamRunConfig
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
 from tabsdatak.conn.common._stream._ingester import StreamIngester
@@ -31,17 +31,12 @@ logger = logging.getLogger(__name__)
 STREAM_NAMESPACE = "tabsdatak.conn.common._stream"
 
 
-def manifest_secs(trigger_max_secs: float, flush_interval_secs: float) -> float:
-    if flush_interval_secs > 0:
-        return min(trigger_max_secs, flush_interval_secs)
-    return trigger_max_secs
-
-
 @dataclass(kw_only=True)
 class StreamRun[R, O: StreamOffset]:
     ctx: StreamSrcPluginCtx
     ingester: StreamIngester[R, O]
     cfg: StreamRunConfig
+    thresholds: StreamThresholds
     stop_signal: StopSignal
     session: Any = None
     slots: list[str] = field(default_factory=list)
@@ -110,7 +105,25 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         cfg: StreamRunConfig,
         stop_signal: StopSignal,
     ) -> StreamRun[R, O]:
-        return StreamRun(ctx=ctx, ingester=ingester, cfg=cfg, stop_signal=stop_signal)
+        return StreamRun(
+            ctx=ctx,
+            ingester=ingester,
+            cfg=cfg,
+            thresholds=self.thresholds(ctx, cfg),
+            stop_signal=stop_signal,
+        )
+
+    @staticmethod
+    def thresholds(ctx: StreamSrcPluginCtx, cfg: StreamRunConfig) -> StreamThresholds:
+        """The thresholds this run flows by: the batch level from the
+        function's definition, the buffer and poll levels from it when it
+        names them and from the connector's settings otherwise."""
+        defined = ctx.thresholds
+        return StreamThresholds(
+            batch=defined.batch,
+            buffer=defined.buffer or cfg.buffer,
+            poll=defined.poll or cfg.poll,
+        )
 
     def seed(self, run: StreamRun[R, O]) -> None:
         run.ingester.seed_offset(
@@ -165,8 +178,6 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         interrupted = False
         errored = False
 
-        flush_interval_secs = max(ctx.flush_interval_mins, 0) * 60
-
         stop_signal = StopSignal.install()
         run = self.build_run(
             ctx=ctx, ingester=ingester, cfg=cfg, stop_signal=stop_signal
@@ -183,25 +194,26 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                 return
             ledger = FileLedger(landing=ctx.work_dir, slots=run.slots)
             encoder = self.build_encoder(run)
+            thresholds = run.thresholds
             buffer_sentinel = BufferSentinel(
                 ledger=ledger,
                 encoder=encoder,
                 slots=run.slots,
-                max_rows=cfg.buffer_max_rows,
-                max_bytes=cfg.buffer_max_bytes,
-                max_secs=cfg.buffer_max_secs,
+                max_rows=thresholds.buffer.max_rows,
+                max_bytes=thresholds.buffer.max_bytes,
+                max_secs=thresholds.buffer.max_secs,
                 offset=ingester.base_offset(),
-                measure_bytes=cfg.trigger_max_bytes is not None,
+                measure_bytes=thresholds.batch.max_bytes is not None,
                 clock=self.clock,
             )
             disk_sentinel = DiskSentinel(
                 ledger=ledger,
                 buffer=buffer_sentinel,
-                max_rows=cfg.trigger_max_rows,
-                max_bytes=cfg.trigger_max_bytes,
-                max_secs=manifest_secs(cfg.trigger_max_secs, flush_interval_secs),
-                floor_secs=cfg.manifest_min_secs,
-                heartbeat_secs=cfg.manifest_max_secs,
+                max_rows=thresholds.batch.max_rows,
+                max_bytes=thresholds.batch.max_bytes,
+                max_secs=thresholds.batch.max_secs,
+                min_secs=thresholds.batch.min_secs,
+                idle_secs=thresholds.batch.idle_secs,
                 clock=self.clock,
             )
 
@@ -229,7 +241,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
                     buffer_sentinel.flush()
                     self.publish(run, ledger, disk_sentinel, buffer_sentinel)
                 if polled == 0:
-                    stop_signal.wait(timeout=cfg.poll_idle_secs)
+                    stop_signal.wait(timeout=run.thresholds.poll.idle_secs)
             if stop_signal.is_set():
                 interrupted = True
                 logger.info("Interrupted the stream; exiting the run loop")
@@ -258,7 +270,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         buffer_sentinel: BufferSentinel[R, O],
     ) -> bool:
         tables_files = ledger.manifest()
-        if not any(tables_files) and not disk_sentinel.heartbeat_due():
+        if not any(tables_files) and not disk_sentinel.idle_due():
             return False
         offset = buffer_sentinel.offset
         run.ctx.stage(tables_files, self.stage_state(run, offset))

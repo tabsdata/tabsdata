@@ -9,10 +9,10 @@ from collections.abc import Callable, Iterable
 
 import pyarrow as pa
 
+from tabsdatak._api import BATCH_FLOOR_SECS
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
 from tabsdatak.conn.common._stream._ledger import FileLedger
 from tabsdatak.conn.common._stream._offset import StreamOffset
-from tabsdatak.conn.common._stream.constants import MANIFEST_FLOOR_SECS
 from tabsdatak.conn.common.error import ConnErrorCode
 
 
@@ -68,20 +68,18 @@ class DiskSentinel:
         buffer: BufferSentinel | None = None,
         max_rows: int | None,
         max_bytes: int | None,
-        max_secs: float,
-        floor_secs: float = MANIFEST_FLOOR_SECS,
-        heartbeat_secs: float | None = None,
+        max_secs: float | None,
+        min_secs: float = BATCH_FLOOR_SECS,
+        idle_secs: float | None = None,
         clock: Callable[[], float] = time.time,
     ):
         self._ledger = ledger
         self._buffer = buffer
         self._max_rows = max_rows
         self._max_bytes = max_bytes
-        self._max_secs = (
-            max_secs if heartbeat_secs is None else min(max_secs, heartbeat_secs)
-        )
-        self._floor_secs = min(floor_secs, self._max_secs)
-        self._heartbeat_secs = heartbeat_secs
+        self._max_secs = max_secs
+        self._min_secs = min_secs
+        self._idle_secs = idle_secs
         self._clock = clock
         self._last_flushed: float = clock()
 
@@ -103,24 +101,25 @@ class DiskSentinel:
     def reset_timer(self) -> None:
         self._last_flushed = self._clock()
 
-    def heartbeat_due(self) -> bool:
-        """Whether the stream has gone without a manifest for the heartbeat
-        bound, so an empty one is due even with nothing to stage."""
-        if self._heartbeat_secs is None or self.has_data:
+    def idle_due(self) -> bool:
+        """Whether the stream has gone without a batch for the idle bound,
+        so an empty one is due even with nothing to stage."""
+        if self._idle_secs is None or self.has_data:
             return False
-        return self._clock() - self._last_flushed >= self._heartbeat_secs
+        return self._clock() - self._last_flushed >= self._idle_secs
 
     def due(self, force: bool = False) -> bool:
         if not self.has_data:
-            return self.heartbeat_due()
+            return self.idle_due()
         if force:
             return True
         elapsed = self._clock() - self._last_flushed
-        if elapsed < self._floor_secs:
+        if elapsed < self._min_secs:
             return False
         rows_hit = self._max_rows is not None and self.rows >= self._max_rows
         bytes_hit = self._max_bytes is not None and self.bytes >= self._max_bytes
-        return elapsed >= self._max_secs or rows_hit or bytes_hit
+        time_hit = self._max_secs is not None and elapsed >= self._max_secs
+        return time_hit or rows_hit or bytes_hit
 
 
 class BufferSentinel[R, O: StreamOffset]:

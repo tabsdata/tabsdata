@@ -51,7 +51,7 @@ Examples:
             source=PostgresCdcStreamSrc(tables=["public.city"],
                                         replication_slot="td_slot",
                                         start_from="tail"),
-            flush_interval_mins=2, output_tables=["cdc_raw"])
+            batch_max_secs=120, output_tables=["cdc_raw"])
         def stream(rows: TableFramesSpec) -> TableFrameSpec:
             return concat(rows)
 URI and credential fields accept `Secret` references. Cross-cutting
@@ -82,7 +82,7 @@ from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream import _floor, _validation as _stream_validation
+from tabsdatak.conn.common._stream import _validation as _stream_validation
 from tabsdatak.conn.common.sql.cdc.typing import validate_start
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
@@ -420,11 +420,6 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.buffer.max_rows",
     "tabsdata.cdc.buffer.max_bytes",
     "tabsdata.cdc.buffer.max_secs",
-    "tabsdata.cdc.trigger.max_rows",
-    "tabsdata.cdc.trigger.max_bytes",
-    "tabsdata.cdc.trigger.max_secs",
-    "tabsdata.cdc.manifest.min_secs",
-    "tabsdata.cdc.manifest.max_secs",
     "tabsdata.cdc.poll.idle_secs",
     "tabsdata.cdc.max_large_text_length",
     "tabsdata.cdc.fetch_size",
@@ -435,18 +430,10 @@ CdcSrcCfgKey: TypeAlias = Literal[
 CdcSrcCfgSpec: TypeAlias = Annotated[
     Mapping[CdcSrcCfgKey, Any],
     _common_validation.CONN_CFG_VALIDATION,
-    _floor.seconds_floor_validator("tabsdata.cdc.trigger.max_secs"),
-    _floor.manifest_bounds_validator(
-        "tabsdata.cdc.manifest.min_secs",
-        "tabsdata.cdc.manifest.max_secs",
-        "tabsdata.cdc.trigger.max_secs",
-    ),
     _stream_validation.positive_integers_validator(
         "tabsdata.cdc.buffer.max_rows",
         "tabsdata.cdc.buffer.max_bytes",
         "tabsdata.cdc.buffer.max_secs",
-        "tabsdata.cdc.trigger.max_rows",
-        "tabsdata.cdc.trigger.max_bytes",
         "tabsdata.cdc.poll.max_secs",
     ),
     _stream_validation.non_negative_integers_validator("tabsdata.cdc.poll.idle_secs"),
@@ -548,12 +535,8 @@ class PostgresCdcStreamSrc(StreamSrc):
         flatten_columns: When `True` (default), the new columns are
             inlined as top-level columns.
         src_cfg: Optional config mapping over the allowed CDC keys only
-            -- buffer / trigger thresholds, the manifest bounds
-            (`tabsdata.cdc.manifest.min_secs`, default 60 and never less,
-            which `trigger.max_secs` may not go below; and
-            `tabsdata.cdc.manifest.max_secs`, unset by default, which
-            stages an empty batch once that long has passed without one,
-            so the publisher runs with empty inputs as a heartbeat),
+            -- buffer thresholds (the batch limits are the
+            `@stream_publisher` batch settings),
             polling cadence, wal2json
             format version, the large text length limit and
             `postgres.cdc.unchanged_large_text_as_null`. A byte

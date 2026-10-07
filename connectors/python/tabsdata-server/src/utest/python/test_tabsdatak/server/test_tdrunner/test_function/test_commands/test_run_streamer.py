@@ -46,7 +46,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 @_stream_publisher_decorator(
     source=_KafkaStreamSrc(data_format="json", schema="{}", topic="t"),
-    flush_interval_mins=1,
+    batch_max_secs=60,
     output_tables=["t"],
 )
 def _module_level_stream_pub(t: TableFramesSpec) -> TableFrameSpec:

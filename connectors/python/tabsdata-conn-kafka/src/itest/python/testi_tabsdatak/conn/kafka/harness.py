@@ -21,7 +21,7 @@ from tabsdatax.itest.fixture.backends.redpanda import RedpandaDomain
 from testi_tabsdatak.conn.kafka.backend import Broker, confluent_sr, src_conn
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._floor import unsafe_seconds
+from tabsdatak.api import BatchThresholds, StreamThresholds
 from tabsdatak.conn.kafka import KafkaStreamSrc, KafkaStreamSrcConn, Protobuf
 
 # noinspection PyProtectedMember
@@ -42,10 +42,14 @@ SCHEMAS = Path(__file__).parents[4] / "resources/testi_tabsdatak/conn/kafka/sche
 PROTOBUF_MESSAGE = "PersonV1"
 PLUGIN_TIMEOUT_SECONDS = 60.0
 CAPTURE_TIMEOUT_SECONDS = 45.0
-STREAM_CFG = {
-    "tabsdata.kafka.poll.max_secs": 2,
-    "tabsdata.kafka.trigger.max_secs": unsafe_seconds(1),
-}
+STREAM_CFG = {"tabsdata.kafka.poll.max_secs": 2}
+
+
+def batch_of(rows: int | None = None) -> StreamThresholds:
+    """Batches a second apart at most, of `rows` rows when given."""
+    return StreamThresholds(
+        batch=BatchThresholds(min_secs=1, max_secs=1, max_rows=rows)
+    )
 
 
 @dataclass
@@ -59,8 +63,15 @@ class KafkaCtx(StreamSrcPluginCtx):
     has been staged, or the capture deadline passes -- the test's exit lever for the
     otherwise-infinite loop. ``satisfied`` tells the two apart."""
 
-    def __init__(self, work: Path, *, until: Callable[[KafkaCtx], bool]) -> None:
+    def __init__(
+        self,
+        work: Path,
+        *,
+        until: Callable[[KafkaCtx], bool],
+        thresholds: StreamThresholds | None = None,
+    ) -> None:
         self._work_dir = work
+        self._thresholds = thresholds or batch_of()
         self._until = until
         self._deadline = time.monotonic() + CAPTURE_TIMEOUT_SECONDS
         self.satisfied = False
@@ -130,8 +141,8 @@ class KafkaCtx(StreamSrcPluginCtx):
             return dict(self._state) if self._state else None
 
     @property
-    def flush_interval_mins(self) -> int:
-        return 0
+    def thresholds(self) -> StreamThresholds:
+        return self._thresholds
 
     def stage(self, tables_files, new_state):
         with self._lock:

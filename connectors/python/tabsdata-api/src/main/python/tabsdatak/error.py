@@ -453,4 +453,12 @@ class ApiErrorCode(ErrorCode):
     API_28 = ErrorDef(
         ApiInitException, "invalid cron expression: {value!r}"
     )  # CronMaskSpec -- semantics
+    API_29 = ErrorDef(
+        ApiInitException, "@stream_publisher thresholds validation failed"
+    )  # StreamThresholds and its levels
+    API_30 = ErrorDef(
+        ApiInitException,
+        "flush_interval_mins is deprecated and cannot be given together with "
+        "the batch thresholds; set batch_max_secs instead of flush_interval_mins",
+    )  # @stream_publisher
     # Entity

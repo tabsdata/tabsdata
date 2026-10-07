@@ -17,14 +17,12 @@ import polars as pl
 import pyarrow.parquet as pq
 import pytest
 
-from tabsdatak.api import Secret
+from tabsdatak.api import BatchThresholds, Secret, StreamThresholds
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream import _plugin
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._floor import unsafe_seconds
-
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._signal import StopSignal
 from tabsdatak.conn.common.types import UserPassword
@@ -92,28 +90,24 @@ def test_the_buffer_bytes_default_yields_to_the_source_config():
     cfg = _build_kafka_run_config(
         _src(src_cfg={"tabsdata.kafka.buffer.max_bytes": 1024})
     )
-    assert cfg.buffer_max_bytes == 1024
+    assert cfg.buffer.max_bytes == 1024
 
 
 def test_run_config_defaults():
     cfg = KafkaStreamSrcPlugin().build_run_config(_src())
-    assert cfg.poll_max_secs == 2
+    assert cfg.poll.max_secs == 2
     assert cfg.connect_timeout_secs == 16
-    assert cfg.trigger_max_secs == 60
-    assert cfg.trigger_max_bytes is None
-    assert cfg.trigger_max_rows is None
-    assert (cfg.buffer_max_rows, cfg.buffer_max_bytes, cfg.buffer_max_secs) == (
+    assert (cfg.buffer.max_rows, cfg.buffer.max_bytes, cfg.buffer.max_secs) == (
         10_000,
         None,
         60,
     )
-    assert cfg.poll_idle_secs == 0
+    assert cfg.poll.idle_secs == 0
     assert cfg.consume_max_messages == 10_000
-    assert (cfg.manifest_min_secs, cfg.manifest_max_secs) == (60, None)
     assert cfg.logging_level == logging.ERROR
 
 
-def test_run_config_reads_the_buffer_and_trigger_keys():
+def test_run_config_reads_the_buffer_and_poll_keys():
     src = _src(
         src_cfg={
             "tabsdata.kafka.poll.max_secs": 5,
@@ -121,31 +115,15 @@ def test_run_config_reads_the_buffer_and_trigger_keys():
             "tabsdata.kafka.buffer.max_rows": 50,
             "tabsdata.kafka.buffer.max_bytes": 4096,
             "tabsdata.kafka.buffer.max_secs": 7,
-            "tabsdata.kafka.trigger.max_secs": 120,
-            "tabsdata.kafka.trigger.max_bytes": 64 * 1024 * 1024,
-            "tabsdata.kafka.trigger.max_rows": 1000,
+            "tabsdata.kafka.poll.idle_secs": 3,
             "kafka.logging_level": logging.DEBUG,
         }
     )
     cfg = KafkaStreamSrcPlugin().build_run_config(src)
-    assert cfg.poll_max_secs == 5
+    assert cfg.poll.max_secs == 5
     assert cfg.connect_timeout_secs == 30
-    assert cfg.trigger_max_secs == 120
-    assert cfg.trigger_max_bytes == 64 * 1024 * 1024
-    assert cfg.trigger_max_rows == 1000
+    assert cfg.poll.idle_secs == 3
     assert cfg.logging_level == logging.DEBUG
-
-
-def test_run_config_decodes_a_marked_trigger_max_secs():
-    src = _src(src_cfg={"tabsdata.kafka.trigger.max_secs": unsafe_seconds(3)})
-    assert KafkaStreamSrcPlugin().build_run_config(src).trigger_max_secs == 3
-
-
-@pytest.mark.parametrize("seconds", [0, 15, 59])
-def test_a_trigger_max_secs_below_the_floor_is_rejected(seconds):
-    with pytest.raises(TabsdataException) as raised:
-        _src(src_cfg={"tabsdata.kafka.trigger.max_secs": seconds})
-    assert raised.value.api_error is KafkaErrorCode.KAFKA_5
 
 
 # --- Plugin.run wiring ---------------------------------------------
@@ -283,7 +261,7 @@ def _run(
     producer.flush.return_value = 0
     ctx = _make_ctx(tmp_path, active_calls=active_calls)
     ctx.first_stage = dlq_topic is None
-    src_cfg = {"tabsdata.kafka.trigger.max_secs": unsafe_seconds(0)} | (src_cfg or {})
+    src_cfg = dict(src_cfg or {})
     with (
         patch("confluent_kafka.Consumer", return_value=consumer),
         patch("confluent_kafka.Producer", return_value=producer),
@@ -414,7 +392,9 @@ def _make_ctx(work_dir: Path, *, active_calls: list[bool]):
     class _Ctx:
         def __init__(self) -> None:
             self.work_dir = work_dir
-            self.flush_interval_mins = 0
+            self.thresholds = StreamThresholds(
+                batch=BatchThresholds(min_secs=0, max_secs=0)
+            )
             self.first_stage = True
             self.stream_state = None
             self.manifests: list = []

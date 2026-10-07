@@ -11,6 +11,7 @@ from typing import Self
 import pytest
 
 # noinspection PyProtectedMember
+from tabsdatak.api import BatchThresholds, PollThresholds, StreamThresholds
 from tabsdatak.conn.common._stream import _plugin
 
 # noinspection PyProtectedMember
@@ -26,7 +27,6 @@ from tabsdatak.conn.common._stream._offset import StreamOffset
 from tabsdatak.conn.common._stream._plugin import (
     PipelineStreamSrcPlugin,
     StreamRun,
-    manifest_secs,
 )
 
 # noinspection PyProtectedMember
@@ -45,12 +45,14 @@ class FakeCtx:
         self,
         *,
         active_values,
-        flush_interval_mins=0,
+        thresholds=None,
         first_stage=True,
         stream_state=None,
     ):
         self._active = iter(active_values)
-        self.flush_interval_mins = flush_interval_mins
+        self.thresholds = thresholds or StreamThresholds(
+            batch=BatchThresholds(max_rows=1 << 62)
+        )
         self.first_stage = first_stage
         self.stream_state = stream_state
         self.work_dir = Path("/tmp")
@@ -94,7 +96,7 @@ class FakeDisk:
     def due(self, force: bool = False) -> bool:
         return self._force if force else self._normal
 
-    def heartbeat_due(self) -> bool:
+    def idle_due(self) -> bool:
         return self._heartbeat
 
     def manifest(self):
@@ -225,7 +227,7 @@ class FakeEncoder:
 
 
 def cfg() -> StreamRunConfig:
-    return StreamRunConfig(poll_idle_secs=0)
+    return StreamRunConfig(poll=PollThresholds(max_secs=1, idle_secs=0))
 
 
 def patch_sentinels(monkeypatch, disk, buffer):
@@ -440,32 +442,24 @@ def disk_arguments(monkeypatch, disk) -> dict:
     return arguments
 
 
-@pytest.mark.parametrize(
-    ("trigger_max_secs", "flush_interval_mins", "expected"),
-    [(60, 0, 60), (600, 0, 600), (600, 2, 120), (60, 10, 60), (5, 1, 5)],
-)
-def test_the_manifest_time_threshold_is_capped_by_the_flush_interval(
-    trigger_max_secs, flush_interval_mins, expected
-):
-    assert manifest_secs(trigger_max_secs, flush_interval_mins * 60) == expected
-
-
 def test_stream_hands_the_disk_sentinel_its_thresholds(monkeypatch):
     disk = FakeDisk(manifest=[[]])
     buffer = FakeBuffer()
     patch_sentinels(monkeypatch, disk, buffer)
     arguments = disk_arguments(monkeypatch, disk)
-    ctx = FakeCtx(active_values=[False], flush_interval_mins=2)
+    ctx = FakeCtx(
+        active_values=[False],
+        thresholds=StreamThresholds(
+            batch=BatchThresholds(
+                min_secs=90, max_secs=120, idle_secs=600, max_rows=7, max_bytes=11
+            )
+        ),
+    )
 
     Plugin().stream(
         ctx=ctx,
         ingester=FakeIngester(),
-        cfg=StreamRunConfig(
-            trigger_max_rows=7,
-            trigger_max_bytes=11,
-            trigger_max_secs=600,
-            poll_idle_secs=0,
-        ),
+        cfg=StreamRunConfig(poll=PollThresholds(max_secs=1, idle_secs=0)),
     )
 
     assert arguments["buffer"] is buffer
@@ -473,7 +467,9 @@ def test_stream_hands_the_disk_sentinel_its_thresholds(monkeypatch):
         arguments["max_rows"],
         arguments["max_bytes"],
         arguments["max_secs"],
-    ) == (7, 11, 120)
+        arguments["min_secs"],
+        arguments["idle_secs"],
+    ) == (7, 11, 120, 90, 600)
 
 
 def test_a_due_manifest_writes_the_buffer_out_before_it_stages(monkeypatch):

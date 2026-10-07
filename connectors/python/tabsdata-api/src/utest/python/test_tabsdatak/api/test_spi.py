@@ -11,7 +11,15 @@ import pytest
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
-from tabsdatak.api import BasicDictSpec, Dest, Src, StreamSrc, TrxCtx
+from tabsdatak.api import (
+    BasicDictSpec,
+    BatchThresholds,
+    Dest,
+    Src,
+    StreamSrc,
+    StreamThresholds,
+    TrxCtx,
+)
 from tabsdatak.error import ApiErrorCode, ApiException
 from tabsdatak.spi import (
     Conn,
@@ -577,8 +585,8 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
         return self._stream_state
 
     @property
-    def flush_interval_mins(self) -> int:
-        return 0
+    def thresholds(self) -> StreamThresholds:
+        return StreamThresholds(batch=BatchThresholds(max_rows=1))
 
     def stage(
         self,

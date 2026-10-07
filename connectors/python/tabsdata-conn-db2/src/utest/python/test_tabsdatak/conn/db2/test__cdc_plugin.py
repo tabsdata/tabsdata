@@ -75,10 +75,9 @@ def test_run_config_uses_defaults_when_no_src_cfg():
     src = _src()
     cfg = _build_cdc_run_config(src)
     assert isinstance(cfg, CdcRunConfig)
-    assert cfg.buffer_max_rows == 10_000
-    assert cfg.buffer_max_secs == 60
-    assert cfg.poll_idle_secs == 1
-    assert (cfg.manifest_min_secs, cfg.manifest_max_secs) == (60, None)
+    assert cfg.buffer.max_rows == 10_000
+    assert cfg.buffer.max_secs == 60
+    assert cfg.poll.idle_secs == 1
     assert cfg.max_large_text_length == 1024
 
 
@@ -92,9 +91,9 @@ def test_run_config_picks_up_src_cfg_overrides():
         },
     )
     cfg = _build_cdc_run_config(src)
-    assert cfg.buffer_max_rows == 5
-    assert cfg.buffer_max_secs == 30
-    assert cfg.poll_idle_secs == 2
+    assert cfg.buffer.max_rows == 5
+    assert cfg.buffer.max_secs == 30
+    assert cfg.poll.idle_secs == 2
     assert cfg.max_large_text_length == 4096
 
 
@@ -120,21 +119,12 @@ def test_run_config_format_fields_default_to_columns_flattened():
 # --- logging_level wiring -------------------------------------------
 
 
-def test_run_config_decodes_a_marked_trigger_max_secs():
-    from tabsdatak.conn.common._stream._floor import unsafe_seconds
-
-    src = _src(src_cfg={"tabsdata.cdc.trigger.max_secs": unsafe_seconds(2)})
-    assert _build_cdc_run_config(src).trigger_max_secs == 2
-
-
 @pytest.mark.parametrize(
     "key",
     [
         "tabsdata.cdc.buffer.max_rows",
         "tabsdata.cdc.buffer.max_bytes",
         "tabsdata.cdc.buffer.max_secs",
-        "tabsdata.cdc.trigger.max_rows",
-        "tabsdata.cdc.trigger.max_bytes",
     ],
 )
 def test_a_cdc_limit_that_is_not_positive_is_rejected(key):
@@ -153,7 +143,7 @@ def test_a_negative_poll_idle_secs_is_rejected():
 
 
 def test_a_zero_poll_idle_secs_is_accepted():
-    assert _build_cdc_run_config(_src(src_cfg={"tabsdata.cdc.poll.idle_secs": 0})).poll_idle_secs == 0
+    assert _build_cdc_run_config(_src(src_cfg={"tabsdata.cdc.poll.idle_secs": 0})).poll.idle_secs == 0
 
 
 def test_run_config_logging_level_default_is_error():

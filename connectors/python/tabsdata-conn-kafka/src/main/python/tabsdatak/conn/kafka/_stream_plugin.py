@@ -23,14 +23,13 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # noinspection PyProtectedMember
+from tabsdatak.api import BufferThresholds, PollThresholds
 from tabsdatak.conn.common._stream._config import StreamRunConfig
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._floor import decode_seconds, manifest_bounds
-
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._plugin import PipelineStreamSrcPlugin, StreamRun
 
@@ -39,9 +38,6 @@ from tabsdatak.conn.common._stream.constants import (
     DEFAULT_BUFFER_MAX_BYTES,
     DEFAULT_BUFFER_MAX_ROWS,
     DEFAULT_BUFFER_MAX_SECS,
-    DEFAULT_TRIGGER_MAX_BYTES,
-    DEFAULT_TRIGGER_MAX_ROWS,
-    DEFAULT_TRIGGER_MAX_SECS,
 )
 from tabsdatak.conn.kafka import (
     KafkaStreamSrc,
@@ -77,47 +73,40 @@ _KEY_LOGGING_LEVEL: SrcCfgKey = "kafka.logging_level"
 _KEY_BUFFER_MAX_ROWS: SrcCfgKey = "tabsdata.kafka.buffer.max_rows"
 _KEY_BUFFER_MAX_BYTES: SrcCfgKey = "tabsdata.kafka.buffer.max_bytes"
 _KEY_BUFFER_MAX_SECS: SrcCfgKey = "tabsdata.kafka.buffer.max_secs"
-_KEY_TRIGGER_MAX_ROWS: SrcCfgKey = "tabsdata.kafka.trigger.max_rows"
-_KEY_TRIGGER_MAX_BYTES: SrcCfgKey = "tabsdata.kafka.trigger.max_bytes"
-_KEY_TRIGGER_MAX_SECS: SrcCfgKey = "tabsdata.kafka.trigger.max_secs"
-_KEY_MANIFEST_MIN_SECS: SrcCfgKey = "tabsdata.kafka.manifest.min_secs"
-_KEY_MANIFEST_MAX_SECS: SrcCfgKey = "tabsdata.kafka.manifest.max_secs"
+_KEY_POLL_IDLE_SECS: SrcCfgKey = "tabsdata.kafka.poll.idle_secs"
 _KEY_CONSUME_MAX_MESSAGES: SrcCfgKey = "tabsdata.kafka.consume.max_messages"
 
 
 KAFKA_DEFAULT_POLL_MAX_SECS = 2
+KAFKA_DEFAULT_POLL_IDLE_SECS = 0
 KAFKA_DEFAULT_CONSUME_MAX_MESSAGES = 10_000
+
+
+def default_kafka_poll_thresholds() -> PollThresholds:
+    return PollThresholds(
+        max_secs=KAFKA_DEFAULT_POLL_MAX_SECS, idle_secs=KAFKA_DEFAULT_POLL_IDLE_SECS
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
 class KafkaRunConfig(StreamRunConfig):
-    poll_max_secs: int = KAFKA_DEFAULT_POLL_MAX_SECS
-    poll_idle_secs: int = 0
+    poll: PollThresholds = field(default_factory=default_kafka_poll_thresholds)
     connect_timeout_secs: int = DEFAULT_CONNECT_TIMEOUT_SECS
     consume_max_messages: int = KAFKA_DEFAULT_CONSUME_MAX_MESSAGES
 
 
 def _build_kafka_run_config(src: KafkaStreamSrc) -> KafkaRunConfig:
     cfg = dict(src.src_cfg or {})
-    manifest_min_secs, manifest_max_secs = manifest_bounds(
-        cfg,
-        min_key=_KEY_MANIFEST_MIN_SECS,
-        max_key=_KEY_MANIFEST_MAX_SECS,
-        trigger_key=_KEY_TRIGGER_MAX_SECS,
-    )
     return KafkaRunConfig(
-        buffer_max_rows=cfg.get(_KEY_BUFFER_MAX_ROWS, DEFAULT_BUFFER_MAX_ROWS),
-        buffer_max_bytes=cfg.get(_KEY_BUFFER_MAX_BYTES, DEFAULT_BUFFER_MAX_BYTES),
-        buffer_max_secs=cfg.get(_KEY_BUFFER_MAX_SECS, DEFAULT_BUFFER_MAX_SECS),
-        trigger_max_rows=cfg.get(_KEY_TRIGGER_MAX_ROWS, DEFAULT_TRIGGER_MAX_ROWS),
-        trigger_max_bytes=cfg.get(_KEY_TRIGGER_MAX_BYTES, DEFAULT_TRIGGER_MAX_BYTES),
-        manifest_min_secs=manifest_min_secs,
-        manifest_max_secs=manifest_max_secs,
-        trigger_max_secs=decode_seconds(
-            _KEY_TRIGGER_MAX_SECS,
-            cfg.get(_KEY_TRIGGER_MAX_SECS, DEFAULT_TRIGGER_MAX_SECS),
+        buffer=BufferThresholds(
+            max_rows=cfg.get(_KEY_BUFFER_MAX_ROWS, DEFAULT_BUFFER_MAX_ROWS),
+            max_bytes=cfg.get(_KEY_BUFFER_MAX_BYTES, DEFAULT_BUFFER_MAX_BYTES),
+            max_secs=cfg.get(_KEY_BUFFER_MAX_SECS, DEFAULT_BUFFER_MAX_SECS),
         ),
-        poll_max_secs=cfg.get(_KEY_POLL_MAX_SECS, KAFKA_DEFAULT_POLL_MAX_SECS),
+        poll=PollThresholds(
+            max_secs=cfg.get(_KEY_POLL_MAX_SECS, KAFKA_DEFAULT_POLL_MAX_SECS),
+            idle_secs=cfg.get(_KEY_POLL_IDLE_SECS, KAFKA_DEFAULT_POLL_IDLE_SECS),
+        ),
         connect_timeout_secs=cfg.get(
             _KEY_CONNECT_TIMEOUT, DEFAULT_CONNECT_TIMEOUT_SECS
         ),
@@ -147,7 +136,7 @@ class KafkaStreamSrcPlugin(
         return KafkaIngester(
             conn=conn,
             stream_src=stream_src,
-            poll_max_secs=cfg.poll_max_secs,
+            poll_max_secs=cfg.poll.max_secs,
             connect_timeout_secs=cfg.connect_timeout_secs,
             consume_max_messages=cfg.consume_max_messages,
         )

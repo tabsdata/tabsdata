@@ -30,11 +30,12 @@ from pathlib import Path
 
 import pytest
 
-from tabsdatak.conn.localfile import LocalFileSrcConn
-from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
+from tabsdatak.api import BatchThresholds, StreamThresholds
 from tabsdatak.common._transporter.handler.handler import TransporterReport
 from tabsdatak.common._transporter.handler.handler2 import TransporterHandler2
 from tabsdatak.common._transporter.invoker import transporter2
+from tabsdatak.conn.localfile import LocalFileSrcConn
+from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
 from tabsdatak.server._tdrunner.function._lib import stage_backend
 from tabsdatak.server._tdrunner.function._lib.errors import (
     BadStreamStateError,
@@ -76,7 +77,9 @@ def _local_backend(stage: Path) -> StageBackend:
 def _make_ctx(
     *,
     tmp_path: Path,
-    flush_interval_mins: int = 5,
+    thresholds: StreamThresholds = StreamThresholds(
+        batch=BatchThresholds(max_secs=300)
+    ),
 ) -> StreamerPluginCtx:
     """Build a ctx whose work_dir + stage_root are siblings under tmp_path."""
     work_dir = tmp_path / "work"
@@ -90,7 +93,7 @@ def _make_ctx(
         function_id="F-1",
         function_name="stream_people",
         function_stage=_file_location(stage),
-        flush_interval_mins=flush_interval_mins,
+        thresholds=thresholds,
         tabsdata_version=_TABSDATA_VERSION,
     )
 
@@ -194,7 +197,7 @@ def test_ctx_construction_succeeds_for_file_stage(tmp_path):
     assert ctx.active is True
     assert ctx.first_stage is True
     assert ctx.stream_state is None  # no prior state file
-    assert ctx.flush_interval_mins == 5
+    assert ctx.thresholds == StreamThresholds(batch=BatchThresholds(max_secs=300))
 
 
 def _construct_ctx_for(stage_uri: str, tmp_path: Path) -> StreamerPluginCtx:
@@ -207,7 +210,7 @@ def _construct_ctx_for(stage_uri: str, tmp_path: Path) -> StreamerPluginCtx:
         function_id="F-1",
         function_name="stream_people",
         function_stage=Location(uri=stage_uri),
-        flush_interval_mins=5,
+        thresholds=StreamThresholds(batch=BatchThresholds(max_secs=300)),
         tabsdata_version=_TABSDATA_VERSION,
     )
 
@@ -281,7 +284,7 @@ def test_ctx_construction_loads_existing_state(tmp_path):
         function_id="F-1",
         function_name="stream_people",
         function_stage=_file_location(stage),
-        flush_interval_mins=5,
+        thresholds=StreamThresholds(batch=BatchThresholds(max_secs=300)),
         tabsdata_version=_TABSDATA_VERSION,
     )
     assert ctx.stream_state == {"offset": 100}

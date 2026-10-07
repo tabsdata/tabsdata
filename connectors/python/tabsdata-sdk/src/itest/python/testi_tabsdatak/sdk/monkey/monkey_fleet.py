@@ -100,7 +100,7 @@ def build_stream_publisher(spec: dict):
 
     source = KafkaStreamSrc(topic=spec["topic"], data_format="json", schema=SCHEMA)
     decorate = stream_publisher(
-        source=source, flush_interval_mins=1, output_tables=[spec["table"]]
+        source=source, batch_max_secs=60, output_tables=[spec["table"]]
     )
     return decorate(named(spec["name"], body))
 

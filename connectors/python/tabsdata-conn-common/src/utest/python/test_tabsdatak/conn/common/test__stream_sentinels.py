@@ -13,6 +13,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
+from tabsdatak._api import BATCH_FLOOR_SECS
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._encoder import StreamEncoder
 
@@ -28,7 +30,6 @@ from tabsdatak.conn.common._stream._sentinels import (
     ChunkSentinel,
     DiskSentinel,
 )
-from tabsdatak.conn.common._stream.constants import MANIFEST_FLOOR_SECS
 from tabsdatak.conn.common.error import ConnErrorCode, ConnStreamException
 
 
@@ -62,9 +63,9 @@ def disk(
     *,
     max_rows: int | None = None,
     max_bytes: int | None = None,
-    max_secs: float = math.inf,
-    floor_secs: float = 0,
-    heartbeat_secs: float | None = None,
+    max_secs: float | None = None,
+    min_secs: float = 0,
+    idle_secs: float | None = None,
     buffer: BufferSentinel | None = None,
 ) -> DiskSentinel:
     return DiskSentinel(
@@ -73,8 +74,8 @@ def disk(
         max_rows=max_rows,
         max_bytes=max_bytes,
         max_secs=max_secs,
-        floor_secs=floor_secs,
-        heartbeat_secs=heartbeat_secs,
+        min_secs=min_secs,
+        idle_secs=idle_secs,
         clock=clock,
     )
 
@@ -137,7 +138,7 @@ def test_the_disk_is_not_due_after_the_ledger_is_cleared(ledger: FileLedger):
 
 def test_nothing_is_due_before_the_floor_even_past_a_threshold(ledger: FileLedger):
     clock = Clock()
-    sentinel = disk(ledger, clock, max_rows=1, max_secs=600, floor_secs=60)
+    sentinel = disk(ledger, clock, max_rows=1, max_secs=600, min_secs=60)
     ledger.write("s.a", table(1, 2, 3))
     clock.now += 59.9
     assert sentinel.due() is False
@@ -147,7 +148,7 @@ def test_nothing_is_due_before_the_floor_even_past_a_threshold(ledger: FileLedge
 
 def test_a_threshold_hit_before_the_floor_stages_at_the_floor(ledger: FileLedger):
     clock = Clock()
-    sentinel = disk(ledger, clock, max_bytes=1, max_secs=600, floor_secs=60)
+    sentinel = disk(ledger, clock, max_bytes=1, max_secs=600, min_secs=60)
     ledger.write("s.a", table(1))
     assert sentinel.due() is False
     clock.now += 60
@@ -156,7 +157,7 @@ def test_a_threshold_hit_before_the_floor_stages_at_the_floor(ledger: FileLedger
 
 def test_past_the_floor_the_time_threshold_still_waits(ledger: FileLedger):
     clock = Clock()
-    sentinel = disk(ledger, clock, max_rows=100, max_secs=600, floor_secs=60)
+    sentinel = disk(ledger, clock, max_rows=100, max_secs=600, min_secs=60)
     ledger.write("s.a", table(1))
     clock.now += 599
     assert sentinel.due() is False
@@ -164,74 +165,62 @@ def test_past_the_floor_the_time_threshold_still_waits(ledger: FileLedger):
     assert sentinel.due() is True
 
 
-def test_a_time_threshold_below_the_floor_lowers_the_floor(ledger: FileLedger):
-    clock = Clock()
-    sentinel = disk(ledger, clock, max_rows=1, max_secs=5, floor_secs=60)
-    ledger.write("s.a", table(1))
-    clock.now += 4.9
-    assert sentinel.due() is False
-    clock.now += 0.1
-    assert sentinel.due() is True
-
-
 def test_forcing_bypasses_the_floor(ledger: FileLedger):
-    sentinel = disk(ledger, Clock(), max_secs=600, floor_secs=60)
+    sentinel = disk(ledger, Clock(), max_secs=600, min_secs=60)
     ledger.write("s.a", table(1))
     assert sentinel.due() is False
     assert sentinel.due(force=True) is True
 
 
-def test_the_default_floor_is_the_manifest_floor(ledger: FileLedger):
+def test_the_default_floor_is_the_batch_floor(ledger: FileLedger):
     clock = Clock()
     sentinel = DiskSentinel(
         ledger=ledger, max_rows=1, max_bytes=None, max_secs=600, clock=clock
     )
     ledger.write("s.a", table(1))
-    clock.now += MANIFEST_FLOOR_SECS - 0.1
+    clock.now += BATCH_FLOOR_SECS - 0.1
     assert sentinel.due() is False
     clock.now += 0.1
     assert sentinel.due() is True
 
 
-def test_without_a_heartbeat_an_empty_disk_is_never_due(ledger: FileLedger):
+def test_without_a_time_ceiling_data_waits_for_a_size_threshold(ledger: FileLedger):
+    clock = Clock()
+    sentinel = disk(ledger, clock, max_rows=3, min_secs=60)
+    ledger.write("s.a", table(1))
+    clock.now += 100_000
+    assert sentinel.due() is False
+    ledger.write("s.a", table(2, 3))
+    assert sentinel.due() is True
+
+
+def test_without_an_idle_bound_an_empty_disk_is_never_due(ledger: FileLedger):
     clock = Clock()
     sentinel = disk(ledger, clock, max_secs=5)
     clock.now += 100_000
     assert sentinel.due() is False
-    assert sentinel.heartbeat_due() is False
+    assert sentinel.idle_due() is False
 
 
-def test_an_empty_disk_is_due_once_the_heartbeat_elapses(ledger: FileLedger):
+def test_an_empty_disk_is_due_once_the_idle_bound_elapses(ledger: FileLedger):
     clock = Clock()
-    sentinel = disk(ledger, clock, max_secs=60, heartbeat_secs=600)
+    sentinel = disk(ledger, clock, max_secs=60, idle_secs=600)
     clock.now += 599.9
-    assert (sentinel.due(), sentinel.heartbeat_due()) == (False, False)
+    assert (sentinel.due(), sentinel.idle_due()) == (False, False)
     clock.now += 0.1
-    assert (sentinel.due(), sentinel.heartbeat_due()) == (True, True)
+    assert (sentinel.due(), sentinel.idle_due()) == (True, True)
     sentinel.reset_timer()
     assert sentinel.due() is False
 
 
-def test_the_heartbeat_is_not_due_while_data_waits_its_own_threshold(
+def test_the_idle_bound_is_not_due_while_data_waits_its_own_threshold(
     ledger: FileLedger,
 ):
     clock = Clock()
-    sentinel = disk(ledger, clock, max_secs=60, heartbeat_secs=600)
+    sentinel = disk(ledger, clock, max_secs=60, idle_secs=600)
     ledger.write("s.a", table(1))
     clock.now += 600
-    assert sentinel.heartbeat_due() is False
-    assert sentinel.due() is True
-
-
-def test_a_heartbeat_shorter_than_the_time_threshold_bounds_the_wait_with_data(
-    ledger: FileLedger,
-):
-    clock = Clock()
-    sentinel = disk(ledger, clock, max_secs=600, heartbeat_secs=120)
-    ledger.write("s.a", table(1))
-    clock.now += 119.9
-    assert sentinel.due() is False
-    clock.now += 0.1
+    assert sentinel.idle_due() is False
     assert sentinel.due() is True
 
 

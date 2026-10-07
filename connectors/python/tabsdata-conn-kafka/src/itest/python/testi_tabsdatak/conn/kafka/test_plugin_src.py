@@ -18,6 +18,7 @@ from testi_tabsdatak.conn.kafka.harness import (
     STREAM_CFG,
     KafkaCtx,
     Variant,
+    batch_of,
     committed_manifests,
     run_plugin,
     staged_at_least,
@@ -46,7 +47,11 @@ def test_stream_src_plugin_round_trips_each_serde_variant(
     domain = domain_redpanda
     messages = variant.messages(8)
     bus = broker(domain)
-    ctx = KafkaCtx(work_dir(tmp_path), until=staged_at_least(len(messages)))
+    ctx = KafkaCtx(
+        work_dir(tmp_path),
+        until=staged_at_least(len(messages)),
+        thresholds=batch_of(len(messages)),
+    )
     with bus.fresh_topic() as topic:
         bus.produce(
             topic, messages, variant.producer_serde(bus, work_dir(tmp_path, "proto"))
@@ -55,7 +60,7 @@ def test_stream_src_plugin_round_trips_each_serde_variant(
             domain,
             topic=topic,
             variant=variant,
-            src_cfg=STREAM_CFG | {"tabsdata.kafka.trigger.max_rows": len(messages)},
+            src_cfg=STREAM_CFG,
         )
         run_plugin(ctx, conn, src)
 
@@ -73,14 +78,18 @@ def test_stream_src_plugin_output_table_is_topic(
     domain = domain_redpanda
     messages = user_messages(3)
     bus = broker(domain)
-    ctx = KafkaCtx(work_dir(tmp_path), until=staged_at_least(len(messages)))
+    ctx = KafkaCtx(
+        work_dir(tmp_path),
+        until=staged_at_least(len(messages)),
+        thresholds=batch_of(len(messages)),
+    )
     with bus.fresh_topic() as topic:
         bus.produce(topic, messages, JSON_VARIANT.producer_serde(bus, tmp_path))
         conn, src = stream_src(
             domain,
             topic=topic,
             variant=JSON_VARIANT,
-            src_cfg=STREAM_CFG | {"tabsdata.kafka.trigger.max_rows": len(messages)},
+            src_cfg=STREAM_CFG,
         )
         run_plugin(ctx, conn, src)
         assert src.output_table() == topic
@@ -98,15 +107,18 @@ def test_stream_src_plugin_trigger_max_rows_stages_while_running(
     domain = domain_redpanda
     messages = user_messages(8)
     bus = broker(domain)
-    ctx = KafkaCtx(work_dir(tmp_path), until=staged_at_least(len(messages)))
+    ctx = KafkaCtx(
+        work_dir(tmp_path),
+        until=staged_at_least(len(messages)),
+        thresholds=batch_of(len(messages) // 2),
+    )
     with bus.fresh_topic() as topic:
         bus.produce(topic, messages, JSON_VARIANT.producer_serde(bus, tmp_path))
         conn, src = stream_src(
             domain,
             topic=topic,
             variant=JSON_VARIANT,
-            src_cfg=STREAM_CFG
-            | {"tabsdata.kafka.trigger.max_rows": len(messages) // 2},
+            src_cfg=STREAM_CFG,
         )
         run_plugin(ctx, conn, src)
 

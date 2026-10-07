@@ -35,7 +35,7 @@ Examples:
         @stream_publisher(
             source=KafkaStreamSrc(data_format="json", schema=SCHEMA,
                                   topic="events"),
-            flush_interval_mins=2,
+            batch_max_secs=120,
             output_tables=["events"],
         )
         def ingest(events: TableFramesSpec) -> TableFrameSpec:
@@ -70,7 +70,7 @@ from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream import _floor, _validation as _stream_validation
+from tabsdatak.conn.common._stream import _validation as _stream_validation
 from tabsdatak.conn.common.types import (
     AwsAccessSecretKey,
     AwsRegionSpec,
@@ -282,70 +282,45 @@ class KafkaStreamSrcConn(Conn):
         return _convert(self.group_id, str)
 
 
-# --- KafkaStreamSrc.src_cfg keys ------------------------------------
-#
-# Mirrors the CDC connectors' `src_cfg` shape. The `buffer` knobs
-# control when the buffered messages are written to a parquet file;
-# the `trigger` knobs control when the written files are staged as
-# one batch.
 
 SrcCfgKey: TypeAlias = Literal[
     "tabsdata.kafka.poll.max_secs",
+    "tabsdata.kafka.poll.idle_secs",
     "kafka.connect_timeout_secs",
     "kafka.logging_level",
     "tabsdata.kafka.buffer.max_rows",
     "tabsdata.kafka.buffer.max_bytes",
     "tabsdata.kafka.buffer.max_secs",
-    "tabsdata.kafka.trigger.max_rows",
-    "tabsdata.kafka.trigger.max_bytes",
-    "tabsdata.kafka.trigger.max_secs",
-    "tabsdata.kafka.manifest.min_secs",
-    "tabsdata.kafka.manifest.max_secs",
     "tabsdata.kafka.consume.max_messages",
 ]
 
 SrcCfgSpec: TypeAlias = Annotated[
     Mapping[SrcCfgKey, Any],
     _common_validation.CONN_CFG_VALIDATION,
-    _floor.seconds_floor_validator("tabsdata.kafka.trigger.max_secs"),
-    _floor.manifest_bounds_validator(
-        "tabsdata.kafka.manifest.min_secs",
-        "tabsdata.kafka.manifest.max_secs",
-        "tabsdata.kafka.trigger.max_secs",
-    ),
     _stream_validation.positive_integers_validator(
         "tabsdata.kafka.buffer.max_rows",
         "tabsdata.kafka.buffer.max_bytes",
         "tabsdata.kafka.buffer.max_secs",
-        "tabsdata.kafka.trigger.max_rows",
-        "tabsdata.kafka.trigger.max_bytes",
         "tabsdata.kafka.poll.max_secs",
         "kafka.connect_timeout_secs",
         "tabsdata.kafka.consume.max_messages",
     ),
+    _stream_validation.non_negative_integers_validator("tabsdata.kafka.poll.idle_secs"),
 ]
 
 
 @_api.dataclass(KafkaErrorCode.KAFKA_5, kw_only=True)
 class KafkaStreamSrc(StreamSrc):
     """Kafka streaming source for `@stream_publisher` -- one batch
-    per due trigger.
+    per due batch limit.
 
     :categories: source
 
     Consumes a Kafka `topic` (every topic matching it when it starts
     with `^`) in two levels. The `buffer` keys
     decide when the buffered messages are written to a parquet file;
-    the `trigger` keys decide when the written files are staged as one
-    tableframe batch. A batch is due once
-    `tabsdata.kafka.trigger.max_secs` (or the decorator's
-    `flush_interval_mins`, when shorter) have passed since the last one,
-    or earlier when `tabsdata.kafka.trigger.max_rows` or
-    `tabsdata.kafka.trigger.max_bytes` is reached -- but never sooner
-    than `tabsdata.kafka.manifest.min_secs` after the previous batch (60
-    by default, never less). `tabsdata.kafka.manifest.max_secs`, unset by
-    default, stages an empty batch once that long has passed without one,
-    so the publisher runs with empty inputs as a heartbeat. Messages of incompatible
+    the `@stream_publisher` batch settings decide when the written
+    files are staged as one tableframe batch. Messages of incompatible
     schemas land in separate files of the same batch; the files of one
     schema keep the column types of the run's earlier files of that
     schema, and a row whose values do not fit them is a dead letter.
@@ -376,20 +351,16 @@ class KafkaStreamSrc(StreamSrc):
             dead letter.
         src_cfg: Optional connector config over the keys
             `tabsdata.kafka.poll.max_secs` (how long one poll waits for
-            messages, default 2), `kafka.connect_timeout_secs` (default
-            16), `kafka.logging_level`, the buffer limits
+            messages, default 2), `tabsdata.kafka.poll.idle_secs` (how
+            long to wait after a poll that brought nothing, default 0:
+            the poll already waits on the broker),
+            `kafka.connect_timeout_secs` (default 16),
+            `kafka.logging_level`, and the buffer limits
             `tabsdata.kafka.buffer.max_rows` (default 10000),
             `tabsdata.kafka.buffer.max_bytes` (memory the decoded records
             hold, off by default) and `tabsdata.kafka.buffer.max_secs`
-            (default 60), and the trigger limits
-            `tabsdata.kafka.trigger.max_secs` (default 60, at least 60),
-            `tabsdata.kafka.trigger.max_rows` and
-            `tabsdata.kafka.trigger.max_bytes` (both off by default), and
-            the manifest bounds `tabsdata.kafka.manifest.min_secs`
-            (default 60, at least 60, `None` for the default;
-            `trigger.max_secs` may not be below it) and
-            `tabsdata.kafka.manifest.max_secs` (off by default; at least
-            `min_secs` when set).
+            (default 60). The batch limits are the `@stream_publisher`
+            batch settings.
             Every limit is a positive whole number. A byte limit is
             measured on every record and slows ingestion down; bounding
             by rows is the cheap option and the preferred one.
@@ -413,9 +384,8 @@ class KafkaStreamSrc(StreamSrc):
                     topic="users",
                     data_format="avro",
                     schema=AVRO_SCHEMA,
-                    src_cfg={"tabsdata.kafka.trigger.max_rows": 500},
                 ),
-                flush_interval_mins=1,
+                batch_max_rows=500,
                 output_tables=["users"],
             )
             def ingest(users: TableFramesSpec) -> TableFrameSpec:
@@ -432,7 +402,7 @@ class KafkaStreamSrc(StreamSrc):
                     data_format=Protobuf(message_name="PersonV1"),
                     schema=PROTO_SCHEMA,
                 ),
-                flush_interval_mins=1,
+                batch_max_secs=60,
                 output_tables=["persons"],
             )
             def ingest(persons: TableFramesSpec) -> TableFrameSpec:

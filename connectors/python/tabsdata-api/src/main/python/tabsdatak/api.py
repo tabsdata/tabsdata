@@ -30,10 +30,11 @@ per-flow scratch state across invocations.
 """
 
 import importlib
+import warnings
 from abc import ABC, abstractmethod
 from typing import Annotated, Callable, TypeAlias, Union
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
@@ -159,12 +160,111 @@ SubscriberTriggerBySpec: TypeAlias = Union[
     AllTablesTrigger,
 ]
 
-# stream-publisher fallback rollover window. Whole minutes; the runtime
-# closes the current batch and starts a new one every
-# `fallback_rollover_mins` minutes if the source's own rollover
-# threshold has not fired. Lower-bounded at 1 (zero / negative would
-# either spin or be undefined).
+# Deprecated: the stream-publisher rollover window in whole minutes, now
+# `batch_max_secs`. Kept so a definition that still names it is converted,
+# with a warning, rather than refused.
 FlushIntervalSpec: TypeAlias = Annotated[int, Field(ge=1)]
+
+BatchSecondsSpec: TypeAlias = Annotated[int, Field(ge=0)]
+BatchRowsSpec: TypeAlias = Annotated[int, Field(ge=1)]
+BatchBytesSpec: TypeAlias = Annotated[int, Field(ge=1)]
+
+
+@_api.dataclass(ApiErrorCode.API_29)
+class BatchThresholds:
+    """How a stream publisher's batches are bounded in time and size.
+
+    :categories: functions
+
+    A batch is the set of files one function run receives. Batches are
+    spaced at least `min_secs` apart; with data waiting, one is staged at
+    most `max_secs` after the previous one, or earlier once it holds
+    `max_rows` rows or `max_bytes` bytes; with nothing waiting, an empty
+    one is staged `idle_secs` after the previous one, so the function runs
+    on a cadence while the source is quiet. A `None` is no limit, and at
+    least one of `max_secs`, `max_rows` and `max_bytes` is set, so data
+    never waits forever.
+
+    Args:
+        min_secs: Shortest interval between two batches, 60 by default and
+            never less.
+        max_secs: Longest interval between two batches while data waits.
+        idle_secs: Longest interval between two batches while no data
+            waits, `None` (the default) for no empty batches.
+        max_rows: Rows that stage a batch as soon as `min_secs` allows.
+        max_bytes: Bytes that stage a batch as soon as `min_secs` allows.
+    """
+
+    min_secs: BatchSecondsSpec = _api.BATCH_FLOOR_SECS
+    max_secs: BatchSecondsSpec | None = None
+    idle_secs: BatchSecondsSpec | None = None
+    max_rows: BatchRowsSpec | None = None
+    max_bytes: BatchBytesSpec | None = None
+
+    @model_validator(mode="after")
+    def _ordered_and_bounded(self):
+        if self.max_secs is None and self.max_rows is None and self.max_bytes is None:
+            raise ValueError(
+                "one of batch_max_secs, batch_max_rows and batch_max_bytes must be "
+                "set, or no batch would ever be staged"
+            )
+        if self.max_secs is not None and self.max_secs < self.min_secs:
+            raise ValueError(
+                f"batch_max_secs ({self.max_secs}) must be at least batch_min_secs "
+                f"({self.min_secs})"
+            )
+        if self.idle_secs is not None:
+            floor = self.max_secs if self.max_secs is not None else self.min_secs
+            if self.idle_secs < floor:
+                raise ValueError(
+                    f"batch_idle_secs ({self.idle_secs}) must be at least "
+                    f"batch_max_secs or, without it, batch_min_secs ({floor})"
+                )
+        return self
+
+
+@_api.dataclass(ApiErrorCode.API_29)
+class BufferThresholds:
+    """How a stream publisher's in-memory buffer is bounded before it is
+    written to a file: `max_rows` rows, `max_bytes` bytes (`None` for no
+    byte limit) or `max_secs` since the last write.
+
+    :categories: functions
+    """
+
+    max_rows: BatchRowsSpec
+    max_bytes: BatchBytesSpec | None
+    max_secs: BatchSecondsSpec
+
+
+@_api.dataclass(ApiErrorCode.API_29)
+class PollThresholds:
+    """How a stream publisher polls its source: `max_secs` is the budget of
+    one ingestion iteration, `idle_secs` the wait before the next one when
+    the iteration read nothing.
+
+    :categories: functions
+    """
+
+    max_secs: BatchSecondsSpec
+    idle_secs: BatchSecondsSpec
+
+
+@_api.dataclass(ApiErrorCode.API_29)
+class StreamThresholds:
+    """The thresholds of a stream publisher's data flow, one substructure
+    per level: `batch` (what a function run receives), `buffer` (the
+    in-memory buffer written to files) and `poll` (the source polling).
+    The batch thresholds come from the `stream_publisher` definition;
+    the others are `None` there and filled in by the connector from its
+    own settings until they move to the definition as well.
+
+    :categories: functions
+    """
+
+    batch: BatchThresholds
+    buffer: BufferThresholds | None = None
+    poll: PollThresholds | None = None
 
 
 class Secret(_api._Secret):
@@ -339,9 +439,15 @@ def publisher(
 
 def stream_publisher(
     source: StreamSrc,
-    flush_interval_mins: FlushIntervalSpec,
     output_tables: TableNamesSpec,
+    *,
+    batch_min_secs: int | None = None,
+    batch_max_secs: int | None = None,
+    batch_idle_secs: int | None = None,
+    batch_max_rows: int | None = None,
+    batch_max_bytes: int | None = None,
     on_tables: OnTablesActionSpec | None = None,
+    flush_interval_mins: FlushIntervalSpec | None = None,
 ) -> Callable:
     """Decorate a function as a stream publisher.
 
@@ -354,14 +460,28 @@ def stream_publisher(
     `ctx` parameter -- it runs inside the runtime's stream loop, not
     per-trx, so no `TrxCtx` exists at the call boundary.
 
+    The batch thresholds bound the batches the function receives, the
+    same way for every stream source (see `BatchThresholds`): at least one
+    of `batch_max_secs`, `batch_max_rows` and `batch_max_bytes` is required.
+
     Args:
         source: The `StreamSrc` to consume.
-        flush_interval_mins: Fallback rollover window in whole minutes
-            (at least 1); the runtime closes the current batch every N
-            minutes if the source's own threshold has not fired.
         output_tables: Non-empty list of local table names to emit, one
             per return slot (valid table names, see `publisher`).
+        batch_min_secs: Shortest interval between two batches, 60 by
+            default and never less.
+        batch_max_secs: Longest interval between two batches while data
+            waits; `None` (the default) for no time limit.
+        batch_idle_secs: Longest interval between two batches while no
+            data waits; `None` (the default) for no empty batches.
+        batch_max_rows: Rows that stage a batch; `None` (the default) for
+            no limit.
+        batch_max_bytes: Bytes that stage a batch; `None` (the default)
+            for no limit.
         on_tables: Optional list of `OnTablesAction` side-effects.
+        flush_interval_mins: Deprecated, replaced by `batch_max_secs`:
+            taken as `batch_max_secs = flush_interval_mins * 60`, with a
+            warning, and refused next to any batch setting.
 
     Returns:
         The decorator that wraps the function as a stream-publisher
@@ -369,19 +489,78 @@ def stream_publisher(
 
     Raises:
         ApiException: If the function signature is invalid (e.g. it
-            declares a `ctx` parameter).
+            declares a `ctx` parameter), if the batch thresholds are not
+            consistent, or if `flush_interval_mins` is given next to
+            a batch threshold.
     """
+    thresholds = StreamThresholds(
+        batch=_batch_thresholds(
+            min_secs=batch_min_secs,
+            max_secs=batch_max_secs,
+            idle_secs=batch_idle_secs,
+            max_rows=batch_max_rows,
+            max_bytes=batch_max_bytes,
+            flush_interval_mins=flush_interval_mins,
+        )
+    )
 
     def _stream_publisher(func):
         return _info_cls("StreamPublisherInfo")(
-            func,
-            source,
-            flush_interval_mins,
-            output_tables,
-            on_tables,
+            func=func,
+            source=source,
+            thresholds=thresholds,
+            output_tables=output_tables,
+            on_tables=on_tables,
+            flush_interval_mins=flush_interval_mins,
         )
 
     return _stream_publisher
+
+
+def _batch_thresholds(
+    *,
+    min_secs: int | None,
+    max_secs: int | None,
+    idle_secs: int | None,
+    max_rows: int | None,
+    max_bytes: int | None,
+    flush_interval_mins: int | None,
+) -> BatchThresholds:
+    """The batch thresholds a `stream_publisher` definition gives, with the
+    deprecated `flush_interval_mins` taken as `max_secs` and the seconds
+    read through the floor's test backdoor."""
+    if flush_interval_mins is not None:
+        given = (min_secs, max_secs, idle_secs, max_rows, max_bytes)
+        if any(value is not None for value in given):
+            raise ApiErrorCode.API_30.exception()
+        warnings.warn(
+            "flush_interval_mins is deprecated; set batch_max_secs instead",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        max_secs = flush_interval_mins * 60
+    try:
+        return BatchThresholds(
+            min_secs=(
+                _api.decode_seconds("batch_min_secs", min_secs)
+                if min_secs is not None
+                else _api.BATCH_FLOOR_SECS
+            ),
+            max_secs=(
+                _api.decode_seconds("batch_max_secs", max_secs)
+                if max_secs is not None
+                else None
+            ),
+            idle_secs=(
+                _api.decode_seconds("batch_idle_secs", idle_secs)
+                if idle_secs is not None
+                else None
+            ),
+            max_rows=max_rows,
+            max_bytes=max_bytes,
+        )
+    except ValueError as error:
+        raise ApiErrorCode.API_29.exception(cause=error)
 
 
 def transformer(

@@ -2,10 +2,9 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-from tabsdatak.api import TableFrameSpec, TableFramesSpec, stream_publisher
-
 # noinspection PyProtectedMember
-from tabsdatak.conn.common._stream._floor import unsafe_seconds
+from tabsdatak._api import unsafe_seconds
+from tabsdatak.api import TableFrameSpec, TableFramesSpec, stream_publisher
 from tabsdatak.conn.mysql import MySQLCdcStreamSrc
 
 PUBLISHED_TABLE = "mysql_cdc_published"
@@ -17,8 +16,6 @@ SEEDED_ROWS = [{"id": index, "name": f"seed-{index}"} for index in range(1, 6)]
 SRC_CFG = {
     "tabsdata.cdc.buffer.max_rows": 1,
     "tabsdata.cdc.buffer.max_secs": 1,
-    "tabsdata.cdc.trigger.max_rows": 1,
-    "tabsdata.cdc.trigger.max_secs": unsafe_seconds(1),
     "tabsdata.cdc.poll.idle_secs": 1,
     "tabsdata.cdc.poll.max_secs": 2,
 }
@@ -30,7 +27,9 @@ SRC_CFG = {
         initial_load=True,
         src_cfg=SRC_CFG,
     ),
-    flush_interval_mins=1,
+    batch_min_secs=unsafe_seconds(1),
+    batch_max_secs=unsafe_seconds(1),
+    batch_max_rows=1,
     output_tables=[PUBLISHED_TABLE],
 )
 def pub_stream_publisher_initial_load_from_mysqlcdc_domain(

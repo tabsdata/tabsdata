@@ -30,28 +30,28 @@ def _first(inputs: TableFramesSpec) -> TableFrameSpec:
 
 
 @stream_publisher(
-    source=_source(TOGGLE_TOPIC), flush_interval_mins=1, output_tables=["toggled"]
+    source=_source(TOGGLE_TOPIC), batch_max_secs=60, output_tables=["toggled"]
 )
 def toggled(inputs: TableFramesSpec) -> TableFrameSpec:
     return _first(inputs)
 
 
 @stream_publisher(
-    source=_source(UPDATE_TOPIC), flush_interval_mins=1, output_tables=["updated"]
+    source=_source(UPDATE_TOPIC), batch_max_secs=60, output_tables=["updated"]
 )
 def updated(inputs: TableFramesSpec) -> TableFrameSpec:
     return _first(inputs)
 
 
 @stream_publisher(
-    source=_source(DELETE_TOPIC), flush_interval_mins=1, output_tables=["deleted"]
+    source=_source(DELETE_TOPIC), batch_max_secs=60, output_tables=["deleted"]
 )
 def deleted(inputs: TableFramesSpec) -> TableFrameSpec:
     return _first(inputs)
 
 
 @stream_publisher(
-    source=_source(MIXED_TOPIC), flush_interval_mins=1, output_tables=["mixed"]
+    source=_source(MIXED_TOPIC), batch_max_secs=60, output_tables=["mixed"]
 )
 def mixed(inputs: TableFramesSpec) -> TableFrameSpec:
     return _first(inputs)

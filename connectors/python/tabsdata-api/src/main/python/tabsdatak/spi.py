@@ -50,6 +50,7 @@ from tabsdatak.api import (
     Dest,
     Src,
     StreamSrc,
+    StreamThresholds,
     TrxCtx,
 )
 from tabsdatak.error import ApiErrorCode
@@ -260,8 +261,11 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
       plugin seeds from config rather than from `stream_state`.
     * `stream_state` -- the per-flow resume state persisted by the
       last `BasicDictSpec` handed to `stage`.
-    * `flush_interval_mins` -- max minutes the plugin may buffer
-      before it must `stage`.
+    * `thresholds` -- the `StreamThresholds` of the function's definition:
+      the `batch` level bounding what the plugin stages (how far apart
+      batches are at least, how long data may wait at most, how long the
+      stream may go without a batch, and the rows and bytes that stage
+      one); the `buffer` and `poll` levels when the definition names them.
     * `stage` -- publish a batch and commit its new resume state.
     * `checkpoint` -- commit a new resume state with no batch.
     """
@@ -297,9 +301,9 @@ class StreamSrcPluginCtx(PluginCtx, ABC):
 
     @property
     @abstractmethod
-    def flush_interval_mins(self) -> int:
-        """Maximum minutes the plugin may accumulate before it must
-        `stage`, regardless of its own size/row thresholds."""
+    def thresholds(self) -> StreamThresholds:
+        """The `StreamThresholds` of the function's definition: the batch
+        bounds the plugin stages by, the same for every stream source."""
 
     @abstractmethod
     def stage(
@@ -424,7 +428,7 @@ class StreamSrcPlugin[C: Conn, SS: StreamSrc](ABC):
         `False` or a signal arrives. Implementations seed from config
         when `ctx.first_stage` else from `ctx.stream_state`, then
         call `ctx.stage` for batches as they complete (honouring
-        `ctx.flush_interval_mins`)."""
+        `ctx.thresholds`)."""
 
 
 class DestContext(TrxCtx, PluginCtx, ABC):

@@ -109,7 +109,7 @@ def run(args: argparse.Namespace) -> int:
             function_id=str(request.info.function_version_id),
             function_name=request.info.function,
             function_stage=function_stage,
-            flush_interval_mins=info.fallback_rollover_mins,
+            thresholds=info.thresholds,
             tabsdata_version=_tabsdata_version(),
         )
     except _StageUnsupportedSchemeError as exc:
@@ -138,14 +138,21 @@ def run(args: argparse.Namespace) -> int:
         # by the test driver in lieu of a signal.
         logger.debug("not on main thread; skipping signal handler install")
 
+    if info.flush_interval_mins is not None:
+        logger.warning(
+            "The stream publisher %s names flush_interval_mins=%d, which is "
+            "deprecated and taken as batch_max_secs=%d; set batch_max_secs instead",
+            getattr(user_func, "__name__", repr(user_func)),
+            info.flush_interval_mins,
+            info.thresholds.batch.max_secs,
+        )
     logger.info(
-        "Invoking %s.run() (function=%s, work_dir=%s, stage=%s, "
-        "flush_interval_mins=%d)",
+        "Invoking %s.run() (function=%s, work_dir=%s, stage=%s, thresholds=%s)",
         type(plugin).__name__,
         getattr(user_func, "__name__", repr(user_func)),
         out_dir,
         function_stage.uri,
-        info.fallback_rollover_mins,
+        info.thresholds,
     )
     try:
         plugin.run(ctx, conn, info.source)
