@@ -153,6 +153,7 @@ class _V2Actions:
     INSERT = "I"
     UPDATE = "U"
     DELETE = "D"
+    MESSAGE = "M"
 
 
 _V2_OPERATION_MAP = {
@@ -1575,6 +1576,8 @@ class Wal2JsonIngester(CdcIngester):
                 if self._bound is not None and commit == self._bound:
                     self._reach_bound()
                     break
+                continue
+            if action == _V2Actions.MESSAGE:
                 continue
             if timestamp is None:
                 raise PostgresErrorCode.POSTGRES_34.exception(

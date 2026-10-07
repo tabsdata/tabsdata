@@ -1353,6 +1353,40 @@ def _format_2_ingester(messages: list[_Message]) -> Wal2JsonIngester:
     return bi
 
 
+def _logical_message(lsn: str, transactional: bool) -> _Message:
+    return _Message(
+        lsn,
+        {
+            "action": "M",
+            "transactional": transactional,
+            "prefix": "app",
+            "content": "hello",
+        },
+    )
+
+
+def test_a_logical_message_outside_a_transaction_is_passed_over():
+    """``pg_logical_emit_message(false, ...)`` writes one with no transaction
+    open, which any extension on the source may do; it carries nothing for
+    a table, so the stream reads on rather than stopping."""
+    after = _transaction(11, "0/300", [("0/280", 2)], "0/320")
+    bi = _format_2_ingester([_logical_message("0/200", False), *after])
+
+    changes = list(bi._poll_changes_v2(None))
+
+    assert [change.new_values["id"] for change in changes] == [2]
+
+
+def test_a_logical_message_inside_a_transaction_is_passed_over():
+    inside = _transaction(11, "0/300", [("0/280", 2)], "0/320")
+    inside.insert(2, _logical_message("0/290", True))
+    bi = _format_2_ingester(inside)
+
+    changes = list(bi._poll_changes_v2(None))
+
+    assert [change.new_values["id"] for change in changes] == [2]
+
+
 @pytest.mark.parametrize(
     "payload",
     [
