@@ -11,7 +11,6 @@ import pyarrow as pa
 import pytest
 import sqlalchemy.types as sa_types
 
-from tabsdatak.conn.common.sql.cdc._encoder import row_to_record
 from tabsdatak.conn.common.sql.cdc._model import CdcDataChange
 from tabsdatak.conn.common.sql.cdc._schema import SchemaRegistry
 from tabsdatak.conn.common.sql.cdc._shaper import CdcRowShaper
@@ -21,6 +20,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     OP_LOAD,
 )
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
+from test_tabsdatak.conn.common.sql.cdc.support import row_to_record
 
 TABLE = "s.t"
 TS = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)

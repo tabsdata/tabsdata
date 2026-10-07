@@ -34,7 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections.abc import Generator, Iterable, Iterator
+from collections.abc import Generator, Iterator
 from datetime import date, datetime, time as dt_time, timezone, tzinfo
 from decimal import Decimal
 from pathlib import Path
@@ -643,6 +643,66 @@ class LsnOffset(CdcOffset):
 # ---------------------------------------------------------------------
 
 
+
+
+def _to_decimal(value: Any) -> Decimal:
+    return value if isinstance(value, Decimal) else Decimal(str(value))
+
+
+def _to_int(value: Any) -> int:
+    return value if type(value) is int else int(value)
+
+
+def _to_float(value: Any) -> float:
+    return value if isinstance(value, float) else float(value)
+
+
+def _to_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.lower() in ("t", "true", "1", "yes")
+    return bool(value)
+
+
+def _to_date(value: Any) -> Any:
+    return date.fromisoformat(value) if isinstance(value, str) else value
+
+
+def _to_datetime(value: Any) -> Any:
+    return datetime.fromisoformat(value) if isinstance(value, str) else value
+
+
+def _to_time(value: Any) -> Any:
+    return dt_time.fromisoformat(value) if isinstance(value, str) else value
+
+
+def _to_bytes(value: Any) -> Any:
+    if isinstance(value, str):
+        return bytes.fromhex(value.removeprefix("\\x"))
+    return value
+
+
+def _coercer_of(pa_type: pa.DataType) -> Any:
+    if isinstance(pa_type, pa.Decimal128Type):
+        return _to_decimal
+    if pa.types.is_integer(pa_type):
+        return _to_int
+    if pa.types.is_floating(pa_type):
+        return _to_float
+    if pa.types.is_boolean(pa_type):
+        return _to_bool
+    if pa.types.is_date(pa_type):
+        return _to_date
+    if pa.types.is_timestamp(pa_type):
+        return _to_datetime
+    if pa.types.is_time(pa_type):
+        return _to_time
+    if pa.types.is_binary(pa_type):
+        return _to_bytes
+    return None
+
+
 class Wal2JsonIngester(CdcIngester):
     """``CdcIngester`` for Postgres via wal2json logical decoding.
 
@@ -698,6 +758,11 @@ class Wal2JsonIngester(CdcIngester):
         self._bound_reached = False
         self._held: list[Any] = []
         self._accepted_gap = accepted_gap
+        # Per schema version: the all-null row image, and the coercion each
+        # column's values go through, chosen once from the Arrow type rather
+        # than probed value by value.
+        self._null_rows: dict[str, dict] = {}
+        self._coercers_by_schema: dict[str, tuple[tuple[str, Any], ...]] = {}
         # The furthest position the slot is known to have been confirmed at
         # by this stream, and the furthest one handed on to be recorded:
         # the recorded offset is kept at or past the first, so a resume
@@ -1266,46 +1331,30 @@ class Wal2JsonIngester(CdcIngester):
     # target type for.
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _coerce_value(value: Any, pa_type: pa.DataType) -> Any:
-        if value is None:
-            return None
-        if isinstance(pa_type, pa.Decimal128Type):
-            if not isinstance(value, Decimal):
-                return Decimal(str(value))
-        elif pa.types.is_integer(pa_type):
-            if not isinstance(value, int) or isinstance(value, bool):
-                return int(value)
-        elif pa.types.is_floating(pa_type):
-            if not isinstance(value, float):
-                return float(value)
-        elif pa.types.is_boolean(pa_type):
-            if not isinstance(value, bool):
-                if isinstance(value, str):
-                    return value.lower() in ("t", "true", "1", "yes")
-                return bool(value)
-        elif pa.types.is_date(pa_type):
-            if isinstance(value, str):
-                return date.fromisoformat(value)
-        elif pa.types.is_timestamp(pa_type):
-            if isinstance(value, str):
-                return datetime.fromisoformat(value)
-        elif pa.types.is_time(pa_type):
-            if isinstance(value, str):
-                return dt_time.fromisoformat(value)
-        elif pa.types.is_binary(pa_type):
-            if isinstance(value, str):
-                return bytes.fromhex(value.removeprefix("\\x"))
-        return value
+    def _null_row(self, schema_version: SchemaVersion) -> dict:
+        null_row = self._null_rows.get(schema_version.hash)
+        if null_row is None:
+            null_row = {column.name: None for column in schema_version.columns}
+            self._null_rows[schema_version.hash] = null_row
+        return null_row
 
-    @classmethod
-    def _coerce_values(cls, values: dict, columns: Iterable) -> None:
-        column_types = {column.name: column.patype for column in columns}
-        for column, value in list(values.items()):
-            pa_type = column_types.get(column)
-            if pa_type is None:
-                continue
-            values[column] = cls._coerce_value(value, pa_type)
+    def _coercers(self, schema_version: SchemaVersion) -> tuple[tuple[str, Any], ...]:
+        coercers = self._coercers_by_schema.get(schema_version.hash)
+        if coercers is None:
+            coercers = tuple(
+                (column.name, coercer)
+                for column in schema_version.columns
+                if (coercer := _coercer_of(column.patype)) is not None
+            )
+            self._coercers_by_schema[schema_version.hash] = coercers
+        return coercers
+
+    @staticmethod
+    def _coerce(values: dict, coercers: tuple[tuple[str, Any], ...]) -> None:
+        for name, coerce in coercers:
+            value = values.get(name)
+            if value is not None:
+                values[name] = coerce(value)
 
     def _build_change(
         self,
@@ -1321,14 +1370,13 @@ class Wal2JsonIngester(CdcIngester):
         offset: LsnOffset | None,
         segment: int,
     ) -> CdcDataChange:
-        columns = schema_version.columns
-        null_row = {column.name: None for column in columns}
         if not new_values:
-            new_values = dict(null_row)
+            new_values = dict(self._null_row(schema_version))
         if not old_values:
-            old_values = dict(null_row)
-        self._coerce_values(new_values, columns)
-        self._coerce_values(old_values, columns)
+            old_values = dict(self._null_row(schema_version))
+        coercers = self._coercers(schema_version)
+        self._coerce(new_values, coercers)
+        self._coerce(old_values, coercers)
         return CdcDataChange(
             operation=op,
             transaction=xid,
@@ -1653,7 +1701,7 @@ class Wal2JsonIngester(CdcIngester):
             return None
         if op is CdcOperation.INSERT:
             new_values = self._extract_new_values_v2(payload)
-            old_values = {column: None for column in new_values}
+            old_values = dict(self._null_row(schema_version))
         elif op is CdcOperation.UPDATE:
             new_values = self._extract_new_values_v2(payload)
             old_values = self._extract_old_values_v2(payload)
@@ -1661,7 +1709,7 @@ class Wal2JsonIngester(CdcIngester):
             old_values_raw = self._extract_old_values_v2(payload)
             new_values_raw = self._extract_new_values_v2(payload)
             new_values = old_values_raw or new_values_raw or {}
-            old_values = {column: None for column in new_values}
+            old_values = dict(self._null_row(schema_version))
         return self._build_change(
             qualified=qualified,
             op=op,

@@ -37,9 +37,14 @@ from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 RawSchema = tuple[tuple[str, str, Any], ...]
 
 
-def raw_schema_hash(raw_schema: RawSchema) -> str:
-    canonical = "|".join(f"{name}:{dtype}" for name, dtype, _ in raw_schema)
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+RawSchemaKey = tuple[tuple[str, str], ...]
+
+
+def raw_schema_key(raw_schema: RawSchema) -> RawSchemaKey:
+    """What tells one raw schema from another: each column's name and the
+    type the source reported it with. A plain tuple, so the version a raw
+    schema was registered under is one lookup away on every change."""
+    return tuple((name, dtype) for name, dtype, _ in raw_schema)
 
 
 def schema_hash(

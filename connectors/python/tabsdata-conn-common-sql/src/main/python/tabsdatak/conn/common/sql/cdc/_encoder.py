@@ -59,84 +59,6 @@ def converters_of(
     )
 
 
-def converted(values: dict | None, converters) -> dict | None:
-    if not values or not converters:
-        return values
-    values = dict(values)
-    for name, converter in converters:
-        value = values.get(name)
-        if value is not None:
-            values[name] = converter(value)
-    return values
-
-
-def row_to_record(
-    change: CdcDataChange,
-    cdc_format: CdcFormat,
-    converters: tuple[tuple[str, Callable[[Any], Any]], ...] = (),
-) -> dict[str, Any]:
-    new_values = converted(change.new_values, converters)
-    old_values = converted(change.old_values, converters)
-    record: dict[str, Any] = {
-        CDC_META_OP: change.operation,
-        CDC_META_TX: change.transaction,
-        CDC_META_SQ: change.sequence,
-        CDC_META_TS: change.timestamp.astimezone(timezone.utc),
-        CDC_META_SEG: change.segment,
-        CDC_META_ORD: change.ordinal,
-        CDC_META_FMT: cdc_format.columns_format,
-        CDC_META_FLAT: cdc_format.flatten_columns,
-        CDC_META_SCH: change.schema.hash,
-    }
-
-    columns = change.schema.columns
-
-    if cdc_format.flatten_columns:
-        for column in columns:
-            record[column.name] = new_values.get(column.name)
-    else:
-        match cdc_format.columns_format:
-            case "columns":
-                for column in columns:
-                    record[f"{CDC_DATA_COL_NEW_PREFIX}{DOT}{column.name}"] = (
-                        new_values.get(column.name)
-                    )
-            case "struct":
-                record[CDC_DATA_ROW_NEW] = {
-                    column.name: new_values.get(column.name) for column in columns
-                }
-            case "map":
-                record[CDC_DATA_MAP_NEW] = orjson.dumps(
-                    {column.name: new_values.get(column.name) for column in columns},
-                    default=orjson_default,
-                ).decode()
-            case _:
-                raise ValueError(
-                    f"Unsupported values format: {cdc_format.columns_format!r}"
-                )
-
-    match cdc_format.columns_format:
-        case "columns":
-            prefix = CDC_DATA_COL_OLD_PREFIX
-            for column in columns:
-                record[f"{prefix}{DOT}{column.name}"] = old_values.get(column.name)
-        case "struct":
-            record[CDC_DATA_ROW_OLD] = {
-                column.name: old_values.get(column.name) for column in columns
-            }
-        case "map":
-            record[CDC_DATA_MAP_OLD] = orjson.dumps(
-                {column.name: old_values.get(column.name) for column in columns},
-                default=orjson_default,
-            ).decode()
-        case _:
-            raise ValueError(
-                f"Unsupported values format: {cdc_format.columns_format!r}"
-            )
-
-    return record
-
-
 class CdcEncoder(StreamEncoder[CdcChange, CdcOffset]):
     def __init__(self, cdc_format: CdcFormat, tables: dict[str, TrackedTable]):
         self._cdc_format = cdc_format
@@ -184,10 +106,93 @@ class CdcEncoder(StreamEncoder[CdcChange, CdcOffset]):
         stop: int,
     ) -> pa.Table:
         schema = records[start].schema
-        converters = converters_of(schema)
-        rows = [
-            row_to_record(records[i], self._cdc_format, converters)
-            for i in range(start, stop)
-        ]
-        # noinspection PyArgumentList
-        return pa.Table.from_pylist(mapping=rows, schema=schema.pa_schema)
+        section = records[start:stop]
+        rows = len(section)
+        fields: dict[str, pa.Array] = {
+            CDC_META_OP: pa.array([r.operation for r in section], pa.utf8()),
+            CDC_META_TX: pa.array([r.transaction for r in section], pa.utf8()),
+            CDC_META_SQ: pa.array([r.sequence for r in section], pa.int64()),
+            CDC_META_TS: pa.array(
+                [r.timestamp.astimezone(timezone.utc) for r in section],
+                pa.timestamp("us", tz="UTC"),
+            ),
+            CDC_META_SEG: pa.array([r.segment for r in section], pa.decimal128(38, 0)),
+            CDC_META_ORD: pa.array([r.ordinal for r in section], pa.decimal128(38, 0)),
+            CDC_META_FMT: repeated(self._cdc_format.columns_format, pa.utf8(), rows),
+            CDC_META_FLAT: repeated(self._cdc_format.flatten_columns, pa.bool_(), rows),
+            CDC_META_SCH: repeated(schema.hash, pa.utf8(), rows),
+        }
+        converters = dict(converters_of(schema))
+        new_values = [r.new_values for r in section]
+        old_values = [r.old_values for r in section]
+        fields.update(self._image(schema, new_values, converters, old=False, rows=rows))
+        fields.update(self._image(schema, old_values, converters, old=True, rows=rows))
+        return pa.table(fields, schema=schema.pa_schema)
+
+    def _image(
+        self,
+        schema: SchemaVersion,
+        images: list[dict],
+        converters: dict[str, Callable[[Any], Any]],
+        *,
+        old: bool,
+        rows: int,
+    ) -> dict[str, pa.Array]:
+        values: dict[str, list] = {}
+        for column in schema.columns:
+            name = column.name
+            column_values = [image.get(name) for image in images]
+            if converter := converters.get(name):
+                column_values = [
+                    None if value is None else converter(value)
+                    for value in column_values
+                ]
+            values[name] = column_values
+        if not old and self._cdc_format.flatten_columns:
+            return {
+                column.name: pa.array(values[column.name], column.patype)
+                for column in schema.columns
+            }
+        match self._cdc_format.columns_format:
+            case "columns":
+                prefix = CDC_DATA_COL_OLD_PREFIX if old else CDC_DATA_COL_NEW_PREFIX
+                return {
+                    f"{prefix}{DOT}{column.name}": pa.array(
+                        values[column.name], column.patype
+                    )
+                    for column in schema.columns
+                }
+            case "struct":
+                field = CDC_DATA_ROW_OLD if old else CDC_DATA_ROW_NEW
+                return {
+                    field: pa.StructArray.from_arrays(
+                        [
+                            pa.array(values[column.name], column.patype)
+                            for column in schema.columns
+                        ],
+                        names=[column.name for column in schema.columns],
+                    )
+                }
+            case "map":
+                field = CDC_DATA_MAP_OLD if old else CDC_DATA_MAP_NEW
+                names = [column.name for column in schema.columns]
+                return {
+                    field: pa.array(
+                        [
+                            orjson.dumps(
+                                {name: values[name][row] for name in names},
+                                default=orjson_default,
+                            ).decode()
+                            for row in range(rows)
+                        ],
+                        pa.utf8(),
+                    )
+                }
+            case _:
+                raise ValueError(
+                    f"Unsupported values format: {self._cdc_format.columns_format!r}"
+                )
+
+
+def repeated(value: Any, patype: pa.DataType, rows: int) -> pa.Array:
+    return pa.repeat(pa.scalar(value, type=patype), rows)

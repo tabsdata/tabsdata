@@ -12,9 +12,10 @@ from tabsdatak.conn.common.sql.cdc._column import TrackedColumn
 from tabsdatak.conn.common.sql.cdc._dictionary import (
     LargeColumn,
     RawSchema,
+    RawSchemaKey,
     SchemaVersion,
     build_pa_schema,
-    raw_schema_hash,
+    raw_schema_key,
     schema_hash,
 )
 from tabsdatak.conn.common.sql.cdc._dtype import sqlalchemy_to_arrow, value_converter
@@ -42,7 +43,7 @@ class SchemaRegistry:
         self._cdc_format = cdc_format
         self._versions: dict[str, list[SchemaVersion]] = {}
         self._hashes: dict[str, dict[str, SchemaVersion]] = {}
-        self._raw_hashes: dict[str, dict[str, SchemaVersion]] = {}
+        self._raw_keys: dict[str, dict[RawSchemaKey, SchemaVersion]] = {}
         self._primary_keys: dict[str, tuple[str, ...]] = {}
         self._unknown: SchemaVersion | None = None
 
@@ -79,8 +80,8 @@ class SchemaRegistry:
         table: str,
         raw_schema: RawSchema,
     ) -> SchemaVersion:
-        raw = raw_schema_hash(raw_schema)
-        if (known := self._raw_hashes.get(table)) and (sv := known.get(raw)):
+        raw = raw_schema_key(raw_schema)
+        if (known := self._raw_keys.get(table)) and (sv := known.get(raw)):
             return sv
 
         columns = tuple(
@@ -95,7 +96,7 @@ class SchemaRegistry:
         primary_key = self._primary_keys.get(table, ())
         sch = schema_hash(columns, primary_key)
         if sv := self._hashes.get(table, {}).get(sch):
-            self._raw_hashes.setdefault(table, {})[raw] = sv
+            self._raw_keys.setdefault(table, {})[raw] = sv
             return sv
 
         pa_schema = build_pa_schema(columns, self._cdc_format)
@@ -117,7 +118,7 @@ class SchemaRegistry:
 
         self._versions.setdefault(table, []).append(sv)
         self._hashes.setdefault(table, {})[sch] = sv
-        self._raw_hashes.setdefault(table, {})[raw] = sv
+        self._raw_keys.setdefault(table, {})[raw] = sv
 
         logger.info(
             f"Registered schema version {version_ordinal} for table {table} "
@@ -162,7 +163,7 @@ class SchemaRegistry:
 
         self._versions[table] = [sv]
         self._hashes[table] = {sch: sv}
-        self._raw_hashes[table] = {raw_schema_hash(raw_schema): sv}
+        self._raw_keys[table] = {raw_schema_key(raw_schema): sv}
 
         logger.info(
             f"Registered catalog schema version 0 for table {table} "

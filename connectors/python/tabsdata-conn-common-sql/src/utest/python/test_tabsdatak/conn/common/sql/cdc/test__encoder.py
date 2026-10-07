@@ -13,12 +13,13 @@ import pytest
 import sqlalchemy.types as sa_types
 from sqlalchemy.dialects import mysql
 
-from tabsdatak.conn.common.sql.cdc._encoder import CdcEncoder, row_to_record
+from tabsdatak.conn.common.sql.cdc._encoder import CdcEncoder, converters_of
 from tabsdatak.conn.common.sql.cdc._model import CdcDataChange, CdcSchemaChange
 from tabsdatak.conn.common.sql.cdc._schema import SchemaRegistry
 from tabsdatak.conn.common.sql.cdc.constants import CDC_DATA_COL_OLD_PREFIX, DOT
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode, SqlCdcException
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
+from test_tabsdatak.conn.common.sql.cdc.support import row_to_record
 
 TABLE = "s.t"
 FORMAT = CdcFormat()
@@ -156,6 +157,60 @@ def test_values_a_text_column_cannot_take_as_they_come_are_made_text():
     old = f"{CDC_DATA_COL_OLD_PREFIX}{DOT}"
     assert (row["id"], row[f"{old}doc"], row[f"{old}uid"]) == (1, '["x"]', None)
     assert change.new_values["doc"] == {"k": [1, 2]}
+
+
+@pytest.mark.parametrize("columns_format", ["columns", "struct", "map"])
+@pytest.mark.parametrize("flatten_columns", [True, False])
+def test_every_layout_encodes_as_the_row_at_a_time_reference_does(
+    columns_format, flatten_columns
+):
+    """The columns are assembled a column at a time; the reference builds
+    one record per row. Both must agree on every layout, with converted
+    values, null images and a schema change in the section's run."""
+    cdc_format = CdcFormat(
+        columns_format=columns_format, flatten_columns=flatten_columns
+    )
+    registry = SchemaRegistry(
+        type_mapper=lambda t: t,
+        large_column_classifier=lambda t: None,
+        cdc_format=cdc_format,
+    )
+    schema = registry.register_from_log(
+        TABLE,
+        (
+            ("id", "INTEGER", sa_types.Integer()),
+            ("amount", "NUMERIC", sa_types.Numeric()),
+            ("name", "VARCHAR", sa_types.String()),
+        ),
+    )
+    records = [
+        CdcDataChange(
+            operation=operation,
+            transaction="tx",
+            sequence=sequence,
+            timestamp=datetime(2026, 1, 1, sequence, tzinfo=timezone.utc),
+            table=TABLE,
+            schema=schema,
+            new_values=new_values,
+            old_values=old_values,
+            offset=Offset(),
+            segment=7,
+            ordinal=sequence,
+        )
+        for sequence, operation, new_values, old_values in (
+            (1, "i", {"id": 1, "amount": Decimal("1.5"), "name": "a"}, {}),
+            (2, "u", {"id": 1, "amount": None, "name": "b"}, {"id": 1, "name": "a"}),
+            (3, "d", {"id": 1, "amount": None, "name": None}, {"id": None}),
+        )
+    ]
+
+    [table] = list(CdcEncoder(cdc_format, {TABLE: None}).encode(TABLE, records))
+
+    assert table.schema == schema.pa_schema
+    converters = converters_of(schema)
+    assert table.to_pylist() == [
+        row_to_record(r, cdc_format, converters) for r in records
+    ]
 
 
 def test_changes_of_one_schema_encode_into_one_table():
