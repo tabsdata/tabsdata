@@ -1,0 +1,370 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+format: 1
+namespace: '-'
+failure:
+  duration: 0.0
+  problems:
+  - 'Run aborted: TypeError: unhashable type: ''Execution'''
+  observed: {}
+expected: {}
+plan:
+  generator: 4
+  seed: 3849077464
+  lanes: 4
+  faults: true
+  fleet:
+    collections:
+    - name: publishers_a
+      group: sources
+      connection: datagen
+    - name: publishers_b
+      group: sources
+      connection: datagen
+    - name: cron_publishers
+      group: sources
+      connection: datagen
+    - name: stream_publishers
+      group: sources
+      connection: kafka
+    - name: transformers
+      group: default
+      connection: null
+    - name: subscribers
+      group: destinations
+      connection: trash
+    functions:
+    - name: pub00
+      kind: publisher
+      collection: publishers_a
+    - name: pub01
+      kind: publisher
+      collection: publishers_b
+    - name: crn00
+      kind: cron_publisher
+      collection: cron_publishers
+    - name: crn01
+      kind: cron_publisher
+      collection: cron_publishers
+    - name: stm00
+      kind: stream_publisher
+      collection: stream_publishers
+    - name: stm01
+      kind: stream_publisher
+      collection: stream_publishers
+    - name: tfr00
+      kind: transformer
+      collection: transformers
+      upstream: pub00
+    - name: tfr01
+      kind: transformer
+      collection: transformers
+      upstream: pub00
+    - name: sub00
+      kind: subscriber
+      collection: subscribers
+      upstream: tfr00
+  ops:
+  - index: 0
+    lane: 0
+    delay: 0.0
+    action: trigger
+    function: pub00
+  - index: 1
+    lane: 2
+    delay: 0.0
+    action: update
+    function: tfr00
+  - index: 2
+    lane: 0
+    delay: 0.0
+    action: trigger
+    function: pub00
+  - index: 3
+    lane: 0
+    delay: 0.0
+    action: trigger
+    function: sub00
+  - index: 4
+    lane: 0
+    delay: 3.0
+    action: update
+    function: stm00
+  - index: 5
+    lane: 2
+    delay: 0.4
+    action: disable
+    function: tfr00
+  - index: 6
+    lane: 2
+    delay: 0.0
+    action: trigger
+    function: tfr00
+  - index: 7
+    lane: 2
+    delay: 0.0
+    action: delete
+    function: crn00
+  - index: 8
+    lane: 1
+    delay: 0.3
+    action: enable
+    function: stm01
+  - index: 9
+    lane: 2
+    delay: 0.2
+    action: delete
+    function: crn00
+  - index: 10
+    lane: 0
+    delay: 0.9
+    action: update
+    function: stm00
+  - index: 11
+    lane: 1
+    delay: 0.0
+    action: update
+    function: pub01
+  - index: 12
+    lane: 1
+    delay: 0.9
+    action: trigger
+    function: pub01
+  - index: 13
+    lane: 1
+    delay: 0.6
+    action: update
+    function: stm01
+  - index: 14
+    lane: 0
+    delay: 0.0
+    action: update
+    function: pub00
+  - index: 15
+    lane: 2
+    delay: 0.8
+    action: register
+    function: crn00
+  - index: 16
+    lane: 0
+    delay: 0.5
+    action: cancel_execution
+    function: pub00
+  - index: 17
+    lane: 0
+    delay: 0.0
+    action: enable
+    function: stm00
+  - index: 18
+    lane: 0
+    delay: 0.0
+    action: trigger
+    function: pub00
+  - index: 19
+    lane: 0
+    delay: 0.7
+    action: delete
+    function: stm00
+  - index: 20
+    lane: 0
+    delay: 0.6
+    action: update
+    function: sub00
+  - index: 21
+    lane: 0
+    delay: 0.0
+    action: update
+    function: pub00
+  - index: 22
+    lane: 0
+    delay: 0.8
+    action: enable
+    function: sub00
+  - index: 23
+    lane: 2
+    delay: 4.6
+    action: delete
+    function: tfr00
+  - index: 24
+    lane: 2
+    delay: 0.5
+    action: register
+    function: tfr00
+  - index: 25
+    lane: 2
+    delay: 0.4
+    action: delete
+    function: tfr00
+  - index: 26
+    lane: 0
+    delay: 0.3
+    action: trigger
+    function: stm00
+  - index: 27
+    lane: 0
+    delay: 0.0
+    action: delete
+    function: sub00
+  - index: 28
+    lane: 0
+    delay: 0.8
+    action: trigger
+    function: pub00
+  - index: 29
+    lane: 2
+    delay: 0.8
+    action: delete
+    function: tfr00
+  - index: 30
+    lane: 1
+    delay: 0.0
+    action: lose_job
+    function: pub01
+  - index: 31
+    lane: 1
+    delay: 1.0
+    action: update
+    function: stm01
+  - index: 32
+    lane: 0
+    delay: 0.4
+    action: register
+    function: sub00
+  - index: 33
+    lane: 3
+    delay: 0.0
+    action: trigger
+    function: tfr01
+  - index: 34
+    lane: 0
+    delay: 0.2
+    action: register
+    function: stm00
+  - index: 35
+    lane: 0
+    delay: 0.0
+    action: recover_execution
+    function: pub00
+  - index: 36
+    lane: 2
+    delay: 0.0
+    action: register
+    function: tfr00
+  - index: 37
+    lane: 1
+    delay: 0.4
+    action: update
+    function: stm01
+  - index: 38
+    lane: 2
+    delay: 4.3
+    action: update
+    function: crn00
+  - index: 39
+    lane: 1
+    delay: 0.7
+    action: disable
+    function: pub01
+  - index: 40
+    lane: 2
+    delay: 0.9
+    action: enable
+    function: crn00
+  - index: 41
+    lane: 3
+    delay: 0.0
+    action: enable
+    function: tfr01
+  - index: 42
+    lane: 0
+    delay: 0.8
+    action: disable
+    function: stm00
+  - index: 43
+    lane: 0
+    delay: 0.0
+    action: delete
+    function: sub00
+  - index: 44
+    lane: 3
+    delay: 1.7
+    action: trigger
+    function: tfr01
+  - index: 45
+    lane: 3
+    delay: 1.9
+    action: disable
+    function: crn01
+  - index: 46
+    lane: 3
+    delay: 0.7
+    action: disable
+    function: tfr01
+  - index: 47
+    lane: 3
+    delay: 0.3
+    action: trigger
+    function: tfr01
+  - index: 48
+    lane: 1
+    delay: 0.0
+    action: lose_job
+    function: pub01
+  - index: 49
+    lane: 0
+    delay: 0.3
+    action: update
+    function: stm00
+  - index: 50
+    lane: 0
+    delay: 4.9
+    action: trigger
+    function: pub00
+  - index: 51
+    lane: 2
+    delay: 0.0
+    action: delete
+    function: tfr00
+  - index: 52
+    lane: 2
+    delay: 0.3
+    action: register
+    function: tfr00
+  - index: 53
+    lane: 0
+    delay: 0.5
+    action: trigger
+    function: pub00
+  - index: 54
+    lane: 1
+    delay: 1.0
+    action: disable
+    function: stm01
+  - index: 55
+    lane: 1
+    delay: 0.4
+    action: trigger
+    function: pub01
+  - index: 56
+    lane: 2
+    delay: 0.7
+    action: enable
+    function: tfr00
+  - index: 57
+    lane: 0
+    delay: 0.0
+    action: delete
+    function: stm00
+  - index: 58
+    lane: 3
+    delay: 4.2
+    action: disable
+    function: crn01
+  - index: 59
+    lane: 0
+    delay: 0.7
+    action: cancel_execution
+    function: pub00
+outcomes: []
