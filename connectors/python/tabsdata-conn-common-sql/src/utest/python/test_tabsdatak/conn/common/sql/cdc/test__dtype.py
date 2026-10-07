@@ -122,6 +122,7 @@ def test_a_column_whose_values_fit_its_type_needs_no_converter(sa_type):
         sa_types.Interval(),
         postgresql.ARRAY(sa_types.Integer()),
         sa_types.Numeric(),
+        sa_types.Numeric(39, 0),
         postgresql.INET(),
         mysql.YEAR(),
         mysql.SET("a", "b"),
@@ -153,3 +154,25 @@ def test_a_type_falling_back_to_text_converts_its_values_to_text(sa_type):
 )
 def test_to_text_keeps_json_as_json_and_spells_the_rest(value, expected):
     assert to_text(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("sa_type", "expected"),
+    [
+        (sa_types.Numeric(38, 10), pa.decimal128(38, 10)),
+        (sa_types.Numeric(39, 0), pa.utf8()),
+        (sa_types.Numeric(40, 5), pa.utf8()),
+        (sa_types.Numeric(76, 2), pa.utf8()),
+    ],
+    ids=lambda value: repr(value),
+)
+def test_a_decimal_wider_than_a_tableframe_holds_is_text(sa_type, expected):
+    """A 128-bit decimal holds 38 digits and is the widest a tableframe reads;
+    a column declared wider used to fail the mapping and is text now, every
+    digit kept by the text converter."""
+    assert sqlalchemy_to_arrow(sa_type) == expected
+
+
+def test_a_wide_decimal_value_keeps_every_digit_as_text():
+    value = Decimal("1234567890123456789012345678901234567890.12")
+    assert to_text(value) == "1234567890123456789012345678901234567890.12"

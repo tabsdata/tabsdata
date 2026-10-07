@@ -21,6 +21,10 @@ from tabsdatak.conn.common.sql.cdc._json import orjson_default
 # neither its binlog description (a byte length) nor its catalog one (a
 # precision only when declared) tells that apart reliably, so it is a double,
 # as batch reads publish it.
+# The widest decimal a tableframe holds: a 128-bit decimal. A column declared
+# wider, or with no precision at all, is published as text, every digit kept.
+DECIMAL_MAX_PRECISION = 38
+
 DIALECT_TYPES: dict[type, pa.DataType] = {
     mysql.TIME: pa.duration("us"),
     mysql.FLOAT: pa.float64(),
@@ -60,7 +64,7 @@ def sqlalchemy_to_arrow(sa_type: Any) -> pa.DataType:
     if isinstance(gt, sa.types.Numeric):
         p = getattr(sa_type, "precision", None)
         s = getattr(sa_type, "scale", None)
-        if p is not None and s is not None:
+        if p is not None and s is not None and p <= DECIMAL_MAX_PRECISION:
             return pa.decimal128(p, s)
         return pa.utf8()
 
