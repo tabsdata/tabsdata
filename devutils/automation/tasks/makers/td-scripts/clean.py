@@ -249,6 +249,9 @@ def clean_ts(project_folder):
         "src/e2e/setup/storageState.json",
         "src/e2e/test-results",
         "src/tests/coverage",
+        "src/tests/e2e/playwright-report",
+        "src/tests/e2e/setup/storageState.json",
+        "src/tests/e2e/test-results",
         "target",
         "test-results",
     ]

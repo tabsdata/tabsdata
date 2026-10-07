@@ -176,8 +176,14 @@ def get_custom_license(_m_name, m_license):
     exit(1)
 
 
+UI_FLAVOUR_FOLDERS = [
+    os.path.join("..", "tabsdata-ui"),
+    os.path.join("..", "tabsdata-ui", "new-ui"),
+]
+
+
 def ignore_package(name):
-    return name == "tdui"
+    return name in ("tdui", "new-ui")
 
 
 def parse_package_name_version(node_package_key):
@@ -232,23 +238,25 @@ try:
         encoding="utf-8",
         errors="strict",
     )
-    result = subprocess.run(
-        [
-            node,
-            license_checker,
-            "--start",
-            "../tabsdata-ui",
-            "--json",
-            "--relativeLicensePath",
-        ],
-        cwd="../tabsdata-ui",
-        capture_output=True,
-        text=True,
-        check=True,
-        encoding="utf-8",
-        errors="strict",
-    )
-    data = json.loads(result.stdout)
+    data = {}
+    for ui_flavour_folder in UI_FLAVOUR_FOLDERS:
+        result = subprocess.run(
+            [
+                node,
+                license_checker,
+                "--start",
+                ".",
+                "--json",
+                "--relativeLicensePath",
+            ],
+            cwd=ui_flavour_folder,
+            capture_output=True,
+            text=True,
+            check=True,
+            encoding="utf-8",
+            errors="strict",
+        )
+        data.update(json.loads(result.stdout))
 except subprocess.CalledProcessError as e:
     logger.error(f"❌ Error running license-checker-rseidelsohn: {e}")
     exit(1)
