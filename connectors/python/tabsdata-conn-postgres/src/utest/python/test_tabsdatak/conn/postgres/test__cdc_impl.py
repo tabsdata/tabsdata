@@ -20,12 +20,15 @@ import sqlalchemy.types as sa_types
 from sqlalchemy.dialects.postgresql import BYTEA, JSON, JSONB, OID, TEXT
 from sqlalchemy.types import LargeBinary, Text
 
+from tabsdatak.api import Secret
+
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
+from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.postgres import _cdc_impl
 from tabsdatak.conn.postgres._cdc_impl import (
     DEFAULT_WAL2JSON_FORMAT_VERSION,
@@ -1444,6 +1447,31 @@ def test_a_naive_timestamp_keeps_its_wall_clock_whatever_the_server_zone():
     assert change.new_values["at"] == datetime(2026, 1, 1, 12, 0)
     assert change.new_values["at"].tzinfo is None
     assert change.new_values["seen"] == datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+
+
+def test_conn_cfg_reaches_the_engine_and_the_replication_connection(monkeypatch):
+    """psycopg2 keywords such as sslmode apply to the catalog engine and to
+    the replication connection; the URI's address and the replication
+    connection factory are never overridden by them."""
+    bi = _ingester_with_tables(["public.users"])
+    bi._conn._uri.return_value = "postgresql://etl:pw@h:5432/d"
+    bi._conn.credentials = UserPassword(user=Secret("etl"), password=Secret("pw"))
+    conn_cfg = {"sslmode": "require", "host": "x", "connection_factory": None}
+    bi._conn.conn_cfg = conn_cfg
+    calls = []
+    monkeypatch.setattr(
+        _cdc_impl.sqlalchemy_utils,
+        "create_engine",
+        lambda url, **kwargs: calls.append(kwargs) or "engine",
+    )
+
+    assert bi._build_engine() == "engine"
+    settings = bi._replication_connection_settings()
+
+    assert calls == [{"connect_args": conn_cfg}]
+    assert settings["sslmode"] == "require"
+    assert (settings["host"], settings["dbname"], settings["user"]) == ("h", "d", "etl")
+    assert settings["connection_factory"] is _cdc_impl.LogicalReplicationConnection
 
 
 def test_the_stream_asks_wal2json_for_commit_positions(monkeypatch):

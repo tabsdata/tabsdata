@@ -855,11 +855,14 @@ class Wal2JsonIngester(CdcIngester):
         )
 
     def _build_engine(self) -> Any:
-        return sqlalchemy_utils.create_engine(self._resolve_url())
+        return sqlalchemy_utils.create_engine(
+            self._resolve_url(), connect_args=self.connect_args
+        )
 
     def _replication_connection_settings(self) -> dict[str, Any]:
         url = self._resolve_url()
         settings: dict[str, Any] = {
+            **self.connect_args,
             "host": url.host,
             "port": url.port or 5432,
             "dbname": url.database,

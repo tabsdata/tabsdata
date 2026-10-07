@@ -869,7 +869,9 @@ class SqlReplicaIngester(CdcIngester):
         # noinspection PyProtectedMember
         from tabsdatak.conn.common.sql._engine import sqlalchemy_utils
 
-        return sqlalchemy_utils.create_engine(self._resolve_url())
+        return sqlalchemy_utils.create_engine(
+            self._resolve_url(), connect_args=self.connect_args
+        )
 
     # ------------------------------------------------------------------
     # Source-table resolution + structure (override of base helpers)

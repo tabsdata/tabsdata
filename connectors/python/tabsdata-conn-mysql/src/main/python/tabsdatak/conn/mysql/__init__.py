@@ -502,8 +502,13 @@ class MySQLCdcStreamSrcConn(Conn):
             `DEFAULT_SERVER_ID` (512).
         entity_whitelist: Optional regex patterns narrowing discovery;
             `None` (default) means no filtering.
-        conn_cfg: Optional driver-side config forwarded as
-            `connect_args`.
+        conn_cfg: Optional pymysql connection keywords (`ssl_ca`,
+            `ssl_cert`, `ssl_key`, `ssl_disabled`, `charset`,
+            `connect_timeout`, ...) every connection the stream opens
+            takes: the catalog engine, the binlog reader, the initial
+            load and the server checks alike. A bare `mysql://` URI
+            connects through pymysql here, the stream's driver; an
+            explicit `+driver` is honoured for the catalog engine.
     """
 
     uri: UriSpec

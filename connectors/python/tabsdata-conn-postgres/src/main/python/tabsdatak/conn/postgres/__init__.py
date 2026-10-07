@@ -474,8 +474,11 @@ class PostgresCdcStreamSrcConn(Conn):
             must have the `REPLICATION` attribute.
         entity_whitelist: Optional regex patterns narrowing discovery;
             `None` (default) means no filtering.
-        conn_cfg: Optional driver-side config forwarded as
-            `connect_args`.
+        conn_cfg: Optional psycopg2 connection keywords (`sslmode`,
+            `sslrootcert`, `connect_timeout`, `application_name`, ...)
+            every connection the stream opens takes: the catalog and
+            snapshot engines, the initial load and the replication
+            connection alike.
     """
 
     uri: UriSpec

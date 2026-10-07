@@ -11,11 +11,10 @@ Catalog / engine calls (``server_timezone``,
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone, tzinfo
-from decimal import Decimal
-
 import json
 import logging
+from datetime import datetime, timedelta, timezone, tzinfo
+from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
@@ -25,9 +24,11 @@ from ibm_db_sa import LONGVARCHAR
 from ibm_db_sa.base import DBCLOB, XML
 from sqlalchemy.types import BLOB, CLOB, LargeBinary, Text
 
+from tabsdatak.api import Secret
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
 from tabsdatak.conn.common.sql.cdc.constants import DEFAULT_FETCH_SIZE
+from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.db2 import _cdc_impl
 from tabsdatak.conn.db2._cdc_impl import (
     COMMITSEQ_ORIGIN,
@@ -471,6 +472,21 @@ def test_the_server_zone_is_read_from_db2_s_decimal_hhmmss(d, reported, expected
     as the worker's own clock."""
     engine = _Engine({"current timezone": (reported,)})
     assert d.server_timezone(engine) == expected
+
+
+def test_the_engine_takes_conn_cfg_as_connect_args(monkeypatch):
+    bi = _ingester_with_tables(["ASN.USERS_CD"])
+    bi._conn._uri.return_value = "db2+ibm_db://h:50000/sample"
+    bi._conn.credentials = UserPassword(user=Secret("etl"), password=Secret("pw"))
+    conn_cfg = {"security": "SSL", "sslservercertificate": "/ca.arm"}
+    bi._conn.conn_cfg = conn_cfg
+    calls = []
+    monkeypatch.setattr(
+        "tabsdatak.conn.common.sql._engine.sqlalchemy_utils.create_engine",
+        lambda url, **kwargs: calls.append(kwargs) or "engine",
+    )
+    assert bi._build_engine() == "engine"
+    assert calls == [{"connect_args": conn_cfg}]
 
 
 def _tracked(cd_table: str) -> TrackedTable:

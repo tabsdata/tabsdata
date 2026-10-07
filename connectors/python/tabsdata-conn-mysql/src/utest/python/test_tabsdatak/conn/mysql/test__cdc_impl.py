@@ -488,19 +488,71 @@ def _ingester_with_tables(qualified: list[str]) -> BinlogIngester:
 # --- _resolve_url / _stream_connection_settings ----------------------
 
 
-def test_resolve_url_injects_mysqlconnector_driver():
+def _conn_with(conn_cfg=None, uri="mysql://h:3306/d") -> MagicMock:
     conn = MagicMock()
-    conn._uri.return_value = "mysql://h:3306/d"
+    conn._uri.return_value = uri
     conn.credentials = UserPassword(user=Secret("etl"), password=Secret("hunter2"))
+    conn.conn_cfg = conn_cfg
+    return conn
+
+
+def test_resolve_url_connects_through_pymysql_like_the_stream():
+    conn = _conn_with()
     bi = BinlogIngester(conn=conn, tables=[], start_from="tail", server_id=42)
     url = bi._resolve_url()
-    assert url.drivername == "mysql+mysqlconnector"
+    assert url.drivername == "mysql+pymysql"
     assert url.username == "etl"
     settings = bi._stream_connection_settings()
     assert settings["host"] == "h"
     assert settings["port"] == 3306
     assert settings["user"] == "etl"
     assert settings["db"] == "d"
+
+
+def test_an_explicit_driver_in_the_uri_is_honoured():
+    conn = _conn_with(uri="mysql+mysqlconnector://h:3306/d")
+    bi = BinlogIngester(conn=conn, tables=[], start_from="tail", server_id=42)
+    assert bi._resolve_url().drivername == "mysql+mysqlconnector"
+
+
+def test_conn_cfg_reaches_every_connection_under_the_uri_s_address():
+    """TLS and charset keywords go to the catalog engine, the binlog reader,
+    the initial load and the raw server checks; the URI's address and
+    credentials are never overridden by them."""
+    conn = _conn_with({"ssl_ca": "/ca.pem", "charset": "utf8mb4", "host": "x"})
+    bi = BinlogIngester(conn=conn, tables=[], start_from="tail", server_id=42)
+
+    settings = bi._connection_settings()
+    assert settings["ssl_ca"] == "/ca.pem" and settings["charset"] == "utf8mb4"
+    assert (settings["host"], settings["user"], settings["db"]) == ("h", "etl", "d")
+    assert "read_timeout" not in settings
+    assert bi._stream_connection_settings()["ssl_ca"] == "/ca.pem"
+
+
+def test_the_catalog_engine_takes_conn_cfg_as_connect_args(monkeypatch):
+    conn = _conn_with({"ssl_ca": "/ca.pem"})
+    bi = BinlogIngester(conn=conn, tables=[], start_from="tail", server_id=42)
+    calls = []
+    monkeypatch.setattr(
+        _cdc_impl.sqlalchemy_utils,
+        "create_engine",
+        lambda url, **kwargs: calls.append((url, kwargs)) or "engine",
+    )
+    assert bi._build_engine() == "engine"
+    assert calls[0][1] == {"connect_args": {"ssl_ca": "/ca.pem"}}
+
+
+def test_the_initial_load_connects_with_the_same_settings(monkeypatch):
+    conn = _conn_with({"charset": "utf8mb4"})
+    bi = BinlogIngester(conn=conn, tables=[], start_from="tail", server_id=42)
+    received = []
+    monkeypatch.setattr(
+        _cdc_impl,
+        "BinlogInitialLoadSession",
+        lambda connection_settings: received.append(connection_settings) or "session",
+    )
+    assert bi.open_initial_load() == "session"
+    assert received[0]["charset"] == "utf8mb4" and received[0]["host"] == "h"
 
 
 def test_resolve_url_preserves_explicit_driver():
@@ -955,7 +1007,7 @@ def _gtid_ingester(monkeypatch, row) -> tuple[BinlogIngester, _GtidServer]:
     monkeypatch.setattr(_cdc_impl.pymysql, "connect", lambda **settings: server)
     monkeypatch.setattr(
         bi,
-        "_stream_connection_settings",
+        "_connection_settings",
         lambda: {"host": "h", "port": 1, "user": "u", "passwd": "p", "db": "d"},
     )
     return bi, server
@@ -1073,7 +1125,7 @@ def _init_stream(monkeypatch, bi):
     monkeypatch.setattr(
         _cdc_impl, "BinLogStreamReader", lambda **kwargs: captured.update(kwargs)
     )
-    monkeypatch.setattr(bi, "_stream_connection_settings", lambda: {})
+    monkeypatch.setattr(bi, "_connection_settings", lambda: {})
     monkeypatch.setattr(bi, "_schema_table_filter", lambda: (None, None))
     monkeypatch.setattr(bi, "_verify_gtids", lambda consumed: None)
     monkeypatch.setattr(bi, "_verify_server_settings", lambda: None)

@@ -492,8 +492,9 @@ class Db2CdcStreamSrcConn(Conn):
         credentials: `UserPassword` credentials.
         entity_whitelist: Optional regex patterns narrowing discovery;
             `None` (default) means no filtering.
-        conn_cfg: Optional driver-side config forwarded as
-            `connect_args`.
+        conn_cfg: Optional ibm_db connection keywords forwarded as
+            `connect_args` to every engine the stream opens, the
+            initial load's included.
     """
 
     uri: UriSpec

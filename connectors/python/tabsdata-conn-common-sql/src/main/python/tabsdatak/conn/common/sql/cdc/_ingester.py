@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from datetime import tzinfo
 from typing import Any
 
@@ -72,6 +73,13 @@ class CdcIngester(StreamIngester[CdcChange, CdcOffset], ABC):
     @property
     def server_tz(self) -> tzinfo | None:
         return self._server_tz
+
+    @property
+    def connect_args(self) -> dict[str, Any]:
+        """The connection's ``conn_cfg``, the driver keyword arguments every
+        connection this ingester opens takes."""
+        cfg = getattr(self._conn, "conn_cfg", None)
+        return dict(cfg) if isinstance(cfg, Mapping) else {}
 
     @property
     @abstractmethod

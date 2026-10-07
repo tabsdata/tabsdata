@@ -113,7 +113,7 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.types import _convert
 from tabsdatak.conn.mysql import BinlogPosition, GtidPosition
-from tabsdatak.conn.mysql._uri import normalize_mysql_uri
+from tabsdatak.conn.mysql._uri import normalize_mysql_cdc_uri
 from tabsdatak.conn.mysql.error import MysqlErrorCode
 
 logger = logging.getLogger(__name__)
@@ -756,16 +756,7 @@ class BinlogIngester(CdcIngester):
         return engine
 
     def open_initial_load(self) -> BinlogInitialLoadSession:
-        settings = self._stream_connection_settings()
-        return BinlogInitialLoadSession(
-            connection_settings={
-                "host": settings["host"],
-                "port": settings["port"],
-                "user": settings.get("user"),
-                "password": settings.get("passwd"),
-                "database": settings.get("db"),
-            }
-        )
+        return BinlogInitialLoadSession(connection_settings=self._connection_settings())
 
     def close_session(self, session: Any) -> None:
         if self._stream is not None:
@@ -788,7 +779,7 @@ class BinlogIngester(CdcIngester):
     # ------------------------------------------------------------------
 
     def _resolve_url(self) -> URL:
-        url = make_url(normalize_mysql_uri(self._conn._uri()))
+        url = make_url(normalize_mysql_cdc_uri(self._conn._uri()))
         creds = self._conn.credentials
         return url.set(
             username=_convert(creds.user, str),
@@ -796,11 +787,17 @@ class BinlogIngester(CdcIngester):
         )
 
     def _build_engine(self) -> Any:
-        return sqlalchemy_utils.create_engine(self._resolve_url())
+        return sqlalchemy_utils.create_engine(
+            self._resolve_url(), connect_args=self.connect_args
+        )
 
-    def _stream_connection_settings(self) -> dict[str, Any]:
+    def _connection_settings(self) -> dict[str, Any]:
+        """The pymysql keyword arguments of every connection the stream opens:
+        the connection's ``conn_cfg`` (TLS, charset, timeouts) under the
+        address and credentials of its URI."""
         url = self._resolve_url()
         settings: dict[str, Any] = {
+            **self.connect_args,
             "host": url.host,
             "port": url.port or 3306,
             "user": url.username,
@@ -808,6 +805,10 @@ class BinlogIngester(CdcIngester):
         }
         if url.database:
             settings["db"] = url.database
+        return settings
+
+    def _stream_connection_settings(self) -> dict[str, Any]:
+        settings = self._connection_settings()
         settings["read_timeout"] = int(self._poll_max_secs)
         return settings
 
@@ -949,14 +950,7 @@ class BinlogIngester(CdcIngester):
         transactions in parallel without keeping their commit order, whose
         binlog may then hold a source's transaction before an earlier-numbered
         one, which the stage publisher would drop as already published."""
-        settings = self._stream_connection_settings()
-        conn = pymysql.connect(
-            host=settings["host"],
-            port=settings["port"],
-            user=settings.get("user"),
-            passwd=settings.get("passwd"),
-            db=settings.get("db"),
-        )
+        conn = pymysql.connect(**self._connection_settings())
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -1018,14 +1012,7 @@ class BinlogIngester(CdcIngester):
         """Fail unless the server can send every transaction after
         `consumed`: it has purged none that the stream has not read, and it
         has executed every one the stream has."""
-        settings = self._stream_connection_settings()
-        conn = pymysql.connect(
-            host=settings["host"],
-            port=settings["port"],
-            user=settings.get("user"),
-            passwd=settings.get("passwd"),
-            db=settings.get("db"),
-        )
+        conn = pymysql.connect(**self._connection_settings())
         try:
             with conn.cursor() as cursor:
                 cursor.execute(
@@ -1061,14 +1048,7 @@ class BinlogIngester(CdcIngester):
             reader.close()
 
     def _first_binlog_file(self) -> tuple[str, str]:
-        settings = self._stream_connection_settings()
-        conn = pymysql.connect(
-            host=settings["host"],
-            port=settings["port"],
-            user=settings.get("user"),
-            passwd=settings.get("passwd"),
-            db=settings.get("db"),
-        )
+        conn = pymysql.connect(**self._connection_settings())
         try:
             with conn.cursor() as cursor:
                 cursor.execute("show binary logs")
@@ -1083,14 +1063,7 @@ class BinlogIngester(CdcIngester):
             conn.close()
 
     def _last_binlog_position(self) -> tuple[str, int, str]:
-        settings = self._stream_connection_settings()
-        conn = pymysql.connect(
-            host=settings["host"],
-            port=settings["port"],
-            user=settings.get("user"),
-            passwd=settings.get("passwd"),
-            db=settings.get("db"),
-        )
+        conn = pymysql.connect(**self._connection_settings())
         try:
             with conn.cursor() as cursor:
                 row = self._query_binlog_status(cursor)
