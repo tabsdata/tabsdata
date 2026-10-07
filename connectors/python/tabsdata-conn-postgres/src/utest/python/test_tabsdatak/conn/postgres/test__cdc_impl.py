@@ -925,8 +925,9 @@ class Recording(StreamLifecycle):
     def __init__(self, checkpoints: list) -> None:
         self.checkpoints = checkpoints
 
-    def checkpoint(self, offset) -> None:
+    def checkpoint(self, offset) -> bool:
         self.checkpoints.append(offset)
+        return True
 
 
 def test_the_accepted_gap_resumes_at_the_slot_and_records_it(monkeypatch):
@@ -1273,11 +1274,17 @@ class _Message:
 
 
 class _ReplicationCursor:
+    wal_end = 0
+
     def __init__(self, messages: list[_Message]):
         self._messages = list(messages)
+        self.confirmed: list[int] = []
 
     def read_message(self):
         return self._messages.pop(0) if self._messages else None
+
+    def send_feedback(self, *, flush_lsn: int, reply: bool):
+        self.confirmed.append(flush_lsn)
 
 
 def _row(xid: int, row_id: int) -> dict:
@@ -1595,6 +1602,88 @@ def test_an_unbounded_poll_holds_nothing_back():
 # =====================================================================
 # Attaching to a slot the previous stream still holds
 # =====================================================================
+
+
+# --- Idle confirmation ------------------------------------------------
+
+
+def _idle(messages=(), *, wal_end: str = "0/900") -> tuple[Wal2JsonIngester, list]:
+    """An ingester attached at 0/100 whose server has decoded up to
+    `wal_end`, recording what it hands its checkpoint."""
+    bi = _format_2_ingester(list(messages))
+    bi._cursor.wal_end = lsn_to_int(wal_end)
+    bi._base_offset = _identified(0x100)
+    bi._slot_floor = bi._recorded = bi._confirmed = 0x100
+    recorded = []
+    bi.attach_lifecycle(Recording(recorded))
+    return bi, recorded
+
+
+def test_an_idle_poll_confirms_up_to_where_the_server_decoded():
+    bi, recorded = _idle()
+
+    assert list(bi._poll_changes_v2(None)) == []
+
+    assert [offset.lsn for offset in recorded] == [0x900]
+    assert recorded[0].system_identifier == SYSTEM_ID
+    assert bi._cursor.confirmed == [0x900]
+    assert (bi._slot_floor, bi._recorded) == (0x900, 0x900)
+    assert bi.staged_offset(LsnOffset(lsn=0x500)).lsn == 0x900
+
+
+def test_the_position_is_recorded_before_it_is_confirmed():
+    """A crash between the two must find the slot at or behind the recorded
+    offset, never past it, so a position the run does not record is not
+    sent."""
+    bi, _ = _idle()
+    bi.attach_lifecycle(StreamLifecycle())
+
+    assert list(bi._poll_changes_v2(None)) == []
+
+    assert bi._cursor.confirmed == []
+    assert (bi._slot_floor, bi._recorded) == (0x100, 0x100)
+
+
+def test_delivered_changes_hold_the_idle_confirmation_until_they_are_staged():
+    bi, recorded = _idle(_transaction(10, "0/300", [("0/280", 1)], "0/320"))
+
+    [change] = list(bi._poll_changes_v2(None))
+    assert bi._cursor.confirmed == []
+
+    bi.confirm_lsn(change.offset)
+    assert list(bi._poll_changes_v2(None)) == []
+    assert bi._cursor.confirmed == [0x280, 0x900]
+    assert [offset.lsn for offset in recorded] == [0x900]
+
+
+def test_a_bounded_poll_does_not_confirm_past_its_window():
+    bi, recorded = _idle(wal_end="0/150")
+    bi.bound_stream(LsnOffset(lsn=0x200))
+
+    assert list(bi._poll_changes_v2(None)) == []
+
+    assert bi._cursor.confirmed == []
+    assert recorded == []
+
+
+def test_an_idle_confirmation_is_not_repeated_until_the_server_moves_on():
+    bi, _ = _idle()
+    list(bi._poll_changes_v2(None))
+    list(bi._poll_changes_v2(None))
+    assert bi._cursor.confirmed == [0x900]
+
+    bi._cursor.wal_end = 0xA00
+    list(bi._poll_changes_v2(None))
+    assert bi._cursor.confirmed == [0x900, 0xA00]
+
+
+def test_the_format_1_poll_confirms_when_idle_too():
+    bi, recorded = _idle()
+
+    assert list(bi._poll_changes_v1(None)) == []
+
+    assert bi._cursor.confirmed == [0x900]
+    assert [offset.lsn for offset in recorded] == [0x900]
 
 
 class _HeldSlotCursor:

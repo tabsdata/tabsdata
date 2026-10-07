@@ -71,8 +71,8 @@ class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
         self.disk = disk
         self.buffer = buffer
 
-    def checkpoint(self, offset: O) -> None:
-        self.plugin.checkpoint(self.run, offset)
+    def checkpoint(self, offset: O) -> bool:
+        return self.plugin.checkpoint(self.run, offset)
 
     def settle(self) -> None:
         if self.buffer is None:
@@ -309,7 +309,7 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
             return
         self.checkpoint(run, offset)
 
-    def checkpoint(self, run: StreamRun[R, O], offset: O) -> None:
+    def checkpoint(self, run: StreamRun[R, O], offset: O) -> bool:
         if offset is None:
             raise ConnErrorCode.CONN_34.exception(
                 ingester=type(run.ingester).__name__, offset=offset
@@ -317,11 +317,12 @@ class PipelineStreamSrcPlugin[C: Conn, S: StreamSrc, R, O: StreamOffset](
         state = self.stage_state(run, offset)
         if isinstance(state, dict):
             if not self.may_checkpoint(run):
-                return
+                return False
             run.ctx.checkpoint(state)
         else:
             state()
         run.staged = snapshot(offset)
+        return True
 
     def settle_offset(self, run: StreamRun[R, O]) -> None:
         try:

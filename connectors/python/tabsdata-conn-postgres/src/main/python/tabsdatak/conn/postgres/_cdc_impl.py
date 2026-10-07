@@ -25,7 +25,8 @@ Two pieces:
   records for the runner. Supports wal2json output-plugin format
   versions 1 and 2. Tabsdata owns the resume offset (the LSN is
   persisted in the stream state); the slot is acknowledged once a
-  batch is staged so Postgres can release the WAL behind it.
+  batch is staged, and up to where the server has decoded while
+  nothing arrives, so Postgres can release the WAL behind it.
 """
 
 from __future__ import annotations
@@ -113,9 +114,9 @@ PENDING_TIMEOUT_MULTIPLIER = 16
 # is gone. Attaching is retried on the same connection for this long.
 SLOT_ATTACH_TIMEOUT_SECONDS = 30.0
 
-# The replication client moves the slot on by itself over WAL that holds
-# nothing for the stream, so while the stream holds the slot its confirmed
-# position is read back this often and recorded.
+# While the stream holds the slot its confirmed position is read back this
+# often and recorded, in case something other than the stream's own feedback
+# moved it.
 SLOT_WATCH_INTERVAL_SECONDS = 10.0
 
 # A clean stop reads the slot once the server has released it, which it does
@@ -721,6 +722,13 @@ class Wal2JsonIngester(CdcIngester):
         # never finds the slot ahead of it for a move of the stream's own.
         self._slot_floor = 0
         self._recorded = 0
+        # The furthest position confirmed to the server, and how many changes
+        # have been handed out since the last confirmation: while nothing
+        # arrives, the position the server has decoded up to is confirmed
+        # only once every change handed out is staged, which the next
+        # confirmation says.
+        self._confirmed = 0
+        self._unacknowledged = 0
         self._watched_at = 0.0
         self._watcher: Any | None = None
 
@@ -912,6 +920,8 @@ class Wal2JsonIngester(CdcIngester):
 
         system_identifier, timeline = identify_system(self._cursor)
         self._recorded = self._mark.lsn
+        self._confirmed = 0
+        self._unacknowledged = 0
         self._verify_resume(system_identifier, timeline)
         self._mark.system_identifier = system_identifier
         self._mark.timeline = timeline
@@ -1131,7 +1141,22 @@ class Wal2JsonIngester(CdcIngester):
         if self._cursor is None:  # pragma: no cover -- stream init failed
             return
         self._cursor.send_feedback(flush_lsn=offset.lsn, reply=True)
+        self._confirmed = max(self._confirmed, offset.lsn)
+        self._unacknowledged = 0
         logger.debug("Confirmed LSN offset %d", offset.lsn)
+
+    def _confirm_idle(self) -> None:
+        if self._cursor is None or self._bound is not None or self._unacknowledged:
+            return
+        wal_end = self._cursor.wal_end
+        if wal_end <= self._confirmed:
+            return
+        offset = self.base_offset()
+        offset.lsn = wal_end
+        if not self.lifecycle.checkpoint(offset):
+            return
+        self._slot_floor = self._recorded = wal_end
+        self.confirm_lsn(offset)
 
     def staged_offset(self, offset: CdcOffset) -> CdcOffset:
         if offset.lsn < self._slot_floor:
@@ -1176,8 +1201,7 @@ class Wal2JsonIngester(CdcIngester):
 
     def _watch_slot(self) -> None:
         """Every so often, read how far the slot is confirmed while this
-        stream holds it: the replication client confirms WAL with nothing
-        for the stream by itself, and nothing else can move a held slot."""
+        stream holds it, and record any move the stream did not make."""
         now = time.monotonic()
         if (
             self._replicator is None
@@ -1440,6 +1464,7 @@ class Wal2JsonIngester(CdcIngester):
                 pending_timeout=deadline,
             )
             if message is None:
+                self._confirm_idle()
                 self._bound_passed_quietly()
                 break
             if self._past_bound(message.data_start, message):
@@ -1462,6 +1487,7 @@ class Wal2JsonIngester(CdcIngester):
                     offset=lsn_offset,
                 )
                 if produced is not None:
+                    self._unacknowledged += 1
                     yield produced
             self._mark = lsn_offset.copy()
 
@@ -1551,6 +1577,7 @@ class Wal2JsonIngester(CdcIngester):
             if message is None:
                 if pending:
                     raise PostgresErrorCode.POSTGRES_18.exception(xid=xid)
+                self._confirm_idle()
                 self._bound_passed_quietly()
                 break
             payload = orjson.loads(message.payload)
@@ -1588,6 +1615,7 @@ class Wal2JsonIngester(CdcIngester):
                     segment=commit,
                 )
                 if truncated is not None:
+                    self._unacknowledged += 1
                     yield truncated
                 continue
             lsn_offset = LsnOffset(lsn=message.data_start)
@@ -1601,6 +1629,7 @@ class Wal2JsonIngester(CdcIngester):
                 segment=commit,
             )
             if produced is not None:
+                self._unacknowledged += 1
                 yield produced
 
     @staticmethod

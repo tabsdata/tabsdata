@@ -8,8 +8,8 @@ from tabsdatak.conn.common._stream._offset import StreamOffset
 
 
 class StreamLifecycle[O: StreamOffset]:
-    def checkpoint(self, offset: O) -> None:
-        pass
+    def checkpoint(self, offset: O) -> bool:
+        return False
 
     def settle(self) -> None:
         pass
