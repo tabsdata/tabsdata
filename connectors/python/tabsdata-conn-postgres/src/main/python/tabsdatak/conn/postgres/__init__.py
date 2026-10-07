@@ -533,13 +533,12 @@ class PostgresCdcStreamSrc(StreamSrc):
             How the snapshot is taken follows
             `replication_slot_behavior`. With `"create"` the load creates
             the slot, which exports the snapshot and the position it is
-            consistent at in one operation, so no change is repeated; the
-            named slot must not already exist. With `"reuse"` the load
-            touches no slot and exports a snapshot from a transaction of
-            its own, so the slot stays entirely with whoever provisioned
-            it -- it must already exist, and a transaction committing as
-            the snapshot is taken may be delivered again once capture
-            starts.
+            consistent at in one operation, so no change is repeated or
+            missed; the named slot must not already exist. With `"reuse"`
+            the load leaves that slot to whoever provisioned it -- it must
+            already exist -- and exports its snapshot the same way from a
+            temporary slot of its own, which the server drops once the
+            load is read.
         replication_slot_behavior: `"reuse"` (default, slot must
             exist) or `"create"` (create it, no-op if it exists). It
             also selects how `initial_load` snapshots -- see there.

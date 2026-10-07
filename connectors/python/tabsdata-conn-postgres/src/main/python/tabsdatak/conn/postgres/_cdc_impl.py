@@ -473,6 +473,10 @@ class Wal2JsonInitialLoadSession(InitialLoadSession):
 
 
 class SlotSnapshotSession(Wal2JsonInitialLoadSession):
+    """Loads from the snapshot the server exports as it creates the slot,
+    consistent at the point the slot streams from: no change is both
+    loaded and streamed, and none is missed."""
+
     def __init__(
         self,
         *,
@@ -486,17 +490,7 @@ class SlotSnapshotSession(Wal2JsonInitialLoadSession):
         # Before the slot: its exported snapshot lasts only until the next
         # command on this connection.
         system_identifier, timeline = identify_system(self._cursor)
-        try:
-            self._cursor.execute(
-                f"CREATE_REPLICATION_SLOT {replication_slot} LOGICAL "
-                f"{WAL2JSON_PLUGIN} EXPORT_SNAPSHOT"
-            )
-            _, consistent_point, snapshot_name, _ = self._cursor.fetchone()
-        except psycopg2.errors.DuplicateObject as error:
-            raise PostgresErrorCode.POSTGRES_21.exception(
-                cause=error,
-                slot=replication_slot,
-            )
+        consistent_point, snapshot_name = self._export_snapshot(replication_slot)
         self._offset = LsnOffset(
             lsn=lsn_to_int(consistent_point),
             system_identifier=system_identifier,
@@ -508,6 +502,20 @@ class SlotSnapshotSession(Wal2JsonInitialLoadSession):
             replication_slot,
             consistent_point,
         )
+
+    def _export_snapshot(self, replication_slot: str) -> tuple[str, str]:
+        try:
+            self._cursor.execute(
+                f"CREATE_REPLICATION_SLOT {replication_slot} LOGICAL "
+                f"{WAL2JSON_PLUGIN} EXPORT_SNAPSHOT"
+            )
+        except psycopg2.errors.DuplicateObject as error:
+            raise PostgresErrorCode.POSTGRES_21.exception(
+                cause=error,
+                slot=replication_slot,
+            )
+        _, consistent_point, snapshot_name, _ = self._cursor.fetchone()
+        return consistent_point, snapshot_name
 
     def close(self) -> None:
         for closeable, what in (
@@ -525,74 +533,40 @@ class SlotSnapshotSession(Wal2JsonInitialLoadSession):
         super().close()
 
 
-class TransactionSnapshotSession(Wal2JsonInitialLoadSession):
-    def __init__(
-        self,
-        *,
-        engine: Any,
-        replication_settings: dict[str, Any],
-        replication_slot: str,
-    ):
-        super().__init__(engine=engine)
-        replicator = psycopg2.connect(**replication_settings)
-        try:
-            system_identifier, timeline = identify_system(replicator.cursor())
-        finally:
-            replicator.close()
-        with engine.connect() as connection:
+class ReusedSlotSnapshotSession(SlotSnapshotSession):
+    """Loads from the snapshot of a slot created for the load alone, and
+    temporary, so the server drops it with the connection, when the slot
+    the stream reuses is left to whoever provisioned it. A snapshot taken
+    beside the slot instead, between two readings of the WAL position,
+    misses a transaction whose commit is written but not yet visible, for
+    as long as a synchronous standby takes to answer: it is before the
+    first reading, so never streamed, and not in the snapshot."""
+
+    def _export_snapshot(self, replication_slot: str) -> tuple[str, str]:
+        with self._engine.connect() as connection:
             exists = connection.execute(
                 text("select 1 from pg_replication_slots where slot_name = :slot"),
                 {"slot": replication_slot},
             ).scalar()
-            if not exists:
-                raise PostgresErrorCode.POSTGRES_22.exception(slot=replication_slot)
-            # Read before the snapshot forms: a commit landing in between is
-            # then both in the snapshot and replayed, rather than in neither.
-            lsn = connection.execute(
-                text("select pg_current_wal_lsn() - '0/0'::pg_lsn")
-            ).scalar()
-        self._holder = engine.connect().execution_options(
-            isolation_level="REPEATABLE READ", postgresql_readonly=True
+        if not exists:
+            raise PostgresErrorCode.POSTGRES_22.exception(slot=replication_slot)
+        self._cursor.execute(
+            f"CREATE_REPLICATION_SLOT {_snapshot_slot(replication_slot)} TEMPORARY "
+            f"LOGICAL {WAL2JSON_PLUGIN} EXPORT_SNAPSHOT"
         )
-        self._snapshot_name = self._holder.execute(
-            text("select pg_export_snapshot()")
-        ).scalar()
-        # Read once the snapshot is exported: every commit it can see is
-        # before this position, so the changes up to it are the window the
-        # load is deduplicated against.
-        with engine.connect() as connection:
-            end = connection.execute(
-                text("select pg_current_wal_lsn() - '0/0'::pg_lsn")
-            ).scalar()
-        self._offset = LsnOffset(
-            lsn=int(lsn),
-            system_identifier=system_identifier,
-            timeline=timeline,
-        )
-        self._window_end = LsnOffset(
-            lsn=int(end),
-            system_identifier=system_identifier,
-            timeline=timeline,
-        )
-        logger.info(
-            "Initial load exported snapshot %r between WAL positions %s and %s",
-            self._snapshot_name,
-            lsn,
-            end,
-        )
+        _, consistent_point, snapshot_name, _ = self._cursor.fetchone()
+        return consistent_point, snapshot_name
 
-    @property
-    def window_end(self) -> CdcOffset | None:
-        return self._window_end
 
-    def close(self) -> None:
-        if self._holder is not None:
-            try:
-                self._holder.close()
-            except Exception as exc:  # pragma: no cover
-                logger.warning("Failed to close initial-load snapshot holder: %s", exc)
-            self._holder = None
-        super().close()
+SLOT_NAME_MAX_LENGTH = 63
+SNAPSHOT_SLOT_SUFFIX = "_snapshot"
+
+
+def _snapshot_slot(replication_slot: str) -> str:
+    """The name of the temporary slot a load exports its snapshot from,
+    beside the slot the stream reuses."""
+    keep = SLOT_NAME_MAX_LENGTH - len(SNAPSHOT_SLOT_SUFFIX)
+    return replication_slot[:keep] + SNAPSHOT_SLOT_SUFFIX
 
 
 class LsnOffset(CdcOffset):
@@ -822,7 +796,7 @@ class Wal2JsonIngester(CdcIngester):
                 replication_settings=self._replication_connection_settings(),
                 replication_slot=self._replication_slot,
             )
-        return TransactionSnapshotSession(
+        return ReusedSlotSnapshotSession(
             engine=self._build_engine(),
             replication_settings=self._replication_connection_settings(),
             replication_slot=self._replication_slot,

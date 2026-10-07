@@ -34,8 +34,8 @@ from tabsdatak.conn.postgres._cdc_impl import (
     DEFAULT_WAL2JSON_FORMAT_VERSION,
     LsnOffset,
     PostgresDialect,
+    ReusedSlotSnapshotSession,
     SlotSnapshotSession,
-    TransactionSnapshotSession,
     Wal2JsonIngester,
     accepted_gap,
     lsn_to_int,
@@ -1088,7 +1088,7 @@ def test_a_stream_never_attached_settles_nothing(monkeypatch):
 
 
 # =====================================================================
-# TransactionSnapshotSession
+# ReusedSlotSnapshotSession
 # =====================================================================
 
 
@@ -1122,12 +1122,7 @@ class _Connection:
         sql = str(statement)
         self._engine.log.append((self.number, "execute", sql))
         if "pg_replication_slots" in sql:
-            return _Result(1)
-        if "pg_current_wal_lsn" in sql:
-            positions = self._engine.positions
-            return _Result(positions.pop(0) if positions else 4096)
-        if "pg_export_snapshot" in sql:
-            return _Result("00000003-0000001B-1")
+            return _Result(1 if self._engine.slot_exists else None)
         if "set transaction snapshot" in sql:
             return _Result(None)
         if "select now()" in sql:
@@ -1138,17 +1133,19 @@ class _Connection:
 
 
 class _Engine:
-    def __init__(self, monkeypatch, positions: list[int] | None = None):
+    def __init__(self, monkeypatch, slot_exists: bool = True):
         self.log: list[tuple] = []
-        self.positions = list(positions or [])
+        self.slot_exists = slot_exists
+        self.commands: list[str] = []
         self._connections = 0
+        cursor = MagicMock()
+        cursor.execute.side_effect = self.commands.append
+        cursor.fetchone.side_effect = [
+            (SYSTEM_ID, 4, "0/0", "d"),
+            ("slot_snapshot", "0/1000", "00000003-0000001B-1", "wal2json"),
+        ]
         replicator = MagicMock()
-        replicator.cursor.return_value.fetchone.return_value = (
-            SYSTEM_ID,
-            4,
-            "0/0",
-            "d",
-        )
+        replicator.cursor.return_value = cursor
         monkeypatch.setattr(
             "tabsdatak.conn.postgres._cdc_impl.psycopg2.connect",
             lambda **settings: replicator,
@@ -1172,7 +1169,7 @@ def _executed(engine: _Engine, fragment: str) -> tuple[int, int]:
 
 def test_the_load_time_is_the_snapshot_transaction_start_in_utc(monkeypatch):
     engine = _Engine(monkeypatch)
-    session = _transaction_session(engine)
+    session = _reused_session(engine)
 
     list(session.tables({"public.t": MagicMock()}))
 
@@ -1183,53 +1180,51 @@ def test_the_load_time_is_the_snapshot_transaction_start_in_utc(monkeypatch):
     assert snapshot_connection == now_connection
 
 
-def _transaction_session(engine: _Engine) -> TransactionSnapshotSession:
-    return TransactionSnapshotSession(
+def _reused_session(engine: _Engine) -> ReusedSlotSnapshotSession:
+    return ReusedSlotSnapshotSession(
         engine=engine, replication_settings={}, replication_slot="slot"
     )
 
 
-def test_the_wal_position_is_read_before_the_snapshot_is_exported(monkeypatch):
+def test_a_reused_slot_is_left_alone_and_the_snapshot_comes_from_a_temporary_one(
+    monkeypatch,
+):
+    """A snapshot taken beside the slot between two readings of the WAL
+    position misses a commit written before the first reading that turns
+    visible after the snapshot forms, as one waiting on a synchronous
+    standby does; the server's own exported snapshot is consistent at the
+    point it names, so the load resumes there with no window to
+    deduplicate."""
     engine = _Engine(monkeypatch)
-    session = _transaction_session(engine)
-    lsn_at, lsn_connection = _executed(engine, "pg_current_wal_lsn")
-    export_at, holder_connection = _executed(engine, "pg_export_snapshot")
-    assert lsn_at < export_at
-    assert lsn_connection != holder_connection
-    assert session.offset.lsn == 4096
+    session = _reused_session(engine)
 
-
-def test_the_window_ends_at_the_wal_position_read_after_the_export(monkeypatch):
-    engine = _Engine(monkeypatch, positions=[4096, 8192])
-    session = _transaction_session(engine)
-    export_at, _ = _executed(engine, "pg_export_snapshot")
-    lsn_reads = [
-        index
-        for index, entry in enumerate(engine.log)
-        if entry[1] == "execute" and "pg_current_wal_lsn" in entry[2]
+    assert engine.commands == [
+        "IDENTIFY_SYSTEM",
+        "CREATE_REPLICATION_SLOT slot_snapshot TEMPORARY LOGICAL wal2json "
+        "EXPORT_SNAPSHOT",
     ]
-    assert lsn_reads[0] < export_at < lsn_reads[1]
-    assert session.offset.lsn == 4096
-    assert session.window_end.lsn == 8192
-    assert (session.window_end.system_identifier, session.window_end.timeline) == (
-        SYSTEM_ID,
-        4,
-    )
+    assert session.offset.lsn == 0x1000
+    assert session.window_end is None
+    assert not any("pg_current_wal_lsn" in entry[2] for entry in engine.log)
 
 
-def test_the_snapshot_holder_is_a_read_only_repeatable_read_transaction(monkeypatch):
-    engine = _Engine(monkeypatch)
-    _transaction_session(engine)
-    _, holder_connection = _executed(engine, "pg_export_snapshot")
-    assert (
-        holder_connection,
-        "options",
-        {"isolation_level": "REPEATABLE READ", "postgresql_readonly": True},
-    ) in engine.log
+def test_a_reused_slot_must_exist_before_its_snapshot_slot_is_created(monkeypatch):
+    engine = _Engine(monkeypatch, slot_exists=False)
+    with pytest.raises(TabsdataException) as ei:
+        _reused_session(engine)
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_22
+    assert engine.commands == ["IDENTIFY_SYSTEM"]
+
+
+def test_the_snapshot_slot_name_stays_within_what_the_server_accepts():
+    assert _cdc_impl._snapshot_slot("slot") == "slot_snapshot"
+    longest = _cdc_impl._snapshot_slot("s" * 80)
+    assert len(longest) == 63
+    assert longest.endswith("_snapshot")
 
 
 def test_the_load_offset_records_the_server_it_was_read_from(monkeypatch):
-    session = _transaction_session(_Engine(monkeypatch))
+    session = _reused_session(_Engine(monkeypatch))
     assert (session.offset.system_identifier, session.offset.timeline) == (
         SYSTEM_ID,
         4,
