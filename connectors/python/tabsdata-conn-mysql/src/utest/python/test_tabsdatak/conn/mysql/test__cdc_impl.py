@@ -42,6 +42,7 @@ from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mysql import _cdc_impl
 from tabsdatak.conn.mysql._cdc_impl import (
     BINLOG_START_POSITION,
+    EPOCH,
     INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS,
     BinlogIngester,
     BinlogInitialLoadSession,
@@ -796,7 +797,7 @@ def test_poll_carries_the_gtid_of_a_transaction_it_ran_out_of_time_on():
     opening.gtid = "uuid:9475"
     bi._stream = iter([opening, MagicMock(spec=WriteRowsEvent)])
 
-    assert list(bi._poll_changes_buffered(session=None)) == []
+    assert list(bi.poll_changes(session=None)) == []
     assert bi._carry_gtid == "uuid:9475"
 
 
@@ -805,7 +806,7 @@ def test_poll_adopts_a_carried_gtid_instead_of_tagging_segment_zero():
     bi._carry_gtid = "uuid:9475"
     bi._stream = iter([])
 
-    list(bi._poll_changes_buffered(session=None))
+    list(bi.poll_changes(session=None))
 
     # Consumed by the poll that adopted it, so it is not replayed again.
     assert bi._carry_gtid is None
@@ -1065,13 +1066,143 @@ def _event(kind, **attributes):
     return event
 
 
+class _Packet:
+    """A GTID event body as the library leaves it: ``consumed`` bytes read."""
+
+    def __init__(self, body: bytes, consumed: int):
+        self.body = body
+        self.read_bytes = consumed
+
+    def read(self, size: int) -> bytes:
+        data = self.body[self.read_bytes : self.read_bytes + size]
+        self.read_bytes += size
+        return data
+
+
+def _gtid_event(gtid: str, committed_at: datetime | None = None, consumed: int = 26):
+    """A GTID event of the 8.0.1+ layout when ``committed_at`` is given --
+    flags, source, number, logical clock, commit instant, length and server
+    version -- and of the 5.7 layout, ending at the logical clock, otherwise."""
+    body = bytes(42)
+    if committed_at is not None:
+        micros = (committed_at - EPOCH) // timedelta(microseconds=1)
+        body += micros.to_bytes(7, "little") + bytes(5)
+    event = _event(GtidEvent, gtid=gtid, event_size=len(body))
+    event.packet = _Packet(body, consumed)
+    return event
+
+
+def _rows_event(rows: list[dict], timestamp: int = 0):
+    """A write event of the library's own class, which the operation is keyed
+    on, built without a packet: its rows are set where the class keeps them."""
+    from pymysqlreplication.row_event import WriteRowsEvent
+
+    event = WriteRowsEvent.__new__(WriteRowsEvent)
+    event.schema = "app"
+    event.table = "users"
+    event.columns = [_Col(3, name="id")]
+    event.timestamp = timestamp
+    event._RowsEvent__rows = [{"values": row} for row in rows]
+    return event
+
+
+COMMITTED_AT = datetime(2026, 10, 5, 6, 26, 32, 372609, tzinfo=timezone.utc)
+
+
+@pytest.mark.parametrize("consumed", [26, 42], ids=["unversioned", "versioned"])
+def test_the_commit_instant_is_read_from_the_gtid_event(consumed):
+    """The library reads the logical clock only on a server it can version,
+    so the instant is found from where the body starts, not from where the
+    library stopped."""
+    event = _gtid_event("u:11", COMMITTED_AT, consumed)
+    assert _cdc_impl._commit_timestamp(event) == COMMITTED_AT
+
+
+def test_a_replicated_transaction_keeps_its_own_commit_instant():
+    """The top bit says the source's instant follows; the replica's own is
+    the one the binlog read is about."""
+    micros = (COMMITTED_AT - EPOCH) // timedelta(microseconds=1)
+    body = bytes(42) + (micros | 1 << 55).to_bytes(7, "little") + bytes(12)
+    event = _event(GtidEvent, gtid="u:11", event_size=len(body))
+    event.packet = _Packet(body, 26)
+    assert _cdc_impl._commit_timestamp(event) == COMMITTED_AT
+
+
+def test_a_binlog_from_before_8_0_1_has_no_commit_instant():
+    assert _cdc_impl._commit_timestamp(_gtid_event("u:11")) is None
+
+
+def _polling_ingester() -> BinlogIngester:
+    bi = _ingester_with_tables(["app.users"])
+    bi.init_schema_registry(CdcFormat())
+    bi._poll_max_secs = 60
+    return bi
+
+
+def test_every_row_of_a_transaction_carries_its_commit_instant():
+    """Rows are handed over as they are read, each stamped with the instant
+    the GTID event announced, so a transaction of any size is never held
+    back until its commit event arrives."""
+    from pymysqlreplication.event import QueryEvent, XidEvent
+
+    rows = _rows_event([{"id": 1}, {"id": 2}], timestamp=1767268800)
+    events = [
+        _gtid_event("u:11", COMMITTED_AT),
+        _event(QueryEvent, query="BEGIN", timestamp=1767268800),
+        rows,
+        _event(XidEvent, timestamp=1767268800),
+    ]
+    pulled = []
+
+    def stream():
+        for event in events:
+            pulled.append(event)
+            yield event
+
+    bi = _polling_ingester()
+    bi._stream = stream()
+    poll = bi.poll_changes(session=None)
+
+    first, second = next(poll), next(poll)
+    assert pulled[-1] is rows
+    assert (first.timestamp, second.timestamp) == (COMMITTED_AT, COMMITTED_AT)
+    assert (first.new_values, second.new_values) == ({"id": 1}, {"id": 2})
+    assert (first.transaction, first.segment) == ("u:11", 11)
+    assert list(poll) == []
+    assert str(bi._executed) == "u:11"
+
+
+def test_without_a_commit_instant_rows_keep_their_statement_time(caplog):
+    from pymysqlreplication.event import QueryEvent, XidEvent
+
+    events = []
+    for gtid, at in (("u:11", 1767268800), ("u:12", 1767268900)):
+        events += [
+            _gtid_event(gtid),
+            _event(QueryEvent, query="BEGIN", timestamp=at),
+            _rows_event([{"id": 1}], timestamp=at),
+            _event(XidEvent, timestamp=at + 5),
+        ]
+    bi = _polling_ingester()
+    bi._stream = iter(events)
+
+    with caplog.at_level("WARNING"):
+        changes = list(bi.poll_changes(session=None))
+
+    assert [change.timestamp for change in changes] == [
+        datetime.fromtimestamp(1767268800, tz=timezone.utc),
+        datetime.fromtimestamp(1767268900, tz=timezone.utc),
+    ]
+    assert caplog.text.count("carries no commit instant") == 1
+
+
 def _transactions(*gtids_and_bodies):
     from pymysqlreplication.event import QueryEvent, XidEvent
     from pymysqlreplication.row_event import WriteRowsEvent
 
     events = []
     for gtid, body in gtids_and_bodies:
-        events.append(_event(GtidEvent, gtid=gtid))
+        events.append(_gtid_event(gtid))
         if body == "dml":
             events.append(_event(QueryEvent, query="BEGIN", timestamp=0))
             events.append(_event(WriteRowsEvent, schema="other", table="t", rows=[]))
@@ -1081,8 +1212,7 @@ def _transactions(*gtids_and_bodies):
     return events
 
 
-@pytest.mark.parametrize("loop", ["_poll_changes_buffered", "_poll_changes_unbuffered"])
-def test_every_transaction_read_enters_the_offset(loop):
+def test_every_transaction_read_enters_the_offset():
     bi = _ingester_with_tables(["app.users"])
     bi._poll_max_secs = 60
     bi._executed = GtidSet.parse("u:1-10")
@@ -1093,30 +1223,28 @@ def test_every_transaction_read_enters_the_offset(loop):
             ("u:13", "dml"),
         )
     )
-    list(getattr(bi, loop)(session=None))
+    list(bi.poll_changes(session=None))
     assert str(bi._executed) == "u:1-13"
     assert (bi._mark.gtid, bi._mark.source) == ("u:1-13", "u")
 
 
-@pytest.mark.parametrize("loop", ["_poll_changes_buffered", "_poll_changes_unbuffered"])
-def test_a_transaction_from_another_source_fails_the_poll(loop):
+def test_a_transaction_from_another_source_fails_the_poll():
     bi = _ingester_with_tables(["app.users"])
     bi._poll_max_secs = 60
     bi._executed = GtidSet.parse("u:1-10")
     bi._stream = iter(_transactions(("u:11", "dml"), ("v:1", "dml")))
     with pytest.raises(TabsdataException) as ei:
-        list(getattr(bi, loop)(session=None))
+        list(bi.poll_changes(session=None))
     assert ei.value.api_error is MysqlErrorCode.MYSQL_25
     assert str(bi._executed) == "u:1-11"
 
 
-@pytest.mark.parametrize("loop", ["_poll_changes_buffered", "_poll_changes_unbuffered"])
-def test_a_poll_ending_on_a_heartbeat_carries_its_open_transaction(loop):
+def test_a_poll_ending_on_a_heartbeat_carries_its_open_transaction():
     bi = _ingester_with_tables(["app.users"])
     bi._poll_max_secs = 0
     bi._carry_gtid = "u:5"
     bi._stream = iter([_event(HeartbeatLogEvent)])
-    list(getattr(bi, loop)(session=None))
+    list(bi.poll_changes(session=None))
     assert bi._carry_gtid == "u:5"
 
 

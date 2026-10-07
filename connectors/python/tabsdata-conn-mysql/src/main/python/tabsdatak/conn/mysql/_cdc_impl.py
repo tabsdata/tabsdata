@@ -134,16 +134,15 @@ BINLOG_START_POSITION = 4
 # the load, so it waits as long as the server allows.
 INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS = 31536000
 
-# Placeholder timestamp stamped on rows held in the buffered poll's
-# pending list. The real commit timestamp is written in on the next
-# XidEvent / QueryEvent("COMMIT") that closes the transaction.
-PENDING_TIMESTAMP = datetime.min.replace(tzinfo=timezone.utc)
-
-# When True the poll loop buffers rows per-transaction and stamps
-# them with the commit timestamp on XidEvent / QueryEvent("COMMIT").
-# When False each row carries its own binlog-event timestamp (the
-# behaviour pre-TS port).
-BUFFER_TRANSACTIONS = True
+# Where, in the body of the GTID event that opens a transaction, MySQL
+# 8.0.1 and later write the instant it was committed: after the flags, the
+# source UUID, the transaction number and the logical clock, as microseconds
+# since the epoch in seven bytes whose top bit says whether the original
+# commit instant of a replicated transaction follows.
+GTID_COMMIT_TIMESTAMP_OFFSET = 42
+GTID_COMMIT_TIMESTAMP_BYTES = 7
+GTID_COMMIT_TIMESTAMP_MASK = (1 << 55) - 1
+EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 # Internal start-position shape consumed by the ingester after the
@@ -553,6 +552,21 @@ def _commits_transaction(event: Any) -> bool:
     )
 
 
+def _commit_timestamp(event: Any) -> datetime | None:
+    """The instant the transaction a GTID event opens was committed, which
+    the binlog holds ahead of the transaction's rows; ``None`` on a server
+    older than 8.0.1, whose GTID events end at the logical clock."""
+    end = GTID_COMMIT_TIMESTAMP_OFFSET + GTID_COMMIT_TIMESTAMP_BYTES
+    if event.event_size < end:
+        return None
+    packet = event.packet
+    skipped = GTID_COMMIT_TIMESTAMP_OFFSET - packet.read_bytes
+    if skipped:
+        packet.read(skipped)
+    micros = int.from_bytes(packet.read(GTID_COMMIT_TIMESTAMP_BYTES), "little")
+    return EPOCH + timedelta(microseconds=micros & GTID_COMMIT_TIMESTAMP_MASK)
+
+
 class GtidSet:
     """A MySQL GTID set: for each source -- a server UUID, or a UUID and a
     tag -- the transaction numbers it holds, as disjoint closed intervals.
@@ -727,6 +741,7 @@ class BinlogIngester(CdcIngester):
         # sits below every real one, and would leave it out of the offset.
         self._carry_gtid: str | None = None
         self._warned_zone = False
+        self._warned_commit_time = False
         # Every transaction read so far, seeded with those before the start.
         self._executed = GtidSet()
         # A start by binlog position or timestamp has no set to seed from, so
@@ -1220,15 +1235,6 @@ class BinlogIngester(CdcIngester):
     # ------------------------------------------------------------------
 
     def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
-        if BUFFER_TRANSACTIONS:
-            yield from self._poll_changes_buffered(session)
-        else:
-            yield from self._poll_changes_unbuffered(session)
-
-    def _poll_changes_unbuffered(
-        self,
-        session: Any,
-    ) -> Generator[CdcChange, None, None]:
         # ``deadline`` caps the time we'll spend in a single poll
         # before returning control to the runner. Without it,
         # blocking=True + a stream that's idle would hang the
@@ -1237,31 +1243,56 @@ class BinlogIngester(CdcIngester):
         gtid: str | None = self._carry_gtid
         self._carry_gtid = None
         offset = self._begin_transaction(gtid) if gtid is not None else None
+        committed_at: datetime | None = None
         seq: int = 0
         if self._stream is None:
             return
         for event in self._stream:
             if isinstance(event, GtidEvent):
-                if gtid is not None:
-                    # Advance the mark to the last completed GTID
-                    # before adopting the new one.
+                if gtid is not None and seq == 0:
+                    # The transaction before ended with no commit event of its
+                    # own, which a statement the stream does not see does.
                     self._complete_transaction(gtid)
                     gtid = offset = None
-                if time.monotonic() > deadline:
+                if seq == 0 and time.monotonic() > deadline:
                     self._carry_gtid = event.gtid
                     return
                 gtid = event.gtid
                 offset = self._begin_transaction(gtid)
+                committed_at = self._committed_at(event)
                 seq = 0
             elif isinstance(event, (XidEvent, QueryEvent)):
+                if isinstance(event, QueryEvent):
+                    truncated = self._truncate_change(
+                        event,
+                        gtid or "",
+                        offset or self._offset_of(self._executed),
+                    )
+                    if truncated is not None:
+                        seq += 1
+                        truncated.sequence = truncated.ordinal = seq
+                        yield truncated
+                        if gtid is not None:
+                            self._complete_transaction(gtid)
+                        gtid = offset = None
+                        seq = 0
+                        continue
                 if _opens_transaction(event):
+                    continue
+                if not _commits_transaction(event):
+                    # A statement that commits by itself (DDL): its transaction
+                    # holds no rows, so it is complete.
+                    if gtid is not None and seq == 0:
+                        self._complete_transaction(gtid)
+                        gtid = offset = None
+                        seq = 0
                     continue
                 if gtid is not None:
                     self._complete_transaction(gtid)
                 gtid = offset = None
                 seq = 0
             elif isinstance(event, HeartbeatLogEvent):
-                if time.monotonic() > deadline:
+                if seq == 0 and time.monotonic() > deadline:
                     self._carry_gtid = gtid
                     return
             elif isinstance(event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)):
@@ -1269,7 +1300,9 @@ class BinlogIngester(CdcIngester):
                 if qualified is None:
                     continue
                 op = _OPERATION_MAP[type(event)]
-                commit_ts = datetime.fromtimestamp(event.timestamp, tz=timezone.utc)
+                timestamp = committed_at or datetime.fromtimestamp(
+                    event.timestamp, tz=timezone.utc
+                )
                 raw_schema = self._extract_raw_schema(event)
                 if self._schema_registry is None:  # pragma: no cover
                     return
@@ -1298,7 +1331,7 @@ class BinlogIngester(CdcIngester):
                         operation=op,
                         transaction=gtid or "",
                         sequence=seq,
-                        timestamp=commit_ts,
+                        timestamp=timestamp,
                         table=qualified,
                         new_values=new_values,
                         old_values=old_values,
@@ -1308,118 +1341,16 @@ class BinlogIngester(CdcIngester):
                         schema=schema_version,
                     )
 
-    def _poll_changes_buffered(
-        self,
-        session: Any,
-    ) -> Generator[CdcChange, None, None]:
-        # Buffered mode holds rows in ``pending`` until the closing
-        # XidEvent / QueryEvent("COMMIT") arrives, so every yielded
-        # row carries the *commit* timestamp (not the row's own
-        # binlog-event timestamp).
-        deadline = time.monotonic() + self._poll_max_secs
-        gtid: str | None = self._carry_gtid
-        self._carry_gtid = None
-        offset = self._begin_transaction(gtid) if gtid is not None else None
-        seq: int = 0
-        pending: list[CdcDataChange] = []
-        if self._stream is None:
-            return
-        for event in self._stream:
-            if isinstance(event, GtidEvent):
-                if gtid is not None and not pending:
-                    # The transaction before ended with no commit event of its
-                    # own, which a statement the stream does not see does.
-                    self._complete_transaction(gtid)
-                    gtid = offset = None
-                if not pending and time.monotonic() > deadline:
-                    self._carry_gtid = event.gtid
-                    return
-                gtid = event.gtid
-                offset = self._begin_transaction(gtid)
-                seq = 0
-            elif isinstance(event, (XidEvent, QueryEvent)):
-                if isinstance(event, QueryEvent):
-                    truncated = self._truncate_change(
-                        event,
-                        gtid or "",
-                        offset or self._offset_of(self._executed),
-                    )
-                    if truncated is not None:
-                        seq += 1
-                        truncated.sequence = truncated.ordinal = seq
-                        yield truncated
-                        if gtid is not None:
-                            self._complete_transaction(gtid)
-                        gtid = offset = None
-                        seq = 0
-                        continue
-                if _opens_transaction(event):
-                    continue
-                if not _commits_transaction(event):
-                    # A statement that commits by itself (DDL): its transaction
-                    # holds no rows, so it is complete.
-                    if gtid is not None and not pending:
-                        self._complete_transaction(gtid)
-                        gtid = offset = None
-                        seq = 0
-                    continue
-                commit_timestamp = datetime.fromtimestamp(
-                    event.timestamp,
-                    tz=timezone.utc,
-                )
-                for change in pending:
-                    change.timestamp = commit_timestamp
-                    yield change
-                if gtid is not None:
-                    self._complete_transaction(gtid)
-                pending = []
-                gtid = offset = None
-                seq = 0
-            elif isinstance(event, HeartbeatLogEvent):
-                if not pending and time.monotonic() > deadline:
-                    self._carry_gtid = gtid
-                    return
-            elif isinstance(event, (WriteRowsEvent, UpdateRowsEvent, DeleteRowsEvent)):
-                qualified = self._as_qualified_table(event.schema, event.table)
-                if qualified is None:
-                    continue
-                op = _OPERATION_MAP[type(event)]
-                raw_schema = self._extract_raw_schema(event)
-                if self._schema_registry is None:  # pragma: no cover
-                    return
-                schema_version = self._schema_registry.register_from_log(
-                    qualified,
-                    raw_schema,
-                )
-                stamps = self._timestamp_columns(event)
-                for row in event.rows:
-                    seq += 1
-                    match event:
-                        case WriteRowsEvent():
-                            new_values = row["values"]
-                            old_values = {column: None for column in new_values}
-                        case UpdateRowsEvent():
-                            new_values = row["after_values"]
-                            old_values = row["before_values"]
-                        case DeleteRowsEvent():
-                            new_values = row["values"]
-                            old_values = {column: None for column in new_values}
-                        case _:  # pragma: no cover - unreachable
-                            continue
-                    self._to_server_clock(new_values, stamps)
-                    self._to_server_clock(old_values, stamps)
-                    pending.append(
-                        CdcDataChange(
-                            operation=op,
-                            transaction=gtid or "",
-                            sequence=seq,
-                            timestamp=PENDING_TIMESTAMP,
-                            table=qualified,
-                            new_values=new_values,
-                            old_values=old_values,
-                            offset=offset or self._offset_of(self._executed),
-                            segment=self._transaction_number(gtid),
-                            ordinal=seq,
-                            schema=schema_version,
-                        )
-                    )
+    def _committed_at(self, event: Any) -> datetime | None:
+        """The commit instant every row of the transaction ``event`` opens is
+        stamped with. A server too old to write it leaves each row its own
+        statement time, which can precede the commit by as long as the
+        transaction ran, said once."""
+        committed_at = _commit_timestamp(event)
+        if committed_at is None and not self._warned_commit_time:
+            self._warned_commit_time = True
+            logger.warning(
+                "The MySQL binlog carries no commit instant (server older than "
+                "8.0.1); every row is published with its statement time"
+            )
+        return committed_at
