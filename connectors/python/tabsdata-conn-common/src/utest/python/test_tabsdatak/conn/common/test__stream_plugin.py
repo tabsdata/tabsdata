@@ -402,7 +402,11 @@ def test_the_loop_rests_only_after_a_poll_that_found_nothing(monkeypatch):
     monkeypatch.setattr(_plugin.StopSignal, "install", lambda: signal)
     ctx = FakeCtx(active_values=[True, True, True, True, False])
 
-    Plugin().stream(ctx=ctx, ingester=Trickle(), cfg=StreamRunConfig(poll_idle_secs=7))
+    Plugin().stream(
+        ctx=ctx,
+        ingester=Trickle(),
+        cfg=StreamRunConfig(poll=PollThresholds(max_secs=1, idle_secs=7)),
+    )
 
     assert signal.waits == [7, 7]
 
@@ -424,11 +428,8 @@ def test_each_poll_that_found_records_logs_the_time_spent_on_the_source(
     with caplog.at_level("DEBUG", logger="tabsdatak.conn.common._stream._poll"):
         Plugin().stream(ctx=ctx, ingester=Trickle(), cfg=cfg())
 
-    polled = [r.getMessage() for r in caplog.records if "Polled" in r.getMessage()]
-    assert [line.split(" from")[0] for line in polled] == [
-        "Polled 2 record(s)",
-        "Polled 1 record(s)",
-    ]
+    polled = [r for r in caplog.records if r.name.endswith("._poll")]
+    assert [r.args[0] for r in polled] == [2, 1]
 
 
 def disk_arguments(monkeypatch, disk) -> dict:

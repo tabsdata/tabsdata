@@ -282,7 +282,6 @@ class KafkaStreamSrcConn(Conn):
         return _convert(self.group_id, str)
 
 
-
 SrcCfgKey: TypeAlias = Literal[
     "tabsdata.kafka.poll.max_secs",
     "tabsdata.kafka.poll.idle_secs",

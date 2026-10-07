@@ -79,6 +79,4 @@ def test_a_poll_with_records_logs_them_with_its_seconds(caplog):
     list(poll)
     with caplog.at_level("DEBUG", logger="tabsdatak.conn.common._stream._poll"):
         poll.log()
-    assert [r.getMessage() for r in caplog.records] == [
-        "Polled 1 record(s) from the source in 1.250 s"
-    ]
+    assert [(r.levelname, r.args) for r in caplog.records] == [("DEBUG", (1, 1.25))]

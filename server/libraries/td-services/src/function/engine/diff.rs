@@ -246,7 +246,7 @@ fn desired_table(
 ) -> Result<TableInsertDB, TdError> {
     Ok(TableInsertDB {
         id: TableVersionId::default(),
-        parent_table_id: table.parent_table_id.clone(),
+        parent_table_id: table.parent_table_id,
         collection_id: function.collection_id,
         table_id: table.table_id,
         name: table.name.clone(),
