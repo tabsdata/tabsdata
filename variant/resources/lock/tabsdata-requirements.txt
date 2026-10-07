@@ -4,7 +4,7 @@
 
 accessify==0.3.1
 aiohappyeyeballs==2.7.1
-aiohttp==3.14.3
+aiohttp==3.14.4
 aiosignal==1.4.0
 annotated-types==0.8.0
 anyio==4.14.2
@@ -24,7 +24,7 @@ azure-storage-blob==12.28.0
 base32hex==1.0.2
 boto3==1.43.78
 boto3-stubs==1.43.78
-botocore==1.43.106
+botocore==1.43.108
 botocore-stubs==1.43.67
 build==1.6.1
 cachetools==6.2.6
@@ -52,7 +52,7 @@ filelock==3.25.2
 frozenlist==1.8.0
 fsspec==2026.9.0
 google-api-core==2.30.3
-google-auth==2.59.1
+google-auth==2.60.0
 google-cloud-bigquery==3.40.1
 google-cloud-compute==1.52.0
 google-cloud-container==2.66.0
@@ -90,7 +90,7 @@ msal==1.39.0
 msal-extensions==1.3.1
 msrest==0.7.1
 multidict==6.9.1
-mypy-boto3-glue==1.43.106
+mypy-boto3-glue==1.43.108
 mysql-replication==1.0.15
 numpy==2.4.3
 oauthlib==3.3.1
@@ -130,9 +130,9 @@ pyodbc==5.3.0
 pyopenssl==26.1.0
 pyparsing==3.3.3
 pyproject-hooks==1.3.3
-pyroaring==1.1.0
+pyroaring==1.2.0
 python-dateutil==2.9.0.post0
-pytz==2026.4
+pytz==2026.5
 pywin32==311 ; sys_platform == 'win32'
 pyyaml==6.0.3
 referencing==0.37.0
@@ -142,7 +142,7 @@ requests-oauthlib==2.0.0
 requests-toolbelt==1.0.0
 rich==14.3.3
 rich-click==1.9.7
-rpds-py==2026.6.3
+rpds-py==2026.9.1
 ruamel-yaml==0.19.1
 s3transfer==0.19.2
 scramp==1.4.17
@@ -163,16 +163,16 @@ types-pyyaml==6.0.3
 types-s3transfer==0.16.0
 typing-extensions==4.15.0
 typing-inspection==0.4.4
-tzdata==2026.4
+tzdata==2026.5
 tzlocal==5.3.1
 urllib3==2.8.0
 uuid-v7==1.0.0
 uuid6==2025.0.1
 uv==0.10.12
-wcwidth==0.9.1
+wcwidth==0.9.2
 websocket-client==1.9.2
 wheel==0.48.0
 yarl==1.25.1
 zeep==4.3.3
-zipp==4.1.0
+zipp==4.1.1
 zstandard==0.25.0
