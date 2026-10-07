@@ -67,7 +67,7 @@ class Backend(Protocol):
         found free one. Only port-using backends implement it."""
 
     def use_hostname(self, host: str) -> None:
-        """Bind the hostname this create advertises instead of localhost
+        """Bind the hostname this create advertises instead of 127.0.0.1
         (``--sys-hostname``), so the endpoints ``plan_system`` records are usable
         from other machines. Only backends that publish one implement it (see
         ``systems._common.host``)."""

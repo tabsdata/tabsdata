@@ -27,8 +27,8 @@ def _tunnel_status(meta: dict[str, str]) -> tuple[bool, str]:
     if not ssh.tunnel_alive(pid):
         return False, f"ssh tunnel to {where} is gone (pid {pid})"
     if not (port.isdigit() and port_open("127.0.0.1", int(port))):
-        return False, f"ssh tunnel to {where} is up but localhost:{port} is not"
-    return True, f"tunnelled to {where} via localhost:{port}"
+        return False, f"ssh tunnel to {where} is up but 127.0.0.1:{port} is not"
+    return True, f"tunnelled to {where} via 127.0.0.1:{port}"
 
 
 def run(ctx: cli.Context) -> int:

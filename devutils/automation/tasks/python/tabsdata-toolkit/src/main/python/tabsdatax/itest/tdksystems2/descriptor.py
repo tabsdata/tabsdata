@@ -54,7 +54,7 @@ class SystemInfo(BaseModel):
     # these (`<flag>: value`) but omits the auto-generated defaults (free port,
     # generated password) a fresh create re-derives.
     opt_literals: list[str] = Field(default_factory=list)
-    # the `--sys-hostname` this system was created with (empty = plain localhost),
+    # the `--sys-hostname` this system was created with (empty = 127.0.0.1),
     # kept so a manifest replay advertises the same host again.
     sys_hostname: str = ""
 

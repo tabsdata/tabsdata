@@ -14,7 +14,7 @@
                                           # one per type ('--sys ALL' is not it)
                                           # --sys defaults to TYPE; [type options] too
                                           # --sys-hostname: advertise HOST instead of
-                                          # localhost, so the descriptors (and the
+                                          # 127.0.0.1, so the descriptors (and the
                                           # domains built on them) work off this box
     tdx-system destroy --sys NAME|s1,s2|ALL | --manifest FILE [-f] [--dry-run]
     tdx-system status  --sys NAME|list|ALL | --manifest FILE

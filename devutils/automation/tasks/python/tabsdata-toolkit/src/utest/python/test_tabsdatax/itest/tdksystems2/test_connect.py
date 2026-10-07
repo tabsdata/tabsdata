@@ -127,7 +127,7 @@ def test_connect_writes_a_local_descriptor_pointing_at_the_tunnel(remote):
     info = descriptor.load(store.system_path("remote1"))
     assert info.system == "mysql" and info.name == "remote1"
     # the near end of the tunnel, not the port the container publishes remotely
-    assert info.meta["HOST"] == "localhost"
+    assert info.meta["HOST"] == "127.0.0.1"
     assert info.meta["PORT"] != "33061" and info.meta["PORT"].isdigit()
     assert info.meta[ssh.SSH_TARGET_PORT] == "33061"
     assert info.meta[ssh.TUNNEL_PID] == "4242"

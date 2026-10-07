@@ -5,7 +5,10 @@
 """The hostname a container system advertises in its descriptor.
 
 A container is published on a host port, and by default the descriptor says that
-port lives on ``localhost`` — true only for the machine that ran docker. ``create
+port lives on the loopback address — true only for the machine that ran docker. It
+is ``127.0.0.1`` rather than the name ``localhost``: the SQL Server ODBC driver
+connects to the machine's own hostname for ``localhost``, and a network's DNS can
+resolve that hostname to another device, so every connection times out. ``create
 --sys-hostname HOST`` binds another name here, and the backend plans its endpoints
 around it, so the descriptors (and every domain URI derived from them) are usable
 from other machines: a system store copied elsewhere, or a connector running off
@@ -16,7 +19,7 @@ tells the user the flag has nothing to bind to.
 
 from __future__ import annotations
 
-DEFAULT_HOSTNAME = "localhost"
+DEFAULT_HOSTNAME = "127.0.0.1"
 
 
 class HostMixin:

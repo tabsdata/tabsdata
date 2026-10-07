@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from tabsdatax.itest.tdksystems2.errors import TdxError
 from tabsdatax.itest.tdksystems2.systems._common import container_info
+from tabsdatax.itest.tdksystems2.systems._common.host import DEFAULT_HOSTNAME
 from tabsdatax.itest.tdksystems2.systems._common.sql import Admin, SqlContainerBackend
 
 _SYSTEM_DBS = frozenset({"admin", "local", "config"})
@@ -71,7 +72,7 @@ class MongoDB(SqlContainerBackend):
 
     def _domain_admin(self, domain_meta: dict[str, str]) -> Admin:
         return Admin(
-            host=domain_meta.get("HOST", "localhost"),
+            host=domain_meta.get("HOST", DEFAULT_HOSTNAME),
             port=domain_meta.get("PORT", ""),
             user=domain_meta.get("SYS_ADMIN_USER", self.root_user),
             password=domain_meta.get("SYS_ADMIN_PASSWORD", ""),

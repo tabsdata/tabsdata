@@ -8,7 +8,7 @@ Fetches that machine's (encrypted) system descriptor over SSH, opens a detached
 ``ssh -L`` tunnel to the container's published port, and writes a *local*
 descriptor whose HOST/PORT point at the near end of it. Everything downstream —
 ``tdx-domain create``, the data plane, a connector under test — then works
-against localhost with no local Docker daemon and no knowledge that the system is
+against 127.0.0.1 with no local Docker daemon and no knowledge that the system is
 remote.
 
 Two secrets are in play: the remote descriptor is encrypted under the server's
@@ -121,14 +121,14 @@ def run(ctx: cli.Context) -> int:
     local_port = find_free_port()
     log_path = f"{path}.ssh.log"
     console.out(
-        f">>> opening ssh tunnel to {endpoint.target}: localhost:{local_port} -> "
-        f"localhost:{target_port} (container {remote.meta.get('CONTAINER', '?')})"
+        f">>> opening ssh tunnel to {endpoint.target}: 127.0.0.1:{local_port} -> "
+        f"127.0.0.1:{target_port} (container {remote.meta.get('CONTAINER', '?')})"
     )
     pid = ssh.open_tunnel(endpoint, local_port, int(target_port), log_path)
 
     meta = {k: remote.meta[k] for k in _CARRIED if k in remote.meta}
     meta.update({
-        "HOST": "localhost",
+        "HOST": "127.0.0.1",
         "PORT": str(local_port),
         ssh.SSH_HOST: endpoint.host,
         ssh.SSH_USER: endpoint.user or "",
@@ -143,7 +143,7 @@ def run(ctx: cli.Context) -> int:
         ssh.close_tunnel(pid)
         raise
     console.good(
-        f"connected '{name}' -> {endpoint.target} (localhost:{local_port}); "
+        f"connected '{name}' -> {endpoint.target} (127.0.0.1:{local_port}); "
         f"destroy it to close the tunnel"
     )
     return 0

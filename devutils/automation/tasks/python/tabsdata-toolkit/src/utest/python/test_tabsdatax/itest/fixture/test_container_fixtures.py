@@ -53,7 +53,7 @@ def test_container_system(provision, slug, kind, staging, Sys, Dom):
     provision.system(slug, "s")
     obj = common.load("s", Sys)
     assert isinstance(obj, Sys) and obj.system_type == slug
-    assert obj.system_kind == kind and obj.host == "localhost"
+    assert obj.system_kind == kind and obj.host == "127.0.0.1"
     assert obj.container == "tdx2_s" and obj.image  # tdx2_-prefixed name + image
     if staging:
         assert isinstance(obj.sys_path, Path)
@@ -65,7 +65,7 @@ def test_container_domain(provision, slug, kind, staging, Sys, Dom):
     provision.domain(slug, "s", "d")
     obj = common.load("d", Dom)
     assert isinstance(obj, Dom) and obj.system_type == slug
-    assert obj.system_kind == kind and obj.host == "localhost"
+    assert obj.system_kind == kind and obj.host == "127.0.0.1"
     # The entity (db) is the prefixed external name (default DOMAIN_PREFIX),
     # compared case-insensitively since some backends upper-case identifiers
     # (db2); the descriptor's logical name stays "d". The domain's connection

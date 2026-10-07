@@ -5,7 +5,7 @@
 """``create --sys-hostname``: the host a system advertises to everyone else.
 
 A container is published on a host port, and by default the descriptor calls that
-host ``localhost`` — so the domains built on it (and the connections built on
+host ``127.0.0.1`` — so the domains built on it (and the connections built on
 those) only work on the machine that ran docker. These check that the flag
 reaches every endpoint the descriptor records, including the address Redpanda
 hands back to a client that bootstraps against it.
@@ -58,10 +58,10 @@ def test_hostname_reaches_the_domain_uris(stores, faked):
     assert f"{HOST}:{sdoc.meta['PORT']}" in meta["URI"]
 
 
-def test_default_stays_localhost(stores, faked):
+def test_default_stays_loopback(stores, faked):
     assert _sys(["create", "--type", "mysql", "--sys", "s"]) == 0
     sdoc = descriptor.load(store.system_path("s"))
-    assert sdoc.meta["HOST"] == "localhost" and sdoc.sys_hostname == ""
+    assert sdoc.meta["HOST"] == "127.0.0.1" and sdoc.sys_hostname == ""
 
 
 def test_a_system_with_no_host_says_so_and_still_creates(stores, capsys):
@@ -160,7 +160,7 @@ def test_druid_probes_the_stack_over_loopback(monkeypatch):
     backend.wait_ready(meta, 1)
     assert backend.system_health(meta)[0]
     assert polled and all(HOST not in url for url in polled)
-    assert all(url.startswith("http://localhost:") for url in polled)
+    assert all(url.startswith("http://127.0.0.1:") for url in polled)
     ports = {druid.Druid._port(url) for url in polled}
     assert ports == {druid.Druid._port(meta["OVERLORD_URL"]), druid.Druid._port(meta["ROUTER_URL"])}
 

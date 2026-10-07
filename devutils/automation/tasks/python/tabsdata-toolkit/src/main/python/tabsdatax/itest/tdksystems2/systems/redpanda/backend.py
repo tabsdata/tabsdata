@@ -29,6 +29,7 @@ from tabsdatax.itest.tdksystems2.shell import (
     require_docker,
 )
 from tabsdatax.itest.tdksystems2.systems._common import container_info
+from tabsdatax.itest.tdksystems2.systems._common.host import DEFAULT_HOSTNAME
 from tabsdatax.itest.tdksystems2.systems._common.sql import SqlContainerBackend
 
 _REGISTRY_INTERNAL_PORT = 8081
@@ -130,7 +131,7 @@ class Redpanda(SqlContainerBackend):
         from confluent_kafka.admin import AdminClient
 
         return AdminClient({
-            "bootstrap.servers": f"{meta.get('HOST', 'localhost')}:{meta['PORT']}"
+            "bootstrap.servers": f"{meta.get('HOST', DEFAULT_HOSTNAME)}:{meta['PORT']}"
         })
 
     def _topics(self, client) -> list[str]:

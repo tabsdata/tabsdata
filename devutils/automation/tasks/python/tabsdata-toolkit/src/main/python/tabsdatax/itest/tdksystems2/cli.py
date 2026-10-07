@@ -208,7 +208,7 @@ def add_sys_hostname(parser: argparse.ArgumentParser) -> None:
         default=None,
         metavar="HOST",
         help="hostname the system advertises in its descriptor instead of "
-        "localhost, so the domains created from it are reachable from other "
+        "127.0.0.1, so the domains created from it are reachable from other "
         "machines (container systems only)",
     )
 
