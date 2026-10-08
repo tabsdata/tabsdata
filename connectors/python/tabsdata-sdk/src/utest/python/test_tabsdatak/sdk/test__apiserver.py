@@ -185,6 +185,180 @@ def test_apiserver_refresh_invoked_when_within_buffer(monkeypatch):
     assert called == {"yes": True}
 
 
+class Reply:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+
+def session(tmp_path, bearer="b0", refresh="r0", expires_in=3600):
+    s = a.APIServer("host", credentials_file=str(tmp_path / "connection.json"))
+    s.bearer_token = bearer
+    s.refresh_token = refresh
+    s.token_type = "Bearer"
+    s.expires_in = expires_in
+    s.expiration_time = time.time() + expires_in
+    s._store_in_file(s.credentials_file)
+    return s
+
+
+def another_process_refreshes(s, bearer, refresh):
+    other = a.APIServer("host", credentials_file=s.credentials_file)
+    other.adopt(s.credentials())
+    other.bearer_token = bearer
+    other.refresh_token = refresh
+    other.expiration_time = time.time() + 3600
+    other._store_in_file(other.credentials_file)
+
+
+def test_a_request_rejected_after_another_process_refreshed_retries_with_its_session(
+    tmp_path, monkeypatch
+):
+    s = session(tmp_path)
+    another_process_refreshes(s, "b1", "r1")
+    sent = []
+
+    def request_once(method, path, content_type=None, **kwargs):
+        sent.append(s.bearer_token)
+        return Reply(401 if s.bearer_token == "b0" else 200)
+
+    monkeypatch.setattr(s, "request_once", request_once)
+    assert s.get("/x").status_code == 200
+    assert sent == ["b0", "b1"]
+    assert s.refresh_token == "r1"
+
+
+def test_a_rejected_request_waits_for_a_refresh_still_in_flight(tmp_path, monkeypatch):
+    s = session(tmp_path)
+    monkeypatch.setattr(a, "AUTH_RETRY_FIRST_PAUSE", 0.01)
+    attempts = []
+
+    def request_once(method, path, content_type=None, **kwargs):
+        attempts.append(s.bearer_token)
+        return Reply(401 if s.bearer_token == "b0" else 200)
+
+    real_sleep = time.sleep
+    pauses = []
+
+    def sleep(seconds):
+        pauses.append(seconds)
+        if len(pauses) == 3:
+            another_process_refreshes(s, "b1", "r1")
+        real_sleep(0)
+
+    monkeypatch.setattr(s, "request_once", request_once)
+    monkeypatch.setattr(a.time, "sleep", sleep)
+    assert s.post("/x", json={}).status_code == 200
+    assert attempts == ["b0", "b1"]
+    assert pauses == [0.01, 0.02, 0.04]
+
+
+def test_a_rejected_request_gives_up_after_the_retry_window(tmp_path, monkeypatch):
+    s = session(tmp_path)
+    monkeypatch.setattr(a, "AUTH_RETRY_SECONDS", 0.2)
+    monkeypatch.setattr(a, "AUTH_RETRY_FIRST_PAUSE", 0.01)
+    monkeypatch.setattr(s, "request_once", lambda *args, **kwargs: Reply(401))
+    started = time.monotonic()
+    assert s.delete("/x").status_code == 401
+    assert 0.2 <= time.monotonic() - started < 2
+
+
+def test_an_expired_session_fails_without_waiting(tmp_path, monkeypatch):
+    s = session(tmp_path, expires_in=-10)
+    calls = []
+
+    def request_once(*args, **kwargs):
+        calls.append(1)
+        return Reply(401)
+
+    monkeypatch.setattr(s, "request_once", request_once)
+    started = time.monotonic()
+    assert s.get("/x").status_code == 401
+    assert time.monotonic() - started < 1
+    assert calls == [1]
+
+
+def test_an_expired_process_adopts_the_session_another_process_refreshed(
+    tmp_path, monkeypatch
+):
+    s = session(tmp_path, expires_in=-10)
+    another_process_refreshes(s, "b1", "r1")
+    sent = []
+
+    def request_once(method, path, content_type=None, **kwargs):
+        sent.append(s.bearer_token)
+        return Reply(200)
+
+    monkeypatch.setattr(s, "request_once", request_once)
+    assert s.get("/x").status_code == 200
+    assert sent == ["b1"]
+
+
+def test_a_service_token_or_login_request_is_never_retried(tmp_path, monkeypatch):
+    s = session(tmp_path)
+    s.refresh_token = None
+    calls = []
+
+    def request_once(*args, **kwargs):
+        calls.append(1)
+        return Reply(401)
+
+    monkeypatch.setattr(s, "request_once", request_once)
+    assert s.get("/x").status_code == 401
+    s.refresh_token = "r0"
+    assert s.post("/auth/login", json={}, refresh_if_needed=False).status_code == 401
+    assert calls == [1, 1]
+
+
+def test_a_refresh_adopts_the_session_another_process_already_refreshed(
+    tmp_path, monkeypatch
+):
+    s = session(tmp_path, expires_in=a.REFRESH_BUFFER_IN_SECONDS - 10)
+    another_process_refreshes(s, "b1", "r1")
+    monkeypatch.setattr(
+        s, "authentication_refresh", lambda: pytest.fail("refreshed twice")
+    )
+    s._refresh_token_if_needed()
+    assert (s.bearer_token, s.refresh_token) == ("b1", "r1")
+
+
+def test_a_refresh_happens_once_under_the_lock_and_is_stored(tmp_path, monkeypatch):
+    s = session(tmp_path, expires_in=a.REFRESH_BUFFER_IN_SECONDS - 10)
+
+    def refresh():
+        s.bearer_token, s.refresh_token = "b1", "r1"
+        s.expiration_time = time.time() + 3600
+        s._store_in_file(s.credentials_file)
+
+    monkeypatch.setattr(s, "authentication_refresh", refresh)
+    s._refresh_token_if_needed()
+    late = a.APIServer("host", credentials_file=s.credentials_file)
+    late.adopt(s.credentials())
+    late.bearer_token, late.refresh_token = "b0", "r0"
+    late.expiration_time = time.time() + a.REFRESH_BUFFER_IN_SECONDS - 10
+    monkeypatch.setattr(
+        late, "authentication_refresh", lambda: pytest.fail("refreshed twice")
+    )
+    late._refresh_token_if_needed()
+    assert (late.bearer_token, late.refresh_token) == ("b1", "r1")
+
+
+def test_a_failed_refresh_lets_the_request_go_on(tmp_path, monkeypatch):
+    s = session(tmp_path, expires_in=a.REFRESH_BUFFER_IN_SECONDS - 10)
+
+    def refresh():
+        raise a.APIServerError({"error_description": "Invalid refresh token"})
+
+    monkeypatch.setattr(s, "authentication_refresh", refresh)
+    monkeypatch.setattr(s, "request_once", lambda *args, **kwargs: Reply(200))
+    assert s.get("/x").status_code == 200
+
+
+def test_a_credentials_file_of_another_server_is_ignored(tmp_path):
+    s = session(tmp_path)
+    other = a.APIServer("elsewhere", credentials_file=s.credentials_file)
+    assert other.stored_credentials() is None
+
+
 # ---------------------------------------------------------------------------
 # Project scoping: `_scoped` builds `/projects/{project}/...` paths from the
 # active project; scoping is a per-endpoint decision, so paths not built

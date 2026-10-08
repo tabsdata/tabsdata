@@ -7,11 +7,10 @@ apiserver. The high-level user-facing SDK in
 :mod:`tabsdatak.sdk.tabsdata_server` wraps this with friendlier method
 names; consumers normally don't talk to ``APIServer`` directly."""
 
-import json
 import logging
 import os
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from http import HTTPStatus
 from typing import List
 from urllib.parse import urlparse
@@ -19,6 +18,8 @@ from urllib.parse import urlparse
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3 import Retry
+
+from tabsdatak.sdk import _credentials
 
 # Pytest sets this env var to the current node id while a test is
 # running; we use its presence to switch between the pooled session
@@ -44,6 +45,10 @@ READ_TIMEOUT = 60 * 5
 MIN_CONNECTIONS = 2
 MAX_CONNECTIONS = 8
 REFRESH_BUFFER_IN_SECONDS = 300  # 5 minutes
+AUTH_RETRY_SECONDS = 30.0
+AUTH_RETRY_FIRST_PAUSE = 0.1
+AUTH_RETRY_MAX_PAUSE = 2.0
+REFRESH_LOCK_SECONDS = 30.0
 
 
 DEFAULT_LIST_ENDPOINT_PARAMETERS = [
@@ -257,17 +262,90 @@ class APIServer:
             return None
 
     def _refresh_token_if_needed(self):
-        if not self.refresh_token or not self.expiration_time:
-            # No refresh token or expiration time, no need to refresh
+        if not self.refresh_near() and not self.expired():
             return
+        lock = (
+            _credentials.locked(self.credentials_file, REFRESH_LOCK_SECONDS)
+            if self.credentials_file
+            else nullcontext()
+        )
+        with lock:
+            stored = self.stored_credentials()
+            if stored and stored.get("refresh_token") != self.refresh_token:
+                self.adopt(stored)
+            if not self.refresh_near():
+                return
+            logger.debug("Refreshing authentication token")
+            try:
+                self.authentication_refresh()
+            except APIServerError as e:
+                logger.debug(f"Authentication token refresh failed: {e}")
+
+    def expired(self) -> bool:
+        return bool(
+            self.refresh_token
+            and self.expiration_time
+            and self.expiration_time < time.time()
+        )
+
+    def refresh_near(self) -> bool:
+        if not self.refresh_token or not self.expiration_time:
+            return False
         current_time = time.time()
         already_expired = self.expiration_time < current_time
         near_expiration = (
             current_time > self.expiration_time - REFRESH_BUFFER_IN_SECONDS
         )
-        if near_expiration and not already_expired:
-            logger.debug("Refreshing authentication token")
-            self.authentication_refresh()
+        return near_expiration and not already_expired
+
+    def stored_credentials(self) -> dict | None:
+        if not self.credentials_file:
+            return None
+        try:
+            stored = _credentials.read(self.credentials_file)
+        except (OSError, ValueError) as e:
+            logger.debug(f"Could not read the credentials file: {e}")
+            return None
+        if not stored or stored.get("url") != self.url:
+            return None
+        return stored
+
+    def credentials(self) -> dict:
+        return {
+            "url": self.url,
+            "bearer_token": self.bearer_token,
+            "refresh_token": self.refresh_token,
+            "token_type": self.token_type,
+            "expires_in": self.expires_in,
+            "expiration_time": self.expiration_time,
+        }
+
+    def adopt(self, stored: dict):
+        self.bearer_token = stored.get("bearer_token")
+        self.refresh_token = stored.get("refresh_token")
+        self.token_type = stored.get("token_type")
+        self.expires_in = stored.get("expires_in")
+        self.expiration_time = stored.get("expiration_time")
+
+    def recoverable(self) -> bool:
+        return bool(self.credentials_file and self.refresh_token)
+
+    def await_new_token(self, rejected: str | None, deadline: float) -> bool:
+        pause = AUTH_RETRY_FIRST_PAUSE
+        while True:
+            remaining = deadline - time.monotonic()
+            with _credentials.locked(self.credentials_file, max(remaining, 0)):
+                stored = self.stored_credentials()
+            if stored and stored.get("bearer_token") not in (None, rejected):
+                self.adopt(stored)
+                return True
+            if self.expired():
+                return False
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(pause, remaining))
+            pause = min(pause * 2, AUTH_RETRY_MAX_PAUSE)
 
     @property
     def authentication_header(self):
@@ -277,31 +355,51 @@ class APIServer:
             else {}
         )
 
-    def get(self, path, params=None, refresh_if_needed=True):
-        headers = {}
-
+    def send_request(
+        self,
+        method: str,
+        path: str,
+        refresh_if_needed: bool,
+        content_type=None,
+        **kwargs,
+    ):
         if refresh_if_needed:
             self._refresh_token_if_needed()
+        response = self.request_once(method, path, content_type, **kwargs)
+        deadline = None
+        while (
+            refresh_if_needed
+            and response.status_code == HTTPStatus.UNAUTHORIZED
+            and self.recoverable()
+        ):
+            if deadline is None:
+                deadline = time.monotonic() + AUTH_RETRY_SECONDS
+            if not self.await_new_token(self.bearer_token, deadline):
+                break
+            logger.debug("Retrying with the session another process refreshed")
+            response = self.request_once(method, path, content_type, **kwargs)
+        return response
 
-        headers.update(self.authentication_header)
-
-        resolved = self.url + path
+    def request_once(self, method: str, path: str, content_type=None, **kwargs):
+        headers = dict(self.authentication_header)
+        if content_type:
+            headers["Content-Type"] = content_type
         if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
-            return requests.get(
-                resolved,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                params=params,
-                verify=self.certificate_file,
-            )
+            client = requests
+        elif method == "get":
+            client = GET_HTTP_SESSION
         else:
-            return GET_HTTP_SESSION.get(
-                resolved,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                params=params,
-                verify=self.certificate_file,
-            )
+            client = DEFAULT_HTTP_SESSION
+        return getattr(client, method)(
+            self.url + path,
+            headers=headers,
+            timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
+            verify=self.certificate_file,
+            **kwargs,
+        )
+
+    def get(self, path, params=None, refresh_if_needed=True):
+        return self.send_request("get", path, refresh_if_needed, params=params)
 
     def post(
         self,
@@ -312,100 +410,26 @@ class APIServer:
         refresh_if_needed=True,
         content_type=None,
     ):
-        headers = {}
-
-        if refresh_if_needed:
-            self._refresh_token_if_needed()
-
-        headers.update(self.authentication_header)
-        if content_type:
-            headers.update({"Content-Type": content_type})
-
-        if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
-            return requests.post(
-                self.url + path,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                json=json,
-                data=data,
-                params=params,
-                verify=self.certificate_file,
-            )
-        else:
-            return DEFAULT_HTTP_SESSION.post(
-                self.url + path,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                json=json,
-                data=data,
-                params=params,
-                verify=self.certificate_file,
-            )
+        return self.send_request(
+            "post",
+            path,
+            refresh_if_needed,
+            content_type,
+            json=json,
+            data=data,
+            params=params,
+        )
 
     def post_binary(self, path, data, refresh_if_needed=True):
-        headers = {}
-
-        if refresh_if_needed:
-            self._refresh_token_if_needed()
-
-        headers.update(self.authentication_header)
-        headers.update({"Content-Type": "application/octet-stream"})
-
-        if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
-            return requests.post(
-                self.url + path,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                data=data,
-                verify=self.certificate_file,
-            )
-        else:
-            return DEFAULT_HTTP_SESSION.post(
-                self.url + path,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                data=data,
-                verify=self.certificate_file,
-            )
+        return self.send_request(
+            "post", path, refresh_if_needed, "application/octet-stream", data=data
+        )
 
     def delete(self, path, json=None, refresh_if_needed=True):
-        headers = {}
-
-        if refresh_if_needed:
-            self._refresh_token_if_needed()
-
-        headers.update(self.authentication_header)
-
-        if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
-            return requests.delete(
-                self.url + path,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                json=json,
-                verify=self.certificate_file,
-            )
-        else:
-            return DEFAULT_HTTP_SESSION.delete(
-                self.url + path,
-                headers=headers,
-                timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
-                json=json,
-                verify=self.certificate_file,
-            )
+        return self.send_request("delete", path, refresh_if_needed, json=json)
 
     def _store_in_file(self, file_path: str):
-        with open(file_path, "w") as file:
-            json.dump(
-                {
-                    "url": self.url,
-                    "bearer_token": self.bearer_token,
-                    "refresh_token": self.refresh_token,
-                    "token_type": self.token_type,
-                    "expires_in": self.expires_in,
-                    "expiration_time": self.expiration_time,
-                },
-                file,
-            )
+        _credentials.write(file_path, self.credentials())
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.url!r})"
@@ -521,10 +545,7 @@ class APIServer:
             self.expires_in = None
             self.expiration_time = None
         if self.credentials_file:
-            try:
-                os.remove(self.credentials_file)
-            except FileNotFoundError:
-                pass
+            _credentials.remove(self.credentials_file)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def authentication_password_change(

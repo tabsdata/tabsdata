@@ -2,7 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-import json
 import logging
 import os
 import shlex
@@ -24,6 +23,7 @@ from rich.text import Text
 from tabsdatak.cli.cli_utils import get_credentials_file_path, make_console
 
 # noinspection PyProtectedMember
+from tabsdatak.sdk import _credentials
 from tabsdatak.sdk._apiserver import APIServer
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
@@ -264,8 +264,7 @@ class SessionInfo:
 
         self._mtime = mtime
         try:
-            with open(self._cred_path) as f:
-                creds = json.load(f)
+            creds = _credentials.read(self._cred_path) or {}
             parsed = urlparse(creds.get("url", ""))
             self.server = parsed.hostname or "unknown"
             if parsed.port:

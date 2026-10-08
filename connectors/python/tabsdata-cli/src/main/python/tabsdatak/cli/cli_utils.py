@@ -299,10 +299,10 @@ class _LazyTabsdataServer:
 
 
 def initialise_tabsdata_server_connection(ctx: click.Context):
-    try:
-        with open(get_credentials_file_path(ctx)) as f:
-            credentials = json.load(f)
-    except FileNotFoundError:
+    from tabsdatak.sdk import _credentials
+
+    credentials = _credentials.read(get_credentials_file_path(ctx))
+    if credentials is None:
         ctx.obj["tabsdataserver"] = None
         return
     ctx.obj["tabsdataserver"] = _LazyTabsdataServer(ctx, credentials)
