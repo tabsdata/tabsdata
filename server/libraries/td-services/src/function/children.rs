@@ -2,9 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::function::engine::FunctionState;
 use crate::function::lifecycle::{ChildOf, delete_one, register_one, update_one};
-use crate::function::register::RegisterFunctionError;
 use crate::function::workers::register_workers;
 use std::collections::{HashMap, HashSet};
 use td_bridge::BridgeProviderHandle;
@@ -16,7 +14,8 @@ use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{ChildFunction, FunctionDB, FunctionDBWithNames, FunctionInsertDB};
 use td_objects::types::basic::{
-    Enabled, FunctionId, FunctionName, Parent, ReuseFrozen, TableName, WorkerConfig, WorkerTypeDto,
+    Enabled, FunctionId, FunctionName, Parent, ReuseFrozen, TableNameDto, WorkerConfig,
+    WorkerTypeDto,
 };
 use td_queries::Queries;
 
@@ -35,6 +34,14 @@ pub fn ensure_user_managed(function: &FunctionInsertDB) -> Result<(), TdError> {
     Ok(())
 }
 
+pub fn child_tables(children: Option<&[ChildFunction]>) -> HashSet<&TableNameDto> {
+    children
+        .unwrap_or_default()
+        .iter()
+        .flat_map(|child| child.tables.iter().flatten())
+        .collect()
+}
+
 /// `None` keeps the children, which still follow the parent's `enabled`.
 #[allow(clippy::too_many_arguments)]
 pub async fn reconcile_children(
@@ -44,14 +51,13 @@ pub async fn reconcile_children(
     collection: &ActiveCollectionDB,
     parent: &FunctionInsertDB,
     desired: &Option<Vec<ChildFunction>>,
+    parent_tables: Option<&HashMap<TableNameDto, TableNameDto>>,
     reuse_frozen_tables: ReuseFrozen,
     at: LockInstant,
 ) -> Result<(), TdError> {
     let Some(desired) = desired else {
         return cascade_enabled(conn, ctx, &parent.function_id, parent.enabled, at).await;
     };
-
-    ensure_parent_tables_owned(conn, parent, desired).await?;
 
     let parent_id = Some(Parent::from(parent.function_id));
     let existing: Vec<FunctionDBWithNames> = conn
@@ -72,7 +78,15 @@ pub async fn reconcile_children(
         let child_of = ChildOf {
             function_type: child.function_type.clone(),
             parent: &parent.function_id,
-            parent_tables: child.parent_tables(),
+            parent_tables: child
+                .tables
+                .iter()
+                .flatten()
+                .filter_map(|table| {
+                    let parent_table = parent_tables?.get(table)?;
+                    Some((table.clone(), parent_table.clone()))
+                })
+                .collect(),
         };
         match by_name.get(&child.name) {
             Some(current) => {
@@ -93,27 +107,6 @@ pub async fn reconcile_children(
                 let register = child.to_register(reuse_frozen_tables, parent.enabled)?;
                 register_one(conn, ctx, bridge, collection, &register, Some(child_of), at).await?;
             }
-        }
-    }
-    Ok(())
-}
-
-async fn ensure_parent_tables_owned(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    parent: &FunctionInsertDB,
-    desired: &[ChildFunction],
-) -> Result<(), TdError> {
-    if desired.is_empty() {
-        return Ok(());
-    }
-    let state = FunctionState::load(conn, &parent.function_id).await?;
-    let owned: HashSet<&TableName> = state.tables.iter().map(|t| &t.base.name).collect();
-    for child in desired {
-        if !owned.contains(&TableName::try_from(&child.parent_table)?) {
-            Err(RegisterFunctionError::ChildFunctionParentTableNotOwned(
-                child.parent_table.clone(),
-                parent.name.clone(),
-            ))?
         }
     }
     Ok(())

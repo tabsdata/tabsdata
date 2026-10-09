@@ -18,8 +18,8 @@ use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES, TD_FN_STATE_PREFIX,
 };
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionId, Parent, ResetState, ReuseFrozen, System,
-    TableId, TableName, TableNameDto, TableStatus, TableType,
+    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, Parent, ResetState,
+    ReuseFrozen, System, TableId, TableName, TableNameDto, TableStatus, TableType,
 };
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -66,6 +66,32 @@ impl<'a> From<&'a FunctionUpdate> for FunctionSpec<'a> {
             reset_state: update.reset_state,
         }
     }
+}
+
+pub fn requested_parents(
+    spec: &FunctionSpec<'_>,
+    function: &FunctionName,
+    parents: Option<&HashMap<TableNameDto, TableNameDto>>,
+    child_tables: &HashSet<&TableNameDto>,
+) -> Result<Option<HashMap<TableNameDto, TableNameDto>>, TdError> {
+    let Some(parents) = parents else {
+        return Ok(None);
+    };
+    let tables = spec.tables.unwrap_or_default();
+    let mut own = HashMap::new();
+    for (child, parent) in parents {
+        if !tables.contains(parent) {
+            Err(RegisterFunctionError::ParentTableNotOwned(
+                parent.clone(),
+                function.clone(),
+            ))?
+        }
+        if child_tables.contains(child) {
+            continue;
+        }
+        own.insert(child.clone(), parent.clone());
+    }
+    Ok((!own.is_empty()).then_some(own))
 }
 
 /// A table the function will produce, with the id it keeps or gets.
@@ -269,45 +295,33 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
         .map(|t| (&t.base.base.name, &t.base.base))
         .collect();
 
-    let mut parents: HashMap<TableName, Parent<TableId>> = HashMap::new();
-    if !parent_names.is_empty() {
-        let wanted: Vec<TableName> = parent_names
-            .values()
-            .unique()
-            .map(TableName::try_from)
-            .try_collect()?;
-        let lookups: Vec<_> = wanted
-            .iter()
-            .map(|name| and!(&collection.id, name))
-            .collect();
-        let found: Vec<TableDBWithNames> = conn.scd2().chunked().fetch_all(&lookups, ()).await?;
-        let found: HashMap<&TableName, (TableId, &TableType)> = found
-            .iter()
-            .map(|t| {
-                (
-                    &t.base.base.name,
-                    (t.base.base.table_id, &t.base.base.table_type),
-                )
-            })
-            .collect();
-        for (child, parent) in parent_names {
-            let parent = TableName::try_from(parent)?;
-            let (table_id, parent_type) = found.get(&parent).ok_or_else(|| {
-                RegisterFunctionError::ParentTableDoesNotExist(
-                    parent.clone(),
-                    collection.name.clone(),
-                )
-            })?;
-
-            if !matches!(parent_type, TableType::Regular) {
-                Err(RegisterFunctionError::ParentTableMustBeRegular(
-                    parent.clone(),
-                    (*parent_type).clone(),
-                ))?
-            }
-            parents.insert(TableName::try_from(child)?, (*table_id).into());
-        }
-    }
+    // A parent is either one of the function's own tables, which may only now
+    // be getting its id, or a table already in the collection.
+    let own: HashSet<&TableName> = user_tables.iter().map(|(name, _)| name).collect();
+    let elsewhere: Vec<TableName> = parent_names
+        .values()
+        .unique()
+        .map(TableName::try_from)
+        .filter_ok(|name| !own.contains(name))
+        .try_collect()?;
+    let lookups: Vec<_> = elsewhere
+        .iter()
+        .map(|name| and!(&collection.id, name))
+        .collect();
+    let found: Vec<TableDBWithNames> = if lookups.is_empty() {
+        Vec::new()
+    } else {
+        conn.scd2().chunked().fetch_all(&lookups, ()).await?
+    };
+    let mut parent_candidates: HashMap<TableName, (TableId, TableType)> = found
+        .iter()
+        .map(|t| {
+            (
+                t.base.base.name.clone(),
+                (t.base.base.table_id, t.base.base.table_type.clone()),
+            )
+        })
+        .collect();
 
     let mut owned_elsewhere = Vec::new();
     let mut tables = Vec::new();
@@ -329,21 +343,43 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
                 continue;
             }
         };
-        let parent_table_id = parents.get(name).cloned();
-
-        if parent_table_id.is_some() && matches!(table_type, TableType::Regular) {
-            Err(RegisterFunctionError::RegularTableCannotHaveParent(
-                name.clone(),
-            ))?
-        }
         tables.push(ResolvedTable {
             pos,
             name: name.clone(),
             table_type: table_type.clone(),
             table_id,
             adopted_frozen,
-            parent_table_id,
+            parent_table_id: None,
         });
+    }
+
+    parent_candidates.extend(
+        tables
+            .iter()
+            .filter(|t| own.contains(&t.name))
+            .map(|t| (t.name.clone(), (t.table_id, t.table_type.clone()))),
+    );
+    for (child, parent) in parent_names {
+        let child = TableName::try_from(child)?;
+        let parent = TableName::try_from(parent)?;
+        let Some(table) = tables.iter_mut().find(|t| t.name == child) else {
+            continue;
+        };
+        let (parent_id, parent_type) = parent_candidates.get(&parent).ok_or_else(|| {
+            RegisterFunctionError::ParentTableDoesNotExist(parent.clone(), collection.name.clone())
+        })?;
+        if !matches!(parent_type, TableType::Regular) {
+            Err(RegisterFunctionError::ParentTableMustBeRegular(
+                parent.clone(),
+                parent_type.clone(),
+            ))?
+        }
+        if matches!(table.table_type, TableType::Regular) {
+            Err(RegisterFunctionError::RegularTableCannotHaveParent(
+                child.clone(),
+            ))?
+        }
+        table.parent_table_id = Some((*parent_id).into());
     }
     if !owned_elsewhere.is_empty() {
         Err(RegisterFunctionError::TableAlreadyExists(
@@ -470,4 +506,120 @@ fn check_private_tables<T: ReferencedTable>(
         ))?
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dto(name: &str) -> TableNameDto {
+        TableNameDto::try_from(name).unwrap()
+    }
+
+    fn spec<'a>(
+        tables: &'a [TableNameDto],
+        types: &'a HashMap<TableNameDto, TableType>,
+    ) -> FunctionSpec<'a> {
+        FunctionSpec {
+            tables: Some(tables),
+            table_types: Some(types),
+            parent_tables: None,
+            dependencies: None,
+            triggers: None,
+            reuse_frozen: ReuseFrozen::FALSE,
+            reset_state: ResetState::default(),
+        }
+    }
+
+    fn owner() -> FunctionName {
+        FunctionName::try_from("owner").unwrap()
+    }
+
+    fn check(
+        spec: &FunctionSpec<'_>,
+        parents: &[(&str, &str)],
+        child_tables: &[TableNameDto],
+    ) -> Result<Option<HashMap<TableNameDto, TableNameDto>>, TdError> {
+        let parents: HashMap<_, _> = parents
+            .iter()
+            .map(|(child, parent)| (dto(child), dto(parent)))
+            .collect();
+        requested_parents(
+            spec,
+            &owner(),
+            Some(&parents),
+            &child_tables.iter().collect(),
+        )
+    }
+
+    fn refused(result: Result<Option<HashMap<TableNameDto, TableNameDto>>, TdError>) -> TdError {
+        result.unwrap_err()
+    }
+
+    #[test]
+    fn test_requested_parents_keeps_an_own_tables_parent_whatever_its_type() {
+        let tables = [dto("out"), dto("out_derived")];
+        let types = HashMap::new();
+
+        let kept = check(&spec(&tables, &types), &[("out_derived", "out")], &[]).unwrap();
+        assert_eq!(
+            kept,
+            Some(HashMap::from([(dto("out_derived"), dto("out"))]))
+        );
+    }
+
+    #[test]
+    fn test_requested_parents_leaves_a_childs_table_to_the_child() {
+        let tables = [dto("out"), dto("out_dq_summary")];
+        let types = HashMap::from([(dto("out_dq_summary"), TableType::DQSummary)]);
+        let children = [dto("out_trends")];
+
+        let kept = check(
+            &spec(&tables, &types),
+            &[("out_dq_summary", "out"), ("out_trends", "out")],
+            &children,
+        )
+        .unwrap();
+        assert_eq!(
+            kept,
+            Some(HashMap::from([(dto("out_dq_summary"), dto("out"))]))
+        );
+        // Only a child's entry: nothing is left for the function itself.
+        assert_eq!(
+            check(&spec(&tables, &types), &[("out_trends", "out")], &children).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn test_requested_parents_treats_none_and_empty_alike() {
+        let tables = [dto("out")];
+        let types = HashMap::new();
+        let spec = spec(&tables, &types);
+
+        assert_eq!(
+            requested_parents(&spec, &owner(), None, &HashSet::new()).unwrap(),
+            None
+        );
+        assert_eq!(check(&spec, &[], &[]).unwrap(), None);
+    }
+
+    #[test]
+    fn test_requested_parents_refuses_a_parent_outside_the_function() {
+        let tables = [dto("out"), dto("out_dq_summary")];
+        let types = HashMap::from([(dto("out_dq_summary"), TableType::DQSummary)]);
+        let spec = spec(&tables, &types);
+
+        // The same rule for the function's own summaries and its children's tables.
+        for (child, children) in [
+            ("out_dq_summary", vec![]),
+            ("out_trends", vec![dto("out_trends")]),
+        ] {
+            assert!(matches!(
+                refused(check(&spec, &[(child, "elsewhere")], &children))
+                    .domain_err::<RegisterFunctionError>(),
+                RegisterFunctionError::ParentTableNotOwned(_, _)
+            ));
+        }
+    }
 }

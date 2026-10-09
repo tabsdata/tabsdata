@@ -469,7 +469,6 @@ class Collection:
                 "dependencies": archive.string_dependencies,
                 "tables": archive.tables,
                 "table_types": trend.table_types,
-                "parent_table": trend.parent_table,
             })
         return children
 
@@ -549,6 +548,7 @@ class Collection:
                 description=description,
                 tables=archive.tables,
                 table_types=archive.table_types,
+                parent_tables=archive.parent_tables or None,
                 dependencies=archive.string_dependencies,
                 trigger_by=archive.trigger_string_list,
                 function_snippet=archive.function_snippet,
@@ -792,6 +792,7 @@ class Collection:
                 description=description,
                 tables=archive.tables,
                 table_types=archive.table_types,
+                parent_tables=archive.parent_tables or None,
                 dependencies=archive.string_dependencies,
                 trigger_by=archive.trigger_string_list,
                 function_snippet=archive.function_snippet,
@@ -5729,6 +5730,7 @@ class _FunctionArchive:
 
     tables: list[str]
     table_types: dict[str, str]
+    parent_tables: dict[str, str]
     string_dependencies: list[str]
     trigger_string_list: list[str] | None
     function_snippet: str
@@ -5876,26 +5878,29 @@ def _output_tables(info: FunctionInfo) -> list[str]:
 
 def _dq_derived(
     collection: str, info: FunctionInfo
-) -> tuple[list[str], dict[str, str], list[TrendTransformerInfo]]:
+) -> tuple[list[str], dict[str, str], dict[str, str], list[TrendTransformerInfo]]:
     """Derive everything a function's data-quality actions imply.
 
     Returns the derived table names, their catalog type codes (so
-    registration records each derived table under its ``TableType``), and the
-    system transformers that maintain the summary trend tables. All three are
-    empty when the function declares no data-quality action.
+    registration records each derived table under its ``TableType``), the
+    output table each derived table derives from -- summaries and the trend
+    tables alike, so registration parents them -- and the system transformers
+    that maintain the summary trend tables. All four are empty when the
+    function declares no data-quality action.
 
-    One :class:`DataQualityProcessor` serves all three, so the action set is
+    One :class:`DataQualityProcessor` serves all four, so the action set is
     resolved and validated exactly once per registration.
     """
     from tabsdatak.common._actions.dataquality.processor import (
         DataQualityProcessor,
     )
     from tabsdatak.dataquality import DataQuality
+    from tabsdatak.dataquality._tableinfo import TableKind
 
     on_tables = getattr(info, "on_tables", None) or []
     actions = [action for action in on_tables if isinstance(action, DataQuality)]
     if not actions:
-        return [], {}, []
+        return [], {}, {}, []
 
     processor = DataQualityProcessor.from_actions(
         collection=collection,
@@ -5908,7 +5913,17 @@ def _dq_derived(
         table_info.table: table_info.kind.type.value
         for table_info in output_table_infos
     }
-    return names, types, processor.build_trend_transformers_info()
+    trends = processor.build_trend_transformers_info()
+    parents = {
+        table_info.table: table_info.from_table
+        for table_info in output_table_infos
+        if table_info.kind is TableKind.DQ_SUMMARY
+    } | {
+        table: trend.parent_table
+        for trend in trends
+        for table in trend.info.output_tables
+    }
+    return names, types, parents, trends
 
 
 def _cleanup_trend_roots(trend_transformers) -> None:
@@ -5981,11 +5996,12 @@ def _create_archive(
     function_type = _KIND_TO_API_TYPE.get(info.__kind__, "U")
     function_snippet = capture_source_snippet(info)
 
-    dq_names, dq_types, trend_transformers = _dq_derived(collection, info)
+    dq_names, dq_types, dq_parents, trend_transformers = _dq_derived(collection, info)
 
     return _FunctionArchive(
         tables=_output_tables(info) + dq_names,
         table_types=dq_types,
+        parent_tables=dq_parents,
         string_dependencies=_input_tables(info),
         trigger_string_list=_trigger_string_list(info),
         function_snippet=function_snippet,

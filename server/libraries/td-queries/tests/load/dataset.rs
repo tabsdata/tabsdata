@@ -189,6 +189,7 @@ async fn make_function(
         triggers: None,
         tables: Some(vec![TableNameDto::try_from(out_table)?]),
         table_types: None,
+        parent_tables: None,
         runtime_values: "rv".try_into()?,
         reuse_frozen_tables: ReuseFrozen::FALSE,
         enabled: None,

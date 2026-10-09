@@ -52,6 +52,7 @@ async fn register_function(
             &collection,
             &function,
             &register.child_functions,
+            register.parent_tables.as_ref(),
             register.reuse_frozen_tables,
             at,
         )
@@ -175,6 +176,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -225,6 +227,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -283,6 +286,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -338,6 +342,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -389,6 +394,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -437,6 +443,7 @@ mod tests {
             triggers: None,
             tables: Some(vec![TableNameDto::try_from("table_foo")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -461,6 +468,7 @@ mod tests {
             triggers: Some(vec![TableTriggerDto::try_from("table_foo")?]),
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -588,6 +596,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -648,6 +657,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -724,6 +734,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -766,6 +777,7 @@ mod tests {
             triggers: test_triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -820,6 +832,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -866,6 +879,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -945,6 +959,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -985,6 +1000,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1044,6 +1060,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1095,6 +1112,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1184,6 +1202,7 @@ mod tests {
                 triggers: triggers.clone(),
                 tables: tables.clone(),
                 table_types: None,
+                parent_tables: None,
                 runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
                 reuse_frozen_tables: ReuseFrozen::FALSE,
                 enabled: None,
@@ -1228,6 +1247,7 @@ mod tests {
             triggers,
             tables,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1284,6 +1304,7 @@ mod tests {
             triggers: Some(vec![]),
             tables,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1342,6 +1363,7 @@ mod tests {
             triggers: Some(vec![]),
             tables: Some(vec![TableNameDto::try_from("table_0")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1384,6 +1406,7 @@ mod tests {
             triggers: Some(vec![]),
             tables: Some(vec![TableNameDto::try_from("table_0")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1436,6 +1459,7 @@ mod tests {
             triggers: Some(vec![]),
             tables: Some(vec![TableNameDto::try_from("table_0")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1485,6 +1509,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1544,6 +1569,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1597,6 +1623,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1671,6 +1698,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1721,6 +1749,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -1769,6 +1798,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -2161,7 +2191,6 @@ mod tests {
                 TableNameDto::try_from(format!("{name}_table"))?,
                 TableType::DQSummaryTrends,
             )])),
-            parent_table: TableNameDto::try_from(OWNER_TABLE)?,
         })
     }
 
@@ -2176,6 +2205,15 @@ mod tests {
                 .map(|t| TableNameDto::try_from(*t))
                 .collect::<Result<Vec<_>, _>>()?,
         );
+        // As the SDK declares a trend: the child's tables derive from the
+        // owner's table, through the owner's own map.
+        create.parent_tables = child_functions.as_ref().map(|children| {
+            children
+                .iter()
+                .flat_map(|child| child.tables.iter().flatten())
+                .map(|table| (table.clone(), TableNameDto::try_from(OWNER_TABLE).unwrap()))
+                .collect()
+        });
         create.child_functions = child_functions;
         Ok(create)
     }
@@ -2296,14 +2334,16 @@ mod tests {
     async fn test_register_child_parent_table_must_be_owned(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         create_collection(&db, p.id, "mgd_parent", None).await;
-        let mut stray = child("s")?;
-        stray.parent_table = TableNameDto::try_from("not_owned")?;
-        let create = owner_register(&["owned"], Some(vec![stray]))?;
+        let mut create = owner_register(&["owned"], Some(vec![child("s")?]))?;
+        create.parent_tables = Some(HashMap::from([(
+            TableNameDto::try_from("s_table")?,
+            TableNameDto::try_from("not_owned")?,
+        )]));
 
         let err = register_err(&db, p.id, "mgd_parent", create).await?;
         assert!(matches!(
             err.domain_err::<RegisterFunctionError>(),
-            RegisterFunctionError::ChildFunctionParentTableNotOwned(_, _)
+            RegisterFunctionError::ParentTableNotOwned(_, _)
         ));
         Ok(())
     }
@@ -2314,12 +2354,14 @@ mod tests {
     async fn test_register_child_parent_table_must_be_regular(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         create_collection(&db, p.id, "mgd_ptype", None).await;
-        let mut derived = child("d")?;
-        derived.parent_table = TableNameDto::try_from("summary")?;
-        let mut create = owner_register(&["owned", "summary"], Some(vec![derived]))?;
+        let mut create = owner_register(&["owned", "summary"], Some(vec![child("d")?]))?;
         create.table_types = Some(HashMap::from([(
             TableNameDto::try_from("summary")?,
             TableType::DQSummary,
+        )]));
+        create.parent_tables = Some(HashMap::from([(
+            TableNameDto::try_from("d_table")?,
+            TableNameDto::try_from("summary")?,
         )]));
 
         let err = register_err(&db, p.id, "mgd_ptype", create).await?;
@@ -2342,13 +2384,15 @@ mod tests {
         register_ok(&db, p.id, "mgd_reparent", create).await?;
         let before = live_by_name(&db, "a").await?.expect("registered");
 
-        let mut moved = child("a")?;
-        moved.parent_table = TableNameDto::try_from("other")?;
-        let mut update = owner_update(Some(vec![moved]));
+        let mut update = owner_update(Some(vec![child("a")?]));
         update.tables = Some(vec![
             TableNameDto::try_from("owned")?,
             TableNameDto::try_from("other")?,
         ]);
+        update.parent_tables = Some(HashMap::from([(
+            TableNameDto::try_from("a_table")?,
+            TableNameDto::try_from("other")?,
+        )]));
         update_ok(&db, p.id, "mgd_reparent", CHILD_OWNER, update).await?;
 
         let after = live_by_name(&db, "a").await?.expect("still registered");
@@ -2359,6 +2403,130 @@ mod tests {
             child_table.base.parent_table_id,
             Some(Parent::from(other.base.table_id))
         );
+        Ok(())
+    }
+
+    const SUMMARY_TABLE: &str = "owned_dq_summary";
+
+    /// The owner with a DQ summary of `parent`, which must be one of `tables`.
+    fn summary_register(tables: &[&str], parent: &str) -> Result<FunctionRegister, TdError> {
+        let mut create = owner_register(tables, None)?;
+        create
+            .tables
+            .get_or_insert_default()
+            .push(SUMMARY_TABLE.try_into()?);
+        create.table_types = Some(HashMap::from([(
+            TableNameDto::try_from(SUMMARY_TABLE)?,
+            TableType::DQSummary,
+        )]));
+        create.parent_tables = Some(HashMap::from([(
+            TableNameDto::try_from(SUMMARY_TABLE)?,
+            TableNameDto::try_from(parent)?,
+        )]));
+        Ok(create)
+    }
+
+    /// A summary's parent is registered in the same request, so it has no row
+    /// yet to be looked up: it resolves to the id it is about to get.
+    #[td_test::test(db)]
+    async fn test_register_parents_a_summary_on_its_own_output(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "dqs_parent", None).await;
+        register_ok(
+            &db,
+            p.id,
+            "dqs_parent",
+            summary_register(&["owned"], "owned")?,
+        )
+        .await?;
+
+        let owned = active_table(&db, "owned").await?;
+        let summary = active_table(&db, SUMMARY_TABLE).await?;
+        assert_eq!(
+            summary.base.parent_table_id,
+            Some(Parent::from(owned.base.table_id))
+        );
+        assert_eq!(owned.base.parent_table_id, None);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_update_moves_a_summary_to_another_output(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "dqs_move", None).await;
+        let create = summary_register(&["owned", "other"], "owned")?;
+        register_ok(&db, p.id, "dqs_move", create).await?;
+        let before = active_table(&db, SUMMARY_TABLE).await?;
+
+        let moved = summary_register(&["owned", "other"], "other")?;
+        let mut update = owner_update(None);
+        update.tables = moved.tables;
+        update.table_types = moved.table_types;
+        update.parent_tables = moved.parent_tables;
+        update_ok(&db, p.id, "dqs_move", CHILD_OWNER, update).await?;
+
+        let other = active_table(&db, "other").await?;
+        let summary = active_table(&db, SUMMARY_TABLE).await?;
+        assert_eq!(summary.base.table_id, before.base.table_id);
+        assert_eq!(
+            summary.base.parent_table_id,
+            Some(Parent::from(other.base.table_id))
+        );
+        Ok(())
+    }
+
+    /// A client that predates the field still registers; its summary is simply
+    /// left without a parent.
+    #[td_test::test(db)]
+    async fn test_register_without_parents_leaves_a_summary_unparented(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "dqs_none", None).await;
+        let mut create = summary_register(&["owned"], "owned")?;
+        create.parent_tables = None;
+        register_ok(&db, p.id, "dqs_none", create).await?;
+
+        let summary = active_table(&db, SUMMARY_TABLE).await?;
+        assert_eq!(summary.base.parent_table_id, None);
+        Ok(())
+    }
+
+    /// A parent is always one of the function's own tables, so a neighbour's
+    /// is refused even though it exists.
+    #[td_test::test(db)]
+    async fn test_register_refuses_a_parent_outside_the_function(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "dqs_elsewhere", None).await;
+        let mut neighbour = pubsub_register("neighbour", Decorator::Transformer, None)?;
+        neighbour.tables = Some(vec![TableNameDto::try_from("theirs")?]);
+        register_ok(&db, p.id, "dqs_elsewhere", neighbour).await?;
+
+        let create = summary_register(&["owned"], "theirs")?;
+        let err = register_err(&db, p.id, "dqs_elsewhere", create).await?;
+        assert!(matches!(
+            err.domain_err::<RegisterFunctionError>(),
+            RegisterFunctionError::ParentTableNotOwned(_, _)
+        ));
+        Ok(())
+    }
+
+    /// A child's tables take their parents from the owner's map, so a table
+    /// the map leaves out is registered without one.
+    #[td_test::test(db)]
+    async fn test_a_child_table_left_out_of_the_map_has_no_parent(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        create_collection(&db, p.id, "mgd_unmapped", None).await;
+        let mut create = owner_register(&["owned"], Some(vec![child("a")?]))?;
+        create.parent_tables = None;
+        register_ok(&db, p.id, "mgd_unmapped", create).await?;
+
+        let child_table = active_table(&db, "a_table").await?;
+        assert_eq!(child_table.base.parent_table_id, None);
         Ok(())
     }
 

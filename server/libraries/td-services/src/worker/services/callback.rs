@@ -76,6 +76,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,

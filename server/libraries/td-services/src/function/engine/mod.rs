@@ -17,7 +17,7 @@ mod state;
 
 pub use apply::{apply, dependants_of_tables};
 pub use diff::Changes;
-pub use spec::{FunctionSpec, PrivateTableError, ResolvedSpec, resolve};
+pub use spec::{FunctionSpec, PrivateTableError, ResolvedSpec, requested_parents, resolve};
 pub use state::FunctionState;
 
 use crate::function::workers::register_workers;

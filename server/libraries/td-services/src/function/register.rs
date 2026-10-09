@@ -45,10 +45,8 @@ pub enum RegisterFunctionError {
     TransformerInConnectedCollection(CollectionName, CollectionType) = 11,
     #[error("Parent table '{0}' does not exist in collection '{1}'")]
     ParentTableDoesNotExist(TableName, CollectionName) = 19,
-    #[error(
-        "Table '{0}' is not produced by function '{1}', so its child functions cannot derive from it"
-    )]
-    ChildFunctionParentTableNotOwned(TableNameDto, FunctionName) = 20,
+    #[error("Table '{0}' is not produced by function '{1}', so no table can derive from it")]
+    ParentTableNotOwned(TableNameDto, FunctionName) = 20,
     #[error("Table '{0}' is a {1:?} table, so it cannot be the parent of another table")]
     ParentTableMustBeRegular(TableName, TableType) = 21,
     #[error("Table '{0}' is a Regular table, so it cannot be derived from a parent table")]

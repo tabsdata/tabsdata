@@ -2,7 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::function::engine::{Changes, FunctionSpec, FunctionState, apply, register_version};
+use crate::function::children::child_tables;
+use crate::function::engine::{
+    Changes, FunctionSpec, FunctionState, apply, register_version, requested_parents,
+};
 use crate::function::register::ensure_connection_kind_matches;
 use crate::function::services::update::assert_function_name_not_exists;
 use crate::function::workers::register_workers;
@@ -24,8 +27,10 @@ use td_objects::types::basic::{
 use td_queries::Queries;
 
 /// What the platform stamps on a child it registers on its parent's behalf.
-/// A request cannot express a parent or parented tables, so this is the only
-/// way a function gets them.
+/// A request cannot express a parent function, so this is the only way a
+/// function gets one. Its tables' parents come from the parent's own
+/// `parent_tables`, which is the one place a request states parenting (see
+/// `requested_parents`).
 pub struct ChildOf<'a> {
     pub function_type: FunctionType,
     pub parent: &'a FunctionId,
@@ -64,7 +69,15 @@ pub async fn register_one(
 
     let state = FunctionState::empty();
     let mut spec = FunctionSpec::from(register);
-    spec.parent_tables = parent_tables;
+    spec.parent_tables = match parent_tables {
+        Some(parent_tables) => Some(parent_tables),
+        None => requested_parents(
+            &spec,
+            &function.name,
+            register.parent_tables.as_ref(),
+            &child_tables(register.child_functions.as_deref()),
+        )?,
+    };
     register_version(
         conn,
         ctx,
@@ -103,7 +116,15 @@ pub async fn update_one(
     let previous_version_id = Some(current.base.base.id.clone());
     let state = FunctionState::load(conn, &function.function_id).await?;
     let mut spec = FunctionSpec::from(update);
-    spec.parent_tables = parent_tables;
+    spec.parent_tables = match parent_tables {
+        Some(parent_tables) => Some(parent_tables),
+        None => requested_parents(
+            &spec,
+            &function.name,
+            update.parent_tables.as_ref(),
+            &child_tables(update.child_functions.as_deref()),
+        )?,
+    };
     register_version(
         conn,
         ctx,

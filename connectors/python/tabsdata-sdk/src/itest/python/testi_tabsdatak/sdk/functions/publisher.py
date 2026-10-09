@@ -29,9 +29,23 @@ CUSTOM_TREND_TABLE = "trend_source_custom_trends"
 # PUBLISHED_TABLE so it freezes and becomes deletable.
 MOVED_TABLE = "trend_source_moved"
 
+# Published beside PUBLISHED_TABLE by the pair that moves a summary between the
+# two. The summary is named outright, so moving its action keeps it the same
+# table rather than deriving a new one from the other table's name.
+SECOND_TABLE = "trend_source_second"
+MOVABLE_SUMMARY_TABLE = "trend_source_movable_summary"
+
 GENERATED_FRAME = pl.DataFrame({"amount": [1, -2, 3]})
 
 _SOURCE = DataGenSrc(data=[Data(GENERATED_FRAME)])
+
+
+def _movable_summary_of(table: str) -> DataQuality:
+    return DataQuality(
+        table=table,
+        classifiers=[IsPositive(["amount"])],
+        operators=[Summary(table=MOVABLE_SUMMARY_TABLE, trend=None)],
+    )
 
 
 def _action(trend: SummaryTrend | None) -> DataQuality:
@@ -86,3 +100,25 @@ def pub_without_data_quality(frame: TableFrameSpec) -> TableFrameSpec:
 @publisher(source=_SOURCE, output_tables=[MOVED_TABLE])
 def pub_elsewhere(frame: TableFrameSpec) -> TableFrameSpec:
     return frame
+
+
+@publisher(
+    source=_SOURCE,
+    output_tables=[PUBLISHED_TABLE, SECOND_TABLE],
+    on_tables=[_movable_summary_of(PUBLISHED_TABLE)],
+)
+def pub_summary_on_first(
+    frame: TableFrameSpec,
+) -> tuple[TableFrameSpec, TableFrameSpec]:
+    return frame, frame
+
+
+@publisher(
+    source=_SOURCE,
+    output_tables=[PUBLISHED_TABLE, SECOND_TABLE],
+    on_tables=[_movable_summary_of(SECOND_TABLE)],
+)
+def pub_summary_on_second(
+    frame: TableFrameSpec,
+) -> tuple[TableFrameSpec, TableFrameSpec]:
+    return frame, frame

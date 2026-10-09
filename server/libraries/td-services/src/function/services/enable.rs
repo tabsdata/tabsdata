@@ -208,6 +208,7 @@ mod tests {
                 TableNameDto::try_from("dummy_2")?,
             ]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -230,6 +231,7 @@ mod tests {
             triggers: triggers.clone(),
             tables: tables.clone(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("foo runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: Some(enabled),
@@ -348,7 +350,6 @@ mod tests {
                 TableNameDto::try_from(table.as_str())?,
                 TableType::DQSummaryTrends,
             )])),
-            parent_table: TableNameDto::try_from(format!("{OWNER}_table").as_str())?,
         })
     }
 
@@ -358,6 +359,20 @@ mod tests {
         enabled: Enabled,
     ) -> Result<FunctionRegister, TdError> {
         let table = format!("{name}_table");
+        // Every child's tables derive from the owner's table.
+        let parent_tables = match &children {
+            Some(children) => {
+                let parent = TableNameDto::try_from(table.as_str())?;
+                Some(
+                    children
+                        .iter()
+                        .flat_map(|child| child.tables.iter().flatten())
+                        .map(|table| (table.clone(), parent.clone()))
+                        .collect(),
+                )
+            }
+            None => None,
+        };
         Ok(FunctionRegister {
             child_functions: children,
             name: name.try_into()?,
@@ -372,6 +387,7 @@ mod tests {
             triggers: None,
             tables: Some(vec![TableNameDto::try_from(table.as_str())?]),
             table_types: None,
+            parent_tables,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: Some(enabled),

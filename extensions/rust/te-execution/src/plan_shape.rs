@@ -52,6 +52,7 @@ fn register(
                 .collect::<Result<_, _>>()?,
         ),
         table_types: None,
+        parent_tables: None,
         runtime_values: FunctionRuntimeValues::try_from("r")?,
         reuse_frozen_tables: ReuseFrozen::FALSE,
         enabled: None,

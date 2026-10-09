@@ -789,6 +789,7 @@ class APIServer:
         workers: dict = None,
         base_path: str = None,
         child_functions: list[dict] = None,
+        parent_tables: dict[str, str] = None,
         raise_for_status: bool = True,
     ):
         endpoint = self._scoped(f"/collections/{collection_name}/functions")
@@ -803,6 +804,7 @@ class APIServer:
             "triggers",
             "tables",
             "table_types",
+            "parent_tables",
             "reuse_frozen_tables",
             "runtime_values",
             "enabled",
@@ -822,6 +824,7 @@ class APIServer:
             trigger_by,
             tables,
             table_types,
+            parent_tables,
             reuse_frozen_tables,
             runtime_values,
             enabled,
@@ -955,6 +958,7 @@ class APIServer:
         reset_state: bool = None,
         reset_stage: bool = None,
         child_functions: list[dict] = None,
+        parent_tables: dict[str, str] = None,
         raise_for_status: bool = True,
     ):
         endpoint = self._scoped(
@@ -968,6 +972,7 @@ class APIServer:
                 "bundle_id",
                 "tables",
                 "table_types",
+                "parent_tables",
                 "dependencies",
                 "triggers",
                 "snippet",
@@ -989,6 +994,7 @@ class APIServer:
                 bundle_id,
                 tables,
                 table_types,
+                parent_tables,
                 dependencies,
                 trigger_by,
                 function_snippet,

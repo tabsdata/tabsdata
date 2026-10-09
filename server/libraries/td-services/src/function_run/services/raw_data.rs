@@ -128,6 +128,7 @@ mod tests {
             triggers: None,
             tables: Some(vec!["t0".try_into()?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: "rv".try_into()?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,

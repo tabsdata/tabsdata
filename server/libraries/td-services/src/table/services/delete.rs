@@ -141,6 +141,7 @@ mod tests {
                 TableNameDto::try_from("keep_this_one")?,
             ]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -228,7 +229,6 @@ mod tests {
                 TableNameDto::try_from("trend_table")?,
                 TableType::DQSummaryTrends,
             )])),
-            parent_table: TableNameDto::try_from("super_table")?,
         };
         let create = FunctionRegister {
             child_functions: Some(vec![child]),
@@ -247,6 +247,10 @@ mod tests {
                 TableNameDto::try_from("keep_this_one")?,
             ]),
             table_types: None,
+            parent_tables: Some(HashMap::from([(
+                TableNameDto::try_from("trend_table")?,
+                TableNameDto::try_from("super_table")?,
+            )])),
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -324,6 +328,113 @@ mod tests {
         Ok(())
     }
 
+    /// A DQ summary is parented on the output it summarizes, so it goes with
+    /// that output as a trend table does.
+    #[td_test::test(db)]
+    async fn test_delete_table_cascades_to_its_dq_summary(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("cascade_dqs")?;
+        let collection = db
+            .scoped(p.id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+
+        let create = FunctionRegister {
+            child_functions: None,
+            name: "owner_fn".try_into()?,
+            description: "owner".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "owner snippet".try_into()?,
+            decorator: Decorator::Transformer,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![
+                TableNameDto::try_from("super_table")?,
+                TableNameDto::try_from("super_table_dq_summary")?,
+                TableNameDto::try_from("keep_this_one")?,
+            ]),
+            table_types: Some(HashMap::from([(
+                TableNameDto::try_from("super_table_dq_summary")?,
+                TableType::DQSummary,
+            )])),
+            parent_tables: Some(HashMap::from([(
+                TableNameDto::try_from("super_table_dq_summary")?,
+                TableNameDto::try_from("super_table")?,
+            )])),
+            runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+
+        let service = Services::with_defaults(db.clone());
+        let collection_param = CollectionParam {
+            collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+        };
+        service
+            .register_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(collection_param.clone(), create)
+                    .in_project(p.id),
+            )
+            .await?;
+
+        // Dropping the output and its summary from the owner freezes both.
+        let update = FunctionUpdate {
+            name: Some("owner_fn".try_into()?),
+            description: Some("owner".try_into()?),
+            snippet: Some("owner snippet".try_into()?),
+            decorator: Some(Decorator::Transformer),
+            tables: Some(vec![TableNameDto::try_from("keep_this_one")?]),
+            runtime_values: Some(FunctionRuntimeValues::try_from("mock runtime values")?),
+            ..Default::default()
+        };
+        service
+            .update_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(
+                        (
+                            collection_param.clone(),
+                            FunctionParam {
+                                function: FunctionIdName::from_str("owner_fn")?,
+                            },
+                        ),
+                        update,
+                    )
+                    .in_project(p.id),
+            )
+            .await?;
+
+        service
+            .table_delete(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .delete((
+                        collection_param,
+                        TableParam {
+                            table: TableIdName::from_str("super_table")?,
+                        },
+                    ))
+                    .in_project(p.id),
+            )
+            .await?;
+
+        let summary: Vec<TableDB> = db
+            .scd2()
+            .fetch_all(&TableName::try_from("super_table_dq_summary")?)
+            .await?;
+        assert!(summary.is_empty(), "the summary goes with its output");
+        let kept: Vec<TableDB> = db
+            .scd2()
+            .fetch_all(&TableName::try_from("keep_this_one")?)
+            .await?;
+        assert!(!kept.is_empty(), "an unrelated table is untouched");
+        Ok(())
+    }
+
     /// The frozen bar covers the whole cascade: a live derived table refuses
     /// the delete rather than being swept away with its parent.
     #[td_test::test(db)]
@@ -349,10 +460,9 @@ mod tests {
                 TableNameDto::try_from("trend_table")?,
                 TableType::DQSummaryTrends,
             )])),
-            parent_table: TableNameDto::try_from("super_table")?,
         };
         let create = FunctionRegister {
-            child_functions: Some(vec![child.clone()]),
+            child_functions: Some(vec![child]),
             name: "owner_fn".try_into()?,
             description: "owner".try_into()?,
             bundle_id: BundleId::default(),
@@ -368,6 +478,10 @@ mod tests {
                 TableNameDto::try_from("keep_this_one")?,
             ]),
             table_types: None,
+            parent_tables: Some(HashMap::from([(
+                TableNameDto::try_from("trend_table")?,
+                TableNameDto::try_from("super_table")?,
+            )])),
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -386,15 +500,16 @@ mod tests {
             )
             .await?;
 
-        // The parent freezes, but the trend function keeps producing its table,
-        // so the derived table stays live.
+        // The parent freezes, while the update leaves the trend function as it
+        // is (`child_functions: None`): it keeps producing its table, still
+        // parented on the now-frozen one, so the derived table stays live.
         let update = FunctionUpdate {
             name: Some("owner_fn".try_into()?),
             description: Some("owner".try_into()?),
             snippet: Some("owner snippet".try_into()?),
             decorator: Some(Decorator::Transformer),
             tables: Some(vec![TableNameDto::try_from("keep_this_one")?]),
-            child_functions: Some(vec![child]),
+            child_functions: None,
             runtime_values: Some(FunctionRuntimeValues::try_from("mock runtime values")?),
             ..Default::default()
         };
@@ -464,6 +579,7 @@ mod tests {
             triggers: None,
             tables: Some(vec![TableNameDto::try_from("super_table")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -530,6 +646,7 @@ mod tests {
                 TableNameDto::try_from("keep_this_one")?,
             ]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -556,6 +673,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,

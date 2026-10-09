@@ -37,6 +37,7 @@ pub(crate) fn register(name: &str, base_path: Option<BasePath>) -> FunctionRegis
         triggers: None,
         tables: Some(vec![TableNameDto::try_from("t0").unwrap()]),
         table_types: None,
+        parent_tables: None,
         runtime_values: FunctionRuntimeValues::try_from("rv").unwrap(),
         reuse_frozen_tables: ReuseFrozen::FALSE,
         enabled: None,

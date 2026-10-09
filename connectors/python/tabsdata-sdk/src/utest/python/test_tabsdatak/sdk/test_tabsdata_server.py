@@ -378,7 +378,38 @@ def test_create_archive_publisher_cron_extracts_metadata(project_root, _no_op_bu
     assert archive.connector == qualified_class(_FakeSrc)
     assert archive.connection == qualified_class(_FakeSrcConn)
     assert archive.table_types == {}
+    assert archive.parent_tables == {}
     assert archive.function_snippet == "<source>"
+
+
+def test_create_archive_parents_each_derived_table_on_its_output(
+    project_root, _no_op_bundle
+):
+    from tabsdatak.dataquality import DataQuality, IsNull, Summary
+
+    info = _transformer_info(output_tables=["b", "c"])
+    info.on_tables = [
+        DataQuality("b", classifiers=[IsNull(["value"])], operators=[Summary()]),
+        # A custom name still summarizes the table its action is declared on.
+        DataQuality(
+            "c",
+            classifiers=[IsNull(["value"])],
+            operators=[Summary(table="c_custom")],
+        ),
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = ts._create_archive("coll", info, project_root, tmp)
+
+    # One map for the owner's summaries and its trend transformers' tables:
+    # each derives from the table its action is declared on.
+    assert archive.parent_tables == {
+        "b_dq_summary": "b",
+        "c_custom": "c",
+        "b_dq_summary_trends": "b",
+        "c_dq_summary_trends": "c",
+    }
+    assert archive.table_types["b_dq_summary"] == "DQS"
+    assert archive.table_types["c_custom"] == "DQS"
 
 
 def test_create_archive_transformer_tables_trigger(project_root, _no_op_bundle):

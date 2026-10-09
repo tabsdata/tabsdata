@@ -373,6 +373,7 @@ pub(crate) mod tests {
             triggers: update.triggers,
             tables: update.tables,
             table_types: update.table_types,
+            parent_tables: None,
             runtime_values: update.runtime_values.unwrap_or(create.runtime_values),
             reuse_frozen_tables: update.reuse_frozen_tables,
             enabled: update.enabled,

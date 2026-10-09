@@ -192,16 +192,33 @@ def test_a_published_table_has_no_parent(
 
 
 @tabsdata_instance(consumer="tdtest")
-def test_the_summary_table_has_no_parent(
+def test_the_summary_table_is_parented_to_the_published_table(
     instance_tdtest: Instance,
     collection_factory: CollectionFactory,
 ) -> None:
-    # The trend is the only table registration parents; the summary is an
-    # output of the owner like any other.
+    # The summary is registered in the same request as the table it
+    # summarizes, so its parent resolves before either has a row.
     collection = source_collection(collection_factory)
     register(collection, publisher.pub_with_default_trend)
 
-    assert parent_table_id(collection, publisher.SUMMARY_TABLE) is None
+    assert parent_table_id(collection, publisher.SUMMARY_TABLE) == table_id(
+        collection, publisher.PUBLISHED_TABLE
+    )
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_a_summary_without_a_trend_is_parented_too(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    # The summary's parent comes from its own action, not from the trend
+    # function, so a summary that opted out of trends still carries it.
+    collection = source_collection(collection_factory)
+    register(collection, publisher.pub_without_trend)
+
+    assert parent_table_id(collection, publisher.SUMMARY_TABLE) == table_id(
+        collection, publisher.PUBLISHED_TABLE
+    )
 
 
 @tabsdata_instance(consumer="tdtest")
@@ -230,20 +247,42 @@ def test_the_parent_link_survives_an_owner_update(
     register(collection, publisher.pub_with_default_trend)
     update(collection, publisher.pub_with_custom_retention, reuse_tables=True)
 
-    assert parent_table_id(collection, publisher.DEFAULT_TREND_TABLE) == table_id(
+    published = table_id(collection, publisher.PUBLISHED_TABLE)
+    assert parent_table_id(collection, publisher.DEFAULT_TREND_TABLE) == published
+    assert parent_table_id(collection, publisher.SUMMARY_TABLE) == published
+
+
+@tabsdata_instance(consumer="tdtest")
+def test_updating_moves_the_summary_parent_to_its_new_table(
+    instance_tdtest: Instance,
+    collection_factory: CollectionFactory,
+) -> None:
+    # Moving the action onto the other output re-points the same summary
+    # table: its id holds and only its parent link follows the action.
+    collection = source_collection(collection_factory)
+    register(collection, publisher.pub_summary_on_first)
+    summary = table_id(collection, publisher.MOVABLE_SUMMARY_TABLE)
+    assert parent_table_id(collection, publisher.MOVABLE_SUMMARY_TABLE) == table_id(
         collection, publisher.PUBLISHED_TABLE
+    )
+
+    update(collection, publisher.pub_summary_on_second)
+
+    assert table_id(collection, publisher.MOVABLE_SUMMARY_TABLE) == summary
+    assert parent_table_id(collection, publisher.MOVABLE_SUMMARY_TABLE) == table_id(
+        collection, publisher.SECOND_TABLE
     )
 
 
 @tabsdata_instance(consumer="tdtest")
-def test_deleting_the_published_table_takes_the_trend_table(
+def test_deleting_the_published_table_takes_its_derived_tables(
     instance_tdtest: Instance,
     collection_factory: CollectionFactory,
 ) -> None:
-    # Moving the owner off the published table freezes it and retires the
-    # trend function, which freezes the trend table too. Deleting the parent
-    # then takes the derived table with it, rather than leaving it pointing at
-    # nothing.
+    # Moving the owner off the published table freezes it and its summary,
+    # and retires the trend function, which freezes the trend table too.
+    # Deleting the parent then takes the derived tables with it, rather than
+    # leaving them pointing at nothing.
     collection = source_collection(collection_factory)
     register(collection, publisher.pub_with_default_trend)
     update(collection, publisher.pub_elsewhere)
@@ -252,12 +291,14 @@ def test_deleting_the_published_table_takes_the_trend_table(
         return collection.get_table(name).kwargs.get("status")
 
     assert status(publisher.PUBLISHED_TABLE) == FROZEN
+    assert status(publisher.SUMMARY_TABLE) == FROZEN
     assert status(publisher.DEFAULT_TREND_TABLE) == FROZEN
 
     collection.get_table(publisher.PUBLISHED_TABLE).delete()
 
     remaining = table_names(collection)
     assert publisher.PUBLISHED_TABLE not in remaining
+    assert publisher.SUMMARY_TABLE not in remaining
     assert publisher.DEFAULT_TREND_TABLE not in remaining
 
 

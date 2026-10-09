@@ -124,6 +124,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -187,6 +188,7 @@ mod tests {
                 TableNameDto::try_from("table2")?,
             ]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -247,6 +249,7 @@ mod tests {
             triggers: None,
             tables: Some(vec![TableNameDto::try_from("trigger_table")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -273,6 +276,7 @@ mod tests {
             triggers: None,
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -333,6 +337,7 @@ mod tests {
             triggers: None,
             tables: Some(vec![TableNameDto::try_from("trigger_table")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -359,6 +364,7 @@ mod tests {
             triggers: Some(vec![TableTriggerDto::try_from("trigger_table")?]),
             tables: None,
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -419,6 +425,7 @@ mod tests {
             triggers: None,
             tables: Some(vec![TableNameDto::try_from("trigger_table")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -445,6 +452,7 @@ mod tests {
             triggers: Some(vec![TableTriggerDto::try_from("trigger_table")?]),
             tables: Some(vec![TableNameDto::try_from("workout_1")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -478,6 +486,7 @@ mod tests {
             triggers: Some(vec![TableTriggerDto::try_from("trigger_table")?]),
             tables: Some(vec![TableNameDto::try_from("workout_2")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -552,6 +561,7 @@ mod tests {
             triggers: None,
             tables: Some(vec![TableNameDto::try_from("trigger_table")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -609,6 +619,19 @@ mod tests {
         children: Option<Vec<ChildFunction>>,
         tables: &[&str],
     ) -> Result<FunctionRegister, TdError> {
+        let parent_tables = match &children {
+            Some(children) => {
+                let parent = TableNameDto::try_from(tables[0])?;
+                Some(
+                    children
+                        .iter()
+                        .flat_map(|child| child.tables.iter().flatten())
+                        .map(|table| (table.clone(), parent.clone()))
+                        .collect(),
+                )
+            }
+            None => None,
+        };
         Ok(FunctionRegister {
             child_functions: children,
             name: name.try_into()?,
@@ -628,6 +651,7 @@ mod tests {
                     .collect::<Result<Vec<_>, _>>()?,
             ),
             table_types: None,
+            parent_tables,
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -696,7 +720,6 @@ mod tests {
                 TableNameDto::try_from(table)?,
                 TableType::DQSummaryTrends,
             )])),
-            parent_table: TableNameDto::try_from("owned_table")?,
         })
     }
 

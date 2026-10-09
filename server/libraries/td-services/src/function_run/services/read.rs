@@ -106,6 +106,7 @@ mod tests {
             triggers: None,
             tables: Some(vec![TableNameDto::try_from("table_version")?]),
             table_types: None,
+            parent_tables: None,
             runtime_values: "mock runtime values".try_into()?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled,

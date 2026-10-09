@@ -35,6 +35,8 @@ pub struct FunctionRegister {
     #[serde(default)]
     pub table_types: Option<HashMap<TableNameDto, TableType>>,
     #[serde(default)]
+    pub parent_tables: Option<HashMap<TableNameDto, TableNameDto>>,
+    #[serde(default)]
     pub runtime_values: FunctionRuntimeValues,
     pub reuse_frozen_tables: ReuseFrozen,
     #[serde(default)]
@@ -58,18 +60,9 @@ pub struct ChildFunction {
     pub tables: Option<Vec<TableNameDto>>,
     #[serde(default)]
     pub table_types: Option<HashMap<TableNameDto, TableType>>,
-    pub parent_table: TableNameDto,
 }
 
 impl ChildFunction {
-    pub fn parent_tables(&self) -> HashMap<TableNameDto, TableNameDto> {
-        self.tables
-            .iter()
-            .flatten()
-            .map(|table| (table.clone(), self.parent_table.clone()))
-            .collect()
-    }
-
     pub fn to_register(
         &self,
         reuse_frozen_tables: ReuseFrozen,
@@ -88,6 +81,7 @@ impl ChildFunction {
             triggers: None,
             tables: self.tables.clone(),
             table_types: self.table_types.clone(),
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::default(),
             reuse_frozen_tables,
             enabled: Some(enabled),
@@ -167,6 +161,7 @@ pub struct FunctionUpdate {
     pub triggers: Option<Vec<TableTriggerDto>>,
     pub tables: Option<Vec<TableNameDto>>,
     pub table_types: Option<HashMap<TableNameDto, TableType>>,
+    pub parent_tables: Option<HashMap<TableNameDto, TableNameDto>>,
     pub runtime_values: Option<FunctionRuntimeValues>,
     pub reuse_frozen_tables: ReuseFrozen,
     pub enabled: Option<Enabled>,
@@ -704,7 +699,8 @@ mod child_function_tests {
 
     #[test]
     fn test_a_child_function_type_defaults_to_regular() {
-        let json = r#"{"name":"c","bundle_id":"00000000000000000000000000","snippet":"s","tables":["t"],"parent_table":"p"}"#;
+        let json =
+            r#"{"name":"c","bundle_id":"00000000000000000000000000","snippet":"s","tables":["t"]}"#;
         let child: ChildFunction = serde_json::from_str(json).unwrap();
         assert!(matches!(child.function_type, FunctionType::Regular));
     }

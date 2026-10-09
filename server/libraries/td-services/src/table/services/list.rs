@@ -85,6 +85,7 @@ mod tests {
             triggers: None,
             tables: Some(tables),
             table_types: None,
+            parent_tables: None,
             runtime_values: "mock runtime values".try_into()?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -131,7 +132,6 @@ mod tests {
                 TableNameDto::try_from("tt")?,
                 TableType::DQSummaryTrends,
             )])),
-            parent_table: TableNameDto::try_from("t0")?,
         };
         let create = FunctionRegister {
             child_functions: Some(vec![child]),
@@ -147,6 +147,10 @@ mod tests {
             triggers: None,
             tables: Some(vec![TableNameDto::try_from("t0")?]),
             table_types: None,
+            parent_tables: Some(HashMap::from([(
+                TableNameDto::try_from("tt")?,
+                TableNameDto::try_from("t0")?,
+            )])),
             runtime_values: "mock runtime values".try_into()?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
@@ -241,6 +245,7 @@ mod tests {
             triggers: None,
             tables: Some(tables),
             table_types: None,
+            parent_tables: None,
             runtime_values: "mock runtime values".try_into()?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,

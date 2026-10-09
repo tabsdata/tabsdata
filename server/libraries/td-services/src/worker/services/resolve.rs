@@ -185,6 +185,7 @@ mod tests {
             triggers: None,
             tables: vec![TableNameDto::try_from("t0")?].into(),
             table_types: None,
+            parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("rv")?,
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,

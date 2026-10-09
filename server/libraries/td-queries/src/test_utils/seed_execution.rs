@@ -94,6 +94,7 @@ mod tests {
             triggers,
             tables,
             table_types: None,
+            parent_tables: None,
             runtime_values: "mock runtime values".try_into().unwrap(),
             reuse_frozen_tables: ReuseFrozen::FALSE,
             enabled: None,
