@@ -2,7 +2,6 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::collections::HashMap;
 /*
 use std::path::Path;
 */
@@ -23,12 +22,12 @@ use crate::base::constants::{
     KPROFILE_ASSETS_FAMILY, REQUIREMENTS_FN_ASSET, REQUIREMENTS_TD_ASSET,
 };
 */
-use crate::base::constants::{ENV_TD_KUBE_UV_MODE, KPROFILE_CONFIGS_FAMILY, LogLevel, UvMode};
+use crate::base::constants::{ENV_TD_KUBE_UV_MODE, ENV_UV_INDEX, LogLevel, UvMode};
 #[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
-use crate::client::registry::{instance_folder, instance_init_input_folder};
+use crate::client::registry::instance_folder;
 use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments};
 use crate::client::tdkserver::commands::service::create::create_instance;
@@ -40,18 +39,26 @@ use crate::client::tdkserver::commands::service::{
 };
 #[cfg(feature = "enterprise")]
 use crate::client::tdkserver::common::confirm;
+use crate::client::tdkserver::injector::{
+    Address, CONFIG_ARGUMENT, CONFIG_HELP, CONFIG_LONG_HELP, Provided, Setting, key_address,
+    parse_settings,
+};
 #[allow(unused_imports)]
 use crate::client::tdkserver::widgets::show_notice;
 #[cfg(feature = "enterprise")]
 use crate::core::system::exit::abort;
 use crate::core::system::exit::{CommandResult, abort_with, render_error};
 use crate::cwarn;
-use crate::runtime::instance::index::{self, IndexPlan};
+#[cfg(feature = "enterprise")]
+use crate::runtime::gateway::resolver::kind::PlaceholderKind;
+use crate::runtime::instance::index;
 use crate::runtime::instance::ports::DEFAULT_BASE_PORT;
-use crate::runtime::instance::tabsdata::{TABSDATA_FILE, TabsdataConfig};
+use crate::runtime::instance::tabsdata::TABSDATA_FILE;
 use crate::runtime::provider::ClusterProvider;
 
 const QUICKSTART_PROVIDER: ClusterProvider = ClusterProvider::Kminus;
+
+const UV_INDEX_KEYS: [&str; 4] = ["pods", "global", "envs", ENV_UV_INDEX];
 
 #[allow(dead_code)]
 const VAULT_DISCLAIMER: &str = "The database passwords this quickstart generated are stored in \
@@ -76,11 +83,13 @@ pub struct QuickstartArguments {
         name = "loglevel",
         value_enum,
         required = false,
-        display_order = 75,
+        display_order = 80,
+        help = "Log level for the kminus orchestrator and pod runner. Defaults to \
+                'debug'. Only valid with the 'kminus' provider.",
         long_help = "Log level for the kminus orchestrator and pod runner. \
                      Defaults to 'debug'. Only valid with the 'kminus' provider.\n\n\
                      Example:\n  \
-                     tdk quickstart --provider kminus --loglevel info"
+                     tdkserver quickstart --provider kminus --loglevel info"
     )]
     pub loglevel: Option<LogLevel>,
 
@@ -103,8 +112,9 @@ pub struct QuickstartArguments {
         long,
         name = "anthropic-key",
         required = false,
-        display_order = 80,
-        long_help = "Anthropic API key for the aiagent. Optional."
+        display_order = 110,
+        long_help = "Deprecated: use '--config anthropic-key=<KEY>' instead. Anthropic API key \
+                     for the aiagent. Optional."
     )]
     pub anthropic_key: Option<String>,
 
@@ -113,8 +123,9 @@ pub struct QuickstartArguments {
         long,
         name = "openai-key",
         required = false,
-        display_order = 90,
-        long_help = "OpenAI API key for the aiagent. Optional."
+        display_order = 120,
+        long_help = "Deprecated: use '--config openai-key=<KEY>' instead. OpenAI API key for \
+                     the aiagent. Optional."
     )]
     pub openai_key: Option<String>,
 
@@ -124,7 +135,7 @@ pub struct QuickstartArguments {
         name = "reqs-td",
         required = false,
         value_name = "FILE",
-        display_order = 130,
+        display_order = 160,
         long_help = "Complementary packages for the td virtual environment. The file \
                      replaces the empty requirements-td.txt of the initialized instance \
                      and is installed when the virtual environment is built."
@@ -139,7 +150,7 @@ pub struct QuickstartArguments {
         name = "reqs-fn",
         required = false,
         value_name = "FILE",
-        display_order = 135,
+        display_order = 170,
         long_help = "Complementary packages for the fn virtual environment. The file \
                      replaces the empty requirements-fn.txt of the initialized instance \
                      and is installed when the virtual environment is built."
@@ -155,7 +166,7 @@ pub struct QuickstartArguments {
         name = "reqs-ag",
         required = false,
         value_name = "FILE",
-        display_order = 140,
+        display_order = 180,
         long_help = "Complementary packages for the ag virtual environment. The file \
                      replaces the empty requirements-ag.txt of the initialized instance \
                      and is installed when the virtual environment is built."
@@ -170,17 +181,34 @@ pub struct QuickstartArguments {
         name = "uv-index",
         required = false,
         value_name = "URI",
-        display_order = 150,
-        long_help = "Python package index for the instance. The URI is set as the 'UV_INDEX' \
+        display_order = 100,
+        help = "Deprecated: use '--config tabsdata:pods.global.envs.UV_INDEX=<URI>' \
+                instead. Python package index for the instance. Run with '--help' for \
+                details.",
+        long_help = "Deprecated: use '--config tabsdata:pods.global.envs.UV_INDEX=<URI>' \
+                     instead. Python package index for the instance. The URI is set as the \
+                     'UV_INDEX' \
                      global environment variable of the initialized instance, which every \
                      container of every pod receives, and it takes precedence over the \
                      'UV_INDEX' and 'PIP_INDEX_URL' variables of this machine.\n\n\
                      Only valid with 'TD_KUBE_UV_MODE' unset, because only then are the \
                      packages resolved from this machine's environment.\n\n\
                      Example:\n  \
-                     tdk quickstart --uv-index http://localhost:8000/+simple"
+                     tdkserver quickstart --uv-index http://localhost:8000/+simple"
     )]
     pub uv_index: Option<String>,
+
+    #[arg(
+        long = CONFIG_ARGUMENT,
+        name = CONFIG_ARGUMENT,
+        value_name = "SETTING",
+        required = false,
+        action = clap::ArgAction::Append,
+        display_order = 90,
+        help = CONFIG_HELP,
+        long_help = CONFIG_LONG_HELP
+    )]
+    pub config: Vec<String>,
 
     #[arg(
         long,
@@ -188,7 +216,7 @@ pub struct QuickstartArguments {
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
-        display_order = 100,
+        display_order = 130,
         long_help = "Copy the cluster settings files (kubeconfig, etc.) into the instance \
                      folder so the instance is self-contained."
     )]
@@ -200,7 +228,7 @@ pub struct QuickstartArguments {
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
-        display_order = 110,
+        display_order = 140,
         long_help = "Show the summary of resolved values before each step. Defaults to \
                      'true'. Pass '--details false' to skip the summaries."
     )]
@@ -213,7 +241,7 @@ pub struct QuickstartArguments {
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
-        display_order = 120,
+        display_order = 150,
         long_help = "Skip the interactive confirmation prompts and proceed immediately."
     )]
     pub yes: Option<bool>,
@@ -240,6 +268,7 @@ pub async fn command_quickstart(
         #[cfg(feature = "enterprise")]
         requirements_ag,
         uv_index,
+        config,
     } = arguments;
 
     #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
@@ -265,17 +294,32 @@ pub async fn command_quickstart(
 
     let settings = SettingsContext::settings();
 
-    #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
-    let mut overrides: HashMap<String, String> = HashMap::new();
+    let mut injections = parse_settings(&config).map_err(TdError::from)?;
     #[cfg(feature = "enterprise")]
     {
-        if let Some(value) = anthropic_key {
-            overrides.insert(SECRET_CATEGORY_ANTHROPIC_KEY.to_owned(), value);
+        let keys = [
+            (
+                "anthropic-key",
+                SECRET_CATEGORY_ANTHROPIC_KEY,
+                anthropic_key,
+            ),
+            ("openai-key", SECRET_CATEGORY_OPENAI_KEY, openai_key),
+        ];
+        for (argument, category, value) in keys {
+            if let Some(value) = value {
+                let address = Address::Category {
+                    kind: Some(PlaceholderKind::Secret),
+                    category: category.to_owned(),
+                };
+                injections.push(deprecated(argument, address, value));
+            }
         }
-        if let Some(value) = openai_key {
-            overrides.insert(SECRET_CATEGORY_OPENAI_KEY.to_owned(), value);
-        }
-        if overrides.is_empty()
+        let keyed = injections.iter().any(|injection| {
+            [SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY]
+                .iter()
+                .any(|category| injection.names_category(PlaceholderKind::Secret, category))
+        });
+        if !keyed
             && !confirm(
                 resolved_yes(yes, &settings).value,
                 "No Anthropic or OpenAI key provided. Proceed with no aiagent keys?",
@@ -284,6 +328,7 @@ pub async fn command_quickstart(
             return abort(Cancelled);
         }
     }
+    plan_uv_index(uv_index, &mut injections)?;
 
     let name = resolved_instance(instance.clone(), &settings)
         .value
@@ -313,7 +358,7 @@ pub async fn command_quickstart(
         #[cfg(feature = "enterprise")]
         requirements_ag,
         */
-        uv_index, &overrides, globals,
+        injections, globals,
     )
     .await;
 
@@ -365,39 +410,52 @@ fn persist_requirements(instance: &str, asset: &str, source: &Path) -> CommandRe
 }
 */
 
-fn persist_uv_index(instance: &str, plan: &IndexPlan) -> CommandResult {
-    let target = instance_init_input_folder(instance)?
-        .join(KPROFILE_CONFIGS_FAMILY.folder)
-        .join(TABSDATA_FILE);
-    let contents = std::fs::read_to_string(&target).map_err(|error| {
-        TdError::from(CliError::FileReadFailed {
-            file: target.display().to_string(),
-            cause: error.to_string(),
-        })
-    })?;
-    let mut config = TabsdataConfig::parse(&contents).map_err(|error| {
-        TdError::from(CliError::FileParseFailed {
-            file: target.display().to_string(),
-            cause: error.to_string(),
-        })
-    })?;
-    index::apply(&mut config, plan.local.as_deref());
-    let updated = serde_yaml::to_string(&config).map_err(|error| {
-        TdError::from(CliError::FileSerializeFailed {
-            file: target.display().to_string(),
-            cause: error.to_string(),
-        })
-    })?;
-    std::fs::write(&target, updated).map_err(|error| {
-        TdError::from(CliError::FileWriteFailed {
-            file: target.display().to_string(),
-            cause: error.to_string(),
-        })
-    })?;
-    info!(
-        "The instance will use the Python package index: {}",
-        plan.obtain_local()
+fn deprecated(argument: &str, address: Address, value: String) -> Setting {
+    cwarn!(
+        "Argument '--{argument}' is deprecated; use '--{CONFIG_ARGUMENT} {address}=<value>' instead."
     );
+    Setting::new(address, Provided::Text(value), format!("'--{argument}'"))
+}
+
+fn plan_uv_index(uv_index: Option<String>, injections: &mut Vec<Setting>) -> CommandResult {
+    let uv_mode = UvMode::from_environment().map_err(TdError::from)?;
+    let governed = index::governed(QUICKSTART_PROVIDER, uv_mode);
+    let uv_index = uv_index.filter(|index| !index.trim().is_empty());
+    if let Some(index) = uv_index {
+        if !governed {
+            return Err(TdError::from(CliError::UvIndexNotGoverned {
+                variable: ENV_TD_KUBE_UV_MODE.to_owned(),
+                provider: QUICKSTART_PROVIDER.as_str().to_owned(),
+                mode: uv_mode.as_str().to_owned(),
+            })
+            .into());
+        }
+        info!("The instance will use the Python package index: {index} (from --uv-index)");
+        injections.push(deprecated(
+            "uv-index",
+            key_address(TABSDATA_FILE, &UV_INDEX_KEYS),
+            index,
+        ));
+        return Ok(());
+    }
+    let explicit = injections
+        .iter()
+        .any(|injection| injection.names_key(TABSDATA_FILE, &UV_INDEX_KEYS));
+    if !governed || explicit {
+        return Ok(());
+    }
+    let plan = index::resolve(None, None);
+    if let Some(local) = plan.local.clone() {
+        info!(
+            "The instance will use the Python package index: {}",
+            plan.obtain_local()
+        );
+        injections.push(Setting::new(
+            key_address(TABSDATA_FILE, &UV_INDEX_KEYS),
+            Provided::Text(local),
+            format!("'{}'", plan.origin.as_str()),
+        ));
+    }
     Ok(())
 }
 
@@ -416,8 +474,7 @@ async fn run_quickstart(
     #[cfg(feature = "enterprise")]
     requirements_ag: Option<PathBuf>,
     */
-    uv_index: Option<String>,
-    overrides: &HashMap<String, String>,
+    injections: Vec<Setting>,
     globals: &GlobalArguments,
 ) -> CommandResult {
     init_instance(
@@ -428,16 +485,18 @@ async fn run_quickstart(
             save,
             yes,
             loglevel,
+            config: Vec::new(),
         },
         globals,
         false,
+        injections,
     )
     .await?;
 
+    /*
     let target_instance = resolved_instance(instance.clone(), &SettingsContext::settings())
         .value
         .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
-    /*
     if let Some(source) = &requirements_td {
         persist_requirements(&target_instance, REQUIREMENTS_TD_ASSET, source)?;
     }
@@ -449,18 +508,6 @@ async fn run_quickstart(
         persist_requirements(&target_instance, REQUIREMENTS_AG_ASSET, source)?;
     }
     */
-    let uv_mode = UvMode::from_environment().map_err(TdError::from)?;
-    if index::governed(QUICKSTART_PROVIDER, uv_mode) {
-        let plan = index::resolve(uv_index.as_deref(), None);
-        persist_uv_index(&target_instance, &plan)?;
-    } else if uv_index.is_some() {
-        return Err(TdError::from(CliError::UvIndexNotGoverned {
-            variable: ENV_TD_KUBE_UV_MODE.to_owned(),
-            provider: QUICKSTART_PROVIDER.as_str().to_owned(),
-            mode: uv_mode.as_str().to_owned(),
-        })
-        .into());
-    }
 
     let settings = SettingsContext::settings();
     let resolved_instance_value = resolved_instance(instance.clone(), &settings);
@@ -475,7 +522,6 @@ async fn run_quickstart(
         resolved_details_value.value,
         resolved_yes_value.value,
         resolved_verbose_value,
-        overrides,
         false,
     )
     .await?;
@@ -491,6 +537,3 @@ async fn run_quickstart(
     )
     .await
 }
-
-#[cfg(test)]
-mod tests;

@@ -6,6 +6,7 @@ pub mod cli;
 pub mod codec;
 pub mod connection;
 pub mod gateway;
+pub mod injector;
 pub mod kubernetes;
 pub mod launcher;
 pub mod manifest;

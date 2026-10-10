@@ -112,7 +112,7 @@ pub struct GlobalArguments {
         name = "accept-terms",
         required = false,
         global = true,
-        display_order = 140,
+        display_order = 1020,
         long_help = "Accept or decline the license terms without interactive prompt [y/yes/n/no]."
     )]
     pub accept_terms: Option<String>,
@@ -123,7 +123,7 @@ pub struct GlobalArguments {
         required = false,
         global = true,
         default_value_t = false,
-        display_order = 130,
+        display_order = 1000,
         long_help = "Show the output of each step that this command runs."
     )]
     pub verbose: bool,
@@ -135,7 +135,7 @@ pub struct GlobalArguments {
         global = true,
         default_value_t = true,
         action = clap::ArgAction::Set,
-        display_order = 135,
+        display_order = 1010,
         long_help = "Keep the progress line of each step that this command runs, instead of \
                      clearing it when the step finishes [true/false]."
     )]

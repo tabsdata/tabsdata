@@ -28,12 +28,16 @@ use crate::client::tdkserver::commands::service::{
 };
 use crate::client::tdkserver::commands::template::get::get_templates;
 use crate::client::tdkserver::common::confirm;
+use crate::client::tdkserver::injector::{
+    self, CONFIG_ARGUMENT, CONFIG_HELP, CONFIG_LONG_HELP, Setting, parse_settings,
+};
 use crate::client::tdkserver::render::{preview, report};
 use crate::core::system::exit::{CommandResult, abort, abort_with};
 use crate::kube::api::entity::namespace::ensure_namespace_exists;
 use crate::kube::api::entity::pod::probe_scheduler;
 use crate::kube::api::support::cluster::ensure_cluster_reachable;
 use crate::runtime::instance::cluster::ClusterProperties;
+use crate::runtime::instance::profile::load_profile;
 use crate::runtime::provider::{ClusterProvider, provider_for};
 
 // const DEFAULT_PROVIDER: ClusterProvider = ClusterProvider::Kminus;
@@ -58,13 +62,27 @@ pub struct InitArguments {
         name = "loglevel",
         value_enum,
         required = false,
-        display_order = 20,
+        display_order = 70,
+        help = "Log level for the kminus orchestrator and pod runner. Defaults to \
+                'debug'. Only valid with the 'kminus' provider.",
         long_help = "Log level for the kminus orchestrator and pod runner. \
                      Defaults to 'debug'. Only valid with the 'kminus' provider.\n\n\
                      Example:\n  \
-                     tdk init --provider kminus --loglevel info"
+                     tdkserver init --provider kminus --loglevel info"
     )]
     pub loglevel: Option<LogLevel>,
+
+    #[arg(
+        long = CONFIG_ARGUMENT,
+        name = CONFIG_ARGUMENT,
+        value_name = "SETTING",
+        required = false,
+        action = clap::ArgAction::Append,
+        display_order = 80,
+        help = CONFIG_HELP,
+        long_help = CONFIG_LONG_HELP
+    )]
+    pub config: Vec<String>,
 
     #[arg(
         long,
@@ -72,7 +90,7 @@ pub struct InitArguments {
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
-        display_order = 110,
+        display_order = 100,
         long_help = "Show the summary of resolved values before initializing the instance. \
                      Defaults to 'true'. Pass '--details false' to skip the summary."
     )]
@@ -84,7 +102,7 @@ pub struct InitArguments {
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
-        display_order = 100,
+        display_order = 90,
         long_help = "Copy the cluster settings files (kubeconfig, etc.) into the instance \
                      folder so the instance is self-contained."
     )]
@@ -97,20 +115,21 @@ pub struct InitArguments {
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
-        display_order = 120,
+        display_order = 110,
         long_help = "Skip the interactive confirmation prompt and proceed immediately."
     )]
     pub yes: Option<bool>,
 }
 
 pub async fn command_init(arguments: InitArguments, globals: &GlobalArguments) -> CommandResult {
-    init_instance(arguments, globals, true).await
+    init_instance(arguments, globals, true, Vec::new()).await
 }
 
 pub async fn init_instance(
     arguments: InitArguments,
     globals: &GlobalArguments,
     with_hint: bool,
+    extra: Vec<Setting>,
 ) -> CommandResult {
     let InitArguments {
         instance,
@@ -119,7 +138,10 @@ pub async fn init_instance(
         details,
         yes,
         loglevel,
+        config,
     } = arguments;
+    let mut injections = parse_settings(&config).map_err(TdError::from)?;
+    injections.extend(extra);
 
     let settings = SettingsContext::settings();
     let instance = resolved_instance(instance, &settings);
@@ -167,6 +189,9 @@ pub async fn init_instance(
         current: cluster.current,
         namespace: cluster.namespace.clone(),
     };
+
+    let profile = load_profile(provider, verbose).map_err(TdError::from)?;
+    let injected = injector::plan(&profile.configs, &injections).map_err(TdError::from)?;
 
     let built = provider_for(
         cluster,
@@ -252,6 +277,15 @@ pub async fn init_instance(
     ));
 
     get_templates(&reporter, provider, &init_folder, verbose)?;
+
+    if !injected.is_empty() {
+        let step = reporter.step("Injecting configuration settings");
+        if let Err(error) = injector::write(&init_folder, &injected) {
+            step.fail();
+            return Err(TdError::from(error).into());
+        }
+        step.done("Injected the configuration settings");
+    }
 
     let step = reporter.step("Writing tabsdata instance settings");
     let settings = InstanceSettings {

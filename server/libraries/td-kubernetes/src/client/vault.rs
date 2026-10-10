@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -79,26 +79,15 @@ impl Vault {
         if provisioned { self.save() } else { Ok(()) }
     }
 
-    pub fn persist(
-        &mut self,
-        fused: &FusedSecrets,
-        overrides: &HashMap<String, String>,
-    ) -> CommandResult {
+    pub fn persist(&mut self, fused: &FusedSecrets) -> CommandResult {
         let mut stored = false;
         for (_, entries) in &fused.by_file {
             for entry in entries {
                 let Some(category) = entry.category.as_deref() else {
                     continue;
                 };
-                let value = overrides
-                    .get(category)
-                    .map(String::as_str)
-                    .unwrap_or(entry.value.as_str());
-                stored |= self.store(category, value);
+                stored |= self.store(category, &entry.value);
             }
-        }
-        for (category, value) in overrides {
-            stored |= self.store(category, value);
         }
         if stored { self.save() } else { Ok(()) }
     }

@@ -116,7 +116,6 @@ pub async fn command_create(
         details.value,
         yes.value,
         verbose,
-        &HashMap::new(),
         true,
     )
     .await
@@ -130,7 +129,6 @@ pub async fn create_instance(
     details: bool,
     yes: bool,
     verbose: bool,
-    secret_overrides: &HashMap<String, String>,
     with_hint: bool,
 ) -> CommandResult {
     let instance = instance.unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
@@ -211,9 +209,9 @@ pub async fn create_instance(
     let tx = provider.create_cluster_hook(&reporter).await?;
 
     let context = provider.kube_context().await?;
-    store_secrets(&context, &fused, secret_overrides, &reporter).await?;
+    store_secrets(&context, &fused, &reporter).await?;
     if settings.provider == ClusterProvider::Kminus {
-        vault.persist(&fused, secret_overrides)?;
+        vault.persist(&fused)?;
     }
 
     provider.create_runtimes(&reporter).await?;
@@ -280,7 +278,6 @@ fn relative_to(activate: &Path, root: &Path) -> PathBuf {
 async fn store_secrets(
     context: &KubeContext,
     fused: &FusedSecrets,
-    overrides: &HashMap<String, String>,
     reporter: &InteractiveReporter,
 ) -> CommandResult {
     if fused.by_file.is_empty() {
@@ -291,15 +288,7 @@ async fn store_secrets(
         let name = to_secret_name(file)?;
         let data: BTreeMap<String, String> = entries
             .iter()
-            .map(|entry| {
-                let value = entry
-                    .category
-                    .as_ref()
-                    .and_then(|category| overrides.get(category))
-                    .cloned()
-                    .unwrap_or_else(|| entry.value.clone());
-                (entry.key.clone(), value)
-            })
+            .map(|entry| (entry.key.clone(), entry.value.clone()))
             .collect();
         if let Err(error) = upsert_secret(
             context,
