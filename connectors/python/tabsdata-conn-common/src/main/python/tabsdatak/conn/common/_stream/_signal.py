@@ -33,9 +33,17 @@ class StopSignal:
         if threading.current_thread() is not threading.main_thread():
             return stop_signal
 
-        def handle_signal(signum, _frame):
+        previous = {
+            signum: signal.getsignal(signum)
+            for signum in (signal.SIGINT, signal.SIGTERM)
+        }
+
+        def handle_signal(signum, frame):
             logger.info(f"Received termination signal ({signum}). Shutting down...")
             stop_signal.set()
+            chained = previous.get(signum)
+            if callable(chained) and chained is not signal.default_int_handler:
+                chained(signum, frame)
 
         signal.signal(signal.SIGINT, handle_signal)
         signal.signal(signal.SIGTERM, handle_signal)

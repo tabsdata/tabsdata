@@ -13,9 +13,10 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
 
 
 class CronTriggerConnectionError(CommandRuntimeException):
-    """The one-shot POST to the function execute endpoint could not reach
-    the apiserver (connection refused, DNS failure, timeout). The CronJob
-    fire is marked failed so Kubernetes surfaces it; the next tick retries."""
+    """The POST to the function execute endpoint could not reach the
+    apiserver (connection refused, DNS failure, timeout) within the retry
+    budget. The CronJob fire is marked failed so Kubernetes surfaces it; the
+    next tick fires again."""
 
     exit_code = 82
 

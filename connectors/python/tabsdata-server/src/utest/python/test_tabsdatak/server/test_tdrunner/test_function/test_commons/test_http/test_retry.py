@@ -10,10 +10,13 @@ from http import HTTPStatus
 import pytest
 
 from tabsdatak.server._tdrunner.function._commons.http import retry
+from tabsdatak.server._tdrunner.function._commons.http.request import HttpResponse
 from tabsdatak.server._tdrunner.function._commons.http.retry import (
     call_with_retry,
     is_retriable,
+    is_retriable_response,
 )
+from tabsdatak.server._tdrunner.function._commons.run import shutdown
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -72,6 +75,24 @@ def test_retriable_failures(error):
     assert is_retriable(error)
 
 
+@pytest.fixture
+def shutdown_requested(monkeypatch):
+    monkeypatch.setattr(shutdown, "requested", True)
+
+
+@pytest.mark.parametrize(
+    ("status", "retriable"),
+    [
+        (HTTPStatus.SERVICE_UNAVAILABLE, True),
+        (HTTPStatus.TOO_MANY_REQUESTS, True),
+        (HTTPStatus.OK, False),
+        (HTTPStatus.CONFLICT, False),
+    ],
+)
+def test_retriable_responses(status, retriable):
+    assert is_retriable_response(HttpResponse(status=status, body=b"")) is retriable
+
+
 def test_malformed_url_is_not_retriable():
     assert not is_retriable(ValueError("unknown url type"))
 
@@ -117,3 +138,52 @@ def test_spent_budget_reraises_last_error(short_budget):
         call_with_retry(call)
     assert raised.value is error
     assert len(attempts) > 1
+
+
+def test_retriable_response_is_retried_until_success(short_budget):
+    responses = [
+        HttpResponse(status=HTTPStatus.SERVICE_UNAVAILABLE, body=b""),
+        HttpResponse(status=HTTPStatus.OK, body=b"done"),
+    ]
+
+    assert call_with_retry(responses.pop, 0).body == b"done"
+
+
+def test_spent_budget_returns_last_retriable_response(short_budget):
+    response = HttpResponse(status=HTTPStatus.BAD_GATEWAY, body=b"")
+
+    assert call_with_retry(lambda: response) is response
+
+
+def test_shutdown_stops_retrying_after_the_first_attempt(shutdown_requested):
+    attempts = []
+    error = urllib.error.URLError("connection refused")
+
+    def call():
+        attempts.append(1)
+        raise error
+
+    with pytest.raises(urllib.error.URLError) as raised:
+        call_with_retry(call)
+    assert raised.value is error
+    assert len(attempts) == 1
+
+
+def test_shutdown_during_retries_stops_them(monkeypatch):
+    monkeypatch.setattr(retry, "WAIT_SECONDS", 0)
+    monkeypatch.setattr(shutdown, "requested", False)
+    attempts = []
+
+    def call():
+        attempts.append(1)
+        if len(attempts) == 2:
+            shutdown.request_shutdown()
+        raise urllib.error.URLError("connection refused")
+
+    with pytest.raises(urllib.error.URLError):
+        call_with_retry(call)
+    assert len(attempts) == 2
+
+
+def test_shutdown_keeps_successful_calls(shutdown_requested):
+    assert call_with_retry(lambda: "done") == "done"

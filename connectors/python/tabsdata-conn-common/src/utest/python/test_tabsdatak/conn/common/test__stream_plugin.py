@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import signal
 import threading
 from pathlib import Path
 from typing import Self
@@ -761,6 +762,36 @@ def test_the_stop_signal_off_the_main_thread_is_a_plain_unset_signal():
 
     assert isinstance(result["stop_signal"], StopSignal)
     assert result["is_set"] is False
+
+
+@pytest.fixture
+def restored_signal_handlers():
+    saved = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, signal.SIGTERM)}
+    yield
+    for signum, handler in saved.items():
+        signal.signal(signum, handler)
+
+
+def test_the_stop_signal_chains_to_the_handler_it_replaces(restored_signal_handlers):
+    received = []
+    signal.signal(signal.SIGTERM, lambda signum, frame: received.append(signum))
+
+    stop_signal = StopSignal.install()
+    signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+
+    assert stop_signal.is_set()
+    assert received == [signal.SIGTERM]
+
+
+def test_the_stop_signal_does_not_chain_to_the_default_interrupt(
+    restored_signal_handlers,
+):
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+
+    stop_signal = StopSignal.install()
+    signal.getsignal(signal.SIGINT)(signal.SIGINT, None)
+
+    assert stop_signal.is_set()
 
 
 def test_run_sets_the_configured_level_on_its_loggers(monkeypatch):

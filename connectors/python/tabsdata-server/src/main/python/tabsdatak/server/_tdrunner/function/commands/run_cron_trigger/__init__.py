@@ -20,9 +20,13 @@ that is needed. Kubernetes re-spawns the pod on the next schedule tick.
 apiserver response handling:
 
   * ``2xx`` -- execution scheduled; exit 0.
-  * anything else / connection failure -- raise; ``@command`` reports it to
-    the responder and returns a non-zero exit, so the Job is marked failed
-    and the missed fire is visible rather than silently dropped.
+  * connection failure, ``5xx``, ``408`` or ``429`` -- retried with the
+    function runner's shared policy (``_commons.http.retry``), so a fire
+    survives an apiserver restart.
+  * anything else, or a transient failure that outlasts the retries --
+    raise; ``@command`` reports it to the responder and returns a non-zero
+    exit, so the Job is marked failed and the missed fire is visible rather
+    than silently dropped.
 """
 
 from __future__ import annotations
@@ -54,8 +58,9 @@ MAN = (
     "    ... + standard responder/liveness/log/journal args\n\n"
     "Builds an HttpRequest from the --trigger-* triplet (injected by the "
     "cron-publisher pod profile from the worker's TD_TRIGGER_* secret) and "
-    "POSTs a CronTrigger InternalExecutionRequest once. Exits 0 on 2xx; any "
-    "other response (or a connection failure) fails the Job so the missed "
+    "POSTs a CronTrigger InternalExecutionRequest, retrying connection "
+    "failures, 5xx, 408 and 429. Exits 0 on 2xx; any other response (or a "
+    "transient failure that outlasts the retries) fails the Job so the missed "
     "fire is visible. Kubernetes re-spawns the pod on the next schedule tick."
 )
 

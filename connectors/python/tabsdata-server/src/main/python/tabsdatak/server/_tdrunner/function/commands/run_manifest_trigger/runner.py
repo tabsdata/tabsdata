@@ -29,6 +29,9 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpRequestError,
     invoke,
 )
+from tabsdatak.server._tdrunner.function._commons.run.shutdown import (
+    request_shutdown,
+)
 from tabsdatak.server._tdrunner.function._commons.solver.arguments import (
     resolve_value,
 )
@@ -356,6 +359,7 @@ def run(args: argparse.Namespace) -> int:
             "active-flag check",
             signum,
         )
+        request_shutdown()
         active_flag["on"] = False
 
     try:

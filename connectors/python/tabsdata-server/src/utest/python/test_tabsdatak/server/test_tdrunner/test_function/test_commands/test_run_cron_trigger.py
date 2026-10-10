@@ -10,6 +10,7 @@ import json
 
 import pytest
 
+from tabsdatak.server._tdrunner.function._commons.http import retry
 from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpRequest,
     HttpRequestError,
@@ -91,13 +92,20 @@ def test_build_parser_accepts_trigger_triplet():
     assert ns.trigger_authorization == "val:Bearer t"
 
 
-# --- _fire: POST once, classify the response ------------------------------
+# --- _fire: POST with retries, classify the response ----------------------
+
+
+@pytest.fixture
+def short_budget(monkeypatch):
+    monkeypatch.setattr(retry, "WAIT_SECONDS", 0)
+    monkeypatch.setattr(retry, "TOTAL_SECONDS", 0.2)
 
 
 def _capture_invoke(*, response: HttpResponse | None = None, raise_exc=None):
-    captured: dict = {}
+    captured: dict = {"attempts": 0}
 
     def fake_invoke(request, body=None):
+        captured["attempts"] += 1
         captured["request"] = request
         captured["body"] = body
         if raise_exc is not None:
@@ -124,21 +132,58 @@ def test_fire_posts_cron_body_and_returns_on_2xx(monkeypatch):
     assert json.loads(captured["body"])["trigger_type"] == "CT"
 
 
-def test_fire_raises_ct2_on_non_2xx(monkeypatch):
-    fake, _ = _capture_invoke(response=HttpResponse(status=403, body=b"forbidden"))
+def test_fire_raises_ct2_on_non_2xx_without_retrying(monkeypatch):
+    fake, captured = _capture_invoke(
+        response=HttpResponse(status=403, body=b"forbidden")
+    )
     monkeypatch.setattr(runner, "invoke", fake)
 
     with pytest.raises(CronTriggerRejectedError) as excinfo:
         _fire("http://api/execute", "POST", "Bearer tok")
     assert excinfo.value.exit_code == 83
     assert "403" in str(excinfo.value)
+    assert captured["attempts"] == 1
 
 
-def test_fire_raises_ct1_on_connection_error(monkeypatch):
-    fake, _ = _capture_invoke(raise_exc=HttpRequestError("connection refused"))
+def test_fire_raises_ct2_on_a_server_error_that_outlasts_the_retries(
+    monkeypatch, short_budget
+):
+    fake, captured = _capture_invoke(response=HttpResponse(status=503, body=b""))
+    monkeypatch.setattr(runner, "invoke", fake)
+
+    with pytest.raises(CronTriggerRejectedError) as excinfo:
+        _fire("http://api/execute", "POST", "Bearer tok")
+    assert "503" in str(excinfo.value)
+    assert captured["attempts"] > 1
+
+
+def test_fire_retries_until_the_apiserver_answers(monkeypatch, short_budget):
+    responses = [
+        HttpRequestError("connection refused"),
+        HttpResponse(status=503, body=b""),
+        HttpResponse(status=200, body=b"{}"),
+    ]
+
+    def fake_invoke(request, body=None):
+        outcome = responses.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(runner, "invoke", fake_invoke)
+
+    assert _fire("http://api/execute", "POST", "Bearer tok") is None
+    assert responses == []
+
+
+def test_fire_raises_ct1_on_connection_error(monkeypatch, short_budget):
+    fake, captured = _capture_invoke(
+        raise_exc=HttpRequestError("connection refused")
+    )
     monkeypatch.setattr(runner, "invoke", fake)
 
     with pytest.raises(CronTriggerConnectionError) as excinfo:
         _fire("http://api/execute", "POST", "Bearer tok")
     assert excinfo.value.exit_code == 82
     assert "http://api/execute" in str(excinfo.value)
+    assert captured["attempts"] > 1

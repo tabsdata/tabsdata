@@ -21,6 +21,7 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpRequestError,
     invoke,
 )
+from tabsdatak.server._tdrunner.function._commons.http.retry import call_with_retry
 from tabsdatak.server._tdrunner.function._commons.solver.arguments import resolve_value
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.error import (
     RunCronTriggerErrorCode,
@@ -49,7 +50,8 @@ def _execution_request_body() -> bytes:
 
 
 def _fire(url: str, method: str, authorization: str) -> None:
-    """POST the execute endpoint once; raise on non-2xx or connection failure.
+    """POST the execute endpoint, retrying transient failures; raise on a
+    non-2xx or a connection failure that outlasts the retries.
 
     Raises:
         CronTriggerConnectionError (CT_1): the POST could not reach the
@@ -63,7 +65,7 @@ def _fire(url: str, method: str, authorization: str) -> None:
     )
     logger.info("run-cron-trigger: firing execute %s %s", method, url)
     try:
-        response = invoke(request, body=_execution_request_body())
+        response = call_with_retry(invoke, request, body=_execution_request_body())
     except HttpRequestError as exc:
         raise RunCronTriggerErrorCode.CT_1.exception(url=url, detail=str(exc)) from exc
 

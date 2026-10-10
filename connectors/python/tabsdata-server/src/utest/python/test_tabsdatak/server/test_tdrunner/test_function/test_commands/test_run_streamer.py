@@ -13,6 +13,7 @@ integration suites that bring up a broker.
 from __future__ import annotations
 
 import json
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -29,9 +30,11 @@ from tabsdatak.api import (  # noqa: F401, E402
 from tabsdatak.conn.kafka import (  # noqa: E402
     KafkaStreamSrc as _KafkaStreamSrc,
 )
+from tabsdatak.server._tdrunner.function._commons.run import shutdown
 from tabsdatak.server._tdrunner.function.commands.run_streamer import (
     _load_function_def,
     _resolve_plugin,
+    runner,
 )
 from tabsdatak.server._tdrunner.function.commands.run_streamer.error import (
     BadBundleError,
@@ -176,3 +179,49 @@ def test_rs_7_resolves_to_unsupported_stage_scheme():
     assert isinstance(exc, UnsupportedStageSchemeError)
     assert exc.exit_code == UnsupportedStageSchemeError.exit_code
     assert "s3" in str(exc)
+
+
+# --- report_completion -----------------------------------------------
+
+
+def failing_notify_done(error: BaseException):
+    def notify_done(arguments):
+        raise error
+
+    return notify_done
+
+
+@pytest.fixture
+def shutdown_flag(monkeypatch):
+    monkeypatch.setattr(shutdown, "requested", False)
+
+
+def test_completion_lost_to_a_stopped_apiserver_is_tolerated_on_shutdown(
+    monkeypatch, shutdown_flag
+):
+    shutdown.request_shutdown()
+    monkeypatch.setattr(
+        runner,
+        "notify_done",
+        failing_notify_done(urllib.error.URLError("connection refused")),
+    )
+
+    assert runner.report_completion(None) is None
+
+
+def test_completion_failure_outside_shutdown_propagates(monkeypatch, shutdown_flag):
+    error = urllib.error.URLError("connection refused")
+    monkeypatch.setattr(runner, "notify_done", failing_notify_done(error))
+
+    with pytest.raises(urllib.error.URLError) as raised:
+        runner.report_completion(None)
+    assert raised.value is error
+
+
+def test_completion_rejected_on_shutdown_propagates(monkeypatch, shutdown_flag):
+    shutdown.request_shutdown()
+    error = urllib.error.HTTPError("http://r", 403, "Forbidden", {}, None)
+    monkeypatch.setattr(runner, "notify_done", failing_notify_done(error))
+
+    with pytest.raises(urllib.error.HTTPError):
+        runner.report_completion(None)
