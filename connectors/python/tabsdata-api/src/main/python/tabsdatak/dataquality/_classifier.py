@@ -106,6 +106,30 @@ def _check_min_max(
         )
 
 
+def _check_power_range(
+    base: ScaleBaseSpec,
+    min_val: ScaleLimitSpec,
+    max_val: ScaleLimitSpec,
+    fn_name: str,
+    error_code: DataQualityErrorCode,
+) -> None:
+    """Validates that `base ** min_val` and `base ** max_val` fit in a float."""
+    try:
+        if math.isfinite(base**min_val) and math.isfinite(base**max_val):
+            return
+    except OverflowError:
+        pass
+    detail = (
+        f"min={min_val}, max={max_val}, base={base}, base raised to the minimum "
+        "and maximum values must not overflow a float."
+    )
+    raise error_code.exception(
+        message=_parameter_value_message(
+            fn_name, ["min_val", "max_val", "base"], detail
+        )
+    )
+
+
 def _check_bins(
     bins: int, use_bin_zero: bool, fn_name: str, error_code: DataQualityErrorCode
 ) -> None:
@@ -182,10 +206,14 @@ class Scale(ABC, _api.JsonSerde):
 
 @_api.dataclass(DataQualityErrorCode.DQC_106)
 class IdentityScale(Scale):
-    """A scale where every integer in `[min_val, max_val)` maps to its own
-    bin (used with `ScaleCategorizer`).
+    """A scale with one bin per integer step over `[min_val, max_val]` (used
+    with `ScaleCategorizer`).
 
     :categories: dq-classifier
+
+    Bin `i` holds the integer `min_val + i`. `min_val` itself shares bin 1
+    with `min_val + 1`, unless `use_bin_zero` is `True`: then it gets bin 0
+    and every integer in the range has its own bin.
 
     Args:
         min_val: Lowest integer of the scale; a whole number.
@@ -197,11 +225,14 @@ class IdentityScale(Scale):
 
     Examples:
         One bin per whole value in the range -- here a bin for each score from
-        1 to 5:
+        1 to 5, with 1 in bin 0:
 
         .. code-block:: python
 
-            ScaleCategorizer(["score"], scale=IdentityScale(1, 5))
+            ScaleCategorizer(
+                ["score"],
+                scale=IdentityScale(1, 5, use_bin_zero=True),
+            )
     """
 
     __kind__ = "dqIdentityScale"
@@ -340,24 +371,30 @@ class LogarithmicScale(Scale):
 
     :categories: dq-classifier
 
+    The edges are the logarithms of evenly spaced points between
+    `base ** min_val` and `base ** max_val`, so the bins narrow as values
+    grow and values near `max_val` are resolved most finely.
+
     Args:
         min_val: Lowest value of the scale; an int or float.
         max_val: Highest value of the scale; strictly greater than
             `min_val`.
         base: Base of the logarithm; a float greater than 0 (default
-            `e`).
+            `e`). `base ** min_val` and `base ** max_val` must not
+            overflow a float.
         bins: Number of bins; a whole number from 1 to 100 (default 100).
         use_bin_zero: If `False`, the minimum value belongs to the first
             bin; if `True`, `min_val` gets its own bin 0.
 
     Examples:
-        Bins that widen logarithmically -- useful for long-tailed values:
+        Bins that narrow as values grow -- here with edges at about 2.52,
+        2.82 and 3:
 
         .. code-block:: python
 
             ScaleCategorizer(
                 ["amount"],
-                scale=LogarithmicScale(1.0, 1000.0, base=10.0, bins=3),
+                scale=LogarithmicScale(0.0, 3.0, base=10.0, bins=3),
             )
     """
 
@@ -372,6 +409,13 @@ class LogarithmicScale(Scale):
     @model_validator(mode="after")
     def _validate(self) -> "LogarithmicScale":
         _check_min_max(
+            self.min_val,
+            self.max_val,
+            type(self).__name__,
+            DataQualityErrorCode.DQC_107,
+        )
+        _check_power_range(
+            self.base,
             self.min_val,
             self.max_val,
             type(self).__name__,
@@ -393,6 +437,10 @@ class ExponentialScale(Scale):
 
     :categories: dq-classifier
 
+    The edges grow geometrically, so the bins widen as values grow, the
+    mirror of `LogarithmicScale`. A range with `min_val <= 0` is shifted to
+    positive values before the edges are computed.
+
     Args:
         min_val: Lowest value of the scale; an int or float.
         max_val: Highest value of the scale; strictly greater than
@@ -404,13 +452,14 @@ class ExponentialScale(Scale):
             bin; if `True`, `min_val` gets its own bin 0.
 
     Examples:
-        Bins that narrow as values grow, the mirror of `LogarithmicScale`:
+        Bins that widen as values grow -- useful for long-tailed values. Here
+        the edges are 10, 100 and 1000:
 
         .. code-block:: python
 
             ScaleCategorizer(
                 ["amount"],
-                scale=ExponentialScale(0.0, 100.0, base=2.0, bins=8),
+                scale=ExponentialScale(1.0, 1000.0, base=10.0, bins=3),
             )
     """
 

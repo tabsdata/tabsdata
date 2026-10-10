@@ -96,6 +96,14 @@ def test_supported_dtypes_are_class_scoped():
         (lambda: dq.Matches(["a"], pattern="[unclosed"), DataQualityErrorCode.DQC_145),
         (lambda: dq.LinearScale(10, 5), DataQualityErrorCode.DQC_107),
         (lambda: dq.IdentityScale(0, 200), DataQualityErrorCode.DQC_107),
+        (
+            lambda: dq.LogarithmicScale(1.0, 1000.0, base=10.0),
+            DataQualityErrorCode.DQC_107,
+        ),
+        (
+            lambda: dq.LogarithmicScale(-2000.0, 0.0, base=0.5),
+            DataQualityErrorCode.DQC_107,
+        ),
     ],
 )
 def test_value_invariants_raise_specific_codes(factory, code):
