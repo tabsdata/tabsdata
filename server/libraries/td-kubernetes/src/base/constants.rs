@@ -380,6 +380,7 @@ pub const EDIT_FOLDER: &str = "edit";
 pub const INPUT_FOLDER: &str = "input";
 pub const STAGE_FOLDER: &str = "stage";
 pub const TRASH_FOLDER: &str = "trash";
+pub const STUBS_FOLDER: &str = "stubs";
 pub const LOG_FOLDER: &str = "log";
 pub const TDKSERVER_LOG_FILE: &str = "tdkserver.log";
 pub const KM_IO_LOG_PREFIX: &str = "km.io";

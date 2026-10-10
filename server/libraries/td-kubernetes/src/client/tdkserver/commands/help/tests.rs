@@ -77,6 +77,7 @@ fn test_full_help_json_is_a_command_tree() {
     assert_eq!(tree["path"], PROGRAM_NAME);
     let top: Vec<String> = names(&tree);
     for command in [
+        "stubs",
         "quickstart",
         "init",
         "create",

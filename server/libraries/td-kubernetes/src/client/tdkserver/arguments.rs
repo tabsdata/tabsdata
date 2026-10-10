@@ -26,6 +26,7 @@ use crate::client::tdkserver::commands::service::quickstart::QuickstartArguments
 use crate::client::tdkserver::commands::service::restart::RestartArguments;
 use crate::client::tdkserver::commands::service::start::StartArguments;
 use crate::client::tdkserver::commands::service::stop::StopArguments;
+use crate::client::tdkserver::commands::service::stubs::StubsArguments;
 use crate::client::tdkserver::commands::service::trash::TrashArguments;
 use crate::client::tdkserver::commands::service::upgrade::UpgradeArguments;
 use crate::client::tdkserver::commands::session::set::SetArguments;
@@ -112,7 +113,7 @@ pub struct GlobalArguments {
         name = "accept-terms",
         required = false,
         global = true,
-        display_order = 1020,
+        display_order = 920,
         long_help = "Accept or decline the license terms without interactive prompt [y/yes/n/no]."
     )]
     pub accept_terms: Option<String>,
@@ -123,7 +124,7 @@ pub struct GlobalArguments {
         required = false,
         global = true,
         default_value_t = false,
-        display_order = 1000,
+        display_order = 900,
         long_help = "Show the output of each step that this command runs."
     )]
     pub verbose: bool,
@@ -135,7 +136,7 @@ pub struct GlobalArguments {
         global = true,
         default_value_t = true,
         action = clap::ArgAction::Set,
-        display_order = 1010,
+        display_order = 910,
         long_help = "Keep the progress line of each step that this command runs, instead of \
                      clearing it when the step finishes [true/false]."
     )]
@@ -156,10 +157,12 @@ pub enum Commands {
         arg_required_else_help = true
     )]
     Info(InfoCommands),
-    #[command(about = "Initialize, create and start a tabsdata instance in one step")]
-    Quickstart(QuickstartArguments),
+    #[command(about = "Copy the configuration stubs for '--config' into the tabsdata home folder")]
+    Stubs(StubsArguments),
     #[command(about = "Check whether a tabsdata instance can be created")]
     Assess(AssessArguments),
+    #[command(about = "Initialize, create and start a tabsdata instance in one step")]
+    Quickstart(QuickstartArguments),
     #[command(about = "Produce an editable input config folder for a tabsdata instance")]
     Init(InitArguments),
     #[command(about = "Create a tabsdata instance")]

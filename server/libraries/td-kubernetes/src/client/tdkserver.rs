@@ -35,6 +35,7 @@ use crate::client::tdkserver::commands::service::restart::command_restart;
 use crate::client::tdkserver::commands::service::start::command_start;
 use crate::client::tdkserver::commands::service::status::command_status;
 use crate::client::tdkserver::commands::service::stop::command_stop;
+use crate::client::tdkserver::commands::service::stubs::command_stubs;
 use crate::client::tdkserver::commands::service::trash::command_trash;
 use crate::client::tdkserver::commands::service::upgrade::command_upgrade;
 // use crate::client::tdkserver::commands::service::unregister::command_unregister;
@@ -75,8 +76,9 @@ impl TabsDataKubernetesClient {
             Some(Commands::Banner) => command_banner(&globals).await,
             Some(Commands::About) => command_about(&globals).await,
             Some(Commands::Info(arguments)) => command_info(arguments, &globals).await,
-            Some(Commands::Quickstart(arguments)) => command_quickstart(arguments, &globals).await,
+            Some(Commands::Stubs(arguments)) => command_stubs(arguments, &globals).await,
             Some(Commands::Assess(arguments)) => command_assess(arguments, &globals).await,
+            Some(Commands::Quickstart(arguments)) => command_quickstart(arguments, &globals).await,
             Some(Commands::Init(arguments)) => command_init(arguments, &globals).await,
             Some(Commands::Create(arguments)) => command_create(arguments, &globals).await,
             Some(Commands::Delete(arguments)) => command_delete(arguments, &globals).await,

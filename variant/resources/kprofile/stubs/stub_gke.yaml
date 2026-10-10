@@ -1,0 +1,22 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+files:
+  apiserver.storage:
+    storage.mounts[id=ROOT]:
+      uri: env:TDK_STORAGE_ROOT_URI
+      options.google_service_account_key: env:GOOGLE_SERVICE_ACCOUNT_KEY
+    storage.mounts[id=BUNDLES]:
+      uri: env:TDK_STORAGE_BUNDLES_URI
+      options.google_service_account_key: env:GOOGLE_SERVICE_ACCOUNT_KEY
+    storage.mounts[id=IMAGES]:
+      uri: env:TDK_STORAGE_IMAGES_URI
+      options.google_service_account_key: env:GOOGLE_SERVICE_ACCOUNT_KEY
+values:
+  tdk_database_host: ""
+  tdk_database_port: ""
+  tdk_database_name: ""
+  postgres_system_user: env:POSTGRES_SYSTEM_USER
+  postgres_system_password: env:POSTGRES_SYSTEM_PASSWORD
+  tdk_database_ssl_root_cert_pem: env:TDK_DATABASE_SSL_ROOT_CERT_PEM

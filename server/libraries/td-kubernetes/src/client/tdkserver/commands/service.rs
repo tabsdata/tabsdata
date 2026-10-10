@@ -15,6 +15,7 @@ pub mod restart;
 pub mod start;
 pub mod status;
 pub mod stop;
+pub mod stubs;
 pub mod trash;
 pub mod unregister;
 pub mod upgrade;

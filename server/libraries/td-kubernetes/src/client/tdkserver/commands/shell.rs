@@ -35,6 +35,7 @@ use super::service::restart::{RestartArguments, command_restart};
 use super::service::start::{StartArguments, command_start};
 use super::service::status::command_status;
 use super::service::stop::{StopArguments, command_stop};
+use super::service::stubs::{StubsArguments, command_stubs};
 use super::service::trash::{TrashArguments, command_trash};
 use super::service::upgrade::{UpgradeArguments, command_upgrade};
 use super::session::set::{SetArguments, command_set};
@@ -63,10 +64,12 @@ enum ShellCommand {
         arg_required_else_help = true
     )]
     Info(InfoCommands),
-    #[command(about = "Initialize, create and start a tabsdata instance in one step")]
-    Quickstart(QuickstartArguments),
+    #[command(about = "Copy the configuration stubs for '--config' into the tabsdata home folder")]
+    Stubs(StubsArguments),
     #[command(about = "Check whether a tabsdata instance can be created")]
     Assess(AssessArguments),
+    #[command(about = "Initialize, create and start a tabsdata instance in one step")]
+    Quickstart(QuickstartArguments),
     #[command(about = "Produce an editable input config folder for a tabsdata instance")]
     Init(InitArguments),
     #[command(about = "Create a tabsdata instance")]
@@ -201,11 +204,14 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 ShellCommand::Info(command) => {
                     let _ = command_info(command, globals).await;
                 }
-                ShellCommand::Quickstart(arguments) => {
-                    let _ = command_quickstart(arguments, globals).await;
+                ShellCommand::Stubs(arguments) => {
+                    let _ = command_stubs(arguments, globals).await;
                 }
                 ShellCommand::Assess(arguments) => {
                     let _ = command_assess(arguments, globals).await;
+                }
+                ShellCommand::Quickstart(arguments) => {
+                    let _ = command_quickstart(arguments, globals).await;
                 }
                 ShellCommand::Init(arguments) => {
                     let _ = command_init(arguments, globals).await;

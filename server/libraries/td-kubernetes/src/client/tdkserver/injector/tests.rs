@@ -362,6 +362,15 @@ fn a_compact_settings_file_uses_the_flag_addresses() {
 }
 
 #[test]
+fn an_empty_settings_file_sets_nothing() {
+    for content in ["# Nothing to set.\n", "{}\n", "[]\n"] {
+        let settings = from_file(content).expect("valid file");
+        assert!(settings.is_empty());
+        assert!(plan(&configs(), &settings).expect("planned").is_empty());
+    }
+}
+
+#[test]
 fn an_expanded_settings_file_nests_keys_per_file() {
     let settings = from_file(
         "\

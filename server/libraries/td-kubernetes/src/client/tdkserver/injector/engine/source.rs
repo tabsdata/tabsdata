@@ -132,7 +132,6 @@ fn read_settings_file(file: &Path) -> Result<Vec<Setting>, InjectorError> {
                 )),
             })
             .collect(),
-        Value::Mapping(root) if root.is_empty() => Err(invalid("it has no settings")),
         Value::Mapping(root) => {
             let sections = root
                 .keys()
@@ -163,7 +162,7 @@ fn read_settings_file(file: &Path) -> Result<Vec<Setting>, InjectorError> {
             }
             Ok(settings)
         }
-        Value::Null => Err(invalid("it has no settings")),
+        Value::Null => Ok(Vec::new()),
         _ => Err(invalid(
             "it holds a mapping of settings or a list of 'address=value' strings",
         )),
