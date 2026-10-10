@@ -35,6 +35,12 @@ DIRECT_URL_METADATA_FILE = "direct_url.json"
 DIRECT_URL_KEY_URL = "url"
 DIRECT_URL_KEY_DIR_INFO = "dir_info"
 DIRECT_URL_KEY_EDITABLE = "editable"
+DIRECT_URL_KEY_SUBDIRECTORY = "subdirectory"
+DIRECT_URL_KEY_VCS_INFO = "vcs_info"
+DIRECT_URL_KEY_VCS = "vcs"
+DIRECT_URL_KEY_COMMIT_ID = "commit_id"
+
+URL_FRAGMENT_SUBDIRECTORY = "#subdirectory="
 
 BUILD_MANIFEST_RELATIVE_PATH = "assets/manifest/BUILD"
 
@@ -53,30 +59,27 @@ class Package:
         version = distribution.version
         direct_url_text = distribution.read_text(DIRECT_URL_METADATA_FILE)
         if direct_url_text is None:
-            return self.recipe_from_registry(version)
+            return self.recipe_from_index(version)
         direct_url = json.loads(direct_url_text)
         url = direct_url.get(DIRECT_URL_KEY_URL, "")
+        subdirectory = direct_url.get(DIRECT_URL_KEY_SUBDIRECTORY)
+        vcs_info = direct_url.get(DIRECT_URL_KEY_VCS_INFO)
+        if vcs_info is not None:
+            return self.recipe_from_vcs(version, url, vcs_info, subdirectory)
         if not url.startswith(FILE_PROTOCOL):
-            return self.recipe_from_registry(version)
+            return self.recipe_from_url(version, url, subdirectory)
         path = self.path_from_url(url)
+        dir_info = direct_url.get(DIRECT_URL_KEY_DIR_INFO)
+        if dir_info is not None:
+            location = path / subdirectory if subdirectory else path
+            if dir_info.get(DIRECT_URL_KEY_EDITABLE, False):
+                return self.recipe_from_editable(version, location)
+            return self.recipe_from_frozen(version, location)
         if path.suffix == WHEEL_EXTENSION:
             return self.recipe_from_wheel(version, path)
-        if direct_url.get(DIRECT_URL_KEY_DIR_INFO, {}).get(
-            DIRECT_URL_KEY_EDITABLE, False
-        ):
-            return self.recipe_from_editable(version, path)
-        return self.recipe_from_folder_frozen(version, path)
-
-    def recipe_from_registry(self, version: str | None) -> PackageRecipe:
-        return self.build_recipe(InstallRecipe.REGISTRY, version, None)
-
-    def recipe_from_wheel(self, version: str | None, location: Path) -> PackageRecipe:
-        return self.build_recipe(InstallRecipe.WHEEL, version, location)
-
-    def recipe_from_folder_frozen(
-        self, version: str | None, location: Path
-    ) -> PackageRecipe:
-        return self.build_recipe(InstallRecipe.FROZEN, version, location)
+        if subdirectory:
+            return self.recipe_from_url(version, url, subdirectory)
+        return self.recipe_from_frozen(version, path)
 
     def recipe_from_editable(
         self, version: str | None, location: Path
@@ -88,12 +91,48 @@ class Package:
             binaries=binaries_from_setup_toml(location),
         )
 
+    def recipe_from_frozen(self, version: str | None, location: Path) -> PackageRecipe:
+        return self.build_recipe(InstallRecipe.FROZEN, version, location)
+
+    def recipe_from_index(self, version: str | None) -> PackageRecipe:
+        return self.build_recipe(InstallRecipe.INDEX, version, None)
+
+    def recipe_from_url(
+        self, version: str | None, url: str, subdirectory: str | None
+    ) -> PackageRecipe:
+        return self.build_recipe(
+            InstallRecipe.URL,
+            version,
+            None,
+            url=with_subdirectory(url, subdirectory),
+        )
+
+    def recipe_from_vcs(
+        self,
+        version: str | None,
+        url: str,
+        vcs_info: dict,
+        subdirectory: str | None,
+    ) -> PackageRecipe:
+        vcs = vcs_info[DIRECT_URL_KEY_VCS]
+        commit_id = vcs_info[DIRECT_URL_KEY_COMMIT_ID]
+        return self.build_recipe(
+            InstallRecipe.VCS,
+            version,
+            None,
+            url=with_subdirectory(f"{vcs}+{url}@{commit_id}", subdirectory),
+        )
+
+    def recipe_from_wheel(self, version: str | None, location: Path) -> PackageRecipe:
+        return self.build_recipe(InstallRecipe.WHEEL, version, location)
+
     def build_recipe(
         self,
         recipe: InstallRecipe,
         version: str | None,
         location: Path | None,
         binaries: tuple[Binary, ...] = (),
+        url: str | None = None,
     ) -> PackageRecipe:
         if recipe not in SUPPORTED_INSTALL_RECIPES:
             supported = ", ".join(
@@ -110,6 +149,7 @@ class Package:
             version=version,
             location=location,
             binaries=binaries,
+            url=url,
         )
 
     @staticmethod
@@ -151,3 +191,9 @@ class Package:
         ):
             return None
         return content if isinstance(content, dict) else None
+
+
+def with_subdirectory(url: str, subdirectory: str | None) -> str:
+    if not subdirectory:
+        return url
+    return f"{url}{URL_FRAGMENT_SUBDIRECTORY}{subdirectory}"

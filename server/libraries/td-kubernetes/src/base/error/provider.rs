@@ -146,6 +146,8 @@ pub enum ProviderError {
         linked: String,
         requirements: String,
     } = 5126,
+    #[error("Could not write the requirements file '{file}': {cause}.")]
+    RuntimesRequirementsWriteFailed { file: String, cause: String } = 5127,
     #[error(
         "Another process is already building the Python virtual environments under \
          '{folder}'{holder}. Wait for it to finish before provisioning again."

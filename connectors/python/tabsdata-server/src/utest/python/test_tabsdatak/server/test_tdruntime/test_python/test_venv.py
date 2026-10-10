@@ -4,21 +4,27 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from tabsdatak.common._interpreter.python.error import FeatureDetectionError
+from tabsdatak.common._interpreter.python.error import (
+    FeatureDetectionError,
+    VenvCreationError,
+)
 from tabsdatak.common._interpreter.python.recipe import (
     InstallRecipe,
     PackageRecipe,
     TabsdataEdition,
 )
 from tabsdatak.common._interpreter.python.venv import (
+    CONSTRAINTS_RESOURCE,
     TABSDATA_PACKAGE,
     TABSDATA_TOOLKIT_PACKAGE,
     PythonEnvironment,
 )
+from tabsdatak.common._resources.reader import td_resource
 
 pytestmark = pytest.mark.unit
 
@@ -58,9 +64,7 @@ def test_edition_from_manifest_defaults_to_open_source_when_flag_missing():
 
 def test_edition_from_location_returns_enterprise_for_tabsdata_ee(tmp_path: Path):
     recipe = make_recipe(TABSDATA_PACKAGE, location=tmp_path / "tabsdata-ee")
-    assert (
-        PythonEnvironment.edition_from_location(recipe) == TabsdataEdition.ENTERPRISE
-    )
+    assert PythonEnvironment.edition_from_location(recipe) == TabsdataEdition.ENTERPRISE
 
 
 def test_edition_from_location_returns_open_source_for_other_paths(tmp_path: Path):
@@ -71,7 +75,7 @@ def test_edition_from_location_returns_open_source_for_other_paths(tmp_path: Pat
 
 
 def test_edition_from_location_raises_when_location_is_none():
-    recipe = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY)
+    recipe = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.INDEX)
     with pytest.raises(FeatureDetectionError):
         PythonEnvironment.edition_from_location(recipe)
 
@@ -96,7 +100,7 @@ def test_link_libexec_launchers_skips_non_editable_packages(tmp_path: Path):
     env_root = tmp_path / "venv"
     env_root.mkdir()
     environment = PythonEnvironment(env_root)
-    recipe = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY)
+    recipe = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.INDEX)
     environment.link_libexec_launchers((recipe,))
     assert not (env_root / "libexec" / "tabsdata").exists()
 
@@ -220,7 +224,9 @@ def patch_environment(
                 raise AssertionError(f"unexpected Package lookup: {self.name}")
             return installed[self.name]
 
-    monkeypatch.setattr("tabsdatak.common._interpreter.python.venv.Package", PackageStub)
+    monkeypatch.setattr(
+        "tabsdatak.common._interpreter.python.venv.Package", PackageStub
+    )
     monkeypatch.setattr(
         "tabsdatak.common._interpreter.python.venv.PythonEnvironment.installed_packages",
         staticmethod(lambda: frozenset(installed.keys())),
@@ -242,9 +248,9 @@ def test_synthesise_python_version_is_dotted_triple():
     assert all(part.isdigit() for part in parts)
 
 
-def test_synthesise_emits_registry_installs(monkeypatch):
+def test_synthesise_emits_index_installs(monkeypatch):
     patch_environment(
-        monkeypatch, installed={"polars": stub_recipe(InstallRecipe.REGISTRY)}
+        monkeypatch, installed={"polars": stub_recipe(InstallRecipe.INDEX)}
     )
     requirements, _ = PythonEnvironment.synthesise()
     assert requirements == ["polars==1.2.3"]
@@ -284,24 +290,24 @@ def test_synthesise_drops_unresolvable_packages(monkeypatch):
 
 
 def test_synthesise_drops_versionless_recipes(monkeypatch):
-    """A registry install with no version is dropped (pip would refuse
+    """An index install with no version is dropped (pip would refuse
     the unpinned constraint and we'd rather skip than emit it bare)."""
     patch_environment(
         monkeypatch,
-        installed={"versionless": stub_recipe(InstallRecipe.REGISTRY, version=None)},
+        installed={"versionless": stub_recipe(InstallRecipe.INDEX, version=None)},
     )
     requirements, _ = PythonEnvironment.synthesise()
     assert requirements == []
 
 
-def test_synthesise_mixes_kinds_keeping_only_registry(monkeypatch):
+def test_synthesise_mixes_kinds_keeping_only_index(monkeypatch):
     patch_environment(
         monkeypatch,
         installed={
-            "polars": stub_recipe(InstallRecipe.REGISTRY),
+            "polars": stub_recipe(InstallRecipe.INDEX),
             "my-local-pkg": stub_recipe(InstallRecipe.EDITABLE),
             "wheel-pkg": stub_recipe(InstallRecipe.WHEEL),
-            "boto3": stub_recipe(InstallRecipe.REGISTRY),
+            "boto3": stub_recipe(InstallRecipe.INDEX),
         },
     )
     requirements, _ = PythonEnvironment.synthesise()
@@ -313,8 +319,8 @@ def test_synthesise_excludes_tabsdata_dependencies_packages(monkeypatch):
     patch_environment(
         monkeypatch,
         installed={
-            "polars": stub_recipe(InstallRecipe.REGISTRY),
-            "boto3": stub_recipe(InstallRecipe.REGISTRY),
+            "polars": stub_recipe(InstallRecipe.INDEX),
+            "boto3": stub_recipe(InstallRecipe.INDEX),
         },
         locked=frozenset({"boto3"}),
     )
@@ -322,26 +328,39 @@ def test_synthesise_excludes_tabsdata_dependencies_packages(monkeypatch):
     assert requirements == ["polars==1.2.3"]
 
 
-def test_synthesise_excludes_tabsdata_prefixed_packages(monkeypatch):
-    """Any installed package whose canonical name starts with `tabsdata`
-    is owned by tabsdata and never emitted as an extra, regardless of
-    lock contents."""
+def test_synthesise_excludes_tabsdata_packages(monkeypatch):
+    """Packages shipped by tabsdata are never emitted as extras,
+    regardless of lock contents."""
     patch_environment(
         monkeypatch,
         installed={
-            "tabsdata-api": stub_recipe(InstallRecipe.REGISTRY),
-            "polars": stub_recipe(InstallRecipe.REGISTRY),
+            "tabsdata-api": stub_recipe(InstallRecipe.INDEX),
+            "tabsdata-conn-postgres": stub_recipe(InstallRecipe.INDEX),
+            "polars": stub_recipe(InstallRecipe.INDEX),
         },
     )
     requirements, _ = PythonEnvironment.synthesise()
     assert requirements == ["polars==1.2.3"]
 
 
+def test_synthesise_keeps_third_party_tabsdata_prefixed_packages(monkeypatch):
+    """A package not shipped by tabsdata is an extra even when its name
+    starts with `tabsdata`, like the ones scaffolded from the connector
+    template."""
+    patch_environment(
+        monkeypatch,
+        installed={
+            "tabsdata-jev-github": stub_recipe(InstallRecipe.INDEX),
+            "polars": stub_recipe(InstallRecipe.INDEX),
+        },
+    )
+    requirements, _ = PythonEnvironment.synthesise()
+    assert requirements == ["polars==1.2.3", "tabsdata-jev-github==1.2.3"]
+
+
 def test_synthesise_falls_back_to_online_when_offline_uv_fails(monkeypatch):
     """First uv call uses --offline; a VenvCreationError triggers a retry
     without --offline. The fallback path must still produce results."""
-    from tabsdatak.common._interpreter.python.error import VenvCreationError
-
     calls: list[list[str]] = []
 
     def fake_uv(arguments, *, stdin=None):
@@ -368,9 +387,11 @@ def test_synthesise_falls_back_to_online_when_offline_uv_fails(monkeypatch):
             self.name = name
 
         def recipe(self):
-            return stub_recipe(InstallRecipe.REGISTRY)
+            return stub_recipe(InstallRecipe.INDEX)
 
-    monkeypatch.setattr("tabsdatak.common._interpreter.python.venv.Package", PackageStub)
+    monkeypatch.setattr(
+        "tabsdatak.common._interpreter.python.venv.Package", PackageStub
+    )
 
     requirements, _ = PythonEnvironment.synthesise()
     assert requirements == ["polars==1.2.3"]
@@ -379,9 +400,7 @@ def test_synthesise_falls_back_to_online_when_offline_uv_fails(monkeypatch):
     assert "--offline" not in calls[1]
 
 
-def test_installed_packages_returns_canonical_names(
-    monkeypatch, tmp_path: Path
-):
+def test_installed_packages_returns_canonical_names(monkeypatch, tmp_path: Path):
     """Direct test of the dist-info scan helper. Builds a fake site-packages
     with a mix of .dist-info / .egg-info / unrelated entries and confirms
     that the canonical names are extracted from the directory names."""
@@ -436,7 +455,9 @@ def patch_locks(
                 return tabsdata_recipe
             raise AssertionError(f"unexpected Package lookup: {self.name}")
 
-    monkeypatch.setattr("tabsdatak.common._interpreter.python.venv.Package", PackageStub)
+    monkeypatch.setattr(
+        "tabsdatak.common._interpreter.python.venv.Package", PackageStub
+    )
     monkeypatch.setattr(
         "tabsdatak.common._interpreter.python.venv.td_resource", fake_td_resource
     )
@@ -451,13 +472,13 @@ def tabsdata_recipe(install: InstallRecipe, *, location: Path | None) -> Package
     )
 
 
-def test_locked_packages_loads_runtime_lock_only_for_registry(
+def test_locked_packages_loads_runtime_lock_only_for_index(
     monkeypatch, tmp_path: Path
 ):
     patch_locks(
         monkeypatch,
         tmp_path,
-        tabsdata_recipe=tabsdata_recipe(InstallRecipe.REGISTRY, location=None),
+        tabsdata_recipe=tabsdata_recipe(InstallRecipe.INDEX, location=None),
         lock_files={
             "resources/lock/tabsdata-requirements.txt": (
                 "polars==1.2.3\nboto3==2.0.0\n"
@@ -469,9 +490,7 @@ def test_locked_packages_loads_runtime_lock_only_for_registry(
     assert names == frozenset({"polars", "boto3"})
 
 
-def test_locked_packages_loads_both_locks_for_editable(
-    monkeypatch, tmp_path: Path
-):
+def test_locked_packages_loads_both_locks_for_editable(monkeypatch, tmp_path: Path):
     patch_locks(
         monkeypatch,
         tmp_path,
@@ -489,13 +508,11 @@ def test_locked_packages_loads_both_locks_for_editable(
     assert names == frozenset({"polars", "boto3", "pytest", "ruff"})
 
 
-def test_locked_packages_skips_comments_and_blank_lines(
-    monkeypatch, tmp_path: Path
-):
+def test_locked_packages_skips_comments_and_blank_lines(monkeypatch, tmp_path: Path):
     patch_locks(
         monkeypatch,
         tmp_path,
-        tabsdata_recipe=tabsdata_recipe(InstallRecipe.REGISTRY, location=None),
+        tabsdata_recipe=tabsdata_recipe(InstallRecipe.INDEX, location=None),
         lock_files={
             "resources/lock/tabsdata-requirements.txt": (
                 "# Copyright header\n"
@@ -510,14 +527,12 @@ def test_locked_packages_skips_comments_and_blank_lines(
     assert names == frozenset({"polars", "boto3"})
 
 
-def test_locked_packages_preserves_markered_lines(
-    monkeypatch, tmp_path: Path
-):
+def test_locked_packages_preserves_markered_lines(monkeypatch, tmp_path: Path):
     """PEP 508 markers in lock lines don't affect canonical-name extraction."""
     patch_locks(
         monkeypatch,
         tmp_path,
-        tabsdata_recipe=tabsdata_recipe(InstallRecipe.REGISTRY, location=None),
+        tabsdata_recipe=tabsdata_recipe(InstallRecipe.INDEX, location=None),
         lock_files={
             "resources/lock/tabsdata-requirements.txt": (
                 "cffi==2.0.0 ; platform_python_implementation != 'PyPy'\n"
@@ -529,13 +544,11 @@ def test_locked_packages_preserves_markered_lines(
     assert names == frozenset({"cffi", "pywin32"})
 
 
-def test_locked_packages_raises_when_runtime_lock_missing(
-    monkeypatch, tmp_path: Path
-):
+def test_locked_packages_raises_when_runtime_lock_missing(monkeypatch, tmp_path: Path):
     patch_locks(
         monkeypatch,
         tmp_path,
-        tabsdata_recipe=tabsdata_recipe(InstallRecipe.REGISTRY, location=None),
+        tabsdata_recipe=tabsdata_recipe(InstallRecipe.INDEX, location=None),
         lock_files={},
     )
     with pytest.raises(FileNotFoundError):
@@ -547,7 +560,7 @@ def test_synthesise_runs_real_uv_against_producer_environment():
     """End-to-end smoke: runs the real `uv pip compile --universal` against
     whatever packages the test environment has installed. Validates that
     `uv` is on PATH, accepts the arguments we pass, and emits a parsable
-    requirements.txt. Skipped if no registry-installed packages are
+    requirements.txt. Skipped if no index-installed packages are
     present (uv would have nothing to resolve)."""
     requirements, python_version = PythonEnvironment.synthesise()
     assert python_version.count(".") == 2
@@ -555,3 +568,93 @@ def test_synthesise_runs_real_uv_against_producer_environment():
         pytest.skip("no extras beyond the tabsdata lock in this environment")
     for line in requirements:
         assert "==" in line
+
+
+def record_uv(monkeypatch) -> list[list[str]]:
+    calls: list[list[str]] = []
+
+    def fake_uv(arguments, *, stdin=None, verbose=False):
+        calls.append(arguments)
+        return ""
+
+    monkeypatch.setattr(
+        "tabsdatak.common._interpreter.python.venv.PythonEnvironment.uv",
+        staticmethod(fake_uv),
+    )
+    return calls
+
+
+def test_install_requirements_constrains_to_the_tabsdata_lock(monkeypatch, tmp_path):
+    requirements = tmp_path / "requirements-fn.txt"
+    requirements.write_text("# extras\ntabsdata-jev-github\n", encoding="utf-8")
+    calls = record_uv(monkeypatch)
+
+    PythonEnvironment(tmp_path / "fn").install_requirements(requirements)
+
+    [install] = calls
+    assert install[:2] == ["pip", "install"]
+    assert install[install.index("-r") + 1] == str(requirements)
+    constraints = Path(install[install.index("-c") + 1])
+    assert constraints == td_resource(CONSTRAINTS_RESOURCE)
+
+
+def test_install_requirements_skips_files_with_only_comments(monkeypatch, tmp_path):
+    requirements = tmp_path / "requirements-fn.txt"
+    requirements.write_text("# Complementary packages\n\n", encoding="utf-8")
+    calls = record_uv(monkeypatch)
+
+    PythonEnvironment(tmp_path / "fn").install_requirements(requirements)
+
+    assert calls == []
+
+
+def test_install_arguments_for_a_folder_install(tmp_path):
+    recipe = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.FROZEN, location=tmp_path)
+
+    arguments = PythonEnvironment.install_tabsdata_packages_arguments(recipe)
+
+    assert arguments == [str(tmp_path)]
+
+
+def test_install_arguments_for_a_folder_install_that_is_gone(tmp_path):
+    recipe = make_recipe(
+        TABSDATA_PACKAGE, install=InstallRecipe.FROZEN, location=tmp_path / "gone"
+    )
+
+    with pytest.raises(VenvCreationError):
+        PythonEnvironment.install_tabsdata_packages_arguments(recipe)
+
+
+def test_install_arguments_for_a_source_archive_install(tmp_path):
+    archive = tmp_path / "tabsdata_jev_github-0.1.0.tar.gz"
+    archive.touch()
+    recipe = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.FROZEN, location=archive)
+
+    arguments = PythonEnvironment.install_tabsdata_packages_arguments(recipe)
+
+    assert arguments == [str(archive)]
+
+
+@pytest.mark.parametrize("install", [InstallRecipe.URL, InstallRecipe.VCS])
+def test_install_arguments_for_a_direct_reference(install):
+    url = "git+https://github.com/owner/tabsdata-jev@aed77fb#subdirectory=source/x"
+    recipe = replace(make_recipe("tabsdata-jev-github", install=install), url=url)
+
+    arguments = PythonEnvironment.install_tabsdata_packages_arguments(recipe)
+
+    assert arguments == [f"tabsdata-jev-github @ {url}"]
+
+
+@pytest.mark.parametrize("install", [InstallRecipe.URL, InstallRecipe.VCS])
+def test_install_arguments_for_a_direct_reference_without_url(install):
+    recipe = make_recipe("tabsdata-jev-github", install=install)
+
+    with pytest.raises(VenvCreationError):
+        PythonEnvironment.install_tabsdata_packages_arguments(recipe)
+
+
+@pytest.mark.parametrize("install", [InstallRecipe.URL, InstallRecipe.VCS])
+def test_synthesise_drops_direct_references(monkeypatch, install):
+    patch_environment(monkeypatch, installed={"remote-pkg": stub_recipe(install)})
+    requirements, _ = PythonEnvironment.synthesise()
+    assert requirements == []

@@ -26,22 +26,22 @@ def test_tabsdata_edition_values_are_human_readable():
 
 
 def test_install_recipe_values_are_human_readable():
-    assert InstallRecipe.REGISTRY.value == "Registry"
-    assert InstallRecipe.WHEEL.value == "Wheel"
-    assert InstallRecipe.FROZEN.value == "Frozen"
     assert InstallRecipe.EDITABLE.value == "Editable"
+    assert InstallRecipe.FROZEN.value == "Frozen"
+    assert InstallRecipe.INDEX.value == "Index"
+    assert InstallRecipe.URL.value == "Url"
+    assert InstallRecipe.VCS.value == "Vcs"
+    assert InstallRecipe.WHEEL.value == "Wheel"
 
 
-def test_supported_install_recipes_are_registry_and_editable_and_wheel():
-    assert SUPPORTED_INSTALL_RECIPES == frozenset(
-        {InstallRecipe.REGISTRY, InstallRecipe.EDITABLE, InstallRecipe.WHEEL}
-    )
+def test_supported_install_recipes_are_every_install_recipe():
+    assert SUPPORTED_INSTALL_RECIPES == frozenset(InstallRecipe)
 
 
 def test_package_recipe_binaries_default_to_empty_tuple():
     recipe = PackageRecipe(
         name="tabsdata",
-        recipe=InstallRecipe.REGISTRY,
+        recipe=InstallRecipe.INDEX,
         version="2.0.0",
         location=None,
     )
@@ -51,7 +51,7 @@ def test_package_recipe_binaries_default_to_empty_tuple():
 def test_package_recipe_is_frozen():
     recipe = PackageRecipe(
         name="tabsdata",
-        recipe=InstallRecipe.REGISTRY,
+        recipe=InstallRecipe.INDEX,
         version="2.0.0",
         location=None,
     )
@@ -74,7 +74,7 @@ def test_package_recipe_carries_binaries():
 def test_venv_recipe_holds_packages_tuple():
     package = PackageRecipe(
         name="tabsdata",
-        recipe=InstallRecipe.REGISTRY,
+        recipe=InstallRecipe.INDEX,
         version="2.0.0",
         location=None,
     )

@@ -29,7 +29,7 @@ use crate::base::constants::{
     FOLDER_PYENV_AG, FOLDER_PYENV_FN, FOLDER_PYENV_TD, FOLDER_PYTHON, FOLDER_REPOSITORY,
     FOLDER_RUNTIMES, FOLDER_STORAGE, FOLDER_UV, FOREIGN_ASSETS, IndexReach, KPROFILE_ASSETS_FAMILY,
     KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, LIBEXEC_TABSDATA, LogLevel, RUNTIMES_LOCK_FILE,
-    UV_MODE_LINKED, UV_MODE_LOCAL, UvMode, VENVS, VENVS_IMAGE, YAML_NULL,
+    UV_MODE_LINKED, UV_MODE_LOCAL, UvMode, VENVS, VENVS_IMAGE, Venv, YAML_NULL,
 };
 use td_python::tabsdata::tabsdata_version;
 
@@ -67,8 +67,8 @@ use crate::runtime::instance::ports::{
     wait_for_ports_released, wait_for_ports_released_within,
 };
 use crate::runtime::instance::profile::{
-    Profile, load_profile, parse_from_configmaps, read_family_configmaps, render_for_configmaps,
-    resolve_foreign_path, resolve_kprofile_path,
+    Profile, RenderedConfigmap, load_profile, parse_from_configmaps, read_family_configmaps,
+    render_for_configmaps, resolve_foreign_path, resolve_kprofile_path,
 };
 use crate::runtime::instance::upgrade::guard::ensure_upgraded;
 use crate::runtime::instance::verify_manifest_compatibility;
@@ -793,7 +793,22 @@ impl KminusProvider {
         match UvMode::from_environment().map_err(TdError::from)? {
             UvMode::Linked => self.link_runtimes(&pyvenv, &runtimes_kenvs, reporter),
             UvMode::Local | UvMode::Devpi | UvMode::Pypi | UvMode::Unset => {
-                self.build_runtimes(&pyvenv, &runtimes_folder, &runtimes_kenvs, reporter)
+                let context = self.kube_context().await?;
+                let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
+                let folder = tempfile::tempdir().map_err(|error| {
+                    ProviderError::RuntimesFolderCreateFailed(
+                        std::env::temp_dir().display().to_string(),
+                        error.to_string(),
+                    )
+                })?;
+                let requirements = write_requirements(folder.path(), &assets)?;
+                self.build_runtimes(
+                    &pyvenv,
+                    &runtimes_folder,
+                    &runtimes_kenvs,
+                    &requirements,
+                    reporter,
+                )
             }
         }
     }
@@ -926,6 +941,7 @@ impl KminusProvider {
         pyvenv: &Path,
         runtimes_folder: &Path,
         runtimes_kenvs: &Path,
+        requirements: &[(Venv, PathBuf)],
         reporter: &dyn Reporter,
     ) -> CommandResult {
         ensure_no_linked_venvs(runtimes_kenvs)?;
@@ -942,6 +958,11 @@ impl KminusProvider {
             command.arg("--verbose");
         }
         command.arg("create").arg("--target").arg(runtimes_kenvs);
+        for (venv, file) in requirements {
+            command
+                .arg(format!("--requirements-{}", venv.as_str()))
+                .arg(file);
+        }
         command.env(ENV_UV_PYTHON_INSTALL_DIR, &runtimes_python);
         apply_detached_flags(&mut command);
         let output = match subprocess::run(&mut command, PYVENV_BINARY, self.verbose) {
@@ -1119,6 +1140,28 @@ fn ensure_no_linked_venvs(runtimes_kenvs: &Path) -> CommandResult {
     Ok(())
 }
 
+fn write_requirements(
+    folder: &Path,
+    assets: &RenderedConfigmap,
+) -> CommandResult<Vec<(Venv, PathBuf)>> {
+    let mut requirements = Vec::new();
+    for venv in VENVS {
+        let asset = venv.requirements_asset();
+        let Some(contents) = assets.get(asset) else {
+            continue;
+        };
+        let file = folder.join(asset);
+        fs::write(&file, contents).map_err(|error| {
+            ProviderError::RuntimesRequirementsWriteFailed {
+                file: file.display().to_string(),
+                cause: error.to_string(),
+            }
+        })?;
+        requirements.push((*venv, file));
+    }
+    Ok(requirements)
+}
+
 fn claim_runtimes(runtimes_folder: &std::path::Path) -> CommandResult<LockFile> {
     let lock_path = runtimes_folder.join(RUNTIMES_LOCK_FILE);
     let lock_failed = |error: fslock::Error| ProviderError::RuntimesLockFailed {
@@ -1208,3 +1251,6 @@ pub(crate) fn system_values_for(folder: &std::path::Path) -> CommandResult<Syste
         ..SystemValues::default()
     })
 }
+
+#[cfg(test)]
+mod tests;

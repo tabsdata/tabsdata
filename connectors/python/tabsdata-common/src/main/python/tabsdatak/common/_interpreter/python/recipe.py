@@ -17,15 +17,20 @@ class TabsdataEdition(str, Enum):
 
 
 class InstallRecipe(str, Enum):
-    REGISTRY = "Registry"
-    WHEEL = "Wheel"
-    FROZEN = "Frozen"
     EDITABLE = "Editable"
+    FROZEN = "Frozen"
+    INDEX = "Index"
+    URL = "Url"
+    VCS = "Vcs"
+    WHEEL = "Wheel"
 
 
 SUPPORTED_INSTALL_RECIPES: frozenset[InstallRecipe] = frozenset({
-    InstallRecipe.REGISTRY,
     InstallRecipe.EDITABLE,
+    InstallRecipe.FROZEN,
+    InstallRecipe.INDEX,
+    InstallRecipe.URL,
+    InstallRecipe.VCS,
     InstallRecipe.WHEEL,
 })
 
@@ -37,9 +42,11 @@ class PackageRecipe:
     version: str | None
     location: Path | None
     binaries: tuple[Binary, ...] = field(default_factory=tuple)
+    url: str | None = None
 
 
 @dataclass(frozen=True)
 class VenvRecipe:
     name: str
     packages: tuple[PackageRecipe, ...]
+    requirements: Path | None = None

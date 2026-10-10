@@ -93,6 +93,17 @@ TABSDATA_CONNECTORS_NAMES: tuple[str, ...] = (
 
 TABSDATA_EE_CONNECTORS_NAMES: tuple[str, ...] = ("tabsdata-mcp",)
 
+TABSDATA_PACKAGES_NAMES: frozenset[str] = frozenset(
+    canonicalize_name(name)
+    for name in (
+        TABSDATA_PACKAGE,
+        TABSDATA_TOOLKIT_PACKAGE,
+        TABSDATA_AGENT_PACKAGE,
+        *TABSDATA_CONNECTORS_NAMES,
+        *TABSDATA_EE_CONNECTORS_NAMES,
+    )
+)
+
 CONNECTORS_RELATIVE_PATH = Path("connectors") / "python"
 EE_CONNECTORS_RELATIVE_PATH = Path("connectors.ee") / "python"
 
@@ -278,12 +289,12 @@ class PythonEnvironment:
         extra_dependencies: set[str] = set()
         for canonical in PythonEnvironment.installed_packages():
             if (
-                canonical.startswith(TABSDATA_PACKAGE)
+                canonical in TABSDATA_PACKAGES_NAMES
                 or canonical in tabsdata_dependencies
             ):
                 continue
             recipe = Package(canonical).recipe()
-            if recipe is None or recipe.recipe != InstallRecipe.REGISTRY:
+            if recipe is None or recipe.recipe != InstallRecipe.INDEX:
                 continue
             if recipe.version is None:
                 continue
@@ -412,6 +423,8 @@ class PythonEnvironment:
             self.install_tabsdata_packages(toolkit, verbose=verbose)
         if others:
             self.install_tabsdata_packages(others, verbose=verbose)
+        if recipe.requirements is not None:
+            self.install_requirements(recipe.requirements, verbose=verbose)
         source_root = Path(sys.prefix)
         for package in recipe.packages:
             for binary in package.binaries:
@@ -469,6 +482,31 @@ class PythonEnvironment:
             )
         try:
             constraints = td_resource(CONSTRAINTS_DEV_RESOURCE)
+        except FileNotFoundError as error:
+            raise VenvCreationError(detail=str(error), cause=error)
+        command = ["pip", "install"]
+        if not verbose:
+            command.append("--quiet")
+        command.extend([
+            "--python",
+            str(self.python()),
+            "-r",
+            str(requirements),
+            "-c",
+            str(constraints),
+        ])
+        self.uv(command, verbose=verbose)
+
+    def install_requirements(
+        self,
+        requirements: Path,
+        *,
+        verbose: bool = False,
+    ) -> None:
+        if not has_requirements(requirements):
+            return
+        try:
+            constraints = td_resource(CONSTRAINTS_RESOURCE)
         except FileNotFoundError as error:
             raise VenvCreationError(detail=str(error), cause=error)
         command = ["pip", "install"]
@@ -555,12 +593,31 @@ class PythonEnvironment:
                     detail=f"Editable package '{package.name}' is missing a location",
                 )
             return ["-e", str(package.location)]
-        if package.recipe == InstallRecipe.REGISTRY:
+        if package.recipe == InstallRecipe.FROZEN:
+            if package.location is None:
+                raise VenvCreationError(
+                    detail=f"Frozen package '{package.name}' is missing a location",
+                )
+            if not package.location.exists():
+                raise VenvCreationError(
+                    detail=(
+                        f"Source '{package.location}' of package '{package.name}'"
+                        " no longer exists"
+                    ),
+                )
+            return [str(package.location)]
+        if package.recipe == InstallRecipe.INDEX:
             return [
                 f"{package.name}=={package.version}"
                 if package.version
                 else package.name
             ]
+        if package.recipe in (InstallRecipe.URL, InstallRecipe.VCS):
+            if package.url is None:
+                raise VenvCreationError(
+                    detail=f"Package '{package.name}' is missing its source URL",
+                )
+            return [f"{package.name} @ {package.url}"]
         if package.recipe == InstallRecipe.WHEEL:
             if package.location is None:
                 raise VenvCreationError(
@@ -687,6 +744,13 @@ class PythonEnvironment:
                 ),
             )
         return result.stdout
+
+
+def has_requirements(requirements: Path) -> bool:
+    return any(
+        line.strip() and not line.lstrip().startswith("#")
+        for line in requirements.read_text(encoding="utf-8").splitlines()
+    )
 
 
 def launcher_interpreter(launcher: Path) -> str | None:

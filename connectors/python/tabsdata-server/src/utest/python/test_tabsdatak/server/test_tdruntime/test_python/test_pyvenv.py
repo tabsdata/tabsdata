@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -63,9 +64,9 @@ def make_profile(
 
 
 def test_build_recipes_open_source_returns_server_and_function():
-    main = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY, location=None)
+    main = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.INDEX, location=None)
     toolkit = make_recipe(
-        TABSDATA_TOOLKIT_PACKAGE, install=InstallRecipe.REGISTRY, location=None
+        TABSDATA_TOOLKIT_PACKAGE, install=InstallRecipe.INDEX, location=None
     )
     profile = make_profile(
         (main, toolkit), edition=TabsdataEdition.OPEN_SOURCE
@@ -77,9 +78,9 @@ def test_build_recipes_open_source_returns_server_and_function():
 
 
 def test_build_recipes_enterprise_returns_server_function_and_agent():
-    main = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY, location=None)
+    main = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.INDEX, location=None)
     agent = make_recipe(
-        TABSDATA_AGENT_PACKAGE, install=InstallRecipe.REGISTRY, location=None
+        TABSDATA_AGENT_PACKAGE, install=InstallRecipe.INDEX, location=None
     )
     profile = make_profile((main, agent), edition=TabsdataEdition.ENTERPRISE)
     recipes = build_recipes(profile)
@@ -90,9 +91,9 @@ def test_build_recipes_enterprise_returns_server_function_and_agent():
 
 
 def test_build_recipes_server_excludes_agent_package():
-    main = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY, location=None)
+    main = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.INDEX, location=None)
     agent = make_recipe(
-        TABSDATA_AGENT_PACKAGE, install=InstallRecipe.REGISTRY, location=None
+        TABSDATA_AGENT_PACKAGE, install=InstallRecipe.INDEX, location=None
     )
     profile = make_profile((main, agent), edition=TabsdataEdition.ENTERPRISE)
     recipes = build_recipes(profile)
@@ -102,9 +103,9 @@ def test_build_recipes_server_excludes_agent_package():
 
 
 def test_build_recipes_agent_includes_agent_package():
-    main = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY, location=None)
+    main = make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.INDEX, location=None)
     agent = make_recipe(
-        TABSDATA_AGENT_PACKAGE, install=InstallRecipe.REGISTRY, location=None
+        TABSDATA_AGENT_PACKAGE, install=InstallRecipe.INDEX, location=None
     )
     profile = make_profile((main, agent), edition=TabsdataEdition.ENTERPRISE)
     recipes = build_recipes(profile)
@@ -114,7 +115,7 @@ def test_build_recipes_agent_includes_agent_package():
 
 
 def test_build_connector_recipes_empty_when_tabsdata_missing():
-    other = make_recipe("tabsdata-toolkit", install=InstallRecipe.REGISTRY)
+    other = make_recipe("tabsdata-toolkit", install=InstallRecipe.INDEX)
     assert build_connector_recipes((other,), TabsdataEdition.OPEN_SOURCE) == ()
 
 
@@ -147,14 +148,14 @@ def test_build_connector_recipes_adds_ee_connectors_for_enterprise(tmp_path: Pat
         assert locations[name] == tmp_path / EE_CONNECTORS_RELATIVE_PATH / name
 
 
-def test_build_connector_recipe_for_registry_has_no_location():
+def test_build_connector_recipe_for_index_has_no_location():
     tabsdata = make_recipe(
-        TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY, location=None
+        TABSDATA_PACKAGE, install=InstallRecipe.INDEX, location=None
     )
     recipe = build_connector_recipe(
         "tabsdata-conn-s3", CONNECTORS_RELATIVE_PATH, tabsdata
     )
-    assert recipe.recipe == InstallRecipe.REGISTRY
+    assert recipe.recipe == InstallRecipe.INDEX
     assert recipe.location is None
     assert recipe.version == "2.0.0"
 
@@ -174,16 +175,16 @@ def test_build_connector_recipe_for_editable_resolves_connector_location(
 
 def test_render_package_includes_name_and_recipe():
     recipe = make_recipe(
-        TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY, location=None
+        TABSDATA_PACKAGE, install=InstallRecipe.INDEX, location=None
     )
     line = render_package(recipe)
     assert "name=tabsdata" in line
-    assert "recipe=Registry" in line
+    assert "recipe=Index" in line
 
 
 def test_render_package_omits_location_when_none():
     recipe = make_recipe(
-        TABSDATA_PACKAGE, install=InstallRecipe.REGISTRY, location=None
+        TABSDATA_PACKAGE, install=InstallRecipe.INDEX, location=None
     )
     line = render_package(recipe)
     assert "location=" not in line
@@ -200,9 +201,39 @@ def test_render_package_includes_location_when_set(tmp_path: Path):
 def test_render_package_omits_version_when_falsey():
     recipe = make_recipe(
         TABSDATA_PACKAGE,
-        install=InstallRecipe.REGISTRY,
+        install=InstallRecipe.INDEX,
         version=None,
         location=None,
     )
     line = render_package(recipe)
     assert "version=" not in line
+
+
+def test_render_package_includes_url_when_set():
+    recipe = replace(
+        make_recipe(TABSDATA_PACKAGE, install=InstallRecipe.VCS, location=None),
+        url="git+https://github.com/owner/repo@aed77fb",
+    )
+    line = render_package(recipe)
+    assert "url=git+https://github.com/owner/repo@aed77fb" in line
+
+
+@pytest.mark.parametrize("install", [InstallRecipe.URL, InstallRecipe.VCS])
+def test_build_connector_recipes_reads_installed_connectors_for_direct_references(
+    monkeypatch, install
+):
+    tabsdata = make_recipe(TABSDATA_PACKAGE, install=install, location=None)
+    connector = make_recipe("tabsdata-api", install=install, location=None)
+
+    class PackageStub:
+        def __init__(self, name, mandatory: bool = False):
+            self.name = name
+
+        def recipe(self):
+            return connector if self.name == "tabsdata-api" else None
+
+    monkeypatch.setattr(
+        "tabsdatak.common._interpreter.python.pyvenv.Package", PackageStub
+    )
+    connectors = build_connector_recipes((tabsdata,), TabsdataEdition.OPEN_SOURCE)
+    assert connectors == (connector,)

@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
 
 from tabsdatak.common._interpreter.python.binary import binaries_from_setup_toml
@@ -67,6 +68,11 @@ def main() -> int:
         return create(
             profile,
             arguments.target,
+            requirements={
+                VENV_TD: arguments.requirements_td,
+                VENV_FN: arguments.requirements_fn,
+                VENV_AG: arguments.requirements_ag,
+            },
             archive=arguments.archive,
             verbose=arguments.verbose,
         )
@@ -135,6 +141,16 @@ def parse_arguments() -> argparse.Namespace:
         required=True,
         help="Folder where the Python virtual environment templates will be created",
     )
+    for venv in (VENV_TD, VENV_FN, VENV_AG):
+        create_parser.add_argument(
+            f"--requirements-{venv}",
+            type=Path,
+            default=None,
+            help=(
+                f"File with the complementary packages of the '{venv}' Python"
+                " virtual environment, in pip requirements format"
+            ),
+        )
     create_parser.add_argument(
         "--archive",
         action="store_true",
@@ -193,13 +209,18 @@ def create(
     profile: EnvironmentProfile,
     target: Path,
     *,
+    requirements: dict[str, Path | None] | None = None,
     archive: bool = False,
     verbose: bool = False,
 ) -> int:
+    requirements = requirements or {}
     try:
         target.mkdir(parents=True, exist_ok=True)
         PythonEnvironment.install(profile.python_version, verbose=verbose)
-        recipes = build_recipes(profile)
+        recipes = tuple(
+            replace(recipe, requirements=requirements.get(recipe.name))
+            for recipe in build_recipes(profile)
+        )
         with ThreadPoolExecutor(max_workers=len(recipes)) as executor:
             futures = [
                 executor.submit(
@@ -263,8 +284,8 @@ def build_connector_recipes(
     )
     if tabsdata is None:
         return ()
-    if tabsdata.recipe == InstallRecipe.WHEEL:
-        return installed_connector_recipes(edition)
+    if tabsdata.recipe in (InstallRecipe.URL, InstallRecipe.VCS, InstallRecipe.WHEEL):
+        return installed_connector_recipes(edition, tabsdata.recipe)
     return tuple(
         build_connector_recipe(name, connectors_relative_path, tabsdata)
         for name, connectors_relative_path in edition_connectors(edition)
@@ -273,11 +294,12 @@ def build_connector_recipes(
 
 def installed_connector_recipes(
     edition: TabsdataEdition,
+    install: InstallRecipe,
 ) -> tuple[PackageRecipe, ...]:
     recipes = []
     for name, _ in edition_connectors(edition):
         recipe = Package(name).recipe()
-        if recipe is None or recipe.recipe != InstallRecipe.WHEEL:
+        if recipe is None or recipe.recipe != install:
             continue
         recipes.append(recipe)
     return tuple(recipes)
@@ -288,10 +310,10 @@ def build_connector_recipe(
     connectors_relative_path: Path,
     tabsdata: PackageRecipe,
 ) -> PackageRecipe:
-    if tabsdata.recipe == InstallRecipe.REGISTRY:
+    if tabsdata.recipe == InstallRecipe.INDEX:
         return PackageRecipe(
             name=name,
-            recipe=InstallRecipe.REGISTRY,
+            recipe=InstallRecipe.INDEX,
             version=tabsdata.version,
             location=None,
         )
@@ -327,6 +349,8 @@ def render_package(recipe) -> str:
         fields.append(f"version={recipe.version}")
     if recipe.location is not None:
         fields.append(f"location={recipe.location}")
+    if recipe.url is not None:
+        fields.append(f"url={recipe.url}")
     return "    * " + ", ".join(fields)
 
 

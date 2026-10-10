@@ -43,27 +43,84 @@ def test_recipe_raises_when_mandatory_package_missing(monkeypatch):
         package.recipe()
 
 
-def test_recipe_from_registry_when_no_direct_url(monkeypatch):
+def test_recipe_from_index_when_no_direct_url(monkeypatch):
     package = Package("tabsdata")
     monkeypatch.setattr(
         Package, "distribution", lambda self: make_distribution("2.0.0", None)
     )
     recipe = package.recipe()
     assert recipe is not None
-    assert recipe.recipe == InstallRecipe.REGISTRY
+    assert recipe.recipe == InstallRecipe.INDEX
     assert recipe.version == "2.0.0"
     assert recipe.location is None
 
 
-def test_recipe_from_registry_when_direct_url_is_non_file(monkeypatch):
+def test_recipe_from_remote_wheel_is_url(monkeypatch):
     package = Package("tabsdata")
-    direct_url = {"url": "https://example.com/wheels/tabsdata-2.0.0.whl"}
+    url = "https://example.com/wheels/tabsdata-2.0.0-py3-none-any.whl"
+    direct_url = {"url": url, "archive_info": {}}
     monkeypatch.setattr(
         Package, "distribution", lambda self: make_distribution("2.0.0", direct_url)
     )
     recipe = package.recipe()
-    assert recipe is not None
-    assert recipe.recipe == InstallRecipe.REGISTRY
+    assert recipe.recipe == InstallRecipe.URL
+    assert recipe.url == url
+    assert recipe.location is None
+
+
+def test_recipe_from_remote_archive_keeps_its_subdirectory(monkeypatch):
+    package = Package("tabsdata-jev-github")
+    url = "https://example.com/tabsdata-jev-main.tar.gz"
+    direct_url = {
+        "url": url,
+        "archive_info": {},
+        "subdirectory": "source/tabsdata-jev-github",
+    }
+    monkeypatch.setattr(
+        Package, "distribution", lambda self: make_distribution("0.1.0", direct_url)
+    )
+    recipe = package.recipe()
+    assert recipe.recipe == InstallRecipe.URL
+    assert recipe.url == f"{url}#subdirectory=source/tabsdata-jev-github"
+
+
+def test_recipe_from_remote_git_is_vcs_pinned_to_the_commit(monkeypatch):
+    package = Package("tabsdata-jev-github")
+    direct_url = {
+        "url": "https://github.com/owner/tabsdata-jev",
+        "vcs_info": {
+            "vcs": "git",
+            "commit_id": "aed77fbb3733da0437d51102793af9a2183ef3aa",
+            "requested_revision": "v0.1.0",
+        },
+        "subdirectory": "source/tabsdata-jev-github",
+    }
+    monkeypatch.setattr(
+        Package, "distribution", lambda self: make_distribution("0.1.0", direct_url)
+    )
+    recipe = package.recipe()
+    assert recipe.recipe == InstallRecipe.VCS
+    assert recipe.url == (
+        "git+https://github.com/owner/tabsdata-jev"
+        "@aed77fbb3733da0437d51102793af9a2183ef3aa"
+        "#subdirectory=source/tabsdata-jev-github"
+    )
+    assert recipe.location is None
+
+
+def test_recipe_from_local_git_is_vcs(monkeypatch, tmp_path):
+    """`git+file://` records a plain `file://` URL; `vcs_info` decides."""
+    package = Package("tabsdata-jev-github")
+    direct_url = {
+        "url": f"file://{tmp_path}",
+        "vcs_info": {"vcs": "git", "commit_id": "aed77fb", "requested_revision": "main"},
+    }
+    monkeypatch.setattr(
+        Package, "distribution", lambda self: make_distribution("0.1.0", direct_url)
+    )
+    recipe = package.recipe()
+    assert recipe.recipe == InstallRecipe.VCS
+    assert recipe.url == f"git+file://{tmp_path}@aed77fb"
 
 
 def test_recipe_from_wheel(monkeypatch, tmp_path):
@@ -98,7 +155,7 @@ def test_recipe_from_editable(monkeypatch, tmp_path):
     assert recipe.location == project_root
 
 
-def test_recipe_from_folder_frozen_is_unsupported(monkeypatch, tmp_path):
+def test_recipe_from_folder_install_is_frozen(monkeypatch, tmp_path):
     package = Package("tabsdata")
     project_root = tmp_path / "snapshot"
     project_root.mkdir()
@@ -109,8 +166,37 @@ def test_recipe_from_folder_frozen_is_unsupported(monkeypatch, tmp_path):
     monkeypatch.setattr(
         Package, "distribution", lambda self: make_distribution("2.0.0", direct_url)
     )
-    with pytest.raises(UnsupportedInstallMethodError):
-        package.recipe()
+    recipe = package.recipe()
+    assert recipe.recipe == InstallRecipe.FROZEN
+    assert recipe.version == "2.0.0"
+    assert recipe.location == project_root
+
+
+def test_recipe_from_folder_direct_reference_is_frozen(monkeypatch, tmp_path):
+    """`name @ file:///folder` records an empty `dir_info`."""
+    package = Package("tabsdata-jev-github")
+    project_root = tmp_path / "tabsdata-jev-github"
+    project_root.mkdir()
+    direct_url = {"url": f"file://{project_root}", "dir_info": {}}
+    monkeypatch.setattr(
+        Package, "distribution", lambda self: make_distribution("0.1.0", direct_url)
+    )
+    recipe = package.recipe()
+    assert recipe.recipe == InstallRecipe.FROZEN
+    assert recipe.location == project_root
+
+
+def test_recipe_from_source_archive_is_frozen(monkeypatch, tmp_path):
+    package = Package("tabsdata-jev-github")
+    archive = tmp_path / "tabsdata_jev_github-0.1.0.tar.gz"
+    archive.touch()
+    direct_url = {"url": f"file://{archive}", "archive_info": {}}
+    monkeypatch.setattr(
+        Package, "distribution", lambda self: make_distribution("0.1.0", direct_url)
+    )
+    recipe = package.recipe()
+    assert recipe.recipe == InstallRecipe.FROZEN
+    assert recipe.location == archive
 
 
 def test_path_from_url_strips_file_protocol():
@@ -126,3 +212,34 @@ def test_path_from_url_handles_backslash_prefix():
     assert Package.path_from_url("file://\\\\server\\share\\x") == Path(
         "\\server\\share\\x"
     )
+
+
+def test_recipe_from_folder_with_subdirectory_is_frozen_in_it(monkeypatch, tmp_path):
+    package = Package("tabsdata-jev-github")
+    direct_url = {
+        "url": f"file://{tmp_path}",
+        "dir_info": {},
+        "subdirectory": "source/tabsdata-jev-github",
+    }
+    monkeypatch.setattr(
+        Package, "distribution", lambda self: make_distribution("0.1.0", direct_url)
+    )
+    recipe = package.recipe()
+    assert recipe.recipe == InstallRecipe.FROZEN
+    assert recipe.location == tmp_path / "source" / "tabsdata-jev-github"
+
+
+def test_recipe_from_local_archive_with_subdirectory_is_url(monkeypatch, tmp_path):
+    package = Package("tabsdata-jev-github")
+    archive = tmp_path / "tabsdata-jev.tar.gz"
+    direct_url = {
+        "url": f"file://{archive}",
+        "archive_info": {},
+        "subdirectory": "source/tabsdata-jev-github",
+    }
+    monkeypatch.setattr(
+        Package, "distribution", lambda self: make_distribution("0.1.0", direct_url)
+    )
+    recipe = package.recipe()
+    assert recipe.recipe == InstallRecipe.URL
+    assert recipe.url == f"file://{archive}#subdirectory=source/tabsdata-jev-github"
