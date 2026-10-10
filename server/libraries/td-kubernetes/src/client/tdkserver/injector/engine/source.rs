@@ -18,6 +18,9 @@ pub const FILE_PREFIX: char = '@';
 pub const ENV_PREFIX: &str = "env:";
 pub const VAL_PREFIX: &str = "val:";
 
+const REFERENCE_OPEN: &str = "${";
+const REFERENCE_CLOSE: &str = "}";
+
 const FILES_SECTION: &str = "files";
 const VALUES_SECTION: &str = "values";
 
@@ -285,14 +288,12 @@ fn resolve_value(value: Provided, origin: &str) -> Result<Provided, InjectorErro
         Provided::Typed(Value::String(text)) => text.as_str(),
         Provided::Typed(_) => return Ok(value),
     };
-    if let Some(variable) = text.strip_prefix(ENV_PREFIX) {
-        let variable = variable.trim();
-        return match std::env::var(variable) {
-            Ok(resolved) => Ok(Provided::Text(resolved)),
-            Err(_) => Err(InjectorError::EnvironmentVariableMissing {
-                origin: origin.to_owned(),
-                variable: variable.to_owned(),
-            }),
+    if let Some(reference) = text.strip_prefix(ENV_PREFIX) {
+        let reference = reference.trim();
+        return if reference.contains(REFERENCE_OPEN) {
+            expand_references(reference, origin).map(Provided::Text)
+        } else {
+            read_variable(reference, origin).map(Provided::Text)
         };
     }
     if let Some(literal) = text.strip_prefix(VAL_PREFIX) {
@@ -302,4 +303,41 @@ fn resolve_value(value: Provided, origin: &str) -> Result<Provided, InjectorErro
         });
     }
     Ok(value)
+}
+
+fn expand_references(template: &str, origin: &str) -> Result<String, InjectorError> {
+    let invalid = |reason: String| InjectorError::InvalidSetting {
+        origin: origin.to_owned(),
+        reason,
+    };
+    let mut expanded = String::new();
+    let mut rest = template;
+    while let Some(open) = rest.find(REFERENCE_OPEN) {
+        expanded.push_str(&rest[..open]);
+        let after = &rest[open + REFERENCE_OPEN.len()..];
+        let close = after.find(REFERENCE_CLOSE).ok_or_else(|| {
+            invalid(format!(
+                "a '{REFERENCE_OPEN}' in '{ENV_PREFIX}{template}' has no closing \
+                 '{REFERENCE_CLOSE}'"
+            ))
+        })?;
+        let variable = after[..close].trim();
+        if variable.is_empty() {
+            return Err(invalid(format!(
+                "'{ENV_PREFIX}{template}' has a '{REFERENCE_OPEN}{REFERENCE_CLOSE}' without a \
+                 variable name"
+            )));
+        }
+        expanded.push_str(&read_variable(variable, origin)?);
+        rest = &after[close + REFERENCE_CLOSE.len()..];
+    }
+    expanded.push_str(rest);
+    Ok(expanded)
+}
+
+fn read_variable(variable: &str, origin: &str) -> Result<String, InjectorError> {
+    std::env::var(variable).map_err(|_| InjectorError::EnvironmentVariableMissing {
+        origin: origin.to_owned(),
+        variable: variable.to_owned(),
+    })
 }

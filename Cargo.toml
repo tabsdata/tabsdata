@@ -291,6 +291,10 @@ version = "1.0.102"
 [workspace.dependencies.aquamarine]
 version = "0.6.0"
 
+[workspace.dependencies.arboard]
+version = "3.6.1"
+default-features = false
+
 [workspace.dependencies.argon2]
 version = "0.5.3"
 features = ["std"]
@@ -576,6 +580,9 @@ version = "0.10.0"
 
 [workspace.dependencies.ratatui]
 version = "0.30.0"
+
+[workspace.dependencies.ratatui-textarea]
+version = "0.9.3"
 
 [workspace.dependencies.reedline]
 version = "0.43.0"

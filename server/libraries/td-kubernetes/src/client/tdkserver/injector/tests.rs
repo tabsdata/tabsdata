@@ -325,6 +325,39 @@ fn a_missing_environment_variable_is_rejected() {
 }
 
 #[test]
+fn braced_references_are_expanded_and_the_text_around_them_is_kept() {
+    let path = std::env::var("PATH").expect("PATH is set");
+    let home = std::env::var("HOME").expect("HOME is set");
+    let files = injected(&["tdk_database_host=env:${PATH}/root:${ HOME }"]);
+    let database = read(&files["dbmanager.database.yaml"]);
+    assert_eq!(
+        database["database_server"]["postgres"]["host"],
+        format!("{path}/root:{home}").as_str()
+    );
+}
+
+#[test]
+fn a_missing_variable_in_a_braced_reference_is_rejected() {
+    let arguments = vec!["tdk_database_host=env:${TD_INJECTOR_TEST_SURELY_UNSET}/root".to_owned()];
+    assert!(matches!(
+        parse_settings(&arguments),
+        Err(InjectorError::EnvironmentVariableMissing { variable, .. })
+            if variable == "TD_INJECTOR_TEST_SURELY_UNSET"
+    ));
+}
+
+#[test]
+fn an_unclosed_or_empty_braced_reference_is_rejected() {
+    for value in ["env:${PATH/root", "env:${}/root"] {
+        let arguments = vec![format!("tdk_database_host={value}")];
+        assert!(matches!(
+            parse_settings(&arguments),
+            Err(InjectorError::InvalidSetting { .. })
+        ));
+    }
+}
+
+#[test]
 fn a_literal_prefix_keeps_an_environment_lookalike() {
     let files = injected(&["tdk_database_host=val:env:HOST"]);
     let database = read(&files["dbmanager.database.yaml"]);

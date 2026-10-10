@@ -5,13 +5,11 @@
 /*
 use std::path::Path;
 */
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap_derive::Args;
 use td_common::settings::DEFAULT_INSTANCE;
-#[cfg(feature = "enterprise")]
-use td_common::status::ExitStatus::Cancelled;
-use td_common::status::ExitStatus::NoAction;
+use td_common::status::ExitStatus::{Cancelled, NoAction};
 use td_error::TdError;
 use tracing::{info, warn};
 
@@ -22,41 +20,46 @@ use crate::base::constants::{
     KPROFILE_ASSETS_FAMILY, REQUIREMENTS_FN_ASSET, REQUIREMENTS_TD_ASSET,
 };
 */
-use crate::base::constants::{ENV_TD_KUBE_UV_MODE, ENV_UV_INDEX, LogLevel, UvMode};
+use crate::base::constants::{
+    ENV_TD_KUBE_UV_MODE, ENV_UV_INDEX, FILL_STUB_FILE, LogLevel, STUB_FILE_PREFIX, STUBS_FOLDER,
+    UvMode,
+};
 #[cfg(feature = "enterprise")]
 use crate::base::constants::{SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY};
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
-use crate::client::registry::instance_folder;
+use crate::client::registry::{fill_root, instance_folder, instance_init_fill_folder};
 use crate::client::session::settings::SettingsContext;
 use crate::client::tdkserver::arguments::{ClusterArguments, GlobalArguments};
 use crate::client::tdkserver::commands::service::create::create_instance;
+use crate::client::tdkserver::commands::service::delete::delete_if_possible;
 use crate::client::tdkserver::commands::service::init::{InitArguments, init_instance};
 use crate::client::tdkserver::commands::service::start::{StartArguments, command_start};
 use crate::client::tdkserver::commands::service::trash::{stop_if_possible, trash_instance_folder};
 use crate::client::tdkserver::commands::service::{
-    resolved_details, resolved_instance, resolved_yes,
+    resolved_cluster, resolved_details, resolved_instance, resolved_yes,
 };
 #[cfg(feature = "enterprise")]
 use crate::client::tdkserver::common::confirm;
+use crate::client::tdkserver::common::interactive;
+use crate::client::tdkserver::filler::{Heading, Outcome, fill};
 use crate::client::tdkserver::injector::{
-    Address, CONFIG_ARGUMENT, CONFIG_HELP, CONFIG_LONG_HELP, Provided, Setting, key_address,
-    parse_settings,
+    self, Address, CONFIG_ARGUMENT, CONFIG_EXTENSION, CONFIG_HELP, CONFIG_LONG_HELP, FILE_PREFIX,
+    Provided, Setting, key_address, parse_settings,
 };
 #[allow(unused_imports)]
 use crate::client::tdkserver::widgets::show_notice;
-#[cfg(feature = "enterprise")]
-use crate::core::system::exit::abort;
-use crate::core::system::exit::{CommandResult, abort_with, render_error};
+use crate::core::system::exit::{CommandResult, abort, abort_with, render_error};
 use crate::cwarn;
 #[cfg(feature = "enterprise")]
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
 use crate::runtime::instance::index;
 use crate::runtime::instance::ports::DEFAULT_BASE_PORT;
+use crate::runtime::instance::profile::{load_profile, resolve_kprofile_path};
 use crate::runtime::instance::tabsdata::TABSDATA_FILE;
 use crate::runtime::provider::ClusterProvider;
 
-const QUICKSTART_PROVIDER: ClusterProvider = ClusterProvider::Kminus;
+const FILL_ARGUMENT: &str = "fill";
 
 const UV_INDEX_KEYS: [&str; 4] = ["pods", "global", "envs", ENV_UV_INDEX];
 
@@ -112,7 +115,7 @@ pub struct QuickstartArguments {
         long,
         name = "anthropic-key",
         required = false,
-        display_order = 110,
+        display_order = 120,
         long_help = "Deprecated: use '--config anthropic-key=<KEY>' instead. Anthropic API key \
                      for the aiagent. Optional."
     )]
@@ -123,7 +126,7 @@ pub struct QuickstartArguments {
         long,
         name = "openai-key",
         required = false,
-        display_order = 120,
+        display_order = 130,
         long_help = "Deprecated: use '--config openai-key=<KEY>' instead. OpenAI API key for \
                      the aiagent. Optional."
     )]
@@ -135,7 +138,7 @@ pub struct QuickstartArguments {
         name = "reqs-td",
         required = false,
         value_name = "FILE",
-        display_order = 160,
+        display_order = 170,
         long_help = "Complementary packages for the td virtual environment. The file \
                      replaces the empty requirements-td.txt of the initialized instance \
                      and is installed when the virtual environment is built."
@@ -150,7 +153,7 @@ pub struct QuickstartArguments {
         name = "reqs-fn",
         required = false,
         value_name = "FILE",
-        display_order = 170,
+        display_order = 180,
         long_help = "Complementary packages for the fn virtual environment. The file \
                      replaces the empty requirements-fn.txt of the initialized instance \
                      and is installed when the virtual environment is built."
@@ -166,7 +169,7 @@ pub struct QuickstartArguments {
         name = "reqs-ag",
         required = false,
         value_name = "FILE",
-        display_order = 180,
+        display_order = 190,
         long_help = "Complementary packages for the ag virtual environment. The file \
                      replaces the empty requirements-ag.txt of the initialized instance \
                      and is installed when the virtual environment is built."
@@ -181,7 +184,7 @@ pub struct QuickstartArguments {
         name = "uv-index",
         required = false,
         value_name = "URI",
-        display_order = 100,
+        display_order = 110,
         help = "Deprecated: use '--config tabsdata:pods.global.envs.UV_INDEX=<URI>' \
                 instead. Python package index for the instance. Run with '--help' for \
                 details.",
@@ -211,12 +214,38 @@ pub struct QuickstartArguments {
     pub config: Vec<String>,
 
     #[arg(
+        long = FILL_ARGUMENT,
+        name = FILL_ARGUMENT,
+        required = false,
+        display_order = 100,
+        help = "Fill the configuration stub of the provider in a built-in editor before \
+                anything is created. Run with '--help' for details.",
+        long_help = "Fill the configuration stub of the provider in a built-in editor before \
+                     anything is created. The editor opens the stub of the chosen provider, \
+                     or the file left by an earlier '--fill' of the same instance, with the \
+                     required values marked. Ctrl+Q saves and continues once the settings \
+                     are valid, Ctrl+S saves without leaving, and Esc quits without saving, \
+                     which cancels the quickstart.\n\n\
+                     Editing keys use Ctrl, also on macOS: the terminal keeps Cmd for \
+                     itself. Ctrl+C, Ctrl+X and Ctrl+V use the system clipboard, so text \
+                     moves between the editor and other applications, and Cmd+V pastes \
+                     too. Ctrl+A selects all; Shift with the arrows, or a mouse drag, \
+                     selects a block.\n\n\
+                     The filled file is used as '--config @FILE', together with any other \
+                     '--config' settings, and it is kept in the 'init/fill' folder of the \
+                     instance.\n\n\
+                     Example:\n  \
+                     tdkserver quickstart --provider gke --fill"
+    )]
+    pub fill: bool,
+
+    #[arg(
         long,
         name = "save",
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
-        display_order = 130,
+        display_order = 140,
         long_help = "Copy the cluster settings files (kubeconfig, etc.) into the instance \
                      folder so the instance is self-contained."
     )]
@@ -228,7 +257,7 @@ pub struct QuickstartArguments {
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
-        display_order = 140,
+        display_order = 150,
         long_help = "Show the summary of resolved values before each step. Defaults to \
                      'true'. Pass '--details false' to skip the summaries."
     )]
@@ -241,7 +270,7 @@ pub struct QuickstartArguments {
         required = false,
         num_args = 0..=1,
         default_missing_value = "true",
-        display_order = 150,
+        display_order = 160,
         long_help = "Skip the interactive confirmation prompts and proceed immediately."
     )]
     pub yes: Option<bool>,
@@ -269,6 +298,7 @@ pub async fn command_quickstart(
         requirements_ag,
         uv_index,
         config,
+        fill,
     } = arguments;
 
     #[cfg_attr(not(feature = "enterprise"), allow(unused_mut))]
@@ -294,6 +324,28 @@ pub async fn command_quickstart(
 
     let settings = SettingsContext::settings();
 
+    let name = resolved_instance(instance.clone(), &settings)
+        .value
+        .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
+    let folder = instance_folder(&name)?;
+    let preexisting = folder.exists();
+
+    let mut cluster = cluster;
+    let provider = cluster
+        .provider
+        .or_else(|| resolved_cluster(cluster.clone(), &settings).0.provider)
+        .unwrap_or(ClusterProvider::Kminus);
+    if !provider.supported() {
+        return abort_with(
+            NoAction,
+            ProviderError::CommandNotSupportedForProvider {
+                command: "quickstart".to_owned(),
+                provider: provider.as_str().to_owned(),
+            },
+        );
+    }
+    cluster.provider = Some(provider);
+
     let mut injections = parse_settings(&config).map_err(TdError::from)?;
     #[cfg(feature = "enterprise")]
     {
@@ -314,6 +366,18 @@ pub async fn command_quickstart(
                 injections.push(deprecated(argument, address, value));
             }
         }
+    }
+    plan_uv_index(provider, uv_index, &mut injections)?;
+    let filled = if fill {
+        let Some(staged) = fill_settings(provider, &name, &mut injections, globals.verbose)? else {
+            return abort(Cancelled);
+        };
+        Some(staged)
+    } else {
+        None
+    };
+    #[cfg(feature = "enterprise")]
+    {
         let keyed = injections.iter().any(|injection| {
             [SECRET_CATEGORY_ANTHROPIC_KEY, SECRET_CATEGORY_OPENAI_KEY]
                 .iter()
@@ -328,42 +392,43 @@ pub async fn command_quickstart(
             return abort(Cancelled);
         }
     }
-    plan_uv_index(uv_index, &mut injections)?;
 
-    let name = resolved_instance(instance.clone(), &settings)
-        .value
-        .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
-    let folder = instance_folder(&name)?;
-    let preexisting = folder.exists();
-
-    let mut cluster = cluster;
-    match cluster.provider {
-        None => cluster.provider = Some(QUICKSTART_PROVIDER),
-        Some(provider) if provider != QUICKSTART_PROVIDER => {
-            return abort_with(
-                NoAction,
-                ProviderError::CommandNotSupportedForProvider {
-                    command: "quickstart".to_owned(),
-                    provider: provider.as_str().to_owned(),
-                },
-            );
-        }
-        Some(_) => {}
-    }
     let outcome = run_quickstart(
-        instance, cluster, port, save, details, yes, loglevel,
+        instance,
+        cluster,
+        port,
+        save,
+        details,
+        yes,
+        loglevel,
         /*
         requirements_td,
         requirements_fn,
         #[cfg(feature = "enterprise")]
         requirements_ag,
         */
-        injections, globals,
+        injections,
+        filled.as_deref(),
+        globals,
     )
     .await;
 
+    if outcome.is_ok()
+        && let Some(staged) = &filled
+        && let Err(error) = std::fs::remove_file(staged)
+    {
+        cwarn!(
+            "Could not remove the filled settings file '{}': {error}",
+            staged.display()
+        );
+    }
+
     if outcome.is_err() && !preexisting && folder.exists() {
-        stop_if_possible(&name, globals.verbose).await;
+        if provider == ClusterProvider::Kminus {
+            stop_if_possible(&name, globals.verbose).await;
+        } else {
+            delete_if_possible(&name, globals.verbose).await;
+        }
         match trash_instance_folder(&name, &folder) {
             Ok(destination) => {
                 warn!(
@@ -410,6 +475,88 @@ fn persist_requirements(instance: &str, asset: &str, source: &Path) -> CommandRe
 }
 */
 
+fn fill_settings(
+    provider: ClusterProvider,
+    name: &str,
+    injections: &mut Vec<Setting>,
+    verbose: bool,
+) -> CommandResult<Option<PathBuf>> {
+    if !interactive() {
+        return Err(TdError::from(CliError::FillNeedsTerminal).into());
+    }
+    let staged = fill_root()?.join(format!("{name}{CONFIG_EXTENSION}"));
+    if !staged.exists() {
+        stage_stub(provider, &staged, verbose)?;
+    }
+    let profile = load_profile(provider, verbose).map_err(TdError::from)?;
+    let argument = format!("{FILE_PREFIX}{}", staged.display());
+    let heading = Heading {
+        instance: name.to_owned(),
+        provider: provider.as_str().to_owned(),
+    };
+    info!(
+        "Opening the settings of instance '{name}' in the editor: {}",
+        staged.display()
+    );
+    let validate = |_: &Path| -> Result<(), String> {
+        let mut settings = injections.clone();
+        settings
+            .extend(parse_settings(std::slice::from_ref(&argument)).map_err(|e| e.to_string())?);
+        injector::plan(&profile.configs, &settings)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    };
+    if fill(&staged, &heading, validate).map_err(TdError::from)? == Outcome::Discarded {
+        return Ok(None);
+    }
+    injections.extend(parse_settings(&[argument]).map_err(TdError::from)?);
+    info!("Using the filled settings: {}", staged.display());
+    Ok(Some(staged))
+}
+
+fn stage_stub(provider: ClusterProvider, staged: &Path, verbose: bool) -> CommandResult {
+    let stub = resolve_kprofile_path(verbose)
+        .map_err(TdError::from)?
+        .join(STUBS_FOLDER)
+        .join(format!(
+            "{STUB_FILE_PREFIX}{}{CONFIG_EXTENSION}",
+            provider.as_str()
+        ));
+    if let Some(parent) = staged.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| {
+            TdError::from(CliError::FolderCreateFailed {
+                folder: parent.display().to_string(),
+                cause: error.to_string(),
+            })
+        })?;
+    }
+    std::fs::copy(&stub, staged).map_err(|error| {
+        TdError::from(CliError::FileReadFailed {
+            file: stub.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    Ok(())
+}
+
+fn keep_filled(name: &str, staged: &Path) -> CommandResult {
+    let folder = instance_init_fill_folder(name)?;
+    std::fs::create_dir_all(&folder).map_err(|error| {
+        TdError::from(CliError::FolderCreateFailed {
+            folder: folder.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    let target = folder.join(FILL_STUB_FILE);
+    std::fs::copy(staged, &target).map_err(|error| {
+        TdError::from(CliError::FileWriteFailed {
+            file: target.display().to_string(),
+            cause: error.to_string(),
+        })
+    })?;
+    Ok(())
+}
+
 fn deprecated(argument: &str, address: Address, value: String) -> Setting {
     cwarn!(
         "Argument '--{argument}' is deprecated; use '--{CONFIG_ARGUMENT} {address}=<value>' instead."
@@ -417,15 +564,19 @@ fn deprecated(argument: &str, address: Address, value: String) -> Setting {
     Setting::new(address, Provided::Text(value), format!("'--{argument}'"))
 }
 
-fn plan_uv_index(uv_index: Option<String>, injections: &mut Vec<Setting>) -> CommandResult {
+fn plan_uv_index(
+    provider: ClusterProvider,
+    uv_index: Option<String>,
+    injections: &mut Vec<Setting>,
+) -> CommandResult {
     let uv_mode = UvMode::from_environment().map_err(TdError::from)?;
-    let governed = index::governed(QUICKSTART_PROVIDER, uv_mode);
+    let governed = index::governed(provider, uv_mode);
     let uv_index = uv_index.filter(|index| !index.trim().is_empty());
     if let Some(index) = uv_index {
         if !governed {
             return Err(TdError::from(CliError::UvIndexNotGoverned {
                 variable: ENV_TD_KUBE_UV_MODE.to_owned(),
-                provider: QUICKSTART_PROVIDER.as_str().to_owned(),
+                provider: provider.as_str().to_owned(),
                 mode: uv_mode.as_str().to_owned(),
             })
             .into());
@@ -475,6 +626,7 @@ async fn run_quickstart(
     requirements_ag: Option<PathBuf>,
     */
     injections: Vec<Setting>,
+    filled: Option<&Path>,
     globals: &GlobalArguments,
 ) -> CommandResult {
     init_instance(
@@ -492,6 +644,13 @@ async fn run_quickstart(
         injections,
     )
     .await?;
+
+    if let Some(staged) = filled {
+        let name = resolved_instance(instance.clone(), &SettingsContext::settings())
+            .value
+            .unwrap_or_else(|| DEFAULT_INSTANCE.to_owned());
+        keep_filled(&name, staged)?;
+    }
 
     /*
     let target_instance = resolved_instance(instance.clone(), &SettingsContext::settings())

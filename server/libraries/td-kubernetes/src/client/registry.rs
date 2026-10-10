@@ -16,7 +16,7 @@ use te_system::edition::{Edition, TabsdataEdition};
 #[cfg(feature = "enterprise")]
 use crate::base::constants::FOLDER_PYENV_AG;
 use crate::base::constants::{
-    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, EDIT_FOLDER, FOLDER_KENVS, FOLDER_PYENV_FN,
+    CLUSTER_CONFIG_FOLDER, CLUSTER_FOLDER, EDIT_FOLDER, FILL_FOLDER, FOLDER_KENVS, FOLDER_PYENV_FN,
     FOLDER_PYENV_TD, FOLDER_RUNTIMES, FOLDER_UV, INIT_FOLDER, INPUT_FOLDER, KUBE_FOLDER,
     KUBECONFIG_FILE, LogLevel, SETTINGS_FILE, STAGE_FOLDER, STUBS_FOLDER, TDKSERVER_LOG_FILE,
     TRASH_FOLDER, VENV_ACTIVATE_FILE,
@@ -57,12 +57,24 @@ pub fn stubs_root() -> CommandResult<PathBuf> {
     Ok(home.join(TABSDATA_HOME_DIR).join(STUBS_FOLDER))
 }
 
+pub fn fill_root() -> CommandResult<PathBuf> {
+    let home = homedir::my_home()
+        .ok()
+        .flatten()
+        .ok_or(ProviderError::HomeDirNotFound)?;
+    Ok(home.join(TABSDATA_HOME_DIR).join(FILL_FOLDER))
+}
+
 pub fn instance_init_folder(name: &str) -> CommandResult<PathBuf> {
     Ok(instance_folder(name)?.join(INIT_FOLDER))
 }
 
 pub fn instance_edit_folder(name: &str) -> CommandResult<PathBuf> {
     Ok(instance_folder(name)?.join(EDIT_FOLDER))
+}
+
+pub fn instance_init_fill_folder(name: &str) -> CommandResult<PathBuf> {
+    Ok(instance_folder(name)?.join(INIT_FOLDER).join(FILL_FOLDER))
 }
 
 pub fn instance_init_input_folder(name: &str) -> CommandResult<PathBuf> {

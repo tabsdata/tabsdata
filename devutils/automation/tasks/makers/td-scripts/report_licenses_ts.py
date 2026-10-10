@@ -128,12 +128,14 @@ normalized_licenses = {
     "LICENSEREF-NVIDIA-SOFTWARE-LICENSE": "NVIDIA Proprietary License",                                                                                                                        # noqa: E231,E241,E501
     "MIT AND Apache-2.0": "MIT License, and Apache License Version 2.0",                                                                                                                       # noqa: E231,E241,E501
     "MIT AND BSD-3-Clause": "MIT License, and BSD Revised License (BSD-3-Clause)",                                                                                                             # noqa: E231,E241,E501
+    "MIT AND Unicode-DFS-2016": "MIT License, and Unicode Data Files and Software 2016",                                                                                                       # noqa: E231,E241,E501
     "MIT LICENSE_ APACHE LICENSE_ VERSION 2.0": "MIT License or Apache License Version 2.0",                                                                                                   # noqa: E231,E241,E501
     "MIT LICENSE;; APACHE SOFTWARE LICENSE": "MIT License or Apache Software License Version 2.0",                                                                                             # noqa: E231,E241,E501
     "MIT LICENSE;; MOZILLA PUBLIC LICENSE 2.0 _MPL 2.0_": "MIT License or Mozilla Public License Version 2.0",                                                                                 # noqa: E231,E241,E501
     "MIT LICENSE": "MIT License",                                                                                                                                                              # noqa: E231,E241,E501
     "MIT NO ATTRIBUTION LICENSE _MIT-0_": "MIT No Attribution License",                                                                                                                        # noqa: E231,E241,E501
     "MIT OR Apache2": "MIT License or Apache License Version 2.0",                                                                                                                             # noqa: E231,E241,E501
+    "MIT OR MPL-2.0": "MIT License or Mozilla Public License Version 2.0",                                                                                                                     # noqa: E231,E241,E501
     "MIT OR Unlicense": "MIT License or The Unlicense",                                                                                                                                        # noqa: E231,E241,E501
     "MIT-0": "MIT No Attribution License",                                                                                                                                                     # noqa: E231,E241,E501
     "MIT-CMU": "MIT License (CMU Variant)",                                                                                                                                                    # noqa: E231,E241,E501
@@ -157,6 +159,7 @@ normalized_licenses = {
     "UNKNOWN": "The Unknown License",                                                                                                                                                          # noqa: E231,E241,E501
     "Unlicense": "The Unlicense",                                                                                                                                                              # noqa: E231,E241,E501
     "UNLICENSED": "The Unlicense",                                                                                                                                                             # noqa: E231,E241,E501
+    "WTFPL": "Do What The F*ck You Want To Public License",                                                                                                                                    # noqa: E231,E241,E501
     "Zlib": "Zlib License",                                                                                                                                                                    # noqa: E231,E241,E501
 }
 # fmt: on

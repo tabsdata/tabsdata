@@ -13,7 +13,7 @@ use serde_yaml::Value;
 use crate::base::constants::KPROFILE_CONFIGS_FAMILY;
 use crate::base::error::cli::CliError;
 use crate::base::error::injector::InjectorError;
-use crate::client::tdkserver::injector::engine::address::{CONFIG_EXTENSION, Segment};
+use crate::client::tdkserver::injector::engine::address::Segment;
 use crate::client::tdkserver::injector::engine::document::{
     Document, Edit, Leaf, Lookup, apply, set_at,
 };
@@ -26,8 +26,8 @@ use crate::runtime::gateway::resolver::walker::{
 };
 use crate::runtime::instance::profile::RenderedConfigmap;
 
-pub use engine::address::Address;
-pub use engine::source::{CONFIG_ARGUMENT, Setting, key_address, parse_settings};
+pub use engine::address::{Address, CONFIG_EXTENSION};
+pub use engine::source::{CONFIG_ARGUMENT, FILE_PREFIX, Setting, key_address, parse_settings};
 pub use engine::value::Provided;
 
 pub const CONFIG_HELP: &str = "Sets a value of the instance configuration, as ADDRESS=VALUE \
@@ -85,8 +85,10 @@ Only values that already exist can be set: never new keys, and never a key \
 that holds other keys or a list. A string value replaces a string, while numbers \
 and booleans replace only values of their own type. A VALUE starting with \
 'env:' is read from that environment variable of this machine, so secrets need \
-not be written in any file of yours; 'val:' keeps a value that literally starts \
-with 'env:'. Secret values end up in the instance input config files.
+not be written in any file of yours. To combine variables with fixed text, wrap \
+each variable in '${...}': 'env:${BUCKET_URI}/root' reads BUCKET_URI and appends \
+'/root'. 'val:' keeps a value that literally starts with 'env:'. Secret values \
+end up in the instance input config files.
 
 Examples:
   tdkserver init --provider gke --config tdk_database_host=db.internal \

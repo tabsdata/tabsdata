@@ -41,6 +41,11 @@ pub enum CliError {
          'tdkserver init' and before 'tdkserver create'."
     )]
     ArgumentNoLongerSupported { argument: String } = 4,
+    #[error(
+        "Argument '--fill' opens the settings file in an editor, which needs a terminal. When \
+         running unattended, fill a stub from 'tdkserver stubs' and pass it as '--config @FILE'."
+    )]
+    FillNeedsTerminal = 16,
     #[error("File '{file}' is not a valid pip requirements file; line {line}: {cause}.")]
     RequirementsInvalid {
         file: String,
@@ -77,6 +82,8 @@ pub enum CliError {
     FileEntryMissing { file: String, entry: String } = 5010,
     #[error("Could not remove folder '{folder}': {cause}.")]
     FolderRemoveFailed { folder: String, cause: String } = 5011,
+    #[error("Could not run the settings editor on file '{file}': {cause}.")]
+    EditorFailed { file: String, cause: String } = 5012,
 }
 
 #[cfg(test)]
