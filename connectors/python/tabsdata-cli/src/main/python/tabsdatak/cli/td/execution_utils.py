@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from itertools import islice
-from time import sleep
+from time import monotonic, sleep
 from typing import TYPE_CHECKING, Callable, List
 
 import rich_click as click
@@ -346,19 +346,60 @@ def workers_table(workers, title: str = "Workers", indexed: bool = False) -> Tab
     return table
 
 
-def live_monitor(items, fetch: Callable, build_table: Callable, is_final: Callable):
+MONITOR_OUTAGE_GRACE = 120  # seconds
+
+
+def live_monitor(
+    items,
+    fetch: Callable,
+    build_table: Callable,
+    is_final: Callable,
+    outage_grace: float = MONITOR_OUTAGE_GRACE,
+):
     """Refresh a listing until every item reaches a final status; returns the
-    final listing."""
+    final listing.
+
+    Watching only reads, so a server that drops away for a moment (a restarted
+    apiserver, a dropped port-forward) does not end the watch: the last listing
+    stays up and polling resumes when the server answers again. Only an outage
+    longer than ``outage_grace`` seconds is raised."""
+    import requests
+
+    transient = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
     refresh_rate = 1  # seconds
+    down_since = None
     with Live(
         build_table(items), refresh_per_second=refresh_rate, console=make_console()
     ) as live:
-        while not all(is_final(item) for item in items):
-            items = fetch()
-            live.update(build_table(items))
+
+        def poll():
+            nonlocal down_since
+            try:
+                fresh = fetch()
+            except transient as e:
+                now = monotonic()
+                if down_since is None:
+                    down_since = now
+                    live.console.print(
+                        f"Lost the connection to the server ({e}); retrying for "
+                        f"up to {outage_grace:g}s."
+                    )
+                if now - down_since > outage_grace:
+                    raise
+                return None
+            if down_since is not None:
+                live.console.print("Connection to the server restored.")
+                down_since = None
+            return fresh
+
+        while True:
+            fresh = poll()
+            if fresh is not None:
+                items = fresh
+                live.update(build_table(items))
+                if all(is_final(item) for item in items):
+                    break
             sleep(1 / refresh_rate)
-        items = fetch()
-        live.update(build_table(items))
     return items
 
 

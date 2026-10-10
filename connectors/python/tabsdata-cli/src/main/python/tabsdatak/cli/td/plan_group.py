@@ -98,6 +98,8 @@ def plan():
     help=(
         "If set, the command will monitor the listed plans until they all reach "
         "a final state."
+        " A lost connection to the server is retried for up to two minutes "
+        "before the command fails."
     ),
 )
 @format_option
