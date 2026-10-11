@@ -20,6 +20,7 @@ pub enum Node {
 #[derive(Debug)]
 pub struct Entry {
     key: Option<String>,
+    key_start: usize,
     value: Node,
 }
 
@@ -63,6 +64,7 @@ pub struct Edit {
     pub start: usize,
     pub end: usize,
     pub text: String,
+    pub value: String,
     pub steps: Vec<Step>,
 }
 
@@ -88,6 +90,48 @@ impl Document {
     }
 
     pub fn find(&self, path: &[Segment]) -> Result<Leaf<'_>, Lookup> {
+        let (node, steps) = self.node_at(path)?;
+        match node {
+            Node::Scalar(scalar) => Ok(Leaf { scalar, steps }),
+            Node::Mapping(_) | Node::Sequence(_) => Err(Lookup::NotALeaf),
+            Node::Alias => Err(Lookup::Alias),
+        }
+    }
+
+    pub fn insert(&self, parent: &[Segment], key: &str, text: &str) -> Result<Edit, String> {
+        let (node, mut steps) = self
+            .node_at(parent)
+            .map_err(|_| "its parent does not exist".to_owned())?;
+        let Node::Mapping(entries) = node else {
+            return Err("its parent is not a mapping".to_owned());
+        };
+        let (Some(first), Some(last)) = (entries.first(), entries.last()) else {
+            return Err("its parent is an empty mapping".to_owned());
+        };
+        let Node::Scalar(last_value) = &last.value else {
+            return Err("the last entry of its parent does not hold a single value".to_owned());
+        };
+        if last_value.flow {
+            return Err("its parent is a flow mapping".to_owned());
+        }
+        let line_start = self.source[..first.key_start]
+            .rfind('\n')
+            .map_or(0, |offset| offset + 1);
+        let indent = self.source[line_start..first.key_start].chars().count();
+        let position = self.source[last_value.end..]
+            .find('\n')
+            .map_or(self.source.len(), |offset| last_value.end + offset);
+        steps.push(Step::Key(key.to_owned()));
+        Ok(Edit {
+            start: position,
+            end: position,
+            text: format!("\n{}{key}: {text}", " ".repeat(indent)),
+            value: text.to_owned(),
+            steps,
+        })
+    }
+
+    fn node_at(&self, path: &[Segment]) -> Result<(&Node, Vec<Step>), Lookup> {
         let mut node = self.root.as_ref().ok_or(Lookup::Missing)?;
         let mut steps = Vec::new();
         for segment in path {
@@ -109,11 +153,7 @@ impl Document {
                 node = item;
             }
         }
-        match node {
-            Node::Scalar(scalar) => Ok(Leaf { scalar, steps }),
-            Node::Mapping(_) | Node::Sequence(_) => Err(Lookup::NotALeaf),
-            Node::Alias => Err(Lookup::Alias),
-        }
+        Ok((node, steps))
     }
 
     pub fn leaves(&self) -> Vec<Leaf<'_>> {
@@ -141,6 +181,7 @@ impl Document {
                 start: position,
                 end: position,
                 text: format!(" {text}"),
+                value: text.to_owned(),
                 steps: leaf.steps.clone(),
             });
         }
@@ -155,6 +196,7 @@ impl Document {
             start: scalar.start,
             end: scalar.end,
             text: text.to_owned(),
+            value: text.to_owned(),
             steps: leaf.steps.clone(),
         })
     }
@@ -176,10 +218,18 @@ pub fn set_at(node: &mut Value, steps: &[Step], replacement: Value) -> bool {
         return true;
     };
     let child = match (step, node) {
-        (Step::Key(key), Value::Mapping(map)) => map
-            .iter_mut()
-            .find(|(candidate, _)| scalar_text(candidate).as_deref() == Some(key.as_str()))
-            .map(|(_, child)| child),
+        (Step::Key(key), Value::Mapping(map)) => {
+            let present = map
+                .keys()
+                .any(|candidate| scalar_text(candidate).as_deref() == Some(key.as_str()));
+            if !present && rest.is_empty() {
+                map.insert(Value::String(key.clone()), replacement);
+                return true;
+            }
+            map.iter_mut()
+                .find(|(candidate, _)| scalar_text(candidate).as_deref() == Some(key.as_str()))
+                .map(|(_, child)| child)
+        }
         (Step::Index(index), Value::Sequence(items)) => items.get_mut(*index),
         _ => None,
     };
@@ -282,7 +332,7 @@ fn quoted_end(source: &str, start: usize, style: ScalarStyle) -> usize {
 enum Frame {
     Mapping {
         entries: Vec<Entry>,
-        pending: Option<Option<String>>,
+        pending: Option<(Option<String>, usize)>,
         flow: bool,
     },
     Sequence {
@@ -338,12 +388,16 @@ impl<'s> Builder<'s> {
             }) => match pending.take() {
                 None => {
                     let key = match node {
-                        Node::Scalar(scalar) => Some(scalar.value),
-                        _ => None,
+                        Node::Scalar(scalar) => (Some(scalar.value), scalar.start),
+                        _ => (None, 0),
                     };
                     *pending = Some(key);
                 }
-                Some(key) => entries.push(Entry { key, value: node }),
+                Some((key, key_start)) => entries.push(Entry {
+                    key,
+                    key_start,
+                    value: node,
+                }),
             },
         }
     }

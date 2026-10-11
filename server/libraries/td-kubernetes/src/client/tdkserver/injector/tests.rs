@@ -257,9 +257,66 @@ fn only_final_nodes_can_be_set() {
 #[test]
 fn new_keys_cannot_be_added() {
     assert!(matches!(
-        failure(&["tabsdata.yaml:pods.global.envs.NEW_VARIABLE=x"]),
+        failure(&["tabsdata.yaml:pods.service.resources.gpu=1"]),
         InjectorError::KeyNotFound { .. }
     ));
+    assert!(matches!(
+        failure(&["tabsdata.yaml:pods.global.NEW_SECTION=x"]),
+        InjectorError::KeyNotFound { .. }
+    ));
+    assert!(matches!(
+        failure(&["apiserver.database:database.port=1"]),
+        InjectorError::KeyNotFound { .. }
+    ));
+}
+
+#[test]
+fn a_global_env_can_be_added() {
+    let content =
+        &injected(&["tabsdata:pods.global.envs.TYPESAFE_API_KEY=secret-value"])["tabsdata.yaml"];
+    assert!(content.contains(
+        "      UV_INDEX_STRATEGY: unsafe-best-match\n      TYPESAFE_API_KEY: secret-value\n  service:"
+    ));
+    let config =
+        crate::runtime::instance::tabsdata::TabsdataConfig::parse(content).expect("parses");
+    let value = config.pods.global.envs["TYPESAFE_API_KEY"].render();
+    assert_eq!(value.as_deref(), Some("secret-value"));
+}
+
+#[test]
+fn an_added_global_env_is_always_a_string() {
+    let content = &injected(&["tabsdata:pods.global.envs.RETRIES=3"])["tabsdata.yaml"];
+    assert!(content.contains("      RETRIES: '3'\n"));
+}
+
+#[test]
+fn several_global_envs_can_be_added() {
+    let content = &injected(&[
+        "tabsdata:pods.global.envs.FIRST=one",
+        "tabsdata:pods.global.envs.SECOND=two",
+    ])["tabsdata.yaml"];
+    assert!(content.contains("FIRST: one\n"));
+    assert!(content.contains("SECOND: two\n"));
+}
+
+#[test]
+fn an_added_global_env_needs_a_valid_name() {
+    assert!(matches!(
+        failure(&["tabsdata:pods.global.envs.9LIVES=x"]),
+        InjectorError::InvalidEnvName { .. }
+    ));
+    assert!(matches!(
+        failure(&["tabsdata:pods.global.envs.\"MY-KEY\"=x"]),
+        InjectorError::InvalidEnvName { .. }
+    ));
+}
+
+#[test]
+fn an_existing_global_env_is_still_replaced() {
+    let content =
+        &injected(&["tabsdata:pods.global.envs.UV_INDEX_STRATEGY=first-index"])["tabsdata.yaml"];
+    assert!(content.contains("      UV_INDEX_STRATEGY: first-index\n"));
+    assert!(!content.contains("unsafe-best-match"));
 }
 
 #[test]

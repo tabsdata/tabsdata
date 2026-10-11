@@ -264,6 +264,22 @@ fn global_envs_do_not_need_the_config_mounted() {
 }
 
 #[test]
+fn global_envs_apply_to_a_function_pod_spec() {
+    let mut spec = build_pod_spec_mounting(&["run-function", "upload"], &[]);
+    apply_global_envs(
+        "pods:\n  global:\n    envs:\n      TYPESAFE_API_KEY: key\n",
+        &mut spec,
+    )
+    .expect("ok");
+    for container in ["run-function", "upload"] {
+        assert!(
+            names(&spec, container).contains(&"TYPESAFE_API_KEY".to_owned()),
+            "{container}"
+        );
+    }
+}
+
+#[test]
 fn an_empty_global_envs_map_injects_nothing() {
     let profile = build_profile(&[("tabsdata.yaml", "pods:\n  global:\n    envs: {}\n")]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);

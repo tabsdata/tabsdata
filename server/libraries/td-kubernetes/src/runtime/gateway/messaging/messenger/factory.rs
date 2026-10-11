@@ -30,6 +30,7 @@ use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues, WorkerSettings};
+use crate::runtime::instance::injection::apply_global_envs;
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::sizing::{PodPlacement, apply_sizing};
 use crate::runtime::provider::ClusterProvider;
@@ -75,7 +76,7 @@ impl WorkloadFactory {
                             inject_connection_envfrom_into_pod(&mut pod, connection_envfrom);
                         }
                         inject_metadata_into_pod(&mut pod, &kit.labels, &kit.annotations);
-                        self.apply_sizing_to_pod(&mut pod)?;
+                        self.apply_tabsdata_config_to_pod(&mut pod)?;
                         (
                             vec![kit.main_configmap],
                             vec![kit.main_secret],
@@ -99,7 +100,7 @@ impl WorkloadFactory {
                             inject_connection_envfrom_into_job(&mut job, connection_envfrom);
                         }
                         inject_metadata_into_job(&mut job, &kit.labels, &kit.annotations);
-                        self.apply_sizing_to_job(&mut job)?;
+                        self.apply_tabsdata_config_to_job(&mut job)?;
                         (
                             vec![kit.main_configmap],
                             vec![kit.main_secret],
@@ -126,7 +127,7 @@ impl WorkloadFactory {
                             );
                         }
                         inject_metadata_into_cronjob(&mut cronjob, &kit.labels, &kit.annotations);
-                        self.apply_sizing_to_cronjob(&mut cronjob)?;
+                        self.apply_tabsdata_config_to_cronjob(&mut cronjob)?;
                         (
                             vec![kit.main_configmap],
                             vec![kit.main_secret],
@@ -154,15 +155,15 @@ impl WorkloadFactory {
         Ok(())
     }
 
-    fn apply_sizing_to_pod(&self, pod: &mut Pod) -> Result<(), QueueError> {
+    fn apply_tabsdata_config_to_pod(&self, pod: &mut Pod) -> Result<(), QueueError> {
         let placement = PodPlacement::of(pod.metadata.labels.as_ref());
         let Some(spec) = pod.spec.as_mut() else {
             return Ok(());
         };
-        self.apply_sizing(&placement, spec)
+        self.apply_tabsdata_config(&placement, spec)
     }
 
-    fn apply_sizing_to_job(&self, job: &mut Job) -> Result<(), QueueError> {
+    fn apply_tabsdata_config_to_job(&self, job: &mut Job) -> Result<(), QueueError> {
         let placement = PodPlacement::of(job.metadata.labels.as_ref());
         let Some(spec) = job
             .spec
@@ -171,10 +172,10 @@ impl WorkloadFactory {
         else {
             return Ok(());
         };
-        self.apply_sizing(&placement, spec)
+        self.apply_tabsdata_config(&placement, spec)
     }
 
-    fn apply_sizing_to_cronjob(&self, cronjob: &mut CronJob) -> Result<(), QueueError> {
+    fn apply_tabsdata_config_to_cronjob(&self, cronjob: &mut CronJob) -> Result<(), QueueError> {
         let placement = PodPlacement::of(cronjob.metadata.labels.as_ref());
         let Some(spec) = cronjob
             .spec
@@ -184,16 +185,22 @@ impl WorkloadFactory {
         else {
             return Ok(());
         };
-        self.apply_sizing(&placement, spec)
+        self.apply_tabsdata_config(&placement, spec)
     }
 
-    fn apply_sizing(&self, placement: &PodPlacement, spec: &mut PodSpec) -> Result<(), QueueError> {
-        let Some(sizing) = self.templates.sizing() else {
+    fn apply_tabsdata_config(
+        &self,
+        placement: &PodPlacement,
+        spec: &mut PodSpec,
+    ) -> Result<(), QueueError> {
+        let Some(config_yaml) = self.templates.tabsdata_config() else {
             return Ok(());
         };
-        apply_sizing(sizing, placement, spec).map_err(|error| QueueError::BackendError {
-            cause: error.to_string(),
-        })
+        apply_sizing(config_yaml, placement, spec)
+            .and_then(|()| apply_global_envs(config_yaml, spec))
+            .map_err(|error| QueueError::BackendError {
+                cause: error.to_string(),
+            })
     }
 
     fn system_values(&self) -> Result<SystemValues, QueueError> {

@@ -116,9 +116,13 @@ pub fn inject_secret_envs(
     spec: &mut PodSpec,
     available_secrets: &BTreeSet<String>,
 ) -> Result<(), LauncherError> {
-    let globals = collect_global_env_entries(profile)?;
-    if !globals.is_empty() {
-        override_env_entries(spec, &globals);
+    if let Some(config_yaml) = profile.configs.get(TABSDATA_FILE) {
+        apply_global_envs(config_yaml, spec).map_err(|error| {
+            LauncherError::SecretEnvInjectionConfigParseFailed {
+                config: TABSDATA_FILE.to_owned(),
+                cause: error.to_string(),
+            }
+        })?;
     }
     let mounted = mounted_config_files(spec);
     let entries = collect_env_entries(profile, pod_template_key, &mounted, available_secrets)?;
@@ -129,16 +133,16 @@ pub fn inject_secret_envs(
     Ok(())
 }
 
-fn collect_global_env_entries(profile: &Profile) -> Result<Vec<EnvVar>, LauncherError> {
-    let Some(config_yaml) = profile.configs.get(TABSDATA_FILE) else {
-        return Ok(Vec::new());
-    };
-    let config = TabsdataConfig::parse(config_yaml).map_err(|error| {
-        LauncherError::SecretEnvInjectionConfigParseFailed {
-            config: TABSDATA_FILE.to_owned(),
-            cause: error.to_string(),
-        }
-    })?;
+pub fn apply_global_envs(config_yaml: &str, spec: &mut PodSpec) -> Result<(), serde_yaml::Error> {
+    let globals = global_env_entries(config_yaml)?;
+    if !globals.is_empty() {
+        override_env_entries(spec, &globals);
+    }
+    Ok(())
+}
+
+fn global_env_entries(config_yaml: &str) -> Result<Vec<EnvVar>, serde_yaml::Error> {
+    let config = TabsdataConfig::parse(config_yaml)?;
     Ok(config
         .pods
         .global

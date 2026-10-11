@@ -25,6 +25,7 @@ use crate::runtime::gateway::resolver::walker::{
     Placeholder, Rule, contains_placeholder, parse_bare_placeholder, placeholder_occurrences,
 };
 use crate::runtime::instance::profile::RenderedConfigmap;
+use crate::runtime::instance::tabsdata::TABSDATA_FILE;
 
 pub use engine::address::{Address, CONFIG_EXTENSION};
 pub use engine::source::{CONFIG_ARGUMENT, FILE_PREFIX, Setting, key_address, parse_settings};
@@ -82,7 +83,10 @@ strings, a mapping of addresses to values, or a mapping with two sections: \
       secret:postgres_system_password: env:POSTGRES_PASSWORD
 
 Only values that already exist can be set: never new keys, and never a key \
-that holds other keys or a list. A string value replaces a string, while numbers \
+that holds other keys or a list. The one exception is 'tabsdata:pods.global.envs', \
+where new environment variables can be added for every pod and function:
+    tabsdata:pods.global.envs.MY_API_KEY=env:MY_API_KEY
+Their values are written as strings. A string value replaces a string, while numbers \
 and booleans replace only values of their own type. A VALUE starting with \
 'env:' is read from that environment variable of this machine, so secrets need \
 not be written in any file of yours. To combine variables with fixed text, wrap \
@@ -95,9 +99,12 @@ Examples:
 --config secret:postgres_system_password=env:POSTGRES_PASSWORD
   tdkserver quickstart --config tabsdata:pods.service.resources.memory=8Gi
   tdkserver quickstart --config anthropic-key=env:ANTHROPIC_API_KEY
+  tdkserver quickstart --config tabsdata:pods.global.envs.MY_API_KEY=env:MY_API_KEY
   tdkserver quickstart --config @settings.yaml";
 
 const MAX_SUGGESTION_DISTANCE: usize = 3;
+
+const GLOBAL_ENVS_PATH: [&str; 3] = ["pods", "global", "envs"];
 
 struct Occurrence<'a> {
     file: &'a str,
@@ -291,7 +298,13 @@ fn key_target(
             available: documents.keys().copied().collect::<Vec<_>>().join(", "),
         });
     };
-    let leaf = document.find(path).map_err(|lookup| match lookup {
+    let found = document.find(path);
+    if matches!(found, Err(Lookup::Missing))
+        && let Some(name) = global_env_name(file, path)
+    {
+        return global_env_target(setting, file, path, name, document);
+    }
+    let leaf = found.map_err(|lookup| match lookup {
         Lookup::Missing => InjectorError::KeyNotFound {
             origin: origin.clone(),
             address: address.clone(),
@@ -374,6 +387,70 @@ fn key_target(
             edit,
         }],
     ))
+}
+
+fn global_env_name<'a>(file: &str, path: &'a [Segment]) -> Option<&'a str> {
+    let [parent @ .., name] = path else {
+        return None;
+    };
+    let expandable = file == TABSDATA_FILE
+        && path.iter().all(|segment| segment.selectors.is_empty())
+        && parent
+            .iter()
+            .map(|segment| segment.key.as_str())
+            .eq(GLOBAL_ENVS_PATH);
+    expandable.then_some(name.key.as_str())
+}
+
+fn global_env_target(
+    setting: &Setting,
+    file: &str,
+    path: &[Segment],
+    name: &str,
+    document: &Document,
+) -> Result<(String, String, Vec<Target>), InjectorError> {
+    let origin = &setting.origin;
+    let address = setting.address.to_string();
+    if !is_env_name(name) {
+        return Err(InjectorError::InvalidEnvName {
+            origin: origin.clone(),
+            address,
+            name: name.to_owned(),
+        });
+    }
+    let rendered = render_leaf(&setting.value, LeafType::Text, false).map_err(|reason| {
+        InjectorError::ValueTypeMismatch {
+            origin: origin.clone(),
+            address: address.clone(),
+            expected: LeafType::Text.describe().to_owned(),
+            reason,
+        }
+    })?;
+    let parent = &path[..path.len() - 1];
+    let edit = document.insert(parent, name, &rendered).map_err(|reason| {
+        InjectorError::UnsupportedLayout {
+            origin: origin.clone(),
+            address: address.clone(),
+            reason,
+        }
+    })?;
+    let identity = format!("key {file} {:?}", edit.steps);
+    Ok((
+        identity,
+        address,
+        vec![Target {
+            file: file.to_owned(),
+            edit,
+        }],
+    ))
+}
+
+fn is_env_name(name: &str) -> bool {
+    let mut characters = name.chars();
+    characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 
 fn editable_kind(
@@ -459,7 +536,7 @@ fn verify(file: &str, original: &str, injected: &str, edits: &[Edit]) -> Result<
         serde_yaml::from_str(injected).map_err(|cause| failed(cause.to_string()))?;
     for edit in edits {
         let replacement: Value =
-            serde_yaml::from_str(edit.text.trim()).map_err(|cause| failed(cause.to_string()))?;
+            serde_yaml::from_str(edit.value.trim()).map_err(|cause| failed(cause.to_string()))?;
         if !set_at(&mut expected, &edit.steps, replacement) {
             return Err(failed("an edited value could not be located".to_owned()));
         }

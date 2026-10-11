@@ -52,6 +52,15 @@ pub enum InjectorError {
     NonEditableKey { origin: String, address: String } = 7,
     #[error("Setting {origin} targets '{address}', which is not a final node: it has subnodes.")]
     NotALeaf { origin: String, address: String } = 8,
+    #[error(
+        "Setting {origin} targets '{address}', but '{name}' is not a valid environment \
+         variable name: use letters, digits and '_', not starting with a digit."
+    )]
+    InvalidEnvName {
+        origin: String,
+        address: String,
+        name: String,
+    } = 14,
     #[error("Setting {origin} targets '{address}', whose current value is {expected}; {reason}.")]
     ValueTypeMismatch {
         origin: String,
@@ -97,7 +106,8 @@ pub enum InjectorError {
     } = 1001,
     #[error(
         "Setting {origin} targets '{address}', which does not exist; settings can change \
-         existing values only, not add new ones."
+         existing values only, not add new ones, except environment variables under \
+         'tabsdata:pods.global.envs'."
     )]
     KeyNotFound { origin: String, address: String } = 1002,
     #[error(

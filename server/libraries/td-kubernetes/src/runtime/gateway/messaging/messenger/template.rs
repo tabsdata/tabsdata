@@ -68,7 +68,7 @@ pub struct PodTemplate {
 #[derive(Debug, Clone, Default)]
 pub struct PodTemplateIndex {
     map: HashMap<String, PodTemplate>,
-    sizing: Option<String>,
+    tabsdata_config: Option<String>,
 }
 
 impl PodTemplateIndex {
@@ -94,12 +94,15 @@ impl PodTemplateIndex {
                 map.insert(template.component.clone(), template);
             }
         }
-        let sizing = load_sizing(context).await?;
-        Ok(Self { map, sizing })
+        let tabsdata_config = load_tabsdata_config(context).await?;
+        Ok(Self {
+            map,
+            tabsdata_config,
+        })
     }
 
-    pub fn sizing(&self) -> Option<&str> {
-        self.sizing.as_deref()
+    pub fn tabsdata_config(&self) -> Option<&str> {
+        self.tabsdata_config.as_deref()
     }
 
     pub fn lookup(&self, component: &str) -> Result<&PodTemplate, KubeMessagingError> {
@@ -122,7 +125,7 @@ impl PodTemplateIndex {
     }
 }
 
-async fn load_sizing(context: &KubeContext) -> Result<Option<String>, KubernetesError> {
+async fn load_tabsdata_config(context: &KubeContext) -> Result<Option<String>, KubernetesError> {
     let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, KPROFILE_CONFIGS_FAMILY.kind);
     let configmaps = get_configmaps(context, Some(filter)).await?;
     for (_, entries) in configmaps {
