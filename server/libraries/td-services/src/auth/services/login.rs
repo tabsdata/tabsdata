@@ -70,13 +70,7 @@ async fn login(
         let session = SessionDB::new(user.id, at, session_expiration(&jwt_config)?);
         conn.insert(&session).await?;
 
-    // Housekeeping purge of expired session rows commits with this
-    // transaction; the authoritative cache invalidation must wait for the
-    // commit (invalidating earlier races a concurrent reader repopulating the
-    // cache from a pre-commit snapshot that omits the new session).
-    sessions.purge(conn).await?;
-    gated_trx.commit().await?;
-    sessions.invalidate().await;
+        let token = create_access_token(&jwt_config, &session)?;
 
         gated_trx.commit().await?;
         Ok(token)

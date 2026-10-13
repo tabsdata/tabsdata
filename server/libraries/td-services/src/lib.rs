@@ -11,7 +11,6 @@ use std::path::PathBuf;
 use ta_services::factory::FieldAccessors;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::session_provider::Sessions;
 use td_authz::token_provider::ServiceTokens;
 use td_bridge::BridgeProviderHandle;
 use td_common::jwt::JwtConfig;
@@ -59,7 +58,6 @@ pub struct Services {
     pub server_addresses: Ctx<ApiServerAddresses>,
     pub jwt_config: Ctx<JwtConfig>,
     pub auth_context: Ctx<AuthzContext>,
-    pub sessions: Ctx<Sessions>,
     pub tokens: Ctx<ServiceTokens>,
     pub token_settings: Ctx<ServiceTokenConfig>,
     pub password_settings: Ctx<PasswordHashingConfig>,
@@ -98,7 +96,6 @@ impl Default for Services {
             server_addresses: Ctx::new(ApiServerAddresses::default()),
             jwt_config: jwt_config.clone(),
             auth_context: Ctx::new(AuthzContext::default()),
-            sessions: Ctx::new(Sessions::default()),
             tokens: Ctx::new(ServiceTokens::default()),
             token_settings: Ctx::new(ServiceTokenConfig {
                 max_days: Some(MaxTokenDays::Unbounded),

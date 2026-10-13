@@ -59,6 +59,7 @@ impl SchemaDelta for Migration {
             r#"DROP INDEX IF EXISTS "collections___project_id__name___idx""#.to_string(),
             r#"DROP INDEX IF EXISTS "functions___collection_id__name___current_idx""#.to_string(),
             r#"DROP INDEX IF EXISTS "groups___project_id__name___idx""#.to_string(),
+            r#"DROP INDEX IF EXISTS "sessions___status___idx""#.to_string(),
             r#"DROP INDEX IF EXISTS "tables___collection_id__name___current_idx""#.to_string(),
         ]
     }

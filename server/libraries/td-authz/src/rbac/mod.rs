@@ -118,7 +118,7 @@ pub use model::{
 };
 pub use registry::{AuthzRegistry, DecodeEntityId};
 pub use source::{FixedRbacSource, RbacSource, identity_grants};
-pub use sql_source::{SqlRbacGrantsProvider, SqlRbacSource};
+pub use sql_source::SqlRbacSource;
 
 /// The service-facing enforcer with the production grant source fixed in:
 /// `Enforce<SqlRbacSource, E, R>`.

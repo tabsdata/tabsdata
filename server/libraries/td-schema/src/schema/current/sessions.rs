@@ -47,9 +47,6 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            // The session provider lists the active sessions; invalidated
-            // rows dominate between hourly purges.
-            Index::create().name("sessions___status___idx").table(Sessions::Table).col(Sessions::Status).to_owned(),
             // For session purge: DELETE WHERE expires_on < now
             Index::create().name("sessions___expires_on___idx").table(Sessions::Table).col(Sessions::ExpiresOn).to_owned(),
             // For session lookup by user during refresh

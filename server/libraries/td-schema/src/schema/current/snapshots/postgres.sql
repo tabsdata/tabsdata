@@ -287,8 +287,6 @@ CREATE INDEX "users_roles___role_id__id___idx" ON "users_roles" ("role_id", "id"
 
 CREATE UNIQUE INDEX "roles___user_id__role_id___idx" ON "users_roles" ("user_id", "role_id")
 
-CREATE INDEX "sessions___status___idx" ON "sessions" ("status")
-
 CREATE INDEX "sessions___expires_on___idx" ON "sessions" ("expires_on")
 
 CREATE INDEX "sessions___user_id___idx" ON "sessions" ("user_id")

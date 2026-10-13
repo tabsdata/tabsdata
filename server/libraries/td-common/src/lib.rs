@@ -20,7 +20,6 @@ pub mod logic_id;
 pub mod manifest;
 pub mod name;
 pub mod os;
-pub mod provider;
 pub mod random;
 pub mod server_runner;
 pub mod settings;

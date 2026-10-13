@@ -9,8 +9,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageAccess, SelfUser, User};
-use td_authz::token_provider::ServiceTokens;
-use td_database::access::{DbPool, Global};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::UpdateRequest;
@@ -25,38 +24,44 @@ use td_security::config::PasswordHashingConfig;
 async fn update_user(
     authz: Ctx<AuthzContext>,
     password_hashing_config: Ctx<PasswordHashingConfig>,
-    tokens: Ctx<ServiceTokens>,
     db: DbPool<Global>,
     request: UpdateRequest<UserUpdate, UserParam>,
 ) -> Result<UserRead, TdError> {
     let (ctx, param, update) = request.into_parts();
-    let id_name = param.user;
-    let mut gated_trx = db.begin().await?;
-    let conn = gated_trx.get(authz.none());
-    let user: UserDB = conn.fetch_one(&id_name).await?;
-    assert_user_is_not_system(&user)?;
-    let grant = authz
-        .require::<User, (SelfUser, ManageAccess)>(&mut gated_trx, &ctx, &user.id)
-        .await?;
-    let conn = gated_trx.get(grant);
-
     update_user_validate(&update)?;
-    update_user_validate_password_change(&ctx.user_id, &update, &user)?;
-    update_user_validate_enabled(&ctx.user_id, &user, &update)?;
+    let read = retrying(|attempt| async {
+        let mut gated_trx = db.begin(attempt).await?;
+        let conn = gated_trx.get(authz.none());
+        let user: UserDB = conn.fetch_one(&param.user).await?;
+        assert_user_is_not_system(&user)?;
+        let grant = authz
+            .require::<User, (SelfUser, ManageAccess)>(&mut gated_trx, &ctx, &user.id)
+            .await?;
+        let conn = gated_trx.get(grant);
 
-    let user_id = user.id;
-    let sets_enabled = update.enabled.is_some();
-    let update_db = update.to_dao(user, &ctx, &password_hashing_config)?;
-    conn.update::<UserUpdateDB>(&update_db, user_id).await?;
+        update_user_validate_password_change(&ctx.user_id, &update, &user)?;
+        update_user_validate_enabled(&ctx.user_id, &user, &update)?;
 
-    let with_names: UserDBWithNames = conn.fetch_one(&user_id).await?;
-    let read = UserRead::from_dao(with_names)?;
-    gated_trx.commit().await?;
-    // After the commit: a reload before it could refill from a pre-commit
-    // snapshot.
-    if sets_enabled {
-        tokens.invalidate().await;
-    }
+        let user_id = user.id;
+        let retired = if update.enabled == Some(UserEnabled::FALSE) && *user.enabled {
+            Some(SessionStatus::InvalidUserDisabled)
+        } else if update.password.is_some() {
+            Some(SessionStatus::InvalidPasswordChange)
+        } else {
+            None
+        };
+        let update_db = update.clone().to_dao(&ctx, &password_hashing_config)?;
+        conn.update::<UserUpdateDB>(&update_db, user_id).await?;
+        if let Some(status) = retired {
+            retire_sessions(conn, &user_id, ctx.time, status).await?;
+        }
+
+        let with_names: UserDBWithNames = conn.fetch_one(&user_id).await?;
+        let read = UserRead::from_dao(with_names)?;
+        gated_trx.commit().await?;
+        Ok(read)
+    })
+    .await?;
     Ok(read)
 }
 
@@ -206,32 +211,6 @@ mod tests {
         assert_eq!(*updated.modified_by_id, user.id);
         assert_eq!(*updated.modified_by, UserLabel::from(user.name.clone()));
         assert!(*updated.enabled);
-    }
-
-    #[td_test::test(db)]
-    async fn test_update_user_enabled_invalidates_tokens(db: TdPool) {
-        let _ = db
-            .seed()
-            .user(&UserName::try_from("u0").unwrap(), &UserEnabled::TRUE)
-            .await;
-        let service = Services::with_defaults(db.clone());
-
-        for enabled in [UserEnabled::FALSE, UserEnabled::TRUE] {
-            service.tokens.load(&db).await.unwrap();
-            let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
-                UserParam {
-                    user: UserIdName::from_str("u0").unwrap(),
-                },
-                UserUpdate {
-                    full_name: None,
-                    email: None,
-                    password: None,
-                    enabled: Some(enabled),
-                },
-            );
-            service.update_user(request).await.unwrap();
-            assert!(service.tokens.cached().await.is_none());
-        }
     }
 
     /// email is tri-state: setting it, then clearing it (the JSON `null` =

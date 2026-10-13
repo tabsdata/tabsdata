@@ -51,11 +51,7 @@ async fn refresh(
         let new_session = SessionDB::new(ctx.user_id, at, session_expiration(&jwt_config)?);
         conn.insert(&new_session).await?;
 
-    // Housekeeping purge commits with the transaction; the cache invalidation
-    // must wait for the commit (see LoginService).
-    sessions.purge(conn).await?;
-    gated_trx.commit().await?;
-    sessions.invalidate().await;
+        let token = create_access_token(&jwt_config, &new_session)?;
 
         gated_trx.commit().await?;
         Ok(token)

@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Current- and Default-family read cases, plus Sessions::purge, over the chain
+//! Current- and Default-family read cases, plus the session purge, over the chain
 //! dataset. Current reads target `TableDB`; Default reads target `ActiveCollectionDB`.
 
 use crate::harness::{record, seed};

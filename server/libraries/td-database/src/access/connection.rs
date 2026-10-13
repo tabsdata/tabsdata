@@ -103,7 +103,11 @@ impl<M: AccessMode, S: EntersProject, D: ScopedBy<S> + ScopedBy<InProject>>
         let scope = InProject::new(project);
         let mut conn = DomainConnection::<D, InProject, M>::new(self.conn.into_transaction());
         scope.apply(&mut conn).await?;
-        Ok(GatedConnection::new(conn, self.lock))
+        Ok(GatedConnection {
+            conn,
+            lock: self.lock,
+            _m: PhantomData,
+        })
     }
 }
 

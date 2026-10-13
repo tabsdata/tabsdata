@@ -7,8 +7,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{SelfUser, User};
-use td_authz::token_provider::ServiceTokens;
-use td_database::access::{DbPool, Global};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::and;
 use td_objects::dxo::crudl::CreateRequest;
@@ -28,7 +27,6 @@ use tracing::info;
 async fn create_service_token(
     authz: Ctx<AuthzContext>,
     settings: Ctx<ServiceTokenConfig>,
-    tokens: Ctx<ServiceTokens>,
     db: DbPool<Global>,
     request: CreateRequest<TokenCreate, TokenSlotParam>,
 ) -> Result<TokenCreated, TdError> {
@@ -56,18 +54,26 @@ async fn create_service_token(
         system: TokenSystem::FALSE,
     };
 
-    // A concurrent create that slips past this check loses on the unique
-    // `(user_id, slot)`.
-    if conn
-        .fetch_optional::<ServiceTokenDB>(and!(&row.user_id, &row.slot))
-        .await?
-        .is_some()
-    {
-        Err(occupied(&row.slot))?
-    }
-    conn.insert(&row).await?;
-    trx.commit().await?;
-    tokens.invalidate().await;
+    // A concurrent create of the slot fails to serialize with this one, and
+    // its retry finds the slot taken.
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<User, SelfUser>(&mut trx, &ctx, &ctx.user_id)
+            .await?;
+        let conn = trx.get(grant);
+        if conn
+            .fetch_optional::<ServiceTokenDB>(and!(&row.user_id, &row.slot))
+            .await?
+            .is_some()
+        {
+            Err(occupied(&row.slot))?
+        }
+        conn.insert(&row).await?;
+        trx.commit().await?;
+        Ok(())
+    })
+    .await?;
 
     info!(
         user_id = %row.user_id,

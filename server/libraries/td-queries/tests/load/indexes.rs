@@ -414,10 +414,6 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Queries(&["Sessions::purge"]),
     },
     IndexCase {
-        index: "sessions___status___idx",
-        served_by: Path("active sessions load"),
-    },
-    IndexCase {
         index: "sessions___user_id___idx",
         served_by: Path("sessions of a user: logout, password change"),
     },

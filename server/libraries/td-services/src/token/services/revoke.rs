@@ -7,8 +7,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{SelfUser, User};
-use td_authz::token_provider::ServiceTokens;
-use td_database::access::{DbPool, Global};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::crudl::DeleteRequest;
@@ -19,28 +18,29 @@ use tracing::info;
 #[service_factory]
 async fn revoke_service_token(
     authz: Ctx<AuthzContext>,
-    tokens: Ctx<ServiceTokens>,
     db: DbPool<Global>,
     request: DeleteRequest<TokenSlotParam>,
 ) -> Result<(), TdError> {
     let (ctx, param) = request.into_parts();
-    let mut trx = db.begin().await?;
-    let grant = authz
-        .require::<User, SelfUser>(&mut trx, &ctx, &ctx.user_id)
-        .await?;
-    let conn = trx.get(grant);
+    let row = retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<User, SelfUser>(&mut trx, &ctx, &ctx.user_id)
+            .await?;
+        let conn = trx.get(grant);
 
-    let row: ServiceTokenDB = conn
-        .fetch_optional(and!(&ctx.user_id, &param.slot))
-        .await?
-        .ok_or(TokenError::NotFound)?;
-    if *row.system {
-        Err(TokenError::SystemManaged)?
-    }
-    conn.delete::<ServiceTokenDB>(row.id).await?;
-    trx.commit().await?;
-    // After the commit, so a reload cannot keep the revoked token.
-    tokens.invalidate().await;
+        let row: ServiceTokenDB = conn
+            .fetch_optional(and!(&ctx.user_id, &param.slot))
+            .await?
+            .ok_or(TokenError::NotFound)?;
+        if *row.system {
+            Err(TokenError::SystemManaged)?
+        }
+        conn.delete::<ServiceTokenDB>(row.id).await?;
+        trx.commit().await?;
+        Ok(row)
+    })
+    .await?;
 
     info!(
         user_id = %row.user_id,

@@ -188,7 +188,6 @@ async fn assert_indices(db: &TdPool) {
         "roles___user_id__role_id___idx",
         "service_tokens___user_id__slot___idx",
         "sessions___expires_on___idx",
-        "sessions___status___idx",
         "sessions___user_id___idx",
         "tables___collection_id__name___current_uidx",
         "tables___collection_id__name___idx",

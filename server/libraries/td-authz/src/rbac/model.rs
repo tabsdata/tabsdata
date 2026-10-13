@@ -543,7 +543,7 @@ impl Clone for Grants {
 /// The grants effective for one request: the user's stored grants plus the
 /// implicit per-request identity grants.
 ///
-/// Borrows both sides — the stored grants stay behind their cache `Arc` and
+/// Borrows both sides — the stored grants stay behind their `Arc` and
 /// the identity grants live on the stack, so building this is free.
 #[derive(Debug, Clone, Copy)]
 pub struct EffectiveGrants<'a> {

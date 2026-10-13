@@ -12,7 +12,7 @@ use ta_apiserver::router::{Auth, accepts};
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_services::service::Ctx;
 use td_authz::rbac::enforce::RbacError;
-use td_authz::session_provider::{Session, SessionError, Sessions};
+use td_authz::session_provider::{Session, SessionError, active_session};
 use td_authz::token_provider::ServiceTokens;
 use td_common::jwt::{JwtConfig, decode_token};
 use td_database::access::{DbPool, GatedConnection, Global, Grant, RO, retrying};
@@ -30,7 +30,6 @@ use tracing::{Instrument, Level, Span, debug, error, span, warn};
 pub async fn authorization_layer(
     State(db): State<DbPool<Global>>,
     State(jwt_config): State<Ctx<JwtConfig>>,
-    State(sessions): State<Ctx<Sessions>>,
     State(tokens): State<Ctx<ServiceTokens>>,
     request: Request,
     next: Next,
@@ -288,6 +287,7 @@ mod tests {
                 "create_user",
                 "list_service_tokens",
                 "read_own_service_token",
+                "logout",
             ],
             &states,
         )
@@ -415,6 +415,38 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["code"], "RbacError::3002");
+    }
+
+    /// The session is read on every request, so a logout takes effect on
+    /// the very next one.
+    #[td_test::test(db)]
+    async fn test_a_logged_out_session_is_refused(db: TdPool) {
+        db.seed().test_project().await.unwrap();
+        let (router, services) = build(db.clone());
+        let login = Login {
+            name: UserName::admin(),
+            password: Password::try_from("tabsdata").unwrap(),
+        };
+        let bearer = services
+            .login(login)
+            .await
+            .unwrap()
+            .data
+            .access_token
+            .to_string();
+        assert_eq!(
+            status(&router, Method::GET, "/collections", &bearer).await,
+            StatusCode::OK
+        );
+
+        assert_eq!(
+            status(&router, Method::POST, "/auth/logout", &bearer).await,
+            StatusCode::OK
+        );
+        assert_eq!(
+            status(&router, Method::GET, "/collections", &bearer).await,
+            StatusCode::UNAUTHORIZED
+        );
     }
 
     #[td_test::test(db)]

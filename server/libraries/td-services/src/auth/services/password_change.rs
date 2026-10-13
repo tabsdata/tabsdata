@@ -54,15 +54,7 @@ async fn password_change(
         };
         conn.update::<UserUpdateDB>(&updated, user.id).await?;
 
-    // invalidate all existing sessions for the user id
-    let invalidate = SessionInvalidateDB::new(at, SessionStatus::InvalidPasswordChange);
-    conn.update(&invalidate, user.id).await?;
-
-    // Housekeeping purge commits with the transaction; the cache invalidation
-    // must wait for the commit (see LoginService).
-    sessions.purge(conn).await?;
-    gated_trx.commit().await?;
-    sessions.invalidate().await;
+        retire_sessions(conn, &user.id, at, SessionStatus::InvalidPasswordChange).await?;
 
         gated_trx.commit().await?;
         Ok(())

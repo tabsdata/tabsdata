@@ -33,15 +33,11 @@ async fn delete_permission(
         authorize_permission_target(&authz, conn, &ctx, &permission).await?;
         assert_permission_is_not_fixed(&permission)?;
 
-    conn.delete::<PermissionDB>(permission.id).await?;
-    trx.commit().await?;
-
-    // Revoked a permission; with the transaction committed, invalidate the
-    // cached authz grants.
-    let mut conn = db.read().await?;
-    authz.refresh(conn.get(grant)).await?;
-
-    Ok(())
+        conn.delete::<PermissionDB>(permission.id).await?;
+        trx.commit().await?;
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]

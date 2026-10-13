@@ -2,20 +2,17 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Service tokens keyed by digest: a whole-map snapshot with explicit
-//! invalidation, like the session cache.
+//! Service-token lookup by digest, plus a per-node throttle on the
+//! `last_used_on` writes.
 
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use td_common::provider::{CachedProvider, Provider};
+use std::sync::Mutex;
 use td_database::domain::{Apiserver, Domained};
 use td_error::{TdError, td_error};
 use td_objects::dxo::service_token::{ServiceTokenDBWithNames, ServiceTokenTouchDB};
 use td_objects::types::basic::{AtTime, ServiceTokenId, TokenDigest};
 use td_queries::{Queries, QueryExecutor, Writes};
-
-type Tokens = HashMap<TokenDigest, Arc<ServiceTokenDBWithNames>>;
 
 /// One `last_used_on` write per token per interval per node.
 const TOUCH_INTERVAL_SECS: i64 = 10 * 60;
@@ -29,49 +26,20 @@ pub enum TokenError {
 }
 
 #[derive(Default)]
-pub struct SqlTokenProvider;
-
-impl<E: QueryExecutor + Domained<Domain = Apiserver> + Send> Provider<Tokens, E>
-    for SqlTokenProvider
-{
-    async fn get(&self, conn: E) -> Result<Arc<Tokens>, TdError> {
-        let tokens: Vec<ServiceTokenDBWithNames> = conn.fetch_all(&()).await?;
-        let tokens = tokens
-            .into_iter()
-            .map(|token| (token.base.digest.clone(), Arc::new(token)))
-            .collect();
-        Ok(Arc::new(tokens))
-    }
-
-    /// An expired token keeps its slot until revoked.
-    async fn purge(&self, _conn: E) -> Result<(), TdError> {
-        Ok(())
-    }
-}
-
-#[derive(Default)]
 pub struct ServiceTokens {
-    cache: CachedProvider<Tokens, SqlTokenProvider>,
     touched: Mutex<HashMap<ServiceTokenId, DateTime<Utc>>>,
 }
 
 impl ServiceTokens {
-    pub async fn cached(&self) -> Option<Arc<Tokens>> {
-        self.cache.cached().await
-    }
-
-    pub async fn load<E>(&self, conn: E) -> Result<Arc<Tokens>, TdError>
+    pub async fn find<E>(
+        &self,
+        conn: E,
+        digest: &TokenDigest,
+    ) -> Result<Option<ServiceTokenDBWithNames>, TdError>
     where
         E: QueryExecutor + Domained<Domain = Apiserver> + Send,
     {
-        self.cache.get(conn).await
-    }
-
-    /// Call after the transaction commits: a reload from a pre-commit snapshot
-    /// would stick.
-    pub async fn invalidate(&self) {
-        self.cache.invalidate().await;
-        self.touched.lock().unwrap().clear();
+        Ok(conn.fetch_optional(digest).await?)
     }
 
     pub fn accept(&self, token: &ServiceTokenDBWithNames, at: &AtTime) -> Result<(), TdError> {
@@ -86,11 +54,13 @@ impl ServiceTokens {
 
     /// Check before acquiring a write connection.
     pub fn due_for_touch(&self, id: &ServiceTokenId, now: DateTime<Utc>) -> bool {
+        let within = |last: &DateTime<Utc>| {
+            now.signed_duration_since(*last).num_seconds() < TOUCH_INTERVAL_SECS
+        };
         let mut touched = self.touched.lock().unwrap();
-        let due = touched.get(id).is_none_or(|last| {
-            now.signed_duration_since(*last).num_seconds() >= TOUCH_INTERVAL_SECS
-        });
+        let due = !touched.get(id).is_some_and(within);
         if due {
+            touched.retain(|_, last| within(last));
             touched.insert(*id, now);
         }
         due
@@ -173,13 +143,14 @@ mod tests {
         assert!(tokens.due_for_touch(&ServiceTokenId::default(), start));
     }
 
-    #[tokio::test]
-    async fn test_invalidate_forgets_touches() {
+    #[test]
+    fn test_touch_forgets_tokens_past_the_interval() {
         let tokens = ServiceTokens::default();
-        let id = ServiceTokenId::default();
         let start = Utc::now();
-        assert!(tokens.due_for_touch(&id, start));
-        tokens.invalidate().await;
-        assert!(tokens.due_for_touch(&id, start));
+        for _ in 0..3 {
+            tokens.due_for_touch(&ServiceTokenId::default(), start);
+        }
+        tokens.due_for_touch(&ServiceTokenId::default(), start + Duration::minutes(10));
+        assert_eq!(tokens.touched.lock().unwrap().len(), 1);
     }
 }

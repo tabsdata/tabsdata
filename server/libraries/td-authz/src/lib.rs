@@ -24,8 +24,6 @@ pub mod token_provider;
 
 /// The authorization context services check against.
 ///
-/// This is the production [`rbac::RbacSource`] (SQL-backed, cached), shared
-/// as a `Ctx<AuthzContext>` service dependency. Construct it with
-/// [`Default`]. Refresh it (`AuthzContext::refresh`) after committing any
-/// change to role assignments or role permissions.
+/// This is the production [`rbac::RbacSource`] (SQL-backed), shared as a
+/// `Ctx<AuthzContext>` service dependency. Construct it with [`Default`].
 pub type AuthzContext = SqlRbacSource;

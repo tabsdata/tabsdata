@@ -23,14 +23,8 @@ async fn logout(
         let mut gated_trx = db.begin(attempt).await?;
         let conn = gated_trx.get(authz.none());
 
-    let logout = SessionInvalidateDB::new(ctx.time, SessionStatus::InvalidLogout);
-    conn.update(&logout, ctx.access_token_id).await?;
-
-    // Housekeeping purge commits with the transaction; the cache invalidation
-    // must wait for the commit (see LoginService).
-    sessions.purge(conn).await?;
-    gated_trx.commit().await?;
-    sessions.invalidate().await;
+        let logout = SessionInvalidateDB::new(ctx.time, SessionStatus::InvalidLogout);
+        conn.update(&logout, ctx.access_token_id).await?;
 
         gated_trx.commit().await?;
         Ok(())

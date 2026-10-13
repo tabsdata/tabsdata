@@ -27,8 +27,8 @@ async fn create_role(
             .await?;
         let conn = trx.get(grant);
 
-    let role = create.to_dao(&ctx);
-    conn.insert(&role).await?;
+        let role = create.clone().to_dao(&ctx);
+        conn.insert(&role).await?;
 
         let with_names: RoleDBWithNames = conn.fetch_one(&role.id).await?;
         let read = Role::from_dao(with_names)?;

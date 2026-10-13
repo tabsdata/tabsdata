@@ -32,14 +32,14 @@ async fn create_user(
             .await?;
         let conn = trx.get(grant);
 
-    let user = create.to_dao(&ctx, &password_hashing_config)?;
-    // A duplicate user name reports a clean "already exists" error instead
-    // of the raw unique-constraint violation from the insert.
-    conn.assert_not_exists::<UserDB>(&user.name).await?;
-    conn.insert(&user).await?;
+        let user = create.clone().to_dao(&ctx, &password_hashing_config)?;
+        // A duplicate user name reports a clean "already exists" error
+        // instead of the raw unique-constraint violation from the insert.
+        conn.assert_not_exists::<UserDB>(&user.name).await?;
+        conn.insert(&user).await?;
 
-    let user_role = UserRoleDB::new(user.id, RoleId::default_role(), &ctx, Fixed::TRUE);
-    conn.insert(&user_role).await?;
+        let user_role = UserRoleDB::new(user.id, RoleId::default_role(), &ctx, Fixed::TRUE);
+        conn.insert(&user_role).await?;
 
         let with_names: UserDBWithNames = conn.fetch_one(&user.id).await?;
         let read = UserRead::from_dao(with_names)?;

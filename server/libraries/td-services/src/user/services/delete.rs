@@ -7,9 +7,8 @@ use crate::user::UserError;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{ManageAccess, RbacSource, System, SystemEntity};
-use td_authz::token_provider::ServiceTokens;
-use td_database::access::{DbPool, Global};
+use td_authz::rbac::{ManageAccess, System, SystemEntity};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::service_token::ServiceTokenDB;
@@ -22,7 +21,6 @@ use td_queries::Queries;
 #[service_factory]
 async fn delete_user(
     authz: Ctx<AuthzContext>,
-    tokens: Ctx<ServiceTokens>,
     db: DbPool<Global>,
     request: DeleteRequest<UserParam>,
 ) -> Result<(), TdError> {
@@ -37,17 +35,14 @@ async fn delete_user(
         let user: UserDB = conn.fetch_one(&param.user).await?;
         delete_user_validate(&user, &ctx.user_id)?;
 
-    conn.delete::<UserRoleDB>(user.id).await?;
-    // Restricting foreign key: token rows go first.
-    conn.delete::<ServiceTokenDB>(user.id).await?;
-    conn.delete::<UserDB>(user.id).await?;
-    trx.commit().await?;
-    tokens.invalidate().await;
-
-    // The cascade dropped role memberships; invalidate the cached authz
-    // grants like every other membership-mutating service.
-    let mut conn = db.read().await?;
-    authz.refresh(conn.get(grant)).await?;
+        retire_sessions(conn, &user.id, ctx.time, SessionStatus::InvalidUserDisabled).await?;
+        conn.delete::<UserRoleDB>(user.id).await?;
+        // Restricting foreign key: token rows go first.
+        conn.delete::<ServiceTokenDB>(user.id).await?;
+        conn.delete::<UserDB>(user.id).await?;
+        trx.commit().await
+    })
+    .await?;
     Ok(())
 }
 

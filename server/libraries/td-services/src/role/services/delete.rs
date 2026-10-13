@@ -6,8 +6,8 @@ use crate::role::assert_not_fixed;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::{ManageRoles, RbacSource, System, SystemEntity};
-use td_database::access::{DbPool, Global};
+use td_authz::rbac::{ManageRoles, System, SystemEntity};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::permission::PermissionDB;
@@ -33,18 +33,13 @@ async fn delete_role(
         let role: RoleDBWithNames = conn.fetch_one(&param.role).await?;
         assert_not_fixed(&role)?;
 
-    // Drop the role's permissions and memberships, then the role itself.
-    conn.delete::<PermissionDB>(role.base.id).await?;
-    conn.delete::<UserRoleDB>(role.base.id).await?;
-    conn.delete::<RoleDB>(role.base.id).await?;
-    trx.commit().await?;
-
-    // Dropped the role's permissions and memberships; with the transaction
-    // committed, invalidate the cached authz grants.
-    let mut conn = db.read().await?;
-    authz.refresh(conn.get(grant)).await?;
-
-    Ok(())
+        conn.delete::<PermissionDB>(role.base.id).await?;
+        conn.delete::<UserRoleDB>(role.base.id).await?;
+        conn.delete::<RoleDB>(role.base.id).await?;
+        trx.commit().await?;
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]

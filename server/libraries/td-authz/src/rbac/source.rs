@@ -7,8 +7,8 @@
 //! The async boundary lives here and only here — the enforcement decision
 //! itself ([`Grants::allows`]) is pure. A source resolves a user to their
 //! effective grants (the union across the user's assigned roles); the
-//! SQL-backed implementation ([`super::sql_source`]) loads `role_permission`
-//! rows, groups them per user, and caches the result.
+//! SQL-backed implementation ([`super::sql_source`]) loads the user's roles
+//! and their permissions.
 
 use crate::rbac::model::{EntityKind, Grants, IdentityClaim, RoleGrant, User};
 use std::collections::{HashMap, HashSet};
@@ -20,26 +20,14 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::UserId;
 
 /// Resolves the effective grants of a user.
-///
-/// Implementations are expected to cache: the contract is "return an
-/// `Arc<Grants>` snapshot", so the per-check cost is a map lookup plus a
-/// clone of the `Arc`.
 pub trait RbacSource: Send + Sync {
     /// The effective grants for the user: the union across their assigned
-    /// roles; no grants is an empty [`Grants`], not an error. The slot may be
-    /// latent — implementations should touch it only on a cache miss.
+    /// roles; no grants is an empty [`Grants`], not an error.
     fn user_grants<S: DbScope, M: AccessMode>(
         &self,
         slot: &mut DomainConnection<Apiserver, S, M>,
         user: &UserId,
     ) -> impl Future<Output = Result<Arc<Grants>, TdError>> + Send;
-
-    /// Invalidate any cached state. Must be called when role assignments or
-    /// role permissions change.
-    fn refresh<S: DbScope, M: AccessMode>(
-        &self,
-        slot: &mut DomainConnection<Apiserver, S, M>,
-    ) -> impl Future<Output = Result<(), TdError>> + Send;
 
     /// Whether the kind's source of truth still knows the entity; nothing is
     /// authorized on one it does not.
@@ -108,13 +96,6 @@ impl RbacSource for FixedRbacSource {
         user: &UserId,
     ) -> Result<Arc<Grants>, TdError> {
         Ok(self.users.get(user).unwrap_or(&self.empty).clone())
-    }
-
-    async fn refresh<S: DbScope, M: AccessMode>(
-        &self,
-        _slot: &mut DomainConnection<Apiserver, S, M>,
-    ) -> Result<(), TdError> {
-        Ok(())
     }
 
     async fn is_current<E: EntityKind, S: DbScope, M: AccessMode>(
