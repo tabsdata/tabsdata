@@ -214,7 +214,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &LogicalFunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Requested,
             )
             .await?;
         let worker = db

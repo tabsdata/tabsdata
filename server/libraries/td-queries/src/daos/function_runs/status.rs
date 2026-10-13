@@ -4,7 +4,9 @@
 
 //! The doors through which a logical run's status and a physical run's
 //! instants change. Each writes the row, then what follows from it: the
-//! metrics facts and the parents' status roll-up. They exist on in-project
+//! parents' status roll-up and the metrics facts, which for a reported
+//! attempt [`ended`](PhysicalRuns::ended) writes once its run is written too.
+//! They exist on in-project
 //! write connections only, and the update DAOs they use are constructed
 //! nowhere else. Write units are `SERIALIZABLE`, so two units changing the
 //! same runs, or the children of one parent, never both commit on stale reads.
@@ -19,7 +21,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_objects::and;
 use td_objects::dxo::logical::LogicalFunctionRunStatusUpdateDB;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
-use td_objects::dxo::worker::WorkerExecutionUpdate;
+use td_objects::dxo::worker::{WorkerDBWithNames, WorkerExecutionUpdate, WorkerUpdateDB};
 use td_objects::types::basic::{
     AtTime, LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
     PhysicalFunctionRunStatus,
@@ -82,37 +84,65 @@ impl<M: WriteMode> PhysicalRuns<&mut DomainConnection<Apiserver, InProject, M>> 
         Ok(())
     }
 
-    // A late or duplicate report still moves the audit row; only a physical run
-    // still in flight earns facts.
+    /// A report the attempt may not make from its current status is late (an
+    /// abandon, a cancel or an earlier report got there first) and moves
+    /// nothing. Returns whether it ended an attempt in flight, whose facts
+    /// [`ended`](Self::ended) writes once the run and its outputs are.
     pub async fn reported(
         self,
         physical_run: &PhysicalFunctionRunDB,
         update: &WorkerExecutionUpdate,
-    ) -> Result<(), SqlError> {
+    ) -> Result<bool, SqlError> {
         let conn = self.executor;
         let audit =
             PhysicalFunctionRunUpdateDB::try_from(update).map_err(SqlError::DtoConversionError)?;
-        conn.scd2().update(&audit, &physical_run.base.id).await?;
-        let ids = std::slice::from_ref(&physical_run.base.id);
-        if PhysicalFunctionRunStatus::IN_FLIGHT.contains(&physical_run.base.status) {
-            physical_runs_finished(conn, ids).await
-        } else {
-            physical_runs_changed(conn, ids).await
+        let from = physical_run.base.status;
+        if !from.can_move_to(&audit.status) {
+            return Ok(false);
         }
+        conn.scd2()
+            .update(&audit, and!(&physical_run.base.id, from))
+            .await?;
+        physical_runs_changed(conn, std::slice::from_ref(&physical_run.base.id)).await?;
+        Ok(PhysicalFunctionRunStatus::IN_FLIGHT.contains(&from))
     }
 
-    pub async fn failed(
+    pub async fn ended(self, pfr_ids: &[PhysicalFunctionRunId]) -> Result<(), SqlError> {
+        attempts_ended(self.executor, pfr_ids).await
+    }
+
+    /// Fails the attempts, their live workers first. Returns the workers, to
+    /// stop once the caller commits.
+    pub async fn end(
         self,
         pfr_ids: &[PhysicalFunctionRunId],
         at: &AtTime,
-    ) -> Result<(), SqlError> {
+    ) -> Result<Vec<WorkerDBWithNames>, SqlError> {
         if pfr_ids.is_empty() {
-            return Ok(());
+            return Ok(Vec::new());
         }
         let conn = self.executor;
+        let keys: Vec<Option<PhysicalFunctionRunId>> = pfr_ids.iter().cloned().map(Some).collect();
+        let workers: Vec<WorkerDBWithNames> = conn.chunked().fetch_all(&keys, ()).await?;
+        let failed = WorkerUpdateDB::failed_at(at);
+        let live: Vec<_> = workers
+            .iter()
+            .map(|worker| &worker.base.base)
+            .filter(|worker| {
+                worker.status != failed.status
+                    && worker
+                        .status
+                        .can_move_to(&worker.worker_type, &failed.status)
+            })
+            .map(|worker| and!(worker.id.clone(), worker.status))
+            .collect();
+        if !live.is_empty() {
+            conn.chunked().update(&failed, &live).await?;
+        }
         let update = PhysicalFunctionRunUpdateDB::failed_at(at);
         conn.scd2().chunked().update(&update, pfr_ids).await?;
-        physical_runs_finished(conn, pfr_ids).await
+        physical_runs_finished(conn, pfr_ids).await?;
+        Ok(workers)
     }
 }
 
@@ -138,6 +168,7 @@ mod tests {
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::transaction::TransactionDB;
     use td_objects::dxo::worker::WorkerExecutionUpdate;
+    use td_objects::test_utils::transitions::path;
     use td_objects::types::basic::{
         AtTime, ExecutionId, ExecutionStatus, LogicalFunctionRunStatus, ProjectId, ProjectName,
         TransactionId, TransactionStatus,
@@ -162,7 +193,14 @@ mod tests {
         let lfrs: Vec<LogicalFunctionRunDB> = db.scoped(project).fetch_all(execution).await?;
         let ids: Vec<_> = lfrs.iter().map(|lfr| lfr.base.id.clone()).collect();
         in_project(db, project, async |conn| {
-            conn.logical_runs().set_status(&ids, status).await?;
+            let walk = path(
+                LogicalFunctionRunStatus::TRANSITIONS,
+                LogicalFunctionRunStatus::Scheduled,
+                status,
+            );
+            for status in walk {
+                conn.logical_runs().set_status(&ids, status).await?;
+            }
             Ok(())
         })
         .await
@@ -175,7 +213,13 @@ mod tests {
         update: &WorkerExecutionUpdate,
     ) -> Result<(), TdError> {
         in_project(db, project, async |conn| {
-            conn.physical_runs().reported(physical_run, update).await?;
+            let current: PhysicalFunctionRunDB =
+                conn.timeline().fetch_one(&physical_run.base.id).await?;
+            if conn.physical_runs().reported(&current, update).await? {
+                conn.physical_runs()
+                    .ended(std::slice::from_ref(&current.base.id))
+                    .await?;
+            }
             Ok(())
         })
         .await
@@ -295,6 +339,13 @@ mod tests {
         let lfrs: Vec<LogicalFunctionRunDB> = db.scoped(p.id).fetch_all(&run.execution).await?;
         let physical_run: PhysicalFunctionRunDB =
             db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
+        in_project(&db, p.id, async |conn| {
+            conn.physical_runs()
+                .dispatched(std::slice::from_ref(&physical_run.base.id), &AtTime::now())
+                .await?;
+            Ok(())
+        })
+        .await?;
 
         let started = AtTime::now();
         let running = WorkerExecutionUpdate {

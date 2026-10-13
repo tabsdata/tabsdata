@@ -20,7 +20,7 @@ async fn worker_callback(
     authz: Ctx<AuthzContext>,
     db: DbPool<AcrossProjects>,
     request: UpdateRequest<CallbackRequest, WorkerParam>,
-) -> Result<(), TdError> {
+) -> Result<CallbackResponse, TdError> {
     let (_, param, callback) = request.into_parts();
     let update = WorkerExecutionUpdate::try_from(&callback)?;
 

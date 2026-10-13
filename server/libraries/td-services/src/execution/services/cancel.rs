@@ -127,12 +127,14 @@ mod tests {
             db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
         let mut trx = begin_exclusive(&db, p.id).await?;
         let conn = trx.get(Grant::asserted("cancel test"));
-        conn.logical_runs()
-            .set_status(
-                &[lfrs[0].base.id.clone()],
-                LogicalFunctionRunStatus::Running,
-            )
-            .await?;
+        for status in [
+            LogicalFunctionRunStatus::Requested,
+            LogicalFunctionRunStatus::Running,
+        ] {
+            conn.logical_runs()
+                .set_status(&[lfrs[0].base.id.clone()], status)
+                .await?;
+        }
         conn.physical_runs()
             .dispatched(std::slice::from_ref(&attempt.base.id), &AtTime::now())
             .await?;

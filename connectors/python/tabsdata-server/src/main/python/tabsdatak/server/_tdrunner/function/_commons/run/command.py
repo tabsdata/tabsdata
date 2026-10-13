@@ -29,6 +29,7 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
     CommandException,
     InconsistentError,
     PrematureError,
+    StaleReportError,
     UnexpectedError,
 )
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
@@ -164,12 +165,12 @@ def notify_status(
     arguments: argparse.Namespace,
     payload: ResponseMessagePayload,
 ) -> None:
-    def post(request: urllib.request.Request) -> None:
+    def post(request: urllib.request.Request) -> bytes:
         try:
             with urllib.request.urlopen(
                 request, timeout=DEFAULT_TIMEOUT_SECONDS
             ) as response:
-                response.read()
+                return response.read()
         except urllib.error.HTTPError as error:
             body = error.read().decode("utf-8", errors="replace")
             error.msg = f"{error.msg}: {body}" if body else error.msg
@@ -261,6 +262,8 @@ def notify_failed(
                 error_message=repr(error),
             ),
         )
+    except StaleReportError:
+        logger.info("The apiserver answered the Failed report as stale")
     except Exception:
         logger.warning("Failed to post Failed status to responder", exc_info=True)
 
@@ -285,6 +288,9 @@ def command(
                 result = body(parsed)
                 exit_code = 0 if result is None else int(result)
                 return exit_code
+            except StaleReportError as error:
+                logger.info(f"Stopping without reporting Failed: {error}")
+                return error.exit_code
             except CommandException as error:
                 exit_code = error.exit_code
                 logger.exception("Handled exception caught by command")

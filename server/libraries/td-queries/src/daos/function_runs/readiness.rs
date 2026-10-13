@@ -11,6 +11,7 @@ use crate::daos::function_runs::chain::{
     Visibility, build_chain, producer_chain, producer_status_in_strict, producer_status_not_in,
     unmaterialized,
 };
+use crate::primitives::scd2::open_interval_at;
 use crate::primitives::table::claim;
 use sea_query::{
     Asterisk, CommonTableExpression, Expr, ExprTrait, Func, Iden, JoinType, Order, Query,
@@ -24,8 +25,10 @@ use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden,
     LogicalTableDataVersionDBIden,
 };
+use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
 use td_objects::types::basic::{
     AtTime, ExecutionId, FunctionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
+    PhysicalFunctionRunStatus,
 };
 
 impl<E> LogicalRuns<E>
@@ -335,6 +338,41 @@ pub(crate) fn fetch_ids_to_commit_query(execution_ids: &[ExecutionId]) -> WithQu
 }
 
 /// Patch-agnostic: patch resolution happens at mint time, not here.
+/// The run's current attempt is still in flight. The database refuses to
+/// open a new attempt over it, so such a run is left for its attempt to end
+/// instead of failing the tick that claims it.
+fn attempt_in_flight() -> SelectStatement {
+    Query::select()
+        .expr(Expr::val(1))
+        .from(PhysicalFunctionRunDBIden::Table)
+        .and_where(
+            Expr::col((
+                PhysicalFunctionRunDBIden::Table,
+                PhysicalFunctionRunDBIden::LogicalFunctionRunId,
+            ))
+            .equals((
+                LogicalFunctionRunDBIden::Table,
+                LogicalFunctionRunDBIden::Id,
+            )),
+        )
+        .and_where(open_interval_at((
+            PhysicalFunctionRunDBIden::Table,
+            PhysicalFunctionRunDBIden::ValidTo,
+        )))
+        .and_where(
+            Expr::col((
+                PhysicalFunctionRunDBIden::Table,
+                PhysicalFunctionRunDBIden::Status,
+            ))
+            .is_in(
+                PhysicalFunctionRunStatus::IN_FLIGHT
+                    .iter()
+                    .map(|status| status.as_sea_expr()),
+            ),
+        )
+        .take()
+}
+
 pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime, limit: u64) -> SelectStatement {
     let pending_input = correlated_chain(
         build_chain(Visibility::At(at)),
@@ -354,6 +392,7 @@ pub(crate) fn fetch_lfrs_to_execute_query(at: &AtTime, limit: u64) -> SelectStat
             ]),
         )
         .and_where(Expr::exists(pending_input).not())
+        .and_where(Expr::exists(attempt_in_flight()).not())
         .order_by(
             (
                 LogicalFunctionRunDBIden::Table,
@@ -383,6 +422,7 @@ mod tests {
         LogicalTableDataVersionInsertDB,
     };
     use td_objects::dxo::table::TableDB;
+    use td_objects::test_utils::transitions::path;
     use td_objects::types::basic::{
         BundleId, CollectionName, Decorator, DependencyPos, LogicalFunctionRunInputId,
         LogicalTableDataVersionId, ReuseFrozen, TableNameDto, TransactionKey, UserId, VersionPos,
@@ -506,12 +546,19 @@ mod tests {
             "unmaterialized in-plan input must not block"
         );
 
-        let failed = LogicalFunctionRunStatusUpdateDB {
-            status: LogicalFunctionRunStatus::Failed,
-        };
-        db.chunked()
-            .update(&failed, std::slice::from_ref(&producer_lfr.base.id))
-            .await?;
+        let to_failed = path(
+            LogicalFunctionRunStatus::TRANSITIONS,
+            LogicalFunctionRunStatus::Scheduled,
+            LogicalFunctionRunStatus::Failed,
+        );
+        for status in to_failed {
+            db.chunked()
+                .update(
+                    &LogicalFunctionRunStatusUpdateDB { status },
+                    std::slice::from_ref(&producer_lfr.base.id),
+                )
+                .await?;
+        }
         let blocked = db.logical_runs().blocked_ids(&execution.base.id).await?;
         assert_eq!(blocked, vec![consumer_lfr.base.id]);
         Ok(())
@@ -539,7 +586,7 @@ mod tests {
         let sql = fetch_lfrs_to_execute_query(&at(), 50).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "logical_function_runs".* FROM "logical_function_runs" WHERE "logical_function_runs"."status" IN ('S', 'RS') AND (NOT EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND ("physical_table_data_versions"."valid_from" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions"."valid_to" > '2023-11-14 22:13:20.000000 +00:00') LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" NOT IN ('D', 'C'))))) ORDER BY "logical_function_runs"."triggered_on" ASC LIMIT 50 FOR UPDATE OF "logical_function_runs" SKIP LOCKED"#
+            r#"SELECT "logical_function_runs".* FROM "logical_function_runs" WHERE "logical_function_runs"."status" IN ('S', 'RS') AND (NOT EXISTS(SELECT "logical_function_run_inputs"."id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND ("physical_table_data_versions"."valid_from" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions"."valid_to" > '2023-11-14 22:13:20.000000 +00:00') LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_run_inputs"."logical_function_run_id" = "logical_function_runs"."id" AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" NOT IN ('D', 'C'))))) AND (NOT EXISTS(SELECT 1 FROM "physical_function_runs" WHERE "physical_function_runs"."logical_function_run_id" = "logical_function_runs"."id" AND "physical_function_runs"."valid_to" = ('infinity'::timestamptz) AND "physical_function_runs"."status" IN ('RR', 'DP', 'R'))) ORDER BY "logical_function_runs"."triggered_on" ASC LIMIT 50 FOR UPDATE OF "logical_function_runs" SKIP LOCKED"#
         );
     }
 

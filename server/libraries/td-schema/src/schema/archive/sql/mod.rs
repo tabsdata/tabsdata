@@ -9,4 +9,4 @@ pub(crate) mod seed_current;
 pub(crate) mod trigger;
 
 pub(crate) use seed_current::SeedCurrent;
-pub(crate) use trigger::{ImmutableTriggerDef, MaintainCurrentTriggerDef, VersionedTriggerDef};
+pub(crate) use trigger::{ImmutableTriggerDef, MaintainCurrentTriggerDef, StickyTerminalsTriggerDef, VersionedTriggerDef};

@@ -58,12 +58,46 @@ pub async fn update_worker_status<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     update: &WorkerUpdateDB,
     worker_id: &WorkerId,
-) -> Result<(), TdError> {
-    // Worker status update is never conditional, we want to know exactly what got reported,
-    // as it doesn't affect execution flow, it's just informational.
-    let _ = conn.update(update, worker_id).await?;
+) -> Result<bool, TdError> {
+    // A report the worker may not make from where it stands is late (a stop
+    // or an abandon got there first) and is dropped. Keyed on the status
+    // read, so a write landing in between drops it too.
+    let worker: WorkerDB = conn.fetch_one(worker_id).await?;
+    let from = worker.base.status;
+    if !from.can_move_to(&worker.base.worker_type, &update.status) {
+        debug!(%from, to = %update.status, "worker.callback: dropped a late report");
+        return Ok(false);
+    }
+    let applied = conn
+        .update(update, and!(worker_id, from))
+        .await?
+        .rows_affected()
+        > 0;
+    Ok(applied)
+}
 
-    Ok(())
+/// Moves the workers to `update.status`, each keyed on the status it was read
+/// in. A worker whose type does not allow that change from where it stands is
+/// left as it is. Returns how many moved.
+pub async fn move_workers<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
+    workers: &[WorkerDB],
+    update: &WorkerUpdateDB,
+) -> Result<u64, TdError> {
+    let keys: Vec<_> = workers
+        .iter()
+        .filter(|w| {
+            w.base.status != update.status
+                && w.base
+                    .status
+                    .can_move_to(&w.base.worker_type, &update.status)
+        })
+        .map(|w| and!(w.base.id.clone(), w.base.status))
+        .collect();
+    if keys.is_empty() {
+        return Ok(0);
+    }
+    Ok(conn.chunked().update(update, &keys).await?.rows_affected())
 }
 
 /// Recover of an LFR stuck in `Requested` re-dispatches it, but its
@@ -396,6 +430,11 @@ pub async fn update_function_run_status(
         }
     }
 
+    if status == LogicalFunctionRunStatus::ReScheduled {
+        lfr_ids = without_attempt_in_flight(conn, lfr_ids).await?;
+        lfr_ids = recoverable(conn, logical_function_runs, lfr_ids, &HashSet::new()).await?;
+    }
+
     debug!(
         input_count = input_count,
         actionable_count = lfr_ids.len(),
@@ -492,6 +531,11 @@ async fn cascade_downstream_status(
                 msgs.warning(Message::of(reported))
             }
         }
+    }
+    if *status == LogicalFunctionRunStatus::ReScheduled {
+        to_update = without_attempt_in_flight(conn, to_update).await?;
+        let recovered: HashSet<LogicalFunctionRunId> = starting.iter().cloned().collect();
+        to_update = recoverable(conn, &downstream, to_update, &recovered).await?;
     }
     if to_update.is_empty() {
         return Ok(());

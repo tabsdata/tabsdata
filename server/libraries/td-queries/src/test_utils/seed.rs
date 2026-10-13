@@ -55,8 +55,8 @@ use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{
     CollectionName, DependencyPos, Description, EntityId, EntityName, FunctionId, GroupName,
-    LogicalFunctionRunStatus, PermissionType, ProjectId, ProjectName, RoleId, RoleName,
-    TransactionKey, UserEnabled, UserId, UserName, VersionPos, WorkerMessageStatus, WorkerStatus,
+    LogicalFunctionRunStatus, PermissionType, PhysicalFunctionRunStatus, ProjectId, ProjectName,
+    RoleId, RoleName, TransactionKey, UserEnabled, UserId, UserName, VersionPos, WorkerStatus,
     WorkerType,
 };
 
@@ -226,6 +226,34 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
             execution,
             transaction,
             status,
+            &PhysicalFunctionRunStatus::from(status),
+        )
+        .await
+    }
+
+    /// A run whose attempt is in `attempt_status`, for states the run's own
+    /// status does not pin down (a planned run whose attempt was minted but
+    /// not yet dispatched).
+    pub async fn physical_function_run_with_attempt(
+        self,
+        collection: &ActiveCollectionDB,
+        function_version: &FunctionDB,
+        execution: &ExecutionDB,
+        transaction: &TransactionDB,
+        status: &LogicalFunctionRunStatus,
+        attempt_status: &PhysicalFunctionRunStatus,
+    ) -> Result<PhysicalFunctionRunDB, TdError>
+    where
+        E: Domained<Scope = InProject>,
+    {
+        seed_physical_function_run(
+            self.executor,
+            collection,
+            function_version,
+            execution,
+            transaction,
+            status,
+            attempt_status,
         )
         .await
     }

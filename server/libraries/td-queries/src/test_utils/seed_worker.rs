@@ -15,7 +15,7 @@ use td_objects::dxo::transaction::TransactionDB;
 use td_objects::dxo::worker::{CronTriggerConfig, WorkerDB, WorkerInsertDB};
 use td_objects::types::basic::Enabled;
 use td_objects::types::basic::{
-    CronMask, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
+    CronMask, PhysicalFunctionRunStatus, WorkerConfig, WorkerId, WorkerStatus, WorkerType,
 };
 
 pub(crate) async fn seed_worker(
@@ -47,8 +47,8 @@ pub(crate) async fn seed_worker(
         message_status: message_status.clone(),
         started_on: None,
         ended_on: None,
-        status: worker_status.clone(),
-        worker_type: worker_type.clone(),
+        status: *worker_status,
+        worker_type: *worker_type,
         worker_enabled: Enabled::TRUE,
         worker_config,
     };
@@ -74,7 +74,16 @@ pub(crate) async fn seed_function_runner_worker(
         message_status: status.clone(),
         started_on: None,
         ended_on: None,
-        status: WorkerStatus::Requested,
+        status: match physical_function_run.base.status {
+            PhysicalFunctionRunStatus::Requested | PhysicalFunctionRunStatus::Dispatched => {
+                WorkerStatus::Requested
+            }
+            PhysicalFunctionRunStatus::Running => WorkerStatus::Running,
+            PhysicalFunctionRunStatus::Done => WorkerStatus::Done,
+            PhysicalFunctionRunStatus::Error | PhysicalFunctionRunStatus::Failed => {
+                WorkerStatus::Failed
+            }
+        },
         worker_type: WorkerType::FunctionRunner,
         worker_enabled: Enabled::TRUE,
         worker_config: None,

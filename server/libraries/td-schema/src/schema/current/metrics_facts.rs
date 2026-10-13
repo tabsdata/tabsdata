@@ -9,7 +9,7 @@
 use sea_query::{ColumnDef, Iden, Index, IndexCreateStatement, Table, TableCreateStatement};
 
 use crate::schema::Entity;
-use crate::schema::sql::{PartialIndexDef, StatisticsDef};
+use crate::schema::sql::StatisticsDef;
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
@@ -147,16 +147,6 @@ impl Entity for Defs {
         ]
     }
 
-    /// Serves `versions_consumed`, which only ever looks up written rows.
-    fn create_partial_indices(&self) -> Vec<PartialIndexDef> {
-        vec![PartialIndexDef::new(
-            "metrics_facts___table_version_id___written___idx",
-            MetricsFacts::Table,
-            [MetricsFacts::TableVersionId],
-            "side = 'O'",
-        )]
-    }
-
     fn create_statistics(&self) -> Vec<StatisticsDef> {
         vec![StatisticsDef::n_distinct(
             "metrics_facts___grouping___stx",
@@ -187,6 +177,12 @@ impl Entity for Defs {
                 .col(MetricsFacts::FunctionRunId)
                 .to_owned(),
             Index::create().name("metrics_facts___attempt_id___idx").table(MetricsFacts::Table).col(MetricsFacts::AttemptId).to_owned(),
+            Index::create()
+                .name("metrics_facts___table_version_id__side___idx")
+                .table(MetricsFacts::Table)
+                .col(MetricsFacts::TableVersionId)
+                .col(MetricsFacts::Side)
+                .to_owned(),
         ]
     }
 }

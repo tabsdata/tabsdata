@@ -10,6 +10,7 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::extractors::Json;
 use ta_apiserver::status::ok_status::{CreateStatus, GetStatus, NoContent, UpdateStatus};
 use td_apiforge::apiserver_path;
+use td_common::execution_status::CallbackResponse;
 use td_objects::Route;
 use td_objects::dxo::crudl::{AtTimeParam, RequestContext};
 use td_objects::dxo::execution::{ExecutionParam, ExecutionResponse, InternalExecutionRequest};
@@ -38,7 +39,7 @@ pub async fn function_run_callback(
     Path(function_run_id): Path<FunctionRunParam>,
     Path(worker_id): Path<WorkerParam>,
     Json(request): Json<CallbackRequest>,
-) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
+) -> Result<UpdateStatus<CallbackResponse>, ErrorStatus> {
     let request = context.update((function_run_id, worker_id), request);
     let response = state.execution_callback(request).await?;
     Ok(UpdateStatus::OK(response))
@@ -58,7 +59,7 @@ pub async fn worker_callback(
     Extension(context): Extension<RequestContext>,
     Path(worker_id): Path<WorkerParam>,
     Json(request): Json<CallbackRequest>,
-) -> Result<UpdateStatus<NoContent>, ErrorStatus> {
+) -> Result<UpdateStatus<CallbackResponse>, ErrorStatus> {
     let request = context.update(worker_id, request);
     let response = state.worker_callback(request).await?;
     Ok(UpdateStatus::OK(response))

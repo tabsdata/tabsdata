@@ -322,8 +322,8 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Queries(&["Metrics::per_table"]),
     },
     IndexCase {
-        index: "metrics_facts___table_version_id___written___idx",
-        served_by: Queries(&["versions_consumed"]),
+        index: "metrics_facts___table_version_id__side___idx",
+        served_by: Queries(&["versions_consumed", "attempts_ended"]),
     },
     IndexCase {
         index: "metrics_facts___ts___idx",

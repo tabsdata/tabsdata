@@ -9,8 +9,9 @@ use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_database::access::{AcrossProjects, DbPool};
-use td_error::TdError;
+use td_common::execution_status::{CallbackOutcome, CallbackResponse};
+use td_database::access::{AcrossProjects, DbPool, retrying};
+use td_error::{ApiError, TdError, api_error};
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
@@ -21,6 +22,7 @@ use td_objects::dxo::worker::{
 };
 use td_objects::types::basic::{LogicalFunctionRunStatus, PhysicalFunctionRunStatus};
 use td_queries::Queries;
+use tracing::debug;
 
 #[service_factory]
 async fn execution_callback(
@@ -29,17 +31,18 @@ async fn execution_callback(
     msgs: &mut ReqCtx,
     db: DbPool<AcrossProjects>,
     request: UpdateRequest<CallbackRequest, (FunctionRunParam, WorkerParam)>,
-) -> Result<(), TdError> {
+) -> Result<CallbackResponse, TdError> {
     let (_ctx, (function_run_param, worker_param), callback) = request.into_parts();
 
     let update: WorkerExecutionUpdate = WorkerExecutionUpdate::try_from(&callback)?;
+    let reported = PhysicalFunctionRunStatus::try_from(update.status.clone())?;
 
     let grant = authz.none();
     let worker_id = worker_param.worker;
-    let project = {
+    let physical_function_run_id = function_run_param.function_run;
+    let worker: WorkerDB = {
         let mut trx = db.read().await?;
-        let worker: WorkerDB = trx.get(grant).fetch_one(&worker_id).await?;
-        worker.project_id
+        trx.get(grant).fetch_one(&worker_id).await?
     };
     if worker.base.physical_function_run_id.as_ref() != Some(&physical_function_run_id) {
         return Err(api_error!(
@@ -67,33 +70,38 @@ async fn execution_callback(
             };
             conn.update(&mark, &worker_id).await?;
             trx.commit().await?;
-            return Ok((CallbackOutcome::Applied, false, attempt));
+            return Ok(((CallbackOutcome::Applied, false), recorded));
         }
 
         let lfr: LogicalFunctionRunDB = conn
             .fetch_one(&physical_run.base.logical_function_run_id)
             .await?;
+        // Worker, attempt, then run: the order every unit writes them in, so
+        // two units never wait on each other's rows in a cycle.
         let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
         update_worker_status(conn, &worker_update, &worker_id).await?;
-
-        // Canonical flow-control status update on the LFR (sticky-Committed gate
-        // applies inside `update_function_run_status`). An attempt whose PFR has
-        // already ended is a duplicate callback — drop it.
-        let in_flight = PhysicalFunctionRunStatus::IN_FLIGHT.contains(&from);
-        let lfrs = if in_flight { vec![lfr] } else { Vec::new() };
-        let lfr_status = LogicalFunctionRunStatus::try_from(update.status.clone())?;
-        update_function_run_status(&mut attempt, conn, &lfrs, lfr_status).await?;
-
         update_table_data_version_status(conn, &physical_function_run_id, &callback, at).await?;
-        // Last: the physical run's facts read the run and version rows written above.
-        conn.physical_runs()
+        let ended = conn
+            .physical_runs()
             .reported(&physical_run, &update)
             .await?;
+
+        // Canonical flow-control status update on the LFR (sticky-Committed gate
+        // applies inside `update_function_run_status`).
+        let lfr_status = LogicalFunctionRunStatus::try_from(update.status.clone())?;
+        update_function_run_status(&mut recorded, conn, &vec![lfr], lfr_status).await?;
+
+        // The attempt's facts read the run and versions written above.
+        if ended {
+            conn.physical_runs()
+                .ended(std::slice::from_ref(&physical_function_run_id))
+                .await?;
+        }
         trx.commit().await?;
-        Ok((CallbackOutcome::Applied, true, attempt))
+        Ok(((CallbackOutcome::Applied, true), recorded))
     })
     .await?;
-    *msgs = attempt;
+    msgs.merge(recorded);
 
     if applied_run {
         scheduler_notify.notify_scheduler();
@@ -173,10 +181,7 @@ pub(crate) mod tests {
                     );
 
                 let service = Services::with_defaults(db.clone());
-                service
-                    .execution_callback(request)
-                    .await
-                    .map(|response| response.data)
+                service.execution_callback(request).await.map(|_| ())
             }
         })
         .await

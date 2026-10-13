@@ -30,9 +30,10 @@ use super::projects::{Projects, ProjectsResolved};
 use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
+use crate::schema::archive::sql::StickyTerminalsTriggerDef;
 use crate::schema::render::{json_object_agg, name_or_id};
 use crate::schema::source::Derived;
-use crate::schema::sql::{StickyTerminalsTriggerDef, ViewDef};
+use crate::schema::sql::ViewDef;
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "function_runs__with_names"]

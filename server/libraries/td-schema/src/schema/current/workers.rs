@@ -3,8 +3,8 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
-    TableCreateStatement,
+    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, IntoIden, JoinType,
+    Query, Table, TableCreateStatement,
 };
 
 use super::collections::{Collections, CollectionsResolved};
@@ -16,7 +16,8 @@ use super::physical_function_runs::PhysicalFunctionRuns;
 use super::projects::{Projects, ProjectsResolved};
 use super::transactions::Transactions;
 use crate::schema::Entity;
-use crate::schema::sql::ViewDef;
+use crate::schema::source::Derived;
+use crate::schema::sql::{Transitions, TransitionsTriggerDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
@@ -41,6 +42,55 @@ pub enum Workers {
     WorkerEnabled,
     WorkerConfig,
 }
+
+/// Every status change a worker may make, per worker type. A function runner
+/// runs once. A trigger stops from any state its workload may still exist in:
+/// a cron trigger parks at D or F between fires, and a stage trigger restarts
+/// from F once its retry is due, or stops.
+const WORKER_TRANSITIONS: &[(&str, &[(&str, &str)])] = &[
+    ("F", &[("RR", "R"), ("RR", "F"), ("R", "D"), ("R", "F")]),
+    (
+        "CT",
+        &[
+            ("S", "RR"),
+            ("RR", "R"),
+            ("RR", "F"),
+            ("R", "D"),
+            ("R", "F"),
+            ("D", "R"),
+            ("D", "F"),
+            ("F", "R"),
+            ("F", "D"),
+            ("S", "SPS"),
+            ("RR", "SPS"),
+            ("R", "SPS"),
+            ("D", "SPS"),
+            ("F", "SPS"),
+            ("SPS", "SPR"),
+            ("SPS", "SP"),
+            ("SPR", "SP"),
+        ],
+    ),
+    (
+        "ST",
+        &[
+            ("S", "RR"),
+            ("RR", "R"),
+            ("RR", "F"),
+            ("R", "D"),
+            ("R", "F"),
+            ("F", "R"),
+            ("S", "SPS"),
+            ("RR", "SPS"),
+            ("R", "SPS"),
+            ("D", "SPS"),
+            ("F", "SPS"),
+            ("SPS", "SPR"),
+            ("SPS", "SP"),
+            ("SPR", "SP"),
+        ],
+    ),
+];
 
 pub(super) struct Defs;
 
@@ -169,6 +219,18 @@ impl Entity for Defs {
                 .table(Workers::Table)
                 .col(Workers::PhysicalFunctionRunId)
                 .to_owned(),
+        ]
+    }
+
+    fn create_db_triggers(&self) -> Vec<Derived> {
+        vec![
+            TransitionsTriggerDef {
+                name: format!("{}__transitions", Workers::Table.to_string()),
+                source_table: Workers::Table.into_iden(),
+                status_col: Workers::Status.into_iden(),
+                transitions: Transitions::ByKind(Workers::WorkerType.into_iden(), WORKER_TRANSITIONS),
+            }
+            .derived(),
         ]
     }
 

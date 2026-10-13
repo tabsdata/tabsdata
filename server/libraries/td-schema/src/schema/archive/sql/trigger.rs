@@ -185,6 +185,51 @@ impl ImmutableTriggerDef {
     }
 }
 
+/// A `BEFORE UPDATE` guard that refuses any transition out of a set of
+/// "sticky terminal" status values.
+pub(crate) struct StickyTerminalsTriggerDef {
+    pub name: String,
+    pub source_table: DynIden,
+    pub status_col: DynIden,
+    /// Persisted enum codes that are sticky-final (e.g. `&["C", "X", "Y"]`).
+    /// These are domain status discriminants from `td-objects`, not column
+    /// names — kept as `&str` because they have no Iden representation here.
+    pub terminal_values: &'static [&'static str],
+}
+
+impl StickyTerminalsTriggerDef {
+    pub(crate) fn derived(&self) -> Derived {
+        Derived {
+            create: self.render(),
+            drop: vec![drop_trigger(&self.name, &self.source_table), drop_trigger_function(&self.name)],
+        }
+    }
+
+    pub(crate) fn render(&self) -> Vec<String> {
+        let name = &self.name;
+        let table = self.source_table.to_string();
+        let col = self.status_col.to_string();
+        let values = self.terminal_values.iter().map(|v| format!("'{v}'")).collect::<Vec<_>>().join(", ");
+
+        vec![
+            format!(
+                "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
+                 BEGIN\n  \
+                   IF OLD.{col} IN ({values}) AND NEW.{col} != OLD.{col} THEN\n    \
+                     RAISE EXCEPTION '{table}.{col} is sticky in terminal state';\n  \
+                   END IF;\n  \
+                   RETURN NEW;\n\
+                 END;\n\
+                 $$ LANGUAGE plpgsql",
+            ),
+            format!(
+                "CREATE TRIGGER {name} BEFORE UPDATE OF {col} ON {table}\n\
+                 FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
+            ),
+        ]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use sea_query::{Alias, IntoIden};
@@ -197,6 +242,24 @@ mod tests {
 
     fn aliases(strs: &[&'static str]) -> Vec<DynIden> {
         strs.iter().copied().map(alias).collect()
+    }
+
+    fn sticky() -> StickyTerminalsTriggerDef {
+        StickyTerminalsTriggerDef {
+            name: "foos__sticky".to_string(),
+            source_table: alias("foos"),
+            status_col: alias("status"),
+            terminal_values: &["C", "X"],
+        }
+    }
+
+    #[test]
+    fn sticky_terminals_raises_on_transition_out_of_terminal() {
+        let out = sticky().render();
+        assert_eq!(out.len(), 2);
+        assert!(out[0].contains("OLD.status IN ('C', 'X')"), "{}", out[0]);
+        assert!(out[0].contains("RAISE EXCEPTION 'foos.status is sticky in terminal state'"), "{}", out[0]);
+        assert!(out[1].contains("BEFORE UPDATE OF status ON foos"), "{}", out[1]);
     }
 
     fn maintain() -> MaintainCurrentTriggerDef {

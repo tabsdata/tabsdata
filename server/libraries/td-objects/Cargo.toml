@@ -64,7 +64,6 @@ td-security = { workspace = true }
 
 # External dependencies
 
-aquamarine = { workspace = true }
 axum = { workspace = true }
 bytes = { workspace = true }
 constcat = { workspace = true }

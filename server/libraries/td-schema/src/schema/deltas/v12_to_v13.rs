@@ -2,7 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! v12 → v13: Live names are unique through partial indexes, so a rename never
+//! v12 → v13: Runs, attempts and workers admit only their declared status
+//! transitions, and a run's new attempt opens only once its current one has
+//! ended. The runs' sticky-terminals guard is subsumed by its transitions
+//! trigger. Live names are unique through partial indexes, so a rename never
 //! takes a key lock; the upgrade stops, listing them, when two live functions
 //! or tables of a collection share a name. A membership references its user, so
 //! a grant racing the user's delete cannot leave one behind; memberships of
@@ -56,9 +59,12 @@ impl SchemaDelta for Migration {
 
     fn retired() -> Vec<String> {
         vec![
+            "DROP TRIGGER IF EXISTS logical_function_runs__sticky_terminals ON logical_function_runs".to_string(),
+            "DROP FUNCTION IF EXISTS logical_function_runs__sticky_terminals_fn()".to_string(),
             r#"DROP INDEX IF EXISTS "collections___project_id__name___idx""#.to_string(),
             r#"DROP INDEX IF EXISTS "functions___collection_id__name___current_idx""#.to_string(),
             r#"DROP INDEX IF EXISTS "groups___project_id__name___idx""#.to_string(),
+            r#"DROP INDEX IF EXISTS "metrics_facts___table_version_id___written___idx""#.to_string(),
             r#"DROP INDEX IF EXISTS "sessions___status___idx""#.to_string(),
             r#"DROP INDEX IF EXISTS "tables___collection_id__name___current_idx""#.to_string(),
         ]

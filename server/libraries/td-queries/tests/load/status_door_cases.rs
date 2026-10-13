@@ -45,9 +45,15 @@ async fn load_pfr_reported(db: TdPool) -> Result<(), TdError> {
     let mut trx = begin_exclusive(&db, h.project_id).await?;
     let conn = trx.get(Grant::asserted("load case"));
     let t = Instant::now();
-    conn.physical_runs()
+    if conn
+        .physical_runs()
         .reported(&physical_run, &update)
-        .await?;
+        .await?
+    {
+        conn.physical_runs()
+            .ended(std::slice::from_ref(&physical_run.base.id))
+            .await?;
+    }
     record("pfr::reported", profile, t, 1, seeded);
     trx.commit().await?;
     Ok(())

@@ -288,9 +288,6 @@ version = "0.5.1"
 [workspace.dependencies.anyhow]
 version = "1.0.102"
 
-[workspace.dependencies.aquamarine]
-version = "0.6.0"
-
 [workspace.dependencies.arboard]
 version = "3.6.1"
 default-features = false

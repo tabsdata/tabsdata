@@ -28,7 +28,10 @@ Exit-code semantics (per ``docs/01-CommandBasics.md``):
   ``exit_code=0`` (:class:`InconsistentError`).
 * ``5``       -- premature exit, ``SystemExit`` intercepted in command body
   (:class:`PrematureError`).
-* ``6..9``    -- reserved.
+* ``6``       -- bad storage configuration (:class:`BadStorageConfigError`).
+* ``7``       -- the apiserver answered a status report as stale
+  (:class:`StaleReportError`); nothing is reported Failed.
+* ``8..9``    -- reserved.
 * ``10..``    -- command-specific (see ``commands/<command>/error.py``).
 """
 
@@ -46,6 +49,7 @@ EXIT_UNEXPECTED: int = 3
 EXIT_INCONSISTENT: int = 4
 EXIT_PREMATURE: int = 5
 EXIT_BAD_CONFIG: int = 6
+EXIT_STALE_REPORT: int = 7
 COMMAND_SPECIFIC_MIN_EXIT_CODE: int = 10
 
 
@@ -92,6 +96,14 @@ class UndefinedEnvError(CommandRuntimeException):
     (exit 2)."""
 
     exit_code = EXIT_UNDEFINED_ENV
+
+
+class StaleReportError(CommandRuntimeException):
+    """The apiserver answered a status report as stale: the attempt was
+    superseded, or its run or worker had already moved past the report.
+    The command stops without reporting Failed (exit 7)."""
+
+    exit_code = EXIT_STALE_REPORT
 
 
 # --- orchestration-boundary exceptions ---------------------------------
@@ -281,3 +293,10 @@ class CommandErrorCode(ErrorCode):
     )
     # Raised by ``_lib.transporter`` when TRANSPORTER_MODE is neither the
     # legacy nor the current implementation.
+
+    # Raised by ``_commons.run.command._call_back``.
+    CMD_8 = ErrorDef(
+        StaleReportError,
+        "The apiserver answered the {status} report as stale; the attempt was "
+        "superseded or had already ended, so this worker stops.",
+    )

@@ -99,35 +99,8 @@ pub enum ExecutionStatus {
     Unexpected,
 }
 
-#[cfg_attr(doc, aquamarine::aquamarine)]
-/// Represents the state of a function run.
-///
-/// ```mermaid
-/// stateDiagram-v2
-///     [*] --> Scheduled
-///     Canceled --> [*]
-///     Yanked --> [*]
-///
-///     Scheduled --> Requested
-///     Requested --> Scheduled
-///     Requested --> Running
-///     Requested --> ReScheduled
-///     Scheduled --> OnHold
-///     Scheduled --> Canceled
-///     Running --> Done
-///     Running --> Error
-///     Running --> Failed
-///     Running --> Canceled
-///     OnHold --> Canceled
-///     OnHold --> Scheduled
-///     Error --> Running
-///     Error --> Canceled
-///     Failed --> ReScheduled
-///     Failed --> Canceled
-///     Done --> Canceled
-///     Done --> Committed
-///     Committed --> Yanked
-/// ```
+/// Represents the state of a function run. The status changes it may make
+/// are [`Self::TRANSITIONS`]; the database refuses any other.
 #[derive(
     TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash, Copy,
 )]
@@ -157,6 +130,51 @@ pub enum LogicalFunctionRunStatus {
 }
 
 impl LogicalFunctionRunStatus {
+    /// Every status change a run may make. Canceled and Yanked have no way
+    /// out, and Committed only to Yanked.
+    pub const TRANSITIONS: &'static [(Self, Self)] = &[
+        (Self::Scheduled, Self::Requested),
+        (Self::Scheduled, Self::OnHold),
+        (Self::Scheduled, Self::ReScheduled),
+        (Self::Scheduled, Self::Canceled),
+        (Self::Requested, Self::Scheduled),
+        (Self::Requested, Self::Running),
+        (Self::Requested, Self::Error),
+        (Self::Requested, Self::Failed),
+        (Self::Requested, Self::OnHold),
+        (Self::Requested, Self::ReScheduled),
+        (Self::Requested, Self::Canceled),
+        (Self::ReScheduled, Self::Requested),
+        (Self::ReScheduled, Self::OnHold),
+        (Self::ReScheduled, Self::Canceled),
+        (Self::Running, Self::Done),
+        (Self::Running, Self::Error),
+        (Self::Running, Self::Failed),
+        (Self::Running, Self::OnHold),
+        (Self::Running, Self::ReScheduled),
+        (Self::Running, Self::Canceled),
+        (Self::Done, Self::Committed),
+        (Self::Done, Self::OnHold),
+        (Self::Done, Self::ReScheduled),
+        (Self::Done, Self::Canceled),
+        (Self::Committed, Self::Yanked),
+        (Self::Error, Self::OnHold),
+        (Self::Error, Self::ReScheduled),
+        (Self::Error, Self::Canceled),
+        (Self::Failed, Self::Done),
+        (Self::Failed, Self::OnHold),
+        (Self::Failed, Self::ReScheduled),
+        (Self::Failed, Self::Canceled),
+        (Self::OnHold, Self::ReScheduled),
+        (Self::OnHold, Self::Canceled),
+    ];
+
+    /// Whether a run may be written from `self` to `to`. Writing the status a
+    /// run already has is always allowed.
+    pub fn can_move_to(&self, to: &Self) -> bool {
+        self == to || Self::TRANSITIONS.contains(&(*self, *to))
+    }
+
     /// Statuses that imply `ended_on IS NOT NULL` on the bound PFR —
     /// the set `/metrics` aggregates over. `IN_FLIGHT` is the
     /// complement, the set `/inflight` returns.
@@ -206,13 +224,9 @@ impl TryFrom<WorkerCallbackStatus> for LogicalFunctionRunStatus {
 }
 
 /// Per-attempt status on `physical_function_runs`. Independent of
-/// [`LogicalFunctionRunStatus`] (LFR/LTDV-canonical, sticky-Committed).
-///
-/// ```text
-///   Requested ─► Dispatched ─► Running ─► Done | Error | Failed
-///   Failed    ─► Requested                       (operator recover)
-///   Requested | Dispatched | Running ─► Failed   (recover abandons the attempt)
-/// ```
+/// [`LogicalFunctionRunStatus`] (LFR/LTDV-canonical, sticky-Committed). The
+/// status changes it may make are [`Self::TRANSITIONS`]; the database refuses
+/// any other.
 #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash, Copy)]
 pub enum PhysicalFunctionRunStatus {
     #[typed_enum(rename = "RR")]
@@ -265,6 +279,23 @@ pub enum FactSide {
 }
 
 impl PhysicalFunctionRunStatus {
+    /// Every status change an attempt may make. Done, Error and Failed have no
+    /// way out.
+    pub const TRANSITIONS: &'static [(Self, Self)] = &[
+        (Self::Requested, Self::Dispatched),
+        (Self::Requested, Self::Failed),
+        (Self::Dispatched, Self::Running),
+        (Self::Dispatched, Self::Failed),
+        (Self::Running, Self::Done),
+        (Self::Running, Self::Failed),
+    ];
+
+    /// Whether an attempt may be written from `self` to `to`. Writing the
+    /// status an attempt already has is always allowed.
+    pub fn can_move_to(&self, to: &Self) -> bool {
+        self == to || Self::TRANSITIONS.contains(&(*self, *to))
+    }
+
     /// Statuses where the attempt has finished and `ended_on` plus the
     /// bucket columns are populated.
     pub const ENDED: &'static [PhysicalFunctionRunStatus] = &[
@@ -309,8 +340,10 @@ impl TryFrom<WorkerCallbackStatus> for PhysicalFunctionRunStatus {
 ///
 /// Mapping rationale: shared variants pass through; LFR-only sticky
 /// terminals collapse to the PFR terminal that implied the underlying
-/// attempt outcome (Committed/Yanked → Done, Canceled → Failed); LFR
-/// pre-flight states map to Requested.
+/// attempt outcome (Committed/Yanked → Done, Canceled → Failed); a Requested
+/// run's attempt was dispatched by the tick that requested it; and a run not
+/// yet requested can only carry an attempt that already ended, since a new
+/// attempt opens only once the previous one has.
 impl From<LogicalFunctionRunStatus> for PhysicalFunctionRunStatus {
     fn from(s: LogicalFunctionRunStatus) -> Self {
         match s {
@@ -319,13 +352,12 @@ impl From<LogicalFunctionRunStatus> for PhysicalFunctionRunStatus {
             | LogicalFunctionRunStatus::Committed
             | LogicalFunctionRunStatus::Yanked => PhysicalFunctionRunStatus::Done,
             LogicalFunctionRunStatus::Error => PhysicalFunctionRunStatus::Error,
-            LogicalFunctionRunStatus::Failed | LogicalFunctionRunStatus::Canceled => {
-                PhysicalFunctionRunStatus::Failed
-            }
-            LogicalFunctionRunStatus::Scheduled
-            | LogicalFunctionRunStatus::Requested
+            LogicalFunctionRunStatus::Failed
+            | LogicalFunctionRunStatus::Canceled
+            | LogicalFunctionRunStatus::Scheduled
             | LogicalFunctionRunStatus::ReScheduled
-            | LogicalFunctionRunStatus::OnHold => PhysicalFunctionRunStatus::Requested,
+            | LogicalFunctionRunStatus::OnHold => PhysicalFunctionRunStatus::Failed,
+            LogicalFunctionRunStatus::Requested => PhysicalFunctionRunStatus::Dispatched,
         }
     }
 }
@@ -699,6 +731,70 @@ pub enum WorkerStatus {
     Canceled,
 }
 
+impl WorkerStatus {
+    const FUNCTION_RUNNER: &'static [(Self, Self)] = &[
+        (Self::Requested, Self::Running),
+        (Self::Requested, Self::Failed),
+        (Self::Running, Self::Done),
+        (Self::Running, Self::Failed),
+    ];
+
+    const CRON_TRIGGER: &'static [(Self, Self)] = &[
+        (Self::Scheduled, Self::Requested),
+        (Self::Requested, Self::Running),
+        (Self::Requested, Self::Failed),
+        (Self::Running, Self::Done),
+        (Self::Running, Self::Failed),
+        (Self::Done, Self::Running),
+        (Self::Done, Self::Failed),
+        (Self::Failed, Self::Running),
+        (Self::Failed, Self::Done),
+        (Self::Scheduled, Self::StopScheduled),
+        (Self::Requested, Self::StopScheduled),
+        (Self::Running, Self::StopScheduled),
+        (Self::Done, Self::StopScheduled),
+        (Self::Failed, Self::StopScheduled),
+        (Self::StopScheduled, Self::StopRequested),
+        (Self::StopScheduled, Self::Stopped),
+        (Self::StopRequested, Self::Stopped),
+    ];
+
+    const STAGE_TRIGGER: &'static [(Self, Self)] = &[
+        (Self::Scheduled, Self::Requested),
+        (Self::Requested, Self::Running),
+        (Self::Requested, Self::Failed),
+        (Self::Running, Self::Done),
+        (Self::Running, Self::Failed),
+        (Self::Failed, Self::Running),
+        (Self::Scheduled, Self::StopScheduled),
+        (Self::Requested, Self::StopScheduled),
+        (Self::Running, Self::StopScheduled),
+        (Self::Done, Self::StopScheduled),
+        (Self::Failed, Self::StopScheduled),
+        (Self::StopScheduled, Self::StopRequested),
+        (Self::StopScheduled, Self::Stopped),
+        (Self::StopRequested, Self::Stopped),
+    ];
+
+    /// Every status change a worker of `worker_type` may make. A function
+    /// runner runs once. A trigger stops from any state its workload may still
+    /// exist in: a cron trigger parks at Done or Failed between fires, and a
+    /// stage trigger restarts from Failed once its retry is due, or stops.
+    pub fn transitions(worker_type: &WorkerType) -> &'static [(Self, Self)] {
+        match worker_type {
+            WorkerType::FunctionRunner => Self::FUNCTION_RUNNER,
+            WorkerType::CronTrigger => Self::CRON_TRIGGER,
+            WorkerType::StageTrigger => Self::STAGE_TRIGGER,
+        }
+    }
+
+    /// Whether a worker of `worker_type` may be written from `self` to `to`.
+    /// Writing the status a worker already has is always allowed.
+    pub fn can_move_to(&self, worker_type: &WorkerType, to: &Self) -> bool {
+        self == to || Self::transitions(worker_type).contains(&(*self, *to))
+    }
+}
+
 impl From<WorkerCallbackStatus> for WorkerStatus {
     fn from(value: WorkerCallbackStatus) -> Self {
         match value {
@@ -761,11 +857,10 @@ mod tests {
         );
     }
 
-    /// Pin the persisted codes of the sticky-terminal `FunctionRunStatus`
-    /// variants. The td-schema `logical_function_runs__sticky_terminals`
-    /// trigger hardcodes `&["C", "X", "Y"]`; td-schema can't import this
-    /// enum (foundational crate ordering), so this test is the canary
-    /// that catches a divergent rename.
+    /// Pin the persisted codes of the terminal `FunctionRunStatus` variants.
+    /// td-schema's status roll-ups hardcode `&["C", "X", "Y"]`; td-schema
+    /// can't import this enum (foundational crate ordering), so this test is
+    /// the canary that catches a divergent rename.
     #[test]
     fn test_sticky_terminal_codes_pinned() {
         assert_eq!(LogicalFunctionRunStatus::Committed.to_string(), "C");

@@ -22,6 +22,7 @@ import yaml
 
 from tabsdatak.server._tdrunner.function._commons.run import command as command_lib
 from tabsdatak.server._tdrunner.function._commons.run.command import UnexpectedError
+from tabsdatak.server._tdrunner.function._lib.errors import EXIT_STALE_REPORT
 from tabsdatak.server._tdrunner.function.commands.report_completion import main
 from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
     BadManifestError,
@@ -155,8 +156,11 @@ def responder():
                 "body": body,
             })
             status = getattr(self.server, "next_status", 200)
+            answer = getattr(self.server, "next_body", b"")
             self.send_response(status)
+            self.send_header("Content-Length", str(len(answer)))
             self.end_headers()
+            self.wfile.write(answer)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("127.0.0.1", 0))
@@ -234,6 +238,33 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
         posted_by_name["customers"]["Data"]["info"]["row_count"]
         == by_name["customers"]["info"]["row_count"]
     )
+
+
+def test_main_stops_without_failed_when_done_is_stale(monkeypatch, tmp_path, responder):
+    base_url, request_log, server = responder
+    server.next_body = json.dumps({"data": {"outcome": "Stale"}}).encode()
+    request_yaml = _write_request(
+        tmp_path / "request.yaml", output=[{"name": "customers"}]
+    )
+    customers_parquet = tmp_path / "out" / "slot0" / "customers.parquet"
+    _write_parquet(customers_parquet, id=[1])
+    manifest = _write_manifest(
+        tmp_path / "outputs_manifest.yaml",
+        [{"name": "customers", "file": str(customers_parquet)}],
+    )
+    _set_argv(
+        monkeypatch,
+        request=request_yaml,
+        outputs_manifest=manifest,
+        state_dir=tmp_path / "state",
+        out=tmp_path / "response.yaml",
+        liveness=tmp_path / "live",
+        responder_url=f"{base_url}/api/v1/done",
+        journal_file=_write_journal(tmp_path / "journal.yaml"),
+    )
+    assert main() == EXIT_STALE_REPORT
+    statuses = [json.loads(posted["body"])["status"] for posted in request_log]
+    assert statuses == ["Done"]
 
 
 def test_main_no_info_when_manifest_file_is_null(monkeypatch, tmp_path, responder):

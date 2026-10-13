@@ -13,6 +13,7 @@
 use crate::collection::services::connection::{
     drop_connection_best_effort, escalate_for_connected,
 };
+use crate::execution::update_status::move_workers;
 use crate::function::engine::dependants_of_tables;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -31,7 +32,7 @@ use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::TriggerDB;
-use td_objects::dxo::worker::WorkerUpdateDB;
+use td_objects::dxo::worker::{WorkerDB, WorkerUpdateDB};
 use td_objects::types::basic::TableId;
 use td_objects::types::basic::{CollectionId, WorkerType};
 use td_objects::{and, or};
@@ -113,22 +114,14 @@ pub async fn update_deleted_workers<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     collection_id: &CollectionId,
 ) -> Result<(), TdError> {
-    let update = WorkerUpdateDB::stop_scheduled();
-
-    let res = conn
-        .update(
-            &update,
-            and!(
-                *collection_id,
-                or!(WorkerType::CronTrigger, WorkerType::StageTrigger)
-            ),
-        )
+    let workers: Vec<WorkerDB> = conn
+        .fetch_all(and!(
+            *collection_id,
+            or!(WorkerType::CronTrigger, WorkerType::StageTrigger)
+        ))
         .await?;
-    debug!(
-        "Set stopped status in {} workers for collection {}.",
-        res.rows_affected(),
-        collection_id
-    );
+    let stopped = move_workers(conn, &workers, &WorkerUpdateDB::stop_scheduled()).await?;
+    debug!("Set stopped status in {stopped} workers for collection {collection_id}.");
 
     Ok(())
 }
@@ -363,7 +356,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &LogicalFunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Requested,
             )
             .await?;
         let _function_worker = db

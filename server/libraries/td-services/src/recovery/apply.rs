@@ -33,9 +33,9 @@ pub async fn apply_recovery_actions(
     let actions = finalize_recovery_actions(conn, actions).await?;
 
     // Worker rows → Failed (informational record).
-    let worker_update = failed_worker_update(at)?;
     let worker_ids = failed_worker_ids(&actions)?;
-    conn.chunked().update(&worker_update, &worker_ids).await?;
+    let workers: Vec<WorkerDB> = conn.chunked().fetch_all(&worker_ids, ()).await?;
+    move_workers(conn, &workers, &failed_worker_update(at)?).await?;
 
     // Attempts → Failed; late callbacks drop at the in-flight filter.
     fail_recovered_attempts(conn, at, &actions).await?;

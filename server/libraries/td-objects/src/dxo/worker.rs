@@ -271,6 +271,14 @@ impl WorkerUpdateDB {
             status: WorkerStatus::Stopped,
         }
     }
+
+    pub fn failed_at(at: &AtTime) -> Self {
+        Self {
+            started_on: None,
+            ended_on: Some((*at).into()),
+            status: WorkerStatus::Failed,
+        }
+    }
 }
 
 #[ta_objects::Dao]

@@ -346,8 +346,9 @@ pub const LOAD_CASES: &[LoadCase] = &[
         name: "pfr::reported",
         covers: &[
             "PhysicalRuns::reported",
+            "PhysicalRuns::ended",
             "PhysicalRuns::dispatched",
-            "PhysicalRuns::failed",
+            "PhysicalRuns::end",
         ],
         family: Family::Latest,
         status: Status::Implemented,

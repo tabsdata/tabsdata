@@ -28,10 +28,11 @@ use super::projects::{Projects, ProjectsResolved};
 use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
+use crate::schema::archive::sql::StickyTerminalsTriggerDef;
 use crate::schema::render::{json_object_agg, name_or_id};
 use crate::schema::source::Derived;
+use crate::schema::sql::ViewDef;
 use crate::schema::sql::scd2::open_interval;
-use crate::schema::sql::{StickyTerminalsTriggerDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]

@@ -19,7 +19,7 @@ use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
 use crate::schema::sql::scd2::open_interval;
-use crate::schema::sql::{Scd2TriggerDef, ViewDef};
+use crate::schema::sql::{Scd2TriggerDef, SupersedeEndedTriggerDef, Transitions, TransitionsTriggerDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
@@ -56,6 +56,13 @@ pub enum PhysicalFunctionRuns {
     LogicalFunctionRunId,
     ValidTo,
 }
+
+/// A run's attempts in progress: a new attempt opens only once its current
+/// one has left these.
+const ATTEMPTS_IN_FLIGHT: &[&str] = &["RR", "DP", "R"];
+
+/// Every status change an attempt may make. D and F have no way out.
+const ATTEMPT_TRANSITIONS: &[(&str, &str)] = &[("RR", "DP"), ("RR", "F"), ("DP", "R"), ("DP", "F"), ("R", "D"), ("R", "F")];
 
 pub(super) struct Defs;
 
@@ -224,6 +231,22 @@ impl Entity for Defs {
                 valid_from_col: PhysicalFunctionRuns::ValidFrom.into_iden(),
                 valid_to_col: PhysicalFunctionRuns::ValidTo.into_iden(),
                 pk_col: PhysicalFunctionRuns::Id.into_iden(),
+            }
+            .derived(),
+            SupersedeEndedTriggerDef {
+                name: format!("{}__open_after_end", PhysicalFunctionRuns::Table.to_string()),
+                source_table: PhysicalFunctionRuns::Table.into_iden(),
+                partition_col: PhysicalFunctionRuns::LogicalFunctionRunId.into_iden(),
+                valid_to_col: PhysicalFunctionRuns::ValidTo.into_iden(),
+                status_col: PhysicalFunctionRuns::Status.into_iden(),
+                open_statuses: ATTEMPTS_IN_FLIGHT,
+            }
+            .derived(),
+            TransitionsTriggerDef {
+                name: format!("{}__transitions", PhysicalFunctionRuns::Table.to_string()),
+                source_table: PhysicalFunctionRuns::Table.into_iden(),
+                status_col: PhysicalFunctionRuns::Status.into_iden(),
+                transitions: Transitions::Any(ATTEMPT_TRANSITIONS),
             }
             .derived(),
         ]

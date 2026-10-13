@@ -76,19 +76,24 @@ impl Scd2TriggerDef {
     }
 }
 
-/// A `BEFORE UPDATE` guard that refuses any transition out of a set of
-/// "sticky terminal" status values.
-pub(crate) struct StickyTerminalsTriggerDef {
+/// The status transitions a [`TransitionsTriggerDef`] admits, as persisted
+/// enum codes. `ByKind` keys them by another column of the row, for tables
+/// whose rows follow different state machines.
+pub(crate) enum Transitions {
+    Any(&'static [(&'static str, &'static str)]),
+    ByKind(DynIden, &'static [(&'static str, &'static [(&'static str, &'static str)])]),
+}
+
+/// A `BEFORE UPDATE OF status` guard that refuses any status change not in
+/// its [`Transitions`]. Writing the status a row already has always passes.
+pub(crate) struct TransitionsTriggerDef {
     pub name: String,
     pub source_table: DynIden,
     pub status_col: DynIden,
-    /// Persisted enum codes that are sticky-final (e.g. `&["C", "X", "Y"]`).
-    /// These are domain status discriminants from `td-objects`, not column
-    /// names — kept as `&str` because they have no Iden representation here.
-    pub terminal_values: &'static [&'static str],
+    pub transitions: Transitions,
 }
 
-impl StickyTerminalsTriggerDef {
+impl TransitionsTriggerDef {
     pub(crate) fn derived(&self) -> Derived {
         Derived {
             create: self.render(),
@@ -100,14 +105,26 @@ impl StickyTerminalsTriggerDef {
         let name = &self.name;
         let table = self.source_table.to_string();
         let col = self.status_col.to_string();
-        let values = self.terminal_values.iter().map(|v| format!("'{v}'")).collect::<Vec<_>>().join(", ");
+        let (key, values) = match &self.transitions {
+            Transitions::Any(pairs) => {
+                (format!("(OLD.{col}, NEW.{col})"), pairs.iter().map(|(from, to)| format!("('{from}', '{to}')")).collect::<Vec<_>>())
+            }
+            Transitions::ByKind(kind_col, kinds) => (
+                format!("(OLD.{kind_col}, OLD.{col}, NEW.{col})"),
+                kinds
+                    .iter()
+                    .flat_map(|(kind, pairs)| pairs.iter().map(move |(from, to)| format!("('{kind}', '{from}', '{to}')")))
+                    .collect(),
+            ),
+        };
+        let values = values.join(", ");
 
         vec![
             format!(
                 "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
                  BEGIN\n  \
-                   IF OLD.{col} IN ({values}) AND NEW.{col} != OLD.{col} THEN\n    \
-                     RAISE EXCEPTION '{table}.{col} is sticky in terminal state';\n  \
+                   IF NEW.{col} IS DISTINCT FROM OLD.{col} AND {key} NOT IN (VALUES {values}) THEN\n    \
+                     RAISE EXCEPTION '{table}.{col} cannot move from % to %', OLD.{col}, NEW.{col};\n  \
                    END IF;\n  \
                    RETURN NEW;\n\
                  END;\n\
@@ -120,7 +137,6 @@ impl StickyTerminalsTriggerDef {
         ]
     }
 }
-
 /// An `ImmutableTriggerDef` with an SCD2 carve-out: UPDATEs are refused only
 /// when they touch one of `columns` (everything but `valid_to`), so the
 /// [`Scd2TriggerDef`] close-out — which sets only `valid_to` — passes while
@@ -197,22 +213,55 @@ mod tests {
         strs.iter().copied().map(alias).collect()
     }
 
-    fn sticky() -> StickyTerminalsTriggerDef {
-        StickyTerminalsTriggerDef {
-            name: "foos__sticky".to_string(),
+    fn transitions() -> TransitionsTriggerDef {
+        TransitionsTriggerDef {
+            name: "foos__transitions".to_string(),
             source_table: alias("foos"),
             status_col: alias("status"),
-            terminal_values: &["C", "X"],
+            transitions: Transitions::Any(&[("A", "B"), ("B", "C")]),
         }
     }
 
     #[test]
-    fn sticky_terminals_raises_on_transition_out_of_terminal() {
-        let out = sticky().render();
+    fn transitions_admit_only_the_declared_pairs() {
+        let out = transitions().render();
         assert_eq!(out.len(), 2);
-        assert!(out[0].contains("OLD.status IN ('C', 'X')"), "{}", out[0]);
-        assert!(out[0].contains("RAISE EXCEPTION 'foos.status is sticky in terminal state'"), "{}", out[0]);
+        assert!(
+            out[0].contains(
+                "IF NEW.status IS DISTINCT FROM OLD.status AND (OLD.status, NEW.status) NOT IN (VALUES ('A', 'B'), ('B', 'C')) THEN"
+            ),
+            "{}",
+            out[0]
+        );
+        assert!(out[0].contains("RAISE EXCEPTION 'foos.status cannot move from % to %', OLD.status, NEW.status"), "{}", out[0]);
         assert!(out[1].contains("BEFORE UPDATE OF status ON foos"), "{}", out[1]);
+    }
+
+    #[test]
+    fn transitions_by_kind_key_on_the_kind_column() {
+        let def = TransitionsTriggerDef {
+            transitions: Transitions::ByKind(alias("kind"), &[("K", &[("A", "B")]), ("L", &[("B", "A")])]),
+            ..transitions()
+        };
+        let out = def.render();
+        assert!(out[0].contains("(OLD.kind, OLD.status, NEW.status) NOT IN (VALUES ('K', 'A', 'B'), ('L', 'B', 'A'))"), "{}", out[0]);
+    }
+
+    #[test]
+    fn supersede_ended_refuses_while_the_open_version_is_in_progress() {
+        let out = SupersedeEndedTriggerDef {
+            name: "foos__open_after_end".to_string(),
+            source_table: alias("foos"),
+            partition_col: alias("foo_id"),
+            valid_to_col: alias("valid_to"),
+            status_col: alias("status"),
+            open_statuses: &["A", "B"],
+        }
+        .render();
+        let f = &out[0];
+        assert!(f.contains("pg_advisory_xact_lock(hashtextextended('foos:' || NEW.foo_id, 0))"), "{f}");
+        assert!(f.contains("WHERE foo_id = NEW.foo_id AND valid_to = 'infinity' AND status IN ('A', 'B')"), "{f}");
+        assert!(out[1].contains("CREATE TRIGGER foos__open_after_end BEFORE INSERT ON foos"), "{}", out[1]);
     }
 
     fn scd2() -> Scd2TriggerDef {
@@ -259,10 +308,10 @@ mod tests {
     #[test]
     fn drops_name_the_table() {
         assert_eq!(
-            sticky().derived().drop,
+            transitions().derived().drop,
             vec![
-                "DROP TRIGGER IF EXISTS foos__sticky ON foos",
-                "DROP FUNCTION IF EXISTS foos__sticky_fn()",
+                "DROP TRIGGER IF EXISTS foos__transitions ON foos",
+                "DROP FUNCTION IF EXISTS foos__transitions_fn()",
             ]
         );
         assert_eq!(

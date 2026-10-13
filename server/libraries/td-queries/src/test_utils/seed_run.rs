@@ -14,8 +14,8 @@ use td_objects::dxo::user::UserDB;
 use td_objects::types::basic::ReuseFrozen;
 use td_objects::types::basic::{
     BundleId, CollectionName, Decorator, Description, EntityId, ExecutionId,
-    LogicalFunctionRunStatus, PermissionType, ProjectId, RoleName, TransactionId, TransactionKey,
-    UserEnabled, UserId, UserName, WorkerId, WorkerMessageStatus,
+    LogicalFunctionRunStatus, PermissionType, PhysicalFunctionRunStatus, ProjectId, RoleName,
+    TransactionId, TransactionKey, UserEnabled, UserId, UserName, WorkerId,
 };
 
 pub struct SeededRun {
@@ -68,12 +68,13 @@ pub async fn seed_run(db: &TdPool, project: ProjectId) -> Result<SeededRun, TdEr
     let physical_function_run = db
         .scoped(project)
         .seed()
-        .physical_function_run(
+        .physical_function_run_with_attempt(
             &collection,
             &function_version,
             &execution,
             &transaction,
             &LogicalFunctionRunStatus::Scheduled,
+            &PhysicalFunctionRunStatus::Requested,
         )
         .await?;
     let worker = db

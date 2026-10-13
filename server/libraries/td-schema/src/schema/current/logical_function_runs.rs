@@ -27,7 +27,7 @@ use crate::schema::Entity;
 use crate::schema::render::{json_object_agg, name_or_id};
 use crate::schema::source::Derived;
 use crate::schema::sql::scd2::open_interval;
-use crate::schema::sql::{StickyTerminalsTriggerDef, ViewDef};
+use crate::schema::sql::{Transitions, TransitionsTriggerDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
@@ -38,7 +38,44 @@ pub struct FunctionRunsWithNames;
 /// the set has ended.
 pub(super) const RUN_TERMINALS: &[&str] = &["C", "X", "Y"];
 
-pub(super) const RUN_LADDER_FALLBACK: &str = "U";
+/// Every status change a run may make. X and Y have no way out, and C only
+/// to Y.
+const RUN_TRANSITIONS: &[(&str, &str)] = &[
+    ("S", "RR"),
+    ("S", "H"),
+    ("S", "RS"),
+    ("S", "X"),
+    ("RR", "S"),
+    ("RR", "R"),
+    ("RR", "E"),
+    ("RR", "F"),
+    ("RR", "H"),
+    ("RR", "RS"),
+    ("RR", "X"),
+    ("RS", "RR"),
+    ("RS", "H"),
+    ("RS", "X"),
+    ("R", "D"),
+    ("R", "E"),
+    ("R", "F"),
+    ("R", "H"),
+    ("R", "RS"),
+    ("R", "X"),
+    ("D", "C"),
+    ("D", "H"),
+    ("D", "RS"),
+    ("D", "X"),
+    ("C", "Y"),
+    ("E", "H"),
+    ("E", "RS"),
+    ("E", "X"),
+    ("F", "D"),
+    ("F", "H"),
+    ("F", "RS"),
+    ("F", "X"),
+    ("H", "RS"),
+    ("H", "X"),
+];
 
 /// Alias for the per-status count derived table inside the status-count
 /// scalar subquery; the dialect JSON aggregate reads its `status`/`count`
@@ -274,11 +311,11 @@ impl Entity for Defs {
 
     fn create_db_triggers(&self) -> Vec<Derived> {
         vec![
-            StickyTerminalsTriggerDef {
-                name: format!("{}__sticky_terminals", LogicalFunctionRuns::Table.to_string()),
+            TransitionsTriggerDef {
+                name: format!("{}__transitions", LogicalFunctionRuns::Table.to_string()),
                 source_table: LogicalFunctionRuns::Table.into_iden(),
                 status_col: LogicalFunctionRuns::Status.into_iden(),
-                terminal_values: RUN_TERMINALS,
+                transitions: Transitions::Any(RUN_TRANSITIONS),
             }
             .derived(),
         ]

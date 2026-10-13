@@ -155,17 +155,17 @@ $$ LANGUAGE plpgsql
 CREATE TRIGGER triggers__scd2_close BEFORE INSERT ON triggers
 FOR EACH ROW EXECUTE FUNCTION triggers__scd2_close_fn()
 
-CREATE OR REPLACE FUNCTION logical_function_runs__sticky_terminals_fn() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION logical_function_runs__transitions_fn() RETURNS TRIGGER AS $$
 BEGIN
-  IF OLD.status IN ('C', 'X', 'Y') AND NEW.status != OLD.status THEN
-    RAISE EXCEPTION 'logical_function_runs.status is sticky in terminal state';
+  IF NEW.status IS DISTINCT FROM OLD.status AND (OLD.status, NEW.status) NOT IN (VALUES ('S', 'RR'), ('S', 'H'), ('S', 'RS'), ('S', 'X'), ('RR', 'S'), ('RR', 'R'), ('RR', 'E'), ('RR', 'F'), ('RR', 'H'), ('RR', 'RS'), ('RR', 'X'), ('RS', 'RR'), ('RS', 'H'), ('RS', 'X'), ('R', 'D'), ('R', 'E'), ('R', 'F'), ('R', 'H'), ('R', 'RS'), ('R', 'X'), ('D', 'C'), ('D', 'H'), ('D', 'RS'), ('D', 'X'), ('C', 'Y'), ('E', 'H'), ('E', 'RS'), ('E', 'X'), ('F', 'D'), ('F', 'H'), ('F', 'RS'), ('F', 'X'), ('H', 'RS'), ('H', 'X')) THEN
+    RAISE EXCEPTION 'logical_function_runs.status cannot move from % to %', OLD.status, NEW.status;
   END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql
 
-CREATE TRIGGER logical_function_runs__sticky_terminals BEFORE UPDATE OF status ON logical_function_runs
-FOR EACH ROW EXECUTE FUNCTION logical_function_runs__sticky_terminals_fn()
+CREATE TRIGGER logical_function_runs__transitions BEFORE UPDATE OF status ON logical_function_runs
+FOR EACH ROW EXECUTE FUNCTION logical_function_runs__transitions_fn()
 
 CREATE OR REPLACE FUNCTION physical_function_runs__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
@@ -184,6 +184,31 @@ $$ LANGUAGE plpgsql
 
 CREATE TRIGGER physical_function_runs__scd2_close BEFORE INSERT ON physical_function_runs
 FOR EACH ROW EXECUTE FUNCTION physical_function_runs__scd2_close_fn()
+
+CREATE OR REPLACE FUNCTION physical_function_runs__open_after_end_fn() RETURNS TRIGGER AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('physical_function_runs:' || NEW.logical_function_run_id, 0));
+  IF EXISTS (SELECT 1 FROM physical_function_runs WHERE logical_function_run_id = NEW.logical_function_run_id AND valid_to = 'infinity' AND status IN ('RR', 'DP', 'R')) THEN
+    RAISE EXCEPTION 'physical_function_runs: % still has an open version in progress', NEW.logical_function_run_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+
+CREATE TRIGGER physical_function_runs__open_after_end BEFORE INSERT ON physical_function_runs
+FOR EACH ROW EXECUTE FUNCTION physical_function_runs__open_after_end_fn()
+
+CREATE OR REPLACE FUNCTION physical_function_runs__transitions_fn() RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status IS DISTINCT FROM OLD.status AND (OLD.status, NEW.status) NOT IN (VALUES ('RR', 'DP'), ('RR', 'F'), ('DP', 'R'), ('DP', 'F'), ('R', 'D'), ('R', 'F')) THEN
+    RAISE EXCEPTION 'physical_function_runs.status cannot move from % to %', OLD.status, NEW.status;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+
+CREATE TRIGGER physical_function_runs__transitions BEFORE UPDATE OF status ON physical_function_runs
+FOR EACH ROW EXECUTE FUNCTION physical_function_runs__transitions_fn()
 
 CREATE OR REPLACE FUNCTION physical_table_data_versions__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
@@ -487,7 +512,7 @@ CREATE INDEX "metrics_facts___function_run_id___idx" ON "metrics_facts" ("functi
 
 CREATE INDEX "metrics_facts___attempt_id___idx" ON "metrics_facts" ("attempt_id")
 
-CREATE INDEX "metrics_facts___table_version_id___written___idx" ON "metrics_facts" ("table_version_id") WHERE side = 'O'
+CREATE INDEX "metrics_facts___table_version_id__side___idx" ON "metrics_facts" ("table_version_id", "side")
 
 CREATE STATISTICS "metrics_facts___grouping___stx" (ndistinct) ON "side", "edge_kind", "from_collection_id", "from_group_id", "collection_id", "group_id", "run_status", "table_id" FROM "metrics_facts"
 

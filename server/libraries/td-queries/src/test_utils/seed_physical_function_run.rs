@@ -25,6 +25,7 @@ pub(crate) async fn seed_physical_function_run(
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     status: &LogicalFunctionRunStatus,
+    attempt_status: &PhysicalFunctionRunStatus,
 ) -> Result<PhysicalFunctionRunDB, TdError> {
     let logical = seed_logical_function_run(
         executor.reuse(),
@@ -54,7 +55,7 @@ pub(crate) async fn seed_physical_function_run(
         dispatched_on: None,
         started_on: None,
         ended_on: None,
-        status: PhysicalFunctionRunStatus::from(status),
+        status: *attempt_status,
         function_version_patch_id: None,
         logical_function_run_id: logical.base.id.clone(),
     };

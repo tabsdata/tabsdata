@@ -165,7 +165,7 @@ async fn assert_indices(db: &TdPool) {
         "metrics_facts___attempt_id___idx",
         "metrics_facts___function_run_id___idx",
         "metrics_facts___project_id__ts___idx",
-        "metrics_facts___table_version_id___written___idx",
+        "metrics_facts___table_version_id__side___idx",
         "metrics_facts___ts___idx",
         "permissions___role_id__permission_type__entity___idx",
         "pfr___function_version_id___idx",

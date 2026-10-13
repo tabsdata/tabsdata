@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+mod attempts;
 mod base_path;
 mod callback_outcomes;
 mod cancel_cascade;
@@ -38,3 +39,4 @@ mod tick_retries;
 mod transaction_settlement;
 mod upload_transaction;
 mod worker_stops;
+mod write_order;

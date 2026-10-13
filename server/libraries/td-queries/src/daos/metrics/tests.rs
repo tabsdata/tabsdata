@@ -28,6 +28,7 @@ use td_objects::dxo::physical_table_data_version::{
 };
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
 use td_objects::dxo::table::TableDB;
+use td_objects::test_utils::transitions::path;
 use td_objects::types::basic::{
     AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, Decorator, DependencyPos,
     Description, EdgeKind, EpochMs, FactSide, GroupName, HasData, IncludePrivate, IncludeReplaced,
@@ -311,16 +312,27 @@ async fn stamp_status_at(
     pfr: &PhysicalFunctionRunDB,
     status: PhysicalFunctionRunStatus,
 ) -> Result<(), TdError> {
-    let update = PhysicalFunctionRunUpdateDB {
-        dispatched_on: None,
-        started_on: None,
-        ended_on: Some(in_window()?.into()),
+    let current: PhysicalFunctionRunDB = db.timeline().fetch_one(&pfr.base.id).await?;
+    let mut steps = path(
+        PhysicalFunctionRunStatus::TRANSITIONS,
+        current.base.status,
         status,
-    };
-    db.scoped(pfr.project_id)
-        .scd2()
-        .update(&update, &pfr.base.id)
-        .await?;
+    );
+    if steps.is_empty() {
+        steps.push(status);
+    }
+    for status in steps {
+        let update = PhysicalFunctionRunUpdateDB {
+            dispatched_on: None,
+            started_on: None,
+            ended_on: Some(in_window()?.into()),
+            status,
+        };
+        db.scoped(pfr.project_id)
+            .scd2()
+            .update(&update, &pfr.base.id)
+            .await?;
+    }
     Ok(())
 }
 
@@ -1062,14 +1074,19 @@ async fn test_a_recovered_run_supersedes_its_failed_attempt(db: TdPool) -> Resul
     let retry: PhysicalFunctionRunDB = db.timeline().fetch_one(&retry.id).await?;
     stamp_status_at(&db, &retry, PhysicalFunctionRunStatus::Done).await?;
     bind_all_outputs(&db, &func, &lfr, &retry).await?;
-    db.scoped(p.id)
-        .update(
-            &LogicalFunctionRunStatusUpdateDB {
-                status: LogicalFunctionRunStatus::Committed,
-            },
-            &lfr.base.id,
-        )
-        .await?;
+    let recovered = path(
+        LogicalFunctionRunStatus::TRANSITIONS,
+        LogicalFunctionRunStatus::ReScheduled,
+        LogicalFunctionRunStatus::Committed,
+    );
+    for status in [LogicalFunctionRunStatus::ReScheduled]
+        .into_iter()
+        .chain(recovered)
+    {
+        db.scoped(p.id)
+            .update(&LogicalFunctionRunStatusUpdateDB { status }, &lfr.base.id)
+            .await?;
+    }
     in_project(&db, p.id, async |conn| {
         attempts_ended(conn, std::slice::from_ref(&retry.base.id))
             .await
