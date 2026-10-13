@@ -102,7 +102,7 @@ async fn recovery(
         }
         _ => {
             for project in active_project_ids(&db, grant).await? {
-                match sweep_project(msgs, &db, grant, &project, &at, &config).await {
+                match sweep_project(msgs, &db, grant, &project, &config).await {
                     Ok(stops) => stop_function_workers(&bridge, stops).await,
                     Err(e) => error!(
                         project_id = %project,
@@ -132,8 +132,8 @@ async fn apply_project(
     let (committed, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
         let mut trx = db.in_project(project).begin(attempt).await?;
-        let at = AtTime::from(trx.locked_at());
-        let committed = apply_recovery_actions(&mut recorded, trx.get(grant), &at, actions).await?;
+        let at = trx.locked_at();
+        let committed = apply_recovery_actions(&mut recorded, trx.get(grant), at, actions).await?;
         trx.commit().await?;
         Ok((committed, recorded))
     })
@@ -142,17 +142,19 @@ async fn apply_project(
     Ok(committed)
 }
 
+/// Sweeps a project's stale runs in its own write transaction, judging and
+/// stamping at the unit's own instant.
 async fn sweep_project(
     msgs: &mut ReqCtx,
     db: &DbPool<AcrossProjects>,
     grant: Grant,
     project: &ProjectId,
-    at: &AtTime,
     config: &RecoveryConfig,
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
     let (stops, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
         let mut trx = db.in_project(project).begin(attempt).await?;
+        let at = trx.locked_at();
         let stops = sweep_stale_runs(&mut recorded, trx.get(grant), at, config).await?;
         trx.commit().await?;
         Ok((stops, recorded))

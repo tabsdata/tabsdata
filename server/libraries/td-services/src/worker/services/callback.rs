@@ -29,6 +29,7 @@ async fn worker_callback(
     let worker_id = param.worker;
     let applied = retrying(|attempt| async {
         let mut trx = db.begin(attempt).await?;
+        let at = AtTime::from(trx.locked_at());
         let worker: WorkerDB = trx.get(authz.none()).fetch_one(&worker_id).await?;
         let mut trx = trx.enter_project(&worker.project_id).await?;
 
@@ -39,7 +40,7 @@ async fn worker_callback(
             && worker.base.worker_type == WorkerType::StageTrigger
             && worker_update.status == WorkerStatus::Failed
         {
-            let retry = after_failure(&worker.failures, &update, &AtTime::now());
+            let retry = after_failure(&worker.failures, &update, &at);
             conn.update(&retry, &worker_id).await?;
         }
         trx.commit().await?;

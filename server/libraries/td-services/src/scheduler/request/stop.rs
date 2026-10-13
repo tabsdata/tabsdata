@@ -3,9 +3,9 @@
 //
 
 use td_bridge::Orchestrator;
+use td_database::access::LockInstant;
 use td_error::TdError;
 use td_objects::dxo::worker::WorkerUpdateDB;
-use td_objects::types::basic::AtTime;
 
 /// The stop-flip update for trigger workers. The kubernetes stop is
 /// put-and-forget — the queue put records the deletion, the bridge carries it
@@ -15,7 +15,7 @@ use td_objects::types::basic::AtTime;
 /// `StopRequested` until the exiting worker's callback flips it to `Stopped`.
 pub fn stop_worker_update(
     orchestrator: Orchestrator,
-    at: &AtTime,
+    at: LockInstant,
 ) -> Result<WorkerUpdateDB, TdError> {
     match orchestrator {
         Orchestrator::Kubernetes => Ok(WorkerUpdateDB::stopped(at)),

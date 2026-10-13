@@ -47,9 +47,10 @@ async fn execution_cancel(
     let (stops, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
         let mut trx = db.in_project(&project).begin(attempt).await?;
+        let at = trx.locked_at();
         let conn = trx.get(grant);
         let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&execution_id).await?;
-        let cancelled = cancel_runs(conn, &ctx.time, &lfrs).await?;
+        let cancelled = cancel_runs(conn, at, &lfrs).await?;
         if cancelled.runs.is_empty() {
             recorded.warning(Message::of(UpdateStatusRunError::NoOpStatusUpdate));
         }
@@ -78,11 +79,11 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::types::basic::ExecutionId;
+    use td_objects::types::basic::PhysicalFunctionRunStatus;
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
         ProjectId, TableNameDto, TransactionStatus, UserId,
     };
-    use td_objects::types::basic::{AtTime, PhysicalFunctionRunStatus};
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::test_utils::{SeedEntry, begin_exclusive, seed_run};
 
@@ -124,6 +125,7 @@ mod tests {
         let attempt: PhysicalFunctionRunDB =
             db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
         let mut trx = begin_exclusive(&db, p.id).await?;
+        let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("cancel test"));
         for status in [
             LogicalFunctionRunStatus::Requested,
@@ -134,7 +136,7 @@ mod tests {
                 .await?;
         }
         conn.physical_runs()
-            .dispatched(std::slice::from_ref(&attempt.base.id), &AtTime::now())
+            .dispatched(std::slice::from_ref(&attempt.base.id), at)
             .await?;
         trx.commit().await?;
 
@@ -165,6 +167,7 @@ mod tests {
         let attempt: PhysicalFunctionRunDB =
             db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
         let mut trx = begin_exclusive(&db, p.id).await?;
+        let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("cancel test"));
         conn.logical_runs()
             .set_status(
@@ -173,7 +176,7 @@ mod tests {
             )
             .await?;
         conn.physical_runs()
-            .dispatched(std::slice::from_ref(&attempt.base.id), &AtTime::now())
+            .dispatched(std::slice::from_ref(&attempt.base.id), at)
             .await?;
         trx.commit().await?;
 

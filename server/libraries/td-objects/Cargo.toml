@@ -27,6 +27,7 @@ td-test = [
     "test-utils",
     "ta-objects/td-test",
     "td-common/td-test",
+    "td-database/td-test",
     "td-error/td-test",
     "td-security/td-test",
 ]

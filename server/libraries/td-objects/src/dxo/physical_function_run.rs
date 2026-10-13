@@ -13,6 +13,7 @@ use crate::types::basic::{
     TransactionId, Trigger, UserId, UserLabel,
 };
 use ta_objects::FromDao;
+use td_database::access::LockInstant;
 use td_error::TdError;
 
 /// One attempt at a logical function run. Attempts are the run's SCD2
@@ -179,9 +180,9 @@ impl PhysicalFunctionRunUpdateDB {
     /// `Requested → Dispatched`, stamped at `dispatched_on`. The same
     /// tx creates the WorkerDB row; the pair (PFR.status=Dispatched,
     /// WorkerDB exists) makes the PFR ineligible for the readiness query.
-    pub fn dispatched(at: &AtTime) -> Self {
+    pub fn dispatched(at: LockInstant) -> Self {
         Self {
-            dispatched_on: Some((*at).into()),
+            dispatched_on: Some(AtTime::from(at).into()),
             started_on: None,
             ended_on: None,
             status: PhysicalFunctionRunStatus::Dispatched,
@@ -192,11 +193,11 @@ impl PhysicalFunctionRunUpdateDB {
     /// `Requested` LFR abandons its in-flight attempt as `Failed` at
     /// `ended_on`, so late callbacks from it drop at the in-flight
     /// filter.
-    pub fn failed_at(ended_on: &AtTime) -> Self {
+    pub fn failed_at(ended_on: LockInstant) -> Self {
         Self {
             dispatched_on: None,
             started_on: None,
-            ended_on: Some((*ended_on).into()),
+            ended_on: Some(AtTime::from(ended_on).into()),
             status: PhysicalFunctionRunStatus::Failed,
         }
     }
@@ -233,10 +234,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_dispatched_helper_sets_status_and_dispatched_on() {
-        let at = AtTime::now();
-        let update = PhysicalFunctionRunUpdateDB::dispatched(&at);
+        let at = LockInstant::asserted(*AtTime::now());
+        let update = PhysicalFunctionRunUpdateDB::dispatched(at);
         assert_eq!(update.status, PhysicalFunctionRunStatus::Dispatched);
-        assert_eq!(update.dispatched_on, Some(Dispatched::from(at)));
+        assert_eq!(
+            update.dispatched_on,
+            Some(Dispatched::from(AtTime::from(at)))
+        );
         assert!(update.started_on.is_none());
         assert!(update.ended_on.is_none());
     }

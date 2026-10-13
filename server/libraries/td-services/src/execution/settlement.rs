@@ -9,10 +9,10 @@
 
 use crate::execution::cancellation::cancel_runs;
 use td_bridge::messaging::FunctionStopRequest;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{InProject, LockInstant, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::types::basic::{AtTime, ExecutionId, LogicalFunctionRunStatus};
+use td_objects::types::basic::{ExecutionId, LogicalFunctionRunStatus};
 use td_queries::Queries;
 use tracing::debug;
 
@@ -43,7 +43,7 @@ pub async fn commit_done_transactions(
 /// reached, to send once the unit of work commits.
 pub async fn settle_transactions(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    at: &AtTime,
+    at: LockInstant,
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
     let discarded = conn.logical_runs().done_beside_canceled().await?;
     let stops = cancel_runs(conn, at, &discarded).await?.stops;

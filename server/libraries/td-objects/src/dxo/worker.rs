@@ -20,6 +20,7 @@ use td_common::worker::{
     ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, ResponseMessagePayload,
     TD_LOG_FILE_NAME,
 };
+use td_database::access::LockInstant;
 use td_error::TdError;
 
 #[ta_objects::Dao]
@@ -280,18 +281,18 @@ impl WorkerUpdateDB {
         }
     }
 
-    pub fn stopped(at: &AtTime) -> Self {
+    pub fn stopped(at: LockInstant) -> Self {
         Self {
             started_on: None,
-            ended_on: Some((*at).into()),
+            ended_on: Some(AtTime::from(at).into()),
             status: WorkerStatus::Stopped,
         }
     }
 
-    pub fn failed_at(at: &AtTime) -> Self {
+    pub fn failed_at(at: LockInstant) -> Self {
         Self {
             started_on: None,
-            ended_on: Some((*at).into()),
+            ended_on: Some(AtTime::from(at).into()),
             status: WorkerStatus::Failed,
         }
     }

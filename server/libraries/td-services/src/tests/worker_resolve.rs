@@ -20,7 +20,7 @@ use td_error::{ApiError, TdError};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::worker::WorkerParam;
 use td_objects::types::basic::{
-    AccessTokenId, AtTime, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
+    AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
     TableNameDto, TransactionStatus, UserId,
 };
 use td_queries::Queries;
@@ -58,9 +58,9 @@ async fn test_a_resolve_waiting_on_a_cancel_of_its_attempt_answers_not_found(
                 AcrossProjects,
             );
             let mut gate = pools.in_project(&p.id).begin(Attempt::unretried()).await?;
-            let at = AtTime::now();
+            let at = gate.locked_at();
             let conn = gate.get(Grant::asserted("attempt ended, held open"));
-            conn.physical_runs().end(&[attempt], &at).await?;
+            conn.physical_runs().end(&[attempt], at).await?;
 
             let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read(WorkerParam { worker });

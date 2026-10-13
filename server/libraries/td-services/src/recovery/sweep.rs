@@ -11,7 +11,7 @@ use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use ta_services::ctx_service::ReqCtx;
 use td_bridge::messaging::FunctionStopRequest;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
+use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
@@ -116,7 +116,7 @@ pub async fn fetch_stale_dispatched_runs<S: SeesProjectRows, M: AccessMode>(
 )]
 pub async fn fail_stale_abandoned_attempts(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    at: &AtTime,
+    at: LockInstant,
     stale: &StaleDispatchedRuns,
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
     if stale.abandoned_pfr_ids.is_empty() {
@@ -145,10 +145,10 @@ pub async fn fail_stale_abandoned_attempts(
 pub async fn sweep_stale_runs(
     msgs: &mut ReqCtx,
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    at: &AtTime,
+    at: LockInstant,
     config: &RecoveryConfig,
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
-    let stale = fetch_stale_dispatched_runs(conn, at, config).await?;
+    let stale = fetch_stale_dispatched_runs(conn, &AtTime::from(at), config).await?;
     let mut stops = fail_stale_abandoned_attempts(conn, at, &stale).await?;
     let (stuck_lfrs, given_up): (Vec<_>, Vec<_>) =
         stale.stuck_lfrs.iter().cloned().partition(under_cap);

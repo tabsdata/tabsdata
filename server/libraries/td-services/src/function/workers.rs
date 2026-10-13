@@ -67,7 +67,7 @@ pub async fn stop_triggers<S: SeesProjectRows, M: WriteMode>(
         .iter()
         .cloned()
         .partition(|w| w.base.status == WorkerStatus::Scheduled);
-    let ended = move_workers(conn, &unstarted, &WorkerUpdateDB::stopped(&at.into())).await?;
+    let ended = move_workers(conn, &unstarted, &WorkerUpdateDB::stopped(at)).await?;
     let stopping = move_workers(conn, &started, &WorkerUpdateDB::stop_scheduled()).await?;
     Ok(ended + stopping)
 }

@@ -166,9 +166,10 @@ async fn test_replay_in_flight_keeps_committed_data_visible(db: TdPool) -> Resul
             );
 
             let mut trx = begin_exclusive(&db, p.id).await?;
+            let at = trx.locked_at();
             trx.get(Grant::asserted("a replay attempt fails"))
                 .physical_runs()
-                .end(&[replayed], &AtTime::now())
+                .end(&[replayed], at)
                 .await?;
             trx.commit().await?;
             assert_eq!(

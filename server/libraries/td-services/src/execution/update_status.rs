@@ -21,7 +21,7 @@ use td_objects::dxo::worker::{CallbackRequest, WorkerDB, WorkerUpdateDB};
 use td_objects::dxo::worker_input::WorkerOutput;
 use td_objects::dxo::worker_input::function::WrittenTable;
 use td_objects::types::basic::{
-    AtTime, ExecutionId, FunctionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus,
+    ExecutionId, FunctionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, SchemaChanged, WorkerId,
 };
 use td_queries::Queries;
@@ -112,7 +112,7 @@ pub async fn move_workers<S: SeesProjectRows, M: WriteMode>(
 )]
 pub async fn abandon_requested_physical_runs(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    at: &AtTime,
+    at: LockInstant,
     logical_function_runs: &[LogicalFunctionRunDB],
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
     let requested: HashSet<(&ExecutionId, &FunctionId)> = logical_function_runs

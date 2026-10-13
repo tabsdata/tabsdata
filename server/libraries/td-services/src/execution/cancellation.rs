@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use td_bridge::messaging::{FunctionRequest, FunctionStopRequest, OrchestratorMessagePayload};
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_common::worker::WorkerName;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{InProject, LockInstant, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::function::FunctionDB;
@@ -20,7 +20,7 @@ use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::types::basic::{
-    AtTime, Decorator, FunctionVersionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
+    Decorator, FunctionVersionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, TransactionId,
 };
 use td_queries::Queries;
@@ -48,7 +48,7 @@ pub struct Cancelled {
 /// transaction it read from has. Ends the cancelled runs' attempts.
 pub async fn cancel_runs(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    at: &AtTime,
+    at: LockInstant,
     named: &[LogicalFunctionRunDB],
 ) -> Result<Cancelled, TdError> {
     let cancelled = cancel_closure(conn, named).await?;
@@ -141,7 +141,7 @@ async fn cancel_closure(
 /// `Failed`. Returns the stops for the workers that have a workload.
 async fn end_cancelled_attempts(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    at: &AtTime,
+    at: LockInstant,
     cancelled: &[LogicalFunctionRunDB],
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
     let lfr_ids: Vec<LogicalFunctionRunId> =

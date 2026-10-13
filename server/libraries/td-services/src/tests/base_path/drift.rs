@@ -15,7 +15,7 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::types::basic::{AtTime, BasePath, CollectionName, UserId};
+use td_objects::types::basic::{BasePath, CollectionName, UserId};
 use td_queries::Queries;
 use td_queries::test_utils::{SeedEntry, begin_exclusive};
 
@@ -142,10 +142,7 @@ async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdEr
     let at = trx.locked_at();
     trx.get(Grant::asserted("base path test"))
         .physical_runs()
-        .end(
-            std::slice::from_ref(&attempt_1.id),
-            &AtTime::from(at.timestamp()),
-        )
+        .end(std::slice::from_ref(&attempt_1.id), at)
         .await?;
     let attempt_2 = mint_function_run(
         trx.get(Grant::asserted("base path test")),

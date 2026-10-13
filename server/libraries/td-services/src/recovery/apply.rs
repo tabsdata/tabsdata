@@ -16,7 +16,7 @@ use crate::worker::retry::after_failure;
 use itertools::Itertools;
 use ta_services::ctx_service::ReqCtx;
 use td_common::execution_status::WorkerCallbackStatus;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{InProject, LockInstant, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerExecutionUpdate, WorkerUpdateDB};
@@ -39,7 +39,7 @@ use tracing::instrument;
 pub async fn apply_recovery_actions(
     msgs: &mut ReqCtx,
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    at: &AtTime,
+    at: LockInstant,
     actions: &RecoveryActions,
 ) -> Result<RecoveryActions, TdError> {
     let actions = finalize_recovery_actions(conn, actions).await?;
@@ -122,13 +122,13 @@ async fn still_as_read(
 /// worker a callback or a stop moved meanwhile is left as it is.
 async fn fail_exited_streams(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    at: &AtTime,
+    at: LockInstant,
     exited: &[WorkerDBWithNames],
 ) -> Result<(), TdError> {
     let failed = WorkerUpdateDB::failed_at(at);
     let exit = WorkerExecutionUpdate {
         started_on: None,
-        ended_on: Some((*at).into()),
+        ended_on: Some(AtTime::from(at).into()),
         status: WorkerCallbackStatus::Failed,
     };
     for worker in exited {
@@ -139,7 +139,7 @@ async fn fail_exited_streams(
         {
             continue;
         }
-        let retry = after_failure(&current.failures, &exit, at);
+        let retry = after_failure(&current.failures, &exit, &AtTime::from(at));
         conn.update(&retry, id).await?;
     }
     Ok(())

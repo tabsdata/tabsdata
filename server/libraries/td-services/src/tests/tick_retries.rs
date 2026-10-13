@@ -43,7 +43,7 @@ fn pools(db: &TdPool) -> DbPool<AcrossProjects> {
 }
 
 /// Another unit's uncommitted write of `row` of `table`.
-async fn hold_a_write(
+pub(crate) async fn hold_a_write(
     db: &TdPool,
     project: &ProjectId,
     table: &str,
@@ -60,7 +60,7 @@ async fn hold_a_write(
 }
 
 /// Commits the held write once the tick waits on it, then lets the tick end.
-async fn release_once_waited_on(
+pub(crate) async fn release_once_waited_on(
     mut gate: GatedConnection<RW, InProject>,
     ticking: JoinHandle<Result<(), TdError>>,
 ) -> Result<(), TdError> {

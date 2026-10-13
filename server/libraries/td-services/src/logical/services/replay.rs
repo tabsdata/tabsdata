@@ -18,6 +18,7 @@ use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunParam, LogicalFunctionRunReplayResponse,
 };
+use td_objects::types::basic::AtTime;
 use td_queries::Queries;
 
 #[service_factory]
@@ -28,7 +29,6 @@ async fn replay_logical_function_run(
     request: CreateRequest<(), LogicalFunctionRunParam>,
 ) -> Result<LogicalFunctionRunReplayResponse, TdError> {
     let (ctx, param, _) = request.into_parts();
-    let at = ctx.time;
     let lfr_id = param.logical_function_run;
 
     let (project, grant) = {
@@ -43,6 +43,7 @@ async fn replay_logical_function_run(
     let response = retrying(|attempt| async {
         let mut trx = db.in_project(&project).begin(attempt).await?;
         let locked_at = trx.locked_at();
+        let at = AtTime::from(locked_at);
         let conn = trx.get(grant);
         let lfr: LogicalFunctionRunDB = conn.fetch_one(&lfr_id).await?;
 

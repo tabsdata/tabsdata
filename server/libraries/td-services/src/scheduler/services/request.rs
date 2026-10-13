@@ -22,7 +22,8 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_bridge::{BridgeProviderHandle, Orchestrator};
 use td_database::access::{
-    AcrossProjects, DbPool, Grant, InProject, SeesProjectRows, WriteMode, conflicted, retrying,
+    AcrossProjects, DbPool, Grant, InProject, LockInstant, SeesProjectRows, WriteMode, conflicted,
+    retrying,
 };
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -53,17 +54,10 @@ async fn request(
     // which the scheduler is woken for instead of waiting out its timer.
     let mut rerun = false;
 
-    // Capture the dispatch tick's AtTime once, before any sub-pipeline.
-    // Every readiness/mint/bind/yaml lookup in the tick shares this
-    // temporal point so the dispatch is consistent even if operator
-    // events arrive mid-tick — and every project of this tick shares it too.
-    let at = AtTime::now();
-
     let active = projects_to_tick(&db, grant).await?;
     let draining = projects_to_drain(&db, grant).await?;
     let tick = |project| ProjectTick {
         project,
-        at: &at,
         storage: &storage,
         bridge: &bridge,
         internal_api: &internal_api,
@@ -112,13 +106,13 @@ async fn projects_to_drain(
     Ok(conn.get(grant).projects().draining().await?)
 }
 
-/// One project's tick. Each step is its own write unit, and sends its worker
-/// messages once it commits: housekeeping first, so dispatch reads what it
-/// decided, then each dispatch path. A step that fails rolls back alone and
-/// the rest go on; the next tick runs it again.
+/// One project's tick. Each step is its own write unit, reads and stamps at
+/// that unit's own instant, and sends its worker messages once it commits:
+/// housekeeping first, so dispatch reads what it decided, then each dispatch
+/// path. A step that fails rolls back alone and the rest go on; the next tick
+/// runs it again.
 struct ProjectTick<'a> {
     project: &'a ProjectId,
-    at: &'a AtTime,
     storage: &'a Storage,
     bridge: &'a BridgeProviderHandle,
     internal_api: &'a InternalApi,
@@ -153,9 +147,10 @@ impl ProjectTick<'_> {
     async fn end_deleted_runs(&self) -> Result<(), TdError> {
         let stops = retrying(|attempt| async {
             let mut trx = self.db.begin(attempt).await?;
+            let at = trx.locked_at();
             let conn = trx.get(self.grant);
             let orphaned = conn.logical_runs().of_deleted_functions().await?;
-            let stops = cancel_runs(conn, self.at, &orphaned).await?.stops;
+            let stops = cancel_runs(conn, at, &orphaned).await?.stops;
             trx.commit().await?;
             Ok(stops)
         })
@@ -172,10 +167,11 @@ impl ProjectTick<'_> {
     async fn housekeep(&self) -> Result<(), TdError> {
         let stops = retrying(|attempt| async {
             let mut trx = self.db.begin(attempt).await?;
+            let at = trx.locked_at();
             let conn = trx.get(self.grant);
             let orphaned = conn.logical_runs().of_deleted_functions().await?;
-            let mut stops = cancel_runs(conn, self.at, &orphaned).await?.stops;
-            stops.extend(settle_transactions(conn, self.at).await?);
+            let mut stops = cancel_runs(conn, at, &orphaned).await?.stops;
+            stops.extend(settle_transactions(conn, at).await?);
             release_unblocked(conn).await?;
             trx.commit().await?;
             Ok(stops)
@@ -191,11 +187,12 @@ impl ProjectTick<'_> {
         let (messages, filled) = retrying(|attempt| async {
             let mut trx = self.db.begin(attempt).await?;
             let locked_at = trx.locked_at();
+            let at = AtTime::from(locked_at);
             let conn = trx.get(self.grant);
             let mut messages = WorkerMessages::default();
             let mut filled = false;
 
-            let ready = fetch_lfr_to_dispatch(conn, self.at, self.config, &mut filled).await?;
+            let ready = fetch_lfr_to_dispatch(conn, &at, self.config, &mut filled).await?;
             let minted = mint_function_runs_on_dispatch(conn, &ready, locked_at).await?;
             let enriched = enrich_minted_dispatch(conn, &minted).await?;
             let workers = create_locked_function_runner_workers_start_request(
@@ -203,7 +200,7 @@ impl ProjectTick<'_> {
                 self.storage,
                 self.internal_api,
                 conn,
-                self.at,
+                &at,
                 &enriched,
                 &mut messages,
             )
@@ -215,7 +212,7 @@ impl ProjectTick<'_> {
                 .await?;
             // Requested -> Dispatched, so the replay readiness excludes these.
             let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
-            conn.physical_runs().dispatched(&pfr_ids, self.at).await?;
+            conn.physical_runs().dispatched(&pfr_ids, locked_at).await?;
             trx.commit().await?;
             Ok((messages, filled))
         })
@@ -231,6 +228,8 @@ impl ProjectTick<'_> {
     async fn dispatch_replays(&self, saturated: &mut bool) -> Result<(), TdError> {
         let (messages, filled) = retrying(|attempt| async {
             let mut trx = self.db.begin(attempt).await?;
+            let locked_at = trx.locked_at();
+            let at = AtTime::from(locked_at);
             let conn = trx.get(self.grant);
             let mut messages = WorkerMessages::default();
             let mut filled = false;
@@ -243,14 +242,14 @@ impl ProjectTick<'_> {
                 self.storage,
                 self.internal_api,
                 conn,
-                self.at,
+                &at,
                 &enriched,
                 &mut messages,
             )
             .await?;
             conn.chunked().insert(&workers).await?;
             let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
-            conn.physical_runs().dispatched(&pfr_ids, self.at).await?;
+            conn.physical_runs().dispatched(&pfr_ids, locked_at).await?;
             trx.commit().await?;
             Ok((messages, filled))
         })
@@ -273,9 +272,10 @@ impl ProjectTick<'_> {
         let orchestrator = self.bridge.orchestrator();
         let messages = retrying(|attempt| async move {
             let mut trx = self.db.begin(attempt).await?;
+            let at = trx.locked_at();
             let conn = trx.get(self.grant);
             let mut messages = WorkerMessages::default();
-            stop_triggers(conn, orchestrator, self.at, worker_type, &mut messages).await?;
+            stop_triggers(conn, orchestrator, at, worker_type, &mut messages).await?;
             trx.commit().await?;
             Ok(messages)
         })
@@ -289,13 +289,14 @@ impl ProjectTick<'_> {
         let orchestrator = self.bridge.orchestrator();
         let messages = retrying(|attempt| async {
             let mut trx = self.db.begin(attempt).await?;
+            let at = trx.locked_at();
             let conn = trx.get(self.grant);
             let mut messages = WorkerMessages::default();
 
             stop_triggers(
                 conn,
                 orchestrator,
-                self.at,
+                at,
                 WorkerType::CronTrigger,
                 &mut messages,
             )
@@ -312,7 +313,7 @@ impl ProjectTick<'_> {
                 to_start,
                 &mut messages,
             )?;
-            update_worker_statuses(conn, orchestrator, self.at, &to_start, false).await?;
+            update_worker_statuses(conn, orchestrator, at, &to_start, false).await?;
             trx.commit().await?;
             Ok(messages)
         })
@@ -326,13 +327,14 @@ impl ProjectTick<'_> {
         let orchestrator = self.bridge.orchestrator();
         let messages = retrying(|attempt| async {
             let mut trx = self.db.begin(attempt).await?;
+            let at = trx.locked_at();
             let conn = trx.get(self.grant);
             let mut messages = WorkerMessages::default();
 
             stop_triggers(
                 conn,
                 orchestrator,
-                self.at,
+                at,
                 WorkerType::StageTrigger,
                 &mut messages,
             )
@@ -352,7 +354,7 @@ impl ProjectTick<'_> {
                 &mut messages,
             )
             .await?;
-            update_worker_statuses(conn, orchestrator, self.at, &to_start, false).await?;
+            update_worker_statuses(conn, orchestrator, at, &to_start, false).await?;
             trx.commit().await?;
             Ok(messages)
         })
@@ -388,7 +390,7 @@ fn report<const N: usize>(
 async fn stop_triggers(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     orchestrator: Orchestrator,
-    at: &AtTime,
+    at: LockInstant,
     worker_type: WorkerType,
     messages: &mut WorkerMessages,
 ) -> Result<(), TdError> {
@@ -426,7 +428,7 @@ async fn trigger_workers<S: SeesProjectRows, M: WriteMode>(
 async fn update_worker_statuses<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     orchestrator: Orchestrator,
-    at: &AtTime,
+    at: LockInstant,
     workers: &[WorkerDBWithNames],
     stopping: bool,
 ) -> Result<(), TdError> {

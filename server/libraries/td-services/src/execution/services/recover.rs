@@ -34,7 +34,6 @@ async fn execution_recover(
     request: UpdateRequest<(), ExecutionParam>,
 ) -> Result<(), TdError> {
     let (ctx, param, _) = request.into_parts();
-    let at = ctx.time;
     let execution_id = param.execution;
 
     let (project, grant) = {
@@ -52,9 +51,10 @@ async fn execution_recover(
     let (stops, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
         let mut trx = db.in_project(&project).begin(attempt).await?;
+        let at = trx.locked_at();
         let conn = trx.get(grant);
         let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&execution_id).await?;
-        let stops = abandon_requested_physical_runs(conn, &at, &lfrs).await?;
+        let stops = abandon_requested_physical_runs(conn, at, &lfrs).await?;
         update_function_run_status(
             &mut recorded,
             conn,

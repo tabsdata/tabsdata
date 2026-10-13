@@ -16,14 +16,14 @@ use crate::daos::function_runs::{LogicalRuns, PhysicalRuns};
 use crate::daos::metrics::write::{attempts_ended, runs_status_changed};
 use crate::daos::status_rollup::{logical_runs_changed, physical_runs_changed};
 use ta_objects::errors::SqlError;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{InProject, LockInstant, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_objects::and;
 use td_objects::dxo::logical::LogicalFunctionRunStatusUpdateDB;
 use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB};
 use td_objects::dxo::worker::{WorkerDBWithNames, WorkerExecutionUpdate, WorkerUpdateDB};
 use td_objects::types::basic::{
-    AtTime, LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
+    LogicalFunctionRunId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
     PhysicalFunctionRunStatus,
 };
 
@@ -70,7 +70,7 @@ impl<M: WriteMode> PhysicalRuns<&mut DomainConnection<Apiserver, InProject, M>> 
     pub async fn dispatched(
         self,
         pfr_ids: &[PhysicalFunctionRunId],
-        at: &AtTime,
+        at: LockInstant,
     ) -> Result<(), SqlError> {
         if pfr_ids.is_empty() {
             return Ok(());
@@ -116,7 +116,7 @@ impl<M: WriteMode> PhysicalRuns<&mut DomainConnection<Apiserver, InProject, M>> 
     pub async fn end(
         self,
         pfr_ids: &[PhysicalFunctionRunId],
-        at: &AtTime,
+        at: LockInstant,
     ) -> Result<Vec<WorkerDBWithNames>, SqlError> {
         if pfr_ids.is_empty() {
             return Ok(Vec::new());
@@ -159,6 +159,7 @@ mod tests {
     use crate::Queries;
     use crate::test_utils::{SeedEntry, begin_exclusive, derive_status_rollup, seed_run};
     use td_common::execution_status::WorkerCallbackStatus;
+    use td_database::access::LockInstant;
     use td_database::access::{Grant, InProject, XW};
     use td_database::domain::{Apiserver, DomainConnection};
     use td_database::pool::TdPool;
@@ -361,7 +362,10 @@ mod tests {
             db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
         in_project(&db, p.id, async |conn| {
             conn.physical_runs()
-                .dispatched(std::slice::from_ref(&physical_run.base.id), &AtTime::now())
+                .dispatched(
+                    std::slice::from_ref(&physical_run.base.id),
+                    LockInstant::asserted(*AtTime::now()),
+                )
                 .await?;
             Ok(())
         })

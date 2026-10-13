@@ -46,9 +46,10 @@ async fn transaction_cancel(
     let (stops, recorded) = retrying(|attempt| async {
         let mut recorded = ReqCtx::default();
         let mut trx = db.in_project(&project).begin(attempt).await?;
+        let at = trx.locked_at();
         let conn = trx.get(grant);
         let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&transaction_id).await?;
-        let cancelled = cancel_runs(conn, &ctx.time, &lfrs).await?;
+        let cancelled = cancel_runs(conn, at, &lfrs).await?;
         if cancelled.runs.is_empty() {
             recorded.warning(Message::of(UpdateStatusRunError::NoOpStatusUpdate));
         }
