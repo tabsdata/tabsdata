@@ -13,8 +13,9 @@
 use crate::components::sql::is_undefined_table_error;
 use crate::error::DbError;
 use crate::sea_query::builder::SeaQueryExt;
+use crate::sea_query::catalog::current_setting;
 use crate::sea_query::executor::SeaExecutor;
-use sea_query::{Expr, ExprTrait, Iden, Query};
+use sea_query::{Alias, Expr, ExprTrait, Iden, Query};
 use sqlx::Error;
 use sqlx::PgPool;
 use std::cmp::Ordering;
@@ -158,7 +159,7 @@ pub async fn check_tabsdata_edition(pool: &PgPool) -> Result<(), DbError> {
 /// needs 15+) and at runtime (the floor must still hold).
 pub async fn check_pg_min_version(pool: &PgPool) -> Result<(), DbError> {
     let version: Option<i32> = Query::select()
-        .expr(Expr::cust("current_setting('server_version_num')::int"))
+        .expr(current_setting("server_version_num").cast_as(Alias::new("int")))
         .build_query_scalar()
         .fetch_optional(pool)
         .await

@@ -3,6 +3,7 @@
 //
 
 pub mod builder;
+pub(crate) mod catalog;
 pub mod executor;
 
 #[cfg(feature = "td-test")]

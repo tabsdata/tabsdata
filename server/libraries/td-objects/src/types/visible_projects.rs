@@ -49,7 +49,7 @@ impl VisibleProjects {
             VisibleProjects::Only(ids) => ids,
         };
         if ids.is_empty() {
-            return Condition::all().add(Expr::cust("1 = 0"));
+            return Condition::all().add(Expr::Constant(false.into()));
         }
         let values: Vec<_> = ids.iter().map(|id| id.as_sea_expr()).collect();
         Condition::all().add(project_id.into().is_in(values))
@@ -95,7 +95,7 @@ mod tests {
         );
         assert_eq!(
             render(&VisibleProjects::Only(HashSet::new())),
-            r#"SELECT "id" FROM "plans" WHERE 1 = 0"#
+            r#"SELECT "id" FROM "plans" WHERE FALSE"#
         );
     }
 }

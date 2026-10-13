@@ -7,6 +7,8 @@
 //! [`PoolConnection`](sqlx::pool::PoolConnection) or a
 //! [`DomainConnection`](crate::domain::DomainConnection) through deref.
 
+use crate::sea_query::builder::SeaQueryExt;
+use sea_query::{Expr, Func, Query};
 use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Error, Executor};
 use std::time::Duration;
@@ -85,6 +87,15 @@ pub trait PgConnectionExt {
     /// with 42P01 whenever a concurrent test drops its schema mid-run.
     #[cfg(feature = "td-test")]
     fn analyze_current_schema(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
+
+    /// Waits until another backend is blocked on a lock this transaction
+    /// holds: the point at which a concurrent unit under test has reached
+    /// the statement the interleaving is about. `false` if `within` elapsed.
+    #[cfg(feature = "td-test")]
+    fn wait_until_blocking(
+        &mut self,
+        within: Duration,
+    ) -> impl Future<Output = Result<bool, Error>> + Send;
 }
 
 impl PgConnectionExt for PgConnection {
@@ -97,25 +108,21 @@ impl PgConnectionExt for PgConnection {
                 sql = stmt.as_str(),
                 "Executing batch statement"
             );
-            sqlx::query(AssertSqlSafe(stmt.clone()))
+            sqlx::query(generated(stmt.clone()))
                 .execute(&mut *self)
                 .await?;
         }
         Ok(())
     }
 
-    async fn advisory_xact_lock_text_within(
-        &mut self,
-        key: &str,
-        wait: Duration,
-    ) -> Result<bool, Error> {
-        let millis = wait.as_millis().max(1);
-        sqlx::query(AssertSqlSafe(format!("SET LOCAL lock_timeout = {millis}")))
-            .execute(&mut *self)
-            .await?;
-        match sqlx::query(ADVISORY_XACT_LOCK)
-            .bind(key)
-            .execute(&mut *self)
+    async fn try_advisory_xact_lock_text(&mut self, key: &str) -> Result<bool, Error> {
+        Query::select()
+            .expr(
+                Func::cust("pg_try_advisory_xact_lock")
+                    .arg(Func::cust("hashtextextended").args([Expr::val(key), Expr::val(0)])),
+            )
+            .build_query_scalar()
+            .fetch_one(self)
             .await
         {
             Ok(_) => Ok(true),
@@ -124,64 +131,69 @@ impl PgConnectionExt for PgConnection {
         }
     }
 
-    async fn try_advisory_xact_lock_text(&mut self, key: &str) -> Result<bool, Error> {
-        sqlx::query_scalar(TRY_ADVISORY_XACT_LOCK)
-            .bind(key)
-            .fetch_one(&mut *self)
+    async fn try_advisory_lock_text(&mut self, key: &str) -> Result<bool, Error> {
+        Query::select()
+            .expr(
+                Func::cust("pg_try_advisory_lock")
+                    .arg(Func::cust("hashtextextended").args([Expr::val(key), Expr::val(0)])),
+            )
+            .build_query_scalar()
+            .fetch_one(self)
             .await
     }
 
     async fn set_local_secret(&mut self, name: &str, value: &str) -> Result<(), Error> {
-        sqlx::query("SELECT set_config($1, $2, true)")
-            .bind(name)
-            .bind(value)
-            .execute(&mut *self)
+        Query::select()
+            .expr(Func::cust("set_config").args([
+                Expr::val(name),
+                Expr::val(value),
+                Expr::val(true),
+            ]))
+            .build_query()
+            .execute(self)
             .await?;
         Ok(())
     }
 
     async fn scope_across_projects(&mut self) -> Result<(), Error> {
-        sqlx::query(AssertSqlSafe(format!(
-            "SELECT set_config('role', current_setting('{ACROSS_PROJECTS_ROLE_GUC}'), true)"
-        )))
-        .execute(&mut *self)
-        .await?;
+        sqlx::query("SELECT set_config('role', current_setting($1), true)")
+            .bind(ACROSS_PROJECTS_ROLE_GUC)
+            .execute(&mut *self)
+            .await?;
         Ok(())
     }
 
     async fn scope_global(&mut self) -> Result<(), Error> {
-        sqlx::query(AssertSqlSafe(format!(
-            "SELECT set_config('role', current_setting('{IN_PROJECT_ROLE_GUC}'), true)"
-        )))
-        .execute(&mut *self)
-        .await?;
+        sqlx::query("SELECT set_config('role', current_setting($1), true)")
+            .bind(IN_PROJECT_ROLE_GUC)
+            .execute(&mut *self)
+            .await?;
         Ok(())
     }
 
     async fn admit_legacy_project_scope(&mut self) -> Result<(), Error> {
-        sqlx::query(AssertSqlSafe(format!(
-            "SELECT set_config('{LEGACY_BYPASS_RLS_GUC}', 'on', true)"
-        )))
-        .execute(&mut *self)
-        .await?;
+        sqlx::query("SELECT set_config($1, 'on', true)")
+            .bind(LEGACY_BYPASS_RLS_GUC)
+            .execute(&mut *self)
+            .await?;
         Ok(())
     }
 
     async fn scope_in_project(&mut self, project_id: &str) -> Result<(), Error> {
-        let id = project_id.replace('\'', "''");
-        // Simple-query protocol: one round trip for both, where the prepared
-        // path `sqlx::query` uses would reject a multi-statement string.
-        let sql = format!(
-            "SELECT set_config('role', current_setting('{IN_PROJECT_ROLE_GUC}'), true); \
-             SELECT set_config('{PROJECT_ID_GUC}', '{id}', true)"
-        );
-        self.execute(AssertSqlSafe(sql)).await?;
+        sqlx::query(
+            "SELECT set_config('role', current_setting($1), true), set_config($2, $3, true)",
+        )
+        .bind(IN_PROJECT_ROLE_GUC)
+        .bind(PROJECT_ID_GUC)
+        .bind(project_id)
+        .execute(&mut *self)
+        .await?;
         Ok(())
     }
 
     #[cfg(feature = "td-test")]
     async fn explain(&mut self, sql: &str) -> Result<Vec<String>, Error> {
-        sqlx::query_scalar::<_, String>(AssertSqlSafe(format!("EXPLAIN {sql}")))
+        sqlx::query_scalar::<_, String>(generated(format!("EXPLAIN {sql}")))
             .fetch_all(&mut *self)
             .await
     }
@@ -195,7 +207,7 @@ impl PgConnectionExt for PgConnection {
         .fetch_all(&mut *self)
         .await?;
         if !tables.is_empty() {
-            sqlx::query(AssertSqlSafe(format!("ANALYZE {}", tables.join(", "))))
+            sqlx::query(generated(format!("ANALYZE {}", tables.join(", "))))
                 .execute(&mut *self)
                 .await?;
         }
@@ -203,9 +215,26 @@ impl PgConnectionExt for PgConnection {
     }
 }
 
-/// PostgreSQL `lock_not_available`.
-fn lock_wait_elapsed(e: &Error) -> bool {
-    e.as_database_error()
-        .and_then(|db| db.code())
-        .is_some_and(|code| code == "55P03")
+    #[cfg(feature = "td-test")]
+    async fn wait_until_blocking(&mut self, within: Duration) -> Result<bool, Error> {
+        let deadline = tokio::time::Instant::now() + within;
+        loop {
+            sqlx::query("SELECT pg_stat_clear_snapshot()")
+                .execute(&mut *self)
+                .await?;
+            let blocked: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM pg_stat_activity \
+                 WHERE pg_backend_pid() = ANY(pg_blocking_pids(pid))",
+            )
+            .fetch_one(&mut *self)
+            .await?;
+            if blocked > 0 {
+                return Ok(true);
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Ok(false);
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
 }

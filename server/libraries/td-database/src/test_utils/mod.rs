@@ -27,6 +27,8 @@ use tracing::warn;
 
 pub mod domain;
 pub mod postgres;
+
+pub use crate::generated_sql::generated;
 /// Pool settings for the test pools. One server backs the whole suite, so each
 /// pool stays lean and holds **no resident connections**
 /// (`min_connections = 0` + short idle timeout: connections open on demand and

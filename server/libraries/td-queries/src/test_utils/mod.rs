@@ -12,6 +12,7 @@ pub use status_rollup::derive_status_rollup;
 
 mod exclusive;
 mod metrics_facts;
+pub mod probes;
 mod seed;
 mod seed_collection;
 mod seed_execution;

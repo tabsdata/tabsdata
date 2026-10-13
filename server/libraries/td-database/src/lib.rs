@@ -22,6 +22,7 @@ pub mod config;
 pub mod connection;
 pub mod domain;
 pub mod error;
+mod generated_sql;
 pub mod pool;
 pub mod sea_query;
 pub mod server;

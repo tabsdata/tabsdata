@@ -18,7 +18,8 @@ use crate::config::{DatabaseConfig, RlsRoles, Schema};
 use crate::error::DbError;
 use crate::pool::state::db_version;
 use crate::sea_query::builder::SeaQueryExt;
-use sea_query::{Expr, Query};
+use crate::sea_query::catalog::{catalog_has, current_user, has_role, only_if, role_exists};
+use sea_query::{Expr, ExprTrait, Func, Query};
 use sqlx::PgPool;
 use td_schema::ACROSS_PROJECTS_ROLE;
 use tracing::{debug, info, instrument};
@@ -214,10 +215,7 @@ impl AdminPool {
         name: &str,
     ) -> Result<bool, DbError> {
         let found: Option<bool> = Query::select()
-            .expr(Expr::cust_with_values(
-                format!("EXISTS (SELECT FROM {catalog} WHERE {column} = $1)"),
-                [name],
-            ))
+            .expr(catalog_has(catalog, column, name))
             .build_query_scalar()
             .fetch_optional(&self.pool)
             .await
@@ -237,9 +235,11 @@ impl AdminPool {
     pub(crate) async fn check_upgrader_permissions(&self) -> Result<(), DbError> {
         let schema = self.schema();
         let can_create: Option<bool> = Query::select()
-            .expr(Expr::cust(format!(
-                "has_schema_privilege(current_user, '{schema}', 'CREATE')"
-            )))
+            .expr(Func::cust("has_schema_privilege").args([
+                current_user(),
+                Expr::val(schema.to_string()),
+                Expr::val("CREATE"),
+            ]))
             .build_query_scalar()
             .fetch_optional(&self.pool)
             .await
@@ -262,38 +262,54 @@ impl AdminPool {
     /// The error carries the statements a DBA has to run.
     pub(crate) async fn check_across_projects_memberships(&self) -> Result<(), DbError> {
         let (tenant, across) = (&self.roles().in_project, &self.roles().across_projects);
-        let exists = |role: &str| format!("EXISTS (SELECT FROM pg_roles WHERE rolname = '{role}')");
-        let (marker, has_tenant, has_across) =
-            (exists(ACROSS_PROJECTS_ROLE), exists(tenant), exists(across));
-        let missing: Option<String> = Query::select()
-            .expr(Expr::cust(format!(
-                "trim(both ' ' from \
-                   CASE WHEN NOT {has_tenant} \
-                     THEN 'CREATE ROLE \"{tenant}\" NOBYPASSRLS; ' ELSE '' END \
-                || CASE WHEN NOT {has_across} \
-                     THEN 'CREATE ROLE \"{across}\" NOBYPASSRLS; ' ELSE '' END \
-                || CASE WHEN NOT {marker} \
-                     THEN 'CREATE ROLE \"{ACROSS_PROJECTS_ROLE}\" NOBYPASSRLS NOLOGIN; ' \
-                     ELSE '' END \
-                || CASE WHEN NOT ({marker} AND {has_across}) \
-                        OR NOT pg_has_role('{across}', '{ACROSS_PROJECTS_ROLE}', 'USAGE') \
-                     THEN 'GRANT \"{ACROSS_PROJECTS_ROLE}\" TO \"{across}\"; ' \
-                     ELSE '' END \
-                || CASE WHEN NOT {marker} \
-                        OR NOT pg_has_role(current_user, '{ACROSS_PROJECTS_ROLE}', 'USAGE') \
-                     THEN 'GRANT \"{ACROSS_PROJECTS_ROLE}\" TO CURRENT_USER; ' \
-                     ELSE '' END)"
-            )))
-            .build_query_scalar()
+        let (marker, has_tenant, has_across) = (
+            role_exists(ACROSS_PROJECTS_ROLE),
+            role_exists(tenant),
+            role_exists(across),
+        );
+        let found: Option<(bool, bool, bool, bool, bool)> = Query::select()
+            .expr(has_tenant)
+            .expr(has_across.clone())
+            .expr(marker.clone())
+            .expr(only_if(
+                marker.clone().and(has_across),
+                has_role(Expr::val(across.to_string()), ACROSS_PROJECTS_ROLE, "USAGE"),
+            ))
+            .expr(only_if(
+                marker,
+                has_role(current_user(), ACROSS_PROJECTS_ROLE, "USAGE"),
+            ))
+            .build_query_as()
             .fetch_optional(&self.pool)
             .await
             .map_err(DbError::SqlError)?;
-        match missing.as_deref() {
-            Some("") | None => {
-                debug!("db.pool.check: across-projects memberships OK");
-                Ok(())
-            }
-            Some(sql) => Err(DbError::MissingAcrossProjectsMembership(sql.to_owned())),
+        let (has_tenant, has_across, has_marker, across_member, self_member) =
+            found.unwrap_or_default();
+        let missing = [
+            (has_tenant, format!("CREATE ROLE \"{tenant}\" NOBYPASSRLS;")),
+            (has_across, format!("CREATE ROLE \"{across}\" NOBYPASSRLS;")),
+            (
+                has_marker,
+                format!("CREATE ROLE \"{ACROSS_PROJECTS_ROLE}\" NOBYPASSRLS NOLOGIN;"),
+            ),
+            (
+                across_member,
+                format!("GRANT \"{ACROSS_PROJECTS_ROLE}\" TO \"{across}\";"),
+            ),
+            (
+                self_member,
+                format!("GRANT \"{ACROSS_PROJECTS_ROLE}\" TO CURRENT_USER;"),
+            ),
+        ]
+        .into_iter()
+        .filter_map(|(held, statement)| (!held).then_some(statement))
+        .collect::<Vec<_>>()
+        .join(" ");
+        if missing.is_empty() {
+            debug!("db.pool.check: across-projects memberships OK");
+            Ok(())
+        } else {
+            Err(DbError::MissingAcrossProjectsMembership(missing))
         }
     }
 

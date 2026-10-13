@@ -8,6 +8,7 @@
 //! `SchemaDelta`. The test source declares only its own content, never the ledger
 //! or the version row, proving those are the pool's responsibility.
 
+use crate::generated_sql::generated;
 use crate::test_utils::TestDb;
 use crate::test_utils::postgres::pool;
 use td_schema::SchemaSource;
@@ -57,7 +58,7 @@ impl SchemaSource for WidgetSource {
 
 /// Read a scalar `i64` on the serving pool (same schema as the system pool).
 async fn scalar(db: &TestDb, sql: impl Into<String>) -> i64 {
-    sqlx::query_scalar(sqlx::AssertSqlSafe(sql.into()))
+    sqlx::query_scalar(generated(sql.into()))
         .fetch_one(db.serving.as_ref())
         .await
         .unwrap()

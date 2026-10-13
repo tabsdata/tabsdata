@@ -17,7 +17,7 @@ use crate::pool::PoolKind;
 use crate::pool::options::pg_connect_options;
 use sqlx::pool::PoolOptions;
 use sqlx::postgres::PgConnectOptions;
-use sqlx::{AssertSqlSafe, ConnectOptions, Connection, PgPool, Postgres};
+use sqlx::{ConnectOptions, Connection, PgPool, Postgres};
 use std::time::Duration;
 use tracing::debug;
 
@@ -141,7 +141,8 @@ impl DatabaseConfig {
     ) -> Result<(), DbError> {
         let switched = tokio::time::timeout(acquire_timeout, async {
             let mut conn = conn_options.connect().await?;
-            let switched = sqlx::query(AssertSqlSafe(format!("SET ROLE \"{}\"", role)))
+            let switched = sqlx::query("SELECT set_config('role', $1, false)")
+                .bind(role)
                 .execute(&mut conn)
                 .await;
             let _ = conn.close().await;
@@ -216,25 +217,21 @@ impl DatabaseConfig {
                 // RLS-policy/view resolution, and queries all target it.
                 // The admin/system pool has no home schema and skips this.
                 if let Some(schema) = schema {
-                    sqlx::query(AssertSqlSafe(format!("SET search_path TO \"{schema}\"")))
+                    sqlx::query("SELECT set_config('search_path', $1, false)")
+                        .bind(format!("\"{}\"", schema.replace('"', "\"\"")))
                         .execute(&mut *conn)
                         .await?;
                 }
                 // Also on the admin posture: an upgrade transaction scopes
                 // itself across projects through the same seam.
                 if let Some(roles) = &roles {
-                    sqlx::query(AssertSqlSafe(format!(
-                        "SET {IN_PROJECT_ROLE_GUC} = \"{}\"",
-                        roles.in_project
-                    )))
-                    .execute(&mut *conn)
-                    .await?;
-                    sqlx::query(AssertSqlSafe(format!(
-                        "SET {ACROSS_PROJECTS_ROLE_GUC} = \"{}\"",
-                        roles.across_projects
-                    )))
-                    .execute(&mut *conn)
-                    .await?;
+                    sqlx::query("SELECT set_config($1, $2, false), set_config($3, $4, false)")
+                        .bind(IN_PROJECT_ROLE_GUC)
+                        .bind(&roles.in_project)
+                        .bind(ACROSS_PROJECTS_ROLE_GUC)
+                        .bind(&roles.across_projects)
+                        .execute(&mut *conn)
+                        .await?;
                 }
                 if app_role {
                     let roles = roles.expect("a serving pool resolves its RLS roles");

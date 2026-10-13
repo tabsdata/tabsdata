@@ -7,6 +7,7 @@
 //! insert-only guard's `valid_to` carve-out, and the attempt tables' void.
 
 use crate::components::ApiserverComponent;
+use crate::generated_sql::generated;
 use crate::pool::TdPool;
 
 use super::{at_rest, execute, scalars};
@@ -143,7 +144,7 @@ async fn scd2_close_out_serializes_concurrent_inserts_postgres() {
     seed_prelude(&db.serving).await;
 
     let mut tx1 = db.serving.as_ref().begin().await.unwrap();
-    sqlx::query(sqlx::AssertSqlSafe(insert_function_version(
+    sqlx::query(generated(insert_function_version(
         1,
         "f-a",
         "2026-01-01T00:00:00Z",
@@ -155,7 +156,7 @@ async fn scd2_close_out_serializes_concurrent_inserts_postgres() {
     let pool = db.serving.as_ref().clone();
     let racer = tokio::spawn(async move {
         let mut tx2 = pool.begin().await.unwrap();
-        sqlx::query(sqlx::AssertSqlSafe(insert_function_version(
+        sqlx::query(generated(insert_function_version(
             2,
             "f-a",
             "2026-01-02T00:00:00Z",
@@ -231,7 +232,7 @@ async fn scd2_immutable_guard_carves_out_valid_to_postgres() {
     );
 
     let patch = at_rest(12);
-    let err = sqlx::query(sqlx::AssertSqlSafe(format!(
+    let err = sqlx::query(generated(format!(
         "UPDATE function_patches SET description = 'x' WHERE id = {patch}"
     )))
     .execute(db.serving.as_ref())
@@ -241,7 +242,7 @@ async fn scd2_immutable_guard_carves_out_valid_to_postgres() {
         err.to_string().contains("function_patches is insert-only"),
         "{err}"
     );
-    let err = sqlx::query(sqlx::AssertSqlSafe(format!(
+    let err = sqlx::query(generated(format!(
         "DELETE FROM function_patches WHERE id = {patch}"
     )))
     .execute(db.serving.as_ref())
@@ -353,7 +354,7 @@ async fn scd2_attempts_void_leaves_no_current_row_postgres() {
                WHERE id = {id} AND valid_to = 'infinity'"
         )
     };
-    let closed = sqlx::query(sqlx::AssertSqlSafe(void(2)))
+    let closed = sqlx::query(generated(void(2)))
         .execute(db.serving.as_ref())
         .await
         .unwrap()
@@ -374,7 +375,7 @@ async fn scd2_attempts_void_leaves_no_current_row_postgres() {
         "a voided run has no current attempt: {open:?}"
     );
 
-    let again = sqlx::query(sqlx::AssertSqlSafe(void(1)))
+    let again = sqlx::query(generated(void(1)))
         .execute(db.serving.as_ref())
         .await
         .unwrap()

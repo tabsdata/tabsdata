@@ -118,11 +118,11 @@ where
         }
         Version::Head(back) => match desc_offset(*back) {
             Some(offset) => key_expr::<D>().eq(key_at::<D, V>(partition, on, true, offset)),
-            None => Expr::cust("1 = 0"),
+            None => Expr::Constant(false.into()),
         },
         Version::Initial(forward) => match asc_offset(*forward) {
             Some(offset) => key_expr::<D>().eq(key_at::<D, V>(partition, on, false, offset)),
-            None => Expr::cust("1 = 0"),
+            None => Expr::Constant(false.into()),
         },
     }
 }
@@ -147,7 +147,7 @@ where
         }
         Versions::List(versions) => {
             if versions.is_empty() {
-                Ok(Condition::all().add(Expr::cust("1 = 0")))
+                Ok(Condition::all().add(Expr::Constant(false.into())))
             } else {
                 let mut cond = Condition::any();
                 for version in versions {
@@ -1015,7 +1015,7 @@ mod tests {
                     version_condition::<TestDvDao, _>(P0.deref(), ON.deref(), &versions).unwrap();
                 assert_eq!(
                     where_sql(cond),
-                    r#"SELECT * FROM "test_dv_table" WHERE 1 = 0"#
+                    r#"SELECT * FROM "test_dv_table" WHERE FALSE"#
                 );
             }
         }

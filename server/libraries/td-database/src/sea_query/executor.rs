@@ -15,18 +15,17 @@
 //! `for<'a>` binding explicit, which closure inference will not produce for a
 //! future borrowing its connection argument.
 //!
-//! The SQL arrives owned because sqlx admits only `'static` query text or an
-//! [`AssertSqlSafe`] wrapper around an owned string; a borrow cannot satisfy
-//! either.
+//! The SQL is owned: sqlx takes only `'static` or generated text.
 
 use crate::domain::Domained;
+use crate::generated_sql::generated;
 use crate::pool::TdPool;
 use crate::sea_query::builder::SeaQuerySqlxBuild;
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
 use sea_query_sqlx::SqlxValues;
 use sqlx::postgres::{PgConnection, PgPool, PgQueryResult, PgRow};
-use sqlx::{AssertSqlSafe, Decode, Error, FromRow, Postgres, Type};
+use sqlx::{Decode, Error, FromRow, Postgres, Type};
 
 /// The `'a` binds the connection and the future together, so the future may
 /// borrow it.
@@ -43,7 +42,7 @@ mod op {
                 values: SqlxValues,
                 conn: &'a mut PgConnection,
             ) -> BoxFuture<'a, Result<$ret, Error>> {
-                async move { sqlx::$query(AssertSqlSafe(sql), values).$fetch(conn).await }.boxed()
+                async move { sqlx::$query(generated(sql), values).$fetch(conn).await }.boxed()
             }
         };
         ($name:ident, $ret:ty, $query:ident, $fetch:ident, $o:ident: $($bound:tt)+) => {
@@ -52,7 +51,7 @@ mod op {
                 values: SqlxValues,
                 conn: &'a mut PgConnection,
             ) -> BoxFuture<'a, Result<$ret, Error>> {
-                async move { sqlx::$query(AssertSqlSafe(sql), values).$fetch(conn).await }.boxed()
+                async move { sqlx::$query(generated(sql), values).$fetch(conn).await }.boxed()
             }
         };
     }
@@ -69,7 +68,7 @@ mod op {
         conn: &'a mut PgConnection,
     ) -> BoxFuture<'a, Result<Vec<O>, Error>> {
         async move {
-            sqlx::query_as_with(AssertSqlSafe(sql), values)
+            sqlx::query_as_with(generated(sql), values)
                 .persistent(false)
                 .fetch_all(conn)
                 .await

@@ -11,6 +11,7 @@
 use crate::components::{AdminPool, ApiserverComponent, ProvisionSpec, UpgradeAction};
 use crate::config::{DatabaseConfig, PoolConfig, PoolsConfig, PostgresConnect, RlsRoles, Schema};
 use crate::error::DbError;
+use crate::generated_sql::generated;
 use crate::pool::TdPool;
 use crate::pool::options::pg_connect_options;
 use crate::test_utils::domain;
@@ -66,7 +67,7 @@ async fn create_admin(su: &PgPool, admin_role: &str) {
 }
 
 async fn scalar(su: &PgPool, sql: impl Into<String>) -> String {
-    let (value,): (String,) = sqlx::query_as(sqlx::AssertSqlSafe(sql.into()))
+    let (value,): (String,) = sqlx::query_as(generated(sql.into()))
         .fetch_one(su)
         .await
         .unwrap();
@@ -79,10 +80,7 @@ async fn scalar(su: &PgPool, sql: impl Into<String>) -> String {
 async fn execute_retrying(su: &PgPool, sql: impl Into<String>) {
     let sql = sql.into();
     for _ in 0..10 {
-        match sqlx::query(sqlx::AssertSqlSafe(sql.clone()))
-            .execute(su)
-            .await
-        {
+        match sqlx::query(generated(sql.clone())).execute(su).await {
             Ok(_) => return,
             Err(sqlx::Error::Database(e)) if e.message().contains("tuple concurrently") => {
                 tokio::time::sleep(Duration::from_millis(50)).await;
@@ -209,7 +207,7 @@ async fn test_upgrade_provisions_roles_on_the_privileged_entry() {
         format!("CREATE ROLE \"{owner}\" LOGIN PASSWORD 'own_pw'"),
         format!("CREATE SCHEMA \"{owner}\" AUTHORIZATION \"{owner}\""),
     ] {
-        sqlx::query(sqlx::AssertSqlSafe(stmt.clone()))
+        sqlx::query(generated(stmt.clone()))
             .execute(&su)
             .await
             .unwrap();
@@ -319,7 +317,7 @@ async fn test_provision_leaves_foreign_owner_role_untouched() {
         );
     }
 
-    sqlx::query(sqlx::AssertSqlSafe(format!(
+    sqlx::query(generated(format!(
         "DROP SCHEMA IF EXISTS \"{foreign}\" CASCADE"
     )))
     .execute(&su)

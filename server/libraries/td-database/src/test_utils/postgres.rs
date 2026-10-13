@@ -177,6 +177,7 @@ pub async fn pools(
 mod tests {
     use super::*;
     use crate::components::{ApiserverComponent, SchemaSource};
+    use crate::generated_sql::generated;
     use crate::pool::PoolKind;
 
     struct DummySource;
@@ -207,7 +208,7 @@ mod tests {
     }
 
     async fn count(pool: &TdPool, sql: impl Into<String>) -> i64 {
-        sqlx::query_scalar(sqlx::AssertSqlSafe(sql.into()))
+        sqlx::query_scalar(generated(sql.into()))
             .fetch_one(pool.as_ref())
             .await
             .unwrap()

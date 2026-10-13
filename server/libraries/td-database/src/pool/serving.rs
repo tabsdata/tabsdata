@@ -9,7 +9,8 @@ use crate::connection::{IN_PROJECT_ROLE_GUC, PgConnectionExt};
 use crate::error::DbError;
 use crate::pool::PoolKind;
 use crate::sea_query::builder::SeaQueryExt;
-use sea_query::{Alias, Expr, Query};
+use crate::sea_query::catalog::{current_setting, current_user, has_role};
+use sea_query::{Alias, Expr, ExprTrait, Query};
 use sqlx::PgPool;
 use sqlx::{Error, Postgres, Transaction};
 use std::time::Duration;
@@ -91,9 +92,9 @@ impl TdPool {
     /// ([`DbError::ConnectedRoleBypassesRls`]). PostgreSQL only (no RLS elsewhere).
     pub(crate) async fn check_rls_posture(&self) -> Result<(), DbError> {
         let bypasses: Option<bool> = Query::select()
-            .expr(Expr::cust("rolsuper OR rolbypassrls"))
+            .expr(Expr::col(Alias::new("rolsuper")).or(Expr::col(Alias::new("rolbypassrls"))))
             .from(Alias::new("pg_roles"))
-            .and_where(Expr::cust("rolname = current_user"))
+            .and_where(Expr::col(Alias::new("rolname")).eq(current_user()))
             .build_query_scalar()
             .fetch_optional(&self.pool)
             .await
@@ -102,10 +103,11 @@ impl TdPool {
             return Err(DbError::ConnectedRoleBypassesRls);
         }
         let tenant_bypasses: Option<bool> = Query::select()
-            .expr(Expr::cust(format!(
-                "pg_has_role(current_setting('{IN_PROJECT_ROLE_GUC}'), \
-                 '{ACROSS_PROJECTS_ROLE}', 'USAGE')"
-            )))
+            .expr(has_role(
+                current_setting(IN_PROJECT_ROLE_GUC),
+                ACROSS_PROJECTS_ROLE,
+                "USAGE",
+            ))
             .build_query_scalar()
             .fetch_optional(&self.pool)
             .await
