@@ -187,19 +187,19 @@ fn seed_v3_function_versions_sql() -> Vec<String> {
          VALUES ('c0', 'p0', 'c0', '', now(), 'u0', now(), 'u0', 'g0', NULL, 'R')"
             .to_string(),
     ];
-    for (counter, function_id, defined_on) in [
-        (1, "f-a", "'2026-01-01T00:00:00Z'"),
-        (2, "f-a", "'2026-01-02T00:00:00Z'"),
-        (3, "f-a", "'2026-01-03T00:00:00Z'"),
-        (4, "f-a", "'2026-01-03T00:00:00Z'"),
-        (5, "f-b", "'2026-01-02T00:00:00Z'"),
+    for (counter, function_id, name, defined_on) in [
+        (1, "f-a", "f0", "'2026-01-01T00:00:00Z'"),
+        (2, "f-a", "f0", "'2026-01-02T00:00:00Z'"),
+        (3, "f-a", "f0", "'2026-01-03T00:00:00Z'"),
+        (4, "f-a", "f0", "'2026-01-03T00:00:00Z'"),
+        (5, "f-b", "f1", "'2026-01-02T00:00:00Z'"),
     ] {
         let id = logical("fv", counter);
         out.push(format!(
             "INSERT INTO functions (id, project_id, collection_id, name, description, \
                decorator, runtime_values, function_id, stage_id, stage_base_path, \
                storage_version, bundle_id, snippet, defined_on, defined_by_id, status) \
-             VALUES ('{id}', 'p0', 'c0', 'f0', '', 'P', '', '{function_id}', 's0', '/s', \
+             VALUES ('{id}', 'p0', 'c0', '{name}', '', 'P', '', '{function_id}', 's0', '/s', \
                'V1', 'b0', '', {defined_on}, 'u0', 'A')"
         ));
     }

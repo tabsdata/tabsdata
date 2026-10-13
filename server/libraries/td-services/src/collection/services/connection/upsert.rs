@@ -11,8 +11,8 @@
 //! across the store's network call (the resolve phase has its own).
 
 use super::{
-    ConnectionResolution, ensure_connectable, resolve_connection, validate_document,
-    validate_upsert,
+    ConnectionResolution, Reconciled, ensure_connectable, reconcile_stored_connection,
+    resolve_connection, validate_document, validate_upsert,
 };
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -65,6 +65,23 @@ async fn connection_upsert(
             &payload,
         )
         .await?;
+    let reconciled = reconcile_stored_connection(
+        &db,
+        authz.none(),
+        store,
+        &project,
+        &resolution.row.base.id,
+        &resolution.collection_id,
+        &resolution.collection,
+    )
+    .await?;
+    if let Reconciled::Deleted = reconciled {
+        return Err(api_error!(
+            ApiError::NotFound,
+            "Collection '{}' was deleted while its connection was being written",
+            resolution.collection
+        ));
+    }
     read.id = Some(resolution.row.base.id);
     Ok(read)
 }

@@ -732,9 +732,8 @@ pub(crate) mod tests {
             .into_iter()
             .collect::<HashMap<_, _>>();
 
-        // We use a default table to seed functions, so we can use it in the implicit
-        // function requirements, similar to fn_state.
-        let default_table = TableNameDto::try_from("default")?;
+        // Every function also gets a table of its own, so it has a requirement
+        // of its own, similar to fn_state.
         let mut function_versions = HashMap::new();
         for test_function in test_executions
             .iter()
@@ -758,7 +757,10 @@ pub(crate) mod tests {
                     .tables
                     .iter()
                     .cloned()
-                    .chain(std::iter::once(default_table.clone()))
+                    .chain(std::iter::once(TableNameDto::try_from(format!(
+                        "{}_default",
+                        test_function.name
+                    ))?))
                     .collect::<Vec<_>>();
 
                 let create = FunctionRegister {

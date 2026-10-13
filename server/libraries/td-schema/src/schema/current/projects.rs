@@ -17,7 +17,10 @@
 //! resolver — not from a DB-level FK. Deletes are soft, so a tagged row's
 //! project id keeps resolving here even after the project is deleted.
 
-use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Func, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement};
+use sea_query::{
+    Alias, ColumnDef, ConditionalStatement, Expr, ExprTrait, Func, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
+    TableCreateStatement,
+};
 
 use super::users::Users;
 use crate::schema::Entity;
@@ -57,7 +60,7 @@ impl Entity for Defs {
             Table::create()
                 .table(Projects::Table)
                 .col(id_column(Projects::Id).not_null().primary_key())
-                .col(ColumnDef::new(Projects::Name).text().not_null().unique_key())
+                .col(ColumnDef::new(Projects::Name).text().not_null())
                 .col(ColumnDef::new(Projects::Description).text().not_null())
                 // Logical storage prefix for the project's artifacts and the
                 // default inherited by its collections (a collection with a NULL
@@ -80,6 +83,15 @@ impl Entity for Defs {
             // the base-column UNIQUE cannot serve a name lookup, and the
             // project resolver runs one on every request. Not unique: two
             // soft-deleted rows may share a resolved name.
+            // Live names are unique. Partial, so a delete's tombstone rename
+            // takes no key lock and never blocks the project's foreign keys.
+            Index::create()
+                .name("projects___name___live_uidx")
+                .table(Projects::Table)
+                .col(Projects::Name)
+                .and_where(Expr::col(Projects::NameWhenDeleted).is_null())
+                .unique()
+                .to_owned(),
             Index::create()
                 .name("projects___resolved_name___idx")
                 .table(Projects::Table)

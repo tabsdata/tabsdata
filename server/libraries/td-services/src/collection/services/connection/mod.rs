@@ -12,6 +12,7 @@ pub(crate) mod test_support;
 mod upsert;
 
 use td_bridge::connection::ConnectionStore;
+use td_database::access::{DbPool, Grant};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::connection::{ConnectionUpsert, KeyValue};
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
@@ -62,6 +63,48 @@ pub(crate) async fn rename_stored_connection(
         .upsert(project, connection_id, new_name, collection_id, &payload)
         .await?;
     Ok(())
+}
+
+/// What the connection's store content was made to follow.
+pub(crate) enum Reconciled {
+    Live,
+    Deleted,
+}
+
+/// Makes the store follow the committed collection: dropped once it is
+/// deleted, renamed when its name is no longer `written`. Every store writer
+/// calls it after its unit, so the last one leaves the store matching.
+pub(crate) async fn reconcile_stored_connection(
+    db: &DbPool<InProject>,
+    grant: Grant,
+    store: &dyn ConnectionStore,
+    project: &ProjectId,
+    connection_id: &ConnectionId,
+    collection_id: &CollectionId,
+    written: &CollectionName,
+) -> Result<Reconciled, TdError> {
+    let committed: Option<ActiveCollectionDB> = {
+        let mut conn = db.read().await?;
+        conn.get(grant).fetch_optional(collection_id).await?
+    };
+    match committed {
+        None => {
+            store.delete(project, connection_id).await?;
+            Ok(Reconciled::Deleted)
+        }
+        Some(collection) if collection.name != *written => {
+            rename_stored_connection(
+                store,
+                project,
+                connection_id,
+                collection_id,
+                &collection.name,
+            )
+            .await?;
+            Ok(Reconciled::Live)
+        }
+        Some(_) => Ok(Reconciled::Live),
+    }
 }
 
 fn kept(names: Vec<String>) -> Vec<KeyValue> {

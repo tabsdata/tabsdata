@@ -86,13 +86,15 @@ impl Entity for Defs {
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
             // The at-now twin of `(collection_id, name)`, which is
-            // non-partial and so carries every historical version.
+            // non-partial and so carries every historical version; unique, so a
+            // collection's live table names are too.
             Index::create()
-                .name("tables___collection_id__name___current_idx")
+                .name("tables___collection_id__name___current_uidx")
                 .table(Tables::Table)
                 .col(Tables::CollectionId)
                 .col(Tables::Name)
                 .and_where(open_interval(Tables::ValidTo))
+                .unique()
                 .to_owned(),
             // The graph recursion's reference set: every open row of the
             // tenant filtered on status, with nothing else to lead on.

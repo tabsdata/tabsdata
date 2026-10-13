@@ -3,8 +3,8 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Func, Iden, Index, IndexCreateStatement, JoinType, Query,
-    Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Func, Iden, Index,
+    IndexCreateStatement, JoinType, Query, Table, TableCreateStatement,
 };
 
 use super::connections::Connections;
@@ -112,12 +112,15 @@ impl Entity for Defs {
                 .col(Collections::ProjectId)
                 .to_owned(),
             // Leads with project_id so it serves the RLS predicate; unique makes
-            // collection names unique within a project, not globally.
+            // live collection names unique within a project, not globally.
+            // Partial, so a delete's tombstone rename takes no key lock and
+            // never blocks the foreign-key checks of rows that point here.
             Index::create()
-                .name("collections___project_id__name___idx")
+                .name("collections___project_id__name___live_uidx")
                 .table(Collections::Table)
                 .col(Collections::ProjectId)
                 .col(Collections::Name)
+                .and_where(Expr::col(Collections::NameWhenDeleted).is_null())
                 .unique()
                 .to_owned(),
             // Keyset pagination: `ORDER BY id` under the tenant predicate.

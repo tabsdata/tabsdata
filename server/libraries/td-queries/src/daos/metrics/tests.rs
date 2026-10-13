@@ -1136,7 +1136,14 @@ async fn test_mixed_project_matches_backfill(db: TdPool) -> Result<(), TdError> 
     end_attempt(&db, &sink_pfr).await?;
     link_input(&db, &sink, &sink_lfr, &ltdv).await?;
 
-    let failed_fn = make_publisher_function(&db, &mid, "mix_failed_fn").await?;
+    let failed_fn = make_function(
+        &db,
+        &mid,
+        "mix_failed_fn",
+        Decorator::Publisher,
+        &["failed_out"],
+    )
+    .await?;
     let (_, failed_pfr) = seed_run(&db, &mid, &failed_fn, LogicalFunctionRunStatus::Failed).await?;
     stamp_status_at(&db, &failed_pfr, PhysicalFunctionRunStatus::Failed).await?;
 

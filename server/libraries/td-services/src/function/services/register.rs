@@ -13,8 +13,8 @@ use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::FromDao;
+use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB};
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function::{Function, FunctionDBWithNames, FunctionRegister};
 use td_queries::Queries;
@@ -37,13 +37,7 @@ async fn register_function(
         let at = gated_trx.locked_at();
         let conn = gated_trx.get(grant);
 
-        // Bare-table row lock (views with outer joins aren't lockable); the
-        // active-view fetch is the liveness check, decided under the lock.
-        let (locked, at) = conn
-            .for_update()
-            .serialize_on::<CollectionDB>(&param.collection)
-            .await?;
-        let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
+        let collection: ActiveCollectionDB = conn.fetch_one(&param.collection).await?;
 
         let function = register_one(conn, &ctx, &bridge, &collection, &register, None, at).await?;
         reconcile_children(

@@ -37,12 +37,7 @@ async fn enable_function(
         let at = gated_trx.locked_at();
         let conn = gated_trx.get(grant);
 
-        // Bare-table row lock: the re-registration must not resurrect a function
-        // inside a collection whose delete cascade is in flight.
-        let (_, at) = conn
-            .for_update()
-            .serialize_on::<CollectionDB>(&collection_param.collection)
-            .await?;
+        let _: ActiveCollectionDB = conn.fetch_one(&collection_param.collection).await?;
 
         // Before-update ids: the function id does not change, the function
         // version id does.

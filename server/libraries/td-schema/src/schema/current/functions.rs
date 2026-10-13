@@ -106,13 +106,15 @@ impl Entity for Defs {
                 .col(Functions::CollectionId)
                 .col(Functions::Name)
                 .to_owned(),
-            // The at-now twin of the pair above.
+            // The at-now twin of the pair above; unique, so a collection's
+            // live function names are too.
             Index::create()
-                .name("functions___collection_id__name___current_idx")
+                .name("functions___collection_id__name___current_uidx")
                 .table(Functions::Table)
                 .col(Functions::CollectionId)
                 .col(Functions::Name)
                 .and_where(open_interval(Functions::ValidTo))
+                .unique()
                 .to_owned(),
             // The graph recursion's reference set: every open row of the
             // tenant filtered on status, with nothing else to lead on.

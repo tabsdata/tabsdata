@@ -12,7 +12,7 @@ use td_error::{TdError, td_error};
 use td_objects::and;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
-use td_objects::dxo::function::FunctionInsertDB;
+use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::table::TableParam;
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDB;
@@ -32,37 +32,21 @@ enum DeleteTableError {
 #[service_factory]
 async fn table_delete(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    db: DbPool<InProject>,
     request: WithinProject<DeleteRequest<(CollectionParam, TableParam)>>,
 ) -> Result<(), TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, table_param)) = request.into_parts();
-    let grant = authz
-        .require::<Project, DevelopProject>(gated_trx, &ctx, &project)
-        .await?;
-    let conn = gated_trx.get(grant);
-
     let collection_id_name = collection_param.collection;
     let table_id_name = table_param.table;
-    // Bare-table row lock: the freeze-dependents scan must not race
-    // function register/update, which lock this row too.
-    let (locked, at) = conn
-        .for_update()
-        .serialize_on::<CollectionDB>(&collection_id_name)
-        .await?;
-    let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
 
-    let table: TableDBWithNames = conn
-        .scd2()
-        .fetch_one(and!(&collection_id_name, &table_id_name))
-        .await?;
-    if !matches!(table.base.base.status, TableStatus::Frozen) {
-        Err(DeleteTableError::TableNotFrozen(
-            table.base.base.name.clone(),
-            collection.name.clone(),
-        ))?
-    }
-    let table_id = table.base.base.table_id;
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
+            .await?;
+        let at = trx.locked_at();
+        let conn = trx.get(grant);
 
         let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
         let table: TableDBWithNames = conn
@@ -75,20 +59,35 @@ async fn table_delete(
                 collection.name.clone(),
             ))?
         }
-    }
-    let mut table_ids = Vec::with_capacity(children.len() + 1);
-    table_ids.push(table_id);
-    table_ids.extend(children.iter().map(|child| child.base.table_id));
+        let table_id = table.base.base.table_id;
 
-    let functions = dependants_of_tables(conn, &table_ids).await?;
-    let frozen: Vec<FunctionInsertDB> = functions.iter().map(|f| f.frozen_version(&ctx)).collect();
-    conn.scd2().chunked().open(&frozen, at).await?;
+        let parent = Some(Parent::from(table_id));
+        let children: Vec<TableDB> = conn.scd2().fetch_all(and!(&parent, &collection.id)).await?;
+        for child in &children {
+            if !matches!(child.base.status, TableStatus::Frozen) {
+                Err(DeleteTableError::DerivedTableNotFrozen(
+                    child.base.name.clone(),
+                    table.base.base.name.clone(),
+                    collection.name.clone(),
+                ))?
+            }
+        }
+        let mut table_ids = Vec::with_capacity(children.len() + 1);
+        table_ids.push(table_id);
+        table_ids.extend(children.iter().map(|child| child.base.table_id));
 
-    for table_id in &table_ids {
-        conn.scd2().close::<TriggerDB>(table_id, at).await?;
-        conn.scd2().close::<TableDB>(table_id, at).await?;
-    }
-    Ok(())
+        let functions = dependants_of_tables(conn, &table_ids).await?;
+        ensure_freezes_on_top(conn, &functions, at).await?;
+        freeze_functions(conn, &functions, &ctx, at).await?;
+
+        for table_id in &table_ids {
+            conn.scd2().close::<TriggerDB>(table_id, at).await?;
+            conn.scd2().close::<DependencyDB>(table_id, at).await?;
+            conn.scd2().close::<TableDB>(table_id, at).await?;
+        }
+        trx.commit().await
+    })
+    .await
 }
 
 #[cfg(test)]

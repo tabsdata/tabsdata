@@ -3,8 +3,8 @@
 //
 
 use sea_query::{
-    Alias, ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, InsertStatement, JoinType, Keyword,
-    Query, Table, TableCreateStatement,
+    Alias, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
+    InsertStatement, JoinType, Keyword, Query, Table, TableCreateStatement,
 };
 
 use super::projects::Projects;
@@ -43,7 +43,7 @@ impl Entity for Defs {
             Table::create()
                 .table(Roles::Table)
                 .col(id_column(Roles::Id).not_null().primary_key())
-                .col(ColumnDef::new(Roles::Name).text().not_null().unique_key())
+                .col(ColumnDef::new(Roles::Name).text().not_null())
                 .col(ColumnDef::new(Roles::Description).text().not_null())
                 .col(ColumnDef::new(Roles::CreatedOn).timestamp_with_time_zone().not_null())
                 .col(id_column(Roles::CreatedById).not_null())
@@ -67,6 +67,16 @@ impl Entity for Defs {
         vec![
             // Per-project roles are looked up / cascade-deleted by project_id.
             Index::create().name("roles___project_id___idx").table(Roles::Table).col(Roles::ProjectId).to_owned(),
+            // Names are unique. Partial (the predicate always holds), so a
+            // rename takes no key lock and never blocks the foreign-key checks
+            // of the memberships and permissions that point here.
+            Index::create()
+                .name("roles___name___uidx")
+                .table(Roles::Table)
+                .col(Roles::Name)
+                .and_where(Expr::col(Roles::Name).is_not_null())
+                .unique()
+                .to_owned(),
         ]
     }
 

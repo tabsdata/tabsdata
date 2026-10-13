@@ -294,14 +294,17 @@ mod tests {
             .seed()
             .function(&collection, &create)
             .await?;
-        db.scoped(p.id)
-            .seed()
-            .function(&collection, &create)
-            .await?;
-        db.scoped(p.id)
-            .seed()
-            .function(&collection, &create)
-            .await?;
+        for n in 2..=3 {
+            let another = FunctionRegister {
+                name: format!("f{n}").as_str().try_into()?,
+                tables: vec![TableNameDto::try_from(format!("t{n}"))?].into(),
+                ..create.clone()
+            };
+            db.scoped(p.id)
+                .seed()
+                .function(&collection, &another)
+                .await?;
+        }
 
         let execution = db.scoped(p.id).seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;

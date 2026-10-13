@@ -25,12 +25,14 @@ pub async fn apply(
     changes: &Changes,
     at: LockInstant,
 ) -> Result<(), TdError> {
-    conn.scd2().chunked().open(&changes.tables, at).await?;
+    // Closed first: a table that gets a new id keeps its name, and live names
+    // are unique.
     conn.scd2()
         .chunked()
         .close::<TableDB>(&changes.close_tables, (), at)
         .await?;
-    let flips = trigger_flips(conn, &changes.table_transitions).await?;
+    conn.scd2().chunked().open(&changes.tables, at).await?;
+    let flips = trigger_flips(conn, &changes.table_transitions, at).await?;
     conn.scd2().chunked().open(&flips, at).await?;
     conn.scd2()
         .chunked()
@@ -48,9 +50,10 @@ pub async fn apply(
     Ok(())
 }
 
-async fn trigger_flips<S: SeesProjectRows, M: AccessMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+async fn trigger_flips(
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     transitions: &[TableTransition],
+    at: LockInstant,
 ) -> Result<Vec<TriggerInsertDB>, TdError> {
     if transitions.is_empty() {
         return Ok(Vec::new());
@@ -59,6 +62,7 @@ async fn trigger_flips<S: SeesProjectRows, M: AccessMode>(
     let triggers: Vec<TriggerDB> = conn.scd2().chunked().fetch_all(&table_ids, ()).await?;
     let by_table: HashMap<TableId, &TableTransition> =
         transitions.iter().map(|t| (t.table_id, t)).collect();
+    let mut flipped = Vec::new();
     let mut flips = Vec::new();
     for trigger in triggers {
         let Some(transition) = by_table.get(&trigger.base.trigger_by_table_id) else {
@@ -76,9 +80,11 @@ async fn trigger_flips<S: SeesProjectRows, M: AccessMode>(
                 status: TriggerStatus::Active,
                 ..trigger.base.clone()
             }),
-            _ => {}
+            _ => continue,
         }
+        flipped.push(trigger);
     }
+    ensure_flips_on_top(conn, &flipped, at).await?;
     Ok(flips)
 }
 
@@ -89,7 +95,13 @@ pub async fn dependants_of_tables<S: SeesProjectRows, M: AccessMode>(
     table_ids: &[TableId],
 ) -> Result<Vec<FunctionDB>, TdError> {
     let dependencies: Vec<DependencyDB> = conn.scd2().chunked().fetch_all(table_ids, ()).await?;
-    let function_ids: Vec<FunctionId> = dependencies.iter().map(|d| d.base.function_id).collect();
+    // A function depending on several of the tables has a row for each; one
+    // id per function, or a chunked read would return it once per chunk.
+    let function_ids: Vec<FunctionId> = dependencies
+        .iter()
+        .map(|d| d.base.function_id)
+        .unique()
+        .collect();
     let functions = conn
         .scd2()
         .chunked()

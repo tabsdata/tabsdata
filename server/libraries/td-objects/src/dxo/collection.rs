@@ -38,7 +38,7 @@ pub struct CollectionInsertDB {
 
 /// The row as the database holds it: `project_id` is the `project_isolation`
 /// policy's, defaulted from the connection the insert ran on. The base table,
-/// so it is the lock target the delete guard takes `FOR UPDATE`.
+/// so it is the row a catalog write locks to write under the collection.
 #[ta_objects::Dao]
 #[dao(
     table = "collections",

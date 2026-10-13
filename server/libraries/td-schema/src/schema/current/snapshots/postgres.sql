@@ -7,13 +7,13 @@ CREATE TABLE "service_tokens" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "use
 
 CREATE TABLE "groups" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "name" text NOT NULL, "description" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C", "system" bool NOT NULL, "kind" text NOT NULL )
 
-CREATE TABLE "projects" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "name" text NOT NULL UNIQUE, "description" text NOT NULL, "base_path" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C", "name_when_deleted" text NULL )
+CREATE TABLE "projects" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "name" text NOT NULL, "description" text NOT NULL, "base_path" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C", "name_when_deleted" text NULL )
 
 CREATE TABLE "connections" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "kind" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C" )
 
 CREATE TABLE "collections" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "name" text NOT NULL, "description" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C", "name_when_deleted" text NULL, "group_id" text NOT NULL COLLATE "C", "base_path" text NULL, "collection_type" text NOT NULL, "connection_id" text NULL COLLATE "C", FOREIGN KEY ("group_id") REFERENCES "groups" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("connection_id") REFERENCES "connections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "roles" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "name" text NOT NULL UNIQUE, "description" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C", "kind" text NOT NULL, "project_id" text NULL COLLATE "C", "fixed" bool NOT NULL, FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "roles" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "name" text NOT NULL, "description" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C", "kind" text NOT NULL, "project_id" text NULL COLLATE "C", "fixed" bool NOT NULL, FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "users_roles" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "user_id" text NOT NULL COLLATE "C", "role_id" text NOT NULL COLLATE "C", "added_on" timestamp with time zone NOT NULL, "added_by_id" text NOT NULL COLLATE "C", "fixed" bool NOT NULL, FOREIGN KEY ("role_id") REFERENCES "roles" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
@@ -265,7 +265,9 @@ CREATE UNIQUE INDEX "service_tokens___user_id__slot___idx" ON "service_tokens" (
 
 CREATE INDEX "groups___name___idx" ON "groups" ("name")
 
-CREATE UNIQUE INDEX "groups___project_id__name___idx" ON "groups" ("project_id", "name")
+CREATE UNIQUE INDEX "groups___project_id__name___uidx" ON "groups" ("project_id", "name") WHERE "name" IS NOT NULL
+
+CREATE UNIQUE INDEX "projects___name___live_uidx" ON "projects" ("name") WHERE "name_when_deleted" IS NULL
 
 CREATE INDEX "projects___resolved_name___idx" ON "projects" ((COALESCE("name_when_deleted", "name")))
 
@@ -273,11 +275,13 @@ CREATE INDEX "collections___project_id__resolved_name___idx" ON "collections" ("
 
 CREATE INDEX "collections___group_id__project_id___idx" ON "collections" ("group_id", "project_id")
 
-CREATE UNIQUE INDEX "collections___project_id__name___idx" ON "collections" ("project_id", "name")
+CREATE UNIQUE INDEX "collections___project_id__name___live_uidx" ON "collections" ("project_id", "name") WHERE "name_when_deleted" IS NULL
 
 CREATE INDEX "collections___project_id__id___idx" ON "collections" ("project_id", "id")
 
 CREATE INDEX "roles___project_id___idx" ON "roles" ("project_id")
+
+CREATE UNIQUE INDEX "roles___name___uidx" ON "roles" ("name") WHERE "name" IS NOT NULL
 
 CREATE INDEX "users_roles___role_id__id___idx" ON "users_roles" ("role_id", "id")
 
@@ -293,7 +297,7 @@ CREATE UNIQUE INDEX "permissions___role_id__permission_type__entity___idx" ON "p
 
 CREATE INDEX "functions___collection_id__name___idx" ON "functions" ("collection_id", "name")
 
-CREATE INDEX "functions___collection_id__name___current_idx" ON "functions" ("collection_id", "name") WHERE "valid_to" = ('infinity'::timestamptz)
+CREATE UNIQUE INDEX "functions___collection_id__name___current_uidx" ON "functions" ("collection_id", "name") WHERE "valid_to" = ('infinity'::timestamptz)
 
 CREATE INDEX "functions___project_id__status___current_idx" ON "functions" ("project_id", "status") WHERE "valid_to" = ('infinity'::timestamptz)
 
@@ -311,7 +315,7 @@ CREATE INDEX "function_patches___parent_fv_id__valid_from__id___idx" ON "functio
 
 CREATE UNIQUE INDEX "function_patches___parent_function_version_id___current_uidx" ON "function_patches" ("parent_function_version_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "tables___collection_id__name___current_idx" ON "tables" ("collection_id", "name") WHERE "valid_to" = ('infinity'::timestamptz)
+CREATE UNIQUE INDEX "tables___collection_id__name___current_uidx" ON "tables" ("collection_id", "name") WHERE "valid_to" = ('infinity'::timestamptz)
 
 CREATE INDEX "tables___project_id__status___current_idx" ON "tables" ("project_id", "status") WHERE "valid_to" = ('infinity'::timestamptz)
 

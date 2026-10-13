@@ -28,7 +28,7 @@ async fn create_group(
 
     let group = create.to_dao(&ctx);
     // A duplicate name within the project (the connection is project-scoped,
-    // matching the `groups___project_id__name___idx` UNIQUE index) reports a
+    // matching the `groups___project_id__name___uidx` UNIQUE index) reports a
     // clean "already exists" error instead of the raw unique-constraint
     // violation from the insert.
     conn.assert_not_exists::<GroupDB>(&group.name).await?;
@@ -86,7 +86,7 @@ mod tests {
     /// Creating a group with a name that already exists in the project is
     /// rejected up front with a clean `SqlError::EntityAlreadyExists` (via the
     /// `assert_not_exists` pre-check) rather than the raw
-    /// `UniqueViolation` from the `groups___project_id__name___idx` constraint.
+    /// `UniqueViolation` from the `groups___project_id__name___uidx` constraint.
     /// (Case-insensitive uniqueness is a follow-up; for now the check is
     /// exact-match, matching the collections convention.)
     #[td_test::test(db)]
@@ -115,7 +115,7 @@ mod tests {
     }
 
     /// Group names are unique *within* a project, not globally — the
-    /// `groups___project_id__name___idx` is on `(project_id, name)`. Two projects
+    /// `groups___project_id__name___uidx` is on `(project_id, name)`. Two projects
     /// can each hold a group of the same name. (The within-project rejection is
     /// covered by `test_create_duplicate_name_rejected`.) PostgreSQL only
     /// (multi-project needs RLS).

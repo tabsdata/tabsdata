@@ -24,7 +24,7 @@ use td_database::access::{DbPool, InProject, WriteMode, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionDeleteDB};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDeleteDB};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
@@ -64,14 +64,8 @@ async fn delete_collection(
         let mut trx = db.begin(attempt).await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
-        // Bare-table row lock (views with outer joins aren't lockable): a
-        // registration landing mid-cascade would otherwise escape it.
-        let (_, at) = conn
-            .for_update()
-            .serialize_on::<CollectionDB>(&collection.id)
-            .await?;
-        // Liveness re-read under the lock: a raced delete loses with not-found
-        // instead of silently re-renaming the already-deleted row.
+        // A raced delete loses with not-found instead of silently re-renaming
+        // the already-deleted row.
         let collection: ActiveCollectionDB = conn.fetch_one(&collection.id).await?;
         let delete_db = collection.to_delete_dao(&ctx);
         conn.update::<CollectionDeleteDB>(&delete_db, collection.id)
@@ -85,7 +79,6 @@ async fn delete_collection(
             .await?
             .into_iter()
             .filter(|f| f.base.collection_id != collection.id)
-            .map(|f| f.frozen_version(&ctx))
             .collect();
         ensure_freezes_on_top(conn, &dependants, at).await?;
         freeze_functions(conn, &dependants, &ctx, at).await?;
@@ -147,13 +140,17 @@ mod tests {
     use crate::collection::services::connection::test_support::{
         bridge, create_collection, create_request, linked_connection, seed_dev_user,
     };
+    use crate::collection::services::connection::{Reconciled, reconcile_stored_connection};
     use std::str::FromStr;
     use td_bridge::connection::memory::InMemoryConnectionStore;
+    use td_database::access::{AcrossProjects, Grant};
+    use td_database::domain::DomainPools;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::{ApiError, TdError};
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::collection::{CollectionDB, ResolvedCollectionDB};
+    use td_objects::dxo::connection::ConnectionUpsert;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::dependency::DependencyDBWithNames;
     use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
@@ -209,6 +206,67 @@ mod tests {
             .await
             .expect_err("store content must be dropped with the collection");
         assert!(err.to_string().contains("no connection configured"));
+    }
+
+    /// A store write landing after the collection's delete committed, as by a
+    /// rename or an upsert racing it, is dropped by its writer's reconcile.
+    #[td_test::test(db)]
+    async fn test_a_store_write_after_the_delete_is_dropped(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
+        let bridge = bridge(InMemoryConnectionStore::default());
+        Services {
+            bridge: bridge.clone(),
+            ..Services::with_defaults(db.clone())
+        }
+        .create_collection(create_request(p.id, "src0", Some(GroupName::source())))
+        .await
+        .unwrap();
+        let connection = linked_connection(&db, p.id, "src0").await.unwrap();
+        let name = CollectionName::try_from("src0").unwrap();
+        let collection: ActiveCollectionDB = db.scoped(p.id).fetch_one(&name).await.unwrap();
+        let store = bridge.connection_store();
+        let late = store.fetch(&p.id, &connection.base.id).await.unwrap();
+
+        Services {
+            bridge: bridge.clone(),
+            ..Services::with_defaults(db.clone())
+        }
+        .delete_collection(delete_request(p.id, "src0"))
+        .await
+        .unwrap();
+        store
+            .upsert(
+                &p.id,
+                &connection.base.id,
+                &name,
+                &collection.id,
+                &ConnectionUpsert {
+                    connection: Some(late.connection),
+                    secrets: None,
+                },
+            )
+            .await
+            .unwrap();
+
+        let pools =
+            DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
+        let reconciled = reconcile_stored_connection(
+            &DbPool::in_project(&pools, &p.id),
+            Grant::asserted("reconcile"),
+            store,
+            &p.id,
+            &connection.base.id,
+            &collection.id,
+            &name,
+        )
+        .await
+        .unwrap();
+
+        assert!(matches!(reconciled, Reconciled::Deleted));
+        store
+            .fetch(&p.id, &connection.base.id)
+            .await
+            .expect_err("a write after the delete must be dropped");
     }
 
     #[td_test::test(db)]

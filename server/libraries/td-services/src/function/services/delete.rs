@@ -12,7 +12,7 @@ use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::and;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionParam};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
@@ -35,13 +35,8 @@ async fn delete_function(
         let at = gated_trx.locked_at();
         let conn = gated_trx.get(grant);
 
-        // Bare-table row lock (views with outer joins aren't lockable); the
-        // active-view fetch is the liveness check, decided under the lock.
-        let (locked, at) = conn
-            .for_update()
-            .serialize_on::<CollectionDB>(&collection_param.collection)
-            .await?;
-        let _: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
+        let collection_id_name = &collection_param.collection;
+        let _: ActiveCollectionDB = conn.fetch_one(collection_id_name).await?;
 
         let current: FunctionDBWithNames = conn
             .scd2()

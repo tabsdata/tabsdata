@@ -25,7 +25,8 @@ use td_objects::types::basic::{
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
-/// A publisher registration with one regular output table ("t0").
+/// A publisher registration with one regular output table, `<name>_t0`, so
+/// several of them fit in one collection.
 /// `base_path` becomes the function-version override.
 pub(crate) fn register(name: &str, base_path: Option<BasePath>) -> FunctionRegister {
     FunctionRegister {
@@ -40,7 +41,7 @@ pub(crate) fn register(name: &str, base_path: Option<BasePath>) -> FunctionRegis
         base_path,
         dependencies: None,
         triggers: None,
-        tables: Some(vec![TableNameDto::try_from("t0").unwrap()]),
+        tables: Some(vec![TableNameDto::try_from(format!("{name}_t0")).unwrap()]),
         table_types: None,
         parent_tables: None,
         runtime_values: FunctionRuntimeValues::try_from("rv").unwrap(),
@@ -77,7 +78,7 @@ pub(crate) async fn set_collection_base_path(
     Ok(updated)
 }
 
-/// Plan-build output for a publisher with one regular output table ("t0"):
+/// Plan-build output for a publisher with one regular output table:
 /// an LFR and its output LTDVs, with no attempt yet — what the dispatch tick
 /// sees. `base_path` becomes the function-version override
 /// (`FunctionRegister::base_path`).

@@ -194,7 +194,7 @@ async fn test_table_download_survives_collection_move(db: TdPool) -> Result<(), 
     let coll =
         set_collection_base_path(&db, p.id, &coll, Some(&BasePath::try_from("/new")?)).await?;
 
-    let bytes = get_table_download(&services, &p, &coll, "t0").await?;
+    let bytes = get_table_download(&services, &p, &coll, "fa_t0").await?;
     assert_eq!(bytes, Bytes::from_static(BYTES));
     Ok(())
 }

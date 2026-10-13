@@ -104,7 +104,12 @@ impl Changes {
             let desired = desired_table(table, function, ctx)?;
             match existing.get(&table.name) {
                 Some(current) if same_table(&current.base, &desired) => {}
-                _ => {
+                current => {
+                    if let Some(current) =
+                        current.filter(|current| current.base.table_id != desired.table_id)
+                    {
+                        self.close_tables.push(current.base.table_id);
+                    }
                     if table.adopted_frozen {
                         self.table_transitions.push(TableTransition {
                             table_id: desired.table_id,

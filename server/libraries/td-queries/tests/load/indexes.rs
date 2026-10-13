@@ -82,7 +82,7 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path(KEYSET),
     },
     IndexCase {
-        index: "collections___project_id__name___idx",
+        index: "collections___project_id__name___live_uidx",
         served_by: Constraint,
     },
     IndexCase {
@@ -172,8 +172,8 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path("function by name at an instant"),
     },
     IndexCase {
-        index: "functions___collection_id__name___current_idx",
-        served_by: Path("function by name, open row"),
+        index: "functions___collection_id__name___current_uidx",
+        served_by: Constraint,
     },
     IndexCase {
         index: "functions___function_id___current_uidx",
@@ -200,7 +200,7 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path("group by name"),
     },
     IndexCase {
-        index: "groups___project_id__name___idx",
+        index: "groups___project_id__name___uidx",
         served_by: Constraint,
     },
     IndexCase {
@@ -386,8 +386,16 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Constraint,
     },
     IndexCase {
+        index: "projects___name___live_uidx",
+        served_by: Constraint,
+    },
+    IndexCase {
         index: "projects___resolved_name___idx",
         served_by: Path("projects_resolved lookup by name"),
+    },
+    IndexCase {
+        index: "roles___name___uidx",
+        served_by: Constraint,
     },
     IndexCase {
         index: "roles___project_id___idx",
@@ -418,8 +426,8 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path("table by name at an instant"),
     },
     IndexCase {
-        index: "tables___collection_id__name___current_idx",
-        served_by: Path("table by name, open row"),
+        index: "tables___collection_id__name___current_uidx",
+        served_by: Constraint,
     },
     IndexCase {
         index: "tables___function_id___current_idx",

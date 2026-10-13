@@ -22,7 +22,9 @@
 
 use crate::collection::CollectionError;
 use crate::collection::services::connection::ensure_collection_name_free;
-use crate::collection::services::connection::{escalate_for_connected, rename_stored_connection};
+use crate::collection::services::connection::{
+    escalate_for_connected, reconcile_stored_connection, rename_stored_connection,
+};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -83,37 +85,32 @@ async fn update_collection(
     }
 
     // 3. update (short TX).
-    let updated = retrying(|| async {
-        let mut trx = db.begin().await?;
+    let updated = retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
         let read = apply_collection_update(trx.get(grant), &plan).await?;
         trx.commit().await?;
         Ok(read)
     })
     .await;
-    match updated {
-        Ok(read) => Ok(read),
-        Err(e) => {
-            // The DB still references the old name — put the store back
-            // best-effort (idempotent; a retry of either direction overwrites).
-            if let Some(rename) = &plan.rename
-                && let Err(revert) = rename_stored_connection(
-                    store,
-                    &project,
-                    &rename.connection_id,
-                    &rename.collection_id,
-                    &rename.old_name,
-                )
-                .await
-            {
-                warn!(
-                    error = %revert,
-                    "could not revert the connection store rename; \
-                     upsert the connection to repair"
-                );
-            }
-            Err(e)
-        }
+    if let Some(rename) = &plan.rename
+        && let Err(reconcile) = reconcile_stored_connection(
+            &db,
+            grant,
+            store,
+            &project,
+            &rename.connection_id,
+            &rename.collection_id,
+            &rename.new_name,
+        )
+        .await
+    {
+        warn!(
+            error = %reconcile,
+            "could not bring the connection store in line with the collection; \
+             upsert the connection to repair"
+        );
     }
+    updated
 }
 
 pub fn update_collection_validate(update: &CollectionUpdate) -> Result<(), TdError> {
@@ -184,6 +181,9 @@ pub async fn apply_collection_update<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     plan: &CollectionUpdatePlan,
 ) -> Result<CollectionRead, TdError> {
+    // A delete that committed since the plan was read leaves no live row to
+    // update: not found, instead of renaming the deleted one.
+    let _: ActiveCollectionDB = conn.fetch_one(plan.collection_id).await?;
     conn.update::<CollectionUpdateDB>(&plan.update, plan.collection_id)
         .await?;
     let with_names: ActiveCollectionDBWithNames = conn.fetch_one(plan.collection_id).await?;
@@ -202,6 +202,8 @@ mod tests {
     use axum::extract::Request;
     use std::str::FromStr;
     use td_bridge::connection::memory::InMemoryConnectionStore;
+    use td_database::access::{AcrossProjects, Grant};
+    use td_database::domain::DomainPools;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::{ApiError, TdError, assert_service_error};
@@ -633,6 +635,50 @@ mod tests {
             .unwrap();
         assert_eq!(stored.connection["name"], "src0");
     }
+    /// A store write left with a name the collection no longer has, as by a
+    /// rename whose store write landed after another's, is put back in line
+    /// with the committed name.
+    #[td_test::test(db)]
+    async fn test_a_stale_stored_name_follows_the_committed_one(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
+        let bridge = bridge(InMemoryConnectionStore::default());
+        Services {
+            bridge: bridge.clone(),
+            ..Services::with_defaults(db.clone())
+        }
+        .create_collection(create_request(p.id, "src0", Some(GroupName::source())))
+        .await
+        .unwrap();
+        let connection = linked_connection(&db, p.id, "src0").await.unwrap();
+        let collection: ActiveCollectionDB = db
+            .scoped(p.id)
+            .fetch_one(&CollectionName::try_from("src0").unwrap())
+            .await
+            .unwrap();
+        let stale = CollectionName::try_from("stale").unwrap();
+        let store = bridge.connection_store();
+        rename_stored_connection(store, &p.id, &connection.base.id, &collection.id, &stale)
+            .await
+            .unwrap();
+
+        let pools =
+            DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
+        reconcile_stored_connection(
+            &DbPool::in_project(&pools, &p.id),
+            Grant::asserted("reconcile"),
+            store,
+            &p.id,
+            &connection.base.id,
+            &collection.id,
+            &stale,
+        )
+        .await
+        .unwrap();
+
+        let stored = store.fetch(&p.id, &connection.base.id).await.unwrap();
+        assert_eq!(stored.connection["name"], "src0");
+    }
+
     /// Renaming re-keys a source collection's connection document, so it
     /// requires ManageProject; plain collections need only DevelopProject.
     #[td_test::test(db)]

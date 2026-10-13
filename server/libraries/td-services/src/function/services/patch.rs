@@ -14,7 +14,7 @@ use td_error::TdError;
 use td_error::td_error;
 use td_objects::FromDao;
 use td_objects::dxo::bundle::BundleStatusUpdateDB;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionParam};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::function::{
     FunctionDB, FunctionParam, FunctionPatch, FunctionPatchDBWithNames, FunctionPatchInsertDB,
@@ -39,11 +39,7 @@ async fn create_function_patch(
     let conn = gated_trx.get(grant);
     let collection_id_name = collection_param.collection;
     let function_id_name = function_param.function;
-    let (locked, at) = conn
-        .for_update()
-        .serialize_on::<CollectionDB>(&collection_id_name)
-        .await?;
-    let collection: ActiveCollectionDB = conn.fetch_one(&locked.base.id).await?;
+    let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
 
     let parent: FunctionDB = conn.timeline().fetch_one(&body.patch_of).await?;
     ensure_user_managed(&parent.base)?;
@@ -159,7 +155,9 @@ mod tests {
             base_path: None,
             dependencies: None,
             triggers: None,
-            tables: Some(vec![TableNameDto::try_from("t").unwrap()]),
+            tables: Some(vec![
+                TableNameDto::try_from(format!("{function_name}_t")).unwrap(),
+            ]),
             table_types: None,
             parent_tables: None,
             runtime_values: FunctionRuntimeValues::try_from("rv").unwrap(),

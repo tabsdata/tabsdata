@@ -2,7 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use sea_query::{Alias, ColumnDef, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table, TableCreateStatement};
+use sea_query::{
+    Alias, ColumnDef, ConditionalStatement, Expr, ExprTrait, Iden, Index, IndexCreateStatement, JoinType, Query, Table,
+    TableCreateStatement,
+};
 
 use super::users::Users;
 use crate::schema::Entity;
@@ -60,11 +63,15 @@ impl Entity for Defs {
             // RLS supplies `project_id` through an OR, so the unique index's
             // leading column is never an index qual; a read by name needs its own.
             Index::create().name("groups___name___idx").table(Groups::Table).col(Groups::Name).to_owned(),
+            // Partial (the predicate always holds), so a rename takes no key
+            // lock and never blocks the foreign-key checks of rows that point
+            // at the group.
             Index::create()
-                .name("groups___project_id__name___idx")
+                .name("groups___project_id__name___uidx")
                 .table(Groups::Table)
                 .col(Groups::ProjectId)
                 .col(Groups::Name)
+                .and_where(Expr::col(Groups::Name).is_not_null())
                 .unique()
                 .to_owned(),
         ]
