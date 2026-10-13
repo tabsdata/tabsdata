@@ -131,7 +131,7 @@ pub async fn cascade_enabled(
         let previous_version_id = Some(child.base.id.clone());
         let updated = child.re_registered(ctx, enabled);
         conn.scd2().open(&updated, at).await?;
-        register_workers(conn, &updated, &previous_version_id, &no_workers).await?;
+        register_workers(conn, &updated, &previous_version_id, &no_workers, at).await?;
     }
     Ok(())
 }

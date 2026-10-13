@@ -301,24 +301,12 @@ impl WorkerUpdateDB {
     }
 }
 
+/// A cron or stage worker carried to its function's frozen version, which
+/// does not fire.
 #[ta_objects::Dao]
 #[dao(table = "workers", ops(update(WorkerDB)), project_scoped)]
-pub struct WorkerMessageStatusUpdateDB {
-    pub message_status: WorkerMessageStatus,
-}
-
-impl WorkerMessageStatusUpdateDB {
-    pub fn locked() -> Self {
-        Self {
-            message_status: WorkerMessageStatus::Locked,
-        }
-    }
-
-    pub fn unlocked() -> Self {
-        Self {
-            message_status: WorkerMessageStatus::Unlocked,
-        }
-    }
+pub struct WorkerFreezeUpdateDB {
+    pub function_version_id: FunctionVersionId,
 }
 
 #[ta_objects::Dto]

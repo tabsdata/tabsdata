@@ -13,15 +13,17 @@
 use crate::collection::services::connection::{
     drop_connection_best_effort, escalate_for_connected,
 };
-use crate::execution::update_status::move_workers;
 use crate::function::engine::dependants_of_tables;
+use crate::function::freeze::freeze_functions;
+use crate::function::on_top::ensure_freezes_on_top;
+use crate::function::workers::stop_triggers;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::SeesProjectRows;
-use td_database::access::{DbPool, InProject, WriteMode, retrying};
+use td_database::access::{DbPool, InProject, LockInstant, WriteMode, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionParam;
@@ -29,10 +31,9 @@ use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDeleteDB};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
-use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::TriggerDB;
-use td_objects::dxo::worker::{WorkerDB, WorkerUpdateDB};
+use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::TableId;
 use td_objects::types::basic::{CollectionId, WorkerType};
 use td_objects::{and, or};
@@ -97,7 +98,7 @@ async fn delete_collection(
             .await?;
         conn.scd2().close::<TableDB>(&collection.id, at).await?;
         conn.scd2().close::<FunctionDB>(&collection.id, at).await?;
-        update_deleted_workers(conn, &collection.id).await?;
+        update_deleted_workers(conn, &collection.id, at).await?;
         trx.commit().await?;
         Ok(collection.connection_id)
     })
@@ -113,6 +114,7 @@ async fn delete_collection(
 pub async fn update_deleted_workers<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     collection_id: &CollectionId,
+    at: LockInstant,
 ) -> Result<(), TdError> {
     let workers: Vec<WorkerDB> = conn
         .fetch_all(and!(
@@ -120,7 +122,7 @@ pub async fn update_deleted_workers<S: SeesProjectRows, M: WriteMode>(
             or!(WorkerType::CronTrigger, WorkerType::StageTrigger)
         ))
         .await?;
-    let stopped = move_workers(conn, &workers, &WorkerUpdateDB::stop_scheduled()).await?;
+    let stopped = stop_triggers(conn, &workers, at).await?;
     debug!("Set stopped status in {stopped} workers for collection {collection_id}.");
 
     Ok(())

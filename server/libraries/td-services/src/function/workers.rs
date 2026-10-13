@@ -6,8 +6,9 @@
 //! the new version's start. Workers are not versioned rows, so they sit beside
 //! the SCD2 engine rather than in it.
 
+use crate::execution::update_status::move_workers;
 use std::collections::HashMap;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
+use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::function::FunctionInsertDB;
@@ -18,15 +19,16 @@ use td_objects::types::basic::{
 };
 use td_objects::{and, or};
 use td_queries::Queries;
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
 pub async fn register_workers(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     function: &FunctionInsertDB,
     previous_function_version_id: &Option<FunctionVersionId>,
     new_workers: &Option<HashMap<WorkerTypeDto, WorkerConfig>>,
+    at: LockInstant,
 ) -> Result<(), TdError> {
-    stop_current_workers(conn, previous_function_version_id).await?;
+    stop_current_workers(conn, previous_function_version_id, at).await?;
     let workers = build_workers(conn, function, previous_function_version_id, new_workers).await?;
     conn.chunked().insert(&workers).await?;
     Ok(())
@@ -35,6 +37,7 @@ pub async fn register_workers(
 pub async fn stop_current_workers<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     function_version_id: &Option<FunctionVersionId>,
+    at: LockInstant,
 ) -> Result<(), TdError> {
     if let Some(function_version_id) = function_version_id {
         // Function-runner workers cannot be stopped here.
@@ -43,52 +46,31 @@ pub async fn stop_current_workers<S: SeesProjectRows, M: WriteMode>(
             or!(WorkerType::CronTrigger, WorkerType::StageTrigger),
         );
         let workers = conn.fetch_all::<WorkerDB>(to_stop).await?;
-
-        let mut to_stop = vec![];
-        for worker in workers {
-            match worker.base.status {
-                WorkerStatus::Scheduled | WorkerStatus::Requested | WorkerStatus::Running => {
-                    debug!(
-                        "Stopping worker {} with status {}",
-                        worker.base.id, worker.base.status
-                    );
-                    // Keyed on the status read: unlocked, and the tick writes
-                    // these same rows.
-                    to_stop.push(and!(worker.base.id, worker.base.status));
-                }
-                WorkerStatus::Done
-                | WorkerStatus::StopScheduled
-                | WorkerStatus::StopRequested
-                | WorkerStatus::Stopped
-                | WorkerStatus::Error
-                | WorkerStatus::Failed
-                | WorkerStatus::Canceled => {
-                    debug!(
-                        "Ignoring stop of worker {}, as it is already in status {}",
-                        worker.base.id, worker.base.status
-                    )
-                }
-            }
-        }
-
-        let update = WorkerUpdateDB::stop_scheduled();
-        let res = conn.chunked().update(&update, &to_stop).await?;
-        if res.rows_affected() != to_stop.len() as u64 {
-            warn!(
-                function_version_id = %function_version_id,
-                expected = to_stop.len(),
-                updated = res.rows_affected(),
-                "register: worker(s) changed status before the stop landed"
-            );
-        }
+        let stopped = stop_triggers(conn, &workers, at).await?;
         debug!(
-            "Set stopped status in {} workers for function version {}.",
-            res.rows_affected(),
-            function_version_id
+            function_version_id = %function_version_id,
+            stopped,
+            "Stopped the previous version's triggers"
         );
     }
 
     Ok(())
+}
+
+/// Stops cron and stage `workers`. One never started has no workload, so it
+/// ends at once; the rest wait for the tick to send their stop.
+pub async fn stop_triggers<S: SeesProjectRows, M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
+    workers: &[WorkerDB],
+    at: LockInstant,
+) -> Result<u64, TdError> {
+    let (unstarted, started): (Vec<WorkerDB>, Vec<WorkerDB>) = workers
+        .iter()
+        .cloned()
+        .partition(|w| w.base.status == WorkerStatus::Scheduled);
+    let ended = move_workers(conn, &unstarted, &WorkerUpdateDB::stopped(&at.into())).await?;
+    let stopping = move_workers(conn, &started, &WorkerUpdateDB::stop_scheduled()).await?;
+    Ok(ended + stopping)
 }
 
 pub async fn build_workers<S: SeesProjectRows, M: AccessMode>(

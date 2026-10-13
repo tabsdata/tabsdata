@@ -54,7 +54,7 @@ async fn enable_function(
 
         let previous_version_id = Some(current.base.base.id);
         let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
-        register_workers(conn, &function, &previous_version_id, &no_workers).await?;
+        register_workers(conn, &function, &previous_version_id, &no_workers, at).await?;
 
         cascade_enabled(
             conn,

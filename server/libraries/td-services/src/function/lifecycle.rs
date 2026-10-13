@@ -154,7 +154,7 @@ pub async fn delete_one(
     apply(conn, &changes, at).await?;
     // An empty workers map so all the previous workers get deleted.
     let empty_workers = Some(HashMap::<WorkerTypeDto, WorkerConfig>::default());
-    register_workers(conn, function, &previous_version_id, &empty_workers).await?;
+    register_workers(conn, function, &previous_version_id, &empty_workers, at).await?;
     conn.scd2()
         .close::<FunctionDB>(&function.function_id, at)
         .await?;

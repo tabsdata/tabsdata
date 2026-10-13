@@ -49,7 +49,9 @@ pub enum Workers {
 /// Every status change a worker may make, per worker type. A function runner
 /// runs once. A trigger stops from any state its workload may still exist in:
 /// a cron trigger parks at D or F between fires, and a stage trigger restarts
-/// from F once its retry is due, or stops.
+/// from F once its retry is due, or stops. A stage trigger that exits D while
+/// it should run has failed. A trigger never started has no workload, so it
+/// stops at once.
 const WORKER_TRANSITIONS: &[(&str, &[(&str, &str)])] = &[
     ("F", &[("RR", "R"), ("RR", "F"), ("R", "D"), ("R", "F")]),
     (
@@ -64,6 +66,7 @@ const WORKER_TRANSITIONS: &[(&str, &[(&str, &str)])] = &[
             ("D", "F"),
             ("F", "R"),
             ("F", "D"),
+            ("S", "SP"),
             ("S", "SPS"),
             ("RR", "SPS"),
             ("R", "SPS"),
@@ -82,7 +85,9 @@ const WORKER_TRANSITIONS: &[(&str, &[(&str, &str)])] = &[
             ("RR", "F"),
             ("R", "D"),
             ("R", "F"),
+            ("D", "F"),
             ("F", "R"),
+            ("S", "SP"),
             ("S", "SPS"),
             ("RR", "SPS"),
             ("R", "SPS"),

@@ -3,6 +3,8 @@
 //
 
 use crate::function::engine::dependants_of_tables;
+use crate::function::freeze::freeze_functions;
+use crate::function::on_top::ensure_freezes_on_top;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;

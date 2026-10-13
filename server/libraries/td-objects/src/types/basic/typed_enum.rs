@@ -749,6 +749,7 @@ impl WorkerStatus {
         (Self::Done, Self::Failed),
         (Self::Failed, Self::Running),
         (Self::Failed, Self::Done),
+        (Self::Scheduled, Self::Stopped),
         (Self::Scheduled, Self::StopScheduled),
         (Self::Requested, Self::StopScheduled),
         (Self::Running, Self::StopScheduled),
@@ -765,7 +766,9 @@ impl WorkerStatus {
         (Self::Requested, Self::Failed),
         (Self::Running, Self::Done),
         (Self::Running, Self::Failed),
+        (Self::Done, Self::Failed),
         (Self::Failed, Self::Running),
+        (Self::Scheduled, Self::Stopped),
         (Self::Scheduled, Self::StopScheduled),
         (Self::Requested, Self::StopScheduled),
         (Self::Running, Self::StopScheduled),
@@ -779,7 +782,9 @@ impl WorkerStatus {
     /// Every status change a worker of `worker_type` may make. A function
     /// runner runs once. A trigger stops from any state its workload may still
     /// exist in: a cron trigger parks at Done or Failed between fires, and a
-    /// stage trigger restarts from Failed once its retry is due, or stops.
+    /// stage trigger restarts from Failed once its retry is due, or stops. A
+    /// stage trigger that exits Done while it should run has failed. A trigger
+    /// never started has no workload, so it stops at once.
     pub fn transitions(worker_type: &WorkerType) -> &'static [(Self, Self)] {
         match worker_type {
             WorkerType::FunctionRunner => Self::FUNCTION_RUNNER,

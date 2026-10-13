@@ -2490,8 +2490,8 @@ mod tests {
         assert_eq!(worker.base.function_version_id, updated_function_1.id);
         assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
-        assert_eq!(worker.base.ended_on, None);
-        assert_eq!(worker.base.status, WorkerStatus::StopScheduled);
+        assert!(worker.base.ended_on.is_some());
+        assert_eq!(worker.base.status, WorkerStatus::Stopped);
         assert_eq!(worker.base.worker_type, WorkerType::StageTrigger);
         assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
 
@@ -2549,8 +2549,8 @@ mod tests {
         assert_eq!(worker.base.function_version_id, updated_function_2.id);
         assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
-        assert_eq!(worker.base.ended_on, None);
-        assert_eq!(worker.base.status, WorkerStatus::StopScheduled);
+        assert!(worker.base.ended_on.is_some());
+        assert_eq!(worker.base.status, WorkerStatus::Stopped);
         assert_eq!(worker.base.worker_type, WorkerType::StageTrigger);
         assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
 
@@ -2605,8 +2605,8 @@ mod tests {
         assert_eq!(worker.base.function_version_id, updated_function_3.id);
         assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
-        assert_eq!(worker.base.ended_on, None);
-        assert_eq!(worker.base.status, WorkerStatus::StopScheduled);
+        assert!(worker.base.ended_on.is_some());
+        assert_eq!(worker.base.status, WorkerStatus::Stopped);
         assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
         assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
 

@@ -261,6 +261,15 @@ FROM (
 WHERE t.id = n.id
   AND t.valid_to IS DISTINCT FROM n.next_valid_from";
 
+/// A disabled version's trigger is never started, so the stop it waits for is
+/// never sent: it ends now.
+const END_UNSTARTED_TRIGGERS: &str = "\
+UPDATE workers
+SET status = 'SP', ended_on = transaction_timestamp()
+WHERE status = 'SPS'
+  AND NOT worker_enabled
+  AND worker_type IN ('CT', 'ST')";
+
 impl SchemaDelta for Migration {
     const FROM_VERSION: usize = 12;
     const TO_VERSION: usize = 13;
@@ -317,6 +326,7 @@ impl SchemaDelta for Migration {
             render_schema(input_table_versions),
             PIN_INPUT_TABLE_VERSIONS.to_string(),
             render_schema(worker_retries),
+            END_UNSTARTED_TRIGGERS.to_string(),
             render_schema(run_recoveries),
             PARK_UNSETTLED.to_string(),
             RESPLICE_SETTLED.to_string(),
