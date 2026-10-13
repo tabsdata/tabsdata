@@ -23,14 +23,15 @@ async fn delete_role(
     request: DeleteRequest<RoleParam>,
 ) -> Result<(), TdError> {
     let (ctx, param) = request.into_parts();
-    let mut trx = db.begin().await?;
-    let grant = authz
-        .require::<System, ManageRoles>(&mut trx, &ctx, &SystemEntity)
-        .await?;
-    let conn = trx.get(grant);
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<System, ManageRoles>(&mut trx, &ctx, &SystemEntity)
+            .await?;
+        let conn = trx.get(grant);
 
-    let role: RoleDBWithNames = conn.fetch_one(&param.role).await?;
-    assert_not_fixed(&role)?;
+        let role: RoleDBWithNames = conn.fetch_one(&param.role).await?;
+        assert_not_fixed(&role)?;
 
     // Drop the role's permissions and memberships, then the role itself.
     conn.delete::<PermissionDB>(role.base.id).await?;

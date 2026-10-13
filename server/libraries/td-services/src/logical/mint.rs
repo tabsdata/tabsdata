@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 use crate::function::topology::RunnableVersion;
 use td_database::access::LockInstant;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode, XW};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
@@ -93,7 +93,7 @@ pub fn build_function_run(
 }
 
 pub async fn mint_function_run(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     at: LockInstant,

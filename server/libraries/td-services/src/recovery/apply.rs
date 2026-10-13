@@ -26,7 +26,7 @@ use tracing::instrument;
 #[instrument(name = "recovery.apply", skip_all, level = "debug", err(Debug))]
 pub async fn apply_recovery_actions(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     at: &AtTime,
     actions: &RecoveryActions,
 ) -> Result<(), TdError> {

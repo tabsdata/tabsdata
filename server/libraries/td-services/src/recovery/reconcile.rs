@@ -15,7 +15,7 @@ use td_bridge::messaging::{
 };
 use td_bridge::observer::{ObservedWorkload, WorkloadKind, WorkloadObservation, WorkloadPhase};
 use td_common::worker::WorkerName;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
@@ -108,7 +108,12 @@ impl RecoveryActions {
     }
 }
 
-#[instrument(name = "recovery.fn_candidates", skip_all, level = "debug", err(Debug))]
+#[instrument(
+    name = "recovery.fn_candidates",
+    skip_all,
+    level = "debug",
+    err(Debug, level = "debug")
+)]
 pub async fn fn_candidates<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
 ) -> Result<FnCandidates, TdError> {
@@ -653,7 +658,7 @@ pub async fn recreate_trigger_workloads(
     name = "recovery.finalize_recovery_actions",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn finalize_recovery_actions<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -753,10 +758,10 @@ pub fn failed_worker_ids(actions: &RecoveryActions) -> Result<Vec<WorkerId>, TdE
     name = "recovery.fail_recovered_attempts",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn fail_recovered_attempts(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     at: &AtTime,
     actions: &RecoveryActions,
 ) -> Result<(), TdError> {

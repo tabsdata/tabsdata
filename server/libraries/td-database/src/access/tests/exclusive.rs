@@ -6,6 +6,7 @@
 //! project's lock until the transaction ends, so a second one in the same
 //! project waits and a second one elsewhere does not. PostgreSQL only.
 
+use crate::access::Attempt;
 use crate::access::{DbPool, GatedConnection, InProject, ServiceDbError, XW};
 use crate::domain::DomainPools;
 use crate::test_utils::TestDb;
@@ -36,9 +37,10 @@ async fn exclusive_serializes_the_same_project() {
     let (_db, pools) = pools().await;
     let db: DbPool<InProject> = DbPool::new(pools, InProject::new(&project()));
 
-    let held: GatedConnection<XW, InProject> = db.begin_exclusive().await.unwrap();
+    let held: GatedConnection<XW, InProject> =
+        db.begin_exclusive(Attempt::unretried()).await.unwrap();
     let error = db
-        .begin_exclusive()
+        .begin_exclusive(Attempt::unretried())
         .await
         .map(|_| ())
         .expect_err("the project's lock is held");
@@ -49,7 +51,8 @@ async fn exclusive_serializes_the_same_project() {
 
     // Ending the holder releases it, so the next one in gets through.
     held.commit().await.unwrap();
-    let next: GatedConnection<XW, InProject> = db.begin_exclusive().await.unwrap();
+    let next: GatedConnection<XW, InProject> =
+        db.begin_exclusive(Attempt::unretried()).await.unwrap();
     next.commit().await.unwrap();
 }
 
@@ -59,8 +62,10 @@ async fn exclusive_projects_do_not_block_each_other() {
     let one: DbPool<InProject> = DbPool::new(pools.clone(), InProject::new(&project()));
     let other: DbPool<InProject> = DbPool::new(pools, InProject::new(&project()));
 
-    let one: GatedConnection<XW, InProject> = one.begin_exclusive().await.unwrap();
-    let other: GatedConnection<XW, InProject> = other.begin_exclusive().await.unwrap();
+    let one: GatedConnection<XW, InProject> =
+        one.begin_exclusive(Attempt::unretried()).await.unwrap();
+    let other: GatedConnection<XW, InProject> =
+        other.begin_exclusive(Attempt::unretried()).await.unwrap();
     one.commit().await.unwrap();
     other.commit().await.unwrap();
 }

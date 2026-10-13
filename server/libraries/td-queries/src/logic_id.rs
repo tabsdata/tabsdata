@@ -96,10 +96,7 @@ pub async fn initialize_logical_ids(db: &TdPool) -> Result<(), TdError> {
     // load-bearing: the bypass GUC is `SET LOCAL`-scoped and would not
     // outlive its own statement on an autocommit connection (fail-closed,
     // empty reads).
-    let mut conn = db
-        .begin()
-        .await
-        .map_err(ServiceDbError::CannotBeginTransaction)?;
+    let mut conn = db.begin().await.map_err(ServiceDbError::begin_failed)?;
     conn.scope_across_projects()
         .await
         .map_err(ServiceDbError::CannotBypassProjectScope)?;

@@ -41,35 +41,64 @@ async fn execution_callback(
         let worker: WorkerDB = trx.get(grant).fetch_one(&worker_id).await?;
         worker.project_id
     };
-    let mut trx = db.in_project(&project).begin_exclusive().await?;
+    if worker.base.physical_function_run_id.as_ref() != Some(&physical_function_run_id) {
+        return Err(api_error!(
+            ApiError::NotFound,
+            "Worker {worker_id} does not run attempt {physical_function_run_id}"
+        ));
+    }
+    let ((outcome, applied_run), recorded) = retrying(|attempt| async {
+        let mut recorded = ReqCtx::default();
+        let mut trx = db.in_project(&worker.project_id).begin(attempt).await?;
+        let at = trx.locked_at();
+        let conn = trx.get(grant);
+        let physical_run: PhysicalFunctionRunDB =
+            conn.timeline().fetch_one(&physical_function_run_id).await?;
+        let current = physical_run.interval.valid_to.at().is_none();
+        let from = physical_run.base.status;
+        if !current || !from.can_move_to(&reported) {
+            debug!(%from, to = %reported, current, "execution.callback: stale report");
+            return Ok((CallbackOutcome::Stale, false, attempt));
+        }
 
-    let conn = trx.get(grant);
-    let physical_function_run_id = function_run_param.function_run;
-    let physical_run: PhysicalFunctionRunDB =
-        conn.timeline().fetch_one(&physical_function_run_id).await?;
-    let lfr: LogicalFunctionRunDB = conn
-        .fetch_one(&physical_run.base.logical_function_run_id)
-        .await?;
-    let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
-    update_worker_status(conn, &worker_update, &worker_id).await?;
+        if callback.unguarded_write {
+            let mark = WorkerUnguardedWriteUpdateDB {
+                unguarded_write_on: UnguardedWrite::from(AtTime::from(at)),
+            };
+            conn.update(&mark, &worker_id).await?;
+            trx.commit().await?;
+            return Ok((CallbackOutcome::Applied, false, attempt));
+        }
 
-    // Canonical flow-control status update on the LFR (sticky-Committed gate
-    // applies inside `update_function_run_status`). An attempt whose PFR has
-    // already ended is a late or duplicate callback — drop it.
-    let in_flight = PhysicalFunctionRunStatus::IN_FLIGHT.contains(&physical_run.base.status);
-    let lfrs = if in_flight { vec![lfr] } else { Vec::new() };
-    let lfr_status = LogicalFunctionRunStatus::try_from(update.status.clone())?;
-    update_function_run_status(msgs, conn, &lfrs, lfr_status).await?;
+        let lfr: LogicalFunctionRunDB = conn
+            .fetch_one(&physical_run.base.logical_function_run_id)
+            .await?;
+        let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
+        update_worker_status(conn, &worker_update, &worker_id).await?;
 
-    update_table_data_version_status(conn, &physical_function_run_id, &callback).await?;
-    // Last: the physical run's facts read the run and version rows written above.
-    conn.physical_runs()
-        .reported(&physical_run, &update)
-        .await?;
-    trx.commit().await?;
+        // Canonical flow-control status update on the LFR (sticky-Committed gate
+        // applies inside `update_function_run_status`). An attempt whose PFR has
+        // already ended is a duplicate callback — drop it.
+        let in_flight = PhysicalFunctionRunStatus::IN_FLIGHT.contains(&from);
+        let lfrs = if in_flight { vec![lfr] } else { Vec::new() };
+        let lfr_status = LogicalFunctionRunStatus::try_from(update.status.clone())?;
+        update_function_run_status(&mut attempt, conn, &lfrs, lfr_status).await?;
 
-    scheduler_notify.notify_scheduler();
-    Ok(())
+        update_table_data_version_status(conn, &physical_function_run_id, &callback, at).await?;
+        // Last: the physical run's facts read the run and version rows written above.
+        conn.physical_runs()
+            .reported(&physical_run, &update)
+            .await?;
+        trx.commit().await?;
+        Ok((CallbackOutcome::Applied, true, attempt))
+    })
+    .await?;
+    *msgs = attempt;
+
+    if applied_run {
+        scheduler_notify.notify_scheduler();
+    }
+    Ok(CallbackResponse { outcome })
 }
 
 #[cfg(test)]

@@ -8,8 +8,10 @@
 
 // The generated code names `::ta_services::factory::*`, which in this crate's
 // own test build is the self dev-dependency, so the impls below target it.
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use ta_services::factory::{Extract, ExtractMut, service_factory};
+use ta_services::ctx_service::{Message, ReqCtx};
+use ta_services::factory::{Extract, ExtractMut, Finished, Pass, service_factory};
 use td_error::{TdError, td_error};
 
 #[td_error]
@@ -38,6 +40,9 @@ impl Log {
 struct Probe {
     log: Log,
     ending_fails: bool,
+    /// Passes whose ending, as a database would, aborts the unit.
+    aborted_passes: u32,
+    passes: Arc<AtomicU32>,
 }
 
 impl Probe {
@@ -45,6 +50,15 @@ impl Probe {
         Self {
             log: Log::default(),
             ending_fails,
+            aborted_passes: 0,
+            passes: Arc::default(),
+        }
+    }
+
+    fn aborting(passes: u32) -> Self {
+        Self {
+            aborted_passes: passes,
+            ..Self::new(false)
         }
     }
 }
@@ -74,7 +88,11 @@ impl<Req: Sync> ExtractMut<Probe, Req> for &mut FailingResource {
         Err(ProbeError::Extraction.into())
     }
 
-    async fn finish(_kept: Self::Kept, _ok: bool) -> Result<(), TdError> {
+    async fn finish(
+        _kept: Self::Kept,
+        _outcome: Result<(), &TdError>,
+        _pass: Pass,
+    ) -> Result<Finished, TdError> {
         unreachable!("never extracted, never ended")
     }
 }
@@ -99,9 +117,14 @@ impl<Req: Sync> ExtractMut<Probe, Req> for &mut SecondResource {
         })
     }
 
-    async fn finish(kept: Self::Kept, ok: bool) -> Result<(), TdError> {
-        kept.log.record(format!("finish second({ok})"));
-        Ok(())
+    async fn finish(
+        kept: Self::Kept,
+        outcome: Result<(), &TdError>,
+        _pass: Pass,
+    ) -> Result<Finished, TdError> {
+        kept.log
+            .record(format!("finish second({})", outcome.is_ok()));
+        Ok(Finished::Done)
     }
 }
 
@@ -117,12 +140,54 @@ impl<Req: Sync> ExtractMut<Probe, Req> for &mut Resource {
         })
     }
 
-    async fn finish(kept: Self::Kept, ok: bool) -> Result<(), TdError> {
-        kept.log.record(format!("finish({ok})"));
+    async fn finish(
+        kept: Self::Kept,
+        outcome: Result<(), &TdError>,
+        _pass: Pass,
+    ) -> Result<Finished, TdError> {
+        kept.log.record(format!("finish({})", outcome.is_ok()));
         if kept.ending_fails {
             return Err(ProbeError::Ending.into());
         }
-        Ok(())
+        Ok(Finished::Done)
+    }
+}
+
+/// A write connection whose first `aborted_passes` endings abort and ask for a
+/// rerun.
+struct Retried {
+    log: Log,
+    aborts: bool,
+}
+
+impl Retried {
+    fn use_it(&mut self) {
+        self.log.record("body");
+    }
+}
+
+impl<Req: Sync> ExtractMut<Probe, Req> for &mut Retried {
+    type Kept = Retried;
+
+    async fn extract(srv: &Probe, _req: &Req) -> Result<Self::Kept, TdError> {
+        let pass = srv.passes.fetch_add(1, Ordering::SeqCst) + 1;
+        srv.log.record(format!("extract pass {pass}"));
+        Ok(Retried {
+            log: srv.log.clone(),
+            aborts: pass <= srv.aborted_passes,
+        })
+    }
+
+    async fn finish(
+        kept: Self::Kept,
+        outcome: Result<(), &TdError>,
+        pass: Pass,
+    ) -> Result<Finished, TdError> {
+        kept.log.record(format!("finish pass {}", pass.number));
+        if kept.aborts || outcome.is_err() {
+            return Ok(Finished::Retry);
+        }
+        Ok(Finished::Done)
     }
 }
 
@@ -184,6 +249,17 @@ async fn two_kept(
     resource.use_it();
     second.use_it();
     Ok(7)
+}
+
+#[service_factory(on = Probe)]
+async fn retried(
+    resource: &mut Retried,
+    msgs: &mut ReqCtx,
+    request: String,
+) -> Result<String, TdError> {
+    resource.use_it();
+    msgs.warning(Message::of(ProbeError::Body));
+    Ok(request)
 }
 
 #[tokio::test]
@@ -267,4 +343,40 @@ async fn test_by_value_parameter_is_not_ended() {
     probe.owns_it(()).await.unwrap();
 
     assert_eq!(probe.log.events(), ["extract", "body"]);
+}
+
+/// A rerun extracts afresh, gets a fresh request and keeps only the last
+/// pass's messages.
+#[tokio::test]
+async fn test_an_ending_asking_for_it_runs_the_service_again() {
+    let probe = Probe::aborting(2);
+    let response = probe.retried("request".to_string()).await.unwrap();
+
+    assert_eq!(response.data, "request");
+    assert_eq!(response.context.warning_count(), 1);
+    assert_eq!(
+        probe.log.events(),
+        [
+            "extract pass 1",
+            "body",
+            "finish pass 1",
+            "extract pass 2",
+            "body",
+            "finish pass 2",
+            "extract pass 3",
+            "body",
+            "finish pass 3",
+        ]
+    );
+}
+
+#[tokio::test]
+async fn test_a_service_runs_once_unless_asked_again() {
+    let probe = Probe::aborting(0);
+    probe.retried("request".to_string()).await.unwrap();
+
+    assert_eq!(
+        probe.log.events(),
+        ["extract pass 1", "body", "finish pass 1"]
+    );
 }

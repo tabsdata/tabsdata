@@ -27,11 +27,12 @@ async fn delete_function(
 ) -> Result<(), TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param)) = request.into_parts();
-    retrying(|| async {
-        let mut gated_trx = db.begin_exclusive().await?;
+    retrying(|attempt| async {
+        let mut gated_trx = db.begin(attempt).await?;
         let grant = authz
             .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
             .await?;
+        let at = gated_trx.locked_at();
         let conn = gated_trx.get(grant);
 
         // Bare-table row lock (views with outer joins aren't lockable); the
@@ -44,7 +45,7 @@ async fn delete_function(
 
         let current: FunctionDBWithNames = conn
             .scd2()
-            .fetch_one(and!(&collection_param.collection, &function_param.function))
+            .fetch_one(and!(collection_id_name, &function_param.function))
             .await?;
 
         ensure_user_managed(&current.base.base)?;
@@ -57,8 +58,7 @@ async fn delete_function(
             delete_one(conn, &ctx, &child.base, at).await?;
         }
         delete_one(conn, &ctx, &current.base.base, at).await?;
-        gated_trx.commit().await?;
-        Ok(())
+        gated_trx.commit().await
     })
     .await?;
 

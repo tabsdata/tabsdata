@@ -5,24 +5,17 @@
 use std::fmt::{Debug, Formatter};
 use td_common::datetime::Timestamp;
 
-/// Proof that a lock was taken, carrying the instant it was: minted by
-/// [`XW`](crate::access::XW) once it holds the project's advisory lock and by
-/// `serialize_on` once its `FOR UPDATE` read returns. The only instant an
-/// SCD2 interval opens or closes at, so stamps follow lock order and never a
-/// request's arrival time, which may predate rows a lock holder ahead in the
-/// queue committed.
+/// The instant a write unit of work writes at, minted as it opens: by
+/// [`RW`](crate::access::RW) once its snapshot is fixed, by
+/// [`XW`](crate::access::XW) once it holds the project's advisory lock. The
+/// only instant an SCD2 interval opens or closes at, so a stamp never predates
+/// rows the unit reads, as a request's arrival time may.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LockInstant(Timestamp);
 
 impl LockInstant {
     pub(crate) fn now() -> Self {
         Self(Timestamp::default())
-    }
-
-    /// For `serialize_on` alone, called once its locking read has returned.
-    /// Any other caller is a review finding: grep for it.
-    pub fn after_row_lock() -> Self {
-        Self::now()
     }
 
     /// Tests stand in for the lock; every use is an audit point.

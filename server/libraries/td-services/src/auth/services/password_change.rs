@@ -11,8 +11,7 @@ use argon2::password_hash::rand_core::OsRng;
 use std::ops::Deref;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
-use td_authz::session_provider::Sessions;
-use td_database::access::{AccessMode, DbPool, DbScope, Global, Grant};
+use td_database::access::{AccessMode, DbPool, DbScope, Global, Grant, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::auth::{PasswordChange, SessionInvalidateDB};
@@ -29,31 +28,30 @@ async fn password_change(
     db: DbPool<Global>,
     request: PasswordChange,
 ) -> Result<(), TdError> {
-    let mut gated_trx = db.begin().await?;
-    let conn = gated_trx.get(Grant::asserted("password-change credential verification"));
-    // request time (we don't have a request context in this service)
-    let at = AtTime::default();
+    retrying(|attempt| async {
+        let mut gated_trx = db.begin(attempt).await?;
+        let conn = gated_trx.get(Grant::asserted("password-change credential verification"));
+        let at = AtTime::default();
 
-    // Unknown user and wrong current password both surface as
-    // AuthenticationFailed so neither can be distinguished.
-    let user = authenticate(conn, &request)
-        .await
-        .map_err(|_| TdError::from(AuthError::AuthenticationFailed))?;
-    // check user is enabled (keeps its own code so a valid login can act on it)
-    assert_user_enabled(&user)?;
+        // Unknown user and wrong current password both surface as
+        // AuthenticationFailed so neither can be distinguished.
+        let user = authenticate(conn, &request)
+            .await
+            .map_err(|_| TdError::from(AuthError::AuthenticationFailed))?;
+        assert_user_enabled(&user)?;
 
-    let hash = create_password_hash(&password_hashing_config, &request.new_password)?;
-    let updated = UserUpdateDB {
-        full_name: user.full_name.clone(),
-        email: Some(user.email.clone()),
-        modified_on: at.into(),
-        modified_by_id: user.id.into(),
-        password_hash: hash,
-        password_set_on: PasswordChangeTime::try_from(&at)?,
-        password_must_change: PasswordMustChange::FALSE,
-        enabled: user.enabled,
-    };
-    conn.update::<UserUpdateDB>(&updated, user.id).await?;
+        let hash = create_password_hash(&password_hashing_config, &request.new_password)?;
+        let updated = UserUpdateDB {
+            full_name: None,
+            email: None,
+            modified_on: at.into(),
+            modified_by_id: user.id.into(),
+            password_hash: Some(hash),
+            password_set_on: Some(PasswordChangeTime::try_from(&at)?),
+            password_must_change: Some(PasswordMustChange::FALSE),
+            enabled: None,
+        };
+        conn.update::<UserUpdateDB>(&updated, user.id).await?;
 
     // invalidate all existing sessions for the user id
     let invalidate = SessionInvalidateDB::new(at, SessionStatus::InvalidPasswordChange);
@@ -65,6 +63,11 @@ async fn password_change(
     gated_trx.commit().await?;
     sessions.invalidate().await;
 
+        gated_trx.commit().await?;
+        Ok(())
+    })
+    .await?;
+    purge_expired_sessions(&db).await;
     Ok(())
 }
 

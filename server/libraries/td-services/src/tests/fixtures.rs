@@ -4,18 +4,23 @@
 
 //! Cross-module test fixtures for the mint/dispatch object graph.
 
+use crate::scheduler::test_wiring::dispatch_services;
+use std::str::FromStr;
 use td_database::pool::TdPool;
+use td_database::pool::scoped::ScopedExt as _;
 use td_error::TdError;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionUpdateDB};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam, CollectionUpdateDB};
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::execution::ExecutionDB;
-use td_objects::dxo::function::{FunctionDB, FunctionRegister};
+use td_objects::dxo::execution::{ExecutionDB, ExecutionRequest};
+use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionRegister};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
-    AccessTokenId, BasePath, BundleId, Decorator, FunctionRuntimeValues, LogicalFunctionRunStatus,
-    ProjectId, ReuseFrozen, TableNameDto, TransactionKey, UserId,
+    AccessTokenId, BasePath, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
+    FunctionOnly, FunctionRuntimeValues, LogicalFunctionRunStatus, OverrideDisabledTrigger,
+    PhysicalFunctionRunStatus, ProjectId, ReuseFrozen, SkipIfRunning, TableNameDto, TransactionKey,
+    UserId,
 };
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
@@ -113,6 +118,53 @@ pub(crate) async fn seed_dispatched_run(
             &LogicalFunctionRunStatus::Scheduled,
         )
         .await
+}
+
+/// A publisher executed and dispatched by a real tick, in a new project: its
+/// one attempt is Dispatched with a worker, its pod not up yet.
+pub(crate) async fn dispatched_publisher(
+    db: &TdPool,
+    collection: &str,
+    function: &str,
+) -> Result<(ProjectId, PhysicalFunctionRunDB), TdError> {
+    let p = db.seed().test_project().await?;
+    let seeded = db
+        .scoped(p.id)
+        .seed()
+        .collection(&CollectionName::try_from(collection)?, &UserId::admin())
+        .await?;
+    db.scoped(p.id)
+        .seed()
+        .function(&seeded, &register(function, None))
+        .await?;
+    let execute = RequestContext::with(AccessTokenId::default(), UserId::admin())
+        .create(
+            (
+                CollectionParam {
+                    collection: CollectionIdName::from_str(collection)?,
+                },
+                FunctionParam {
+                    function: FunctionIdName::from_str(function)?,
+                },
+            ),
+            ExecutionRequest {
+                name: None,
+                function_only: FunctionOnly::default(),
+                override_disabled_trigger: OverrideDisabledTrigger::default(),
+                skip_if_running: SkipIfRunning::default(),
+                external_uid: None,
+            },
+        )
+        .in_project(p.id);
+    let execution = dispatch_services(db).execute_function(execute).await?.data;
+    dispatch_services(db).request(()).await?;
+    let attempts: Vec<PhysicalFunctionRunDB> = db
+        .timeline()
+        .fetch_all(&(&execution.manual_trigger))
+        .await?;
+    let [attempt] = <[_; 1]>::try_from(attempts).expect("one attempt");
+    assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Dispatched);
+    Ok((p.id, attempt))
 }
 
 async fn seed_run_prelude(

@@ -184,21 +184,6 @@ async fn load_default_fetch_one_for_update(db: TdPool) -> Result<(), TdError> {
     Ok(())
 }
 
-/// The unit-of-work instant: the same locking single-row read, plus the
-/// `LockInstant` a versioned write opens and closes at.
-#[td_test::test(db)]
-async fn load_default_serialize_on(db: TdPool) -> Result<(), TdError> {
-    let (h, profile, seeded) = seed(&db).await?;
-    let mut conn = db.begin().await.expect("write transaction");
-    let t = Instant::now();
-    let (_row, _at) = conn
-        .for_update()
-        .serialize_on::<LogicalFunctionRunDB>(&h.producer_lfrs[0])
-        .await?;
-    record("default::serialize_on", profile, t, 1, seeded);
-    Ok(())
-}
-
 /// The list-level claim: every row the caller is about to decide on and write
 /// back, locked in one statement.
 #[td_test::test(db)]

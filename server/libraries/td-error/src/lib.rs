@@ -36,8 +36,11 @@ pub enum ApiError {
     InternalError,
     /// Not implemented (range fallback: 6000 to 6999).
     NotImplemented,
-    /// Unexpected / invariant violation (range fallback: 7000 and up).
+    /// Unexpected / invariant violation (range fallback: 7000 to 7999, and 9000 up).
     Unexpected,
+    /// Temporarily unavailable, worth retrying: the database was busy or gave
+    /// up waiting (range fallback: 8000 to 8999).
+    Unavailable,
     /// Passthrough for an explicit code with no dedicated named class.
     ///
     /// `td-error` treats the value as an opaque integer and does not ascribe any transport
@@ -75,6 +78,8 @@ impl From<u16> for ApiError {
             i if i < 5000 => Self::NotAuthorized,
             i if i < 6000 => Self::InternalError,
             i if i < 7000 => Self::NotImplemented,
+            i if i < 8000 => Self::Unexpected,
+            i if i < 9000 => Self::Unavailable,
             _i => Self::Unexpected,
         }
     }

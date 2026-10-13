@@ -25,30 +25,27 @@ async fn create_user_role(
     request: CreateRequest<UserRoleCreate, RoleParam>,
 ) -> Result<UserRole, TdError> {
     let (ctx, param, create) = request.into_parts();
-    let mut trx = db.begin().await?;
-    let grant = authz
-        .require::<System, ManageAccess>(&mut trx, &ctx, &SystemEntity)
-        .await?;
-    let conn = trx.get(grant);
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<System, ManageAccess>(&mut trx, &ctx, &SystemEntity)
+            .await?;
+        let conn = trx.get(grant);
 
-    let role: RoleDB = conn.fetch_one(&param.role).await?;
+        let role: RoleDB = conn.fetch_one(&param.role).await?;
 
-    let user: UserDB = conn.fetch_one(&create.user).await?;
-    assert_user_is_not_system(&user)?;
+        let user: UserDB = conn.fetch_one(&create.user).await?;
+        assert_user_is_not_system(&user)?;
 
-    let user_role = UserRoleDB::new(user.id, role.id, &ctx, Fixed::FALSE);
-    conn.insert(&user_role).await?;
+        let user_role = UserRoleDB::new(user.id, role.id, &ctx, Fixed::FALSE);
+        conn.insert(&user_role).await?;
 
-    let with_names: UserRoleDBWithNames = conn.fetch_one(&user_role.id).await?;
-    let read = UserRole::from_dao(with_names)?;
-    trx.commit().await?;
-
-    // Added a role membership; with the transaction committed, invalidate the
-    // cached authz grants.
-    let mut conn = db.read().await?;
-    authz.refresh(conn.get(grant)).await?;
-
-    Ok(read)
+        let with_names: UserRoleDBWithNames = conn.fetch_one(&user_role.id).await?;
+        let read = UserRole::from_dao(with_names)?;
+        trx.commit().await?;
+        Ok(read)
+    })
+    .await
 }
 
 #[cfg(test)]

@@ -383,16 +383,6 @@ async fn time_chain_queries(
         let mut conn = db.begin().await.expect("write transaction");
         let _ = timed!(
             out,
-            "default::serialize_on",
-            conn.for_update()
-                .serialize_on::<LogicalFunctionRunDB>(&h.producer_lfrs[0])
-                .await?
-        );
-    }
-    {
-        let mut conn = db.begin().await.expect("write transaction");
-        let _ = timed!(
-            out,
             "default::claim_all",
             conn.for_update()
                 .claim_all::<LogicalFunctionRunDB>(())

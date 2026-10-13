@@ -33,11 +33,12 @@ async fn update_function(
 ) -> Result<Function, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param), update) = request.into_parts();
-    let read = retrying(|| async {
-        let mut gated_trx = db.begin_exclusive().await?;
+    let read = retrying(|attempt| async {
+        let mut gated_trx = db.begin(attempt).await?;
         let grant = authz
             .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
             .await?;
+        let at = gated_trx.locked_at();
         let conn = gated_trx.get(grant);
 
         // Bare-table row lock (views with outer joins aren't lockable); the
@@ -52,7 +53,7 @@ async fn update_function(
         // version id does.
         let current: FunctionDBWithNames = conn
             .scd2()
-            .fetch_one(and!(&collection_param.collection, &function_param.function))
+            .fetch_one(and!(collection_id_name, &function_param.function))
             .await?;
 
         ensure_user_managed(&current.base.base)?;

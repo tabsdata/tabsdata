@@ -21,6 +21,11 @@ use sqlx::{ConnectOptions, Connection, PgPool, Postgres};
 use std::time::Duration;
 use tracing::debug;
 
+/// The longest a serving statement runs, its lock waits included.
+const SERVING_STATEMENT_TIMEOUT: &str = "60s";
+/// The longest a serving transaction sits idle between statements.
+const SERVING_IDLE_IN_TRANSACTION_TIMEOUT: &str = "60s";
+
 /// Result of a connect. Bundles the sqlx pool with the pinned schema.
 /// `connect` only ever connects to an already-running server — it never boots
 /// one (embedded is brought up out of band), so there is no server handle to
@@ -242,9 +247,18 @@ impl DatabaseConfig {
                     let session_role = &roles.in_project;
                     #[cfg(feature = "td-test")]
                     let session_role = &roles.across_projects;
-                    sqlx::query(AssertSqlSafe(format!("SET ROLE \"{session_role}\"")))
-                        .execute(&mut *conn)
-                        .await?;
+                    // A statement stuck behind a lock, or a transaction its
+                    // dropped request left open, ends on its own.
+                    sqlx::query(
+                        "SELECT set_config('role', $1, false), \
+                         set_config('statement_timeout', $2, false), \
+                         set_config('idle_in_transaction_session_timeout', $3, false)",
+                    )
+                    .bind(session_role)
+                    .bind(SERVING_STATEMENT_TIMEOUT)
+                    .bind(SERVING_IDLE_IN_TRANSACTION_TIMEOUT)
+                    .execute(&mut *conn)
+                    .await?;
 
                     // Archived schemas carry the pre-v4 policy, which reads
                     // this instead of the role; the ladder tests install them.

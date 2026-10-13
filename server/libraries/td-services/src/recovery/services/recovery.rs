@@ -175,13 +175,11 @@ mod tests {
             TestBridgeProvider::default()
                 .with_orchestrator(Orchestrator::Kubernetes)
                 .with_workload_observer(StaticWorkloadObserver::default()),
-        )));
-        services
+        )
     }
 
     /// The recovery tick sweeps, then a request tick re-dispatches what it
-    /// recovered. Returns the request tick's services so tests can inspect
-    /// its queue.
+    /// recovered. Returns the queue the request tick sent its messages to.
     async fn recovery_and_request_tick(
         db: &TdPool,
         timeout: StuckRequestedTimeout,
@@ -276,8 +274,7 @@ mod tests {
 
         // A freshly-dispatched run is well within the default timeout — the
         // sweep must not touch it.
-        let context_fresh =
-            recovery_and_request_tick(&db, StuckRequestedTimeout::default()).await?;
+        let sent_fresh = recovery_and_request_tick(&db, StuckRequestedTimeout::default()).await?;
         let pfr: PhysicalFunctionRunDB = db
             .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.base.id)
@@ -292,8 +289,7 @@ mod tests {
                 .is_empty()
         );
 
-        let context_2 =
-            recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
+        let sent_2 = recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
 
         let pfr_failed: PhysicalFunctionRunDB = db
             .timeline()
@@ -437,8 +433,7 @@ mod tests {
         assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Dispatched);
         assert!(pfr.base.dispatched_on.is_some());
 
-        let context_2 =
-            recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
+        let sent_2 = recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
 
         let pfr: PhysicalFunctionRunDB = db
             .timeline()
@@ -568,7 +563,7 @@ mod tests {
         )
         .await?;
 
-        let services = kubernetes_recovery_services(&db, RecoveryConfig::default());
+        let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
         services.clone().recovery(()).await?;
 
         let messages = services.bridge.message_queue().locked_messages().await;
@@ -694,7 +689,7 @@ mod tests {
 
         // Empty cluster observation, no dispatch grace: the workload is
         // judged missing on the first tick.
-        let services = kubernetes_recovery_services(
+        let (services, _) = kubernetes_recovery_services(
             &db,
             RecoveryConfig {
                 dispatch_grace: DispatchGrace(Duration::ZERO),
@@ -758,7 +753,7 @@ mod tests {
         outdate_function_version(&db, p.id, &cron_fn).await?;
         outdate_function_version(&db, p.id, &stage_fn).await?;
 
-        let services = kubernetes_recovery_services(&db, RecoveryConfig::default());
+        let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
         services.clone().recovery(()).await?;
 
         let messages = services.bridge.message_queue().locked_messages().await;
@@ -789,7 +784,7 @@ mod tests {
         )
         .await?;
 
-        let services = kubernetes_recovery_services(&db, RecoveryConfig::default());
+        let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
         services.clone().recovery(()).await?;
 
         let messages = services.bridge.message_queue().locked_messages().await;

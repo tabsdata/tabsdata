@@ -35,6 +35,7 @@ async fn create_function_patch(
     let grant = authz
         .require::<Project, DevelopProject>(gated_trx, &ctx, &project)
         .await?;
+    let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
     let collection_id_name = collection_param.collection;
     let function_id_name = function_param.function;

@@ -13,7 +13,7 @@ use super::{AcrossProjects, DbPool, GatedConnection, Global, InProject, OpensIn}
 use crate::domain::{DomainPools, ScopedBy, Supports};
 use crate::pool::scoped::Scoped;
 use std::fmt::Display;
-use ta_services::factory::{Extract, ExtractMut, FieldAccessor};
+use ta_services::factory::{Extract, ExtractMut, FieldAccessor, Finished, Pass};
 use td_error::TdError;
 
 /// A request carrying the project it is scoped to; the source of the
@@ -84,8 +84,12 @@ where
             .await
     }
 
-    async fn finish(kept: Self::Kept, ok: bool) -> Result<(), TdError> {
-        kept.end(ok).await
+    async fn finish(
+        kept: Self::Kept,
+        outcome: Result<(), &TdError>,
+        pass: Pass,
+    ) -> Result<Finished, TdError> {
+        kept.finish(outcome, pass).await
     }
 }
 
@@ -105,8 +109,12 @@ where
             .await
     }
 
-    async fn finish(kept: Self::Kept, ok: bool) -> Result<(), TdError> {
-        kept.end(ok).await
+    async fn finish(
+        kept: Self::Kept,
+        outcome: Result<(), &TdError>,
+        pass: Pass,
+    ) -> Result<Finished, TdError> {
+        kept.finish(outcome, pass).await
     }
 }
 
@@ -126,7 +134,11 @@ where
             .await
     }
 
-    async fn finish(kept: Self::Kept, ok: bool) -> Result<(), TdError> {
-        kept.end(ok).await
+    async fn finish(
+        kept: Self::Kept,
+        outcome: Result<(), &TdError>,
+        pass: Pass,
+    ) -> Result<Finished, TdError> {
+        kept.finish(outcome, pass).await
     }
 }

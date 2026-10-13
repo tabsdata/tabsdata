@@ -7,16 +7,15 @@
 //! [`PoolConnection`](sqlx::pool::PoolConnection) or a
 //! [`DomainConnection`](crate::domain::DomainConnection) through deref.
 
+use crate::generated_sql::generated;
 use crate::sea_query::builder::SeaQueryExt;
 use sea_query::{Expr, Func, Query};
+use sqlx::Error;
 use sqlx::postgres::PgConnection;
-use sqlx::{AssertSqlSafe, Error, Executor};
+#[cfg(feature = "td-test")]
 use std::time::Duration;
 use td_schema::{LEGACY_BYPASS_RLS_GUC, PROJECT_ID_GUC};
 use tracing::debug;
-
-const ADVISORY_XACT_LOCK: &str = "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))";
-const TRY_ADVISORY_XACT_LOCK: &str = "SELECT pg_try_advisory_xact_lock(hashtextextended($1, 0))";
 
 /// Set once per connection, so the per-transaction scope switch is a single
 /// statement needing no configuration of its own.
@@ -27,24 +26,20 @@ pub trait PgConnectionExt {
     fn execute_batch(&mut self, stmts: &[String])
     -> impl Future<Output = Result<(), Error>> + Send;
 
-    /// Serializes concurrent transactions locking the same `key` until this one
-    /// ends, waiting at most `wait`; `false` if it elapsed. `key` is hashed
-    /// in-SQL, so any string is safe and a collision only over-serializes two
-    /// unrelated keys. Floors at 1ms: `lock_timeout = 0` means no timeout in
-    /// PostgreSQL, i.e. the opposite of "don't wait".
-    ///
-    /// Bounded is the only waiting form: an unbounded wait on a serving
-    /// connection is a request that never answers.
-    fn advisory_xact_lock_text_within(
+    /// Serializes concurrent transactions locking the same `key` until this
+    /// one ends, without waiting: `false` when another transaction holds it.
+    /// `key` is hashed in-SQL, so any string is safe and a collision only
+    /// over-serializes two unrelated keys. Sets no `lock_timeout`, so the
+    /// caller's later locks still wait normally.
+    fn try_advisory_xact_lock_text(
         &mut self,
         key: &str,
-        wait: Duration,
     ) -> impl Future<Output = Result<bool, Error>> + Send;
 
-    /// Takes the same lock without waiting: `false` when another transaction
-    /// holds it. Sets no `lock_timeout`, so the caller's later locks still wait
-    /// normally.
-    fn try_advisory_xact_lock_text(
+    /// [`try_advisory_xact_lock_text`](Self::try_advisory_xact_lock_text)'s
+    /// key, held by the session instead: taken outside a transaction, it is
+    /// held until the session releases it or ends. The two conflict.
+    fn try_advisory_lock_text(
         &mut self,
         key: &str,
     ) -> impl Future<Output = Result<bool, Error>> + Send;
@@ -124,11 +119,6 @@ impl PgConnectionExt for PgConnection {
             .build_query_scalar()
             .fetch_one(self)
             .await
-        {
-            Ok(_) => Ok(true),
-            Err(e) if lock_wait_elapsed(&e) => Ok(false),
-            Err(e) => Err(e),
-        }
     }
 
     async fn try_advisory_lock_text(&mut self, key: &str) -> Result<bool, Error> {
@@ -213,7 +203,6 @@ impl PgConnectionExt for PgConnection {
         }
         Ok(())
     }
-}
 
     #[cfg(feature = "td-test")]
     async fn wait_until_blocking(&mut self, within: Duration) -> Result<bool, Error> {

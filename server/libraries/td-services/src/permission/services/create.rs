@@ -8,8 +8,7 @@ use crate::permission::{
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::RbacSource;
-use td_database::access::{DbPool, Global};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::CreateRequest;
@@ -25,32 +24,27 @@ async fn create_permission(
 ) -> Result<Permission, TdError> {
     let (ctx, param, create) = request.into_parts();
     let grant = authz.none();
-    let mut trx = db.begin().await?;
-    let conn = trx.get(grant);
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let conn = trx.get(grant);
 
-    let role: RoleDB = conn.fetch_one(&param.role).await?;
-    // A system-managed (fixed) role's permission set is immutable; reject
-    // adding a permission to it from the user surface.
-    assert_role_is_not_fixed(&role)?;
+        let role: RoleDB = conn.fetch_one(&param.role).await?;
+        // A system-managed (fixed) role's permission set is immutable; reject
+        // adding a permission to it from the user surface.
+        assert_role_is_not_fixed(&role)?;
 
-    // build_permission_db derives entity_type from the authorization
-    // registry, so an unregistered permission is already rejected here.
-    let permission = build_permission_db(&authz, conn, &ctx, &role, &create).await?;
-    // Authorize by the permission's target: manage_access on the system, or
-    // manage_project on the target project (single-project permissions only).
-    authorize_permission_target(&authz, conn, &ctx, &permission).await?;
-    conn.insert(&permission).await?;
+        // build_permission_db derives entity_type from the authorization
+        // registry, so an unregistered permission is already rejected here.
+        let permission = build_permission_db(&authz, conn, &ctx, &role, &create).await?;
+        authorize_permission_target(&authz, conn, &ctx, &permission).await?;
+        conn.insert(&permission).await?;
 
-    let with_names: PermissionDBWithNames = conn.fetch_one(&permission.id).await?;
-    let read = Permission::from_dao(with_names)?;
-    trx.commit().await?;
-
-    // Gated a permission; with the transaction committed, invalidate the
-    // cached authz grants.
-    let mut conn = db.read().await?;
-    authz.refresh(conn.get(grant)).await?;
-
-    Ok(read)
+        let with_names: PermissionDBWithNames = conn.fetch_one(&permission.id).await?;
+        let read = Permission::from_dao(with_names)?;
+        trx.commit().await?;
+        Ok(read)
+    })
+    .await
 }
 
 #[cfg(test)]

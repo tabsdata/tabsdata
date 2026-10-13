@@ -9,7 +9,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
-use td_database::access::{DbPool, InProject};
+use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_execution::{SchedulerNotify, TransactionBy};
 use td_objects::and;
@@ -41,28 +41,39 @@ async fn execute_function(
             .require::<Project, DevelopProject>(&mut conn, &ctx, &project)
             .await?
     };
-    let mut trx = db.begin_exclusive().await?;
-    let at = trx.locked_at();
-    let conn = trx.get(grant);
-    let function: FunctionDBWithNames = conn
-        .scd2()
-        .as_of(&ctx.time)
-        .fetch_one(and!(&collection_param.collection, &function_param.function))
-        .await?;
+    let (response, recorded) = retrying(|attempt| async {
+        let mut recorded = ReqCtx::default();
+        let mut trx = db.begin_exclusive(attempt).await?;
+        let at = trx.locked_at();
+        let conn = trx.get(grant);
+        let function: FunctionDBWithNames = conn
+            .scd2()
+            .fetch_one(and!(&collection_param.collection, &function_param.function))
+            .await?;
 
-    ensure_user_managed(&function.base.base)?;
-    let response = execute(
-        conn,
-        msgs,
-        &transaction_by,
-        ctx,
-        at,
-        execution_request,
-        function,
-        TriggerType::Manual,
-    )
+        ensure_user_managed(&function.base.base)?;
+        refuse_unkeyed_stage_publisher(conn, &function, &execution_request.external_uid).await?;
+        if let Some(refused) =
+            trigger_gate(conn, &execution_request, &function, &TriggerType::Manual).await?
+        {
+            return Err(refusal(&refused));
+        }
+        let response = execute(
+            conn,
+            &mut recorded,
+            &transaction_by,
+            ctx,
+            at,
+            execution_request.clone(),
+            function,
+            TriggerType::Manual,
+        )
+        .await?;
+        trx.commit().await?;
+        Ok((response, recorded))
+    })
     .await?;
-    trx.commit().await?;
+    msgs.merge(recorded);
 
     scheduler_notify.notify_scheduler();
     Ok(response)

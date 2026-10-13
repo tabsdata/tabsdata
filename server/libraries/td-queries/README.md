@@ -462,12 +462,10 @@ narrows by its viewable projects in the condition.
 Two grains hang off the same level:
 
 - `for_update()` — the same reads holding row locks: `fetch_one`,
-  `fetch_optional`, `fetch_all`, plus `claim_all` (`SKIP LOCKED`).
-  `serialize_on::<D>(cond)` is the locking read that also mints the unit of
-  work's `LockInstant`: the row the work serializes on, and the instant it
-  took its lock, which is what `scd2().open` and `close` stamp. An exclusive
-  (`XW`) transaction has its instant from the project lock instead:
-  `trx.locked_at()`.
+  `fetch_optional`, `fetch_all`, plus `claim_all` (`SKIP LOCKED`). A write
+  unit's `LockInstant`, which `scd2().open` and `close` stamp, comes from the
+  unit itself: `trx.locked_at()`, taken once a `SERIALIZABLE` unit's snapshot
+  is fixed, or once an exclusive (`XW`) one holds the project lock.
 - `chunked()` — `insert(&[D])`, `fetch_all(values, extra)`,
   `update(dao, values)` over a slice too large for one statement's bind
   parameters: each chunk is one statement, the slice's conditions OR-joined
@@ -645,11 +643,8 @@ let function: FunctionDBWithNames = conn
     .fetch_one(and!(&collection_id, &function_name))
     .await?;
 
-// The unit of work's instant: the row it serializes on, read FOR UPDATE.
-let (collection, at) = conn
-    .for_update()
-    .serialize_on::<CollectionDB>(&collection_id)
-    .await?;
+// The write unit's instant, taken before the grant unlocks the connection.
+let at = trx.locked_at();
 
 // A new version open from `at`: the trigger closes the previous open row of
 // the partition at that same instant.

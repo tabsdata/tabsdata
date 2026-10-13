@@ -26,15 +26,15 @@ async fn delete_user(
     request: DeleteRequest<UserParam>,
 ) -> Result<(), TdError> {
     let (ctx, param) = request.into_parts();
-    let mut trx = db.begin().await?;
-    let grant = authz
-        .require::<System, ManageAccess>(&mut trx, &ctx, &SystemEntity)
-        .await?;
-    let conn = trx.get(grant);
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<System, ManageAccess>(&mut trx, &ctx, &SystemEntity)
+            .await?;
+        let conn = trx.get(grant);
 
-    let id_name = param.user;
-    let user: UserDB = conn.fetch_one(&id_name).await?;
-    delete_user_validate(&user, &ctx.user_id)?;
+        let user: UserDB = conn.fetch_one(&param.user).await?;
+        delete_user_validate(&user, &ctx.user_id)?;
 
     conn.delete::<UserRoleDB>(user.id).await?;
     // Restricting foreign key: token rows go first.

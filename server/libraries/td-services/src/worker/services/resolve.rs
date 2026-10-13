@@ -8,7 +8,7 @@ use crate::scheduler::message_builder::{
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_database::access::{AcrossProjects, DbPool, SeesProjectRows, WriteMode};
+use td_database::access::{AcrossProjects, DbPool, SeesProjectRows, WriteMode, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::ReadRequest;
@@ -32,13 +32,17 @@ async fn resolve_worker_message(
 ) -> Result<WorkerInput, TdError> {
     let (ctx, param) = request.into_parts();
     let worker_id = param.worker;
-    let mut trx = db.begin().await?;
-    let worker: WorkerDB = trx.get(authz.none()).fetch_one(&worker_id).await?;
-    let mut trx = trx.enter_project(&worker.project_id).await?;
     let at = ctx.time;
-    let input = resolve_worker_message(trx.get(authz.none()), &storage, &worker_id, &at).await?;
-    trx.commit().await?;
-    Ok(input)
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let worker: WorkerDB = trx.get(authz.none()).fetch_one(&worker_id).await?;
+        let mut trx = trx.enter_project(&worker.project_id).await?;
+        let input =
+            resolve_worker_message(trx.get(authz.none()), &storage, &worker_id, &at).await?;
+        trx.commit().await?;
+        Ok(input)
+    })
+    .await
 }
 
 /// Resolve any worker's message on demand: the single yaml generator the
@@ -50,7 +54,7 @@ async fn resolve_worker_message(
     name = "scheduler.resolve_worker_message",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn resolve_worker_message<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,

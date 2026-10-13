@@ -24,7 +24,7 @@ use tracing::instrument;
     name = "function_run.resolve_current",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn resolve_current_function_run<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,

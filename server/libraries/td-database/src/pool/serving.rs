@@ -12,7 +12,7 @@ use crate::sea_query::builder::SeaQueryExt;
 use crate::sea_query::catalog::{current_setting, current_user, has_role};
 use sea_query::{Alias, Expr, ExprTrait, Query};
 use sqlx::PgPool;
-use sqlx::{Error, Postgres, Transaction};
+use sqlx::{Error, Postgres, SqlSafeStr, Transaction};
 use std::time::Duration;
 use td_schema::ACROSS_PROJECTS_ROLE;
 use tracing::{debug, info, instrument};
@@ -163,10 +163,47 @@ impl TdPool {
         self.pool.begin().await
     }
 
+    /// Commits only what a serial order of the concurrent transactions would
+    /// have; one that cannot fails with a serialization failure (40001) and is
+    /// run again whole.
+    pub async fn begin_serializable(&self) -> Result<Transaction<'static, Postgres>, Error> {
+        self.pool
+            .begin_with("BEGIN ISOLATION LEVEL SERIALIZABLE")
+            .await
+    }
+
+    /// [`begin_serializable`](Self::begin_serializable) on a connection that
+    /// first took `key`'s session lock, so its snapshot sees every transaction
+    /// that held the lock before it; `None`, holding nothing, when `key` is
+    /// held. The connection closes once it is done instead of returning to
+    /// the pool, and closing is what releases the lock: one dropped at any
+    /// point after the attempt cannot leave it held.
+    pub async fn begin_serializable_holding(
+        &self,
+        key: &str,
+    ) -> Result<Option<Transaction<'static, Postgres>>, Error> {
+        let mut conn = self.pool.acquire().await?;
+        conn.close_on_drop();
+        if !conn.try_advisory_lock_text(key).await? {
+            conn.return_to_pool().await;
+            return Ok(None);
+        }
+        Transaction::begin(
+            conn,
+            Some("BEGIN ISOLATION LEVEL SERIALIZABLE".into_sql_str()),
+        )
+        .await
+        .map(Some)
+    }
+
     /// `READ ONLY`, which the RLS `SET LOCAL` needs to scope to and in which a
-    /// stray write fails loudly.
+    /// stray write fails loudly; `REPEATABLE READ`, so all its statements read
+    /// one snapshot and a commit cannot land between two of them. A read-only
+    /// transaction never fails to serialize there.
     pub async fn begin_ro(&self) -> Result<Transaction<'static, Postgres>, Error> {
-        self.pool.begin_with("BEGIN READ ONLY").await
+        self.pool
+            .begin_with("BEGIN READ ONLY ISOLATION LEVEL REPEATABLE READ")
+            .await
     }
 
     /// Returns if the pool is closed.

@@ -23,26 +23,23 @@ async fn delete_user_role(
     request: DeleteRequest<(RoleParam, UserParam)>,
 ) -> Result<(), TdError> {
     let (ctx, (role_param, user_param)) = request.into_parts();
-    let mut trx = db.begin().await?;
-    let grant = authz
-        .require::<System, ManageAccess>(&mut trx, &ctx, &SystemEntity)
-        .await?;
-    let conn = trx.get(grant);
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<System, ManageAccess>(&mut trx, &ctx, &SystemEntity)
+            .await?;
+        let conn = trx.get(grant);
 
-    let role: RoleDB = conn.fetch_one(&role_param.role).await?;
-    let user: UserDB = conn.fetch_one(&user_param.user).await?;
+        let role: RoleDB = conn.fetch_one(&role_param.role).await?;
+        let user: UserDB = conn.fetch_one(&user_param.user).await?;
 
-    let row: UserRoleDBWithNames = conn.fetch_one(and!(&role.id, &user.id)).await?;
-    assert_not_fixed(&row)?;
-    conn.delete::<UserRoleDB>(and!(&role.id, &user.id)).await?;
-    trx.commit().await?;
-
-    // Removed a role membership; with the transaction committed, invalidate
-    // the cached authz grants.
-    let mut conn = db.read().await?;
-    authz.refresh(conn.get(grant)).await?;
-
-    Ok(())
+        let row: UserRoleDBWithNames = conn.fetch_one(and!(&role.id, &user.id)).await?;
+        assert_not_fixed(&row)?;
+        conn.delete::<UserRoleDB>(and!(&role.id, &user.id)).await?;
+        trx.commit().await?;
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]

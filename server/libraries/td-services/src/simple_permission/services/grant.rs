@@ -7,8 +7,7 @@ use crate::simple_permission::{assert_simple_permission_valid, resolve_grant};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::RbacSource;
-use td_database::access::{DbPool, Global};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::crudl::CreateRequest;
@@ -25,32 +24,24 @@ async fn grant_simple_permission(
 ) -> Result<(), TdError> {
     let (ctx, _, grant) = request.into_parts();
     let token = authz.none();
-    let mut trx = db.begin().await?;
-    let conn = trx.get(token);
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let conn = trx.get(token);
 
-    // validate (reject org-wide wildcards; project required/forbidden)
-    assert_simple_permission_valid(&grant)?;
-    // resolve the target role membership (and project for authz)
-    let resolved = resolve_grant(conn, &grant).await?;
-    // authz by target: project perm -> manage_access | manage_project on P;
-    // system perm -> manage_access on the system (shared with the raw API).
-    authorize_permission_target(&authz, conn, &ctx, &resolved).await?;
+        assert_simple_permission_valid(&grant)?;
+        let resolved = resolve_grant(conn, &grant).await?;
+        authorize_permission_target(&authz, conn, &ctx, &resolved).await?;
 
-    // a duplicate grant reports the membership already exists instead of
-    // surfacing the raw user_role unique-constraint SQL error.
-    conn.assert_not_exists::<UserRoleDB>(and!(&resolved.user_id, &resolved.role_id))
-        .await?;
-    // membership add (same as user_role create).
-    let user_role = UserRoleDB::new(resolved.user_id, resolved.role_id, &ctx, Fixed::FALSE);
-    conn.insert(&user_role).await?;
-    trx.commit().await?;
-
-    // Role membership changed; with the transaction committed, invalidate the
-    // cached authz grants.
-    let mut conn = db.read().await?;
-    authz.refresh(conn.get(token)).await?;
-
-    Ok(())
+        // a duplicate grant reports the membership already exists instead of
+        // surfacing the raw user_role unique-constraint SQL error.
+        conn.assert_not_exists::<UserRoleDB>(and!(&resolved.user_id, &resolved.role_id))
+            .await?;
+        let user_role = UserRoleDB::new(resolved.user_id, resolved.role_id, &ctx, Fixed::FALSE);
+        conn.insert(&user_role).await?;
+        trx.commit().await?;
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]

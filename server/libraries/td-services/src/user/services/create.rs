@@ -6,7 +6,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageAccess, System, SystemEntity};
-use td_database::access::{GatedConnection, RW};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::CreateRequest;
@@ -21,14 +21,16 @@ use td_security::config::PasswordHashingConfig;
 async fn create_user(
     authz: Ctx<AuthzContext>,
     password_hashing_config: Ctx<PasswordHashingConfig>,
-    gated_trx: &mut GatedConnection<RW>,
+    db: DbPool<Global>,
     request: CreateRequest<UserCreate>,
 ) -> Result<UserRead, TdError> {
     let (ctx, _, create) = request.into_parts();
-    let grant = authz
-        .require::<System, ManageAccess>(gated_trx, &ctx, &SystemEntity)
-        .await?;
-    let conn = gated_trx.get(grant);
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<System, ManageAccess>(&mut trx, &ctx, &SystemEntity)
+            .await?;
+        let conn = trx.get(grant);
 
     let user = create.to_dao(&ctx, &password_hashing_config)?;
     // A duplicate user name reports a clean "already exists" error instead
@@ -39,9 +41,12 @@ async fn create_user(
     let user_role = UserRoleDB::new(user.id, RoleId::default_role(), &ctx, Fixed::TRUE);
     conn.insert(&user_role).await?;
 
-    let with_names: UserDBWithNames = conn.fetch_one(&user.id).await?;
-    let read = UserRead::from_dao(with_names)?;
-    Ok(read)
+        let with_names: UserDBWithNames = conn.fetch_one(&user.id).await?;
+        let read = UserRead::from_dao(with_names)?;
+        trx.commit().await?;
+        Ok(read)
+    })
+    .await
 }
 
 #[cfg(test)]

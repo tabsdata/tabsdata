@@ -18,11 +18,13 @@
 //! ([`ScopedBy`](crate::domain::ScopedBy)) — a domain whose tables carry no
 //! project cannot be spelled project-scoped.
 
-use super::{AccessMode, DbScope, EntersProject, Gated, Global, InProject, WriteMode, XW};
+use super::retry::{retry_after, succeeded};
+use super::{AccessMode, DbScope, EntersProject, Gated, Global, InProject, WriteMode};
 use crate::access::{Grant, LockInstant};
 use crate::domain::{Apiserver, DomainConnection, ScopedBy};
 use std::fmt::Display;
 use std::marker::PhantomData;
+use ta_services::factory::{Finished, Pass};
 use td_error::TdError;
 
 /// A scoped unit of work in mode `M`. Declared `&mut` by a service, the wrapper
@@ -52,6 +54,38 @@ impl<M: AccessMode, S: DbScope, D: ScopedBy<S>> GatedConnection<M, S, D> {
     pub(super) async fn end(self, ok: bool) -> Result<(), TdError> {
         M::close(self.conn, ok).await
     }
+
+    /// Ends a connection the service wrapper kept: commits or rolls back by
+    /// how the body ended, and for a write the database aborted, in the body
+    /// or at the commit, asks for the whole service to run again.
+    pub(super) async fn finish(
+        self,
+        outcome: Result<(), &TdError>,
+        pass: Pass,
+    ) -> Result<Finished, TdError> {
+        let ended = self.end(outcome.is_ok()).await;
+        if !M::RETRIED {
+            return ended.map(|()| Finished::Done);
+        }
+        let failure = match (outcome, &ended) {
+            (Err(error), _) => Some(error),
+            (Ok(()), Err(error)) => Some(error),
+            (Ok(()), Ok(())) => None,
+        };
+        match failure {
+            None => {
+                succeeded(pass.unit, pass.number, pass.started);
+                Ok(Finished::Done)
+            }
+            Some(error) => match retry_after(pass.unit, pass.number, error) {
+                Some(wait) => {
+                    tokio::time::sleep(wait).await;
+                    Ok(Finished::Retry)
+                }
+                None => ended.map(|()| Finished::Done),
+            },
+        }
+    }
 }
 
 impl<M: AccessMode, S: EntersProject, D: ScopedBy<S> + ScopedBy<InProject>>
@@ -73,8 +107,9 @@ impl<M: AccessMode, S: EntersProject, D: ScopedBy<S> + ScopedBy<InProject>>
     }
 }
 
-impl<S: DbScope, D: ScopedBy<S>> GatedConnection<XW, S, D> {
-    /// The instant this unit of work took the project's lock.
+impl<M: WriteMode<Lock = LockInstant>, S: DbScope, D: ScopedBy<S>> GatedConnection<M, S, D> {
+    /// The instant this unit of work writes at: once its snapshot is fixed,
+    /// and for `XW` once it holds the project's lock.
     pub fn locked_at(&self) -> LockInstant {
         self.lock
     }

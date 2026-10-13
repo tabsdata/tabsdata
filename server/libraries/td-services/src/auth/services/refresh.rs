@@ -12,7 +12,7 @@ use td_authz::AuthzContext;
 use td_authz::session_provider::Sessions;
 use td_common::jwt::JwtConfig;
 use td_common::jwt::decode_token;
-use td_database::access::{DbPool, Global};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::auth::{SessionDB, SessionInvalidateDB, TokenResponse};
@@ -32,30 +32,25 @@ async fn refresh(
     request: UpdateRequest<RefreshToken>,
 ) -> Result<TokenResponse, TdError> {
     let (ctx, _, refresh_token) = request.into_parts();
-    let mut gated_trx = db.begin().await?;
-    let conn = gated_trx.get(authz.none());
-    let access_token_id = ctx.access_token_id;
-    let at = ctx.time;
-
     let refresh_token_id = decode_refresh_token(&jwt_config, &refresh_token)?;
+    let token = retrying(|attempt| async {
+        let mut gated_trx = db.begin(attempt).await?;
+        let conn = gated_trx.get(authz.none());
+        let access_token_id = ctx.access_token_id;
+        let at = ctx.time;
 
-    // find and lock the session by access token ID and refresh token ID; the
-    // lock serializes concurrent refreshes so the token can be redeemed once
-    let session = conn
-        .for_update()
-        .fetch_one::<SessionDB>(and!(&access_token_id, &refresh_token_id))
-        .await?;
-    assert_session_active(&session)?;
-    let user: UserDB = conn.fetch_one(&ctx.user_id).await?;
-    assert_user_enabled(&user)?;
+        let user: UserDB = conn.fetch_one(&ctx.user_id).await?;
+        let session = conn
+            .fetch_one::<SessionDB>(and!(&access_token_id, &refresh_token_id))
+            .await?;
+        assert_session_active(&session)?;
+        assert_user_enabled(&user)?;
 
-    let new_token = SessionInvalidateDB::new(at, SessionStatus::InvalidNewToken);
-    conn.update(&new_token, access_token_id).await?;
+        let new_token = SessionInvalidateDB::new(at, SessionStatus::InvalidNewToken);
+        conn.update(&new_token, access_token_id).await?;
 
-    let new_session = SessionDB::new(ctx.user_id, at, session_expiration(&jwt_config)?);
-    conn.insert(&new_session).await?;
-
-    let token = create_access_token(&jwt_config, &new_session)?;
+        let new_session = SessionDB::new(ctx.user_id, at, session_expiration(&jwt_config)?);
+        conn.insert(&new_session).await?;
 
     // Housekeeping purge commits with the transaction; the cache invalidation
     // must wait for the commit (see LoginService).
@@ -63,6 +58,11 @@ async fn refresh(
     gated_trx.commit().await?;
     sessions.invalidate().await;
 
+        gated_trx.commit().await?;
+        Ok(token)
+    })
+    .await?;
+    purge_expired_sessions(&db).await;
     Ok(token)
 }
 

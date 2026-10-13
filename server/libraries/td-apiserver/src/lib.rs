@@ -16,6 +16,7 @@ use ta_services::service::Ctx;
 use td_bridge::{BridgeProviderFactory, BridgeProviderHandle};
 use td_common::server_runner::ServerRunner;
 use td_common::status::ExitStatus;
+use td_database::access::{DbPool, Global};
 use td_execution::SchedulerNotify;
 use td_process::launcher::cli::Cli;
 use td_queries::initialize_logical_ids;
@@ -140,6 +141,7 @@ pub fn run() {
             // entry point.
             let authz_registry = te_authz::enable_extensions(
                 &db,
+                &DbPool::new(serving_pools.domain_pools(), Global),
                 config.security_mode.is_simple(),
                 &config.password,
                 config.extended_config.instance_token(),

@@ -60,8 +60,9 @@ async fn delete_collection(
         (collection, grant)
     };
 
-    let connection_id = retrying(|| async {
-        let mut trx = db.begin_exclusive().await?;
+    let connection_id = retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let at = trx.locked_at();
         let conn = trx.get(grant);
         // Bare-table row lock (views with outer joins aren't lockable): a
         // registration landing mid-cascade would otherwise escape it.
@@ -80,13 +81,14 @@ async fn delete_collection(
         let table_ids: Vec<TableId> = tables.iter().map(|x| x.base.table_id).collect();
         // Same-collection dependants are closed with the collection below; a
         // frozen version for them would be closed in the same instant.
-        let frozen: Vec<FunctionInsertDB> = dependants_of_tables(conn, &table_ids)
+        let dependants: Vec<FunctionDB> = dependants_of_tables(conn, &table_ids)
             .await?
-            .iter()
+            .into_iter()
             .filter(|f| f.base.collection_id != collection.id)
             .map(|f| f.frozen_version(&ctx))
             .collect();
-        conn.scd2().chunked().open(&frozen, at).await?;
+        ensure_freezes_on_top(conn, &dependants, at).await?;
+        freeze_functions(conn, &dependants, &ctx, at).await?;
         conn.scd2()
             .chunked()
             .close::<TriggerDB>(&table_ids, (), at)

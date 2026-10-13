@@ -38,7 +38,7 @@ use crate::test_utils::TestDb;
 /// a transaction dropped without being ended keeps its locks until the pool
 /// closes, which is after the teardown that waits for them.
 async fn scalars(db: &TdPool, sql: impl Into<String>) -> Vec<String> {
-    sqlx::query_scalar(sqlx::AssertSqlSafe(sql.into()))
+    sqlx::query_scalar(generated(sql.into()))
         .fetch_all(db.as_ref())
         .await
         .unwrap()
@@ -46,7 +46,7 @@ async fn scalars(db: &TdPool, sql: impl Into<String>) -> Vec<String> {
 
 /// Fetch one text column, binding `args` as `$1`, `$2`, … .
 async fn fetch_text(db: &TdPool, sql: impl Into<String>, args: &[&str]) -> String {
-    let mut query = sqlx::query_scalar(sqlx::AssertSqlSafe(sql.into()));
+    let mut query = sqlx::query_scalar(generated(sql.into()));
     for arg in args {
         query = query.bind(*arg);
     }
@@ -55,7 +55,7 @@ async fn fetch_text(db: &TdPool, sql: impl Into<String>, args: &[&str]) -> Strin
 
 /// `SELECT count(*)` off `table`.
 async fn count_rows(db: &TdPool, table: &str) -> i64 {
-    sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT count(*) FROM {table}")))
+    sqlx::query_scalar(generated(format!("SELECT count(*) FROM {table}")))
         .fetch_one(db.as_ref())
         .await
         .unwrap()
@@ -75,7 +75,7 @@ fn at_rest(counter: usize) -> String {
 /// Run a statement for its effect, committing it.
 async fn execute(db: &TdPool, sql: impl Into<String>) {
     let mut conn = db.begin().await.unwrap();
-    sqlx::query(sqlx::AssertSqlSafe(sql.into()))
+    sqlx::query(generated(sql.into()))
         .execute(&mut *conn)
         .await
         .unwrap();

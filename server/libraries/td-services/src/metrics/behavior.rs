@@ -8,6 +8,7 @@ use crate::Services;
 use crate::execution::services::callback::tests::test_callback;
 use crate::execution::update_status::tests::{TestExecution, TestFunction, TestTransaction};
 use td_common::execution_status::WorkerCallbackStatus;
+use td_database::access::Attempt;
 use td_database::access::{AcrossProjects, DbPool, Grant};
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
@@ -268,7 +269,9 @@ async fn a_replaced_attempt_is_filtered_not_deducted(db: TdPool) -> Result<(), T
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut trx = DbPool::in_project(&pools, &p.id).begin_exclusive().await?;
+    let mut trx = DbPool::in_project(&pools, &p.id)
+        .begin_exclusive(Attempt::unretried())
+        .await?;
     runs_reattempted(
         trx.get(Grant::asserted("metrics behavior test")),
         std::slice::from_ref(&lfr.base.id),

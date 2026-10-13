@@ -237,6 +237,8 @@ fn expand(args: FactoryArgs, mut func: ItemFn) -> Result<TokenStream, syn::Error
                     quote! {
                         ::ta_services::factory::abandon_param::<#prior_ty, Self, #req_ty>(
                             #prior_name,
+                            &__e,
+                            __pass,
                         )
                         .await;
                     }
@@ -244,11 +246,11 @@ fn expand(args: FactoryArgs, mut func: ItemFn) -> Result<TokenStream, syn::Error
                 .collect();
             if abandons.is_empty() {
                 quote_spanned! { ty.span() =>
-                    #binding = <#ty as #trait_path>::extract(self, &__request).await?;
+                    #binding = <#ty as #trait_path>::extract(self, &__request_pass).await?;
                 }
             } else {
                 quote_spanned! { ty.span() =>
-                    #binding = match <#ty as #trait_path>::extract(self, &__request).await {
+                    #binding = match <#ty as #trait_path>::extract(self, &__request_pass).await {
                         Ok(__v) => __v,
                         Err(__e) => {
                             #(#abandons)*
@@ -273,7 +275,7 @@ fn expand(args: FactoryArgs, mut func: ItemFn) -> Result<TokenStream, syn::Error
                 }
             }
             FnParam::ReqCtx => quote! { &mut __req_ctx },
-            FnParam::Request => quote! { __request },
+            FnParam::Request => quote! { __request_pass },
         })
         .collect();
 
@@ -290,11 +292,50 @@ fn expand(args: FactoryArgs, mut func: ItemFn) -> Result<TokenStream, syn::Error
                 let __out = ::ta_services::factory::finish_param::<#ty, Self, #req_ty, _>(
                     #name,
                     __out,
+                    __pass,
+                    &mut __retry,
                 )
                 .await;
             }
         })
         .collect();
+
+    let unit = entry_name.to_string();
+    let retried = extracted.iter().any(|e| e.by_ref);
+    let run = if retried {
+        quote! {
+            let mut __pass = ::ta_services::factory::Pass::first(#unit);
+            loop {
+                #[allow(unused_variables, unused_mut)]
+                let mut __req_ctx = ::ta_services::ctx_service::ReqCtx::default();
+                let __request_pass = ::core::clone::Clone::clone(&__request);
+                #(#bindings)*
+                let __out = Self::#func_name(#(#call_args),*).await;
+                let mut __retry = false;
+                #(#finishes)*
+                if __retry {
+                    __pass = __pass.next();
+                    continue;
+                }
+                return Ok(::ta_services::ctx_service::CtxResponse::new(
+                    __out?,
+                    __req_ctx,
+                ));
+            }
+        }
+    } else {
+        quote! {
+            #[allow(unused_variables, unused_mut)]
+            let mut __req_ctx = ::ta_services::ctx_service::ReqCtx::default();
+            let __request_pass = __request;
+            #(#bindings)*
+            let __out = Self::#func_name(#(#call_args),*).await;
+            Ok(::ta_services::ctx_service::CtxResponse::new(
+                __out?,
+                __req_ctx,
+            ))
+        }
+    };
 
     Ok(TokenStream::from(quote! {
         impl #target {
@@ -303,20 +344,15 @@ fn expand(args: FactoryArgs, mut func: ItemFn) -> Result<TokenStream, syn::Error
             /// Run the service: extract the fn's parameters, execute it, end
             /// the ones it borrowed, and fold the accumulated messages into the
             /// response envelope. The body's result is held rather than
-            /// propagated, so a failing body still reaches those endings.
+            /// propagated, so a failing body still reaches those endings. When
+            /// an ended parameter asks for it, the whole service runs again on
+            /// a fresh copy of the request, and only the last run's messages
+            /// are kept.
             pub async fn #entry_name(
                 &self,
                 __request: #req_ty,
             ) -> Result<::ta_services::ctx_service::CtxResponse<#res_ty>, td_error::TdError> {
-                #[allow(unused_variables, unused_mut)]
-                let mut __req_ctx = ::ta_services::ctx_service::ReqCtx::default();
-                #(#bindings)*
-                let __out = Self::#func_name(#(#call_args),*).await;
-                #(#finishes)*
-                Ok(::ta_services::ctx_service::CtxResponse::new(
-                    __out?,
-                    __req_ctx,
-                ))
+                #run
             }
         }
     }))

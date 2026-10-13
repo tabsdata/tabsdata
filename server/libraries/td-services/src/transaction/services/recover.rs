@@ -10,7 +10,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
-use td_database::access::{AcrossProjects, DbPool};
+use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::collection::ResolvedCollectionDB;
@@ -38,22 +38,31 @@ async fn transaction_recover(
         let collection: ResolvedCollectionDB =
             conn.fetch_one(&transaction.base.collection_id).await?;
         let project = collection.base.project_id;
-        // before the exclusive lock: unauthorized callers must not queue on it
         let grant = authz
             .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
             .await?;
         (project, grant)
     };
-    let mut trx = db.in_project(&project).begin_exclusive().await?;
-    let conn = trx.get(grant);
-
-    let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&transaction_id).await?;
-    // Terminalize the dead attempts of Requested LFRs before re-scheduling.
-    abandon_requested_physical_runs(conn, &ctx.time, &lfrs).await?;
-    // Set recover status (ReScheduled). Dispatch re-mints per LFR; the new
-    // attempt is the run's current version from mint.
-    update_function_run_status(msgs, conn, &lfrs, LogicalFunctionRunStatus::ReScheduled).await?;
-    trx.commit().await?;
+    let (stops, recorded) = retrying(|attempt| async {
+        let mut recorded = ReqCtx::default();
+        let mut trx = db.in_project(&project).begin(attempt).await?;
+        let conn = trx.get(grant);
+        let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&transaction_id).await?;
+        let stops = abandon_requested_physical_runs(conn, &ctx.time, &lfrs).await?;
+        update_function_run_status(
+            &mut recorded,
+            conn,
+            &lfrs,
+            LogicalFunctionRunStatus::ReScheduled,
+        )
+        .await?;
+        reset_recoveries(conn, &lfrs).await?;
+        trx.commit().await?;
+        Ok((stops, recorded))
+    })
+    .await?;
+    msgs.merge(recorded);
+    stop_function_workers(&bridge, stops).await;
 
     scheduler_notify.notify_scheduler();
     Ok(())

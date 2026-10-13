@@ -163,12 +163,6 @@ pub const LOAD_CASES: &[LoadCase] = &[
         family: Family::Default,
         status: Status::Implemented,
     },
-    LoadCase {
-        name: "default::serialize_on",
-        covers: &["ForUpdate::serialize_on"],
-        family: Family::Default,
-        status: Status::Implemented,
-    },
     // generic/scd2.rs — open-interval (at-now) reads and the interval writes.
     LoadCase {
         name: "latest::fetch_one",

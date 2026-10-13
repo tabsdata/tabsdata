@@ -8,7 +8,7 @@ use crate::execution::update_status::{
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use ta_services::ctx_service::ReqCtx;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::RecoveryConfig;
@@ -44,7 +44,7 @@ impl StaleDispatchedRuns {
     name = "recovery.fetch_stale_dispatched_runs",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn fetch_stale_dispatched_runs<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -111,7 +111,7 @@ pub async fn fetch_stale_dispatched_runs<S: SeesProjectRows, M: AccessMode>(
     err(Debug)
 )]
 pub async fn fail_stale_abandoned_attempts(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     at: &AtTime,
     stale: &StaleDispatchedRuns,
 ) -> Result<(), TdError> {
@@ -134,7 +134,7 @@ pub async fn fail_stale_abandoned_attempts(
 #[instrument(name = "recovery.sweep", skip_all, level = "debug", err(Debug))]
 pub async fn sweep_stale_runs(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     at: &AtTime,
     config: &RecoveryConfig,
 ) -> Result<(), TdError> {

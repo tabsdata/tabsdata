@@ -6,7 +6,8 @@ use crate::execution::update_status::update_worker_status;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_database::access::{AcrossProjects, DbPool};
+use td_common::execution_status::{CallbackOutcome, CallbackResponse};
+use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::worker::{
@@ -24,14 +25,36 @@ async fn worker_callback(
     let update = WorkerExecutionUpdate::try_from(&callback)?;
 
     let worker_id = param.worker;
-    let mut trx = db.begin().await?;
-    let worker: WorkerDB = trx.get(authz.none()).fetch_one(&worker_id).await?;
-    let mut trx = trx.enter_project(&worker.project_id).await?;
+    let applied = retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let worker: WorkerDB = trx.get(authz.none()).fetch_one(&worker_id).await?;
+        let mut trx = trx.enter_project(&worker.project_id).await?;
 
-    let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
-    update_worker_status(trx.get(authz.none()), &worker_update, &worker_id).await?;
-    trx.commit().await?;
-    Ok(())
+        let worker_update: WorkerUpdateDB = WorkerUpdateDB::try_from(&update)?;
+        let conn = trx.get(authz.none());
+        let applied = update_worker_status(conn, &worker_update, &worker_id).await?;
+        if applied
+            && worker.base.worker_type == WorkerType::StageTrigger
+            && worker_update.status == WorkerStatus::Failed
+        {
+            let retry = after_failure(
+                &worker.failures,
+                &update,
+                callback.exit_status,
+                &AtTime::now(),
+            );
+            conn.update(&retry, &worker_id).await?;
+        }
+        trx.commit().await?;
+        Ok(applied)
+    })
+    .await?;
+    let outcome = if applied {
+        CallbackOutcome::Applied
+    } else {
+        CallbackOutcome::Stale
+    };
+    Ok(CallbackResponse { outcome })
 }
 
 #[cfg(test)]

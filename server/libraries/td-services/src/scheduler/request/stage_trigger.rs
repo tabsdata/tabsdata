@@ -30,7 +30,7 @@ use tracing::{instrument, warn};
     name = "scheduler.create_stage_trigger_workers_start",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn create_locked_stage_trigger_workers_start_request<S: DbScope, M: AccessMode>(
     orchestrator: Orchestrator,
@@ -240,7 +240,7 @@ pub(crate) async fn put_stage_trigger_start(
     name = "scheduler.create_stage_trigger_workers_stop",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub fn create_locked_stage_trigger_workers_stop_request(
     orchestrator: Orchestrator,

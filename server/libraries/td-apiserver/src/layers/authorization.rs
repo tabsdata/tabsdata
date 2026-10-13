@@ -15,7 +15,7 @@ use td_authz::rbac::enforce::RbacError;
 use td_authz::session_provider::{Session, SessionError, Sessions};
 use td_authz::token_provider::ServiceTokens;
 use td_common::jwt::{JwtConfig, decode_token};
-use td_database::access::{DbPool, GatedConnection, Global, Grant, RO};
+use td_database::access::{DbPool, GatedConnection, Global, Grant, RO, retrying};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::service_token::ServiceTokenDBWithNames;
@@ -39,7 +39,7 @@ pub async fn authorization_layer(
     if bearer.starts_with(token::PREFIX) {
         service_token(db, tokens, bearer, request, next).await
     } else {
-        session(db, jwt_config, sessions, bearer, request, next).await
+        session(db, jwt_config, bearer, request, next).await
     }
 }
 
@@ -73,7 +73,6 @@ fn bearer(request: &Request) -> Result<String, TdError> {
 async fn session(
     db: DbPool<Global>,
     jwt_config: Ctx<JwtConfig>,
-    sessions: Ctx<Sessions>,
     bearer: String,
     request: Request,
     next: Next,
@@ -89,21 +88,17 @@ async fn session(
     })?;
     let access_token_id: AccessTokenId = token.jti.into();
 
-    // Hot path: the cache; only a miss (startup, post-invalidation) reads.
-    let session_map = match sessions.cached().await {
-        Some(map) => map,
-        None => {
-            let mut conn = read_connection(&db).await?;
-            sessions
-                .get(conn.get(Grant::asserted("session authentication")))
-                .await
-                .map_err(|e| {
-                    error!("Could not load sessions: {e:#?}");
-                    TdError::from(AuthError::AuthenticationFailed)
-                })?
-        }
+    // The database failing is the server's error, not the token's: a 401
+    // would tell the client to discard a valid token.
+    let session = {
+        let mut conn = db.read().await?;
+        active_session(
+            conn.get(Grant::asserted("session authentication")),
+            &access_token_id,
+        )
+        .await?
     };
-    let session = session_map.get(&access_token_id).cloned().ok_or_else(|| {
+    let session = session.ok_or_else(|| {
         warn!("{}", SessionError::NotFound(access_token_id));
         TdError::from(AuthError::AuthenticationFailed)
     })?;
@@ -139,20 +134,20 @@ async fn service_token(
         TdError::from(AuthError::AuthenticationFailed)
     })?;
 
-    let token_map = match tokens.cached().await {
-        Some(map) => map,
-        None => {
-            let mut conn = read_connection(&db).await?;
-            tokens
-                .load(conn.get(Grant::asserted("service token authentication")))
-                .await
-                .map_err(|e| {
-                    error!("Could not load service tokens: {e:#?}");
-                    TdError::from(AuthError::AuthenticationFailed)
-                })?
-        }
+    let token = {
+        let mut conn = read_connection(&db).await?;
+        tokens
+            .find(
+                conn.get(Grant::asserted("service token authentication")),
+                &digest,
+            )
+            .await
+            .map_err(|e| {
+                error!("Could not look up a service token: {e:#?}");
+                TdError::from(AuthError::AuthenticationFailed)
+            })?
     };
-    let token = token_map.get(&digest).cloned().ok_or_else(|| {
+    let token = token.ok_or_else(|| {
         warn!("Service token not recognised");
         TdError::from(AuthError::AuthenticationFailed)
     })?;
@@ -179,16 +174,16 @@ async fn service_token(
 
     // The interval is checked before a write connection is acquired.
     if tokens.due_for_touch(&token.base.id, **at) {
-        match db.begin().await {
-            Ok(mut conn) => {
-                let grant = Grant::asserted("service token last-used stamp");
-                if let Err(e) = tokens.touch(conn.get(grant), &token.base.id, &at).await {
-                    warn!("Could not stamp a service token's last use: {e:#?}");
-                } else if let Err(e) = conn.commit().await {
-                    warn!("Could not commit a service token's last-use stamp: {e:#?}");
-                }
-            }
-            Err(e) => warn!("Could not open a transaction to stamp a token's last use: {e:#?}"),
+        let stamped = retrying(|attempt| async {
+            let mut conn = db.begin(attempt).await?;
+            let grant = Grant::asserted("service token last-used stamp");
+            tokens.touch(conn.get(grant), &token.base.id, &at).await?;
+            conn.commit().await?;
+            Ok(())
+        })
+        .await;
+        if let Err(e) = stamped {
+            warn!("Could not stamp a service token's last use: {e:#?}");
         }
     }
     Ok(response)
@@ -503,5 +498,38 @@ mod tests {
         assert!(log_output.contains(&format!(
             "authorized{{credential=\"session\" user_id={user_id} user_name={user_name} access_token_id={trace_auth_id}}}"
         )));
+    }
+
+    /// A valid token arrives while the database cannot be reached. That is the server's failure, not the
+    /// token's: the request must fail with a server error the client can retry,
+    /// not a 401 that tells it to discard the token and log in again.
+    #[td_test::test(db)]
+    async fn test_an_unreachable_database_is_not_reported_as_bad_credentials(db: TdPool) {
+        let (router, services) = build(db.clone());
+        db.seed()
+            .user(&UserName::try_from("u_valid").unwrap(), &UserEnabled::TRUE)
+            .await
+            .unwrap();
+        let token = services
+            .clone()
+            .login(Login {
+                name: UserName::try_from("u_valid").unwrap(),
+                password: Password::try_from("password").unwrap(),
+            })
+            .await
+            .unwrap();
+        db.close().await;
+
+        let answered = status(
+            &router,
+            Method::GET,
+            "/collections",
+            token.access_token.as_str(),
+        )
+        .await;
+        assert!(
+            answered.is_server_error(),
+            "a database outage answered {answered}"
+        );
     }
 }

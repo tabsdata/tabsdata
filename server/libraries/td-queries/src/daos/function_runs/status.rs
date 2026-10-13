@@ -4,17 +4,17 @@
 
 //! The doors through which a logical run's status and a physical run's
 //! instants change. Each writes the row, then what follows from it: the
-//! metrics facts and the parents' status roll-up. They exist on the
-//! `XW` in-project connection only, so neither changes outside the
-//! project's exclusive lock, and the update DAOs they use are constructed
-//! nowhere else.
+//! metrics facts and the parents' status roll-up. They exist on in-project
+//! write connections only, and the update DAOs they use are constructed
+//! nowhere else. Write units are `SERIALIZABLE`, so two units changing the
+//! same runs, or the children of one parent, never both commit on stale reads.
 
 use crate::Queries;
 use crate::daos::function_runs::{LogicalRuns, PhysicalRuns};
 use crate::daos::metrics::write::{attempts_ended, runs_status_changed};
 use crate::daos::status_rollup::{logical_runs_changed, physical_runs_changed};
 use ta_objects::errors::SqlError;
-use td_database::access::{InProject, XW};
+use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_objects::and;
 use td_objects::dxo::logical::LogicalFunctionRunStatusUpdateDB;
@@ -25,7 +25,7 @@ use td_objects::types::basic::{
     PhysicalFunctionRunStatus,
 };
 
-impl LogicalRuns<&mut DomainConnection<Apiserver, InProject, XW>> {
+impl<M: WriteMode> LogicalRuns<&mut DomainConnection<Apiserver, InProject, M>> {
     pub async fn set_status(
         self,
         lfr_ids: &[LogicalFunctionRunId],
@@ -64,7 +64,7 @@ impl LogicalRuns<&mut DomainConnection<Apiserver, InProject, XW>> {
     }
 }
 
-impl PhysicalRuns<&mut DomainConnection<Apiserver, InProject, XW>> {
+impl<M: WriteMode> PhysicalRuns<&mut DomainConnection<Apiserver, InProject, M>> {
     pub async fn dispatched(
         self,
         pfr_ids: &[PhysicalFunctionRunId],
@@ -117,7 +117,7 @@ impl PhysicalRuns<&mut DomainConnection<Apiserver, InProject, XW>> {
 }
 
 async fn physical_runs_finished(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     pfr_ids: &[PhysicalFunctionRunId],
 ) -> Result<(), SqlError> {
     attempts_ended(conn, pfr_ids).await?;

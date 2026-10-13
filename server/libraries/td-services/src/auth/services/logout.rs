@@ -5,8 +5,7 @@
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::session_provider::Sessions;
-use td_database::access::{DbPool, Global};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::dxo::auth::SessionInvalidateDB;
 use td_objects::dxo::crudl::RequestContext;
@@ -20,8 +19,9 @@ async fn logout(
     db: DbPool<Global>,
     ctx: RequestContext,
 ) -> Result<(), TdError> {
-    let mut gated_trx = db.begin().await?;
-    let conn = gated_trx.get(authz.none());
+    retrying(|attempt| async {
+        let mut gated_trx = db.begin(attempt).await?;
+        let conn = gated_trx.get(authz.none());
 
     let logout = SessionInvalidateDB::new(ctx.time, SessionStatus::InvalidLogout);
     conn.update(&logout, ctx.access_token_id).await?;
@@ -32,6 +32,11 @@ async fn logout(
     gated_trx.commit().await?;
     sessions.invalidate().await;
 
+        gated_trx.commit().await?;
+        Ok(())
+    })
+    .await?;
+    purge_expired_sessions(&db).await;
     Ok(())
 }
 

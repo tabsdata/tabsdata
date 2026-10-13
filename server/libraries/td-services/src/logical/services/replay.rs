@@ -11,7 +11,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
-use td_database::access::{AcrossProjects, DbPool};
+use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::crudl::CreateRequest;
@@ -35,27 +35,30 @@ async fn replay_logical_function_run(
         let mut trx = db.read().await?;
         let lfr: LogicalFunctionRunDB = trx.get(authz.none()).fetch_one(&lfr_id).await?;
         let project = lfr.project_id;
-        // before the exclusive lock: unauthorized callers must not queue on it
         let grant = authz
             .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
             .await?;
         (project, grant)
     };
-    let mut trx = db.in_project(&project).begin_exclusive().await?;
-    let locked_at = trx.locked_at();
-    let conn = trx.get(grant);
-    let lfr: LogicalFunctionRunDB = conn.fetch_one(&lfr_id).await?;
+    let response = retrying(|attempt| async {
+        let mut trx = db.in_project(&project).begin(attempt).await?;
+        let locked_at = trx.locked_at();
+        let conn = trx.get(grant);
+        let lfr: LogicalFunctionRunDB = conn.fetch_one(&lfr_id).await?;
 
-    // The concurrent-replay gate only matters for sticky-Committed LFRs;
-    // other terminal statuses cannot have a prior replay.
-    assert_lfr_terminal(&lfr)?;
-    let bound = load_current_function_run_id(conn, &lfr).await?;
-    assert_no_concurrent_replay(conn, &lfr).await?;
-    let runnable = resolve_replay_function_version_id(conn, &lfr, &at).await?;
-    let fr_new = mint_replay_function_run(conn, &lfr, &runnable, locked_at).await?;
-    mint_replay_table_data_versions(conn, &lfr, &runnable, &fr_new, locked_at).await?;
-    let response = build_replay_response(&lfr, &bound, &fr_new, &runnable)?;
-    trx.commit().await?;
+        // The concurrent-replay gate only matters for sticky-Committed LFRs;
+        // other terminal statuses cannot have a prior replay.
+        assert_lfr_terminal(&lfr)?;
+        let bound = load_current_function_run_id(conn, &lfr).await?;
+        assert_no_concurrent_replay(conn, &lfr).await?;
+        let runnable = resolve_replay_function_version_id(conn, &lfr, &at).await?;
+        let fr_new = mint_replay_function_run(conn, &lfr, &runnable, locked_at).await?;
+        mint_replay_table_data_versions(conn, &lfr, &runnable, &fr_new, locked_at).await?;
+        let response = build_replay_response(&lfr, &bound, &fr_new, &runnable)?;
+        trx.commit().await?;
+        Ok(response)
+    })
+    .await?;
 
     // Wake the scheduler so the next tick fires immediately instead of
     // waiting for the periodic interval.

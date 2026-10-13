@@ -8,8 +8,7 @@ use crate::permission::{
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::RbacSource;
-use td_database::access::{DbPool, Global};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::permission::{PermissionDB, PermissionDBWithNames, PermissionParam};
@@ -24,15 +23,15 @@ async fn delete_permission(
 ) -> Result<(), TdError> {
     let (ctx, (role_param, permission_param)) = request.into_parts();
     let grant = authz.none();
-    let mut trx = db.begin().await?;
-    let conn = trx.get(grant);
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let conn = trx.get(grant);
 
-    let permission: PermissionDBWithNames = conn.fetch_one(&permission_param.permission).await?;
-    assert_role_in_permission(&role_param.role, &permission)?;
-    // Authorize by the permission's target: manage_access on the system, or
-    // manage_project on the target project (single-project permissions only).
-    authorize_permission_target(&authz, conn, &ctx, &permission).await?;
-    assert_permission_is_not_fixed(&permission)?;
+        let permission: PermissionDBWithNames =
+            conn.fetch_one(&permission_param.permission).await?;
+        assert_role_in_permission(&role_param.role, &permission)?;
+        authorize_permission_target(&authz, conn, &ctx, &permission).await?;
+        assert_permission_is_not_fixed(&permission)?;
 
     conn.delete::<PermissionDB>(permission.id).await?;
     trx.commit().await?;

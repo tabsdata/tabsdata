@@ -43,11 +43,19 @@ pub use connection::GatedConnection;
 pub use grant::{Gated, Grant};
 pub use lock_instant::LockInstant;
 pub use mode::{AccessMode, OpensIn, RO, RW, WriteMode, XW};
-pub use retry::retrying;
+pub use retry::{Attempt, conflicted, retrying};
 use sqlx::postgres::PgConnection;
 use std::fmt::Display;
 use std::marker::PhantomData;
+use std::time::Duration;
 use td_error::{TdError, td_error};
+use tokio::time::Instant;
+use tracing::warn;
+
+/// The first and the longest pause between attempts to open a unit whose
+/// mode waits on a lock someone else holds.
+const OPEN_BACKOFF_MIN: Duration = Duration::from_millis(10);
+const OPEN_BACKOFF_MAX: Duration = Duration::from_millis(200);
 
 #[td_error]
 pub enum ServiceDbError {
@@ -61,10 +69,35 @@ pub enum ServiceDbError {
     CannotBypassProjectScope(#[source] sqlx::Error) = 5005,
     #[error("Cannot acquire the lock: {0}")]
     CannotAcquireLock(#[source] sqlx::Error) = 5006,
-    #[error("Timed out waiting for a lock; retry the request")]
-    LockBusy = 5007,
     #[error("Cannot roll back a transaction on the database: {0}")]
     CannotRollbackTransaction(#[source] sqlx::Error) = 5008,
+    #[error("Timed out waiting for a lock; retry the request")]
+    LockBusy = 8000,
+    #[error("Timed out waiting for a database connection; retry the request")]
+    PoolBusy(#[source] sqlx::Error) = 8001,
+    #[error("The request conflicted with a concurrent one; retry the request")]
+    Conflicted(#[source] sqlx::Error) = 8002,
+}
+
+impl ServiceDbError {
+    /// A transaction that could not begin: retryable when the pool gave up
+    /// waiting for a connection.
+    pub fn begin_failed(error: sqlx::Error) -> Self {
+        match error {
+            sqlx::Error::PoolTimedOut => ServiceDbError::PoolBusy(error),
+            error => ServiceDbError::CannotBeginTransaction(error),
+        }
+    }
+
+    /// A commit that failed: retryable when the database refused it for
+    /// conflicting with a concurrent one.
+    pub fn commit_failed(error: sqlx::Error) -> Self {
+        if retry::conflicted_sql(&error) {
+            ServiceDbError::Conflicted(error)
+        } else {
+            ServiceDbError::CannotCommitTransaction(error)
+        }
+    }
 }
 
 /// The row-level-security scope a [`DbPool`] handle applies to every connection it
@@ -175,35 +208,40 @@ impl<S: DbScope, D: ScopedBy<S>> DbPool<S, D> {
         self.open::<RO>().await
     }
 
-    /// A write transaction on this domain's database, scoped, from the regular
-    /// pool.
-    ///
-    /// Serialization is not implied: a transaction that reads every row it
-    /// decides on `FOR UPDATE` is already serialized against a concurrent
-    /// writer of them. Work with no such row to lock takes
-    /// [`begin_exclusive`](DbPool::begin_exclusive) instead.
-    pub async fn begin(&self) -> Result<GatedConnection<RW, S, D>, TdError>
+    /// A `SERIALIZABLE` write transaction on this domain's database, scoped,
+    /// from the regular pool. It takes no lock to be correct against
+    /// concurrent writes: one whose outcome no serial order explains fails
+    /// with a conflict, so it opens only for an [`Attempt`] of [`retrying`].
+    pub async fn begin(&self, _attempt: Attempt) -> Result<GatedConnection<RW, S, D>, TdError>
     where
         D: Supports<RW>,
     {
         self.open::<RW>().await
     }
 
-    /// Open `M`'s unit of work on the domain's pool, tag and scope it, and let
-    /// the mode finish opening it — the one path a connection reaches service
-    /// code by.
+    /// Begin `M`'s unit of work on the domain's pool, tag and scope it, and
+    /// mint what it carries — the one path a connection reaches service code
+    /// by.
     async fn open<M: OpensIn<S>>(&self) -> Result<GatedConnection<M, S, D>, TdError>
     where
         D: Supports<M>,
     {
         let pool = self.pools.get::<M, D>()?;
-        let conn = M::open(pool)
-            .await
-            .map_err(ServiceDbError::CannotBeginTransaction)?;
-        let mut conn = DomainConnection::<D, S, M>::new(conn);
-        self.scope.apply(&mut conn).await?;
-        let lock = M::opened(&mut conn, &self.scope, pool).await?;
-        Ok(GatedConnection::new(conn, lock))
+        let deadline = Instant::now() + pool.acquire_timeout();
+        let mut backoff = OPEN_BACKOFF_MIN;
+        loop {
+            if let Some(conn) = M::begin(pool, &self.scope).await? {
+                let mut conn = DomainConnection::<D, S, M>::new(conn);
+                self.scope.apply(&mut conn).await?;
+                return Ok(GatedConnection::new(conn, M::opened()));
+            }
+            if Instant::now() + backoff > deadline {
+                warn!("db.tx: gave up waiting for the lock");
+                return Err(ServiceDbError::LockBusy.into());
+            }
+            tokio::time::sleep(backoff).await;
+            backoff = (backoff * 2).min(OPEN_BACKOFF_MAX);
+        }
     }
 }
 
@@ -216,10 +254,14 @@ impl<S: DbScope, D: ScopedBy<S> + ScopedBy<InProject>> DbPool<S, D> {
 }
 
 impl<D: ScopedBy<InProject> + Supports<XW>> DbPool<InProject, D> {
-    /// A write transaction on the exclusive pool, serialized against every
-    /// other exclusive transaction in this project: it holds the project's
-    /// lock until it ends. Only here, because the lock is the scope.
-    pub async fn begin_exclusive(&self) -> Result<GatedConnection<XW, InProject, D>, TdError> {
+    /// [`begin`](DbPool::begin) on the exclusive pool, serialized against
+    /// every other exclusive transaction in this project: it holds the
+    /// project's lock from before it begins until it ends, so it reads what
+    /// the one before it committed. Only here, because the lock is the scope.
+    pub async fn begin_exclusive(
+        &self,
+        _attempt: Attempt,
+    ) -> Result<GatedConnection<XW, InProject, D>, TdError> {
         self.open::<XW>().await
     }
 }

@@ -12,7 +12,7 @@ use sea_query::{Alias, Expr, ExprTrait, Func, Query};
 use std::collections::{BTreeMap, HashSet};
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
-use td_database::access::{InProject, XW};
+use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::metrics_facts::{MetricsFactDB, MetricsFactDBIden, MetricsFactInsertDB};
@@ -35,7 +35,7 @@ struct Consumption {
 /// A version re-materialized by a later attempt was possibly read before: its
 /// new written row inherits the earliest read, like the rung derives it.
 async fn inherit_consumption(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     version_ids: &[LogicalTableDataVersionId],
 ) -> Result<(), SqlError> {
     let mut by_instant: BTreeMap<AtTime, Vec<LogicalTableDataVersionId>> = BTreeMap::new();
@@ -73,7 +73,7 @@ async fn inherit_consumption(
 }
 
 async fn attempts_with_facts(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     pfr_ids: &[PhysicalFunctionRunId],
 ) -> Result<HashSet<PhysicalFunctionRunId>, SqlError> {
     let mut found = HashSet::new();
@@ -100,7 +100,7 @@ async fn attempts_with_facts(
 /// Call after the attempt's row and its outputs are written; an attempt that
 /// already owns facts is skipped.
 pub async fn attempts_ended(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     pfr_ids: &[PhysicalFunctionRunId],
 ) -> Result<(), SqlError> {
     if pfr_ids.is_empty() {
@@ -139,7 +139,7 @@ pub async fn attempts_ended(
 
 /// Keeps the earliest instant, so processing order cannot change the answer.
 pub async fn versions_consumed(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     version_ids: &[LogicalTableDataVersionId],
     consumed_on: &AtTime,
 ) -> Result<(), SqlError> {
@@ -179,7 +179,7 @@ pub async fn versions_consumed(
 /// outcome, a superseded one the status it had. An in-flight status has no
 /// fact to move yet.
 pub async fn runs_status_changed(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     lfr_ids: &[LogicalFunctionRunId],
     status: &LogicalFunctionRunStatus,
 ) -> Result<(), SqlError> {
@@ -215,7 +215,7 @@ pub async fn runs_status_changed(
 /// Call where a new attempt is minted, by replay or recovery: the earlier
 /// attempts' facts stop being current.
 pub async fn runs_reattempted(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     lfr_ids: &[LogicalFunctionRunId],
 ) -> Result<(), SqlError> {
     if lfr_ids.is_empty() {

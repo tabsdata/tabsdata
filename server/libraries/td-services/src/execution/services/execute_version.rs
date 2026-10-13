@@ -10,7 +10,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
-use td_database::access::{AcrossProjects, DbPool};
+use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_execution::{SchedulerNotify, TransactionBy};
 use td_objects::dxo::collection::ResolvedCollectionDB;
@@ -46,35 +46,49 @@ async fn execute_function_version(
             .await?;
         (requested, project, grant)
     };
-    let mut trx = db.in_project(&project).begin_exclusive().await?;
-
-    // Ensure the trigger function is the current active version (never allow
-    // older versions to execute).
-    let at = trx.locked_at();
-    let conn = trx.get(grant);
-    let function: FunctionDBWithNames = conn
-        .scd2()
-        .as_of(&ctx.time)
-        .fetch_one(&requested.base.base.function_id)
-        .await?;
-    assert_function_version(&function_version_id, &function)?;
-    ensure_user_managed(&function.base.base)?;
-
     let trigger_type = internal_request.trigger_type.clone();
     let execution_request = ExecutionRequest::from(&internal_request);
+    let db = db.in_project(&project);
+    let (executed, recorded) = retrying(|attempt| async {
+        let mut recorded = ReqCtx::default();
+        let mut trx = db.begin_exclusive(attempt).await?;
+        let at = trx.locked_at();
+        let conn = trx.get(grant);
 
-    let response = execute(
-        conn,
-        msgs,
-        &transaction_by,
-        ctx,
-        at,
-        execution_request,
-        function,
-        trigger_type,
-    )
+        // Ensure the trigger function is the current active version (never
+        // allow older versions to execute).
+        let function: FunctionDBWithNames = conn
+            .scd2()
+            .fetch_one(&requested.base.base.function_id)
+            .await?;
+        assert_function_version(&function_version_id, &function)?;
+        ensure_user_managed(&function.base.base)?;
+
+        if let Some(refused) =
+            trigger_gate(conn, &execution_request, &function, &trigger_type).await?
+        {
+            return Ok((Err(refused), recorded));
+        }
+        let response = execute(
+            conn,
+            &mut recorded,
+            &transaction_by,
+            ctx,
+            at,
+            execution_request.clone(),
+            function,
+            trigger_type.clone(),
+        )
+        .await?;
+        trx.commit().await?;
+        Ok((Ok(response), recorded))
+    })
     .await?;
-    trx.commit().await?;
+    msgs.merge(recorded);
+    let response = match executed {
+        Ok(response) => response,
+        Err(refused) => return Ok(refused),
+    };
 
     scheduler_notify.notify_scheduler();
     Ok(response)

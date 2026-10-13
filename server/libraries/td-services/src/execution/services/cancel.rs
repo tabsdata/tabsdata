@@ -11,7 +11,7 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
-use td_database::access::{AcrossProjects, DbPool};
+use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::dxo::collection::ResolvedCollectionDB;
@@ -41,21 +41,27 @@ async fn execution_cancel(
         let collection: ResolvedCollectionDB =
             conn.fetch_one(&execution.base.collection_id).await?;
         let project = collection.base.project_id;
-        // before the exclusive lock: unauthorized callers must not queue on it
         let grant = authz
             .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
             .await?;
         (project, grant)
     };
-    let mut trx = db.in_project(&project).begin_exclusive().await?;
+    let (stops, recorded) = retrying(|attempt| async {
+        let mut recorded = ReqCtx::default();
+        let mut trx = db.in_project(&project).begin(attempt).await?;
+        let conn = trx.get(grant);
+        let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&execution_id).await?;
+        let cancelled = cancel_runs(conn, &ctx.time, &lfrs).await?;
+        if cancelled.runs.is_empty() {
+            recorded.warning(Message::of(UpdateStatusRunError::NoOpStatusUpdate));
+        }
+        trx.commit().await?;
+        Ok((cancelled.stops, recorded))
+    })
+    .await?;
+    msgs.merge(recorded);
 
-    let conn = trx.get(grant);
-    let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&execution_id).await?;
-    let stops = end_cancelled_attempts(conn, &ctx.time, &lfrs).await?;
-    update_function_run_status(msgs, conn, &lfrs, LogicalFunctionRunStatus::Canceled).await?;
-    trx.commit().await?;
-
-    stop_cancelled_workers(&bridge, stops).await;
+    stop_function_workers(&bridge, stops).await;
     scheduler_notify.notify_scheduler();
     Ok(())
 }

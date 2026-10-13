@@ -9,7 +9,7 @@
 use crate::function::topology::{RunnableVersion, latest_patch_or_head};
 use crate::logical::mint::{mint_function_run, mint_output_table_data_versions};
 use td_database::access::LockInstant;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode, XW};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunReplayResponse};
@@ -43,7 +43,7 @@ pub enum ReplayError {
     name = "replay.load_current_attempt",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn load_current_function_run_id<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -62,7 +62,7 @@ pub async fn load_current_function_run_id<S: SeesProjectRows, M: AccessMode>(
     name = "replay.assert_no_concurrent_replay",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn assert_no_concurrent_replay<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -95,7 +95,12 @@ pub async fn assert_no_concurrent_replay<S: SeesProjectRows, M: AccessMode>(
 /// - `Failed` — can be **promoted to `Done`** by a successful replay
 ///   ("replay healed a failed run"); see the `Failed → Done` arm in
 ///   `update_function_run_status`.
-#[instrument(name = "replay.assert_terminal", skip_all, level = "debug", err(Debug))]
+#[instrument(
+    name = "replay.assert_terminal",
+    skip_all,
+    level = "debug",
+    err(Debug, level = "debug")
+)]
 pub fn assert_lfr_terminal(lfr: &LogicalFunctionRunDB) -> Result<(), TdError> {
     match lfr.base.status {
         LogicalFunctionRunStatus::Done
@@ -113,7 +118,12 @@ pub fn assert_lfr_terminal(lfr: &LogicalFunctionRunDB) -> Result<(), TdError> {
 /// Resolve the head + optional patch fvid to run on this attempt.
 /// Pins to the replay-request `at`, so a patch registered between the
 /// replay request and the dispatch tick won't be silently picked up.
-#[instrument(name = "replay.resolve_fvid", skip_all, level = "debug", err(Debug))]
+#[instrument(
+    name = "replay.resolve_fvid",
+    skip_all,
+    level = "debug",
+    err(Debug, level = "debug")
+)]
 pub async fn resolve_replay_function_version_id<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     lfr: &LogicalFunctionRunDB,
@@ -130,9 +140,14 @@ pub async fn resolve_replay_function_version_id<S: SeesProjectRows, M: AccessMod
     Ok(runnable)
 }
 
-#[instrument(name = "replay.mint_fr_new", skip_all, level = "debug", err(Debug))]
+#[instrument(
+    name = "replay.mint_fr_new",
+    skip_all,
+    level = "debug",
+    err(Debug, level = "debug")
+)]
 pub async fn mint_replay_function_run(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     lfr: &LogicalFunctionRunDB,
     runnable: &RunnableVersion,
     at: LockInstant,
@@ -140,7 +155,12 @@ pub async fn mint_replay_function_run(
     mint_function_run(&mut *conn, lfr, runnable, at).await
 }
 
-#[instrument(name = "replay.mint_tdvs_new", skip_all, level = "debug", err(Debug))]
+#[instrument(
+    name = "replay.mint_tdvs_new",
+    skip_all,
+    level = "debug",
+    err(Debug, level = "debug")
+)]
 pub async fn mint_replay_table_data_versions(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     lfr: &LogicalFunctionRunDB,

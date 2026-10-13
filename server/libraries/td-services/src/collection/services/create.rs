@@ -24,7 +24,7 @@ use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
-use td_database::access::{DbPool, InProject};
+use td_database::access::{DbPool, InProject, retrying};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::collection::{CollectionCreate, CollectionRead};
 use td_objects::dxo::connection::ConnectionUpsert;
@@ -77,18 +77,14 @@ async fn create_collection(
     }
 
     // 3. create (short TX): insert the connection row + the collection.
-    let created = async {
-        let mut trx = db.begin().await?;
+    let created = retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
         let conn = trx.get(grant);
-        // FOR UPDATE + liveness check against project delete's emptiness guard.
-        let _ = conn
-            .for_update()
-            .fetch_one::<ActiveProjectDB>(&project)
-            .await?;
+        let _ = conn.fetch_one::<ActiveProjectDB>(&project).await?;
         let read = insert_collection_with_connection(conn, &ctx, &plan).await?;
         trx.commit().await?;
-        Ok::<_, TdError>(read)
-    }
+        Ok(read)
+    })
     .await;
     match created {
         Ok(read) => Ok(read),

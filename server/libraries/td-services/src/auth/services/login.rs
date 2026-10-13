@@ -11,7 +11,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::session_provider::Sessions;
 use td_common::jwt::JwtConfig;
-use td_database::access::{DbPool, Global, Grant};
+use td_database::access::{DbPool, Global, Grant, retrying};
 use td_error::TdError;
 use td_objects::dxo::auth::{Login, SessionDB, TokenResponse};
 use td_objects::dxo::user::UserDB;
@@ -39,10 +39,20 @@ async fn login(
     assert_user_enabled(&user)?;
     assert_no_password_change_required(&user)?;
 
-    let session = SessionDB::new(user.id, at, session_expiration(&jwt_config)?);
-    conn.insert(&session).await?;
+    let token = retrying(|attempt| async {
+        let mut gated_trx = db.begin(attempt).await?;
+        let conn = gated_trx.get(grant);
+        // A password change or disable that committed since the check is seen
+        // here; one racing this login conflicts with it.
+        let user: UserDB = conn.fetch_one(&user.id).await?;
+        if user.password_hash != verified {
+            Err(AuthError::AuthenticationFailed)?;
+        }
+        assert_user_enabled(&user)?;
+        assert_no_password_change_required(&user)?;
 
-    let token = create_access_token(&jwt_config, &session)?;
+        let session = SessionDB::new(user.id, at, session_expiration(&jwt_config)?);
+        conn.insert(&session).await?;
 
     // Housekeeping purge of expired session rows commits with this
     // transaction; the authoritative cache invalidation must wait for the
@@ -52,6 +62,11 @@ async fn login(
     gated_trx.commit().await?;
     sessions.invalidate().await;
 
+        gated_trx.commit().await?;
+        Ok(token)
+    })
+    .await?;
+    purge_expired_sessions(&db).await;
     Ok(token)
 }
 

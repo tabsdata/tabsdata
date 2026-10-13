@@ -12,7 +12,7 @@ use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::collection::{CollectionDB, CollectionParam};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{Function, FunctionDB, FunctionDBWithNames, FunctionEnable};
@@ -29,11 +29,12 @@ async fn enable_function(
 ) -> Result<Function, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, (collection_param, function_param), enable) = request.into_parts();
-    let read = retrying(|| async {
-        let mut gated_trx = db.begin_exclusive().await?;
+    let read = retrying(|attempt| async {
+        let mut gated_trx = db.begin(attempt).await?;
         let grant = authz
             .require::<Project, DevelopProject>(&mut gated_trx, &ctx, &project)
             .await?;
+        let at = gated_trx.locked_at();
         let conn = gated_trx.get(grant);
 
         // Bare-table row lock: the re-registration must not resurrect a function

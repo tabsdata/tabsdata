@@ -14,7 +14,7 @@
 use std::sync::Arc;
 use td_authz::rbac::AuthzRegistry;
 use td_authz::security::sys_admin::ensure_sys_admin_permissions;
-use td_database::access::{Global, RO, RW};
+use td_database::access::{DbPool, Global, Grant, RO, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::{TdError, td_error};
@@ -32,8 +32,6 @@ pub fn register_ext(registry: AuthzRegistry) -> AuthzRegistry {
 pub enum AuthzBootstrapError {
     #[error("Could not start the authz bootstrap transaction: {0}.")]
     TransactionBegin(String) = 5000,
-    #[error("Could not commit the authz bootstrap transaction: {0}.")]
-    TransactionCommit(String) = 5001,
     #[error(
         "Cannot start in 'simple' security mode: the current RBAC configuration is not \
          representable on the Simple surface. Revert the offending configuration or start in \
@@ -51,22 +49,21 @@ pub enum AuthzBootstrapError {
 /// and the shared `td-apiserver` compiles against either.
 pub async fn enable_extensions(
     db: &TdPool,
+    pools: &DbPool<Global>,
     simple_mode: bool,
     _pw_cfg: &PasswordHashingConfig,
     _instance_token: Option<&ServiceToken>,
 ) -> Result<Arc<AuthzRegistry>, TdError> {
     let registry = register_ext(AuthzRegistry::default());
 
-    // Boot writes run as one committed transaction on the regular pool.
-    let tx = db
-        .begin()
-        .await
-        .map_err(|e| AuthzBootstrapError::TransactionBegin(e.to_string()))?;
-    let mut conn = DomainConnection::<Apiserver, Global, RW>::new(tx);
-    ensure_sys_admin_permissions(&mut conn, registry.sys_admin_permissions()).await?;
-    conn.commit()
-        .await
-        .map_err(|e| AuthzBootstrapError::TransactionCommit(e.to_string()))?;
+    retrying(|attempt| async {
+        let mut trx = pools.begin(attempt).await?;
+        let conn = trx.get(Grant::asserted("authz bootstrap"));
+        ensure_sys_admin_permissions(conn, registry.sys_admin_permissions()).await?;
+        trx.commit().await?;
+        Ok(())
+    })
+    .await?;
 
     if simple_mode {
         ensure_representable(db, &registry).await?;

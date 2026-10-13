@@ -44,7 +44,7 @@ pub fn assert_function_version(
     skip_all,
     fields(function_version_id = %*function_version_id),
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn reject_if_running<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -101,7 +101,7 @@ pub async fn reject_if_running<S: SeesProjectRows, M: AccessMode>(
     skip_all,
     fields(function_id = %*function_id),
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn reject_if_external_uid_in_use<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,

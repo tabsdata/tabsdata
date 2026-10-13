@@ -7,10 +7,10 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
-use td_database::access::{GatedConnection, InProject, RW};
+use td_database::access::{DbPool, InProject, retrying};
 use td_error::{TdError, td_error};
 use td_objects::and;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDB, CollectionParam};
+use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::dxo::table::TableParam;
@@ -64,12 +64,13 @@ async fn table_delete(
     }
     let table_id = table.base.base.table_id;
 
-    let parent = Some(Parent::from(table_id));
-    let children: Vec<TableDB> = conn.scd2().fetch_all(and!(&parent, &collection.id)).await?;
-    for child in &children {
-        if !matches!(child.base.status, TableStatus::Frozen) {
-            Err(DeleteTableError::DerivedTableNotFrozen(
-                child.base.name.clone(),
+        let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
+        let table: TableDBWithNames = conn
+            .scd2()
+            .fetch_one(and!(&collection_id_name, &table_id_name))
+            .await?;
+        if !matches!(table.base.base.status, TableStatus::Frozen) {
+            Err(DeleteTableError::TableNotFrozen(
                 table.base.base.name.clone(),
                 collection.name.clone(),
             ))?

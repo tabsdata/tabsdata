@@ -43,6 +43,7 @@ fn status_code(api_error: ApiError) -> StatusCode {
         ApiError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
         ApiError::NotImplemented => StatusCode::NOT_IMPLEMENTED,
         ApiError::Unexpected => StatusCode::INTERNAL_SERVER_ERROR,
+        ApiError::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
         ApiError::Any(code) => {
             StatusCode::from_u16(code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
         }
@@ -60,6 +61,7 @@ fn reason_phrase(api_error: ApiError) -> String {
         ApiError::InternalError => "internal_error",
         ApiError::NotImplemented => "not_implemented",
         ApiError::Unexpected => "unexpected",
+        ApiError::Unavailable => "unavailable",
         // Derive a tag from the canonical reason of the passed-through status.
         ApiError::Any(code) => {
             return StatusCode::from_u16(code)

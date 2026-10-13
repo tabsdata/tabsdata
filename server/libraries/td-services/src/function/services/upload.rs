@@ -8,7 +8,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
-use td_database::access::{GatedConnection, InProject, RW};
+use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_error::td_error;
 use td_objects::dxo::bundle::{Bundle, BundleInsertDB};
@@ -29,18 +29,22 @@ use tokio_util::io::StreamReader;
 async fn upload_function(
     authz: Ctx<AuthzContext>,
     storage: Ctx<Storage>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    db: DbPool<InProject>,
     request: WithinProject<CreateRequest<FunctionUpload, CollectionParam>>,
 ) -> Result<Bundle, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, param, upload) = request.into_parts();
 
-    let grant = authz
-        .require::<Project, DevelopProject>(gated_trx, &ctx, &project)
-        .await?;
-    let conn = gated_trx.get(grant);
-    let collection_id_name = param.collection;
-    let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
+    // No transaction while the client sends the bundle: the read before, the
+    // insert after.
+    let (grant, collection) = {
+        let mut conn = db.read().await?;
+        let grant = authz
+            .require::<Project, DevelopProject>(&mut conn, &ctx, &project)
+            .await?;
+        let collection: ActiveCollectionDB = conn.get(grant).fetch_one(&param.collection).await?;
+        (grant, collection)
+    };
 
     // The bundle's storage prefix: the collection's effective base_path (resolved
     // by the view), stamped onto the bundle row so it self-locates after moves.
@@ -68,7 +72,12 @@ async fn upload_function(
         created_on: ctx.time,
         created_by_id: ctx.user_id,
     };
-    conn.insert(&bundle).await?;
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        trx.get(grant).insert(&bundle).await?;
+        trx.commit().await
+    })
+    .await?;
 
     let read: Bundle = Bundle::from(&bundle);
     Ok(read)

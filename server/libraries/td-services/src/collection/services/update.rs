@@ -29,7 +29,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::SeesProjectRows;
-use td_database::access::{AccessMode, DbPool, InProject, WriteMode};
+use td_database::access::{AccessMode, DbPool, InProject, WriteMode, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::FromDao;
@@ -86,12 +86,12 @@ async fn update_collection(
     }
 
     // 3. update (short TX).
-    let updated = async {
+    let updated = retrying(|| async {
         let mut trx = db.begin().await?;
         let read = apply_collection_update(trx.get(grant), &plan).await?;
         trx.commit().await?;
-        Ok::<_, TdError>(read)
-    }
+        Ok(read)
+    })
     .await;
     match updated {
         Ok(read) => Ok(read),

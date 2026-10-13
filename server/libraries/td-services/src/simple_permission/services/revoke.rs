@@ -8,8 +8,7 @@ use crate::user_role::assert_not_fixed;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::rbac::RbacSource;
-use td_database::access::{DbPool, Global};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::crudl::DeleteRequest;
@@ -25,36 +24,29 @@ async fn revoke_simple_permission(
 ) -> Result<(), TdError> {
     let (ctx, grant) = request.into_parts();
     let token = authz.none();
-    let mut trx = db.begin().await?;
-    let conn = trx.get(token);
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let conn = trx.get(token);
 
-    // validate (reject org-wide wildcards; project required/forbidden)
-    assert_simple_permission_valid(&grant)?;
-    // resolve the target role membership (and project for authz)
-    let resolved = resolve_grant(conn, &grant).await?;
-    // authz by target (shared with grant and the raw permission API).
-    authorize_permission_target(&authz, conn, &ctx, &resolved).await?;
+        assert_simple_permission_valid(&grant)?;
+        let resolved = resolve_grant(conn, &grant).await?;
+        authorize_permission_target(&authz, conn, &ctx, &resolved).await?;
 
-    // revoking a permission the user does not hold reports a clear
-    // "not found" error instead of the opaque user_role row-not-found
-    // SQL error from the fetch.
-    conn.assert_exists::<UserRoleDB>(and!(&resolved.user_id, &resolved.role_id))
-        .await?;
-    // membership remove, reusing the user_role delete fixed-row guard.
-    let row: UserRoleDBWithNames = conn
-        .fetch_one(and!(&resolved.user_id, &resolved.role_id))
-        .await?;
-    assert_not_fixed(&row)?;
-    conn.delete::<UserRoleDB>(and!(&resolved.user_id, &resolved.role_id))
-        .await?;
-    trx.commit().await?;
-
-    // Role membership changed; with the transaction committed, invalidate the
-    // cached authz grants.
-    let mut conn = db.read().await?;
-    authz.refresh(conn.get(token)).await?;
-
-    Ok(())
+        // revoking a permission the user does not hold reports a clear
+        // "not found" error instead of the opaque user_role row-not-found
+        // SQL error from the fetch.
+        conn.assert_exists::<UserRoleDB>(and!(&resolved.user_id, &resolved.role_id))
+            .await?;
+        let row: UserRoleDBWithNames = conn
+            .fetch_one(and!(&resolved.user_id, &resolved.role_id))
+            .await?;
+        assert_not_fixed(&row)?;
+        conn.delete::<UserRoleDB>(and!(&resolved.user_id, &resolved.role_id))
+            .await?;
+        trx.commit().await?;
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]

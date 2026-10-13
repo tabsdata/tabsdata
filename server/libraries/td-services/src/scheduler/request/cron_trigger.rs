@@ -22,7 +22,7 @@ use tracing::{instrument, warn};
     name = "scheduler.create_cron_trigger_workers_start",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub fn create_locked_cron_trigger_workers_start_request(
     orchestrator: Orchestrator,
@@ -167,7 +167,7 @@ pub(crate) async fn put_cron_trigger_start(
     name = "scheduler.create_cron_trigger_workers_stop",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub fn create_locked_cron_trigger_workers_stop_request(
     orchestrator: Orchestrator,

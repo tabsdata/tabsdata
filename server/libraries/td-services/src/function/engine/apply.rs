@@ -3,6 +3,8 @@
 //
 
 use crate::function::engine::diff::{Changes, TableTransition};
+use crate::function::on_top::ensure_flips_on_top;
+use itertools::Itertools;
 use std::collections::HashMap;
 use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};

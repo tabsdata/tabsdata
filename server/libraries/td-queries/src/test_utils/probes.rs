@@ -5,11 +5,13 @@
 //! Statements tests use to observe or hold the database itself: sessions,
 //! locks and triggers, rather than rows.
 
-use sqlx::{AssertSqlSafe, Error, Executor, PgConnection};
+use sqlx::{Encode, Error, Executor, PgConnection, Postgres, Type};
+use td_database::test_utils::generated;
 
 /// A setting's value on `conn`, as `SHOW` prints it.
 pub async fn show_setting(conn: &mut PgConnection, setting: &str) -> Result<String, Error> {
-    sqlx::query_scalar(AssertSqlSafe(format!("SHOW {setting}")))
+    sqlx::query_scalar("SELECT current_setting($1)")
+        .bind(setting)
         .fetch_one(conn)
         .await
 }
@@ -26,8 +28,15 @@ pub async fn lock_table_exclusive(conn: &mut PgConnection, table: &str) -> Resul
 
 /// Takes `id`'s row of `table` `FOR UPDATE` without waiting: an error when
 /// another transaction holds it.
-pub async fn lock_row_nowait(conn: &mut PgConnection, table: &str, id: &str) -> Result<(), Error> {
-    sqlx::query(AssertSqlSafe(format!(
+pub async fn lock_row_nowait<'q, I>(
+    conn: &mut PgConnection,
+    table: &str,
+    id: I,
+) -> Result<(), Error>
+where
+    I: 'q + Encode<'q, Postgres> + Type<Postgres> + Send,
+{
+    sqlx::query(generated(format!(
         "SELECT 1 FROM {table} WHERE id = $1 FOR UPDATE NOWAIT"
     )))
     .bind(id)

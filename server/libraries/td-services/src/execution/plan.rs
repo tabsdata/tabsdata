@@ -464,7 +464,7 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows, M: AccessMode
     skip_all,
     fields(execution_id = %execution.id),
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn update_initial_function_run_status(
     conn: &mut DomainConnection<Apiserver, InProject, XW>,

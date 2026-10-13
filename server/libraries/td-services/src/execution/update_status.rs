@@ -52,7 +52,7 @@ enum UpdateStatusRunError {
     skip_all,
     fields(worker_id = %*worker_id),
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn update_worker_status<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -78,7 +78,7 @@ pub async fn update_worker_status<S: SeesProjectRows, M: WriteMode>(
     err(Debug)
 )]
 pub async fn abandon_requested_physical_runs(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     at: &AtTime,
     logical_function_runs: &[LogicalFunctionRunDB],
 ) -> Result<(), TdError> {
@@ -377,11 +377,11 @@ fn cascade_transition(
     skip_all,
     fields(target_status = %status, input_count = logical_function_runs.len()),
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn update_function_run_status(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     logical_function_runs: &Vec<LogicalFunctionRunDB>,
     status: LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {
@@ -466,11 +466,11 @@ pub async fn update_function_run_status(
     skip_all,
     fields(cascade_status = %status, from_count = starting.len()),
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 async fn cascade_downstream_status(
     msgs: &mut ReqCtx,
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     starting: &[LogicalFunctionRunId],
     status: &LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {

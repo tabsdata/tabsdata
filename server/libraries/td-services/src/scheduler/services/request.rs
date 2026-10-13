@@ -18,7 +18,9 @@ use crate::scheduler::request::{
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_bridge::{BridgeProviderHandle, Orchestrator};
-use td_database::access::{DbPool, Global, Grant, SeesProjectRows, WriteMode};
+use td_database::access::{
+    DbPool, Global, Grant, InProject, SeesProjectRows, WriteMode, conflicted,
+};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::{SchedulerConfig, SchedulerNotify};
@@ -51,32 +53,32 @@ async fn request(
     // it when they return a full batch, in any project.
     let mut saturated = false;
 
-    // One transaction per project, each holding only that project's write
-    // lock: a failing project's dispatch doesn't abort the other projects'.
+    // A step that lost a conflict rolled back and runs again on the next tick,
+    // which the scheduler is woken for instead of waiting out its timer.
+    let mut rerun = false;
+
     for project in projects_to_tick(&db, grant).await? {
-        if let Err(e) = tick_project(
-            &project,
-            &at,
-            &storage,
-            &bridge,
-            &internal_api,
-            &config,
-            &db,
+        let tick = ProjectTick {
+            project: &project,
+            at: &at,
+            storage: &storage,
+            bridge: &bridge,
+            internal_api: &internal_api,
+            config: &config,
+            db: db.in_project(&project),
             grant,
-            &mut saturated,
-        )
-        .await
-        {
-            error!(
-                project_id = %project,
-                "scheduler.dispatch_tick: project failed, continuing with the rest: {e:?}"
-            );
-        }
+        };
+        tick.run(&mut saturated, &mut rerun).await;
     }
 
     scheduler_notify.notify_dispatcher();
     if saturated {
         debug!("scheduler.dispatch_tick: capped; re-notifying the scheduler");
+    }
+    if rerun {
+        debug!("scheduler.dispatch_tick: a step conflicted; re-notifying the scheduler");
+    }
+    if saturated || rerun {
         scheduler_notify.notify_scheduler();
     }
     Ok(())
@@ -90,131 +92,202 @@ async fn projects_to_tick(db: &DbPool<Global>, grant: Grant) -> Result<Vec<Proje
     active_project_ids(db, grant).await
 }
 
-/// One project's dispatch, in its own transaction.
-#[allow(clippy::too_many_arguments)]
-async fn tick_project(
-    project: &ProjectId,
-    at: &AtTime,
-    storage: &Storage,
-    bridge: &BridgeProviderHandle,
-    internal_api: &InternalApi,
-    config: &SchedulerConfig,
-    db: &DbPool<Global>,
+/// One project's tick. Each step is its own write unit, and sends its worker
+/// messages once it commits: housekeeping first, so dispatch reads what it
+/// decided, then each dispatch path. A step that fails rolls back alone and
+/// the rest go on; the next tick runs it again.
+struct ProjectTick<'a> {
+    project: &'a ProjectId,
+    at: &'a AtTime,
+    storage: &'a Storage,
+    bridge: &'a BridgeProviderHandle,
+    internal_api: &'a InternalApi,
+    config: &'a SchedulerConfig,
+    db: DbPool<InProject>,
     grant: Grant,
-    saturated: &mut bool,
-) -> Result<(), TdError> {
-    let mut trx = db.in_project(project).begin_exclusive().await?;
-    let locked_at = trx.locked_at();
-    let conn = trx.get(grant);
-    let mut messages = WorkerMessages::default();
-    let orchestrator = bridge.orchestrator();
-
-    // Initial dispatch path: Scheduled/ReScheduled LFRs — mint + bind +
-    // flip LFR.status to Requested.
-    let ready = fetch_lfr_to_dispatch(conn, at, config, saturated).await?;
-    let minted = mint_function_runs_on_dispatch(conn, &ready, locked_at).await?;
-    let enriched = enrich_minted_dispatch(conn, &minted).await?;
-    let workers = create_locked_function_runner_workers_start_request(
-        orchestrator,
-        storage,
-        internal_api,
-        conn,
-        at,
-        &enriched,
-        &mut messages,
-    )
-    .await?;
-    conn.chunked().insert(&workers).await?;
-    let lfr_ids = lfr_ids_from_minted_dispatch(&minted)?;
-    conn.logical_runs()
-        .set_status(&lfr_ids, LogicalFunctionRunStatus::Requested)
-        .await?;
-    // Flip PFR.status Requested -> Dispatched so the replay-side readiness
-    // query excludes these PFRs from the next tick.
-    let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
-    conn.physical_runs().dispatched(&pfr_ids, at).await?;
-
-    // Replay dispatch path: PFRs minted by the replay endpoint (status
-    // Requested, no worker). No mint, no bind, no LFR.status flip.
-    let replay_pfrs = fetch_pfrs_to_dispatch(conn, config, saturated).await?;
-    let minted = materialize_replay_dispatch(conn, &replay_pfrs).await?;
-    let enriched = enrich_minted_dispatch(conn, &minted).await?;
-    let workers = create_locked_function_runner_workers_start_request(
-        orchestrator,
-        storage,
-        internal_api,
-        conn,
-        at,
-        &enriched,
-        &mut messages,
-    )
-    .await?;
-    conn.chunked().insert(&workers).await?;
-    let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
-    conn.physical_runs().dispatched(&pfr_ids, at).await?;
-
-    let to_stop =
-        claim_trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::CronTrigger)).await?;
-    let to_stop =
-        create_locked_cron_trigger_workers_stop_request(orchestrator, to_stop, &mut messages)?;
-    update_worker_message_statuses(conn, orchestrator, at, &to_stop, true).await?;
-
-    let to_start = claim_trigger_workers(
-        conn,
-        WorkerDB::triggers_to_schedule(WorkerType::CronTrigger),
-    )
-    .await?;
-    let to_start = create_locked_cron_trigger_workers_start_request(
-        orchestrator,
-        internal_api,
-        to_start,
-        &mut messages,
-    )?;
-    update_worker_message_statuses(conn, orchestrator, at, &to_start, false).await?;
-
-    let to_stop =
-        claim_trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::StageTrigger)).await?;
-    let to_stop =
-        create_locked_stage_trigger_workers_stop_request(orchestrator, to_stop, &mut messages)?;
-    update_worker_message_statuses(conn, orchestrator, at, &to_stop, true).await?;
-
-    let to_start = claim_trigger_workers(
-        conn,
-        WorkerDB::triggers_to_schedule(WorkerType::StageTrigger),
-    )
-    .await?;
-    let to_start = create_locked_stage_trigger_workers_start_request(
-        orchestrator,
-        storage,
-        internal_api,
-        conn,
-        to_start,
-        &mut messages,
-    )
-    .await?;
-    update_worker_message_statuses(conn, orchestrator, at, &to_start, false).await?;
-
-    trx.commit().await?;
-
-    put_worker_messages(bridge, messages).await;
-    Ok(())
 }
 
-/// Two steps because only a base table is lockable: PostgreSQL refuses `FOR
-/// UPDATE` through `workers__with_names`, which outer-joins. Worker rows are
-/// written outside the project's lock too — the worker callback, `resolve`,
-/// collection and function deletes — so the claim skips a worker one of them
-/// is mutating rather than enqueuing for it, and keeps the tick from blocking
-/// on it while holding the lock.
-async fn claim_trigger_workers<S: SeesProjectRows, M: WriteMode>(
+impl ProjectTick<'_> {
+    async fn run(&self, saturated: &mut bool, rerun: &mut bool) {
+        let steps = [
+            ("housekeeping", self.housekeep().await),
+            ("function runners", self.dispatch_runners(saturated).await),
+            ("replays", self.dispatch_replays(saturated).await),
+            ("cron triggers", self.dispatch_cron_triggers().await),
+            ("stage triggers", self.dispatch_stage_triggers().await),
+        ];
+        for (step, outcome) in steps {
+            match outcome {
+                Err(e) if conflicted(&e) => {
+                    *rerun = true;
+                    debug!(project_id = %self.project, step, "scheduler.dispatch_tick: step conflicted: {e}");
+                }
+                Err(e) => error!(
+                    project_id = %self.project,
+                    step,
+                    "scheduler.dispatch_tick: step failed, continuing with the rest: {e:?}"
+                ),
+                Ok(()) => {}
+            }
+        }
+    }
+
+    /// Ends the runs of deleted functions, whole transactions and their
+    /// readers with them; settles transactions, so a discarded run is never
+    /// dispatched and a committed one frees its readers; and releases the runs
+    /// held on hold that nothing blocks any more.
+    async fn housekeep(&self) -> Result<(), TdError> {
+        let mut trx = self.db.begin().await?;
+        let conn = trx.get(self.grant);
+        let orphaned = conn.logical_runs().of_deleted_functions().await?;
+        let mut stops = cancel_runs(conn, self.at, &orphaned).await?.stops;
+        stops.extend(settle_transactions(conn, self.at).await?);
+        release_unblocked(conn).await?;
+        trx.commit().await?;
+
+        stop_cancelled_workers(self.bridge, stops).await;
+        Ok(())
+    }
+
+    /// Scheduled and ReScheduled runs: mint, bind, and flip them to Requested.
+    async fn dispatch_runners(&self, saturated: &mut bool) -> Result<(), TdError> {
+        let mut trx = self.db.begin().await?;
+        let locked_at = trx.locked_at();
+        let conn = trx.get(self.grant);
+        let mut messages = WorkerMessages::default();
+
+        let ready = fetch_lfr_to_dispatch(conn, self.at, self.config, saturated).await?;
+        let minted = mint_function_runs_on_dispatch(conn, &ready, locked_at).await?;
+        let enriched = enrich_minted_dispatch(conn, &minted).await?;
+        let workers = create_locked_function_runner_workers_start_request(
+            self.bridge.orchestrator(),
+            self.storage,
+            self.internal_api,
+            conn,
+            self.at,
+            &enriched,
+            &mut messages,
+        )
+        .await?;
+        conn.chunked().insert(&workers).await?;
+        let lfr_ids = lfr_ids_from_minted_dispatch(&minted)?;
+        conn.logical_runs()
+            .set_status(&lfr_ids, LogicalFunctionRunStatus::Requested)
+            .await?;
+        // Requested -> Dispatched, so the replay readiness excludes these.
+        let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
+        conn.physical_runs().dispatched(&pfr_ids, self.at).await?;
+        trx.commit().await?;
+
+        put_worker_messages(self.bridge, messages).await;
+        Ok(())
+    }
+
+    /// Attempts the replay endpoint minted (Requested, no worker): no mint, no
+    /// bind, no LFR status change.
+    async fn dispatch_replays(&self, saturated: &mut bool) -> Result<(), TdError> {
+        let mut trx = self.db.begin().await?;
+        let conn = trx.get(self.grant);
+        let mut messages = WorkerMessages::default();
+
+        let replay_pfrs = fetch_pfrs_to_dispatch(conn, self.config, saturated).await?;
+        let minted = materialize_replay_dispatch(conn, &replay_pfrs).await?;
+        let enriched = enrich_minted_dispatch(conn, &minted).await?;
+        let workers = create_locked_function_runner_workers_start_request(
+            self.bridge.orchestrator(),
+            self.storage,
+            self.internal_api,
+            conn,
+            self.at,
+            &enriched,
+            &mut messages,
+        )
+        .await?;
+        conn.chunked().insert(&workers).await?;
+        let pfr_ids = pfr_ids_from_dispatched_workers(&workers)?;
+        conn.physical_runs().dispatched(&pfr_ids, self.at).await?;
+        trx.commit().await?;
+
+        put_worker_messages(self.bridge, messages).await;
+        Ok(())
+    }
+
+    async fn dispatch_cron_triggers(&self) -> Result<(), TdError> {
+        let orchestrator = self.bridge.orchestrator();
+        let mut trx = self.db.begin().await?;
+        let conn = trx.get(self.grant);
+        let mut messages = WorkerMessages::default();
+
+        let to_stop =
+            trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::CronTrigger)).await?;
+        let to_stop =
+            create_locked_cron_trigger_workers_stop_request(orchestrator, to_stop, &mut messages)?;
+        update_worker_statuses(conn, orchestrator, self.at, &to_stop, true).await?;
+
+        let to_start = trigger_workers(
+            conn,
+            WorkerDB::triggers_to_schedule(WorkerType::CronTrigger),
+        )
+        .await?;
+        let to_start = create_locked_cron_trigger_workers_start_request(
+            orchestrator,
+            self.internal_api,
+            to_start,
+            &mut messages,
+        )?;
+        update_worker_statuses(conn, orchestrator, self.at, &to_start, false).await?;
+        trx.commit().await?;
+
+        put_worker_messages(self.bridge, messages).await;
+        Ok(())
+    }
+
+    async fn dispatch_stage_triggers(&self) -> Result<(), TdError> {
+        let orchestrator = self.bridge.orchestrator();
+        let mut trx = self.db.begin().await?;
+        let conn = trx.get(self.grant);
+        let mut messages = WorkerMessages::default();
+
+        let to_stop =
+            trigger_workers(conn, WorkerDB::triggers_to_stop(WorkerType::StageTrigger)).await?;
+        let to_stop =
+            create_locked_stage_trigger_workers_stop_request(orchestrator, to_stop, &mut messages)?;
+        update_worker_statuses(conn, orchestrator, self.at, &to_stop, true).await?;
+
+        let to_start = trigger_workers(
+            conn,
+            WorkerDB::triggers_to_schedule(WorkerType::StageTrigger),
+        )
+        .await?;
+        let to_start = create_locked_stage_trigger_workers_start_request(
+            orchestrator,
+            self.storage,
+            self.internal_api,
+            conn,
+            to_start,
+            &mut messages,
+        )
+        .await?;
+        update_worker_statuses(conn, orchestrator, self.at, &to_start, false).await?;
+        trx.commit().await?;
+
+        put_worker_messages(self.bridge, messages).await;
+        Ok(())
+    }
+}
+
+/// The trigger workers `readiness` matches. One that another unit changes
+/// meanwhile makes this unit's status update conflict, so the tick never acts
+/// on a stale worker.
+async fn trigger_workers<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     readiness: impl SqlCondition<WorkerDB>,
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
-    let claimed: Vec<WorkerDB> = conn.for_update().claim_all::<WorkerDB>(readiness).await?;
-    if claimed.is_empty() {
+    let ready: Vec<WorkerDB> = conn.fetch_all(readiness).await?;
+    if ready.is_empty() {
         return Ok(Vec::new());
     }
-    let ids: Vec<WorkerId> = claimed.into_iter().map(|w| w.base.id).collect();
+    let ids: Vec<WorkerId> = ready.into_iter().map(|w| w.base.id).collect();
     let workers = conn
         .chunked()
         .fetch_all::<WorkerDBWithNames>(&ids, ())

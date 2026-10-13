@@ -35,7 +35,7 @@ use tracing::{debug, info, instrument, warn};
     name = "scheduler.fetch_lfr_to_dispatch",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn fetch_lfr_to_dispatch<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -74,7 +74,7 @@ pub async fn fetch_lfr_to_dispatch<S: SeesProjectRows, M: AccessMode>(
     name = "scheduler.fetch_pfrs_to_dispatch",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn fetch_pfrs_to_dispatch<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -110,7 +110,7 @@ pub async fn fetch_pfrs_to_dispatch<S: SeesProjectRows, M: AccessMode>(
     name = "scheduler.materialize_replay_dispatch",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn materialize_replay_dispatch<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -189,7 +189,7 @@ pub async fn materialize_replay_dispatch<S: SeesProjectRows, M: AccessMode>(
     name = "scheduler.enrich_minted_dispatch",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn enrich_minted_dispatch<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
@@ -252,7 +252,7 @@ pub async fn put_worker_messages(bridge: &BridgeProviderHandle, messages: Worker
     name = "scheduler.create_function_runner_workers",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn create_locked_function_runner_workers_start_request<
     S: SeesProjectRows,

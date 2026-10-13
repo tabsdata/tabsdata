@@ -31,10 +31,20 @@ pub struct ErrorResponse {
 )]
 pub struct ErrorStatus(ErrorResponse);
 
+/// Seconds a client is told to wait before retrying a 503.
+const RETRY_AFTER_SECS: &str = "1";
+
 impl axum::response::IntoResponse for ErrorStatus {
     fn into_response(self) -> axum::response::Response {
         let status = self.0.status;
-        (status, axum::Json(serde_json::json!(self.0))).into_response()
+        let mut response = (status, axum::Json(serde_json::json!(self.0))).into_response();
+        if status == StatusCode::SERVICE_UNAVAILABLE {
+            response.headers_mut().insert(
+                http::header::RETRY_AFTER,
+                http::HeaderValue::from_static(RETRY_AFTER_SECS),
+            );
+        }
+        response
     }
 }
 
@@ -58,6 +68,16 @@ mod tests {
             .unwrap();
         let body = serde_json::from_slice(&bytes).unwrap();
         (status, body)
+    }
+
+    #[tokio::test]
+    async fn test_unavailable_answers_503_with_retry_after() {
+        let response = ErrorStatus::from(api_error!(ApiError::Unavailable, "busy")).into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            response.headers()[http::header::RETRY_AFTER],
+            RETRY_AFTER_SECS
+        );
     }
 
     #[tokio::test]

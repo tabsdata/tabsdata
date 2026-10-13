@@ -8,7 +8,7 @@
 //! loop, and FR and TDV rows are bulk-inserted.
 
 use td_database::access::LockInstant;
-use td_database::access::{InProject, XW};
+use td_database::access::{InProject, WriteMode};
 
 use crate::function::topology::{RunnableVersion, latest_patch_or_head_batch};
 use crate::logical::mint::{build_function_run, build_output_table_data_versions};
@@ -39,10 +39,10 @@ pub struct MintedDispatch {
     name = "scheduler.mint_function_runs_on_dispatch",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn mint_function_runs_on_dispatch(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ready_lfrs: &[LogicalFunctionRunDB],
     at: LockInstant,
 ) -> Result<Vec<MintedDispatch>, TdError> {

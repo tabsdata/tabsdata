@@ -4,7 +4,7 @@
 
 use crate::Dao;
 use td_error::td_error;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 #[td_error]
 pub enum SqlError {
@@ -27,6 +27,9 @@ pub enum SqlError {
 
     #[error("[{0}] SQL error: {1}")]
     AnySqlxError(String, #[source] sqlx::Error) = 5000,
+
+    #[error("[{0}] The database was busy; retry the request")]
+    Busy(String, #[source] sqlx::Error) = 8000,
     #[error("Error building SQL Query: {0}")]
     QueryError(#[from] sea_query::error::Error) = 5002,
     #[error(
@@ -124,10 +127,48 @@ pub fn format_hint(columns: &[String], values: &[(String, String)]) -> String {
     format!(" for {}", parts.join(", "))
 }
 
+/// SQLSTATEs of a statement the database gave up on or aborted to let
+/// another through: a retry may succeed.
+const CONFLICTS: [&str; 2] = [
+    "40001", // serialization_failure
+    "40P01", // deadlock_detected
+];
+
+const TIMEOUTS: [&str; 2] = [
+    "55P03", // lock_not_available (lock_timeout)
+    "57014", // query_canceled (statement_timeout)
+];
+
+/// SQLSTATEs of a statement the database refused for lack of a shared
+/// resource, such as a full predicate-lock table: the same request later may
+/// succeed.
+const SHORTAGES: [&str; 1] = [
+    "53200", // out_of_memory
+];
+
 /// Classify a `sqlx::Error` into the appropriate `SqlError` variant,
 /// enriching constraint-violation messages with column names and values,
 /// and logging the error with structured context.
 fn classify(entity: String, error: sqlx::Error, values: &[(String, String)]) -> SqlError {
+    let code = match &error {
+        sqlx::Error::Database(db_err) => db_err.code().map(|code| code.into_owned()),
+        _ => None,
+    };
+    if code
+        .as_deref()
+        .is_some_and(|code| CONFLICTS.contains(&code))
+    {
+        debug!(entity = %entity, sql_error = %error, "Retryable database error");
+        return SqlError::Busy(entity, error);
+    }
+    if matches!(error, sqlx::Error::PoolTimedOut)
+        || code
+            .as_deref()
+            .is_some_and(|code| TIMEOUTS.contains(&code) || SHORTAGES.contains(&code))
+    {
+        warn!(entity = %entity, sql_error = %error, "Retryable database error");
+        return SqlError::Busy(entity, error);
+    }
     match &error {
         sqlx::Error::RowNotFound => {
             warn!(entity = %entity, "Row not found");
@@ -187,3 +228,6 @@ impl SqlError {
         SqlError::RowNotFound(D::display_name().to_string(), sqlx::Error::RowNotFound)
     }
 }
+
+#[cfg(test)]
+mod tests;

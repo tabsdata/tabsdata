@@ -6,7 +6,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageRoles, System, SystemEntity};
-use td_database::access::{GatedConnection, RW};
+use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::CreateRequest;
@@ -16,21 +16,26 @@ use td_queries::Queries;
 #[service_factory]
 async fn create_role(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW>,
+    db: DbPool<Global>,
     request: CreateRequest<RoleCreate>,
 ) -> Result<Role, TdError> {
     let (ctx, _, create) = request.into_parts();
-    let grant = authz
-        .require::<System, ManageRoles>(gated_trx, &ctx, &SystemEntity)
-        .await?;
-    let conn = gated_trx.get(grant);
+    retrying(|attempt| async {
+        let mut trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<System, ManageRoles>(&mut trx, &ctx, &SystemEntity)
+            .await?;
+        let conn = trx.get(grant);
 
     let role = create.to_dao(&ctx);
     conn.insert(&role).await?;
 
-    let with_names: RoleDBWithNames = conn.fetch_one(&role.id).await?;
-    let read = Role::from_dao(with_names)?;
-    Ok(read)
+        let with_names: RoleDBWithNames = conn.fetch_one(&role.id).await?;
+        let read = Role::from_dao(with_names)?;
+        trx.commit().await?;
+        Ok(read)
+    })
+    .await
 }
 
 #[cfg(test)]
