@@ -10,7 +10,8 @@ use crate::types::basic::{
     Ended, ExecutionId, ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName,
     FunctionOnly, FunctionVersionId, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
     OverrideDisabledTrigger, ProjectId, ProjectName, SkipIfRunning, Started, StatusCount, System,
-    TableName, TableVersionId, TransactionId, TriggerType, TriggeredOn, UserId, UserLabel,
+    TableName, TableVersionId, TransactionId, TriggerOutcome, TriggerType, TriggeredOn, UserId,
+    UserLabel,
 };
 use crate::types::composed::TableVersions;
 use crate::types::json::Json;
@@ -97,6 +98,23 @@ pub struct ExecutionDB {
     pub status: ExecutionStatus,
     pub started_on: Option<Started<AtTime>>,
     pub ended_on: Option<Ended<AtTime>>,
+}
+
+/// Frees a released `external_uid` for a new execution: a run that was
+/// canceled or yanked gives its key back, and the unique index only admits
+/// one holder.
+#[ta_objects::Dao]
+#[dao(table = "executions", ops(update(ExecutionDB)), project_scoped)]
+pub struct ExecutionExternalUidReleaseDB {
+    pub external_uid: Option<Option<ExternalUid>>,
+}
+
+impl ExecutionExternalUidReleaseDB {
+    pub fn released() -> Self {
+        Self {
+            external_uid: Some(None),
+        }
+    }
 }
 
 #[ta_objects::Dao]
@@ -224,6 +242,13 @@ pub struct ResolvedVersionResponse {
 
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
+pub struct TriggerResponse {
+    pub outcome: TriggerOutcome,
+    pub execution_id: ExecutionId,
+}
+
+#[ta_objects::Dto]
+#[derive(Eq, PartialEq)]
 pub struct ExecutionResponse {
     pub id: ExecutionId,
     pub name: Option<ExecutionName>,
@@ -294,4 +319,21 @@ pub struct ExecutionParam {
 pub struct AllowDisabledParam {
     #[serde(default)]
     pub with_disabled: AllowDisabled,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_trigger_response_wire_shape() {
+        let response = TriggerResponse {
+            outcome: TriggerOutcome::Held,
+            execution_id: ExecutionId::new(),
+        };
+        let json = serde_json::to_value(&response).unwrap();
+        assert_eq!(json["outcome"], "Held");
+        assert!(json.get("execution_id").is_some());
+        assert_eq!(json.as_object().unwrap().len(), 2);
+    }
 }

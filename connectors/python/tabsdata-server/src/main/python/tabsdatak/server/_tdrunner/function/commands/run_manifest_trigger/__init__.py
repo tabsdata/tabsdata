@@ -9,35 +9,37 @@ Long-running sidecar entrypoint of the streamer pod. Walks
 ``fn_trigger`` per manifest, and drains a deletion queue between polls.
 Works against a local *or* cloud stage via the resolved ``StageBackend``.
 
-apiserver response semantics (``skip_if_running=true``, gates run in order):
+The internal trigger answers 200 with a ``TriggerOutcome``
+(``skip_if_running=true``, gates run in order):
 
-  * ``2xx``  -- newly scheduled.
-  * ``425``  -- the function's execution is still running (gate 1,
-    ``reject_if_running``). Not done yet; leave it, retry.
-  * ``409``  -- the function is idle *and* this ``external_uid`` is held by
-    an ended run (gate 2, ``reject_if_external_uid_in_use``). Because
-    ``425`` gates first on "running", a ``409`` is a **completion** signal:
-    the execution (and its file read) has ended, so the manifest + files
-    are safe to delete.
+  * ``Scheduled`` -- newly scheduled.
+  * ``Busy``      -- the function's execution is still running (gate 1,
+    ``running_execution``). Not done yet; leave it, retry.
+  * ``Held`` / ``Consumed`` -- the function is idle *and* this
+    ``external_uid`` is held by an ended run (gate 2,
+    ``external_uid_holder``). Because ``Busy`` gates first on "running",
+    either is a **completion** signal: the execution (and its file read)
+    has ended, so the manifest + files are safe to delete.
 
 Main loop (per poll), driven by ``next_after(cursor)``:
 
   * Fetch the oldest manifest after the cursor; POST ``fn_trigger`` with
     ``{"skip_if_running": true, "external_uid": <TS>, "trigger_type": "ST", ...}``
     (the ``InternalExecutionRequest`` shape the cron trigger also sends).
-  * On ``409`` (completed) -> queue the manifest + its files for deletion
-    and **advance the cursor past it**, then fetch the next.
-  * On ``2xx`` / ``425`` / other transient -> **stop**, leaving the cursor
-    parked *before* this manifest so the next poll re-fetches it and waits
-    for its ``409``. (Never delete on a non-409: a misconfigured ``403``
-    must not burn through batches.)
+  * On ``Held`` / ``Consumed`` (completed) -> queue the manifest + its files
+    for deletion and **advance the cursor past it**, then fetch the next.
+  * On ``Scheduled`` / ``Busy`` / other transient -> **stop**, leaving the
+    cursor parked *before* this manifest so the next poll re-fetches it and
+    waits for its completion. (Never delete on anything else: a
+    misconfigured ``403`` must not burn through batches.)
   * Then drain the deletion queue for one back-off period.
 
 The cursor advances only on completion, so each manifest is re-triggered
-across its ``200 -> 425… -> 409`` lifetime; that parking is what gives the
-publisher time to consume, and keeps per-poll triggers O(1) (no ``425``
-storm). The cursor is in-memory and resets to epoch on restart -- the
-already-completed front re-issues a ``409`` and is re-deleted (idempotent).
+across its ``Scheduled -> Busy… -> Held/Consumed`` lifetime; that parking
+is what gives the publisher time to consume, and keeps per-poll triggers
+O(1) (no ``Busy`` storm). The cursor is in-memory and resets to epoch on
+restart -- the already-completed front answers ``Held`` / ``Consumed``
+again and is re-deleted (idempotent).
 
 Lifecycle (Q5 decision): the sidecar exits when the streamer's main
 container exits. K8s native sidecar semantics (init container with
@@ -94,9 +96,9 @@ MAN = (
     "    ... + standard responder/liveness/log/journal args\n\n"
     "Reads request.yaml to discover the function_stage URI. Builds "
     "an HttpRequest from the --trigger-* triplet and replays it per "
-    "manifest under <stage>/manifests/. On 409 Conflict (apiserver's "
+    "manifest under <stage>/manifests/. On Held or Consumed (apiserver's "
     "external_uid dedup fired) queues the manifest's files + manifest "
-    "itself for back-off-and-delete cleanup; on any other 4xx/5xx "
+    "itself for back-off-and-delete cleanup; on any other answer "
     "leaves the manifest in place + logs a warning. Exits when "
     "SIGTERM/SIGINT arrives (K8s native-sidecar shutdown signal)."
 )

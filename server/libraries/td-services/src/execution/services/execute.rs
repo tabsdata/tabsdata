@@ -2,7 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::execute;
+use crate::execution::execution_version::refusal;
+use crate::execution::{execute, trigger_gate};
 use crate::function::children::ensure_user_managed;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
@@ -52,7 +53,6 @@ async fn execute_function(
             .await?;
 
         ensure_user_managed(&function.base.base)?;
-        refuse_unkeyed_stage_publisher(conn, &function, &execution_request.external_uid).await?;
         if let Some(refused) =
             trigger_gate(conn, &execution_request, &function, &TriggerType::Manual).await?
         {
@@ -85,8 +85,7 @@ pub(crate) mod tests {
     use crate::Services;
     use crate::collection::services::connection::test_support::create_collection;
     use crate::function::children::ChildFunctionError;
-    use std::collections::HashMap;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
     use std::error::Error;
     use std::str::FromStr;
     use std::sync::LazyLock;
@@ -131,7 +130,7 @@ pub(crate) mod tests {
         ProjectName, SkipIfRunning, TableName, TableNameDto, TransactionKey, TransactionStatus,
         TriggeredOn, UserId, VersionPos,
     };
-    use td_objects::types::basic::{CollectionIdName, FunctionIdName, TableIdName};
+    use td_objects::types::basic::{CollectionIdName, ExternalUid, FunctionIdName, TableIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -1582,8 +1581,6 @@ pub(crate) mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_public_external_uid_conflicts(db: TdPool) -> Result<(), TdError> {
-        use td_objects::types::basic::ExternalUid;
-
         let p = db.seed().test_project().await?.id;
         let collection = db
             .scoped(p)

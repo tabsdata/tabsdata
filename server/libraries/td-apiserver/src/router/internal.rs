@@ -8,12 +8,12 @@ use axum::extract::{Path, State};
 use axum_extra::extract::Query;
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::extractors::Json;
-use ta_apiserver::status::ok_status::{CreateStatus, GetStatus, NoContent, UpdateStatus};
+use ta_apiserver::status::ok_status::{GetStatus, UpdateStatus};
 use td_apiforge::apiserver_path;
 use td_common::execution_status::CallbackResponse;
 use td_objects::Route;
 use td_objects::dxo::crudl::{AtTimeParam, RequestContext};
-use td_objects::dxo::execution::{ExecutionParam, ExecutionResponse, InternalExecutionRequest};
+use td_objects::dxo::execution::{ExecutionParam, InternalExecutionRequest, TriggerResponse};
 use td_objects::dxo::execution_callback::ExecutionCallbackRequest;
 use td_objects::dxo::file::DownloadResponse;
 use td_objects::dxo::function::FunctionVersionParam;
@@ -92,17 +92,17 @@ pub async fn worker_message(
     method(post),
     path = "/internal/function-versions/{function_version}/execute",
     tag(INTERNAL_TAG),
-    doc = "Executes a function version (must be the current active version)"
+    doc = "Triggers a function version (must be the current active version) and answers what became of the trigger"
 )]
 pub async fn function_version_execute(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
     Path(function_version_id): Path<FunctionVersionParam>,
     Json(request): Json<InternalExecutionRequest>,
-) -> Result<CreateStatus<ExecutionResponse>, ErrorStatus> {
+) -> Result<UpdateStatus<TriggerResponse>, ErrorStatus> {
     let request = context.create(function_version_id, request);
     let response = state.execute_function_version(request).await?;
-    Ok(CreateStatus::CREATED(response))
+    Ok(UpdateStatus::OK(response))
 }
 
 #[apiserver_path(

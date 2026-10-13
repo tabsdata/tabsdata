@@ -8,10 +8,11 @@ Covers:
   * `_build_trigger_request`: env:/val: resolution, headers built
   * `_enqueue_for_deletion`: queues stage-relative rels (files + manifest +,
     on a local backend, the per-batch dir); empty slots; missing/malformed
-  * `_trigger_one`: 200 / 4xx / 5xx / connection error / malformed filename,
-    returning the right `_TriggerOutcome`
-  * `_trigger_pending`: cursor walk -- advance only on 409 (completed) /
-    SKIPPED, park on 200/425/transient; honours the active flag
+  * `_trigger_one`: each server outcome / 4xx / 5xx / connection error /
+    malformed filename, returning the right `_TriggerOutcome`
+  * `_trigger_pending`: cursor walk -- advance only on Held / Consumed
+    (completed) / SKIPPED, park on Scheduled / Busy / transient; honours the
+    active flag
   * `_drain_until`: deletes rels via the backend (files + empty per-batch
     dirs), handles missing/failed deletes, respects deadline + active flag
   * End-to-end (one consume cycle against a fake apiserver)
@@ -81,6 +82,11 @@ def _server(handler_cls):
         server.server_close()
 
 
+def _outcome(name: str) -> bytes:
+    """The internal trigger's 200 body naming a ``TriggerOutcome``."""
+    return json.dumps({"data": {"outcome": name}}).encode("utf-8")
+
+
 def _silent_handler(status: int, body: bytes = b""):
     class _H(http.server.BaseHTTPRequestHandler):
         def do_POST(self):
@@ -122,11 +128,12 @@ def _request_capturing_handler(status: int, capture: list[dict]):
     return _H
 
 
-def _sequenced_handler(statuses: list[int], captured_uids: list):
-    """Serve ``statuses`` one per POST (the last value repeats once the
-    list is exhausted), recording each request's ``external_uid`` so a
+def _sequenced_handler(answers: list[str | int], captured_uids: list):
+    """Serve ``answers`` one per POST (the last value repeats once the
+    list is exhausted): an outcome name as a 200, an int as a bare status.
+    Records each request's ``external_uid`` so a
     test can assert exactly which manifests were triggered, in order."""
-    seq = list(statuses)
+    seq = list(answers)
 
     class _H(http.server.BaseHTTPRequestHandler):
         def do_POST(self):
@@ -136,10 +143,15 @@ def _sequenced_handler(statuses: list[int], captured_uids: list):
                 captured_uids.append(json.loads(raw).get("external_uid"))
             except ValueError:
                 captured_uids.append(None)
-            status = seq.pop(0) if len(seq) > 1 else (seq[0] if seq else 200)
+            answer = seq.pop(0) if len(seq) > 1 else seq[0]
+            status, body = (
+                (200, _outcome(answer)) if isinstance(answer, str) else (answer, b"")
+            )
             self.send_response(status)
-            self.send_header("Content-Length", "0")
+            self.send_header("Content-Length", str(len(body)))
             self.end_headers()
+            if body:
+                self.wfile.write(body)
 
         def log_message(self, *_a, **_kw):
             pass
@@ -297,24 +309,25 @@ def test_enqueue_for_deletion_empty_slots_queues_manifest_and_dir(tmp_path):
 # --- _trigger_one ---------------------------------------------------------
 
 
-def test_trigger_one_200_does_not_enqueue(tmp_path):
+def test_trigger_one_scheduled_does_not_enqueue(tmp_path):
     ts = _ts(345_000)
     manifest = _write_a_manifest(tmp_path, [_batch_files(ts, "a.parquet")], ts=ts)
     queue: deque[str] = deque()
-    with _server(_silent_handler(200)) as base_url:
+    with _server(_silent_handler(200, body=_outcome("Scheduled"))) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
     assert outcome == _TriggerOutcome.TRIGGERED
     assert list(queue) == []
 
 
-def test_trigger_one_409_enqueues(tmp_path):
+@pytest.mark.parametrize("outcome", ["Held", "Consumed"])
+def test_trigger_one_completed_enqueues(tmp_path, outcome):
     ts = _ts(345_000)
     slot0 = _batch_files(ts, "a.parquet")
     manifest = _write_a_manifest(tmp_path, [slot0], ts=ts)
     external_id = external_uid_from_filename(manifest.name)
     queue: deque[str] = deque()
-    with _server(_silent_handler(409, body=b'{"error":"seen"}')) as base_url:
+    with _server(_silent_handler(200, body=_outcome(outcome))) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
     assert outcome == _TriggerOutcome.DEDUP_DELETED
@@ -336,17 +349,18 @@ def test_trigger_one_5xx_does_not_enqueue(tmp_path):
     assert list(queue) == []
 
 
-@pytest.mark.parametrize("status", [400, 401, 403, 404, 410, 422, 425])
-def test_trigger_one_non_409_does_not_enqueue(tmp_path, status):
-    """Only 409 (completed) deletes. Everything else -- including 425
-    (still running) -- leaves the manifest in place."""
+@pytest.mark.parametrize("answer", [400, 401, 403, 404, 410, 422, 425, 200, "Busy"])
+def test_trigger_one_not_completed_does_not_enqueue(tmp_path, answer):
+    """Only Held / Consumed (completed) deletes. Everything else -- including
+    Busy (still running) and an unreadable 200 -- leaves the manifest in
+    place."""
     ts = _ts(345_000)
     manifest = _write_a_manifest(tmp_path, [_batch_files(ts, "a.parquet")], ts=ts)
     queue: deque[str] = deque()
-    with _server(_silent_handler(status)) as base_url:
+    with _server(_sequenced_handler([answer], [])) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
-    assert outcome == _TriggerOutcome.TRANSIENT, f"status={status}"
+    assert outcome == _TriggerOutcome.TRANSIENT, f"answer={answer}"
     assert list(queue) == []
 
 
@@ -407,12 +421,12 @@ def test_trigger_one_malformed_filename_skipped_no_invoke(monkeypatch, tmp_path)
 
 
 def test_trigger_pending_parks_after_first_triggered(tmp_path):
-    """Front manifest schedules (200) -> stop, cursor stays before it (so
-    it's re-seen next poll for its 409). Only one manifest is POSTed."""
+    """Front manifest schedules -> stop, cursor stays before it (so it's
+    re-seen next poll for its completion). Only one manifest is POSTed."""
     manifests = _planted_manifests(tmp_path, _ts(1), _ts(2), _ts(3))
     uids: list[str] = []
     queue: deque[str] = deque()
-    with _server(_sequenced_handler([200], uids)) as base_url:
+    with _server(_sequenced_handler(["Scheduled"], uids)) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         cursor = _trigger_pending(
             _local_backend(tmp_path), None, req, queue, lambda: True
@@ -423,12 +437,12 @@ def test_trigger_pending_parks_after_first_triggered(tmp_path):
 
 
 def test_trigger_pending_advances_through_completed_then_parks(tmp_path):
-    """Two completed (409) manifests are deleted + the cursor advances past
-    them; the third (425, still running) parks the cursor."""
+    """Two completed (Held, Consumed) manifests are deleted + the cursor
+    advances past them; the third (Busy, still running) parks the cursor."""
     manifests = _planted_manifests(tmp_path, _ts(1), _ts(2), _ts(3), _ts(4))
     uids: list[str] = []
     queue: deque[str] = deque()
-    with _server(_sequenced_handler([409, 409, 425], uids)) as base_url:
+    with _server(_sequenced_handler(["Held", "Consumed", "Busy"], uids)) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         cursor = _trigger_pending(
             _local_backend(tmp_path), None, req, queue, lambda: True
@@ -440,7 +454,7 @@ def test_trigger_pending_advances_through_completed_then_parks(tmp_path):
     ]
     # cursor advanced past the two completed manifests, parked before M3.
     assert cursor == manifests[1].name
-    # M1 + M2 rels enqueued; M3 (425) not.
+    # M1 + M2 rels enqueued; M3 (Busy) not.
     assert f"manifests/{manifests[0].name}" in queue
     assert f"manifests/{manifests[1].name}" in queue
     assert f"manifests/{manifests[2].name}" not in queue
@@ -450,7 +464,7 @@ def test_trigger_pending_parks_when_oldest_busy(tmp_path):
     manifests = _planted_manifests(tmp_path, _ts(1), _ts(2))
     uids: list[str] = []
     queue: deque[str] = deque()
-    with _server(_sequenced_handler([425], uids)) as base_url:
+    with _server(_sequenced_handler(["Busy"], uids)) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         cursor = _trigger_pending(
             _local_backend(tmp_path), None, req, queue, lambda: True
@@ -464,7 +478,7 @@ def test_trigger_pending_honors_inactive_flag(tmp_path):
     _planted_manifests(tmp_path, _ts(1))
     uids: list[str] = []
     queue: deque[str] = deque()
-    with _server(_sequenced_handler([200], uids)) as base_url:
+    with _server(_sequenced_handler(["Scheduled"], uids)) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         _trigger_pending(_local_backend(tmp_path), None, req, queue, lambda: False)
     assert uids == []
@@ -539,7 +553,7 @@ def test_drain_until_exits_immediately_when_inactive(tmp_path):
 
 
 def test_consume_cycle_triggers_then_drains(tmp_path):
-    """Two completed manifests (409): _trigger_pending enqueues both + their
+    """Two completed manifests (Consumed): _trigger_pending enqueues both + their
     files, advancing the cursor; _drain_until then removes them all."""
     backend = _local_backend(tmp_path)
     m1 = _write_a_manifest(tmp_path, [_batch_files(_ts(1), "p1.parquet")], ts=_ts(1))
@@ -547,7 +561,7 @@ def test_consume_cycle_triggers_then_drains(tmp_path):
     eid1 = external_uid_from_filename(m1.name)
     eid2 = external_uid_from_filename(m2.name)
     queue: deque[str] = deque()
-    with _server(_silent_handler(409)) as base_url:
+    with _server(_silent_handler(200, body=_outcome("Consumed"))) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         cursor = _trigger_pending(backend, None, req, queue, lambda: True)
     assert cursor == m2.name  # advanced past both completed manifests

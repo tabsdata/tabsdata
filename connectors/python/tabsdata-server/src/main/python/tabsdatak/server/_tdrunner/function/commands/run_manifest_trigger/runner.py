@@ -126,9 +126,6 @@ def _enqueue_for_deletion(
         queue.append(f"{FILES_SUBDIR}/{external_id}")
 
 
-_DEDUP_REJECT_STATUS = 409
-
-
 class _TriggerOutcome(Enum):
     """Result of triggering one manifest, used by :func:`_trigger_pending`
     to decide whether to advance to the next manifest this poll.
@@ -137,14 +134,34 @@ class _TriggerOutcome(Enum):
     execution slot" -- the scan may advance to the next candidate.
     ``TRIGGERED`` and ``TRANSIENT`` both mean an execution slot is now
     occupied or unavailable (the function runs one execution at a time),
-    so every newer manifest would just get the same ``425 too_early`` --
+    so every newer manifest would just get the same ``Busy`` --
     the scan should stop and let the next poll re-read from the oldest.
     """
 
-    DEDUP_DELETED = auto()  # 409: consumed; files + manifest queued for deletion
+    DEDUP_DELETED = auto()  # Held / Consumed: files + manifest queued for deletion
     SKIPPED = auto()  # unusable (malformed filename); nothing to trigger
-    TRIGGERED = auto()  # 2xx: execution scheduled
-    TRANSIENT = auto()  # other 4xx / 5xx / connection error; retry next poll
+    TRIGGERED = auto()  # Scheduled: execution scheduled
+    TRANSIENT = auto()  # Busy / other answer / connection error; retry next poll
+
+
+# The apiserver's ``TriggerOutcome`` (``td-objects/src/dxo/execution.rs``).
+_SERVER_OUTCOMES = {
+    "Scheduled": _TriggerOutcome.TRIGGERED,
+    "Busy": _TriggerOutcome.TRANSIENT,
+    "Held": _TriggerOutcome.DEDUP_DELETED,
+    "Consumed": _TriggerOutcome.DEDUP_DELETED,
+}
+
+
+def _server_outcome(body: bytes | None) -> _TriggerOutcome | None:
+    try:
+        answer = json.loads(body or b"")
+    except ValueError:
+        return None
+    data = answer.get("data") if isinstance(answer, dict) else None
+    if not isinstance(data, dict):
+        return None
+    return _SERVER_OUTCOMES.get(data.get("outcome"))
 
 
 def _trigger_one(
@@ -156,23 +173,23 @@ def _trigger_one(
     """POST fn_trigger for one manifest; classify the response.
 
     Outcomes (see :class:`_TriggerOutcome`):
-      * 2xx -- ``TRIGGERED``; manifest stays in place (next iteration's
-        dedup-reject is the cue to delete; see module docstring).
-      * 409 Conflict -- ``DEDUP_DELETED``; apiserver's ``external_uid``
-        dedup gate fired
-        (``td-services/.../execution/layers/execution_version.rs:121``):
-        the previous iteration's POST was accepted, the execution was
-        scheduled, and the function-publisher pod will consume (or has
-        consumed) this manifest. Safe to delete the manifest + its
-        files.
-      * Any other 4xx, 5xx, or connection error -- ``TRANSIENT``;
+      * ``Scheduled`` -- ``TRIGGERED``; manifest stays in place (next
+        iteration's ``Held`` / ``Consumed`` is the cue to delete; see
+        module docstring).
+      * ``Held`` / ``Consumed`` -- ``DEDUP_DELETED``; apiserver's
+        ``external_uid`` dedup gate fired: the previous iteration's POST
+        was accepted, the execution was scheduled, and the
+        function-publisher pod will consume (or has consumed) this
+        manifest. Safe to delete the manifest + its files.
+      * ``Busy`` -- ``TRANSIENT``; the function's execution is still running.
+      * Any other status or answer, or a connection error -- ``TRANSIENT``;
         anomalous (bad request shape, auth failure, server error,
         network blip). DO NOT delete: the publisher may never have seen
         the manifest and deleting destroys evidence + data. Leave in
         place; the next iteration retries.
       * Malformed filename -- ``SKIPPED``; can't build the external_uid.
 
-    The narrow 409-only delete fixes a prior bug where any 4xx
+    The narrow ``Held`` / ``Consumed``-only delete fixes a prior bug where any 4xx
     silently deleted the manifest -- in particular, a 403 from a
     misconfigured trigger JWT scope would burn through every batch
     the streamer produced without the streamer or operator noticing.
@@ -217,23 +234,28 @@ def _trigger_one(
         )
         return _TriggerOutcome.TRANSIENT
 
-    if response.ok:
+    outcome = _server_outcome(response.body) if response.ok else None
+    if outcome is _TriggerOutcome.TRIGGERED:
         logger.info(
-            "run-manifest-trigger: triggered manifest %s (status=%d); "
+            "run-manifest-trigger: triggered manifest %s; "
             "deferring deletion until next iteration sees dedup-reject",
             manifest_path.name,
-            response.status,
         )
-        return _TriggerOutcome.TRIGGERED
-    if response.status == _DEDUP_REJECT_STATUS:
+        return outcome
+    if outcome is _TriggerOutcome.DEDUP_DELETED:
         logger.info(
-            "run-manifest-trigger: manifest %s dedup-rejected (status=%d); "
+            "run-manifest-trigger: manifest %s dedup-rejected; "
             "external_uid already seen, queueing for deletion",
             manifest_path.name,
-            response.status,
         )
         _enqueue_for_deletion(manifest_path, external_uid, backend, deletion_queue)
-        return _TriggerOutcome.DEDUP_DELETED
+        return outcome
+    if outcome is _TriggerOutcome.TRANSIENT:
+        logger.info(
+            "run-manifest-trigger: manifest %s: function busy; retrying next poll",
+            manifest_path.name,
+        )
+        return outcome
     # Anything else (other 4xx, 5xx, etc.) is anomalous -- leave the
     # manifest in place so the next iteration retries, and log loudly
     # at warning so the operator notices. Body snippet helps debug.
@@ -256,24 +278,24 @@ def _trigger_pending(
     is_active: callable,
 ) -> str | None:
     """Scan manifests oldest-first from ``cursor``, advancing only past
-    *completed* (``409``) or unusable (``SKIPPED``) ones, and stop at the
-    first manifest still occupying the execution slot.
+    *completed* (``Held`` / ``Consumed``) or unusable (``SKIPPED``) ones, and
+    stop at the first manifest still occupying the execution slot.
 
-    The apiserver gates triggers in order: ``425`` while the function's
-    execution is still running, then ``409`` once it has ended (see the
-    module docstring). So ``409`` is a *completion* signal -- only then is
-    a manifest safe to delete, and only then does the cursor advance past
-    it. A ``2xx`` (just scheduled) or ``425``/transient (still running /
+    The apiserver gates triggers in order: ``Busy`` while the function's
+    execution is still running, then ``Held`` / ``Consumed`` once it has
+    ended (see the module docstring). So either is a *completion* signal --
+    only then is a manifest safe to delete, and only then does the cursor
+    advance past it. ``Scheduled`` or ``Busy``/transient (still running /
     busy) leaves the cursor **parked** before that manifest, so the next
-    poll re-fetches it and re-checks for its ``409``. This pipelines one
+    poll re-fetches it and re-checks for its completion. This pipelines one
     execution per poll (drain the completed front, schedule one new)
     without re-scanning the whole backlog -- per-poll triggers are O(1),
-    not O(backlog), so no ``425`` storm.
+    not O(backlog), so no ``Busy`` storm.
 
     Returns the advanced cursor. The cursor is in-memory and backend-
     internal (filename for local, last-modified for cloud); on a sidecar
     restart it resets to ``None`` (epoch) and the already-completed front
-    re-issues a ``409`` and is re-deleted -- idempotent, crash-safe.
+    answers ``Held`` / ``Consumed`` again and is re-deleted -- idempotent, crash-safe.
     """
     with tempfile.TemporaryDirectory() as scratch:
         scratch_dir = Path(scratch)
@@ -288,7 +310,7 @@ def _trigger_pending(
             if outcome in (_TriggerOutcome.DEDUP_DELETED, _TriggerOutcome.SKIPPED):
                 cursor = next_cursor  # completed / unusable -> advance past it
                 continue
-            return cursor  # TRIGGERED (200) or TRANSIENT (425/...) -> park
+            return cursor  # TRIGGERED or TRANSIENT -> park
     return cursor
 
 

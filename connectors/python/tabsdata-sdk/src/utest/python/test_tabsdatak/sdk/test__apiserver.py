@@ -12,6 +12,8 @@ factory helpers."""
 
 from __future__ import annotations
 
+import http.server
+import threading
 import time
 
 import pytest
@@ -603,12 +605,11 @@ def test_obtain_connection_triggers_login_when_creds_present(monkeypatch):
 
 
 def test_configure_request_connection_pool_returns_two_sessions():
-    default_session, get_session = a.configure_request_connection_pool()
-    # Both have http+https adapters mounted.
-    assert "http://" in default_session.adapters
-    assert "https://" in default_session.adapters
-    assert "http://" in get_session.adapters
-    assert "https://" in get_session.adapters
+    sessions = a.configure_request_connection_pool()
+    assert len(sessions) == 2
+    for session in sessions:
+        assert "http://" in session.adapters
+        assert "https://" in session.adapters
 
 
 # ---------------------------------------------------------------------------
@@ -621,5 +622,80 @@ def test_module_constants_are_well_defined():
     assert a.HTTP_PROTOCOL == "http://"
     assert a.HTTPS_PROTOCOL == "https://"
     assert a.BASE_API_URL == "/api/v1"
-    assert a.PYTEST_CONTEXT_ACTIVE == "PYTEST_CURRENT_TEST"
     assert "len" in a.DEFAULT_LIST_ENDPOINT_PARAMETERS
+
+
+# ---------------------------------------------------------------------------
+# Transport outside pytest
+# ---------------------------------------------------------------------------
+
+
+def test_a_get_outside_pytest_survives_a_transient_server_error(monkeypatch):
+    """Outside pytest (no PYTEST_CURRENT_TEST, as tdk runs), a GET
+    that first hits a 503 from a restarting apiserver and would succeed on a
+    retry must succeed, as it does under pytest."""
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+    statuses = [503, 200]
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            status = statuses.pop(0) if len(statuses) > 1 else statuses[0]
+            self.send_response(status)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *_a, **_kw):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        api = a.APIServer(f"http://127.0.0.1:{server.server_address[1]}")
+        response = api.get("/status", refresh_if_needed=False)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert response.status_code == 200
+
+
+def write_against(method: str, statuses: list[int]) -> tuple[int, int]:
+    received = []
+
+    class _Handler(http.server.BaseHTTPRequestHandler):
+        def answer(self):
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            received.append(self.path)
+            status = statuses.pop(0) if len(statuses) > 1 else statuses[0]
+            self.send_response(status)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        do_POST = answer
+        do_DELETE = answer
+
+        def log_message(self, *_a, **_kw):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        api = a.APIServer(f"http://127.0.0.1:{server.server_address[1]}")
+        response = getattr(api, method)("/write", json={}, refresh_if_needed=False)
+    finally:
+        server.shutdown()
+        server.server_close()
+    return response.status_code, len(received)
+
+
+@pytest.mark.parametrize("method", ["post", "delete"])
+def test_a_write_survives_a_busy_server(monkeypatch, method):
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+    assert write_against(method, [503, 503, 200]) == (200, 3)
+
+
+@pytest.mark.parametrize("method", ["post", "delete"])
+def test_a_write_is_not_repeated_after_another_server_error(monkeypatch, method):
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+    assert write_against(method, [500, 200]) == (500, 1)

@@ -595,28 +595,44 @@ def trigger(
     try:
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         execution = server.trigger_function(coll, name, execution_name=plan_name)
-        click.echo("Function triggered. Execution has started.")
-        click.echo(f"Plan id: {execution.id}")
-        click.echo("")
-        if not detach:
-            show_hint(
-                ctx,
-                "To trigger the function without monitoring the plan, "
-                "use the '--debug' or '-d' option.",
-                final_empty_line=True,
-            )
-            _monitor_execution_or_transaction(ctx, execution=execution)
-        else:
-            show_hint(
-                ctx,
-                "You can check the status of the plan with 'tdk plan get "
-                f"--plan {execution.id}', or monitor the execution of the function "
-                f"with 'tdk plan monitor --plan {execution.id}'",
-            )
-
     except Exception as e:
+        import requests
+
+        if isinstance(e, requests.exceptions.ReadTimeout):
+            raise click.ClickException(
+                f"The server did not answer in time: {e}. The function may have "
+                "been triggered; check with 'tdk plan list' before triggering it "
+                "again."
+            )
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to trigger function: {e}")
+    click.echo("Function triggered. Execution has started.")
+    click.echo(f"Plan id: {execution.id}")
+    click.echo("")
+    if detach:
+        show_hint(
+            ctx,
+            "You can check the status of the plan with 'tdk plan get "
+            f"--plan {execution.id}', or monitor the execution of the function "
+            f"with 'tdk plan monitor --plan {execution.id}'",
+        )
+        return
+    show_hint(
+        ctx,
+        "To trigger the function without monitoring the plan, "
+        "use the '--debug' or '-d' option.",
+        final_empty_line=True,
+    )
+    try:
+        _monitor_execution_or_transaction(ctx, execution=execution)
+    except click.ClickException:
+        raise
+    except Exception as e:
+        hint_common_solutions(ctx, e)
+        raise click.ClickException(
+            f"Plan {execution.id} was triggered, but monitoring it failed: {e}. "
+            f"Resume with 'tdk plan monitor --plan {execution.id}'"
+        )
 
 
 def _monitor_execution_or_transaction(

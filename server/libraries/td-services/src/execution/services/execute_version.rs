@@ -2,8 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::execute;
 use crate::execution::execution_version::assert_function_version;
+use crate::execution::{execute, trigger_gate};
 use crate::function::children::ensure_user_managed;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
@@ -15,8 +15,9 @@ use td_error::TdError;
 use td_execution::{SchedulerNotify, TransactionBy};
 use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::CreateRequest;
-use td_objects::dxo::execution::{ExecutionRequest, ExecutionResponse, InternalExecutionRequest};
+use td_objects::dxo::execution::{ExecutionRequest, InternalExecutionRequest, TriggerResponse};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionParam};
+use td_objects::types::basic::TriggerOutcome;
 use td_queries::Queries;
 
 #[service_factory]
@@ -27,7 +28,7 @@ async fn execute_function_version(
     msgs: &mut ReqCtx,
     db: DbPool<AcrossProjects>,
     request: CreateRequest<InternalExecutionRequest, FunctionVersionParam>,
-) -> Result<ExecutionResponse, TdError> {
+) -> Result<TriggerResponse, TdError> {
     let (ctx, param, internal_request) = request.into_parts();
     let function_version_id = param.function_version;
 
@@ -91,7 +92,10 @@ async fn execute_function_version(
     };
 
     scheduler_notify.notify_scheduler();
-    Ok(response)
+    Ok(TriggerResponse {
+        outcome: TriggerOutcome::Scheduled,
+        execution_id: response.id,
+    })
 }
 
 #[cfg(test)]
@@ -99,21 +103,23 @@ mod tests {
     use super::*;
     use crate::Services;
     use crate::function::children::ChildFunctionError;
-    use std::collections::HashSet;
     use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
-    use td_error::{ApiError, TdError};
+    use td_error::TdError;
+    use td_objects::and;
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionDB;
     use td_objects::dxo::function::FunctionParam;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister, FunctionUpdate};
+    use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionName,
-        ExternalUid, FunctionIdName, FunctionName, FunctionOnly, FunctionRuntimeValues,
-        LogicalFunctionRunStatus, ProjectId, SkipIfRunning, TableNameDto, TransactionKey, UserId,
+        AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionId,
+        ExecutionName, ExternalUid, FunctionIdName, FunctionName, FunctionOnly,
+        FunctionRuntimeValues, LogicalFunctionRunStatus, ProjectId, SkipIfRunning, TableNameDto,
+        TransactionKey, UserId,
     };
     use td_objects::types::basic::{FunctionVersionId, TriggerType};
     use td_queries::Queries;
@@ -123,12 +129,8 @@ mod tests {
     #[td_test::test(db)]
     async fn test_execute_version_no_previous_execution(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (function, response) =
-            test_execute_version(db, p.id, None, SkipIfRunning::FALSE).await?;
-        assert_eq!(
-            response.triggered_functions,
-            HashSet::from([function.base.id])
-        );
+        let (_, response) = test_execute_version(db, p.id, None, SkipIfRunning::FALSE).await?;
+        assert_eq!(response.outcome, TriggerOutcome::Scheduled);
         Ok(())
     }
 
@@ -137,19 +139,15 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (function, response) =
-            test_execute_version(db, p.id, None, SkipIfRunning::TRUE).await?;
-        assert_eq!(
-            response.triggered_functions,
-            HashSet::from([function.base.id])
-        );
+        let (_, response) = test_execute_version(db, p.id, None, SkipIfRunning::TRUE).await?;
+        assert_eq!(response.outcome, TriggerOutcome::Scheduled);
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_execute_version_previous_execution_running(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (function, response) = test_execute_version(
+        let (_, response) = test_execute_version(
             db,
             p.id,
             Some(PreviousRun {
@@ -159,10 +157,7 @@ mod tests {
             SkipIfRunning::FALSE,
         )
         .await?;
-        assert_eq!(
-            response.triggered_functions,
-            HashSet::from([function.base.id])
-        );
+        assert_eq!(response.outcome, TriggerOutcome::Scheduled);
         Ok(())
     }
 
@@ -171,7 +166,7 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let err = test_execute_version(
+        let (_, response) = test_execute_version(
             db.clone(),
             p.id,
             Some(PreviousRun {
@@ -180,9 +175,8 @@ mod tests {
             }),
             SkipIfRunning::TRUE,
         )
-        .await
-        .unwrap_err();
-        assert_eq!(err.api_error(), ApiError::Any(425));
+        .await?;
+        assert_eq!(response.outcome, TriggerOutcome::Busy);
 
         let executions: Vec<ExecutionDB> = db.fetch_all::<ExecutionDB>(()).await?;
         assert_eq!(executions.len(), 1);
@@ -192,7 +186,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_execute_version_previous_execution_committed(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (function, response) = test_execute_version(
+        let (_, response) = test_execute_version(
             db,
             p.id,
             Some(PreviousRun {
@@ -202,10 +196,7 @@ mod tests {
             SkipIfRunning::FALSE,
         )
         .await?;
-        assert_eq!(
-            response.triggered_functions,
-            HashSet::from([function.base.id])
-        );
+        assert_eq!(response.outcome, TriggerOutcome::Scheduled);
         Ok(())
     }
 
@@ -214,7 +205,7 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (function, response) = test_execute_version(
+        let (_, response) = test_execute_version(
             db,
             p.id,
             Some(PreviousRun {
@@ -224,10 +215,7 @@ mod tests {
             SkipIfRunning::TRUE,
         )
         .await?;
-        assert_eq!(
-            response.triggered_functions,
-            HashSet::from([function.base.id])
-        );
+        assert_eq!(response.outcome, TriggerOutcome::Scheduled);
         Ok(())
     }
 
@@ -236,7 +224,7 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (function, response) = test_execute_version(
+        let (_, response) = test_execute_version(
             db,
             p.id,
             Some(PreviousRun {
@@ -246,10 +234,7 @@ mod tests {
             SkipIfRunning::FALSE,
         )
         .await?;
-        assert_eq!(
-            response.triggered_functions,
-            HashSet::from([function.base.id])
-        );
+        assert_eq!(response.outcome, TriggerOutcome::Scheduled);
         Ok(())
     }
 
@@ -258,7 +243,7 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (function, response) = test_execute_version(
+        let (_, response) = test_execute_version(
             db,
             p.id,
             Some(PreviousRun {
@@ -268,10 +253,7 @@ mod tests {
             SkipIfRunning::TRUE,
         )
         .await?;
-        assert_eq!(
-            response.triggered_functions,
-            HashSet::from([function.base.id])
-        );
+        assert_eq!(response.outcome, TriggerOutcome::Scheduled);
         Ok(())
     }
 
@@ -285,7 +267,7 @@ mod tests {
         project_id: ProjectId,
         previous_run: Option<PreviousRun>,
         skip_if_running: SkipIfRunning,
-    ) -> Result<(FunctionDB, ExecutionResponse), TdError> {
+    ) -> Result<(FunctionDB, TriggerResponse), TdError> {
         let collection_0 = db
             .scoped(project_id)
             .seed()
@@ -492,7 +474,22 @@ mod tests {
         db: &TdPool,
         function_version_id: &FunctionVersionId,
         external_uid: Option<ExternalUid>,
-    ) -> Result<ExecutionResponse, TdError> {
+    ) -> Result<TriggerResponse, TdError> {
+        trigger_keyed(
+            db,
+            function_version_id,
+            external_uid,
+            TriggerType::CronTrigger,
+        )
+        .await
+    }
+
+    async fn trigger_keyed(
+        db: &TdPool,
+        function_version_id: &FunctionVersionId,
+        external_uid: Option<ExternalUid>,
+        trigger_type: TriggerType,
+    ) -> Result<TriggerResponse, TdError> {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
             FunctionVersionParam {
                 function_version: function_version_id.clone(),
@@ -502,7 +499,7 @@ mod tests {
                 function_only: FunctionOnly::default(),
                 skip_if_running: SkipIfRunning::default(),
                 external_uid,
-                trigger_type: TriggerType::CronTrigger,
+                trigger_type,
             },
         );
         Services::with_defaults(db.clone())
@@ -511,23 +508,99 @@ mod tests {
             .map(|response| response.data)
     }
 
+    async fn set_trigger_run_status(
+        db: &TdPool,
+        project: ProjectId,
+        function: &FunctionDB,
+        execution: &ExecutionId,
+        status: LogicalFunctionRunStatus,
+    ) -> Result<(), TdError> {
+        let lfr: LogicalFunctionRunDB = db
+            .scoped(project)
+            .fetch_one(and!(execution, &function.base.function_id))
+            .await?;
+        db.scoped(project)
+            .update(&LogicalFunctionRunStatusUpdateDB { status }, &lfr.base.id)
+            .await?;
+        Ok(())
+    }
+
     #[td_test::test(db)]
-    async fn test_execute_version_external_uid_conflicts(db: TdPool) -> Result<(), TdError> {
+    async fn test_execute_version_external_uid_held(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let function = seed_dedup_function(&db, p.id).await?;
         let uid = ExternalUid::try_from("uid-123")?;
 
-        trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
-
-        let err = trigger_with_external_uid(&db, &function.base.id, Some(uid))
-            .await
-            .unwrap_err();
-        assert_eq!(err.api_error(), ApiError::Any(409));
+        let first = trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
+        let again = trigger_with_external_uid(&db, &function.base.id, Some(uid)).await?;
+        assert_eq!(
+            again,
+            TriggerResponse {
+                outcome: TriggerOutcome::Held,
+                execution_id: first.execution_id,
+            }
+        );
 
         let executions: Vec<ExecutionDB> = db
             .fetch_all::<ExecutionDB>(&function.base.function_id)
             .await?;
         assert_eq!(executions.len(), 1);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_execute_version_external_uid_consumed_once_committed(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let function = seed_dedup_function(&db, p.id).await?;
+        let uid = ExternalUid::try_from("uid-committed")?;
+
+        let first = trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
+        for (status, outcome) in [
+            (LogicalFunctionRunStatus::Requested, TriggerOutcome::Held),
+            (LogicalFunctionRunStatus::Running, TriggerOutcome::Held),
+            (LogicalFunctionRunStatus::Failed, TriggerOutcome::Held),
+            (LogicalFunctionRunStatus::Done, TriggerOutcome::Held),
+            (
+                LogicalFunctionRunStatus::Committed,
+                TriggerOutcome::Consumed,
+            ),
+        ] {
+            set_trigger_run_status(&db, p.id, &function, &first.execution_id, status).await?;
+            let again =
+                trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
+            assert_eq!(again.outcome, outcome, "trigger run {status:?}");
+            assert_eq!(again.execution_id, first.execution_id);
+        }
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_execute_version_external_uid_released_by_cancel_is_reused(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let function = seed_dedup_function(&db, p.id).await?;
+        let uid = ExternalUid::try_from("uid-released")?;
+
+        let first = trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
+        set_trigger_run_status(
+            &db,
+            p.id,
+            &function,
+            &first.execution_id,
+            LogicalFunctionRunStatus::Canceled,
+        )
+        .await?;
+        let again = trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
+        assert_eq!(again.outcome, TriggerOutcome::Scheduled);
+        assert_ne!(again.execution_id, first.execution_id);
+
+        let released: ExecutionDB = db.fetch_one(&first.execution_id).await?;
+        assert_eq!(released.base.external_uid, None);
+        let holder: ExecutionDB = db.fetch_one(&again.execution_id).await?;
+        assert_eq!(holder.base.external_uid, Some(uid));
         Ok(())
     }
 
@@ -548,10 +621,10 @@ mod tests {
 
     /// Concurrent identical-`external_uid` triggers must not race into a 500:
     /// the project's lock, which every exclusive connection holds for its whole
-    /// transaction, serializes them so exactly one inserts (`Executed`) and the
-    /// other is rejected with `409 Conflict`, leaving a single execution row.
-    /// Unserialized, both could pass the conflict check and the INSERT loser
-    /// would hit a constraint and surface a 500.
+    /// transaction, serializes them so exactly one schedules and the other
+    /// finds the key held, leaving a single execution row. Unserialized, both
+    /// could pass the check and the INSERT loser would hit a constraint and
+    /// surface a 500.
     #[td_test::test(db)]
     async fn test_execute_version_concurrent_external_uid_no_race(
         db: TdPool,
@@ -564,17 +637,9 @@ mod tests {
             trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())),
             trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())),
         );
-
-        let executed = [&a, &b].into_iter().filter(|r| r.is_ok()).count();
-        let conflicts = [&a, &b]
-            .into_iter()
-            .filter(|r| matches!(r, Err(e) if e.api_error() == ApiError::Any(409)))
-            .count();
-        assert_eq!(executed, 1, "exactly one trigger executes: {a:?} / {b:?}");
-        assert_eq!(
-            conflicts, 1,
-            "the racing trigger conflicts (409): {a:?} / {b:?}"
-        );
+        let mut outcomes = [a?.outcome, b?.outcome];
+        outcomes.sort_by_key(|o| *o != TriggerOutcome::Scheduled);
+        assert_eq!(outcomes, [TriggerOutcome::Scheduled, TriggerOutcome::Held]);
 
         let executions: Vec<ExecutionDB> = db
             .fetch_all::<ExecutionDB>(&function.base.function_id)

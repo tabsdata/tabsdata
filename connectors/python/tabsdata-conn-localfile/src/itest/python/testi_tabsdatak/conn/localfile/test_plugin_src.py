@@ -963,3 +963,25 @@ def test_src_excel_wildcard_matches_workbooks(
 #     )
 #     with pytest.raises(Exception, match="records"):
 #         _read_in(base, work, src)
+
+
+@fs_domain("fs")
+def test_src_purge_keeps_files_a_rerun_of_the_same_transaction_needs(
+    domain_fs: FsDomain, request: pytest.FixtureRequest
+):
+    # A re-run of the same transaction (recovery) must still find the
+    # files it reads. Holds: purge only deletes what the committed cursor
+    # already consumed, and a re-run starts from that same cursor.
+    _, base, work = scratch(domain_fs, request)
+    stage_parquet(base, "a.parquet", CUTOFF + timedelta(hours=1))
+    src = LocalFileSrc(paths=["*.parquet"], initial_last_modified=CUTOFF, purge=True)
+
+    first = plugin.LocalFileSrcPlugin().read_in(
+        PluginSrcCtx(work / "attempt1"), src_conn(base), src
+    )
+    assert _slot_names(first[0]) == ["a.parquet"]
+
+    rerun = plugin.LocalFileSrcPlugin().read_in(
+        PluginSrcCtx(work / "attempt2"), src_conn(base), src
+    )
+    assert _slot_names(rerun[0]) == ["a.parquet"]

@@ -1595,7 +1595,7 @@ class Function:
                 request was not successful. Defaults to True.
 
         Returns:
-            requests.Response: The response of the trigger request.
+            Execution: The execution the trigger planned.
 
         Raises:
             APIServerError: If the function could not be triggered.
@@ -4389,7 +4389,7 @@ class TabsdataServer:
                 request was not successful. Defaults to True.
 
         Returns:
-            requests.Response: The response of the trigger request.
+            Execution: The execution the trigger planned.
 
         Raises:
             APIServerError: If the function could not be triggered.

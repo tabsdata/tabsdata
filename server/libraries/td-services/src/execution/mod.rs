@@ -4,7 +4,7 @@
 
 pub mod services;
 
-use crate::execution::execution_version::{reject_if_external_uid_in_use, reject_if_running};
+use crate::execution::execution_version::{external_uid_holder, running_execution};
 use crate::execution::plan::{
     assert_function_status, build_execution_plan, build_logical_function_run_inputs,
     build_logical_function_runs, build_logical_table_data_versions, build_response,
@@ -14,7 +14,7 @@ use crate::execution::plan::{
 use ta_execution::PlanScope;
 use ta_services::ctx_service::ReqCtx;
 use td_database::access::LockInstant;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
+use td_database::access::{InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::graph::{GraphConfig, generate_plan_graph};
@@ -22,10 +22,11 @@ use td_execution::{ExecutionScope, TransactionBy};
 use td_objects::and;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{
-    ExecutionDB, ExecutionInsertDB, ExecutionRequest, ExecutionResponse,
+    ExecutionDB, ExecutionInsertDB, ExecutionRequest, ExecutionResponse, TriggerResponse,
 };
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
-use td_objects::types::basic::{ExecutionId, FunctionId, TriggerType, TriggeredOn};
+use td_objects::types::basic::TriggerOutcome;
+use td_objects::types::basic::{ExecutionId, TriggerType, TriggeredOn};
 use td_objects::types::json::Json;
 use td_queries::Queries;
 
@@ -37,41 +38,35 @@ pub(crate) mod release;
 pub(crate) mod settlement;
 pub(crate) mod update_status;
 
-/// Pre-execution trigger gates shared by the function- and version-trigger
-/// services. Both gates short-circuit (they never branch to a different
-/// success response):
-///   1) `skip_if_running` + the function is currently running -> 425 Too Early
-///   2) `external_uid` already in use by a live execution     -> 409 Conflict
-async fn trigger_guards<S: SeesProjectRows, M: AccessMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+/// The trigger gates shared by the function- and version-trigger services,
+/// run on the exclusive connection before planning. `Some` names the
+/// execution that stops this trigger: `Busy` when `skip_if_running` finds the
+/// function running, `Held` or `Consumed` when its `external_uid` is taken.
+pub(crate) async fn trigger_gate<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S, XW>,
     request: &ExecutionRequest,
-    function_id: &FunctionId,
-    function_version_id: &td_objects::types::basic::FunctionVersionId,
+    function: &FunctionDBWithNames,
     trigger_type: &TriggerType,
-) -> Result<(), TdError> {
-    // 1) Latest execution of the same trigger type, then the running gate.
+) -> Result<Option<TriggerResponse>, TdError> {
     let latest_execution: Option<ExecutionDB> = conn
-        .fetch_first(and!(function_version_id, trigger_type))
+        .fetch_first(and!(&function.base.base.id, trigger_type))
         .await?;
-    let skip_if_running = request.skip_if_running;
-    reject_if_running(
-        conn,
-        function_version_id,
-        &skip_if_running,
-        &latest_execution,
-    )
-    .await?;
-    // 2) external_uid conflict gate.
-    let external_uid = request.external_uid.clone();
-    reject_if_external_uid_in_use(conn, function_id, &external_uid).await?;
-    Ok(())
+    if let Some(execution_id) =
+        running_execution(conn, &request.skip_if_running, &latest_execution).await?
+    {
+        return Ok(Some(TriggerResponse {
+            outcome: TriggerOutcome::Busy,
+            execution_id,
+        }));
+    }
+    external_uid_holder(conn, &function.base.base.function_id, &request.external_uid).await
 }
 
-/// The full trigger flow shared by both trigger services: run the trigger
-/// gates (425 if already running, 409 on `external_uid` conflict), then
-/// authorize, plan, and insert the execution + its transactions and (logical)
-/// function runs. Yields the `ExecutionResponse`; the caller commits and then
-/// notifies the scheduler of the new runs.
+/// The full trigger flow shared by both trigger services, once
+/// [`trigger_gate`] let the trigger through: plan, and insert the execution +
+/// its transactions and (logical) function runs. Yields the
+/// `ExecutionResponse`; the caller commits and then notifies the scheduler of
+/// the new runs.
 #[allow(clippy::too_many_arguments)]
 /// The caller has already authorized `DevelopProject` on the request's project,
 /// before reading anything: an unauthorized request must not observe the
@@ -86,16 +81,6 @@ pub(crate) async fn execute(
     function: FunctionDBWithNames,
     trigger_type: TriggerType,
 ) -> Result<ExecutionResponse, TdError> {
-    let function_id = function.base.base.function_id;
-    // Trigger gates (short-circuit with 425 / 409).
-    trigger_guards(
-        conn,
-        &request,
-        &function_id,
-        &function.base.base.id,
-        &trigger_type,
-    )
-    .await?;
     let override_disabled_trigger = request.override_disabled_trigger;
     assert_function_status(msgs, &function, &override_disabled_trigger)?;
 

@@ -57,14 +57,13 @@ def _std_args() -> list[str]:
 
 
 def test_execution_request_body_is_cron_trigger_shape():
-    # Mirrors the legacy td-crontrigger builder: a fresh execution every
-    # tick (no external_uid dedup, skip_if_running false), tagged
-    # TriggerType::CronTrigger ("CT").
-    assert json.loads(_execution_request_body()) == {
+    # A fresh execution every fire (skip_if_running false), keyed by the
+    # fire so its retries dedup, tagged TriggerType::CronTrigger ("CT").
+    assert json.loads(_execution_request_body("cron-k")) == {
         "name": None,
         "function_only": False,
         "skip_if_running": False,
-        "external_uid": None,
+        "external_uid": "cron-k",
         "trigger_type": "CT",
     }
 

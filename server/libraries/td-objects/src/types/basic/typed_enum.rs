@@ -809,7 +809,7 @@ pub enum WorkerTypeDto {
     StageTrigger,
 }
 
-#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Copy)]
 pub enum WorkerType {
     #[typed_enum(rename = "F")]
     FunctionRunner,
@@ -831,6 +831,24 @@ impl From<WorkerTypeDto> for WorkerType {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The trigger runners match these names on the wire.
+    #[test]
+    fn test_trigger_outcome_wire_names() {
+        for (outcome, name) in [
+            (TriggerOutcome::Scheduled, "Scheduled"),
+            (TriggerOutcome::Busy, "Busy"),
+            (TriggerOutcome::Held, "Held"),
+            (TriggerOutcome::Consumed, "Consumed"),
+        ] {
+            let json = serde_json::to_value(outcome).unwrap();
+            assert_eq!(json, serde_json::json!(name));
+            assert_eq!(
+                serde_json::from_value::<TriggerOutcome>(json).unwrap(),
+                outcome
+            );
+        }
+    }
 
     #[test]
     fn test_collection_type_from_group_kind() {
@@ -895,4 +913,21 @@ mod tests {
             assert_eq!(s.is_ended(), ended);
         }
     }
+}
+
+/// What the server did with an internal trigger. `Busy`: the function's
+/// latest execution is still running and the trigger asked to skip. `Held`:
+/// the trigger's `external_uid` belongs to an execution whose trigger run has
+/// not committed. `Consumed`: that run committed, so the key's input is
+/// durably published.
+#[derive(TypedEnum, TypedSerde, TypedOpenApi, Eq, PartialEq, Copy)]
+pub enum TriggerOutcome {
+    #[typed_enum(rename = "Scheduled")]
+    Scheduled,
+    #[typed_enum(rename = "Busy")]
+    Busy,
+    #[typed_enum(rename = "Held")]
+    Held,
+    #[typed_enum(rename = "Consumed")]
+    Consumed,
 }

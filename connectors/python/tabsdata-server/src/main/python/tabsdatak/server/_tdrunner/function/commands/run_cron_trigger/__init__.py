@@ -17,6 +17,9 @@ stage: the trigger URL injected via the worker's ``TD_TRIGGER_*`` secret
 already encodes the project + function version, so the request body is all
 that is needed. Kubernetes re-spawns the pod on the next schedule tick.
 
+The POST carries a key drawn once per fire, so a retry whose earlier
+answer was lost finds the execution it made: the fire happens exactly once.
+
 apiserver response handling:
 
   * ``2xx`` -- execution scheduled; exit 0.

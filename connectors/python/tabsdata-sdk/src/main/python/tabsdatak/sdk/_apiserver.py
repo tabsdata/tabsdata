@@ -21,11 +21,6 @@ from urllib3 import Retry
 
 from tabsdatak.sdk import _credentials
 
-# Pytest sets this env var to the current node id while a test is
-# running; we use its presence to switch between the pooled session
-# (test runs) and the request-per-call mode (production).
-PYTEST_CONTEXT_ACTIVE = "PYTEST_CURRENT_TEST"
-
 DEFAULT_APISERVER_PORT = "2457"
 HTTP_PROTOCOL = "http://"
 HTTPS_PROTOCOL = "https://"
@@ -70,15 +65,17 @@ def configure_request_connection_pool():
         def sleep(self, _response=None):
             time.sleep(http_retries_delay)
 
+    # A 503 means the server applied nothing: it was too busy to run the
+    # request, so any request may be repeated after one.
     default_retry_strategy = ConstantWaitRetry(
         total=http_attempts,
         connect=http_attempts,
         read=0,
         redirect=http_attempts,
-        status=0,
+        status=http_attempts,
         other=0,
         allowed_methods=None,
-        status_forcelist=None,
+        status_forcelist={503},
         raise_on_status=False,
         raise_on_redirect=False,
         respect_retry_after_header=False,
@@ -384,13 +381,8 @@ class APIServer:
         headers = dict(self.authentication_header)
         if content_type:
             headers["Content-Type"] = content_type
-        if os.environ.get(PYTEST_CONTEXT_ACTIVE) is None:
-            client = requests
-        elif method == "get":
-            client = GET_HTTP_SESSION
-        else:
-            client = DEFAULT_HTTP_SESSION
-        return getattr(client, method)(
+        session = GET_HTTP_SESSION if method == "get" else DEFAULT_HTTP_SESSION
+        return getattr(session, method)(
             self.url + path,
             headers=headers,
             timeout=(CONNECTION_TIMEOUT, READ_TIMEOUT),
