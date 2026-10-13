@@ -242,6 +242,7 @@ async fn link_input(
         requirement_input_idx: Some(InputIdx::try_from(0)?),
         requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
         requirement_version_pos: VersionPos::try_from(0)?,
+        requirement_table_version_id: None,
     };
     db.scoped(consumer_coll.project_id).insert(&input).await?;
     Ok(())

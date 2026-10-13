@@ -18,7 +18,7 @@ use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
 use crate::schema::sql::scd2::open_interval;
-use crate::schema::sql::{Scd2TriggerDef, ViewDef};
+use crate::schema::sql::{Scd2PendingTriggerDef, Scd2TriggerDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
 /// View name for `physical_table_data_versions__with_function`, reused by
@@ -190,14 +190,16 @@ impl Entity for Defs {
 
     fn create_db_triggers(&self) -> Vec<Derived> {
         vec![
-            Scd2TriggerDef {
+            // An attempt's materializations stay pending until it reports
+            // Done: a replay never hides the data it would replace.
+            Scd2PendingTriggerDef(Scd2TriggerDef {
                 name: format!("{}__scd2_close", PhysicalTableDataVersions::Table.to_string()),
                 source_table: PhysicalTableDataVersions::Table.into_iden(),
                 partition_col: PhysicalTableDataVersions::LogicalTableDataVersionId.into_iden(),
                 valid_from_col: PhysicalTableDataVersions::ValidFrom.into_iden(),
                 valid_to_col: PhysicalTableDataVersions::ValidTo.into_iden(),
                 pk_col: PhysicalTableDataVersions::Id.into_iden(),
-            }
+            })
             .derived(),
         ]
     }

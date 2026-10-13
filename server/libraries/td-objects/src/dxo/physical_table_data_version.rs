@@ -16,8 +16,8 @@ use ta_objects::FromDao;
 use td_error::TdError;
 
 /// One materialization of a logical table-data version. Materializations are
-/// the version's SCD2 versions, ordered by `triggered_on` in lockstep with the
-/// producing attempt.
+/// the version's SCD2 versions: minted pending, they enter its timeline when
+/// the producing attempt reports Done.
 #[ta_objects::Dao]
 #[dao(
     table = "physical_table_data_versions",

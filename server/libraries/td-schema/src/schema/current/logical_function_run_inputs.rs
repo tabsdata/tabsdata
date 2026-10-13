@@ -27,6 +27,7 @@ pub enum LogicalFunctionRunInputs {
     RequirementInputIdx,
     RequirementDependencyPos,
     RequirementVersionPos,
+    RequirementTableVersionId,
 }
 
 pub(super) struct Defs;
@@ -53,6 +54,10 @@ impl Entity for Defs {
                 .col(ColumnDef::new(LogicalFunctionRunInputs::RequirementInputIdx).integer().null())
                 .col(ColumnDef::new(LogicalFunctionRunInputs::RequirementDependencyPos).integer().null())
                 .col(ColumnDef::new(LogicalFunctionRunInputs::RequirementVersionPos).integer().not_null())
+                // The input table's version the plan read: a dependency's
+                // request is built from it, never from the table as of a later
+                // instant. NULL on trigger-edge rows.
+                .col(id_column(LogicalFunctionRunInputs::RequirementTableVersionId).null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(LogicalFunctionRunInputs::Table, LogicalFunctionRunInputs::CollectionId)

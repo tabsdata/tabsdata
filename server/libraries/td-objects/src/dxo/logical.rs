@@ -436,6 +436,8 @@ pub struct LogicalFunctionRunInputInsertDB {
     pub requirement_input_idx: Option<InputIdx>,
     pub requirement_dependency_pos: Option<DependencyPos>,
     pub requirement_version_pos: VersionPos,
+    // The input table's version the plan read; NULL on trigger-edge rows.
+    pub requirement_table_version_id: Option<TableVersionId>,
 }
 
 /// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.

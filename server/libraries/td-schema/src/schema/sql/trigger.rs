@@ -46,24 +46,128 @@ impl Scd2TriggerDef {
     pub fn render(&self) -> Vec<String> {
         let name = &self.name;
         let table = self.source_table.to_string();
+        vec![
+            self.render_function(""),
+            format!(
+                "CREATE TRIGGER {name} BEFORE INSERT ON {table}\n\
+                 FOR EACH ROW EXECUTE FUNCTION {name}_fn()",
+            ),
+        ]
+    }
+
+    /// The splice; `successor_filter` narrows which later rows can end the
+    /// new one.
+    fn render_function(&self, successor_filter: &str) -> String {
+        let name = &self.name;
+        let table = self.source_table.to_string();
         let partition = self.partition_col.to_string();
         let valid_from = self.valid_from_col.to_string();
         let valid_to = self.valid_to_col.to_string();
         let pk = self.pk_col.to_string();
+        format!(
+            "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
+             BEGIN\n  \
+               PERFORM pg_advisory_xact_lock(hashtextextended('{table}:' || NEW.{partition}, 0));\n  \
+               SELECT COALESCE(MIN({valid_from}), 'infinity') INTO NEW.{valid_to}\n  \
+               FROM {table}\n  \
+               WHERE {partition} = NEW.{partition}\n    \
+                 AND ({valid_from}, {pk}) > (NEW.{valid_from}, NEW.{pk}){successor_filter};\n  \
+               UPDATE {table} SET {valid_to} = NEW.{valid_from}\n  \
+               WHERE {partition} = NEW.{partition}\n    \
+                 AND ({valid_from}, {pk}) < (NEW.{valid_from}, NEW.{pk})\n    \
+                 AND {valid_to} > NEW.{valid_from};\n  \
+               RETURN NEW;\n\
+             END;\n\
+             $$ LANGUAGE plpgsql",
+        )
+    }
+}
+
+/// An SCD2 table that also holds pending versions: a row inserted with
+/// `valid_to = valid_from`, an empty interval at its mint instant, closes
+/// nothing and is never open or visible, until an update moving its
+/// `valid_from` settles it into the timeline exactly as an insert at that
+/// instant would. Pending rows never end another row.
+pub(crate) struct Scd2PendingTriggerDef(pub Scd2TriggerDef);
+
+impl Scd2PendingTriggerDef {
+    pub(crate) fn derived(&self) -> Derived {
+        let def = &self.0;
+        Derived {
+            create: self.render(),
+            drop: vec![
+                drop_trigger(&def.name, &def.source_table),
+                drop_trigger(&self.settle_name(), &def.source_table),
+                drop_trigger_function(&def.name),
+            ],
+        }
+    }
+
+    fn settle_name(&self) -> String {
+        format!("{}__scd2_settle", self.0.source_table)
+    }
+
+    pub fn render(&self) -> Vec<String> {
+        let def = &self.0;
+        let name = &def.name;
+        let settle = self.settle_name();
+        let table = def.source_table.to_string();
+        let valid_from = def.valid_from_col.to_string();
+        let valid_to = def.valid_to_col.to_string();
+        vec![
+            def.render_function(&format!("\n    AND {valid_to} > {valid_from}")),
+            format!(
+                "CREATE TRIGGER {name} BEFORE INSERT ON {table}\n\
+                 FOR EACH ROW WHEN (NEW.{valid_to} IS DISTINCT FROM NEW.{valid_from}) EXECUTE FUNCTION {name}_fn()",
+            ),
+            format!(
+                "CREATE TRIGGER {settle} BEFORE UPDATE OF {valid_from} ON {table}\n\
+                 FOR EACH ROW WHEN (OLD.{valid_to} = OLD.{valid_from} AND NEW.{valid_from} > OLD.{valid_from}) \
+                 EXECUTE FUNCTION {name}_fn()",
+            ),
+        ]
+    }
+}
+
+/// A `BEFORE INSERT` guard on an SCD2 table that refuses a new version while
+/// the partition's open one is in one of `open_statuses`: the open version
+/// has to end before another supersedes it. Named so it fires before the
+/// table's [`Scd2TriggerDef`] closes that version, under the same partition
+/// lock.
+pub(crate) struct SupersedeEndedTriggerDef {
+    pub name: String,
+    pub source_table: DynIden,
+    pub partition_col: DynIden,
+    pub valid_to_col: DynIden,
+    pub status_col: DynIden,
+    pub open_statuses: &'static [&'static str],
+}
+
+impl SupersedeEndedTriggerDef {
+    pub(crate) fn derived(&self) -> Derived {
+        Derived {
+            create: self.render(),
+            drop: vec![drop_trigger(&self.name, &self.source_table), drop_trigger_function(&self.name)],
+        }
+    }
+
+    pub(crate) fn render(&self) -> Vec<String> {
+        let name = &self.name;
+        let table = self.source_table.to_string();
+        let partition = self.partition_col.to_string();
+        let valid_to = self.valid_to_col.to_string();
+        let status = self.status_col.to_string();
+        let statuses = self.open_statuses.iter().map(|s| format!("'{s}'")).collect::<Vec<_>>().join(", ");
 
         vec![
             format!(
                 "CREATE OR REPLACE FUNCTION {name}_fn() RETURNS TRIGGER AS $$\n\
                  BEGIN\n  \
                    PERFORM pg_advisory_xact_lock(hashtextextended('{table}:' || NEW.{partition}, 0));\n  \
-                   SELECT COALESCE(MIN({valid_from}), 'infinity') INTO NEW.{valid_to}\n  \
-                   FROM {table}\n  \
-                   WHERE {partition} = NEW.{partition}\n    \
-                     AND ({valid_from}, {pk}) > (NEW.{valid_from}, NEW.{pk});\n  \
-                   UPDATE {table} SET {valid_to} = NEW.{valid_from}\n  \
-                   WHERE {partition} = NEW.{partition}\n    \
-                     AND ({valid_from}, {pk}) < (NEW.{valid_from}, NEW.{pk})\n    \
-                     AND {valid_to} > NEW.{valid_from};\n  \
+                   IF EXISTS (SELECT 1 FROM {table} WHERE {partition} = NEW.{partition} \
+                 AND {valid_to} = 'infinity' AND {status} IN ({statuses})) THEN\n    \
+                     RAISE EXCEPTION '{table}: % still has an open version in progress', NEW.{partition};\n  \
+                   END IF;\n  \
                    RETURN NEW;\n\
                  END;\n\
                  $$ LANGUAGE plpgsql",
@@ -287,6 +391,22 @@ mod tests {
         assert!(f.contains("AND (defined_on, id) < (NEW.defined_on, NEW.id)"), "{f}");
         assert!(f.contains("AND valid_to > NEW.defined_on"), "{f}");
         assert!(out[1].contains("CREATE TRIGGER foos__scd2_close BEFORE INSERT ON foos"), "{}", out[1]);
+    }
+
+    #[test]
+    fn scd2_pending_versions_skip_the_close_until_settled() {
+        let out = Scd2PendingTriggerDef(scd2()).render();
+        assert_eq!(out.len(), 3, "function + insert and settle triggers");
+        assert!(out[0].contains("AND (defined_on, id) > (NEW.defined_on, NEW.id)\n    AND valid_to > defined_on;"), "{}", out[0]);
+        assert!(out[1].contains("BEFORE INSERT ON foos\nFOR EACH ROW WHEN (NEW.valid_to IS DISTINCT FROM NEW.defined_on)"), "{}", out[1]);
+        assert!(
+            out[2].contains(
+                "CREATE TRIGGER foos__scd2_settle BEFORE UPDATE OF defined_on ON foos\n\
+                 FOR EACH ROW WHEN (OLD.valid_to = OLD.defined_on AND NEW.defined_on > OLD.defined_on)"
+            ),
+            "{}",
+            out[2]
+        );
     }
 
     fn immutable_columns() -> ImmutableColumnsTriggerDef {

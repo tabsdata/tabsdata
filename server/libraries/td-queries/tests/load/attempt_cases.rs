@@ -78,15 +78,34 @@ async fn load_attempts_version_at(db: TdPool) -> Result<(), TdError> {
 }
 
 #[td_test::test(db)]
-async fn load_ltdv_latest_bound_tdv_with_data_for_table(db: TdPool) -> Result<(), TdError> {
+async fn load_ltdv_committed_data_at(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
     let row = db
         .table_data_versions()
-        .latest_bound_tdv_with_data_for_table(&h.table_id, &AtTime::from(h.before_time), false)
+        .committed_data_at(&h.table_id, &AtTime::from(h.before_time))
         .await?;
     record(
-        "ltdv::latest_bound_tdv_with_data_for_table",
+        "ltdv::committed_data_at",
+        profile,
+        t,
+        row.is_some() as usize,
+        seeded,
+    );
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_ltdv_committed_data_before(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    let newest = h.ltdv_ids.last().expect("seeded logical versions");
+    let t = Instant::now();
+    let row = db
+        .table_data_versions()
+        .committed_data_before(newest)
+        .await?;
+    record(
+        "ltdv::committed_data_before",
         profile,
         t,
         row.is_some() as usize,

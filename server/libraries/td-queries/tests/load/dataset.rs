@@ -211,7 +211,7 @@ pub struct ChainHandle {
     pub producer_function_version_id: FunctionVersionId,
     /// Producer LTDV logical ids — partitions for the `find_at` reads.
     pub ltdv_ids: Vec<LogicalTableDataVersionId>,
-    /// A producer output-table id (for `latest_bound_tdv_with_data_for_table`).
+    /// A producer output-table id (for `TableDataVersions::committed_data_at`).
     pub table_id: TableId,
     /// A seeded collection id (for default-grain reads over `ActiveCollectionDB`).
     pub collection_id: td_objects::types::basic::CollectionId,
@@ -493,5 +493,6 @@ fn build_lfri(
         requirement_input_idx: Some(InputIdx::try_from(0)?),
         requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
         requirement_version_pos: VersionPos::try_from(0)?,
+        requirement_table_version_id: None,
     })
 }

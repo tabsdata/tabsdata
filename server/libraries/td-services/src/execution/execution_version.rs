@@ -48,7 +48,6 @@ pub fn assert_function_version(
 )]
 pub async fn reject_if_running<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
-    function_version_id: &FunctionVersionId,
     skip_if_running: &SkipIfRunning,
     latest_execution: &Option<ExecutionDB>,
 ) -> Result<(), TdError> {

@@ -165,7 +165,7 @@ pub async fn mint_function_runs_on_dispatch(
         runs_reattempted(conn, &reattempted).await?;
     }
     if !all_tdvs.is_empty() {
-        conn.scd2().chunked().open(&all_tdvs, at).await?;
+        conn.table_data_versions().pending(&all_tdvs, at).await?;
     }
 
     let mut output = Vec::with_capacity(ready_lfrs.len());

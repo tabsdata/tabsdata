@@ -273,6 +273,12 @@ is an `Scd2OpenDao` instead and opens a version through
 `scd2().open(.., at)`, so the write that stamps `valid_from` and closes the
 previous interval always says so, and says when, at the call site.
 
+Materializations, whose close-out trigger keeps pending versions, also mint
+through `table_data_versions().pending(.., at)`: an empty interval at `at`
+that closes nothing and no read sees. `table_data_versions().settle(.., at)`
+writes the outcome and puts it into the timeline at `at`, superseding the
+open row then; a row already open is updated in place.
+
 A `view = "..."` DAO gets no `TableDao`, so `insert`, `update` and `delete`
 do not typecheck for it. `SELECT ... FOR UPDATE` stays available: locking
 through a view locks the rows of every table it draws from.
@@ -540,9 +546,7 @@ db.executions().list_by_table_data_version(&tdv, &params).await?;
 db.logical_runs().previous_for_function_at(&fid, &before).await?;
 db.logical_runs().to_commit(&execution_ids).await?;
 db.physical_runs().to_dispatch(limit).await?;
-db.table_data_versions()
-    .latest_bound_tdv_with_data_for_table(&table_id, &triggered_on, true)
-    .await?;
+db.table_data_versions().committed_data_at(&table_id, &at).await?;
 ```
 
 Adding a surface is one method on `Queries` plus the inherent `impl` for

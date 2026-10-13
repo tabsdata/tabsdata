@@ -562,6 +562,7 @@ mod tests {
             requirement_input_idx: None,
             requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
             requirement_version_pos: VersionPos::try_from(0)?,
+            requirement_table_version_id: None,
         };
         db.scoped(p.id).insert(&input).await?;
 

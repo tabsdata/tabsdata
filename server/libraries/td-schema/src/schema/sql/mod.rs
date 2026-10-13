@@ -17,7 +17,9 @@ pub(crate) mod view;
 pub(crate) use partial_index::PartialIndexDef;
 pub use rollup::{Changed, Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
 pub(crate) use statistics::StatisticsDef;
-pub(crate) use trigger::{ImmutableColumnsTriggerDef, Scd2TriggerDef, StickyTerminalsTriggerDef};
+pub(crate) use trigger::{
+    ImmutableColumnsTriggerDef, Scd2PendingTriggerDef, Scd2TriggerDef, SupersedeEndedTriggerDef, Transitions, TransitionsTriggerDef,
+};
 pub(crate) use view::ViewDef;
 
 use crate::ID_COLLATION;

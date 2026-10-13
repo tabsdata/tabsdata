@@ -417,8 +417,17 @@ pub const LOAD_CASES: &[LoadCase] = &[
     },
     // daos/table_data_versions.rs — PTDV-with-names, bound-interval filter.
     LoadCase {
-        name: "ltdv::latest_bound_tdv_with_data_for_table",
-        covers: &["TableDataVersions::latest_bound_tdv_with_data_for_table"],
+        name: "ltdv::committed_data_at",
+        covers: &[
+            "TableDataVersions::committed_data_at",
+            "TableDataVersions::data_including_uncommitted_at",
+        ],
+        family: Family::Attempts,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "ltdv::committed_data_before",
+        covers: &["TableDataVersions::committed_data_before"],
         family: Family::Attempts,
         status: Status::Implemented,
     },
@@ -563,6 +572,18 @@ pub const LOAD_CASES: &[LoadCase] = &[
     LoadCase {
         name: "scd2::open_chunked",
         covers: &["Scd2Chunked::open"],
+        family: Family::Latest,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "scd2::pending_chunked",
+        covers: &["TableDataVersions::pending"],
+        family: Family::Latest,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "scd2::settle",
+        covers: &["TableDataVersions::settle"],
         family: Family::Latest,
         status: Status::Implemented,
     },

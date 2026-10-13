@@ -419,6 +419,9 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows, M: AccessMode
                 requirement_input_idx: dependency_pos.is_some().then_some(InputIdx::NO_DATA),
                 requirement_dependency_pos: dependency_pos,
                 requirement_version_pos: VersionPos::NO_VERSIONS,
+                requirement_table_version_id: dependency_pos
+                    .is_some()
+                    .then_some(table.table_version_id),
             });
             continue;
         }
@@ -451,6 +454,9 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows, M: AccessMode
                 requirement_input_idx,
                 requirement_dependency_pos: dependency_pos,
                 requirement_version_pos: version_pos,
+                requirement_table_version_id: dependency_pos
+                    .is_some()
+                    .then_some(table.table_version_id),
             });
         }
     }

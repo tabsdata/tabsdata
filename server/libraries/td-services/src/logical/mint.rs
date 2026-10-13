@@ -6,7 +6,10 @@
 //! `PhysicalFunctionRunDB` row and its output `PhysicalTableDataVersionDB` placeholders.
 //!
 //! Attempts are SCD2 versions of their logical rows, ordered by
-//! `triggered_on`: minting one makes it the current version.
+//! `triggered_on`: minting one makes it the current version. Its
+//! materializations are minted pending and become their logical version's
+//! current one only when the attempt reports Done, so an attempt in flight
+//! or failed never hides the data it would replace.
 
 use std::collections::HashMap;
 
@@ -188,7 +191,7 @@ pub async fn mint_output_table_data_versions(
         &logical_by_table,
     )?;
     if !tdvs.is_empty() {
-        conn.scd2().chunked().open(&tdvs, at).await?;
+        conn.table_data_versions().pending(&tdvs, at).await?;
     }
     Ok(tdvs)
 }

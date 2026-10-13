@@ -97,6 +97,7 @@ pub(crate) async fn execute(
     let override_disabled_trigger = request.override_disabled_trigger;
     assert_function_status(msgs, &function, &override_disabled_trigger)?;
 
+    let function_id = function.base.base.function_id;
     let function_only = request.function_only;
     let recursion_options =
         ExecutionScope::execution_recursion_options(function_only, override_disabled_trigger);

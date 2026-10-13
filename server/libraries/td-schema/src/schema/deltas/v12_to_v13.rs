@@ -5,13 +5,18 @@
 //! v12 → v13: Runs, attempts and workers admit only their declared status
 //! transitions, and a run's new attempt opens only once its current one has
 //! ended. The runs' sticky-terminals guard is subsumed by its transitions
-//! trigger. Transactions roll up atomically and executions from their
-//! transactions, so both stored statuses are recomputed, transactions first.
-//! Live names are unique through partial indexes, so a rename never takes a key
-//! lock; the upgrade stops, listing them, when two live functions or tables of
-//! a collection share a name. A membership references its user, so a grant
-//! racing the user's delete cannot leave one behind; memberships of users
-//! already gone are deleted.
+//! trigger. An attempt's materializations stay pending until it reports Done:
+//! those of attempts that have not, in flight or failed, become pending, and
+//! the settled versions around them are spliced back together. Transactions
+//! roll up atomically and executions from their transactions, so both stored
+//! statuses are recomputed, transactions first. Live names are unique through
+//! partial indexes, so a rename never takes a key lock; the upgrade stops,
+//! listing them, when two live functions or tables of a collection share a
+//! name. A membership references its user, so a grant racing the user's delete
+//! cannot leave one behind; memberships of users already gone are deleted. A
+//! run's input records the version of the table its plan read, backfilled from
+//! the dependency of the run's function version and the table as of the run's
+//! trigger.
 
 use sea_query::{ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, IntoIden, Query, Table};
 
@@ -33,6 +38,23 @@ enum UsersRoles {
     Table,
     UserId,
 }
+
+#[derive(Iden, Clone, Copy)]
+enum LogicalFunctionRunInputs {
+    Table,
+    RequirementTableVersionId,
+}
+
+/// The table version each dependency input of a run was planned on.
+const PIN_INPUT_TABLE_VERSIONS: &str = r#"UPDATE "logical_function_run_inputs" AS i SET "requirement_table_version_id" = t."id"
+FROM "logical_function_runs" AS r, "functions" AS f, "dependencies" AS d, "tables" AS t
+WHERE i."requirement_dependency_pos" IS NOT NULL
+  AND r."id" = i."logical_function_run_id"
+  AND f."id" = r."function_version_id"
+  AND d."function_id" = r."function_id" AND d."dep_pos" = i."requirement_dependency_pos"
+  AND d."valid_from" <= f."valid_from" AND f."valid_from" < d."valid_to"
+  AND t."table_id" = d."table_id"
+  AND t."valid_from" <= r."triggered_on" AND r."triggered_on" < t."valid_to""#;
 
 #[derive(Iden, Clone, Copy)]
 enum Executions {
@@ -197,6 +219,36 @@ BEGIN
   END IF;
 END $$";
 
+/// Every materialization whose attempt has not reported Done and that never
+/// reported data becomes pending (an empty interval at its mint instant).
+const PARK_UNSETTLED: &str = "\
+UPDATE physical_table_data_versions t
+SET valid_to = t.valid_from
+FROM physical_function_runs r
+WHERE r.id = t.physical_function_run_id
+  AND t.has_data IS NULL
+  AND r.status <> 'D'
+  AND t.valid_to IS DISTINCT FROM t.valid_from";
+
+/// In every logical version that holds a pending row, the settled rows are
+/// re-spliced: each ends where the next settled one begins, the last is open.
+const RESPLICE_SETTLED: &str = "\
+UPDATE physical_table_data_versions t
+SET valid_to = n.next_valid_from
+FROM (
+    SELECT id, COALESCE(
+        LEAD(valid_from) OVER (PARTITION BY logical_table_data_version_id ORDER BY valid_from, id),
+        'infinity'
+    ) AS next_valid_from
+    FROM physical_table_data_versions
+    WHERE valid_to IS DISTINCT FROM valid_from
+      AND logical_table_data_version_id IN (
+          SELECT logical_table_data_version_id FROM physical_table_data_versions WHERE valid_to = valid_from
+      )
+) AS n
+WHERE t.id = n.id
+  AND t.valid_to IS DISTINCT FROM n.next_valid_from";
+
 impl SchemaDelta for Migration {
     const FROM_VERSION: usize = 12;
     const TO_VERSION: usize = 13;
@@ -230,12 +282,20 @@ impl SchemaDelta for Migration {
                     .get_foreign_key(),
             )
             .to_owned();
+        let input_table_versions = Table::alter()
+            .table(LogicalFunctionRunInputs::Table)
+            .add_column(id_column(LogicalFunctionRunInputs::RequirementTableVersionId).null())
+            .to_owned();
         vec![
             DUPLICATE_LIVE_NAMES.to_string(),
             "ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_name_key".to_string(),
             "ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_name_key".to_string(),
             render_query(orphan_memberships),
             render_schema(membership_user),
+            render_schema(input_table_versions),
+            PIN_INPUT_TABLE_VERSIONS.to_string(),
+            PARK_UNSETTLED.to_string(),
+            RESPLICE_SETTLED.to_string(),
             format!("SET LOCAL work_mem = '{DERIVATION_WORK_MEM}'"),
             render_query(transaction_rollup().backfill()),
             render_query(execution_rollup().backfill()),

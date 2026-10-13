@@ -471,11 +471,18 @@ async fn bfs_downstream_lfrs<S: SeesProjectRows, M: AccessMode>(
         .collect())
 }
 
+/// On Done, settles the attempt's pending materializations into their logical
+/// versions' timelines at `at`, with what the worker reported for each. Any
+/// other report leaves them pending: the data they would replace stays current.
 pub async fn update_table_data_version_status<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     physical_function_run_id: &PhysicalFunctionRunId,
     callback: &CallbackRequest,
+    at: LockInstant,
 ) -> Result<(), TdError> {
+    if callback.status != WorkerCallbackStatus::Done {
+        return Ok(());
+    }
     if let Some(WorkerOutput::Function(output)) = &callback.context {
         for written in &output.output {
             let (table_name, table_info) = match written {
@@ -495,17 +502,9 @@ pub async fn update_table_data_version_status<S: SeesProjectRows, M: WriteMode>(
                 ))
                 .await?;
 
-            // Walk this table's LTDV history at or before this TDV's
-            // triggered_on to find the previous current with-data TDV.
-            // Logical walk rather than a raw physical scan
-            // so in-flight replays don't poison the schema-change check.
             let latest_version_with_data = conn
                 .table_data_versions()
-                .latest_bound_tdv_with_data_for_table(
-                    &data_version.base.base.base.table_id,
-                    &AtTime::from(data_version.base.base.interval.valid_from),
-                    false,
-                )
+                .committed_data_before(&data_version.base.base.base.logical_table_data_version_id)
                 .await?;
 
             let update = if let Some(table_info) = table_info {
@@ -551,12 +550,24 @@ pub async fn update_table_data_version_status<S: SeesProjectRows, M: WriteMode>(
                 }
             };
 
-            conn.scd2()
-                .update(&update, &data_version.base.base.base.id)
+            conn.table_data_versions()
+                .settle(&update, &data_version.base.base.base.id, at)
                 .await?;
         }
     }
 
+    let unreported = PhysicalTableDataVersionUpdateDB {
+        has_data: None,
+        schema_changed: None,
+        column_count: None,
+        row_count: None,
+        data_bytes: None,
+        schema_hash: None,
+        with_data_table_data_version_id: None,
+    };
+    conn.table_data_versions()
+        .settle(&unreported, physical_function_run_id, at)
+        .await?;
     Ok(())
 }
 

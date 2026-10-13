@@ -58,6 +58,8 @@ pub(crate) async fn seed_logical_input(
         requirement_input_idx: None,
         requirement_dependency_pos: requirement_dependency_pos.cloned(),
         requirement_version_pos: *requirement_version_pos,
+        requirement_table_version_id: requirement_table_data_version
+            .map(|tdv| tdv.base.table_version_id),
     };
     executor.reuse().insert(&ffr_input).await?;
     Ok(executor.reuse().fetch_one(&ffr_input.id).await?)

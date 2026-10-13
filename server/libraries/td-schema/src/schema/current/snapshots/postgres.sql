@@ -49,7 +49,7 @@ CREATE TABLE "table_partitions" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "p
 
 CREATE TABLE "workers" ( "id" bigint NOT NULL PRIMARY KEY, "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "execution_id" bigint NULL, "transaction_id" bigint NULL, "function_version_id" bigint NOT NULL, "physical_function_run_id" bigint NULL, "message_status" text NOT NULL, "started_on" timestamp with time zone NULL, "ended_on" timestamp with time zone NULL, "status" text NOT NULL, "worker_type" text NOT NULL, "worker_enabled" bool NOT NULL, "worker_config" text NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("physical_function_run_id") REFERENCES "physical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "logical_function_run_inputs" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "execution_id" bigint NOT NULL, "transaction_id" bigint NOT NULL, "logical_function_run_id" bigint NOT NULL, "requirement_logical_table_data_version_id" bigint NULL, "requirement_input_idx" integer NULL, "requirement_dependency_pos" integer NULL, "requirement_version_pos" integer NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("requirement_logical_table_data_version_id") REFERENCES "logical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "logical_function_run_inputs" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "execution_id" bigint NOT NULL, "transaction_id" bigint NOT NULL, "logical_function_run_id" bigint NOT NULL, "requirement_logical_table_data_version_id" bigint NULL, "requirement_input_idx" integer NULL, "requirement_dependency_pos" integer NULL, "requirement_version_pos" integer NOT NULL, "requirement_table_version_id" text NULL COLLATE "C", FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("requirement_logical_table_data_version_id") REFERENCES "logical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "metrics_facts" ( "ts" timestamp with time zone NOT NULL, "ts_hour_ms" bigint NOT NULL, "ts_day_ms" bigint NOT NULL, "ts_week_ms" bigint NOT NULL, "ts_month_ms" bigint NOT NULL, "project_id" text NOT NULL COLLATE "C", "from_group_id" text NULL COLLATE "C", "from_collection_id" text NULL COLLATE "C", "group_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "execution_id" bigint NOT NULL, "transaction_id" bigint NOT NULL, "function_id" text NOT NULL COLLATE "C", "function_run_id" bigint NOT NULL, "attempt_id" bigint NOT NULL, "attempt_outcome" text NOT NULL, "run_status" text NOT NULL, "replay" bigint NOT NULL, "current" bool NOT NULL, "run_has_inputs" bool NOT NULL, "run_has_outputs" bool NOT NULL, "side" text NOT NULL, "table_id" text NULL COLLATE "C", "table_version_id" bigint NULL, "private" bool NOT NULL, "has_data" bool NOT NULL, "row_count" bigint NOT NULL, "data_bytes" bigint NOT NULL, "first_consumed_on" timestamp with time zone NULL, "edge_kind" text NULL, "edge_first" bool NOT NULL, "edge_first_group" bool NOT NULL )
 
@@ -216,7 +216,8 @@ BEGIN
   SELECT COALESCE(MIN(valid_from), 'infinity') INTO NEW.valid_to
   FROM physical_table_data_versions
   WHERE logical_table_data_version_id = NEW.logical_table_data_version_id
-    AND (valid_from, id) > (NEW.valid_from, NEW.id);
+    AND (valid_from, id) > (NEW.valid_from, NEW.id)
+    AND valid_to > valid_from;
   UPDATE physical_table_data_versions SET valid_to = NEW.valid_from
   WHERE logical_table_data_version_id = NEW.logical_table_data_version_id
     AND (valid_from, id) < (NEW.valid_from, NEW.id)
@@ -226,7 +227,22 @@ END;
 $$ LANGUAGE plpgsql
 
 CREATE TRIGGER physical_table_data_versions__scd2_close BEFORE INSERT ON physical_table_data_versions
-FOR EACH ROW EXECUTE FUNCTION physical_table_data_versions__scd2_close_fn()
+FOR EACH ROW WHEN (NEW.valid_to IS DISTINCT FROM NEW.valid_from) EXECUTE FUNCTION physical_table_data_versions__scd2_close_fn()
+
+CREATE TRIGGER physical_table_data_versions__scd2_settle BEFORE UPDATE OF valid_from ON physical_table_data_versions
+FOR EACH ROW WHEN (OLD.valid_to = OLD.valid_from AND NEW.valid_from > OLD.valid_from) EXECUTE FUNCTION physical_table_data_versions__scd2_close_fn()
+
+CREATE OR REPLACE FUNCTION workers__transitions_fn() RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status IS DISTINCT FROM OLD.status AND (OLD.worker_type, OLD.status, NEW.status) NOT IN (VALUES ('F', 'RR', 'R'), ('F', 'RR', 'F'), ('F', 'R', 'D'), ('F', 'R', 'F'), ('CT', 'S', 'RR'), ('CT', 'RR', 'R'), ('CT', 'RR', 'F'), ('CT', 'R', 'D'), ('CT', 'R', 'F'), ('CT', 'D', 'R'), ('CT', 'D', 'F'), ('CT', 'F', 'R'), ('CT', 'F', 'D'), ('CT', 'S', 'SPS'), ('CT', 'RR', 'SPS'), ('CT', 'R', 'SPS'), ('CT', 'D', 'SPS'), ('CT', 'F', 'SPS'), ('CT', 'SPS', 'SPR'), ('CT', 'SPS', 'SP'), ('CT', 'SPR', 'SP'), ('ST', 'S', 'RR'), ('ST', 'RR', 'R'), ('ST', 'RR', 'F'), ('ST', 'R', 'D'), ('ST', 'R', 'F'), ('ST', 'F', 'R'), ('ST', 'S', 'SPS'), ('ST', 'RR', 'SPS'), ('ST', 'R', 'SPS'), ('ST', 'D', 'SPS'), ('ST', 'F', 'SPS'), ('ST', 'SPS', 'SPR'), ('ST', 'SPS', 'SP'), ('ST', 'SPR', 'SP')) THEN
+    RAISE EXCEPTION 'workers.status cannot move from % to %', OLD.status, NEW.status;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+
+CREATE TRIGGER workers__transitions BEFORE UPDATE OF status ON workers
+FOR EACH ROW EXECUTE FUNCTION workers__transitions_fn()
 
 CREATE VIEW users__with_names WITH (security_invoker = true) AS SELECT "users".*, COALESCE(created_by_user.name, '[' || users.created_by_id || ']') AS "created_by", COALESCE(modified_by_user.name, '[' || users.modified_by_id || ']') AS "modified_by" FROM "users" LEFT JOIN "users" AS "created_by_user" ON "users"."created_by_id" = "created_by_user"."id" LEFT JOIN "users" AS "modified_by_user" ON "users"."modified_by_id" = "modified_by_user"."id"
 

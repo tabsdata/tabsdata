@@ -28,11 +28,15 @@ pub async fn resolve_table_location<S: DbScope, M: AccessMode>(
     table_id: &TableId,
     uncommitted: &UncommittedStatus,
 ) -> Result<Option<SPath>, TdError> {
-    let committed_only = !**uncommitted;
-    let data_version = conn
-        .table_data_versions()
-        .latest_bound_tdv_with_data_for_table(table_id, triggered_on, committed_only)
-        .await?;
+    let data_version = if **uncommitted {
+        conn.table_data_versions()
+            .data_including_uncommitted_at(table_id, triggered_on)
+            .await?
+    } else {
+        conn.table_data_versions()
+            .committed_data_at(table_id, triggered_on)
+            .await?
+    };
 
     if let Some(data_version) = data_version {
         let (path, _) = get_spath(&data_version)?;
@@ -172,7 +176,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &LogicalFunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Done,
             )
             .await?;
         let current_without_data = db
@@ -264,7 +268,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &LogicalFunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Done,
             )
             .await?;
         let current_without_data = db
@@ -381,7 +385,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &LogicalFunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Done,
             )
             .await?;
 
@@ -450,7 +454,7 @@ mod tests {
                 &function,
                 &execution,
                 &transaction,
-                &LogicalFunctionRunStatus::Scheduled,
+                &LogicalFunctionRunStatus::Done,
             )
             .await?;
 

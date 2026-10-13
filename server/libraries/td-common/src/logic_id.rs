@@ -398,7 +398,9 @@ impl<K: KeyId> IdLGenerator<K> {
 }
 
 impl<K: KeyId> IdLGenerator<K> {
-    /// Returns the next sequence number for a given date.
+    /// Returns the next date and sequence number. A date before the latest
+    /// one issued (a clock stepped back, or a restart on a host behind)
+    /// stays on the latest: ids only ever grow, so none is issued twice.
     fn next_sequence(&self, current_date: NaiveDate) -> (NaiveDate, usize) {
         let mut state = self.state.lock().unwrap();
 
@@ -416,7 +418,7 @@ impl<K: KeyId> IdLGenerator<K> {
             }
         }
 
-        (current_date, state.counter)
+        (state.last_date.expect("set above"), state.counter)
     }
 
     /// Generates a new `IdL<K>` for a specific date.
@@ -556,6 +558,36 @@ mod tests {
         assert_eq!(id1.counter(), 1);
         assert_eq!(id2.counter(), 2);
         assert!(id1 < id2);
+    }
+
+    /// Ids from D1 were issued, then one from D2, and the date then
+    /// goes back to D1 (a clock step back, or a restart onto a host whose
+    /// clock is behind, resuming from the latest persisted id). No id may be
+    /// issued twice, in the same process or after the restart.
+    #[test]
+    fn test_generator_does_not_reissue_ids_when_the_date_goes_back() {
+        let d1 = NaiveDate::from_ymd_opt(2026, 10, 4).unwrap();
+        let d2 = d1.checked_add_days(Days::new(1)).unwrap();
+        let generator = IdLGenerator::<TestKey>::new(&None).unwrap();
+        let issued: Vec<TestId> = vec![
+            generator._generate(d1),
+            generator._generate(d1),
+            generator._generate(d1),
+            generator._generate(d2),
+        ];
+        let latest = issued.last().cloned();
+
+        let stepped_back = generator._generate(d1);
+        let restarted = IdLGenerator::<TestKey>::new(&latest).unwrap()._generate(d1);
+        for (when, id) in [
+            ("after a step back", stepped_back),
+            ("after a restart", restarted),
+        ] {
+            assert!(
+                !issued.contains(&id),
+                "{when} the generator reissued {id}, already issued in {issued:?}"
+            );
+        }
     }
 
     #[test]

@@ -141,6 +141,46 @@ where
         .take())
 }
 
+/// A pending version: the empty interval at its mint instant, outside the
+/// timeline until it settles.
+pub(crate) fn pending_cond<D: Scd2Dao>() -> Expr {
+    Expr::col(D::VALID_TO).equals(D::VALID_FROM)
+}
+
+/// A payload update of the matching versions that settles a pending one into
+/// the timeline at `at` (the trigger closes the open row it supersedes); an
+/// open one is updated in place.
+pub(crate) fn settle_query<U: UpdateDao>(
+    dao: &U,
+    condition: impl SqlCondition<U::FilterBy>,
+    at: LockInstant,
+) -> Result<UpdateStatement, SqlError>
+where
+    U::FilterBy: Scd2Dao,
+{
+    if condition.matches_all() {
+        return Err(SqlError::EmptyConditionRefused(
+            U::display_name().to_string(),
+        ));
+    }
+    let valid_from = <U::FilterBy as Scd2Dao>::VALID_FROM;
+    let pending = pending_cond::<U::FilterBy>();
+    Ok(Query::update()
+        .table(U::TABLE)
+        .values(dao.update_values())
+        .value(
+            valid_from,
+            Expr::case(pending.clone(), stamp(at)).finally(Expr::col(valid_from)),
+        )
+        .cond_where(condition.resolve())
+        .cond_where(
+            Condition::any()
+                .add(pending)
+                .add(open_interval_cond::<U::FilterBy>()),
+        )
+        .take())
+}
+
 /// Ends the matching open intervals at `at` with no successor: the SCD2
 /// deletion. A later insert into the partition reopens it.
 pub(crate) fn close_query<D: TableDao + Scd2Dao>(
@@ -326,6 +366,21 @@ mod tests {
         assert_eq!(
             sql,
             r#"UPDATE "test_scd2" SET "status" = 'A' WHERE "partition_id" = 'p1' AND "valid_to" = ('infinity'::timestamptz)"#
+        );
+    }
+
+    #[test]
+    fn test_settle_query_opens_pending_and_updates_open_rows() {
+        let id = TestPartition::try_from("p1").unwrap();
+        let update = TestScd2Update {
+            status: Some(TestVStatus::Active),
+        };
+        let sql = settle_query(&update, &id, lock_at(100))
+            .unwrap()
+            .to_string(PostgresQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"UPDATE "test_scd2" SET "status" = 'A', "valid_from" = (CASE WHEN ("valid_to" = "valid_from") THEN '1970-01-01 00:00:00.100000 +00:00' ELSE "valid_from" END) WHERE "partition_id" = 'p1' AND ("valid_to" = "valid_from" OR "valid_to" = ('infinity'::timestamptz))"#
         );
     }
 

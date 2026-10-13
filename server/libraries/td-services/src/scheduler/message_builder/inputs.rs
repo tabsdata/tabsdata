@@ -8,6 +8,7 @@
 
 use super::{build_external_location, partition_and_sort};
 use crate::logical::index_lfrs_by_exec_fn;
+use http::StatusCode;
 use itertools::Itertools;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -25,8 +26,7 @@ use td_objects::dxo::table::TableDB;
 use td_objects::dxo::yaml::function::{InputTable, InputTableVersion};
 use td_objects::types::basic::{
     AtTime, CollectionId, DependencyPos, ExecutionId, FunctionId, HasData, LogicalFunctionRunId,
-    LogicalTableDataVersionId, PhysicalFunctionRunId, PhysicalTableDataVersionId, Scd2ValidFrom,
-    TableId,
+    LogicalTableDataVersionId, PhysicalFunctionRunId, PhysicalTableDataVersionId, TableVersionId,
 };
 use td_queries::Queries;
 use td_storage::Storage;
@@ -201,15 +201,15 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
     // `TableDB`/`ResolvedCollectionDB` rows.
     struct FallbackCache {
         deps: HashMap<DependencyPos, DependencyDB>,
-        tables: HashMap<TableId, TableDB>,
+        tables: HashMap<TableVersionId, TableDB>,
         colls: HashMap<CollectionId, ResolvedCollectionDB>,
     }
     let mut fallback_cache: Option<FallbackCache> = None;
 
-    // Per-FR cache for the "chase the latest with-data row" lookup — slots
-    // sharing an upstream `(table_id, valid_from)` reuse one query.
+    // Per-FR cache for the committed data a no-data input stands for — slots
+    // bound to the same logical version reuse one query.
     let mut latest_with_data_cache: HashMap<
-        (TableId, Scd2ValidFrom),
+        LogicalTableDataVersionId,
         Option<PhysicalTableDataVersionDBWithNames>,
     > = HashMap::new();
 
@@ -251,9 +251,12 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                         .into_iter()
                         .map(|d| (d.base.dep_pos, d))
                         .collect();
-                    let table_ids: Vec<TableId> = deps
-                        .values()
-                        .map(|d| d.base.table_id)
+                    // The table versions the plan read, never the tables as of
+                    // a later instant: a delete committing after the plan has
+                    // closed them since.
+                    let pinned: Vec<TableVersionId> = lfr_inputs
+                        .iter()
+                        .filter_map(|i| i.base.requirement_table_version_id)
                         .collect::<HashSet<_>>()
                         .into_iter()
                         .collect();
@@ -263,17 +266,15 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                         .collect::<HashSet<_>>()
                         .into_iter()
                         .collect();
-                    let triggered_at = AtTime::from(f.base.base.interval.valid_from);
-                    let tables: HashMap<TableId, TableDB> = if table_ids.is_empty() {
+                    let tables: HashMap<TableVersionId, TableDB> = if pinned.is_empty() {
                         HashMap::new()
                     } else {
-                        conn.scd2()
-                            .as_of(&triggered_at)
+                        conn.timeline()
                             .chunked()
-                            .fetch_all::<TableDB>(&table_ids, ())
+                            .fetch_all::<TableDB>(&pinned, ())
                             .await?
                             .into_iter()
-                            .map(|t| (t.base.table_id, t))
+                            .map(|t| (t.base.id, t))
                             .collect()
                     };
                     let colls: HashMap<CollectionId, ResolvedCollectionDB> = if coll_ids.is_empty()
@@ -300,11 +301,17 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                         "LFR_input dep_pos {dependency_pos} not found in function_version's deps"
                     )
                 })?;
-                let table = cache.tables.get(&dep.base.table_id).ok_or_else(|| {
+                let pinned = lfri.base.requirement_table_version_id.ok_or_else(|| {
+                    api_error!(
+                        status = StatusCode::CONFLICT,
+                        "The input at dependency position {dependency_pos} was planned before \
+                         runs recorded their table versions; recover the run to plan it again"
+                    )
+                })?;
+                let table = cache.tables.get(&pinned).ok_or_else(|| {
                     api_error!(
                         ApiError::InternalError,
-                        "TableDB not found for dep table_id {} during fallback",
-                        dep.base.table_id
+                        "TableDB not found for planned table version {pinned}"
                     )
                 })?;
                 let coll = cache.colls.get(&*dep.base.table_collection_id).ok_or_else(|| {
@@ -319,7 +326,7 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                     *dep.base.table_collection_id,
                     coll.base.name.clone(),
                     dep.base.table_id,
-                    table.base.id,
+                    pinned,
                 )
             }
         };
@@ -335,23 +342,18 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                 ) {
                     Some(Cow::Borrowed(found_data_version))
                 } else {
-                    let key = (
-                        found_data_version.base.base.base.table_id,
-                        found_data_version.base.base.interval.valid_from,
-                    );
+                    let key = found_data_version
+                        .base
+                        .base
+                        .base
+                        .logical_table_data_version_id
+                        .clone();
                     let res = if let Some(cached) = latest_with_data_cache.get(&key) {
                         cached.clone()
                     } else {
-                        // Latest canonically-bound TDV with data at or
-                        // before triggered_on — what a reader at that
-                        // time would actually see.
                         let r = conn
                             .table_data_versions()
-                            .latest_bound_tdv_with_data_for_table(
-                                &key.0,
-                                &AtTime::from(key.1),
-                                false,
-                            )
+                            .committed_data_before(&key)
                             .await?;
                         latest_with_data_cache.insert(key, r.clone());
                         r

@@ -87,10 +87,11 @@ pub async fn assert_no_concurrent_replay<S: SeesProjectRows, M: AccessMode>(
 /// Validate the LFR's status is terminal. All five terminals are allowed
 /// inputs to replay; the LFR-side effect of a replay differs by status:
 ///
-/// - `Committed` / `Canceled` / `Yanked` are **sticky** (DB-enforced via
-///   the `logical_function_runs__sticky_terminals` trigger) — the LFR
-///   stays put; the replay's outcome surfaces on the new attempt, which
-///   is the run's current version from mint.
+/// - `Committed` / `Canceled` / `Yanked` are **sticky** (DB-enforced by
+///   the runs' transitions trigger) — the LFR stays put; the replay's
+///   outcome surfaces on the new attempt, which is the run's current
+///   version from mint. Its data replaces the run's only once it reports
+///   Done.
 /// - `Done` — same shape (idempotent self-transition allowed).
 /// - `Failed` — can be **promoted to `Done`** by a successful replay
 ///   ("replay healed a failed run"); see the `Failed → Done` arm in

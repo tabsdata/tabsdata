@@ -245,9 +245,9 @@ async fn time_chain_queries(
     );
     let _ = timed!(
         out,
-        "ltdv::latest_bound_tdv_with_data_for_table",
+        "ltdv::committed_data_at",
         (db).table_data_versions()
-            .latest_bound_tdv_with_data_for_table(&h.table_id, &AtTime::from(h.before_time), false)
+            .committed_data_at(&h.table_id, &AtTime::from(h.before_time))
             .await?
     );
 
@@ -427,6 +427,7 @@ async fn time_chain_queries(
         requirement_input_idx: Some(InputIdx::try_from(0)?),
         requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
         requirement_version_pos: VersionPos::try_from(0)?,
+        requirement_table_version_id: None,
     };
     // The field-less LFRI sources `project_id` from the scoped connection.
     let scoped = db.scoped(h.project_id);

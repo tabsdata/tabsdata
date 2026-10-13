@@ -89,6 +89,25 @@ pub(crate) fn open_vec_query<D: Scd2OpenDao>(
     Ok(query)
 }
 
+/// Pending versions minted at `at`: outside the timeline until they settle.
+pub(crate) fn pending_vec_query<D: Scd2OpenDao>(
+    daos: &[D],
+    at: LockInstant,
+) -> Result<InsertStatement, SqlError> {
+    let mut query = Query::insert();
+    query
+        .into_table(D::TABLE)
+        .columns(D::columns().into_iter().chain([D::VALID_FROM, D::VALID_TO]));
+    for dao in daos {
+        query.values(
+            dao.insert_values()
+                .into_iter()
+                .chain([stamp(at), stamp(at)]),
+        )?;
+    }
+    Ok(query)
+}
+
 pub(crate) fn close_chunk_query<D: TableDao + Scd2Dao>(
     chunk: &[impl SqlCondition<D>],
     extra: &Condition,
@@ -386,6 +405,22 @@ mod tests {
         assert_eq!(
             sql,
             r#"INSERT INTO "test_chunked_versioned" ("id", "partition_id", "status", "valid_from") VALUES ('i1', 'p1', 'A', '1970-01-01 00:00:00.100000 +00:00'), ('i2', 'p2', 'A', '1970-01-01 00:00:00.100000 +00:00')"#
+        );
+    }
+
+    #[test]
+    fn test_pending_vec_query_mints_empty_intervals() {
+        let dao = TestScd2InsertDao {
+            id: TestId::try_from("i1").unwrap(),
+            partition_id: TestPartition::try_from("p1").unwrap(),
+            status: TestVStatus::Active,
+        };
+        let sql = pending_vec_query::<TestScd2InsertDao>(&[dao], lock_at(100))
+            .unwrap()
+            .to_string(PostgresQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"INSERT INTO "test_chunked_versioned" ("id", "partition_id", "status", "valid_from", "valid_to") VALUES ('i1', 'p1', 'A', '1970-01-01 00:00:00.100000 +00:00', '1970-01-01 00:00:00.100000 +00:00')"#
         );
     }
 

@@ -314,7 +314,8 @@ const INDEX_CASES: &[IndexCase] = &[
         index: "logical_table_data_versions___table_id__triggered_on__id___idx",
         served_by: Queries(&[
             "Timeline::list_until",
-            "TableDataVersions::latest_bound_tdv_with_data_for_table",
+            "TableDataVersions::committed_data_at",
+            "TableDataVersions::committed_data_before",
         ]),
     },
     IndexCase {
