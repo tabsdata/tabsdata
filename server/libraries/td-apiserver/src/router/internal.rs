@@ -14,6 +14,7 @@ use td_common::execution_status::CallbackResponse;
 use td_objects::Route;
 use td_objects::dxo::crudl::{AtTimeParam, RequestContext};
 use td_objects::dxo::execution::{ExecutionParam, ExecutionResponse, InternalExecutionRequest};
+use td_objects::dxo::execution_callback::ExecutionCallbackRequest;
 use td_objects::dxo::file::DownloadResponse;
 use td_objects::dxo::function::FunctionVersionParam;
 use td_objects::dxo::physical_function_run::{FunctionRunParam, PhysicalFunctionRun};
@@ -38,7 +39,7 @@ pub async fn function_run_callback(
     Extension(context): Extension<RequestContext>,
     Path(function_run_id): Path<FunctionRunParam>,
     Path(worker_id): Path<WorkerParam>,
-    Json(request): Json<CallbackRequest>,
+    Json(request): Json<ExecutionCallbackRequest>,
 ) -> Result<UpdateStatus<CallbackResponse>, ErrorStatus> {
     let request = context.update((function_run_id, worker_id), request);
     let response = state.execution_callback(request).await?;

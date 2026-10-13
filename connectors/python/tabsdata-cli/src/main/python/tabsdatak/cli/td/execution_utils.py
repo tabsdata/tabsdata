@@ -29,7 +29,10 @@ from tabsdatak.cli.cli_utils import (
 from tabsdatak.sdk.status_utils.execution import user_execution_status_to_api
 from tabsdatak.sdk.status_utils.function_run import user_function_run_status_to_api
 from tabsdatak.sdk.status_utils.transaction import user_transaction_status_to_api
-from tabsdatak.sdk.status_utils.worker import user_worker_status_to_api
+from tabsdatak.sdk.status_utils.worker import (
+    user_worker_status_to_api,
+    worker_status_to_mapping,
+)
 
 if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
@@ -340,10 +343,27 @@ def workers_table(workers, title: str = "Workers", indexed: bool = False) -> Tab
             beautify_time(worker.started_on_str),
             beautify_time(worker.ended_on_str),
             patch_label(worker),
-            worker.status,
+            worker_status_label(worker),
         ])
         table.add_row(*row)
     return table
+
+
+def worker_status_label(worker) -> str:
+    """A failed stream says when it restarts, or that it needs the user."""
+    status = worker.status
+    kwargs = getattr(worker, "kwargs", None) or {}
+    stream = getattr(worker, "type", None) == "ST"
+    if not stream or worker_status_to_mapping(status) != "Failed":
+        return status
+    retry_at = kwargs.get("retry_at")
+    if retry_at is None:
+        return f"{status} (needs action)"
+    from tabsdatak.sdk.tabsdata_server import _convert_timestamp_to_string
+
+    retrying_at = beautify_time(_convert_timestamp_to_string(retry_at))
+    failures = kwargs.get("failures")
+    return f"{status} (retrying at {retrying_at}, failure {failures} in a row)"
 
 
 MONITOR_OUTAGE_GRACE = 120  # seconds

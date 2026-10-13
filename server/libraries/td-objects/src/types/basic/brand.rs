@@ -30,6 +30,12 @@ pub struct Dispatched<T>(T);
 pub struct Expires<T>(T);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct Retry<T>(T);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct DestinationWrite<T>(T);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct StatusChange<T>(T);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]

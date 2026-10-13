@@ -2,14 +2,17 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::execution::cancellation::stop_function_workers;
 use crate::execution::update_status::{
     abandon_requested_physical_runs, update_function_run_status,
 };
+use crate::recovery::attempt_cap::reset_recoveries;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
+use td_bridge::BridgeProviderHandle;
 use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
@@ -24,6 +27,7 @@ use td_queries::Queries;
 #[service_factory]
 async fn execution_recover(
     authz: Ctx<AuthzContext>,
+    bridge: Ctx<BridgeProviderHandle>,
     scheduler_notify: Ctx<SchedulerNotify>,
     msgs: &mut ReqCtx,
     db: DbPool<AcrossProjects>,

@@ -331,6 +331,24 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
+        name: "lfr::of_deleted_functions",
+        covers: &["LogicalRuns::of_deleted_functions"],
+        family: Family::Chain,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "projects::draining",
+        covers: &["Projects::draining"],
+        family: Family::Chain,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "lfr::blockers",
+        covers: &["LogicalRuns::blockers"],
+        family: Family::Chain,
+        status: Status::Implemented,
+    },
+    LoadCase {
         name: "lfr::downstream_one_hop",
         covers: &["LogicalRuns::downstream_one_hop"],
         family: Family::Chain,

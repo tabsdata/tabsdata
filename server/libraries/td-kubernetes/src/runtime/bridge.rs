@@ -47,7 +47,8 @@ impl KubernetesBridgeProvider {
         let reconciler = Arc::new(Reconciler::default());
         let message_queue =
             KubernetesOrchestratorMessageQueue::new(factory.clone(), reconciler.clone());
-        let workload_observer = KubernetesWorkloadObserver::new(context.clone());
+        let workload_observer =
+            KubernetesWorkloadObserver::with_queue(context.clone(), reconciler.clone());
         let reconciliation = tokio::spawn(run(
             reconciler,
             factory,

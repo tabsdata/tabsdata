@@ -4,15 +4,15 @@
 
 use crate::dxo::yaml::WorkerOutput;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, Enabled, Ended,
-    ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, LogicalFunctionRunId,
-    LogsCastNumber, OfFunction, Patch, PhysicalFunctionRunId, ProjectId, ProjectName,
-    SizeThreshold, Started, TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerId,
-    WorkerMessageStatus, WorkerStatus, WorkerType,
+    AtTime, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, DestinationWrite,
+    Enabled, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
+    LogicalFunctionRunId, LogsCastNumber, OfFunction, Patch, PhysicalFunctionRunId, ProjectId,
+    ProjectName, Retry, SizeThreshold, Started, TimeoutThresholdMin, TransactionId, WorkerConfig,
+    WorkerFailures, WorkerId, WorkerStatus, WorkerType,
 };
 use chrono::{DateTime, Utc};
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{FromDao, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx, and, or};
+use ta_objects::{FromDao, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx, and, lte, or};
 use td_common::datetime::Timestamp;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::logging::LOG_EXTENSION;
@@ -50,6 +50,12 @@ pub struct WorkerDB {
     #[dao(flatten)]
     pub base: WorkerInsertDB,
     pub project_id: ProjectId,
+    /// A failed stream's failures in a row, and when its next restart is due:
+    /// none means it is not restarted. Unused by other workers.
+    pub failures: WorkerFailures,
+    pub retry_at: Option<Retry<AtTime>>,
+    /// When the attempt began a destination write a re-run would repeat.
+    pub destination_write_on: Option<DestinationWrite<AtTime>>,
 }
 
 impl WorkerDB {
@@ -110,8 +116,8 @@ impl WorkerDBWithNames {
         )
     }
 
-    /// A stage worker's own Failed callback is terminal (re-armed by
-    /// enable/update), so Failed is excluded here.
+    /// A failed stage worker is restarted once its retry is due, so it is
+    /// left out here and listed by [`stage_triggers_due`](Self::stage_triggers_due).
     pub fn stage_triggers_in_flight() -> impl SqlCondition<Self> {
         and!(
             Enabled::TRUE,
@@ -121,6 +127,16 @@ impl WorkerDBWithNames {
                 WorkerStatus::Running,
                 WorkerStatus::Done
             )
+        )
+    }
+
+    /// Failed stage workers whose restart is due at `at`.
+    pub fn stage_triggers_due(at: &AtTime) -> impl SqlCondition<Self> {
+        and!(
+            Enabled::TRUE,
+            WorkerType::StageTrigger,
+            WorkerStatus::Failed,
+            lte!(Retry::from(*at))
         )
     }
 }
@@ -150,6 +166,8 @@ pub struct Worker {
     pub ended_on: Option<Ended<AtTime>>,
     #[dto(list(filter, order_by))]
     pub status: WorkerStatus,
+    pub failures: WorkerFailures,
+    pub retry_at: Option<Retry<AtTime>>,
 
     #[dto(list(filter, order_by))]
     pub logical_function_run_id: Option<LogicalFunctionRunId>,
@@ -184,6 +202,8 @@ impl FromDao for Worker {
             started_on: dao.base.base.started_on,
             ended_on: dao.base.base.ended_on,
             status: dao.base.base.status,
+            failures: dao.base.failures,
+            retry_at: dao.base.retry_at,
             logical_function_run_id: dao.logical_function_run_id,
             collection: dao.collection,
             execution: dao.execution,
@@ -315,6 +335,20 @@ pub struct StageTriggerConfig {
     pub start: Option<DateTime<Utc>>,
     pub end: Option<DateTime<Utc>>,
 }
+#[ta_objects::Dao]
+#[dao(table = "workers", ops(update(WorkerDB)), project_scoped)]
+pub struct WorkerDestinationWriteUpdateDB {
+    pub destination_write_on: DestinationWrite<AtTime>,
+}
+
+/// When a failed stream restarts.
+#[ta_objects::Dao]
+#[dao(table = "workers", ops(update(WorkerDB)), project_scoped)]
+pub struct WorkerRetryUpdateDB {
+    pub failures: WorkerFailures,
+    pub retry_at: Retry<AtTime>,
+}
+
 impl TryFrom<&WorkerExecutionUpdate> for WorkerUpdateDB {
     type Error = TdError;
     fn try_from(src: &WorkerExecutionUpdate) -> Result<Self, Self::Error> {

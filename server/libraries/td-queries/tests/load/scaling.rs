@@ -186,6 +186,16 @@ async fn time_chain_queries(
     );
     let _ = timed!(
         out,
+        "lfr::blockers",
+        (db).logical_runs().blockers(&h.producer_lfrs).await?
+    );
+    let _ = timed!(
+        out,
+        "lfr::of_deleted_functions",
+        (db).logical_runs().of_deleted_functions().await?
+    );
+    let _ = timed!(
+        out,
         "lfr::downstream_one_hop",
         (db).logical_runs()
             .downstream_one_hop(&h.producer_lfrs, &[])

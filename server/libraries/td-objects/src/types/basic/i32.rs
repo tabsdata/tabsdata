@@ -23,6 +23,17 @@ impl Depth {
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct StatusCount(i32);
 
+/// Times recovery re-dispatched a run on its own since it was planned or a
+/// user last recovered or replayed it.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(min = 0, default = 0)]
+pub struct RecoveryCount(i32);
+
+/// Failures in a row of a long-running worker, which space its restarts.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(min = 0, default = 0)]
+pub struct WorkerFailures(i32);
+
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct TableFunctionParamPos(i32);
 

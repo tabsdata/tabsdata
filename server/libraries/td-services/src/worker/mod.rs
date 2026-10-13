@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+pub(crate) mod retry;
 pub mod services;
 
 #[cfg(test)]

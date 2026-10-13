@@ -2,9 +2,11 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::execution::cancellation::function_stops;
 use itertools::Itertools;
 use std::collections::HashSet;
 use ta_services::ctx_service::{Message, ReqCtx};
+use td_bridge::messaging::FunctionStopRequest;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
@@ -100,27 +102,26 @@ pub async fn move_workers<S: SeesProjectRows, M: WriteMode>(
 
 /// Recover of an LFR stuck in `Requested` re-dispatches it, but its
 /// original attempt may still materialize later (a parked queue message
-/// finally spawning a pod). Terminalizing the attempt's in-flight PFR as
-/// `Failed` here makes any late callback from it drop instead of racing the new
-/// attempt.
+/// finally spawning a pod). Ending it here makes its late callbacks drop
+/// instead of racing the new attempt. Returns its workers' stops.
 #[instrument(
     name = "execution.recover_abandon",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn abandon_requested_physical_runs(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     at: &AtTime,
     logical_function_runs: &[LogicalFunctionRunDB],
-) -> Result<(), TdError> {
+) -> Result<Vec<FunctionStopRequest>, TdError> {
     let requested: HashSet<(&ExecutionId, &FunctionId)> = logical_function_runs
         .iter()
         .filter(|lfr| lfr.base.status == LogicalFunctionRunStatus::Requested)
         .map(|lfr| (&lfr.base.execution_id, &lfr.base.function_id))
         .collect();
     if requested.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
     let execution_ids: Vec<ExecutionId> = requested
@@ -142,15 +143,15 @@ pub async fn abandon_requested_physical_runs(
         .map(|pfr| pfr.base.id.clone())
         .collect();
     if abandoned.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
 
-    conn.physical_runs().failed(&abandoned, at).await?;
+    let workers = conn.physical_runs().end(&abandoned, at).await?;
     debug!(
         abandoned_count = abandoned.len(),
         "execution.recover_abandon: terminalized in-flight PFR(s) of Requested LFR(s)"
     );
-    Ok(())
+    function_stops(conn, workers).await
 }
 
 /// `Absorb` is a legal no-op, `Skip` a silent one. `Refuse` fails the request
@@ -292,6 +293,81 @@ fn cascade_transition(
     Transition::Apply
 }
 
+/// Rescheduling a run opens a new attempt, which the database refuses while
+/// the run's current one is in flight (a replay still running, say); those
+/// runs keep their status.
+pub(crate) async fn without_attempt_in_flight(
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    lfr_ids: Vec<LogicalFunctionRunId>,
+) -> Result<Vec<LogicalFunctionRunId>, TdError> {
+    let current: Vec<PhysicalFunctionRunDB> = conn
+        .scd2()
+        .chunked()
+        .fetch_all::<PhysicalFunctionRunDB>(&lfr_ids, ())
+        .await?;
+    let busy: HashSet<&LogicalFunctionRunId> = current
+        .iter()
+        .filter(|pfr| PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status))
+        .map(|pfr| &pfr.base.logical_function_run_id)
+        .collect();
+    if !busy.is_empty() {
+        debug!(
+            busy = busy.len(),
+            "execution.update_status: runs with an attempt in flight are not rescheduled"
+        );
+    }
+    Ok(lfr_ids
+        .into_iter()
+        .filter(|id| !busy.contains(id))
+        .collect())
+}
+
+/// The `ids` a recover may reschedule. An OnHold run stays on hold while an
+/// upstream run that is Failed or OnHold is neither among them nor already
+/// `recovered`: rescheduling it would only wait on that failure. A run left on
+/// hold keeps its own readers on hold, to a fixpoint.
+async fn recoverable(
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    runs: &[LogicalFunctionRunDB],
+    ids: Vec<LogicalFunctionRunId>,
+    recovered: &HashSet<LogicalFunctionRunId>,
+) -> Result<Vec<LogicalFunctionRunId>, TdError> {
+    let mut kept: HashSet<LogicalFunctionRunId> = ids.iter().cloned().collect();
+    let on_hold: Vec<LogicalFunctionRunId> = runs
+        .iter()
+        .filter(|lfr| {
+            lfr.base.status == LogicalFunctionRunStatus::OnHold && kept.contains(&lfr.base.id)
+        })
+        .map(|lfr| lfr.base.id.clone())
+        .collect();
+    if on_hold.is_empty() {
+        return Ok(ids);
+    }
+    let blockers = conn.logical_runs().blockers(&on_hold).await?;
+    loop {
+        let held: Vec<LogicalFunctionRunId> = blockers
+            .iter()
+            .filter(|(run, upstream)| {
+                kept.contains(run) && !kept.contains(upstream) && !recovered.contains(upstream)
+            })
+            .map(|(run, _)| run.clone())
+            .collect();
+        if held.is_empty() {
+            break;
+        }
+        for run in held {
+            kept.remove(&run);
+        }
+    }
+    if kept.len() < ids.len() {
+        debug!(
+            held = ids.len() - kept.len(),
+            "execution.update_status: runs blocked by a failure outside the recover stay on hold"
+        );
+    }
+    Ok(ids.into_iter().filter(|id| kept.contains(id)).collect())
+}
+
 #[instrument(
     name = "execution.update_status",
     skip_all,
@@ -356,15 +432,15 @@ pub async fn update_function_run_status(
             .collect();
         commit_done_transactions(conn, &execution_ids).await?;
 
-        if !to_commit_ffrs.is_empty() {
-            conn.logical_runs()
-                .set_status(&to_commit_ffrs, LogicalFunctionRunStatus::Committed)
-                .await?;
-            debug!(
-                committed_count = to_commit_ffrs.len(),
-                "execution.commit: committed LFR(s)"
-            );
-        }
+        let healed: Vec<LogicalFunctionRunId> = logical_function_runs
+            .iter()
+            .filter(|f| {
+                f.base.status == LogicalFunctionRunStatus::Failed
+                    && updated_set.contains(&f.base.id)
+            })
+            .map(|f| f.base.id.clone())
+            .collect();
+        release_readers_of(conn, &healed).await?;
     }
 
     let downstream_status = match status {

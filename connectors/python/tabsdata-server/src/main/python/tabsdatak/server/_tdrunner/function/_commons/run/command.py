@@ -36,6 +36,7 @@ from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak.server._tdrunner.function._lib.message import (
     EXIT_STATUS_SUCCESS,
+    DestinationWriteMessage,
     ResponseMessagePayload,
 )
 from tabsdatak.server._tdrunner.function.commands import tabsdata_command
@@ -165,6 +166,16 @@ def notify_status(
     arguments: argparse.Namespace,
     payload: ResponseMessagePayload,
 ) -> None:
+    status = payload.status
+    logger.info(f"Reporting {status}: exit_status={payload.exit_status}")
+    _call_back(arguments, payload.to_body(), str(status))
+
+
+def _call_back(
+    arguments: argparse.Namespace,
+    body: dict[str, Any],
+    what: str,
+) -> None:
     def post(request: urllib.request.Request) -> bytes:
         try:
             with urllib.request.urlopen(
@@ -179,21 +190,28 @@ def notify_status(
     url = resolve_value(arguments.responder_url)
     method = resolve_value(arguments.responder_method)
     authorization = resolve_value(arguments.responder_authorization)
-    body = json.dumps(payload.to_body()).encode("utf-8")
     request = urllib.request.Request(
         url,
-        data=body,
+        data=json.dumps(body).encode("utf-8"),
         method=method,
         headers={
             "Authorization": authorization,
             "Content-Type": "application/json",
         },
     )
-    status = payload.status
-    exit_status = payload.exit_status
-    logger.info(f"Posting responder {status}: {method} {url} exit_status={exit_status}")
-    call_with_retry(post, request)
-    logger.info(f"Posted responder {status}: {method} {url} exit_status={exit_status}")
+    logger.info(f"Posting responder {what}: {method} {url}")
+    answer = call_with_retry(post, request)
+    logger.info(f"Posted responder {what}: {method} {url}")
+    if _outcome(answer) == "Stale":
+        raise CommandErrorCode.CMD_8.exception(status=what)
+
+
+def _outcome(answer: bytes) -> str | None:
+    try:
+        data = json.loads(answer).get("data")
+    except (ValueError, AttributeError):
+        return None
+    return data.get("outcome") if isinstance(data, dict) else None
 
 
 def notify_running(arguments: argparse.Namespace) -> None:
@@ -208,6 +226,13 @@ def notify_running(arguments: argparse.Namespace) -> None:
             start=journal.start,
         ),
     )
+
+
+def notify_writing_destination(arguments: argparse.Namespace) -> None:
+    """Tells the server the run is about to make a write a re-run would
+    repeat. Bounded like the Running report: a run that cannot say so fails
+    before writing anything."""
+    _call_back(arguments, DestinationWriteMessage().to_body(), "destination write")
 
 
 def notify_done(

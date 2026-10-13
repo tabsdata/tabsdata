@@ -8,14 +8,19 @@ import argparse
 
 import pytest
 
+from tabsdatak.common._enums import WorkerCallbackStatus
+from tabsdatak.server._tdrunner.function._commons.run import command as command_module
 from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
+    notify_status,
+    notify_writing_destination,
     run_command,
 )
 from tabsdatak.server._tdrunner.function._lib.errors import (
     CommandErrorCode,
     InvalidOptionsError,
 )
+from tabsdatak.server._tdrunner.function._lib.message import ResponseMessagePayload
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -179,3 +184,29 @@ def test_run_command_undefined_env(capsys):
     assert "FOO" in captured.err
 
 
+# --- callback bodies ---
+
+
+def _posted(monkeypatch) -> list[dict]:
+    bodies: list[dict] = []
+    monkeypatch.setattr(
+        command_module,
+        "_call_back",
+        lambda _arguments, body, _what: bodies.append(body),
+    )
+    return bodies
+
+
+def test_a_status_report_names_no_operation(monkeypatch):
+    bodies = _posted(monkeypatch)
+    notify_status(
+        argparse.Namespace(),
+        ResponseMessagePayload(status=WorkerCallbackStatus.RUNNING),
+    )
+    assert "op" not in bodies[0]
+
+
+def test_a_destination_write_names_its_operation_only(monkeypatch):
+    bodies = _posted(monkeypatch)
+    notify_writing_destination(argparse.Namespace())
+    assert bodies == [{"op": "destination_write"}]

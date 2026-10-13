@@ -26,6 +26,7 @@ use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::ExecutionRequest;
+use td_objects::dxo::execution_callback::ExecutionCallbackRequest;
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::{FunctionRunParam, PhysicalFunctionRunDB};
@@ -47,7 +48,6 @@ fn callback(status: WorkerCallbackStatus) -> CallbackRequest {
         error_message: None,
         exit_status: ExitStatus::Success.code(),
         context: None,
-        unguarded_write: false,
     }
 }
 
@@ -66,7 +66,7 @@ pub(crate) async fn post_callback(
                 worker: worker.clone(),
             },
         ),
-        callback(status),
+        ExecutionCallbackRequest::report(callback(status)),
     );
     Services::with_defaults(db.clone())
         .execution_callback(request)

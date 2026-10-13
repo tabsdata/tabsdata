@@ -114,6 +114,7 @@ pub enum LogicalFunctionRuns {
     // Immutable thereafter — collection-group reassignment does not
     // mutate already-minted runs.
     GroupId,
+    Recoveries,
 }
 
 pub(super) struct Defs;
@@ -137,6 +138,7 @@ impl Entity for Defs {
                 .col(id_column(LogicalFunctionRuns::TriggeredById).not_null())
                 .col(ColumnDef::new(LogicalFunctionRuns::Status).text().not_null())
                 .col(id_column(LogicalFunctionRuns::GroupId).not_null())
+                .col(ColumnDef::new(LogicalFunctionRuns::Recoveries).integer().not_null().default(0))
                 .foreign_key(
                     ForeignKey::create()
                         .from(LogicalFunctionRuns::Table, LogicalFunctionRuns::CollectionId)

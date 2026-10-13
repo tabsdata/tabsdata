@@ -18,6 +18,9 @@ from pathlib import Path
 
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    notify_writing_destination,
+)
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
@@ -149,6 +152,7 @@ def run(args: argparse.Namespace) -> int:
         function_id=str(request.info.function_run_id),
         function_name=request.info.function,
     )
+    notify_writing_destination(args)
     logger.info(
         "Invoking %s.write_out: %d table frame(s) -> %s",
         type(plugin).__name__,

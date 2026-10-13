@@ -12,6 +12,7 @@ use td_database::access::{AcrossProjects, DbPool, SeesProjectRows, WriteMode, re
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::crudl::ReadRequest;
+use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::WorkerParam;
 use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerMessageStatusUpdateDB};
@@ -91,6 +92,22 @@ pub async fn resolve_worker_message<S: SeesProjectRows, M: WriteMode>(
                 return Err(api_error!(
                     ApiError::NotFound,
                     "function run [{}] for worker [{}] is not in flight",
+                    function_run_id,
+                    worker_id,
+                ));
+            }
+
+            // A deleted function's run is ended by the scheduler; until then,
+            // its pod gets a clean not-found rather than inputs that may
+            // reference tables deleted with it.
+            let function: Option<FunctionDB> = conn
+                .scd2()
+                .fetch_optional::<FunctionDB>(&pfr.base.function_id)
+                .await?;
+            if function.is_none() {
+                return Err(api_error!(
+                    ApiError::NotFound,
+                    "function of run [{}] for worker [{}] is deleted",
                     function_run_id,
                     worker_id,
                 ));

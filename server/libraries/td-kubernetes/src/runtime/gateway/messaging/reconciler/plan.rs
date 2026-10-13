@@ -9,16 +9,22 @@
 //! # Identity
 //!
 //! - A workload is identified by its name, derived from its worker id.
-//! - A key is `(function_id, kind)`, kind being function run, cron trigger
-//!   or stage trigger. A trigger and the runs of the same function have
-//!   different keys and never affect each other.
+//! - A function run's key is its worker: every attempt has its own worker, so
+//!   two attempts of one function (a run and a replay) never affect each
+//!   other. Running both is safe: a superseded attempt's reports are answered
+//!   stale and its data never becomes current.
+//! - A trigger's key is `(function_id, kind)`, kind being cron trigger or
+//!   stage trigger, so a newer version of a trigger displaces the older one.
 //!
 //! # State
 //!
 //! - `creates`: at most one pending create per key (the latest Start).
 //! - `deletions`: pending deletions, by workload name.
-//! - `settling`: names whose create was issued but that have not been seen
+//! - `settling`: names whose create was planned but that have not been seen
 //!   listed yet. A create that timed out may still land in the background.
+//!   The window starts when the create call returns (`issued`), not when it
+//!   is planned: a pass's actions run in turn, so a create can wait long for
+//!   its call.
 //!
 //! # Inputs
 //!
@@ -33,11 +39,12 @@
 //!   `MAX_CREATE_ATTEMPTS` times (then it is given up and recovery sees the
 //!   run's workload missing).
 //! - `reissue` (a delete call failed): the delete is issued again next pass.
+//! - `issued` (a create call returned): its name's settle window starts.
 //!
 //! # One pass (`plan`)
 //!
-//! 1. Settling names that are now listed, or older than `CREATE_SETTLE`,
-//!    stop settling.
+//! 1. Settling names that are now listed, or issued more than
+//!    `CREATE_SETTLE` ago, stop settling.
 //! 2. Every listed workload Kubernetes is already deleting is tracked as a
 //!    deletion (adoption), whoever started it.
 //! 3. A deletion whose workload is not listed is done and forgotten, unless
@@ -49,15 +56,9 @@
 //! 5. A pending create is held while its name is settling or still listed.
 //!    Otherwise the create waits while any other live workload of its key
 //!    (any phase but Succeeded/Failed) is listed, and each such workload is
-//!    queued for deletion (self-heal: one workload per key) — at once, except
-//!    a function run in its final step. Function runs do all their work in
-//!    init containers and their only regular container reports completion,
-//!    so a run whose pod is running has finished its work and is exiting; it
-//!    gets `SELF_HEAL_GRACE`, counted from when it is first seen in that
-//!    step, and is deleted only if still listed after it. Streamers run their
-//!    stream in the regular container and cron jobs have no pod phase, so
-//!    they get no grace. Finished workloads are left alone so their logs
-//!    survive until their TTL.
+//!    queued for deletion at once (self-heal: one workload per key). Only a
+//!    trigger's key can hold another workload. Finished workloads are left
+//!    alone so their logs survive until their TTL.
 //! 6. Each listed deletion is issued once; after `WARN_AFTER` it warns once;
 //!    after `FORCE_AFTER` it is forced, and forced again every
 //!    `FORCE_RETRY` while the workload is still listed.
@@ -78,7 +79,7 @@
 //!   consistency: a lost create shows as a missing workload, a lost
 //!   deletion as a workload no attempt expects.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use td_bridge::observer::{ObservedWorkload, WorkloadKind, WorkloadPhase};
@@ -90,20 +91,35 @@ pub(crate) const FORCE_AFTER: Duration = Duration::from_secs(5 * 60);
 pub(crate) const FORCE_RETRY: Duration = Duration::from_secs(60);
 pub(crate) const CREATE_SETTLE: Duration = Duration::from_secs(60);
 pub(crate) const MAX_CREATE_ATTEMPTS: u32 = 10;
-pub(crate) const SELF_HEAL_GRACE: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Key {
-    pub function_id: String,
-    pub kind: WorkloadKind,
+pub(crate) enum Key {
+    Run(WorkerId),
+    Trigger {
+        function_id: String,
+        kind: WorkloadKind,
+    },
 }
 
 impl Key {
     fn of(workload: &ObservedWorkload) -> Option<Self> {
-        workload.function_id.as_ref().map(|function_id| Self {
-            function_id: function_id.to_string(),
-            kind: workload.kind,
-        })
+        match workload.kind {
+            WorkloadKind::Function => workload.worker_id.clone().map(Self::Run),
+            kind => workload
+                .function_id
+                .as_ref()
+                .map(|function_id| Self::Trigger {
+                    function_id: function_id.to_string(),
+                    kind,
+                }),
+        }
+    }
+
+    fn kind(&self) -> WorkloadKind {
+        match self {
+            Self::Run(_) => WorkloadKind::Function,
+            Self::Trigger { kind, .. } => *kind,
+        }
     }
 }
 
@@ -144,12 +160,6 @@ impl Deletion {
     }
 }
 
-// Function runs do all their work in init containers; their only regular
-// container reports completion, so a running pod is a run that is finishing.
-fn in_final_step(workload: &ObservedWorkload) -> bool {
-    workload.kind == WorkloadKind::Function && workload.phase == WorkloadPhase::Running
-}
-
 fn live(workload: &ObservedWorkload) -> bool {
     !matches!(
         workload.phase,
@@ -158,11 +168,16 @@ fn live(workload: &ObservedWorkload) -> bool {
 }
 
 #[derive(Debug)]
+struct Settling {
+    key: Key,
+    issued: Option<Instant>,
+}
+
+#[derive(Debug)]
 pub(crate) struct State<P> {
     creates: HashMap<Key, Submission<P>>,
     deletions: BTreeMap<String, Deletion>,
-    settling: HashMap<String, Instant>,
-    blocking: HashMap<String, Instant>,
+    settling: HashMap<String, Settling>,
 }
 
 impl<P> Default for State<P> {
@@ -171,7 +186,6 @@ impl<P> Default for State<P> {
             creates: HashMap::new(),
             deletions: BTreeMap::new(),
             settling: HashMap::new(),
-            blocking: HashMap::new(),
         }
     }
 }
@@ -180,8 +194,7 @@ impl<P> State<P> {
     pub(crate) fn submit(&mut self, key: Key, submission: Submission<P>) -> Option<Submission<P>> {
         info!(
             workload = %submission.name,
-            function_id = %key.function_id,
-            kind = ?key.kind,
+            key = ?key,
             "reconciler: start requested"
         );
         let replaced = self.creates.insert(key, submission);
@@ -210,7 +223,7 @@ impl<P> State<P> {
                 "reconciler: stop cancelled its queued create; an earlier create may still land"
             );
         }
-        let kind = key.kind;
+        let kind = key.kind();
         if !self.deletions.contains_key(name) {
             info!(workload = %name, "reconciler: stop queued a deletion");
         }
@@ -258,6 +271,25 @@ impl<P> State<P> {
         }
     }
 
+    pub(crate) fn issued(&mut self, name: &str, now: Instant) {
+        if let Some(settling) = self.settling.get_mut(name) {
+            settling.issued = Some(now);
+        }
+    }
+
+    /// The function runs whose Start was accepted and whose workload is not
+    /// listed yet.
+    pub(crate) fn queued_runs(&self) -> HashSet<WorkerId> {
+        self.creates
+            .keys()
+            .chain(self.settling.values().map(|settling| &settling.key))
+            .filter_map(|key| match key {
+                Key::Run(worker_id) => Some(worker_id.clone()),
+                Key::Trigger { .. } => None,
+            })
+            .collect()
+    }
+
     pub(crate) fn is_idle(&self) -> bool {
         self.creates.is_empty() && self.deletions.is_empty()
     }
@@ -268,12 +300,15 @@ impl<P> State<P> {
             .map(|workload| (workload.name.as_str(), workload))
             .collect();
 
-        self.settling.retain(|name, since| {
+        self.settling.retain(|name, settling| {
             if present.contains_key(name.as_str()) {
                 info!(workload = %name, "reconciler: created workload is now listed");
                 return false;
             }
-            if now.saturating_duration_since(*since) >= CREATE_SETTLE {
+            if settling
+                .issued
+                .is_some_and(|issued| now.saturating_duration_since(issued) >= CREATE_SETTLE)
+            {
                 info!(workload = %name, "reconciler: created workload never listed; stops settling");
                 return false;
             }
@@ -345,32 +380,10 @@ impl<P> State<P> {
             }
             healing.extend(blockers.into_iter().filter(|workload| !workload.deleting));
         }
-        self.blocking.retain(|name, _| {
-            let finishing = healing
-                .iter()
-                .any(|workload| &workload.name == name && in_final_step(workload));
-            if !finishing {
-                info!(workload = %name, "reconciler: workload left its final step");
-            }
-            finishing
-        });
         for workload in healing {
-            if in_final_step(workload) {
-                let since = *self.blocking.entry(workload.name.clone()).or_insert_with(|| {
-                    info!(
-                        workload = %workload.name,
-                        "reconciler: blocking run is in its final step; granted the self-heal grace"
-                    );
-                    now
-                });
-                if now.saturating_duration_since(since) < SELF_HEAL_GRACE {
-                    continue;
-                }
-            }
             if !self.deletions.contains_key(&workload.name) {
                 info!(
                     workload = %workload.name,
-                    final_step = in_final_step(workload),
                     "reconciler: blocking workload queued for deletion"
                 );
             }
@@ -420,7 +433,13 @@ impl<P> State<P> {
         for key in ready {
             if let Some(submission) = self.creates.remove(&key) {
                 info!(workload = %submission.name, attempts = submission.attempts, "reconciler: issuing create");
-                self.settling.insert(submission.name.clone(), now);
+                self.settling.insert(
+                    submission.name.clone(),
+                    Settling {
+                        key: key.clone(),
+                        issued: None,
+                    },
+                );
                 actions.push(Action::Create { key, submission });
             }
         }

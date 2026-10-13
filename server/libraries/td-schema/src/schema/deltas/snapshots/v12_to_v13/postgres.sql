@@ -39,6 +39,8 @@ WHERE i."requirement_dependency_pos" IS NOT NULL
   AND t."table_id" = d."table_id"
   AND t."valid_from" <= r."triggered_on" AND r."triggered_on" < t."valid_to"
 
+ALTER TABLE "logical_function_runs" ADD COLUMN "recoveries" integer NOT NULL DEFAULT 0
+
 UPDATE physical_table_data_versions t
 SET valid_to = t.valid_from
 FROM physical_function_runs r

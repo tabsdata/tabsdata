@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use crate::execution::cancellation::stop_function_workers;
 use crate::internal_api::InternalApi;
 use crate::project::active::active_project_ids;
 use crate::recovery::{
@@ -9,20 +10,21 @@ use crate::recovery::{
     current_trigger_versions, fn_candidates, stage_trigger_functions,
 };
 use crate::recovery::{
-    apply_recovery_actions, classify_divergence, execute_workload_removals,
-    recreate_trigger_workloads, sweep_stale_runs,
+    RecoveryActions, apply_recovery_actions, classify_divergence, recreate_trigger_workloads,
+    stop_recovered_workloads, stop_unowned_workloads, sweep_stale_runs,
 };
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_bridge::BridgeProviderHandle;
+use td_bridge::messaging::FunctionStopRequest;
 use td_database::access::SeesProjectRows;
-use td_database::access::{AccessMode, AcrossProjects, DbPool, Grant};
+use td_database::access::{AccessMode, AcrossProjects, DbPool, Grant, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::{RecoveryConfig, SchedulerNotify};
 use td_objects::dxo::worker::WorkerDBWithNames;
-use td_objects::types::basic::AtTime;
+use td_objects::types::basic::{AtTime, ProjectId};
 use td_queries::Queries;
 use td_storage::Storage;
 use tracing::instrument;
@@ -30,10 +32,12 @@ use tracing::{error, warn};
 
 /// The recovery tick, over short DB phases so no connection is held during
 /// orchestrator calls: observe (no DB) → snapshot (read-only) → classify
-/// (pure) → workload removals (no DB) → apply (short TX) → recreates (no DB)
-/// → notify (post-commit). Unobservable workloads degrade the tick to the
-/// time-based sweep (short TX). Every orchestrator action is idempotent, so an
-/// aborted tick converges on the next one.
+/// (pure) → stop unowned workloads (no DB) → per project: apply (its own short
+/// TX), then stop the workloads of the verdicts it committed → recreates (no
+/// DB) → notify (post-commit). A project that fails is logged and the rest go
+/// on. Unobservable workloads degrade the tick to the time-based sweep (short
+/// TX). Every orchestrator action is idempotent, so an aborted tick converges
+/// on the next one.
 #[allow(clippy::too_many_arguments)]
 #[service_factory]
 async fn recovery(
@@ -68,31 +72,38 @@ async fn recovery(
                 take_recovery_snapshot(conn.get(grant), &at).await?
             };
             let decisions = classify_divergence(&config, &observation, &snapshot);
-            let actions = execute_workload_removals(bridge.message_queue(), &decisions).await;
+            stop_unowned_workloads(bridge.message_queue(), &decisions).await;
+            let actions = RecoveryActions {
+                fn_actions: decisions.fn_actions.clone(),
+                stage_exits: decisions.stage_exits.clone(),
+                cron_recreates: decisions.cron_recreates.clone(),
+                stage_recreates: decisions.stage_recreates.clone(),
+                worker_stops: Vec::new(),
+            };
             for (project, actions) in actions.by_project() {
-                let mut trx = db.in_project(&project).begin_exclusive().await?;
-                match apply_recovery_actions(msgs, trx.get(grant), &at, &actions).await {
-                    Ok(()) => trx.commit().await?,
+                match apply_project(msgs, &db, grant, &project, &actions).await {
+                    Ok(committed) => {
+                        stop_recovered_workloads(bridge.message_queue(), &committed).await;
+                        recreate_trigger_workloads(
+                            &bridge,
+                            &storage,
+                            &internal_api,
+                            &committed,
+                            &snapshot.stage_functions,
+                        )
+                        .await;
+                    }
                     Err(e) => error!(
                         project_id = %project,
                         "recovery.apply: project failed, continuing with the rest: {e:?}"
                     ),
                 }
             }
-            recreate_trigger_workloads(
-                &bridge,
-                &storage,
-                &internal_api,
-                &decisions,
-                &snapshot.stage_functions,
-            )
-            .await;
         }
         _ => {
             for project in active_project_ids(&db, grant).await? {
-                let mut trx = db.in_project(&project).begin_exclusive().await?;
-                match sweep_stale_runs(msgs, trx.get(grant), &at, &config).await {
-                    Ok(()) => trx.commit().await?,
+                match sweep_project(msgs, &db, grant, &project, &at, &config).await {
+                    Ok(stops) => stop_function_workers(&bridge, stops).await,
                     Err(e) => error!(
                         project_id = %project,
                         "recovery.sweep: project failed, continuing with the rest: {e:?}"
@@ -108,10 +119,58 @@ async fn recovery(
     Ok(())
 }
 
+/// Applies a project's verdicts in its own write transaction and returns
+/// those it committed. Ends are stamped at the unit's own instant: the tick's
+/// may predate a report this unit reads.
+async fn apply_project(
+    msgs: &mut ReqCtx,
+    db: &DbPool<AcrossProjects>,
+    grant: Grant,
+    project: &ProjectId,
+    actions: &RecoveryActions,
+) -> Result<RecoveryActions, TdError> {
+    let (committed, recorded) = retrying(|attempt| async {
+        let mut recorded = ReqCtx::default();
+        let mut trx = db.in_project(project).begin(attempt).await?;
+        let at = AtTime::from(trx.locked_at());
+        let committed = apply_recovery_actions(&mut recorded, trx.get(grant), &at, actions).await?;
+        trx.commit().await?;
+        Ok((committed, recorded))
+    })
+    .await?;
+    msgs.merge(recorded);
+    Ok(committed)
+}
+
+async fn sweep_project(
+    msgs: &mut ReqCtx,
+    db: &DbPool<AcrossProjects>,
+    grant: Grant,
+    project: &ProjectId,
+    at: &AtTime,
+    config: &RecoveryConfig,
+) -> Result<Vec<FunctionStopRequest>, TdError> {
+    let (stops, recorded) = retrying(|attempt| async {
+        let mut recorded = ReqCtx::default();
+        let mut trx = db.in_project(project).begin(attempt).await?;
+        let stops = sweep_stale_runs(&mut recorded, trx.get(grant), at, config).await?;
+        trx.commit().await?;
+        Ok((stops, recorded))
+    })
+    .await?;
+    msgs.merge(recorded);
+    Ok(stops)
+}
+
 /// One read-only pass over the DB: reconciliation candidates plus the stage
 /// function/bundle locations the recreates need, so the orchestrator then runs
 /// every Kubernetes call with no connection held.
-#[instrument(name = "recovery.snapshot", skip_all, level = "debug", err(Debug))]
+#[instrument(
+    name = "recovery.snapshot",
+    skip_all,
+    level = "debug",
+    err(Debug, level = "debug")
+)]
 pub async fn take_recovery_snapshot<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     at: &AtTime,
@@ -120,15 +179,22 @@ pub async fn take_recovery_snapshot<S: SeesProjectRows, M: AccessMode>(
         .fetch_all(WorkerDBWithNames::cron_triggers_in_flight())
         .await?;
     let cron = CronCandidates(cron_workers);
-    let stage_workers: Vec<WorkerDBWithNames> = conn
+    let mut stage_workers: Vec<WorkerDBWithNames> = conn
         .fetch_all(WorkerDBWithNames::stage_triggers_in_flight())
         .await?;
+    let due: Vec<WorkerDBWithNames> = conn
+        .fetch_all(WorkerDBWithNames::stage_triggers_due(at))
+        .await?;
+    stage_workers.extend(due);
     let stage = StageCandidates(stage_workers);
     let current = current_trigger_versions(conn, &cron, &stage).await?;
     let fn_attempts = fn_candidates(conn).await?;
     let stage_functions = stage_trigger_functions(conn, &stage).await?;
     build_recovery_snapshot(at, &cron, &stage, &fn_attempts, &stage_functions, &current)
 }
+
+#[cfg(test)]
+mod races;
 
 #[cfg(test)]
 mod tests {
@@ -599,7 +665,8 @@ mod tests {
 
     /// A Running run whose workload vanished fails AND auto-recovers: the
     /// LFR goes Failed → ReScheduled in one tick and the next request tick
-    /// dispatches a fresh attempt.
+    /// dispatches a fresh attempt. The vanished attempt's worker still gets a
+    /// Stop, for a workload its create brings up late.
     #[td_test::test(db)]
     async fn test_auto_recover_running_missing_workload(db: TdPool) -> Result<(), TdError> {
         use td_objects::and;
@@ -687,9 +754,12 @@ mod tests {
         };
         db.update(&lfr_to_running, &lfr.base.id).await?;
 
+        let old_workers: Vec<WorkerDB> = db.fetch_all(&pfr_old.base.id).await?;
+        assert_eq!(old_workers.len(), 1);
+
         // Empty cluster observation, no dispatch grace: the workload is
         // judged missing on the first tick.
-        let (services, _) = kubernetes_recovery_services(
+        let (services, sent) = kubernetes_recovery_services(
             &db,
             RecoveryConfig {
                 dispatch_grace: DispatchGrace(Duration::ZERO),
@@ -704,6 +774,20 @@ mod tests {
             .await?;
         assert_eq!(pfr_failed.base.status, PhysicalFunctionRunStatus::Failed);
         assert!(pfr_failed.base.ended_on.is_some());
+        let stops: Vec<_> = sent
+            .messages()
+            .into_iter()
+            .filter(|m| {
+                matches!(
+                    m.payload,
+                    OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+                        FunctionRequest::Stop(_)
+                    )
+                )
+            })
+            .map(|m| m.id)
+            .collect();
+        assert_eq!(stops, vec![old_workers[0].base.id.to_string()]);
         let lfr_recovered: LogicalFunctionRunDB =
             db.fetch_one::<LogicalFunctionRunDB>(&lfr.base.id).await?;
         assert_eq!(
@@ -762,10 +846,10 @@ mod tests {
         Ok(())
     }
 
-    /// A streamer's own failure callback is terminal: no recreation. A cron
-    /// worker at Failed stays owned and is recreated.
+    /// A streamer failed with no retry due is not
+    /// recreated. A cron worker at Failed stays owned and is recreated.
     #[td_test::test(db)]
-    async fn test_failed_streamer_not_recreated(db: TdPool) -> Result<(), TdError> {
+    async fn test_failed_streamer_without_a_retry_not_recreated(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let (_, _, cron) = seed_trigger_worker(
             &db,
@@ -801,6 +885,51 @@ mod tests {
         let stage_after: WorkerDB = db.fetch_one(&stage.base.id).await?;
         assert_eq!(stage_after.base.status, WorkerStatus::Failed);
 
+        Ok(())
+    }
+
+    /// A streamer that reported Done exited while it should run: recovery
+    /// fails it with backoff instead of recreating a workload whose Running
+    /// report the worker could not take, and restarts it once its retry is
+    /// due.
+    #[td_test::test(db)]
+    async fn test_a_streamer_that_exited_done_fails_and_restarts_once_due(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let (_, _, stage) = seed_trigger_worker(
+            &db,
+            p.id,
+            "c_done_stage",
+            WorkerType::StageTrigger,
+            WorkerStatus::Done,
+        )
+        .await?;
+
+        let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
+        services.clone().recovery(()).await?;
+
+        assert!(sent.messages().is_empty());
+        let failed: WorkerDB = db.fetch_one(&stage.base.id).await?;
+        assert_eq!(failed.base.status, WorkerStatus::Failed);
+        assert!(failed.retry_at.is_some());
+
+        let due = WorkerRetryUpdateDB {
+            failures: failed.failures,
+            retry_at: Retry::from(AtTime::now()),
+        };
+        db.update(&due, &stage.base.id).await?;
+        services.clone().recovery(()).await?;
+
+        let messages = sent.messages();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].id, stage.base.id.to_string());
+        assert!(matches!(
+            &messages[0].payload,
+            OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
+                StageTriggerRequest::Start(_)
+            )
+        ));
         Ok(())
     }
 }

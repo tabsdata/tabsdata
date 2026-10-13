@@ -4,6 +4,7 @@
 
 use crate::internal_api::InternalApi;
 use crate::logical::index_lfrs_by_exec_fn;
+use crate::recovery::attempt_cap::{gave_up, under_cap};
 use crate::scheduler::request::{put_cron_trigger_start, put_stage_trigger_start};
 use chrono::{DateTime, Utc};
 use itertools::Itertools;
@@ -23,7 +24,7 @@ use td_objects::dxo::function::{FunctionDB, FunctionDBWithBundleBasePath};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::logical::LogicalFunctionRunInsertDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerUpdateDB};
+use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames};
 use td_objects::or;
 use td_objects::types::basic::{
     AtTime, ExecutionId, FunctionVersionId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
@@ -70,10 +71,15 @@ pub struct RecoverySnapshot {
 pub struct FnRecoveryAction {
     pub worker_id: Option<WorkerId>,
     pub pfr_id: PhysicalFunctionRunId,
+    /// The attempt's status the verdict was judged on.
+    pub seen: PhysicalFunctionRunStatus,
     pub project_id: ProjectId,
     pub lfr: Option<LogicalFunctionRunDB>,
     pub recover: bool,
     pub remove: Option<ObservedWorkload>,
+    /// No workload was observed: one its create brings up later still gets a
+    /// Stop once the verdict commits.
+    pub unobserved: bool,
     pub reason: String,
 }
 
@@ -81,9 +87,15 @@ pub struct FnRecoveryAction {
 pub struct RecoveryDecisions {
     pub fn_actions: Vec<FnRecoveryAction>,
     pub cron_recreates: Vec<WorkerDBWithNames>,
+    /// Stopped now, recreated next tick once observed absent.
+    pub cron_restarts: Vec<(WorkerId, ObservedWorkload)>,
     pub stage_recreates: Vec<WorkerDBWithNames>,
     /// Stopped now, recreated next tick once observed absent.
     pub stage_restarts: Vec<(WorkerId, ObservedWorkload)>,
+    /// Streamers whose workload ended without reporting a failure, or that
+    /// reported Done: they fail, and restart with backoff like one that
+    /// reported its failure.
+    pub stage_exits: Vec<WorkerDBWithNames>,
     pub orphan_removals: Vec<ObservedWorkload>,
 }
 
@@ -92,6 +104,11 @@ pub struct RecoveryDecisions {
 #[derive(Debug, Clone, Default)]
 pub struct RecoveryActions {
     pub fn_actions: Vec<FnRecoveryAction>,
+    pub stage_exits: Vec<WorkerDBWithNames>,
+    pub cron_recreates: Vec<WorkerDBWithNames>,
+    pub stage_recreates: Vec<WorkerDBWithNames>,
+    /// Stops for ended function workers whose workloads were not observed.
+    pub worker_stops: Vec<FunctionStopRequest>,
 }
 
 impl RecoveryActions {
@@ -103,6 +120,27 @@ impl RecoveryActions {
                 .or_default()
                 .fn_actions
                 .push(action);
+        }
+        for worker in self.stage_exits {
+            grouped
+                .entry(worker.base.project_id)
+                .or_default()
+                .stage_exits
+                .push(worker);
+        }
+        for worker in self.cron_recreates {
+            grouped
+                .entry(worker.base.project_id)
+                .or_default()
+                .cron_recreates
+                .push(worker);
+        }
+        for worker in self.stage_recreates {
+            grouped
+                .entry(worker.base.project_id)
+                .or_default()
+                .stage_recreates
+                .push(worker);
         }
         grouped.into_iter().collect()
     }
@@ -118,7 +156,7 @@ pub async fn fn_candidates<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
 ) -> Result<FnCandidates, TdError> {
     let mut pfrs: Vec<PhysicalFunctionRunDB> = conn
-        .timeline()
+        .scd2()
         .fetch_all::<PhysicalFunctionRunDB>(or!(
             PhysicalFunctionRunStatus::Dispatched,
             PhysicalFunctionRunStatus::Running
@@ -293,10 +331,18 @@ pub fn classify_divergence(
             .as_ref()
             .and_then(|worker_id| workload_by_worker.get(worker_id).copied());
         let dispatched_old = before(&attempt.pfr.base.dispatched_on.map(|d| *d), &grace_cutoff);
+        // The backend answers for a Start it holds: it creates the workload or
+        // gives it up, and only then can the workload be missing.
+        let queued = attempt
+            .worker_id
+            .as_ref()
+            .is_some_and(|worker_id| observation.queued.contains(worker_id));
 
         // (remove workload?, recover policy?, reason)
         let outcome: Option<(bool, bool, String)> = match workload {
-            None if dispatched_old => Some((false, true, "function workload missing".to_string())),
+            None if dispatched_old && !queued => {
+                Some((false, true, "function workload missing".to_string()))
+            }
             None => None,
             Some(w) => match w.phase {
                 WorkloadPhase::Pending => {
@@ -391,30 +437,54 @@ pub fn classify_divergence(
             decisions.fn_actions.push(FnRecoveryAction {
                 worker_id: attempt.worker_id.clone(),
                 pfr_id: attempt.pfr.base.id.clone(),
+                seen: attempt.pfr.base.status,
                 project_id: attempt.pfr.project_id,
                 lfr: None,
                 recover,
                 remove: remove.then(|| workload.cloned()).flatten(),
+                unobserved: workload.is_none(),
                 reason,
             });
         }
     }
 
     for worker in &snapshot.cron {
-        if !workload_by_worker.contains_key(&worker.base.base.id) {
-            decisions.cron_recreates.push(worker.clone());
+        match workload_by_worker.get(&worker.base.base.id) {
+            None => decisions.cron_recreates.push(worker.clone()),
+            // A CronJob is created suspended and released once complete; one
+            // left suspended past the grace never fires.
+            Some(w)
+                if matches!(w.phase, WorkloadPhase::Suspended | WorkloadPhase::Paused)
+                    && before_or_undated(&w.phase_since, &grace_cutoff) =>
+            {
+                decisions
+                    .cron_restarts
+                    .push((worker.base.base.id.clone(), (*w).clone()));
+            }
+            Some(_) => {}
         }
     }
 
     for worker in &snapshot.stage {
         match workload_by_worker.get(&worker.base.base.id) {
+            // A streamer that reported Done exited while it should run.
+            None if worker.base.base.status == WorkerStatus::Done => {
+                decisions.stage_exits.push(worker.clone())
+            }
             None => decisions.stage_recreates.push(worker.clone()),
             Some(w) => {
                 let restart = match w.phase {
                     WorkloadPhase::Running | WorkloadPhase::Present => false,
                     WorkloadPhase::Pending => before_or_undated(&w.phase_since, &prerun_cutoff),
-                    // Streamers are services: any exit is a restart.
-                    WorkloadPhase::Succeeded | WorkloadPhase::Failed => true,
+                    // Streamers are services: an exit is a failure, which
+                    // restarts with backoff. One already failed is restarting.
+                    WorkloadPhase::Succeeded | WorkloadPhase::Failed => {
+                        if worker.base.base.status != WorkerStatus::Failed {
+                            decisions.stage_exits.push(worker.clone());
+                            continue;
+                        }
+                        true
+                    }
                     WorkloadPhase::Suspended | WorkloadPhase::Paused => {
                         before_or_undated(&w.phase_since, &grace_cutoff)
                     }
@@ -465,8 +535,10 @@ pub fn classify_divergence(
     for (name, len) in [
         ("fn_actions", decisions.fn_actions.len()),
         ("cron_recreates", decisions.cron_recreates.len()),
+        ("cron_restarts", decisions.cron_restarts.len()),
         ("stage_recreates", decisions.stage_recreates.len()),
         ("stage_restarts", decisions.stage_restarts.len()),
+        ("stage_exits", decisions.stage_exits.len()),
         ("orphan_removals", decisions.orphan_removals.len()),
     ] {
         if len > cap {
@@ -480,14 +552,18 @@ pub fn classify_divergence(
     }
     decisions.fn_actions.truncate(cap);
     decisions.cron_recreates.truncate(cap);
+    decisions.cron_restarts.truncate(cap);
     decisions.stage_recreates.truncate(cap);
     decisions.stage_restarts.truncate(cap);
+    decisions.stage_exits.truncate(cap);
     decisions.orphan_removals.truncate(cap);
 
     if !decisions.fn_actions.is_empty()
         || !decisions.cron_recreates.is_empty()
+        || !decisions.cron_restarts.is_empty()
         || !decisions.stage_recreates.is_empty()
         || !decisions.stage_restarts.is_empty()
+        || !decisions.stage_exits.is_empty()
         || !decisions.orphan_removals.is_empty()
     {
         debug!(
@@ -502,23 +578,18 @@ pub fn classify_divergence(
     decisions
 }
 
-/// Each removal is a Stop on the bridge queue, which carries it out
-/// asynchronously; a re-dispatched run shares the stopped run's key, so the
-/// reconciler creates it only once the old workload is gone. A function action
-/// whose Stop cannot be queued is dropped and retried next tick.
-#[instrument(name = "recovery.execute_workload_removals", skip_all, level = "debug")]
-pub async fn execute_workload_removals(
+/// Stops the workloads no run owns: triggers to restart and orphans. Each
+/// removal is a Stop on the bridge queue, which carries it out asynchronously.
+/// Function workloads are stopped by [`stop_recovered_workloads`] once their
+/// verdict is committed.
+#[instrument(name = "recovery.stop_unowned_workloads", skip_all, level = "debug")]
+pub async fn stop_unowned_workloads(
     queue: &dyn OrchestratorMessageQueue,
     decisions: &RecoveryDecisions,
-) -> RecoveryActions {
-    let mut fn_actions = Vec::with_capacity(decisions.fn_actions.len());
-    for action in &decisions.fn_actions {
-        if let Some(workload) = &action.remove
-            && !stop_workload(queue, workload).await
-        {
-            continue;
-        }
-        fn_actions.push(action.clone());
+) {
+    for (worker_id, workload) in &decisions.cron_restarts {
+        warn!(worker_id = %worker_id, workload = %workload.name, "recovery: restarting cron workload");
+        stop_workload(queue, workload).await;
     }
 
     for (worker_id, workload) in &decisions.stage_restarts {
@@ -530,8 +601,29 @@ pub async fn execute_workload_removals(
         warn!(workload = %workload.name, "recovery: removing orphan workload");
         stop_workload(queue, workload).await;
     }
+}
 
-    RecoveryActions { fn_actions }
+/// Stops the workloads of the attempts whose verdict a project committed.
+/// Sent only after the commit, so a verdict that never lands stops nothing.
+/// A Stop that cannot be queued is left to the orphan pass: the attempt has
+/// ended, so no run owns its workload any more.
+#[instrument(name = "recovery.stop_recovered_workloads", skip_all, level = "debug")]
+pub async fn stop_recovered_workloads(
+    queue: &dyn OrchestratorMessageQueue,
+    actions: &RecoveryActions,
+) {
+    for workload in actions.fn_actions.iter().filter_map(|a| a.remove.as_ref()) {
+        stop_workload(queue, workload).await;
+    }
+    for stop in &actions.worker_stops {
+        let id = stop.worker_id.to_string();
+        let payload = OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
+            FunctionRequest::Stop(stop.clone()),
+        );
+        if let Err(e) = queue.put(id, payload).await {
+            warn!(worker_id = %stop.worker_id, reason = ?e, "recovery: stop message put failed; the orphan pass removes the workload");
+        }
+    }
 }
 
 async fn stop_workload(queue: &dyn OrchestratorMessageQueue, workload: &ObservedWorkload) -> bool {
@@ -618,16 +710,17 @@ fn missing_fields(workload: &ObservedWorkload) -> String {
     .join(", ")
 }
 
-/// Recreate the missing trigger workloads; a failed put retries next tick.
+/// Recreate the missing trigger workloads a project committed to; a failed
+/// put retries next tick.
 #[instrument(name = "recovery.recreate_triggers", skip_all, level = "debug")]
 pub async fn recreate_trigger_workloads(
     bridge: &BridgeProviderHandle,
     storage: &Storage,
     internal_api: &InternalApi,
-    decisions: &RecoveryDecisions,
+    actions: &RecoveryActions,
     stage_functions: &HashMap<FunctionVersionId, FunctionDBWithBundleBasePath>,
 ) {
-    for worker in &decisions.cron_recreates {
+    for worker in &actions.cron_recreates {
         warn!(worker_id = %worker.base.base.id, "recovery: recreating cron workload");
         if let Err(e) = put_cron_trigger_start(bridge, internal_api, worker).await {
             warn!(
@@ -637,7 +730,7 @@ pub async fn recreate_trigger_workloads(
             );
         }
     }
-    for worker in &decisions.stage_recreates {
+    for worker in &actions.stage_recreates {
         warn!(worker_id = %worker.base.base.id, "recovery: recreating streamer workload");
         if let Err(e) =
             put_stage_trigger_start(bridge, storage, internal_api, stage_functions, worker).await
@@ -693,15 +786,32 @@ pub async fn finalize_recovery_actions<S: SeesProjectRows, M: AccessMode>(
         .await?;
     let lfr_by_exec_fn = index_lfrs_by_exec_fn(lfrs);
 
+    let worker_ids: Vec<WorkerId> = actions
+        .fn_actions
+        .iter()
+        .filter_map(|action| action.worker_id.clone())
+        .unique()
+        .collect();
+    let wrote: HashSet<WorkerId> = conn
+        .chunked()
+        .fetch_all::<WorkerDB>(&worker_ids, ())
+        .await?
+        .into_iter()
+        .filter(|worker| worker.destination_write_on.is_some())
+        .map(|worker| worker.base.id)
+        .collect();
+
     let mut fn_actions = Vec::with_capacity(actions.fn_actions.len());
     for action in &actions.fn_actions {
         let Some(pfr) = pfr_by_id.get(&action.pfr_id) else {
             continue;
         };
-        if !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status) {
+        if pfr.base.status != action.seen {
             debug!(
                 function_run_id = %action.pfr_id,
-                "recovery: attempt terminalized concurrently; its callback wins"
+                seen = %action.seen,
+                now = %pfr.base.status,
+                "recovery: attempt moved since it was judged; its report wins"
             );
             continue;
         }
@@ -718,31 +828,46 @@ pub async fn finalize_recovery_actions<S: SeesProjectRows, M: AccessMode>(
                 )
             })
             .unwrap_or(false);
-        let recover = action.recover && lfr_recoverable;
+        let capped =
+            action.recover && lfr_recoverable && lfr.as_ref().is_some_and(|lfr| !under_cap(lfr));
+        let may_have_written = action.recover
+            && lfr_recoverable
+            && action
+                .worker_id
+                .as_ref()
+                .is_some_and(|id| wrote.contains(id));
+        let recover = action.recover && lfr_recoverable && !capped && !may_have_written;
+        let reason = if may_have_written {
+            format!("{}; {}", action.reason, MAY_HAVE_WRITTEN)
+        } else if capped {
+            format!("{}; {}", action.reason, gave_up())
+        } else {
+            action.reason.clone()
+        };
         warn!(
             worker_id = ?action.worker_id,
             function_run_id = %action.pfr_id,
             recover,
-            reason = %action.reason,
+            reason = %reason,
             "recovery: failing function-run attempt"
         );
         fn_actions.push(FnRecoveryAction {
             lfr,
             recover,
+            reason,
             ..action.clone()
         });
     }
 
-    Ok(RecoveryActions { fn_actions })
-}
-
-pub fn failed_worker_update(at: &AtTime) -> Result<WorkerUpdateDB, TdError> {
-    Ok(WorkerUpdateDB {
-        started_on: None,
-        ended_on: Some((*at).into()),
-        status: WorkerStatus::Failed,
+    Ok(RecoveryActions {
+        fn_actions,
+        ..actions.clone()
     })
 }
+
+/// Why recovery leaves a run that began a write a re-run would repeat.
+const MAY_HAVE_WRITTEN: &str = "the run may have written to its destination before it was lost; \
+    recover repeats that write, cancel discards the run";
 
 pub fn failed_worker_ids(actions: &RecoveryActions) -> Result<Vec<WorkerId>, TdError> {
     Ok(actions
@@ -771,10 +896,7 @@ pub async fn fail_recovered_attempts(
         .map(|action| action.pfr_id.clone())
         .unique()
         .collect();
-    if pfr_ids.is_empty() {
-        return Ok(());
-    }
-    conn.physical_runs().failed(&pfr_ids, at).await?;
+    conn.physical_runs().end(&pfr_ids, at).await?;
     Ok(())
 }
 

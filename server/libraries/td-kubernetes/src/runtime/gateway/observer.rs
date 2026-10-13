@@ -3,6 +3,7 @@
 //
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
@@ -28,14 +29,27 @@ use crate::kube::api::entity::cronjob::list_cronjobs_of_workers;
 use crate::kube::api::entity::job::list_jobs_of_workers;
 use crate::kube::api::entity::pod::list_pods_of_workers;
 use crate::kube::context::KubeContext;
+use crate::runtime::gateway::messaging::reconciler::Reconciler;
 
 pub struct KubernetesWorkloadObserver {
     context: KubeContext,
+    queue: Option<Arc<Reconciler>>,
 }
 
 impl KubernetesWorkloadObserver {
     pub fn new(context: KubeContext) -> Self {
-        Self { context }
+        Self {
+            context,
+            queue: None,
+        }
+    }
+
+    /// Also reports the runs `queue` still has to create.
+    pub(crate) fn with_queue(context: KubeContext, queue: Arc<Reconciler>) -> Self {
+        Self {
+            context,
+            queue: Some(queue),
+        }
     }
 }
 
@@ -351,6 +365,13 @@ impl FromKubernetes for ObservedWorkload {
 #[async_trait]
 impl WorkloadObserver for KubernetesWorkloadObserver {
     async fn observe(&self) -> Result<WorkloadObservation, ObserverError> {
+        // Read before listing: a create landing in between is then listed,
+        // queued, or both, never neither.
+        let queued = self
+            .queue
+            .as_ref()
+            .map(|queue| queue.queued_runs())
+            .unwrap_or_default();
         let jobs = list_jobs_of_workers(&self.context).await?;
         let cronjobs = list_cronjobs_of_workers(&self.context).await?;
         let pods = list_pods_of_workers(&self.context).await?;
@@ -384,7 +405,7 @@ impl WorkloadObserver for KubernetesWorkloadObserver {
             workloads.push(ObservedWorkload::from_pod(pod)?);
         }
 
-        Ok(WorkloadObservation { workloads })
+        Ok(WorkloadObservation { workloads, queued })
     }
 }
 

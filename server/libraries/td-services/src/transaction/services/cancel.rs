@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::cancellation::{cancel_runs, stop_cancelled_workers};
+use crate::execution::cancellation::{cancel_runs, stop_function_workers};
 use crate::execution::update_status::UpdateStatusRunError;
 use ta_services::ctx_service::{Message, ReqCtx};
 use ta_services::factory::service_factory;

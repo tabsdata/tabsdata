@@ -2,6 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::execution::cancellation::{cancel_runs, stop_function_workers};
+use crate::execution::release::release_unblocked;
+use crate::execution::settlement::settle_transactions;
 use crate::internal_api::InternalApi;
 use crate::logical::dispatch_mint::mint_function_runs_on_dispatch;
 use crate::project::active::active_project_ids;

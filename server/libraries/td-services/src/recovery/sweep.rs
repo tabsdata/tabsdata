@@ -2,12 +2,15 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use crate::execution::cancellation::function_stops;
 use crate::execution::update_status::{
     abandon_requested_physical_runs, update_function_run_status,
 };
+use crate::recovery::attempt_cap::{count_recoveries, gave_up, under_cap};
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use ta_services::ctx_service::ReqCtx;
+use td_bridge::messaging::FunctionStopRequest;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -19,7 +22,7 @@ use td_objects::types::basic::{
     PhysicalFunctionRunId,
 };
 use td_queries::Queries;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, warn};
 
 /// `stuck_lfrs` get the full recover flow; `abandoned_pfr_ids` (attempts
 /// under non-`Requested` LFRs, e.g. replays) are only terminalized.
@@ -104,44 +107,53 @@ pub async fn fetch_stale_dispatched_runs<S: SeesProjectRows, M: AccessMode>(
 }
 
 /// Late callbacks from the failed attempts drop at the in-flight filter.
+/// Returns the stops for their workers.
 #[instrument(
     name = "scheduler.fail_stale_abandoned_attempts",
     skip_all,
     level = "debug",
-    err(Debug)
+    err(Debug, level = "debug")
 )]
 pub async fn fail_stale_abandoned_attempts(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     at: &AtTime,
     stale: &StaleDispatchedRuns,
-) -> Result<(), TdError> {
+) -> Result<Vec<FunctionStopRequest>, TdError> {
     if stale.abandoned_pfr_ids.is_empty() {
-        return Ok(());
+        return Ok(Vec::new());
     }
-    conn.physical_runs()
-        .failed(&stale.abandoned_pfr_ids, at)
+    let workers = conn
+        .physical_runs()
+        .end(&stale.abandoned_pfr_ids, at)
         .await?;
     debug!(
         failed_count = stale.abandoned_pfr_ids.len(),
         "scheduler.fail_stale_abandoned_attempts: terminalized stale attempt(s)"
     );
-    Ok(())
+    function_stops(conn, workers).await
 }
 
 /// The time-based sweep, in one write transaction: stale `Dispatched` PFRs →
 /// `Failed`, and those under a `Requested` LFR additionally get the
 /// operator-recover flow.
-#[instrument(name = "recovery.sweep", skip_all, level = "debug", err(Debug))]
+#[instrument(
+    name = "recovery.sweep",
+    skip_all,
+    level = "debug",
+    err(Debug, level = "debug")
+)]
 pub async fn sweep_stale_runs(
     msgs: &mut ReqCtx,
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     at: &AtTime,
     config: &RecoveryConfig,
-) -> Result<(), TdError> {
+) -> Result<Vec<FunctionStopRequest>, TdError> {
     let stale = fetch_stale_dispatched_runs(conn, at, config).await?;
-    fail_stale_abandoned_attempts(conn, at, &stale).await?;
-    let stuck_lfrs = stale.stuck_lfrs.clone();
-    abandon_requested_physical_runs(conn, at, &stuck_lfrs).await?;
+    let mut stops = fail_stale_abandoned_attempts(conn, at, &stale).await?;
+    let (stuck_lfrs, given_up): (Vec<_>, Vec<_>) =
+        stale.stuck_lfrs.iter().cloned().partition(under_cap);
+    count_recoveries(conn, &stuck_lfrs).await?;
+    stops.extend(abandon_requested_physical_runs(conn, at, &stuck_lfrs).await?);
     update_function_run_status(
         msgs,
         conn,
@@ -149,5 +161,14 @@ pub async fn sweep_stale_runs(
         LogicalFunctionRunStatus::ReScheduled,
     )
     .await?;
-    Ok(())
+    if !given_up.is_empty() {
+        warn!(
+            runs = given_up.len(),
+            reason = %gave_up(),
+            "recovery.sweep: failing stuck runs"
+        );
+    }
+    stops.extend(abandon_requested_physical_runs(conn, at, &given_up).await?);
+    update_function_run_status(msgs, conn, &given_up, LogicalFunctionRunStatus::Failed).await?;
+    Ok(stops)
 }

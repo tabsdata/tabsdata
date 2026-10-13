@@ -7,7 +7,9 @@
 //! methods of one concern to the handle it belongs to.
 
 mod attempts;
+mod blockers;
 pub(crate) mod chain;
+pub(crate) mod deleted_functions;
 mod dispatch;
 mod functions;
 mod readiness;

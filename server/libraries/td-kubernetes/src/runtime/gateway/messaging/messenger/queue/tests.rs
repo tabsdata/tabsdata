@@ -115,10 +115,10 @@ fn function_stop_routes_like_its_start() {
 }
 
 #[test]
-fn function_stop_is_keyed_by_its_function() {
-    let key = derive_key("process", &function_stop()).unwrap();
-    assert_eq!(key.function_id, "00000000000000000000000f00");
-    assert_eq!(key.kind, WorkloadKind::Function);
+fn function_stop_is_keyed_by_its_worker() {
+    let worker_id = WorkerId::try_from("wkr20260101-1").unwrap();
+    let key = derive_key("process", &worker_id, &function_stop()).unwrap();
+    assert_eq!(key, Key::Run(worker_id));
 }
 
 #[test]

@@ -633,7 +633,7 @@ mod tests {
         let sql = previous_lfr_query(&fid, &before).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "id", "collection_id", "execution_id", "transaction_id", "function_id", "function_version_id", "trigger", "triggered_on", "triggered_by_id", "status", "group_id", "project_id" FROM "logical_function_runs" WHERE "function_id" = '00000000000000000000000f00' AND "triggered_on" < '2023-11-14 22:13:20.000000 +00:00' ORDER BY "triggered_on" DESC, "id" DESC LIMIT 1"#
+            r#"SELECT "id", "collection_id", "execution_id", "transaction_id", "function_id", "function_version_id", "trigger", "triggered_on", "triggered_by_id", "status", "group_id", "project_id", "recoveries" FROM "logical_function_runs" WHERE "function_id" = '00000000000000000000000f00' AND "triggered_on" < '2023-11-14 22:13:20.000000 +00:00' ORDER BY "triggered_on" DESC, "id" DESC LIMIT 1"#
         );
     }
 

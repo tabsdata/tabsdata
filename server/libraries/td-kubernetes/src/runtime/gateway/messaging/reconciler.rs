@@ -5,6 +5,7 @@
 pub(crate) mod plan;
 pub(crate) mod run;
 
+use std::collections::HashSet;
 use std::sync::{Mutex, MutexGuard};
 
 use serde_yaml::Value;
@@ -31,6 +32,10 @@ impl Reconciler {
     pub(crate) fn withdraw(&self, key: Key, worker_id: &WorkerId, name: &str) {
         self.state().withdraw(key, worker_id, name);
         self.wake.notify_one();
+    }
+
+    pub(crate) fn queued_runs(&self) -> HashSet<WorkerId> {
+        self.state().queued_runs()
     }
 
     fn state(&self) -> MutexGuard<'_, State<Payload>> {

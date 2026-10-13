@@ -3,6 +3,7 @@
 //
 
 use crate::execution::update_status::update_worker_status;
+use crate::worker::retry::after_failure;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -13,6 +14,7 @@ use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::worker::{
     CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerParam, WorkerUpdateDB,
 };
+use td_objects::types::basic::{AtTime, WorkerStatus, WorkerType};
 use td_queries::Queries;
 
 #[service_factory]
@@ -37,12 +39,7 @@ async fn worker_callback(
             && worker.base.worker_type == WorkerType::StageTrigger
             && worker_update.status == WorkerStatus::Failed
         {
-            let retry = after_failure(
-                &worker.failures,
-                &update,
-                callback.exit_status,
-                &AtTime::now(),
-            );
+            let retry = after_failure(&worker.failures, &update, &AtTime::now());
             conn.update(&retry, &worker_id).await?;
         }
         trx.commit().await?;

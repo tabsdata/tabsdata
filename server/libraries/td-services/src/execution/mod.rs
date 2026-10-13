@@ -33,6 +33,8 @@ pub(crate) mod cancellation;
 pub(crate) mod execution_version;
 pub(crate) mod list;
 pub(crate) mod plan;
+pub(crate) mod release;
+pub(crate) mod settlement;
 pub(crate) mod update_status;
 
 /// Pre-execution trigger gates shared by the function- and version-trigger

@@ -13,7 +13,7 @@ behaviour aligned with what the apiserver deserializes.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -43,3 +43,16 @@ class ResponseMessagePayload(BaseModel):
         ``Option`` handling on the apiserver side.
         """
         return self.model_dump(mode="json", exclude_none=True)
+
+
+class DestinationWriteMessage(BaseModel):
+    """Mirror of the Rust ``ExecutionCallbackRequest::DestinationWrite`` in
+    ``td-objects/src/dxo/execution_callback.rs``: the run is about to write
+    to its destination. A body without ``op`` is a status report."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    op: Literal["destination_write"] = "destination_write"
+
+    def to_body(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")

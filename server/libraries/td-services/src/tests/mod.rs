@@ -2,9 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+mod abandoned_attempts;
 mod attempts;
 mod base_path;
-mod callback_outcomes;
+pub(crate) mod callback_outcomes;
 mod cancel_cascade;
 mod catalog_cycles;
 pub(crate) mod catalog_races;
@@ -31,6 +32,7 @@ mod project_races;
 mod read_snapshots;
 mod recover_blocked;
 mod recovery_loop;
+mod recovery_sweep;
 mod rollup_races;
 mod scd2_writes;
 mod service_retry;

@@ -7,8 +7,6 @@
 //! unfinished run of a transaction it reaches, and every run reading any of
 //! their outputs, until nothing new is reached.
 
-use crate::execution::update_status::move_workers;
-use crate::recovery::failed_worker_update;
 use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 use td_bridge::messaging::{FunctionRequest, FunctionStopRequest, OrchestratorMessagePayload};
@@ -20,7 +18,7 @@ use td_error::TdError;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames};
+use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::types::basic::{
     AtTime, Decorator, FunctionVersionId, LogicalFunctionRunId, LogicalFunctionRunStatus,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, TransactionId,
@@ -158,23 +156,17 @@ async fn end_cancelled_attempts(
         .filter(|pfr| PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status))
         .map(|pfr| pfr.base.id.clone())
         .collect();
-    if ended.is_empty() {
-        return Ok(Vec::new());
-    }
+    let workers = conn.physical_runs().end(&ended, at).await?;
+    function_stops(conn, workers).await
+}
 
-    let worker_keys: Vec<Option<PhysicalFunctionRunId>> = ended.iter().cloned().map(Some).collect();
-    let workers: Vec<WorkerDBWithNames> = conn
-        .chunked()
-        .fetch_all::<WorkerDBWithNames>(&worker_keys, ())
-        .await?;
-    conn.physical_runs().failed(&ended, at).await?;
+pub(crate) async fn function_stops(
+    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
+    workers: Vec<WorkerDBWithNames>,
+) -> Result<Vec<FunctionStopRequest>, TdError> {
     if workers.is_empty() {
         return Ok(Vec::new());
     }
-
-    let failing: Vec<WorkerDB> = workers.iter().map(|worker| worker.base.clone()).collect();
-    move_workers(conn, &failing, &failed_worker_update(at)?).await?;
-
     let function_version_ids: Vec<FunctionVersionId> = workers
         .iter()
         .map(|worker| worker.base.base.function_version_id.clone())
@@ -203,12 +195,8 @@ async fn end_cancelled_attempts(
         .collect())
 }
 
-/// Best effort: a lost stop leaves a workload no attempt expects, which the
-/// recovery orphan pass removes.
-pub async fn stop_cancelled_workers(
-    bridge: &BridgeProviderHandle,
-    stops: Vec<FunctionStopRequest>,
-) {
+/// Best effort: the recovery orphan pass removes a workload whose stop was lost.
+pub async fn stop_function_workers(bridge: &BridgeProviderHandle, stops: Vec<FunctionStopRequest>) {
     if !matches!(bridge.orchestrator(), Orchestrator::Kubernetes) {
         return;
     }
@@ -218,7 +206,7 @@ pub async fn stop_cancelled_workers(
             FunctionRequest::Stop(stop),
         );
         if let Err(error) = bridge.message_queue().put(id.clone(), payload).await {
-            warn!(worker_id = %id, "cancel: stop message put failed: {error:#?}");
+            warn!(worker_id = %id, "stop message put failed: {error:#?}");
         }
     }
 }

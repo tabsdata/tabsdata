@@ -40,6 +40,7 @@ from tabsdatak.server._tdrunner.function.commands.run_destination_plugin import 
     _resolve_plugin,
     _tables_from_manifest,
     main,
+    runner as runner_module,
 )
 from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.error import (
     BadBundleError,
@@ -504,6 +505,59 @@ def test_main_end_to_end_happy_path(tmp_path, built_bundle, monkeypatch, http_ok
     assert df["name"].to_list() == ["a", "b", "c"]
 
     assert liveness.exists()
+
+
+def _shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url):
+    request_path = _write_request(tmp_path / "request.yaml")
+    raw_parquet = tmp_path / "raw" / "to_ship.parquet"
+    raw_parquet.parent.mkdir(parents=True, exist_ok=True)
+    pq.write_table(pa.table({"id": [1], "name": ["a"]}), raw_parquet)
+    outputs_manifest = tmp_path / "outputs.yaml"
+    write_outputs_manifest(
+        [{MANIFEST_NAME_KEY: "out_0", MANIFEST_FILE_KEY: str(raw_parquet)}],
+        outputs_manifest,
+    )
+    conn_file = _write_connection_file(
+        tmp_path / "connection.yaml", tmp_path / "dest_out"
+    )
+    _set_argv(
+        monkeypatch,
+        request_path,
+        built_bundle,
+        outputs_manifest,
+        tmp_path / "live",
+        connection_file=conn_file,
+        responder_url=http_ok_url,
+    )
+    return tmp_path / "dest_out" / "sink.parquet"
+
+
+def test_main_tells_the_server_before_it_writes(
+    tmp_path, built_bundle, monkeypatch, http_ok_url
+):
+    shipped = _shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url)
+    seen: list[bool] = []
+    monkeypatch.setattr(
+        runner_module,
+        "notify_writing_destination",
+        lambda _args: seen.append(shipped.exists()),
+    )
+    assert main() == 0
+    assert seen == [False]
+    assert shipped.is_file()
+
+
+def test_main_writes_nothing_when_the_server_cannot_be_told(
+    tmp_path, built_bundle, monkeypatch, http_ok_url
+):
+    shipped = _shipping_setup(tmp_path, built_bundle, monkeypatch, http_ok_url)
+
+    def unreachable(_args):
+        raise OSError("apiserver unreachable")
+
+    monkeypatch.setattr(runner_module, "notify_writing_destination", unreachable)
+    assert main() != 0
+    assert not shipped.exists()
 
 
 # --- decorator metadata ------------------------------------------------

@@ -9,14 +9,17 @@
 //! those of attempts that have not, in flight or failed, become pending, and
 //! the settled versions around them are spliced back together. Transactions
 //! roll up atomically and executions from their transactions, so both stored
-//! statuses are recomputed, transactions first. Live names are unique through
-//! partial indexes, so a rename never takes a key lock; the upgrade stops,
-//! listing them, when two live functions or tables of a collection share a
-//! name. A membership references its user, so a grant racing the user's delete
-//! cannot leave one behind; memberships of users already gone are deleted. A
-//! run's input records the version of the table its plan read, backfilled from
-//! the dependency of the run's function version and the table as of the run's
-//! trigger.
+//! statuses are recomputed, transactions first. A failed stream restarts with
+//! backoff: workers count failures in a row and when the next restart is due.
+//! Runs count recovery's own re-dispatches, which are capped. An attempt
+//! records when it began a destination write a re-run would repeat. Live names
+//! are unique through partial indexes, so a rename never takes a key lock; the
+//! upgrade stops, listing them, when two live functions or tables of a
+//! collection share a name. A membership references its user, so a grant racing
+//! the user's delete cannot leave one behind; memberships of users already gone
+//! are deleted. A run's input records the version of the table its plan read,
+//! backfilled from the dependency of the run's function version and the table
+//! as of the run's trigger.
 
 use sea_query::{ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, IntoIden, Query, Table};
 
@@ -26,6 +29,14 @@ use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, Rollup
 use crate::schema::version::SchemaDelta;
 
 const DERIVATION_WORK_MEM: &str = "64MB";
+
+#[derive(Iden, Clone, Copy)]
+enum Workers {
+    Table,
+    Failures,
+    RetryAt,
+    DestinationWriteOn,
+}
 
 #[derive(Iden, Clone, Copy)]
 enum Users {
@@ -82,6 +93,7 @@ enum LogicalFunctionRuns {
     ExecutionId,
     TransactionId,
     Status,
+    Recoveries,
 }
 
 #[derive(Iden, Clone, Copy)]
@@ -267,6 +279,12 @@ impl SchemaDelta for Migration {
     }
 
     fn up() -> Vec<String> {
+        let worker_retries = Table::alter()
+            .table(Workers::Table)
+            .add_column(ColumnDef::new(Workers::Failures).integer().not_null().default(0))
+            .add_column(ColumnDef::new(Workers::RetryAt).timestamp_with_time_zone().null())
+            .add_column(ColumnDef::new(Workers::DestinationWriteOn).timestamp_with_time_zone().null())
+            .to_owned();
         let orphan_memberships = Query::delete()
             .from_table(UsersRoles::Table)
             .and_where(Expr::col(UsersRoles::UserId).not_in_subquery(Query::select().column(Users::Id).from(Users::Table).to_owned()))
@@ -286,6 +304,10 @@ impl SchemaDelta for Migration {
             .table(LogicalFunctionRunInputs::Table)
             .add_column(id_column(LogicalFunctionRunInputs::RequirementTableVersionId).null())
             .to_owned();
+        let run_recoveries = Table::alter()
+            .table(LogicalFunctionRuns::Table)
+            .add_column(ColumnDef::new(LogicalFunctionRuns::Recoveries).integer().not_null().default(0))
+            .to_owned();
         vec![
             DUPLICATE_LIVE_NAMES.to_string(),
             "ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_name_key".to_string(),
@@ -294,6 +316,8 @@ impl SchemaDelta for Migration {
             render_schema(membership_user),
             render_schema(input_table_versions),
             PIN_INPUT_TABLE_VERSIONS.to_string(),
+            render_schema(worker_retries),
+            render_schema(run_recoveries),
             PARK_UNSETTLED.to_string(),
             RESPLICE_SETTLED.to_string(),
             format!("SET LOCAL work_mem = '{DERIVATION_WORK_MEM}'"),

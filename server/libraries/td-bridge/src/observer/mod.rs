@@ -7,6 +7,7 @@
 //! observer, and recovery falls back to its time-based sweep.
 
 use async_trait::async_trait;
+use std::collections::HashSet;
 use td_common::worker::{Decorator, WorkerName};
 use td_error::td_error;
 use td_objects::types::basic::{AtTime, FunctionId, FunctionName, WorkerId};
@@ -93,6 +94,9 @@ pub struct ObservedWorkload {
 #[derive(Debug, Clone, Default)]
 pub struct WorkloadObservation {
     pub workloads: Vec<ObservedWorkload>,
+    /// Function runs whose Start the backend accepted and whose workload it
+    /// has not listed yet: it is still being created.
+    pub queued: HashSet<WorkerId>,
 }
 
 #[async_trait]

@@ -94,6 +94,7 @@ async fn reconcile(
                     factory.create(&submission.worker_id, &submission.payload),
                 )
                 .await;
+                reconciler.state().issued(&submission.name, Instant::now());
                 if matches!(outcome, Ok(Ok(()))) {
                     info!("Created '{}'", submission.name);
                 } else {

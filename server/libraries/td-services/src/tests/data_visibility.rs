@@ -17,6 +17,7 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::ExecutionParam;
+use td_objects::dxo::execution_callback::ExecutionCallbackRequest;
 use td_objects::dxo::logical::LogicalFunctionRunParam;
 use td_objects::dxo::physical_function_run::FunctionRunParam;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
@@ -44,7 +45,6 @@ fn done_without_data(table: &str) -> Result<CallbackRequest, TdError> {
                 table: TableName::try_from(table)?,
             }],
         })),
-        unguarded_write: false,
     })
 }
 
@@ -67,7 +67,6 @@ fn done_with_data(table: &str) -> Result<CallbackRequest, TdError> {
                 },
             }],
         })),
-        unguarded_write: false,
     })
 }
 
@@ -86,7 +85,7 @@ async fn post_callback(
                 worker: worker.clone(),
             },
         ),
-        callback,
+        ExecutionCallbackRequest::report(callback),
     );
     Services::with_defaults(db.clone())
         .execution_callback(request)

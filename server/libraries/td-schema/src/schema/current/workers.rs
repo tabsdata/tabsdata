@@ -41,6 +41,9 @@ pub enum Workers {
     WorkerType,
     WorkerEnabled,
     WorkerConfig,
+    Failures,
+    RetryAt,
+    DestinationWriteOn,
 }
 
 /// Every status change a worker may make, per worker type. A function runner
@@ -117,6 +120,13 @@ impl Entity for Defs {
                 // rejects text→BYTEA on INSERT ("column is of type bytea but
                 // expression is of type text").
                 .col(ColumnDef::new(Workers::WorkerConfig).text().null())
+                // A failed stream's restarts: failures in a row, and when the
+                // next restart is due (NULL = none; on F, it is not restarted).
+                .col(ColumnDef::new(Workers::Failures).integer().not_null().default(0))
+                .col(ColumnDef::new(Workers::RetryAt).timestamp_with_time_zone().null())
+                // When the attempt began a destination write a re-run would
+                // repeat; recovery leaves such an attempt to the user.
+                .col(ColumnDef::new(Workers::DestinationWriteOn).timestamp_with_time_zone().null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Workers::Table, Workers::CollectionId)

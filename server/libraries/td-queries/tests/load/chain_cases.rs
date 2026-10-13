@@ -105,6 +105,15 @@ async fn load_lfr_blocked_ids(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     let rows = db.logical_runs().blocked_ids(&h.execs[0]).await?;
     record("lfr::blocked_ids", profile, t, rows.len(), seeded);
+    let t = Instant::now();
+    let rows = db.logical_runs().blockers(&h.producer_lfrs).await?;
+    record("lfr::blockers", profile, t, rows.len(), seeded);
+    let t = Instant::now();
+    let rows = db.logical_runs().of_deleted_functions().await?;
+    record("lfr::of_deleted_functions", profile, t, rows.len(), seeded);
+    let t = Instant::now();
+    let rows = db.projects().draining().await?;
+    record("projects::draining", profile, t, rows.len(), seeded);
     Ok(())
 }
 

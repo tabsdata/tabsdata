@@ -17,33 +17,47 @@ use td_common::worker::{MessageAction, ResponseMessagePayload};
 use td_database::pool::TdPool;
 use td_error::{ApiError, TdError};
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::physical_function_run::FunctionRunParam;
-use td_objects::dxo::worker::{CallbackRequest, WorkerParam};
+use td_objects::dxo::execution_callback::ExecutionCallbackRequest;
+use td_objects::dxo::physical_function_run::{FunctionRunParam, PhysicalFunctionRunDB};
+use td_objects::dxo::worker::{CallbackRequest, WorkerDB, WorkerParam};
 use td_objects::types::basic::{
     AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
     PhysicalFunctionRunId, TableNameDto, TransactionStatus, UserId, WorkerId, WorkerStatus,
     WorkerType,
 };
+use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
 fn report(status: WorkerCallbackStatus) -> CallbackRequest {
+    report_between(status, 123, 456)
+}
+
+fn report_between(status: WorkerCallbackStatus, start: i64, end: i64) -> CallbackRequest {
     ResponseMessagePayload {
         action: MessageAction::Notify,
-        start: Some(123),
-        end: Some(456),
+        start: Some(start),
+        end: Some(end),
         status,
         error_message: None,
         exit_status: ExitStatus::Success.code(),
         context: None,
-        unguarded_write: false,
     }
 }
 
-async fn report_attempt(
+pub(crate) async fn report_attempt(
     db: &TdPool,
     function_run: &PhysicalFunctionRunId,
     worker: &WorkerId,
     status: WorkerCallbackStatus,
+) -> Result<CallbackOutcome, TdError> {
+    send(db, function_run, worker, report(status)).await
+}
+
+async fn send(
+    db: &TdPool,
+    function_run: &PhysicalFunctionRunId,
+    worker: &WorkerId,
+    report: CallbackRequest,
 ) -> Result<CallbackOutcome, TdError> {
     let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
         (
@@ -54,7 +68,7 @@ async fn report_attempt(
                 worker: worker.clone(),
             },
         ),
-        report(status),
+        ExecutionCallbackRequest::report(report),
     );
     let response = Services::with_defaults(db.clone())
         .execution_callback(request)
@@ -99,6 +113,47 @@ async fn test_a_report_after_its_attempt_ended_is_stale(db: TdPool) -> Result<()
             assert_eq!(again.await?, CallbackOutcome::Applied);
             let failed = report_attempt(&db, &function_run, &worker, WorkerCallbackStatus::Failed);
             assert_eq!(failed.await?, CallbackOutcome::Stale);
+            Ok(())
+        }
+    })
+    .await
+}
+
+/// A pod reporting the end its attempt already has, whoever ended it,
+/// changes nothing: the attempt keeps the instants it ended with.
+#[td_test::test(db)]
+async fn test_an_end_reported_again_changes_nothing(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    let test_executions = vec![TestExecution {
+        expected_status: ExecutionStatus::Stalled,
+        transactions: vec![TestTransaction {
+            expected_status: TransactionStatus::Stalled,
+            functions: vec![function("f_0", "t_0", LogicalFunctionRunStatus::Failed)?],
+        }],
+    }];
+    test_status_update(db.clone(), p.id, &test_executions, |_, _, _, f, w| {
+        let db = db.clone();
+        let test_function = &test_executions[0].transactions[0].functions[0];
+        let function_run = f[test_function].base.id.clone();
+        let worker = w[test_function].base.id.clone();
+        async move {
+            let failed = report_between(WorkerCallbackStatus::Failed, 1_000, 2_000);
+            let first = send(&db, &function_run, &worker, failed).await?;
+            assert_eq!(first, CallbackOutcome::Applied);
+            let attempt: PhysicalFunctionRunDB = db.timeline().fetch_one(&function_run).await?;
+            let runner: WorkerDB = db.fetch_one(&worker).await?;
+
+            let late = report_between(WorkerCallbackStatus::Failed, 5_000, 6_000);
+            let again = send(&db, &function_run, &worker, late).await?;
+
+            assert_eq!(again, CallbackOutcome::Applied);
+            let attempt_after: PhysicalFunctionRunDB =
+                db.timeline().fetch_one(&function_run).await?;
+            assert_eq!(attempt_after.base.started_on, attempt.base.started_on);
+            assert_eq!(attempt_after.base.ended_on, attempt.base.ended_on);
+            let runner_after: WorkerDB = db.fetch_one(&worker).await?;
+            assert_eq!(runner_after.base.started_on, runner.base.started_on);
+            assert_eq!(runner_after.base.ended_on, runner.base.ended_on);
             Ok(())
         }
     })

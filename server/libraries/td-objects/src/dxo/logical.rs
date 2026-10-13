@@ -15,9 +15,9 @@ use crate::types::basic::{
     FunctionVersionId, GroupId, GroupName, HasData, InputIdx, LogicalFunctionRunId,
     LogicalFunctionRunInputId, LogicalFunctionRunStatus, LogicalTableDataVersionId, Parent, Patch,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private,
-    ProjectId, ProjectName, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash, Started,
-    StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
-    Trigger, TriggeredOn, UserId, UserLabel, VersionPos, WithData,
+    ProjectId, ProjectName, RecoveryCount, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash,
+    Started, StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionId,
+    TransactionId, Trigger, TriggeredOn, UserId, UserLabel, VersionPos, WithData,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -77,6 +77,7 @@ pub struct LogicalFunctionRunDB {
     #[dao(flatten)]
     pub base: LogicalFunctionRunInsertDB,
     pub project_id: ProjectId,
+    pub recoveries: RecoveryCount,
 }
 
 // LFR identity row joined with the current PFR's per-attempt fields;
@@ -203,6 +204,16 @@ impl FromDao for FunctionRun {
 )]
 pub struct LogicalFunctionRunStatusUpdateDB {
     pub status: LogicalFunctionRunStatus,
+}
+
+#[ta_objects::Dao]
+#[dao(
+    table = "logical_function_runs",
+    ops(update(LogicalFunctionRunDB)),
+    project_scoped
+)]
+pub struct LogicalFunctionRunRecoveriesUpdateDB {
+    pub recoveries: RecoveryCount,
 }
 
 #[ta_objects::Dao]
