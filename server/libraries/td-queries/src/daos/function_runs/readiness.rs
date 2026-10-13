@@ -8,8 +8,8 @@
 use crate::QueryExecutor;
 use crate::daos::function_runs::LogicalRuns;
 use crate::daos::function_runs::chain::{
-    Visibility, build_chain, producer_chain, producer_status_in_strict, producer_status_not_in,
-    unmaterialized,
+    ProducerLfr, Visibility, build_chain, producer_chain, producer_status_in_strict,
+    producer_status_not_in, unmaterialized,
 };
 use crate::primitives::scd2::open_interval_at;
 use crate::primitives::table::claim;
@@ -51,8 +51,8 @@ where
     }
 
     /// LFR ids, within `execution_ids`, whose transaction has every LFR
-    /// `Done` and no blocking input on the chain. The caller marks them
-    /// `Committed`.
+    /// `Done` and every input materialized by a Committed run or a run of the
+    /// same transaction. The caller marks them `Committed`.
     pub async fn to_commit(
         self,
         execution_ids: &[ExecutionId],
@@ -95,7 +95,9 @@ where
             .map_err(SqlError::on_read::<LogicalFunctionRunDB>)
     }
 
-    /// One BFS hop downstream; see [`downstream_one_hop_query`].
+    /// One hop of the failure cascade: the runs consuming an output version
+    /// of any run in `producer_lfrs`, minus `exclude_consumers` and
+    /// self-loops.
     pub async fn downstream_one_hop(
         self,
         producer_lfrs: &[LogicalFunctionRunId],
@@ -228,6 +230,29 @@ fn not_done_or_committed() -> sea_query::SimpleExpr {
     ])
 }
 
+/// An input a transaction cannot commit on: its producer is neither
+/// Committed nor a Done run of the same transaction, which commits with it.
+/// So a committed run never has an uncommitted ancestor, and no cancel or
+/// discard can take back what it read.
+fn blocks_commit() -> sea_query::SimpleExpr {
+    let producer = |col| Expr::col((ProducerLfr, col));
+    producer(LogicalFunctionRunDBIden::Id)
+        .is_not_null()
+        .and(
+            producer(LogicalFunctionRunDBIden::Status)
+                .ne(LogicalFunctionRunStatus::Committed.as_sea_expr()),
+        )
+        .and(
+            producer(LogicalFunctionRunDBIden::Status)
+                .eq(LogicalFunctionRunStatus::Done.as_sea_expr())
+                .and(producer(LogicalFunctionRunDBIden::TransactionId).equals((
+                    LogicalFunctionRunDBIden::Table,
+                    LogicalFunctionRunDBIden::TransactionId,
+                )))
+                .not(),
+        )
+}
+
 /// Commit sees whatever is materialized right now, so the chain is unbounded
 /// in time, unlike readiness.
 pub(crate) fn fetch_ids_to_commit_query(execution_ids: &[ExecutionId]) -> WithQuery {
@@ -277,7 +302,7 @@ pub(crate) fn fetch_ids_to_commit_query(execution_ids: &[ExecutionId]) -> WithQu
             ))
             .is_in(exec_values),
         )
-        .and_where(unmaterialized().or(not_done_or_committed()));
+        .and_where(unmaterialized().or(blocks_commit()));
 
     let with_clause = WithClause::new()
         .cte(
@@ -577,7 +602,7 @@ mod tests {
         let sql = fetch_ids_to_commit_query(&ids).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"WITH "transactions_with_done_runs" AS (SELECT "transaction_id" FROM "logical_function_runs" WHERE "execution_id" IN (202601010000000001, 202601010000000002) GROUP BY "transaction_id" HAVING SUM((CASE WHEN ("status" <> 'D') THEN 1 ELSE 0 END)) = 0) , "transactions_with_pending_reqs" AS (SELECT DISTINCT "logical_function_runs"."transaction_id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND "physical_table_data_versions"."valid_to" = ('infinity'::timestamptz) LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" INNER JOIN "logical_function_runs" ON "logical_function_runs"."id" = "logical_function_run_inputs"."logical_function_run_id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_runs"."execution_id" IN (202601010000000001, 202601010000000002) AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" NOT IN ('D', 'C')))) SELECT "logical_function_runs"."id" FROM "logical_function_runs" JOIN "transactions_with_done_runs" AS "transactions_with_done_runs" ON "logical_function_runs"."transaction_id" = "transactions_with_done_runs"."transaction_id" LEFT JOIN "transactions_with_pending_reqs" AS "transactions_with_pending_reqs" ON "logical_function_runs"."transaction_id" = "transactions_with_pending_reqs"."transaction_id" WHERE "transactions_with_pending_reqs"."transaction_id" IS NULL"#
+            r#"WITH "transactions_with_done_runs" AS (SELECT "transaction_id" FROM "logical_function_runs" WHERE "execution_id" IN (202601010000000001, 202601010000000002) GROUP BY "transaction_id" HAVING SUM((CASE WHEN ("status" <> 'D') THEN 1 ELSE 0 END)) = 0) , "transactions_with_pending_reqs" AS (SELECT DISTINCT "logical_function_runs"."transaction_id" FROM "logical_function_run_inputs" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "logical_function_run_inputs"."requirement_logical_table_data_version_id" LEFT JOIN LATERAL (SELECT "id" FROM "physical_table_data_versions" WHERE "physical_table_data_versions"."logical_table_data_version_id" = "logical_table_data_versions"."id" AND "physical_table_data_versions"."valid_to" = ('infinity'::timestamptz) LIMIT 1 OFFSET 0) AS "current_ptdv" ON TRUE LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" INNER JOIN "logical_function_runs" ON "logical_function_runs"."id" = "logical_function_run_inputs"."logical_function_run_id" WHERE ("logical_table_data_versions"."producer_logical_function_run_id" IS NULL OR "logical_table_data_versions"."producer_logical_function_run_id" <> "logical_function_run_inputs"."logical_function_run_id") AND "logical_function_runs"."execution_id" IN (202601010000000001, 202601010000000002) AND ("current_ptdv"."id" IS NULL OR ("producer_lfr"."id" IS NOT NULL AND "producer_lfr"."status" <> 'C' AND (NOT ("producer_lfr"."status" = 'D' AND "producer_lfr"."transaction_id" = "logical_function_runs"."transaction_id"))))) SELECT "logical_function_runs"."id" FROM "logical_function_runs" JOIN "transactions_with_done_runs" AS "transactions_with_done_runs" ON "logical_function_runs"."transaction_id" = "transactions_with_done_runs"."transaction_id" LEFT JOIN "transactions_with_pending_reqs" AS "transactions_with_pending_reqs" ON "logical_function_runs"."transaction_id" = "transactions_with_pending_reqs"."transaction_id" WHERE "transactions_with_pending_reqs"."transaction_id" IS NULL"#
         );
     }
 

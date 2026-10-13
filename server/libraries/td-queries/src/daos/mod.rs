@@ -9,6 +9,7 @@ pub mod dependency;
 pub mod execution;
 pub mod function_runs;
 pub mod metrics;
+pub mod projects;
 pub mod session;
 pub(crate) mod status_rollup;
 pub mod table_data_versions;

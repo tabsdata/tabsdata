@@ -43,7 +43,7 @@ use sea_query::{DynIden, IntoIden};
 /// schema, follow the README runbook; `test_schema_ddl_snapshot` gates the DDL.
 pub const VERSION: usize = 13;
 
-pub use crate::schema::sql::{Changed, Logical, Parent, Physical, RollupArm, RollupDef};
+pub use crate::schema::sql::{Changed, Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
 pub use executions::rollup as execution_rollup;
 pub use transactions::rollup as transaction_rollup;
 

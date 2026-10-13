@@ -14,8 +14,9 @@ use super::physical_function_runs::PhysicalFunctionRuns;
 use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
+use crate::schema::archive::sql::{Logical, Parent, Physical, RollupArm, RollupDef};
 use crate::schema::render::name_or_id;
-use crate::schema::sql::{Logical, Parent, Physical, RollupArm, RollupDef, ViewDef};
+use crate::schema::sql::ViewDef;
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]

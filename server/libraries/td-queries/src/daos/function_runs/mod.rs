@@ -11,6 +11,7 @@ pub(crate) mod chain;
 mod dispatch;
 mod functions;
 mod readiness;
+mod settlement;
 mod status;
 
 /// LFR-rooted run queries: readiness, commit, dispatch-time enrichment.

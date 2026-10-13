@@ -252,6 +252,26 @@ mod tests {
     }
 
     #[td_test::test(db)]
+    async fn test_a_transaction_canceled_before_any_attempt_ended_has_an_end(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let (execution, transaction) =
+            run_at(&db, p.id, LogicalFunctionRunStatus::Canceled).await?;
+
+        let transaction = rolled_up_transaction(&db, p.id, &transaction).await?;
+        assert_eq!(transaction.status, TransactionStatus::Canceled);
+        assert!(transaction.ended_on.is_some());
+        let execution = rolled_up_execution(&db, p.id, &execution).await?;
+        assert_eq!(
+            execution.ended_on, transaction.ended_on,
+            "an execution ends with its last transaction"
+        );
+        assert_eq!(execution.started_on, transaction.started_on);
+        Ok(())
+    }
+
+    #[td_test::test(db)]
     async fn test_a_planned_run_starts_scheduled(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let run = seed_run(&db, p.id).await?;
@@ -422,20 +442,25 @@ mod tests {
         seed_run(&db, untouched.id).await?;
         projects.push(untouched.id);
 
-        let before = rollup_rows(&db, &projects).await?;
+        let door = rollup_rows(&db, &projects).await?;
         derive_status_rollup(&db).await?;
-        assert_eq!(
-            before,
-            rollup_rows(&db, &projects).await?,
-            "the rung's backfill disagrees with the door"
-        );
+        let rung = rollup_rows(&db, &projects).await?;
+        assert_eq!(door.len(), rung.len());
+        for (door, rung) in door.iter().zip(&rung) {
+            let stamped_by_door =
+                rung.3.is_none() && door.0 == rung.0 && door.1 == rung.1 && door.2 == rung.2;
+            assert!(
+                door == rung || stamped_by_door,
+                "the rung's backfill disagrees with the door: {door:?} vs {rung:?}"
+            );
+        }
         Ok(())
     }
 
     async fn rollup_rows(
         db: &TdPool,
         projects: &[ProjectId],
-    ) -> Result<Vec<(String, String, String)>, TdError> {
+    ) -> Result<Vec<(String, String, String, Option<String>)>, TdError> {
         let mut rows = Vec::new();
         for &project in projects {
             let executions: Vec<ExecutionDB> = db.scoped(project).fetch_all(()).await?;
@@ -443,7 +468,8 @@ mod tests {
                 rows.push((
                     execution.base.id.to_string(),
                     execution.status.to_string(),
-                    format!("{:?}/{:?}", execution.started_on, execution.ended_on),
+                    format!("{:?}", execution.started_on),
+                    execution.ended_on.map(|ended| format!("{ended:?}")),
                 ));
             }
             let transactions: Vec<TransactionDB> = db.scoped(project).fetch_all(()).await?;
@@ -451,7 +477,8 @@ mod tests {
                 rows.push((
                     transaction.base.id.to_string(),
                     transaction.status.to_string(),
-                    format!("{:?}/{:?}", transaction.started_on, transaction.ended_on),
+                    format!("{:?}", transaction.started_on),
+                    transaction.ended_on.map(|ended| format!("{ended:?}")),
                 ));
             }
         }

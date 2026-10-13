@@ -48,6 +48,26 @@ async fn load_lfr_to_commit(db: TdPool) -> Result<(), TdError> {
 }
 
 #[td_test::test(db)]
+async fn load_lfr_awaiting_commit(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, _) = seed(&db).await?;
+    let seeded = h.fr_ids.len();
+    let t = Instant::now();
+    let rows = db.logical_runs().awaiting_commit().await?;
+    record("lfr::awaiting_commit", profile, t, rows.len(), seeded);
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_lfr_done_beside_canceled(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, _) = seed(&db).await?;
+    let seeded = h.fr_ids.len();
+    let t = Instant::now();
+    let rows = db.logical_runs().done_beside_canceled().await?;
+    record("lfr::done_beside_canceled", profile, t, rows.len(), seeded);
+    Ok(())
+}
+
+#[td_test::test(db)]
 async fn load_lfr_previous_for_function_at(db: TdPool) -> Result<(), TdError> {
     let (h, profile, _) = seed(&db).await?;
     let seeded = h.fr_ids.len();

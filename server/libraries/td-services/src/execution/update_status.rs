@@ -3,36 +3,34 @@
 //
 
 use itertools::Itertools;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use ta_services::ctx_service::{Message, ReqCtx};
-use td_bridge::messaging::{FunctionRequest, FunctionStopRequest, OrchestratorMessagePayload};
-use td_bridge::{BridgeProviderHandle, Orchestrator};
-use td_common::worker::WorkerName;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode, XW};
+use td_common::execution_status::WorkerCallbackStatus;
+use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
-use td_error::{TdError, td_error};
+use td_error::{ApiError, TdError, api_error, td_error};
 use td_objects::and;
-use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::{
     PhysicalTableDataVersionDBWithNames, PhysicalTableDataVersionUpdateDB,
 };
-use td_objects::dxo::worker::{CallbackRequest, WorkerDBWithNames, WorkerUpdateDB};
-use td_objects::dxo::yaml::WorkerOutput;
-use td_objects::dxo::yaml::function::WrittenTable;
+use td_objects::dxo::worker::{CallbackRequest, WorkerDB, WorkerUpdateDB};
+use td_objects::dxo::worker_input::WorkerOutput;
+use td_objects::dxo::worker_input::function::WrittenTable;
 use td_objects::types::basic::{
-    AtTime, Decorator, ExecutionId, FunctionId, FunctionVersionId, HasData, LogicalFunctionRunId,
-    LogicalFunctionRunStatus, PhysicalFunctionRunId, PhysicalFunctionRunStatus, SchemaChanged,
-    WorkerId,
+    AtTime, ExecutionId, FunctionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus,
+    PhysicalFunctionRunId, PhysicalFunctionRunStatus, SchemaChanged, WorkerId,
 };
 use td_queries::Queries;
 
-use crate::recovery::failed_worker_update;
-use tracing::{debug, instrument, warn};
+use crate::execution::release::release_readers_of;
+use crate::execution::settlement::commit_done_transactions;
+
+use tracing::{debug, instrument};
 
 #[td_error]
-enum UpdateStatusRunError {
+pub(crate) enum UpdateStatusRunError {
     #[error("Cannot change final '{1:?}' status for LFR [{0}]")]
     StickyFinalStatus(LogicalFunctionRunId, LogicalFunctionRunStatus) = 0,
     #[error("Unexpected LFR status transition for LFR [{0}]: {1:?} -> {2:?}")]
@@ -155,116 +153,6 @@ pub async fn abandon_requested_physical_runs(
     Ok(())
 }
 
-/// Ends the in-flight attempts of the runs a cancel is about to cancel the way
-/// recovery would end them once their workloads are gone: attempt and worker
-/// `Failed`. Returns the stops for the workers that have a workload.
-pub async fn end_cancelled_attempts(
-    conn: &mut DomainConnection<Apiserver, InProject, XW>,
-    at: &AtTime,
-    logical_function_runs: &[LogicalFunctionRunDB],
-) -> Result<Vec<FunctionStopRequest>, TdError> {
-    let cancelled: HashSet<(&ExecutionId, &FunctionId)> = logical_function_runs
-        .iter()
-        .filter(|lfr| {
-            matches!(
-                transition(lfr, &LogicalFunctionRunStatus::Canceled),
-                Transition::Apply
-            )
-        })
-        .map(|lfr| (&lfr.base.execution_id, &lfr.base.function_id))
-        .collect();
-    if cancelled.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let execution_ids: Vec<ExecutionId> = cancelled
-        .iter()
-        .map(|(execution_id, _)| (*execution_id).clone())
-        .unique()
-        .collect();
-    let physical_function_runs: Vec<PhysicalFunctionRunDB> = conn
-        .timeline()
-        .chunked()
-        .fetch_all::<PhysicalFunctionRunDB>(&execution_ids, ())
-        .await?;
-    let ended: Vec<PhysicalFunctionRunId> = physical_function_runs
-        .iter()
-        .filter(|pfr| {
-            PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status)
-                && cancelled.contains(&(&pfr.base.execution_id, &pfr.base.function_id))
-        })
-        .map(|pfr| pfr.base.id.clone())
-        .collect();
-    if ended.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let worker_keys: Vec<Option<PhysicalFunctionRunId>> = ended.iter().cloned().map(Some).collect();
-    let workers: Vec<WorkerDBWithNames> = conn
-        .chunked()
-        .fetch_all::<WorkerDBWithNames>(&worker_keys, ())
-        .await?;
-    conn.physical_runs().failed(&ended, at).await?;
-    if workers.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let worker_ids: Vec<WorkerId> = workers
-        .iter()
-        .map(|worker| worker.base.base.id.clone())
-        .collect();
-    conn.chunked()
-        .update(&failed_worker_update(at)?, &worker_ids)
-        .await?;
-
-    let function_version_ids: Vec<FunctionVersionId> = workers
-        .iter()
-        .map(|worker| worker.base.base.function_version_id.clone())
-        .unique()
-        .collect();
-    let decorators: HashMap<FunctionVersionId, Decorator> = conn
-        .timeline()
-        .chunked()
-        .fetch_all::<FunctionDB>(&function_version_ids, ())
-        .await?
-        .into_iter()
-        .map(|function| (function.base.id, function.base.decorator))
-        .collect();
-    Ok(workers
-        .into_iter()
-        .filter_map(|worker| {
-            let decorator = decorators.get(&worker.base.base.function_version_id)?;
-            Some(FunctionStopRequest {
-                worker: WorkerName::Function,
-                worker_id: worker.base.base.id,
-                decorator: decorator.to_message(),
-                function_id: worker.function_id,
-                function: worker.function,
-            })
-        })
-        .collect())
-}
-
-/// Best effort: a lost stop leaves a workload no attempt expects, which the
-/// recovery orphan pass removes.
-pub async fn stop_cancelled_workers(
-    bridge: &BridgeProviderHandle,
-    stops: Vec<FunctionStopRequest>,
-) {
-    if !matches!(bridge.orchestrator(), Orchestrator::Kubernetes) {
-        return;
-    }
-    for stop in stops {
-        let id = stop.worker_id.to_string();
-        let payload = OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
-            FunctionRequest::Stop(stop),
-        );
-        if let Err(error) = bridge.message_queue().put(id.clone(), payload).await {
-            warn!(worker_id = %id, "cancel: stop message put failed: {error:#?}");
-        }
-    }
-}
-
 /// `Absorb` is a legal no-op, `Skip` a silent one. `Refuse` fails the request
 /// for a caller driving the transition; the cascade downgrades it to a warning.
 enum Transition {
@@ -275,17 +163,17 @@ enum Transition {
 }
 
 /// Arm order is load-bearing: the sticky-final arms come first, so a Committed
-/// LFR is never demoted by a later arm. `ReScheduled` and `Canceled` are the
-/// two targets that have to precede them — recover and cancel name a whole
-/// plan or transaction, whose terminal runs are simply not part of the
-/// operation.
+/// LFR is never demoted by a later arm. `ReScheduled` is the target that has
+/// to precede them — recover names a whole plan or transaction, whose terminal
+/// runs are simply not part of the operation. Cancels never come here: they
+/// go through `cancel_runs`.
 fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus) -> Transition {
     match (&current.base.status, target) {
         (
             LogicalFunctionRunStatus::Committed
             | LogicalFunctionRunStatus::Canceled
             | LogicalFunctionRunStatus::Yanked,
-            LogicalFunctionRunStatus::ReScheduled | LogicalFunctionRunStatus::Canceled,
+            LogicalFunctionRunStatus::ReScheduled,
         ) => Transition::Skip,
 
         // Sticky-final terminals (Committed, Canceled). Worker callbacks
@@ -370,8 +258,6 @@ fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus)
         ) => Transition::Apply,
         (_, LogicalFunctionRunStatus::ReScheduled) => Transition::Skip,
 
-        (_, LogicalFunctionRunStatus::Canceled) => Transition::Apply,
-
         (current, new) if current == new => Transition::Skip,
 
         _ => Transition::Refuse(UpdateStatusRunError::UnexpectedFunctionRunStatusTransition(
@@ -419,6 +305,12 @@ pub async fn update_function_run_status(
     logical_function_runs: &Vec<LogicalFunctionRunDB>,
     status: LogicalFunctionRunStatus,
 ) -> Result<(), TdError> {
+    if status == LogicalFunctionRunStatus::Canceled {
+        return Err(api_error!(
+            ApiError::InternalError,
+            "runs are cancelled through cancel_runs, which ends whole transactions"
+        ));
+    }
     let input_count = logical_function_runs.len();
     let mut lfr_ids = Vec::new();
     for current in logical_function_runs {
@@ -462,12 +354,7 @@ pub async fn update_function_run_status(
             .map(|f| f.base.execution_id.clone())
             .unique()
             .collect();
-        let to_commit_ffrs: Vec<LogicalFunctionRunId> =
-            conn.logical_runs().to_commit(&execution_ids).await?;
-        debug!(
-            commit_count = to_commit_ffrs.len(),
-            "execution.commit: LFR(s) eligible to commit"
-        );
+        commit_done_transactions(conn, &execution_ids).await?;
 
         if !to_commit_ffrs.is_empty() {
             conn.logical_runs()
@@ -481,7 +368,6 @@ pub async fn update_function_run_status(
     }
 
     let downstream_status = match status {
-        LogicalFunctionRunStatus::Canceled => Some(LogicalFunctionRunStatus::Canceled),
         LogicalFunctionRunStatus::Yanked => Some(LogicalFunctionRunStatus::Yanked),
         LogicalFunctionRunStatus::ReScheduled => Some(LogicalFunctionRunStatus::ReScheduled),
         LogicalFunctionRunStatus::Failed => Some(LogicalFunctionRunStatus::OnHold),
@@ -733,6 +619,95 @@ pub(crate) mod tests {
         test_executions: &Vec<TestExecution>,
         test_run: F,
     ) -> Result<(), TdError>
+    where
+        F: Fn(
+            &HashMap<&CollectionName, ActiveCollectionDB>,
+            &HashMap<&TestExecution, ExecutionDB>,
+            &HashMap<&TestTransaction, TransactionDB>,
+            &HashMap<&TestFunction, PhysicalFunctionRunDB>,
+            &HashMap<&TestFunction, WorkerDB>,
+        ) -> Fut,
+        Fut: Future<Output = Result<(), TdError>>,
+    {
+        let (executions, transactions, physical_function_runs) =
+            run_status_scenario(db.clone(), project_id, test_executions, test_run).await?;
+        for test_execution in test_executions {
+            let executions = db
+                .fetch_all::<ExecutionDBWithNames>(&executions.get(test_execution).unwrap().base.id)
+                .await?;
+            assert_eq!(executions.len(), 1);
+            let execution = &executions[0];
+            assert_eq!(execution.base.status, test_execution.expected_status);
+        }
+
+        for test_transaction in test_executions.iter().flat_map(|e| &e.transactions) {
+            let transactions = db
+                .fetch_all::<TransactionDBWithNames>(
+                    &transactions.get(test_transaction).unwrap().base.id,
+                )
+                .await?;
+            assert_eq!(transactions.len(), 1);
+            let transaction = &transactions[0];
+            assert_eq!(transaction.base.status, test_transaction.expected_status);
+        }
+
+        for test_function in test_executions
+            .iter()
+            .flat_map(|e| &e.transactions)
+            .flat_map(|t| &t.functions)
+        {
+            let physical_function_run = physical_function_runs.get(test_function).unwrap();
+
+            // Assert all physical_function_runs are in expected state. The LFR
+            // carries the canonical flow-control status; derive it via
+            // (execution_id, function_id).
+            let physical_function_runs = db
+                .timeline()
+                .fetch_all::<PhysicalFunctionRunDB>(&physical_function_run.base.id)
+                .await?;
+            assert_eq!(physical_function_runs.len(), 1);
+            let physical_function_run = &physical_function_runs[0];
+            let lfr: LogicalFunctionRunDB = db
+                .fetch_one::<LogicalFunctionRunDB>(and!(
+                    &physical_function_run.base.execution_id,
+                    &physical_function_run.base.function_id
+                ))
+                .await?;
+            assert_eq!(lfr.base.status, test_function.expected_status);
+
+            // Per-attempt status on physical_table_data_versions__with_function
+            // mirrors FR.status (the producer attempt's lifecycle).
+            // Canonical (sticky-Committed) status lives on the producer LFR.
+            let physical_table_data_versions = db
+                .timeline()
+                .fetch_all::<PhysicalTableDataVersionDBWithFunction>(&physical_function_run.base.id)
+                .await?;
+            for physical_table_data_version in &physical_table_data_versions {
+                assert_eq!(
+                    physical_table_data_version.status,
+                    physical_function_run.base.status
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// [`test_status_update`] without its final expected-status checks, for
+    /// tests that assert an invariant instead of one particular outcome.
+    pub(crate) async fn run_status_scenario<F, Fut>(
+        db: TdPool,
+        project_id: ProjectId,
+        test_executions: &[TestExecution],
+        test_run: F,
+    ) -> Result<
+        (
+            HashMap<&TestExecution, ExecutionDB>,
+            HashMap<&TestTransaction, TransactionDB>,
+            HashMap<&TestFunction, PhysicalFunctionRunDB>,
+        ),
+        TdError,
+    >
     where
         F: Fn(
             &HashMap<&CollectionName, ActiveCollectionDB>,
@@ -1078,65 +1053,6 @@ pub(crate) mod tests {
         )
         .await?;
 
-        for test_execution in test_executions {
-            let executions = db
-                .fetch_all::<ExecutionDBWithNames>(&executions.get(test_execution).unwrap().base.id)
-                .await?;
-            assert_eq!(executions.len(), 1);
-            let execution = &executions[0];
-            assert_eq!(execution.base.status, test_execution.expected_status);
-        }
-
-        for test_transaction in test_executions.iter().flat_map(|e| &e.transactions) {
-            let transactions = db
-                .fetch_all::<TransactionDBWithNames>(
-                    &transactions.get(test_transaction).unwrap().base.id,
-                )
-                .await?;
-            assert_eq!(transactions.len(), 1);
-            let transaction = &transactions[0];
-            assert_eq!(transaction.base.status, test_transaction.expected_status);
-        }
-
-        for test_function in test_executions
-            .iter()
-            .flat_map(|e| &e.transactions)
-            .flat_map(|t| &t.functions)
-        {
-            let physical_function_run = physical_function_runs.get(test_function).unwrap();
-
-            // Assert all physical_function_runs are in expected state. The LFR
-            // carries the canonical flow-control status; derive it via
-            // (execution_id, function_id).
-            let physical_function_runs = db
-                .timeline()
-                .fetch_all::<PhysicalFunctionRunDB>(&physical_function_run.base.id)
-                .await?;
-            assert_eq!(physical_function_runs.len(), 1);
-            let physical_function_run = &physical_function_runs[0];
-            let lfr: LogicalFunctionRunDB = db
-                .fetch_one::<LogicalFunctionRunDB>(and!(
-                    &physical_function_run.base.execution_id,
-                    &physical_function_run.base.function_id
-                ))
-                .await?;
-            assert_eq!(lfr.base.status, test_function.expected_status);
-
-            // Per-attempt status on physical_table_data_versions__with_function
-            // mirrors FR.status (the producer attempt's lifecycle).
-            // Canonical (sticky-Committed) status lives on the producer LFR.
-            let physical_table_data_versions = db
-                .timeline()
-                .fetch_all::<PhysicalTableDataVersionDBWithFunction>(&physical_function_run.base.id)
-                .await?;
-            for physical_table_data_version in &physical_table_data_versions {
-                assert_eq!(
-                    physical_table_data_version.status,
-                    physical_function_run.base.status
-                );
-            }
-        }
-
-        Ok(())
+        Ok((executions, transactions, physical_function_runs))
     }
 }

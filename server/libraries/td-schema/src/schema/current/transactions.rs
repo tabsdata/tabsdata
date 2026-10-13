@@ -10,13 +10,13 @@ use sea_query::{
 use super::collections::{Collections, CollectionsResolved};
 use super::executions::Executions;
 use super::groups::Groups;
-use super::logical_function_runs::{LogicalFunctionRuns, RUN_LADDER_FALLBACK, RUN_TERMINALS, run_status_count};
+use super::logical_function_runs::{LogicalFunctionRuns, RUN_ACTIVE, RUN_AWAITING, RUN_BLOCKED, RUN_TERMINALS, run_status_count};
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::projects::{Projects, ProjectsResolved};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
-use crate::schema::sql::{Logical, Parent, Physical, RollupArm, RollupDef, ViewDef};
+use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
@@ -40,24 +40,32 @@ pub enum Transactions {
     EndedOn,
 }
 
-/// The transaction status ladder. Unlike an execution's, each terminal run
-/// status rolls up to its own transaction status, so a committed transaction
-/// is told apart from a canceled or a yanked one.
+/// The transaction status ladder, ranked by run class: anything active keeps
+/// it running, then anything blocked stalls it, a yank marks it, a Done run
+/// awaits the commit or the discard the scheduler settles, and only then is it
+/// Committed or, failing that, Canceled. A transaction is atomic: it is
+/// Committed only when every run is, and Canceled once any run is and none is
+/// left to settle.
 const TRANSACTION_LADDER: &[RollupArm] = &[
     RollupArm::All { all: &["S"], status: "S" },
-    RollupArm::All { all: &["C"], status: "C" },
-    RollupArm::All { all: &["X"], status: "X" },
-    RollupArm::All { all: &["Y"], status: "Y" },
-    RollupArm::AllWithAny {
-        all: &["D", "F", "H"],
-        any: &["F", "H"],
-        status: "L",
-    },
     RollupArm::Any {
-        any: &["S", "RR", "RS", "R", "D", "E"],
+        any: RUN_ACTIVE,
         status: "R",
     },
+    RollupArm::Any {
+        any: RUN_BLOCKED,
+        status: "L",
+    },
+    RollupArm::Any { any: &["Y"], status: "Y" },
+    RollupArm::Any {
+        any: RUN_AWAITING,
+        status: "R",
+    },
+    RollupArm::All { all: &["C"], status: "C" },
 ];
+
+/// A transaction in one of these never leaves it.
+pub(super) const TRANSACTION_TERMINALS: &[&str] = &["C", "X", "Y"];
 
 pub(super) struct Defs;
 
@@ -218,11 +226,15 @@ pub fn rollup() -> RollupDef {
             started_on: Transactions::StartedOn.into_iden(),
             ended_on: Transactions::EndedOn.into_iden(),
         },
-        logical: Logical {
+        children: Children {
+            table: LogicalFunctionRuns::Table.into_iden(),
+            parent: LogicalFunctionRuns::TransactionId.into_iden(),
+            status: LogicalFunctionRuns::Status.into_iden(),
+        },
+        runs: Runs {
             table: LogicalFunctionRuns::Table.into_iden(),
             id: LogicalFunctionRuns::Id.into_iden(),
             parent: LogicalFunctionRuns::TransactionId.into_iden(),
-            status: LogicalFunctionRuns::Status.into_iden(),
         },
         physical: Physical {
             table: PhysicalFunctionRuns::Table.into_iden(),
@@ -231,8 +243,9 @@ pub fn rollup() -> RollupDef {
             started_on: PhysicalFunctionRuns::StartedOn.into_iden(),
             ended_on: PhysicalFunctionRuns::EndedOn.into_iden(),
         },
+        instants: Instants::Attempts,
         ladder: TRANSACTION_LADDER,
-        fallback: RUN_LADDER_FALLBACK,
+        fallback: "X",
         finished: RUN_TERMINALS,
     }
 }

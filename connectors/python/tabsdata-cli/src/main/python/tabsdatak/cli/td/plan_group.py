@@ -242,8 +242,9 @@ def get(ctx: click.Context, plan: str):
 @click.pass_context
 def cancel(ctx: click.Context, plan: str, confirm: str):
     """
-    Cancel a plan: every non-committed transaction in it is canceled.
-    Canceled runs cannot be recovered.
+    Cancel a plan: every non-committed transaction in it is canceled, and so
+    is every non-committed transaction that read its output, in later plans
+    too. Canceled runs cannot be recovered.
     """
     verify_login_or_prompt(ctx)
     click.echo(f"Canceling plan with ID '{plan}'")

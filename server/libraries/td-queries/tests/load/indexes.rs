@@ -260,11 +260,19 @@ const INDEX_CASES: &[IndexCase] = &[
     },
     IndexCase {
         index: "logical_function_runs___status__project_id__triggered_on___idx",
-        served_by: Queries(&["LogicalRuns::to_execute"]),
+        served_by: Queries(&[
+            "LogicalRuns::to_execute",
+            "LogicalRuns::awaiting_commit",
+            "LogicalRuns::done_beside_canceled",
+        ]),
     },
     IndexCase {
         index: "logical_function_runs___transaction_id__status___idx",
-        served_by: Queries(&["LogicalRuns::to_commit"]),
+        served_by: Queries(&[
+            "LogicalRuns::to_commit",
+            "LogicalRuns::done_beside_canceled",
+            "LogicalRuns::awaiting_commit",
+        ]),
     },
     IndexCase {
         index: "logical_function_runs___transaction_id__triggered_on__id___idx",

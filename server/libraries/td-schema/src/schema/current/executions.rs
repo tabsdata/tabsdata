@@ -9,13 +9,14 @@ use sea_query::{
 
 use super::collections::{Collections, CollectionsResolved};
 use super::functions::Functions;
-use super::logical_function_runs::{LogicalFunctionRuns, RUN_LADDER_FALLBACK, RUN_TERMINALS, run_status_count};
+use super::logical_function_runs::{LogicalFunctionRuns, run_status_count};
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::projects::{Projects, ProjectsResolved};
+use super::transactions::{TRANSACTION_TERMINALS, Transactions};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
-use crate::schema::sql::{Logical, Parent, Physical, RollupArm, RollupDef, ViewDef};
+use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
@@ -41,23 +42,16 @@ pub enum Executions {
     EndedOn,
 }
 
-/// The execution status ladder: the first arm holding over the execution's
-/// logical-run statuses wins. Rolled up onto `executions.status`.
+/// The execution status ladder, over its transactions' statuses: an
+/// execution may mix outcomes, so it is only Scheduled, Running, Stalled or,
+/// once every transaction has ended whichever way, Finished.
 const EXECUTION_LADDER: &[RollupArm] = &[
     RollupArm::All { all: &["S"], status: "S" },
-    RollupArm::All {
-        all: &["C", "X", "Y"],
-        status: "F",
-    },
-    RollupArm::AllWithAny {
-        all: &["C", "D", "F", "H"],
-        any: &["F", "H"],
-        status: "L",
-    },
     RollupArm::Any {
-        any: &["S", "RR", "RS", "R", "D", "E"],
+        any: &["S", "R"],
         status: "R",
     },
+    RollupArm::Any { any: &["L"], status: "L" },
 ];
 
 pub(super) struct Defs;
@@ -215,11 +209,15 @@ pub fn rollup() -> RollupDef {
             started_on: Executions::StartedOn.into_iden(),
             ended_on: Executions::EndedOn.into_iden(),
         },
-        logical: Logical {
+        children: Children {
+            table: Transactions::Table.into_iden(),
+            parent: Transactions::ExecutionId.into_iden(),
+            status: Transactions::Status.into_iden(),
+        },
+        runs: Runs {
             table: LogicalFunctionRuns::Table.into_iden(),
             id: LogicalFunctionRuns::Id.into_iden(),
             parent: LogicalFunctionRuns::ExecutionId.into_iden(),
-            status: LogicalFunctionRuns::Status.into_iden(),
         },
         physical: Physical {
             table: PhysicalFunctionRuns::Table.into_iden(),
@@ -228,8 +226,12 @@ pub fn rollup() -> RollupDef {
             started_on: PhysicalFunctionRuns::StartedOn.into_iden(),
             ended_on: PhysicalFunctionRuns::EndedOn.into_iden(),
         },
+        instants: Instants::Children {
+            started_on: Transactions::StartedOn.into_iden(),
+            ended_on: Transactions::EndedOn.into_iden(),
+        },
         ladder: EXECUTION_LADDER,
-        fallback: RUN_LADDER_FALLBACK,
-        finished: RUN_TERMINALS,
+        fallback: "F",
+        finished: TRANSACTION_TERMINALS,
     }
 }

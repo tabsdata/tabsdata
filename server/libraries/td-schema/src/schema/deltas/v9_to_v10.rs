@@ -15,8 +15,9 @@ use sea_query::{
     PostgresQueryBuilder, Query, SelectStatement, SimpleExpr, Table, TableCreateStatement, UnionType, WithClause,
 };
 
+use crate::schema::archive::sql::{Logical, Parent, Physical, RollupArm, RollupDef};
 use crate::schema::render::{render_query, render_schema, update_db_version};
-use crate::schema::sql::{Logical, Parent, Physical, RollupArm, RollupDef, id_column, logical_id_column};
+use crate::schema::sql::{id_column, logical_id_column};
 use crate::schema::version::SchemaDelta;
 
 /// Frozen: the delta cannot follow a later rename of the enums.
@@ -753,16 +754,6 @@ fn transaction_rollup() -> RollupDef {
         fallback: RUN_LADDER_FALLBACK,
         finished: RUN_TERMINALS,
     }
-}
-
-/// The v10 roll-up of the parents from their runs. Exposed so the DAO gate
-/// can hold the live door to the rows the rung derives.
-#[cfg(feature = "td-test")]
-pub fn status_rollup_backfill() -> Vec<String> {
-    vec![
-        render_query(execution_rollup().backfill()),
-        render_query(transaction_rollup().backfill()),
-    ]
 }
 
 pub struct Migration;

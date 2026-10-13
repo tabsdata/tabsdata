@@ -2,10 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::update_status::{
-    end_cancelled_attempts, stop_cancelled_workers, update_function_run_status,
-};
-use ta_services::ctx_service::ReqCtx;
+use crate::execution::cancellation::{cancel_runs, stop_cancelled_workers};
+use crate::execution::update_status::UpdateStatusRunError;
+use ta_services::ctx_service::{Message, ReqCtx};
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -19,7 +18,6 @@ use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::execution::ExecutionParam;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
-use td_objects::types::basic::LogicalFunctionRunStatus;
 use td_queries::Queries;
 
 #[service_factory]

@@ -159,6 +159,16 @@ async fn time_chain_queries(
     );
     let _ = timed!(
         out,
+        "lfr::awaiting_commit",
+        (db).logical_runs().awaiting_commit().await?
+    );
+    let _ = timed!(
+        out,
+        "lfr::done_beside_canceled",
+        (db).logical_runs().done_beside_canceled().await?
+    );
+    let _ = timed!(
+        out,
         "lfr::previous_for_function_at",
         (db).logical_runs()
             .previous_for_function_at(&h.consumer_function_id, &AtTime::from(h.before_time))

@@ -23,6 +23,7 @@ use crate::daos::dependency::Dependencies;
 use crate::daos::execution::Executions;
 use crate::daos::function_runs::{LogicalRuns, PhysicalRuns};
 use crate::daos::metrics::Metrics;
+use crate::daos::projects::Projects;
 use crate::daos::session::Sessions;
 use crate::daos::table_data_versions::TableDataVersions;
 use crate::generic::chunked::Chunked;
@@ -359,6 +360,10 @@ pub trait Queries: QueryExecutor {
 
     fn metrics(self) -> Metrics<Self> {
         Metrics { executor: self }
+    }
+
+    fn projects(self) -> Projects<Self> {
+        Projects { executor: self }
     }
 }
 

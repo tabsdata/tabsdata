@@ -301,6 +301,18 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
+        name: "lfr::awaiting_commit",
+        covers: &["LogicalRuns::awaiting_commit"],
+        family: Family::Chain,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "lfr::done_beside_canceled",
+        covers: &["LogicalRuns::done_beside_canceled"],
+        family: Family::Chain,
+        status: Status::Implemented,
+    },
+    LoadCase {
         name: "lfr::previous_for_function_at",
         covers: &["LogicalRuns::previous_for_function_at"],
         family: Family::Chain,

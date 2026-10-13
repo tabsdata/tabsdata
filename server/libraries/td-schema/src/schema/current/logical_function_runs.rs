@@ -34,6 +34,19 @@ use crate::schema::sql::{id_column, logical_id_column};
 #[iden = "function_runs__with_names"]
 pub struct FunctionRunsWithNames;
 
+/// The classes the transaction ladder ranks a run's status into; together
+/// they hold every status exactly once.
+///
+/// Can still move on its own: scheduled, requested, rescheduled, running,
+/// or in error (retried).
+pub(super) const RUN_ACTIVE: &[&str] = &["S", "RR", "RS", "R", "E"];
+
+/// Waits for an operator: failed, or on hold behind a failure.
+pub(super) const RUN_BLOCKED: &[&str] = &["F", "H"];
+
+/// Done, awaiting its transaction's commit or discard.
+pub(super) const RUN_AWAITING: &[&str] = &["D"];
+
 /// A run in one of these never leaves it; a parent all of whose runs are in
 /// the set has ended.
 pub(super) const RUN_TERMINALS: &[&str] = &["C", "X", "Y"];
@@ -348,4 +361,20 @@ fn time_ordered(name: &str, filter: Option<LogicalFunctionRuns>) -> IndexCreateS
         index.col(filter);
     }
     index.col(LogicalFunctionRuns::TriggeredOn).col(LogicalFunctionRuns::Id).to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn run_classes_partition_the_statuses() {
+        let classes = [RUN_ACTIVE, RUN_BLOCKED, RUN_AWAITING, RUN_TERMINALS];
+        let classified: Vec<&str> = classes.iter().flat_map(|c| c.iter().copied()).collect();
+        let distinct: BTreeSet<&str> = classified.iter().copied().collect();
+        assert_eq!(distinct.len(), classified.len(), "a status is in two classes");
+        let statuses: BTreeSet<&str> = RUN_TRANSITIONS.iter().flat_map(|(from, to)| [*from, *to]).collect();
+        assert_eq!(distinct, statuses, "every status is in exactly one class");
+    }
 }

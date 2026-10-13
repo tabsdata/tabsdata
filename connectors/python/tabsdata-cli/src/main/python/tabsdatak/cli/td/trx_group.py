@@ -244,7 +244,8 @@ def get(ctx: click.Context, trx: str):
 @click.pass_context
 def cancel(ctx: click.Context, trx: str, confirm: str):
     """
-    Cancel a transaction and its non-committed function runs.
+    Cancel a transaction and its non-committed function runs, and every
+    non-committed transaction that read its output, in later plans too.
     Canceled runs cannot be recovered.
     """
     verify_login_or_prompt(ctx)

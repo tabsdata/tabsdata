@@ -7,10 +7,10 @@
 //! ```sql
 //! UPDATE parent AS target SET status, started_on, ended_on
 //! FROM (
-//!     SELECT parents.id, <ladder over logical_runs.status>, <every logical run finished>,
+//!     SELECT parents.id, <ladder over children.status>, <every child finished>,
 //!            MIN(instants.started_on), MAX(instants.ended_on)
 //!     FROM parent AS parents
-//!     LEFT JOIN logical_runs ON logical_runs.parent = parents.id
+//!     LEFT JOIN children ON children.parent = parents.id
 //!     LEFT JOIN (SELECT parent, MIN(started_on), MAX(ended_on)
 //!                FROM physical_runs [WHERE parent IN <changed>] GROUP BY parent) AS instants
 //!            ON instants.parent = parents.id
@@ -18,15 +18,20 @@
 //!     GROUP BY parents.id
 //! ) AS summary
 //! WHERE target.id = summary.id
+//!   AND (target.status, target.started_on, target.ended_on)
+//!       IS DISTINCT FROM (summary.status, summary.started_on, summary.ended_on)
 //! ```
 //!
-//! `<changed>` is the parents of the children a door just wrote; the backfill
-//! leaves it out. No lock of its own: the doors that run it are typed on the
-//! `XW` connection, which holds the project's exclusive-write lock for the
-//! whole transaction.
+//! The children are a transaction's logical runs, or an execution's
+//! transactions; `<changed>` is the parents of the runs a door just wrote,
+//! and the backfill leaves it out. A parent the recompute would not change is
+//! not written, so it takes no new row version. An execution spans its
+//! transactions and is recomputed after them. No lock of its own: write units
+//! are `SERIALIZABLE`, so two recomputes of one parent never both commit on
+//! stale reads.
 
 use sea_query::{
-    CaseStatement, DynIden, Expr, ExprTrait, Func, Iden, IntoIden, IntoTableRef, JoinType, Query, SelectStatement, TableRef,
+    BinOper, CaseStatement, DynIden, Expr, ExprTrait, Func, Iden, IntoIden, IntoTableRef, JoinType, Query, SelectStatement, TableRef,
     UpdateStatement,
 };
 
@@ -48,11 +53,17 @@ pub enum RollupArm {
 
 pub struct RollupDef {
     pub parent: Parent,
-    pub logical: Logical,
+    /// Whose statuses the ladder reads.
+    pub children: Children,
+    /// How a written logical run finds the parent to recompute.
+    pub runs: Runs,
+    /// How a written attempt finds the parent to recompute.
     pub physical: Physical,
+    pub instants: Instants,
     pub ladder: &'static [RollupArm],
+    /// The status when no arm holds: the ladder is total.
     pub fallback: &'static str,
-    /// `ended_on` stays NULL until every logical run is in this set, so the column is
+    /// `ended_on` stays NULL until every child is in this set, so the column is
     /// a plain instant a list can order on.
     pub finished: &'static [&'static str],
 }
@@ -65,11 +76,27 @@ pub struct Parent {
     pub ended_on: DynIden,
 }
 
-pub struct Logical {
+pub struct Children {
+    pub table: DynIden,
+    pub parent: DynIden,
+    pub status: DynIden,
+}
+
+pub struct Runs {
     pub table: DynIden,
     pub id: DynIden,
     pub parent: DynIden,
-    pub status: DynIden,
+}
+
+/// Where a parent's `started_on` and `ended_on` come from.
+pub enum Instants {
+    /// Its attempts. Finished with none ended, it ends when the recompute that
+    /// finished it runs; finished children never change again.
+    Attempts,
+    Children {
+        started_on: DynIden,
+        ended_on: DynIden,
+    },
 }
 
 pub struct Physical {
@@ -93,13 +120,15 @@ struct Target;
 struct Parents;
 
 #[derive(Iden, Clone, Copy)]
-struct LogicalRuns;
+#[iden = "children"]
+struct Kids;
 
 #[derive(Iden, Clone, Copy)]
 struct PhysicalRuns;
 
 #[derive(Iden, Clone, Copy)]
-struct Instants;
+#[iden = "instants"]
+struct AttemptInstants;
 
 #[derive(Iden, Clone, Copy)]
 struct Summary;
@@ -116,56 +145,76 @@ enum Col {
 
 impl RollupDef {
     pub fn backfill(&self) -> UpdateStatement {
-        self.update(None)
+        self.update(None, None)
     }
 
     pub fn recompute_for(&self, changed: Changed, ids: impl IntoIterator<Item = Expr>) -> UpdateStatement {
         let (table, id, parent) = match changed {
-            Changed::LogicalRuns => (&self.logical.table, &self.logical.id, &self.logical.parent),
+            Changed::LogicalRuns => (&self.runs.table, &self.runs.id, &self.runs.parent),
             Changed::PhysicalRuns => (&self.physical.table, &self.physical.id, &self.physical.parent),
         };
         let changed = Query::select().column(parent.clone()).from(table.clone()).and_where(Expr::col(id.clone()).is_in(ids)).to_owned();
-        self.update(Some(changed))
+        self.update(Some(changed), Some(Expr::cust("transaction_timestamp()")))
     }
 
-    fn update(&self, changed: Option<SelectStatement>) -> UpdateStatement {
+    fn update(&self, changed: Option<SelectStatement>, now: Option<Expr>) -> UpdateStatement {
         let s = |col: Col| Expr::col((Summary, col));
+        let last_end = match (&self.instants, now) {
+            (Instants::Attempts, Some(now)) => Func::coalesce([s(Col::EndedOn), now]).into(),
+            _ => s(Col::EndedOn),
+        };
+        let ended_on = || -> Expr { Expr::case(s(Col::Finished), last_end.clone()).into() };
+        let differs =
+            |column: &DynIden, value: Expr| Expr::col((Target, column.clone())).binary(BinOper::Custom("IS DISTINCT FROM"), value);
         Query::update()
             .table(self.parent.table.clone().into_table_ref().alias(Target))
             .value(self.parent.status.clone(), s(Col::Status))
             .value(self.parent.started_on.clone(), s(Col::StartedOn))
-            .value(self.parent.ended_on.clone(), Expr::case(s(Col::Finished), s(Col::EndedOn)))
+            .value(self.parent.ended_on.clone(), ended_on())
             .from(TableRef::SubQuery(Box::new(self.summary(changed.as_ref())), Summary.into_iden()))
             .and_where(Expr::col((Target, self.parent.id.clone())).equals((Summary, Col::Id)))
+            .and_where(
+                differs(&self.parent.status, s(Col::Status))
+                    .or(differs(&self.parent.started_on, s(Col::StartedOn)))
+                    .or(differs(&self.parent.ended_on, ended_on())),
+            )
             .to_owned()
     }
 
     fn summary(&self, changed: Option<&SelectStatement>) -> SelectStatement {
         let parent_id = Expr::col((Parents, self.parent.id.clone()));
-        Query::select()
+        let (started_on, ended_on) = match &self.instants {
+            Instants::Attempts => (Expr::col((AttemptInstants, Col::StartedOn)), Expr::col((AttemptInstants, Col::EndedOn))),
+            Instants::Children { started_on, ended_on } => (Expr::col((Kids, started_on.clone())), Expr::col((Kids, ended_on.clone()))),
+        };
+        let mut summary = Query::select()
             .expr_as(parent_id.clone(), Col::Id)
             .expr_as(self.ladder(), Col::Status)
             .expr_as(self.finished(), Col::Finished)
-            .expr_as(Func::min(Expr::col((Instants, Col::StartedOn))), Col::StartedOn)
-            .expr_as(Func::max(Expr::col((Instants, Col::EndedOn))), Col::EndedOn)
+            .expr_as(Func::min(started_on), Col::StartedOn)
+            .expr_as(Func::max(ended_on), Col::EndedOn)
             .from(self.parent.table.clone().into_table_ref().alias(Parents))
             .join(
                 JoinType::LeftJoin,
-                self.logical.table.clone().into_table_ref().alias(LogicalRuns),
-                Expr::col((LogicalRuns, self.logical.parent.clone())).equals((Parents, self.parent.id.clone())),
+                self.children.table.clone().into_table_ref().alias(Kids),
+                Expr::col((Kids, self.children.parent.clone())).equals((Parents, self.parent.id.clone())),
             )
-            .join_subquery(
+            .to_owned();
+        if let Instants::Attempts = self.instants {
+            summary.join_subquery(
                 JoinType::LeftJoin,
-                self.instants(changed),
-                Instants,
-                Expr::col((Instants, Col::ParentId)).equals((Parents, self.parent.id.clone())),
-            )
+                self.attempt_instants(changed),
+                AttemptInstants,
+                Expr::col((AttemptInstants, Col::ParentId)).equals((Parents, self.parent.id.clone())),
+            );
+        }
+        summary
             .and_where_option(changed.map(|changed| parent_id.in_subquery(changed.clone())))
             .group_by_col((Parents, self.parent.id.clone()))
             .to_owned()
     }
 
-    fn instants(&self, changed: Option<&SelectStatement>) -> SelectStatement {
+    fn attempt_instants(&self, changed: Option<&SelectStatement>) -> SelectStatement {
         let parent = Expr::col((PhysicalRuns, self.physical.parent.clone()));
         Query::select()
             .expr_as(parent.clone(), Col::ParentId)
@@ -195,21 +244,18 @@ impl RollupDef {
         case.expect("a ladder has at least one arm").finally(self.fallback).into()
     }
 
-    /// A parent with no logical runs at all counts zero rows but one joined NULL, so
+    /// A parent with no children at all counts zero rows but one joined NULL, so
     /// it is never finished — matching the ladder's own empty case.
     fn finished(&self) -> Expr {
         Expr::cust("count(*)").eq(self.count_in(self.finished))
     }
 
     fn count_in(&self, statuses: &[&str]) -> Expr {
-        Expr::cust_with_expr(
-            "count(*) FILTER (WHERE $1)",
-            Expr::col((LogicalRuns, self.logical.status.clone())).is_in(statuses.iter().copied()),
-        )
+        Expr::cust_with_expr("count(*) FILTER (WHERE $1)", Expr::col((Kids, self.children.status.clone())).is_in(statuses.iter().copied()))
     }
 
     fn count_all(&self) -> Expr {
-        Func::count(Expr::col((LogicalRuns, self.logical.status.clone()))).into()
+        Func::count(Expr::col((Kids, self.children.status.clone()))).into()
     }
 }
 
@@ -238,11 +284,15 @@ mod tests {
                 started_on: Alias::new("started_on").into_iden(),
                 ended_on: Alias::new("ended_on").into_iden(),
             },
-            logical: Logical {
+            children: Children {
+                table: Alias::new("logical_runs").into_iden(),
+                parent: Alias::new("parent_id").into_iden(),
+                status: Alias::new("status").into_iden(),
+            },
+            runs: Runs {
                 table: Alias::new("logical_runs").into_iden(),
                 id: Alias::new("id").into_iden(),
                 parent: Alias::new("parent_id").into_iden(),
-                status: Alias::new("status").into_iden(),
             },
             physical: Physical {
                 table: Alias::new("physical_runs").into_iden(),
@@ -251,6 +301,7 @@ mod tests {
                 started_on: Alias::new("started_on").into_iden(),
                 ended_on: Alias::new("ended_on").into_iden(),
             },
+            instants: Instants::Attempts,
             ladder: LADDER,
             fallback: "U",
             finished: &["C"],
@@ -277,8 +328,8 @@ mod tests {
         let sql = backfill();
         assert!(
             sql.contains(
-                "WHEN ((count(*) FILTER (WHERE \"logical_runs\".\"status\" IN ('C', 'D'))) = COUNT(\"logical_runs\".\"status\") \
-                 AND (count(*) FILTER (WHERE \"logical_runs\".\"status\" IN ('F'))) > 0) THEN 'L'"
+                "WHEN ((count(*) FILTER (WHERE \"children\".\"status\" IN ('C', 'D'))) = COUNT(\"children\".\"status\") \
+                 AND (count(*) FILTER (WHERE \"children\".\"status\" IN ('F'))) > 0) THEN 'L'"
             ),
             "{sql}"
         );
