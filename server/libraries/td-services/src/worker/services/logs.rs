@@ -139,7 +139,7 @@ mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus,
-        TransactionKey, UserId, WorkerMessageStatus,
+        TransactionKey, UserId,
     };
     use td_queries::test_utils::SeedEntry;
 
@@ -204,21 +204,11 @@ mod tests {
         let workers = [
             db.scoped(p.id)
                 .seed()
-                .function_runner_worker(
-                    &execution,
-                    &transaction,
-                    &physical_function_run,
-                    &WorkerMessageStatus::Locked,
-                )
+                .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
             db.scoped(p.id)
                 .seed()
-                .function_runner_worker(
-                    &execution,
-                    &transaction,
-                    &physical_function_run,
-                    &WorkerMessageStatus::Locked,
-                )
+                .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
         ];
 

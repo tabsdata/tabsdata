@@ -226,14 +226,15 @@ pub(super) fn parse_worker_id(id: &str) -> Result<WorkerId, QueueError> {
     })
 }
 
-fn derive_key(id: &str, payload: &OrchestratorMessagePayload<Value>) -> Result<Key, QueueError> {
+fn derive_key(
+    id: &str,
+    worker_id: &WorkerId,
+    payload: &OrchestratorMessagePayload<Value>,
+) -> Result<Key, QueueError> {
     let (function_id, kind) = match payload {
-        OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
-            FunctionRequest::Start(start),
-        ) => (start.function_id.to_string(), WorkloadKind::Function),
-        OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
-            FunctionRequest::Stop(stop),
-        ) => (stop.function_id.to_string(), WorkloadKind::Function),
+        OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(_) => {
+            return Ok(Key::Run(worker_id.clone()));
+        }
         OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(
             StageTriggerRequest::Start(start),
         ) => (start.function_id.to_string(), WorkloadKind::StageTrigger),
@@ -248,7 +249,7 @@ fn derive_key(id: &str, payload: &OrchestratorMessagePayload<Value>) -> Result<K
         )) => (stop.function_id.to_string(), WorkloadKind::CronTrigger),
         _ => return Err(unexpected(id, "untracked", payload)),
     };
-    Ok(Key { function_id, kind })
+    Ok(Key::Trigger { function_id, kind })
 }
 
 pub struct KubernetesOrchestratorMessageQueue {
@@ -273,7 +274,7 @@ impl KubernetesOrchestratorMessageQueue {
         let routing = derive_routing(id, payload)?;
         lookup_template(self.factory.templates(), id, &routing.template_key)?;
         let name = derive_kube_name(&worker_id, &routing.prefix)?;
-        let key = derive_key(id, payload)?;
+        let key = derive_key(id, &worker_id, payload)?;
         Ok((routing, worker_id, name, key))
     }
 }
@@ -308,20 +309,6 @@ impl OrchestratorMessageQueue for KubernetesOrchestratorMessageQueue {
             PathBuf::new(),
             payload,
         ))
-    }
-
-    async fn commit(&self, _message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
-        Ok(())
-    }
-
-    async fn rollback(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError> {
-        let (_, worker_id, name, key) = self.locate(&message.id, &message.payload)?;
-        self.reconciler.withdraw(key, &worker_id, &name);
-        Ok(())
-    }
-
-    async fn locked_messages(&self) -> Vec<OrchestratorMessage<Value>> {
-        Vec::new()
     }
 }
 

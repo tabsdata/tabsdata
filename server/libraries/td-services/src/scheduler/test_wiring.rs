@@ -6,6 +6,9 @@ use crate::Services;
 use crate::internal_api::{InternalApi, InternalRoutes};
 use std::sync::Arc;
 use ta_services::service::Ctx;
+use td_bridge::BridgeProviderHandle;
+use td_bridge::messaging::memory::InMemoryOrchestratorMessageQueue;
+use td_bridge::test::TestBridgeProvider;
 use td_database::pool::TdPool;
 use td_objects::Route;
 
@@ -33,4 +36,17 @@ pub(crate) fn dispatch_services(db: &TdPool) -> Services {
         Arc::default(),
     ));
     services
+}
+
+/// `services` on `bridge`, sending its worker messages to the returned queue so
+/// the test can read back what was sent.
+pub(crate) fn sending_to(
+    mut services: Services,
+    bridge: TestBridgeProvider,
+) -> (Services, InMemoryOrchestratorMessageQueue) {
+    let sent = InMemoryOrchestratorMessageQueue::default();
+    services.bridge = Ctx::new(BridgeProviderHandle::new(Arc::new(
+        bridge.with_message_queue(sent.clone()),
+    )));
+    (services, sent)
 }

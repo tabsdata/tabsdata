@@ -37,7 +37,7 @@ mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectName,
-        TransactionKey, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        TransactionKey, UserId, WorkerStatus, WorkerType,
     };
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
 
@@ -102,39 +102,19 @@ mod tests {
         let workers = [
             db.scoped(p.id)
                 .seed()
-                .function_runner_worker(
-                    &execution,
-                    &transaction,
-                    &physical_function_run,
-                    &WorkerMessageStatus::Locked,
-                )
+                .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
             db.scoped(p.id)
                 .seed()
-                .function_runner_worker(
-                    &execution,
-                    &transaction,
-                    &physical_function_run,
-                    &WorkerMessageStatus::Locked,
-                )
+                .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
             db.scoped(p.id)
                 .seed()
-                .function_runner_worker(
-                    &execution,
-                    &transaction,
-                    &physical_function_run,
-                    &WorkerMessageStatus::Locked,
-                )
+                .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
             db.scoped(p.id)
                 .seed()
-                .function_runner_worker(
-                    &execution,
-                    &transaction,
-                    &physical_function_run,
-                    &WorkerMessageStatus::Locked,
-                )
+                .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
             db.scoped(p.id)
                 .seed()
@@ -143,7 +123,6 @@ mod tests {
                     &function_version,
                     &WorkerType::CronTrigger,
                     &WorkerStatus::Requested,
-                    &WorkerMessageStatus::Locked,
                 )
                 .await?,
         ];
@@ -155,36 +134,16 @@ mod tests {
         let response = service.worker_list(request).await?.data;
         assert_eq!(response.len, workers.len());
         assert_eq!(response.data[0].id, workers[0].base.id);
-        assert_eq!(
-            response.data[0].message_status,
-            workers[0].base.message_status
-        );
         assert_eq!(response.data[0].worker_type, workers[0].base.worker_type);
         assert_eq!(response.data[0].worker_type, WorkerType::FunctionRunner);
         assert_eq!(response.data[1].id, workers[1].base.id);
-        assert_eq!(
-            response.data[1].message_status,
-            workers[1].base.message_status
-        );
         assert_eq!(response.data[1].worker_type, workers[1].base.worker_type);
         assert_eq!(response.data[2].id, workers[2].base.id);
-        assert_eq!(
-            response.data[2].message_status,
-            workers[2].base.message_status
-        );
         assert_eq!(response.data[2].worker_type, workers[2].base.worker_type);
         assert_eq!(response.data[3].id, workers[3].base.id);
-        assert_eq!(
-            response.data[3].message_status,
-            workers[3].base.message_status
-        );
         assert_eq!(response.data[3].worker_type, workers[3].base.worker_type);
         assert_eq!(response.data[4].worker_type, workers[4].base.worker_type);
         assert_eq!(response.data[4].id, workers[4].base.id);
-        assert_eq!(
-            response.data[4].message_status,
-            workers[4].base.message_status
-        );
         assert_eq!(response.data[4].worker_type, workers[4].base.worker_type);
         assert_eq!(response.data[4].worker_type, WorkerType::CronTrigger);
         let expected_project = Some(p.name.clone());

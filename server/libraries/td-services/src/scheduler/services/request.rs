@@ -27,9 +27,7 @@ use td_database::access::{
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::{SchedulerConfig, SchedulerNotify};
-use td_objects::dxo::worker::{
-    WorkerDB, WorkerDBWithNames, WorkerMessageStatusUpdateDB, WorkerUpdateDB,
-};
+use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerUpdateDB};
 use td_objects::sql_condition::SqlCondition;
 use td_objects::types::basic::{AtTime, LogicalFunctionRunStatus, ProjectId, WorkerId, WorkerType};
 use td_queries::Queries;
@@ -80,7 +78,6 @@ async fn request(
         tick(project).drain(&mut rerun).await;
     }
 
-    scheduler_notify.notify_dispatcher();
     if saturated {
         debug!("scheduler.dispatch_tick: capped; re-notifying the scheduler");
     }
@@ -424,9 +421,9 @@ async fn trigger_workers<S: SeesProjectRows, M: WriteMode>(
     Ok(workers)
 }
 
-/// Flip the trigger workers' status (Requested, or the orchestrator-specific
-/// stop status) and mark their messages Locked.
-async fn update_worker_message_statuses<S: SeesProjectRows, M: WriteMode>(
+/// Flip the trigger workers' status: Requested, or the orchestrator-specific
+/// stop status.
+async fn update_worker_statuses<S: SeesProjectRows, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     orchestrator: Orchestrator,
     at: &AtTime,
@@ -440,8 +437,6 @@ async fn update_worker_message_statuses<S: SeesProjectRows, M: WriteMode>(
         WorkerUpdateDB::requested()
     };
     conn.chunked().update(&status_update, &worker_ids).await?;
-    let locked = WorkerMessageStatusUpdateDB::locked();
-    conn.chunked().update(&locked, &worker_ids).await?;
     Ok(())
 }
 
@@ -449,7 +444,7 @@ async fn update_worker_message_statuses<S: SeesProjectRows, M: WriteMode>(
 mod tests {
     use super::*;
     use crate::Services;
-    use crate::scheduler::test_wiring::dispatch_services;
+    use crate::scheduler::test_wiring::{dispatch_services, sending_to};
     use http::Method;
     use std::collections::HashSet;
     use std::str::FromStr;
@@ -476,14 +471,14 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
-    use td_objects::dxo::yaml::WorkerInput;
-    use td_objects::dxo::yaml::function::{InputTable, OutputTable};
+    use td_objects::dxo::worker_input::WorkerInput;
+    use td_objects::dxo::worker_input::function::{InputTable, OutputTable};
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, CronMask, Decorator, EnvPrefix,
         ExecutionName, FunctionIdName, FunctionOnly, FunctionRuntimeValues,
         OverrideDisabledTrigger, PhysicalFunctionRunStatus, ProjectId, ProjectName, SkipIfRunning,
-        TableName, TableNameDto, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        TableName, TableNameDto, UserId, WorkerStatus, WorkerType,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::Queries;
@@ -554,10 +549,10 @@ mod tests {
         let service = dispatch_services(&db);
         let execution = service.execute_function(request).await?.data;
 
-        let context = dispatch_services(&db);
+        let (context, sent) = supervisor_scheduler_context(&db);
         context.clone().request(()).await?;
 
-        let created_message = context.bridge.message_queue().locked_messages().await;
+        let created_message = sent.messages();
         assert_eq!(created_message.len(), 1);
 
         let created_message = &created_message[0].payload;
@@ -707,7 +702,6 @@ mod tests {
             message.base.function_version_id,
             physical_function_run.base.function_version_id
         );
-        assert_eq!(message.base.message_status, WorkerMessageStatus::Locked);
 
         Ok(())
     }
@@ -799,10 +793,10 @@ mod tests {
             .await?;
         assert_eq!(frs.len(), 2);
 
-        let context = dispatch_services(&db);
+        let (context, sent) = supervisor_scheduler_context(&db);
         context.clone().request(()).await?;
 
-        let messages = context.bridge.message_queue().locked_messages().await;
+        let messages = sent.messages();
         assert_eq!(
             messages.len(),
             1,
@@ -829,7 +823,6 @@ mod tests {
             .fetch_first::<WorkerDB>(&Some(replay_response.new_function_run_id.clone()))
             .await?
             .expect("worker for the run");
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::Locked);
         assert_eq!(
             worker.base.physical_function_run_id,
             Some(replay_response.new_function_run_id.clone())
@@ -856,7 +849,7 @@ mod tests {
         // and we just flipped to Dispatched.
         let prior_messages_count = messages.len();
         context.clone().request(()).await?;
-        let messages_after = context.bridge.message_queue().locked_messages().await;
+        let messages_after = sent.messages();
         assert_eq!(
             messages_after.len(),
             prior_messages_count,
@@ -868,7 +861,7 @@ mod tests {
 
     /// In kubernetes mode the request path emits the per-action
     /// `FunctionRequest::Start` kind (not the flat request), carrying the
-    /// decorator + resolver, with no pre-resolved context. WorkerDB stays Locked.
+    /// decorator + resolver, with no pre-resolved context.
     #[td_test::test(db)]
     async fn test_schedule_request_kubernetes(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
@@ -924,10 +917,10 @@ mod tests {
             .in_project(p.id);
         dispatch_services(&db).execute_function(request).await?;
 
-        let context = kubernetes_scheduler_context(&db);
+        let (context, sent) = kubernetes_scheduler_context(&db);
         context.clone().request(()).await?;
 
-        let created = context.bridge.message_queue().locked_messages().await;
+        let created = sent.messages();
         assert_eq!(created.len(), 1);
 
         let OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
@@ -945,8 +938,6 @@ mod tests {
         assert_eq!(responder.method, Method::POST);
 
         let worker_id = WorkerId::try_from(created[0].id.as_str())?;
-        let worker: WorkerDB = db.fetch_one::<WorkerDB>(&worker_id).await?;
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::Locked);
 
         // The resolver carries a valid internal token bound to this exact
         // request: GET, the /message scope, and the worker id (the
@@ -1033,11 +1024,11 @@ mod tests {
             executions.push(dispatch_services(&db).execute_function(request).await?.data);
         }
 
-        let context = kubernetes_scheduler_context(&db);
+        let (context, sent) = kubernetes_scheduler_context(&db);
         context.clone().request(()).await?;
 
         assert_eq!(
-            context.bridge.message_queue().locked_messages().await.len(),
+            sent.messages().len(),
             2,
             "both projects must dispatch in one tick"
         );
@@ -1053,8 +1044,16 @@ mod tests {
 
     /// `Services` wired to the kubernetes orchestrator with an
     /// in-memory queue (the file queue only accepts flat request messages).
-    fn kubernetes_scheduler_context(db: &TdPool) -> Services {
-        kubernetes_scheduler_context_with_queue(db, InMemoryOrchestratorMessageQueue::default())
+    fn kubernetes_scheduler_context(db: &TdPool) -> (Services, InMemoryOrchestratorMessageQueue) {
+        sending_to(
+            dispatch_services(db),
+            TestBridgeProvider::default().with_orchestrator(Orchestrator::Kubernetes),
+        )
+    }
+
+    /// The default orchestrator's `Services`, with the queue its messages go to.
+    fn supervisor_scheduler_context(db: &TdPool) -> (Services, InMemoryOrchestratorMessageQueue) {
+        sending_to(dispatch_services(db), TestBridgeProvider::default())
     }
 
     fn kubernetes_scheduler_context_with_queue(
@@ -1114,24 +1113,6 @@ mod tests {
             }
             self.inner.put(id, payload).await
         }
-
-        async fn commit(
-            &self,
-            message: &OrchestratorMessage<serde_yaml::Value>,
-        ) -> Result<(), QueueError> {
-            self.inner.commit(message).await
-        }
-
-        async fn rollback(
-            &self,
-            message: &OrchestratorMessage<serde_yaml::Value>,
-        ) -> Result<(), QueueError> {
-            self.inner.rollback(message).await
-        }
-
-        async fn locked_messages(&self) -> Vec<OrchestratorMessage<serde_yaml::Value>> {
-            self.inner.locked_messages().await
-        }
     }
 
     /// Assert a callback is a tokenized HTTP POST.
@@ -1141,14 +1122,13 @@ mod tests {
     }
 
     /// Seed a collection + function and a worker of `worker_type` in
-    /// `worker_status`/`message_status`.
+    /// `worker_status`.
     async fn seed_trigger_worker(
         db: &TdPool,
         project_id: ProjectId,
         collection_name: &str,
         worker_type: WorkerType,
         worker_status: WorkerStatus,
-        message_status: WorkerMessageStatus,
     ) -> Result<WorkerDB, TdError> {
         let collection = db
             .scoped(project_id)
@@ -1185,13 +1165,7 @@ mod tests {
             .await?;
         db.scoped(project_id)
             .seed()
-            .worker(
-                &collection,
-                &function,
-                &worker_type,
-                &worker_status,
-                &message_status,
-            )
+            .worker(&collection, &function, &worker_type, &worker_status)
             .await
     }
 
@@ -1213,20 +1187,14 @@ mod tests {
         ),
         TdError,
     > {
-        let worker = seed_trigger_worker(
-            db,
-            project_id,
-            collection_name,
-            worker_type,
-            worker_status,
-            WorkerMessageStatus::Locked,
-        )
-        .await?;
+        let worker =
+            seed_trigger_worker(db, project_id, collection_name, worker_type, worker_status)
+                .await?;
 
-        let context = kubernetes_scheduler_context(db);
+        let (context, sent) = kubernetes_scheduler_context(db);
         context.clone().request(()).await?;
 
-        let mut created = context.bridge.message_queue().locked_messages().await;
+        let mut created = sent.messages();
         assert_eq!(created.len(), 1);
         let message = created.remove(0);
         Ok((message.payload, message.id, worker))
@@ -1247,7 +1215,6 @@ mod tests {
             "c_stop_iso_1",
             WorkerType::StageTrigger,
             WorkerStatus::StopScheduled,
-            WorkerMessageStatus::Unlocked,
         )
         .await?;
         let healthy = seed_trigger_worker(
@@ -1256,11 +1223,11 @@ mod tests {
             "c_stop_iso_2",
             WorkerType::StageTrigger,
             WorkerStatus::StopScheduled,
-            WorkerMessageStatus::Unlocked,
         )
         .await?;
 
         let queue = FailPutQueue::failing_ids([poisoned.base.id.to_string()]);
+        let sent = queue.inner.clone();
         let context = kubernetes_scheduler_context_with_queue(&db, queue);
         context.clone().request(()).await?;
 
@@ -1268,10 +1235,9 @@ mod tests {
             let stopped: WorkerDB = db.fetch_one::<WorkerDB>(id).await?;
             assert_eq!(stopped.base.status, WorkerStatus::Stopped);
             assert!(stopped.base.ended_on.is_some());
-            assert_eq!(stopped.base.message_status, WorkerMessageStatus::Locked);
         }
 
-        let created = context.bridge.message_queue().locked_messages().await;
+        let created = sent.messages();
         assert_eq!(created.len(), 1);
         assert_eq!(created[0].id, healthy.base.id.to_string());
         Ok(())
@@ -1289,7 +1255,6 @@ mod tests {
             "c_stop_sup",
             WorkerType::StageTrigger,
             WorkerStatus::StopScheduled,
-            WorkerMessageStatus::Unlocked,
         )
         .await?;
 
@@ -1304,7 +1269,7 @@ mod tests {
 
     /// Worker-message puts run post-commit, so a failing put neither aborts
     /// the tick nor loses the run: its rows are already committed (PFR
-    /// `Dispatched`, WorkerDB `Locked`) — there is just no pod, so no
+    /// `Dispatched`, a WorkerDB) — there is just no pod, so no
     /// callback ever arrives and the stuck-dispatched sweep re-dispatches
     /// the run under a fresh worker id. A failing put must not stop the
     /// remaining puts either.
@@ -1375,9 +1340,11 @@ mod tests {
 
         // The first put fails post-commit: the tick still succeeds, the
         // other run's put goes through, and BOTH runs' rows are committed.
-        let context = kubernetes_scheduler_context_with_queue(&db, FailPutQueue::failing_first(1));
+        let queue = FailPutQueue::failing_first(1);
+        let sent = queue.inner.clone();
+        let context = kubernetes_scheduler_context_with_queue(&db, queue);
         context.clone().request(()).await?;
-        let created = context.bridge.message_queue().locked_messages().await;
+        let created = sent.messages();
         assert_eq!(created.len(), 1);
         for execution in &executions {
             let pfrs: Vec<PhysicalFunctionRunDB> = db
@@ -1386,25 +1353,17 @@ mod tests {
                 .await?;
             assert_eq!(pfrs.len(), 1);
             assert_eq!(pfrs[0].base.status, PhysicalFunctionRunStatus::Dispatched);
-            let worker: WorkerDB = db
+            let worker: Option<WorkerDB> = db
                 .fetch_first::<WorkerDB>(&Some(pfrs[0].base.id.clone()))
-                .await?
-                .expect("worker for the run");
-            assert_eq!(worker.base.message_status, WorkerMessageStatus::Locked);
+                .await?;
+            assert!(worker.is_some(), "no worker for the run");
         }
 
         // The run with the lost put is NOT re-picked by the readiness
         // queries (its WorkerDB exists): a normal tick dispatches nothing.
-        let context = kubernetes_scheduler_context(&db);
+        let (context, sent) = kubernetes_scheduler_context(&db);
         context.clone().request(()).await?;
-        assert!(
-            context
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .is_empty()
-        );
+        assert!(sent.messages().is_empty());
 
         // The stuck-dispatched sweep (recovery tick) is the recovery path:
         // it fails the pod-less attempts; the next request tick
@@ -1415,7 +1374,7 @@ mod tests {
             ..RecoveryConfig::default()
         });
         recovery.recovery(()).await?;
-        let context = kubernetes_scheduler_context(&db);
+        let (context, sent) = kubernetes_scheduler_context(&db);
         context.clone().request(()).await?;
         for execution in &executions {
             let pfrs: Vec<PhysicalFunctionRunDB> = db
@@ -1433,10 +1392,7 @@ mod tests {
                 .count();
             assert_eq!((failed, dispatched), (1, 1));
         }
-        assert_eq!(
-            context.bridge.message_queue().locked_messages().await.len(),
-            2
-        );
+        assert_eq!(sent.messages().len(), 2);
         Ok(())
     }
 
@@ -1504,7 +1460,7 @@ mod tests {
             executions.push(execution);
         }
 
-        let mut context = kubernetes_scheduler_context(&db);
+        let (mut context, sent) = kubernetes_scheduler_context(&db);
         context.scheduler_config = Ctx::new(SchedulerConfig {
             max_functions_per_tick: MaxFunctionsPerTick(1),
             ..SchedulerConfig::default()
@@ -1519,10 +1475,7 @@ mod tests {
         // Tick 1: only the oldest ready run dispatches; the full batch
         // stores a scheduler re-notify.
         context.clone().request(()).await?;
-        assert_eq!(
-            context.bridge.message_queue().locked_messages().await.len(),
-            1
-        );
+        assert_eq!(sent.messages().len(), 1);
         let pfrs_oldest: Vec<PhysicalFunctionRunDB> = db
             .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&executions[0].manual_trigger))
@@ -1543,10 +1496,7 @@ mod tests {
         // Tick 2: the remaining run dispatches — still a full batch, so
         // the re-notify fires again.
         context.clone().request(()).await?;
-        assert_eq!(
-            context.bridge.message_queue().locked_messages().await.len(),
-            2
-        );
+        assert_eq!(sent.messages().len(), 2);
         let pfrs_newest: Vec<PhysicalFunctionRunDB> = db
             .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&executions[1].manual_trigger))
@@ -1561,10 +1511,7 @@ mod tests {
 
         // Tick 3: nothing ready — under the cap, no re-notify.
         context.clone().request(()).await?;
-        assert_eq!(
-            context.bridge.message_queue().locked_messages().await.len(),
-            2
-        );
+        assert_eq!(sent.messages().len(), 2);
         assert!(
             tokio::time::timeout(
                 Duration::from_millis(100),

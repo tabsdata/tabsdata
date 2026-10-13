@@ -69,7 +69,7 @@ mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BundleId, CollectionName, Decorator, Ended, FunctionRuntimeValues,
-        Started, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        Started, UserId, WorkerStatus, WorkerType,
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -115,7 +115,6 @@ mod tests {
                 &function,
                 &WorkerType::CronTrigger,
                 &WorkerStatus::Requested,
-                &WorkerMessageStatus::Unlocked,
             )
             .await?;
 

@@ -155,7 +155,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, FunctionRuntimeValues,
         GroupName, LogicalFunctionRunStatus, ProjectId, TableName, TableNameDto, TransactionKey,
-        UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        UserId, WorkerStatus, WorkerType,
     };
     use td_objects::types::basic::{CollectionIdName, ReuseFrozen, WhenDeleted};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
@@ -339,7 +339,6 @@ mod tests {
                 &function,
                 &WorkerType::CronTrigger,
                 &WorkerStatus::Running,
-                &WorkerMessageStatus::Unlocked,
             )
             .await?;
 
@@ -364,12 +363,7 @@ mod tests {
         let _function_worker = db
             .scoped(p.id)
             .seed()
-            .function_runner_worker(
-                &execution,
-                &transaction,
-                &physical_function_run,
-                &WorkerMessageStatus::Unlocked,
-            )
+            .function_runner_worker(&execution, &transaction, &physical_function_run)
             .await?;
 
         Services::with_defaults(db.clone())

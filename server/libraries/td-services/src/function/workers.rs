@@ -14,8 +14,7 @@ use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::dxo::worker::{WorkerDB, WorkerInsertDB, WorkerUpdateDB};
 use td_objects::types::basic::{
-    FunctionVersionId, WorkerConfig, WorkerId, WorkerMessageStatus, WorkerStatus, WorkerType,
-    WorkerTypeDto,
+    FunctionVersionId, WorkerConfig, WorkerId, WorkerStatus, WorkerType, WorkerTypeDto,
 };
 use td_objects::{and, or};
 use td_queries::Queries;
@@ -87,7 +86,6 @@ pub async fn build_workers<S: SeesProjectRows, M: AccessMode>(
             transaction_id: None,
             physical_function_run_id: None,
             function_version_id: function.id.clone(),
-            message_status: WorkerMessageStatus::None,
             started_on: None,
             ended_on: None,
             status: WorkerStatus::Scheduled,

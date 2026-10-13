@@ -80,12 +80,7 @@ pub async fn seed_run(db: &TdPool, project: ProjectId) -> Result<SeededRun, TdEr
     let worker = db
         .scoped(project)
         .seed()
-        .function_runner_worker(
-            &execution,
-            &transaction,
-            &physical_function_run,
-            &WorkerMessageStatus::Locked,
-        )
+        .function_runner_worker(&execution, &transaction, &physical_function_run)
         .await?;
     Ok(SeededRun {
         execution: execution.base.id,

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::yaml::location::{Location, Locations};
+use crate::dxo::worker_input::location::{Location, Locations};
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, WorkerConfig, WorkerId,
 };
@@ -41,10 +41,11 @@ pub type CronTriggerOutput = ();
 mod tests {
     use super::*;
     use crate::dxo::worker::CronTriggerConfig;
-    use crate::dxo::yaml::WorkerInput;
+    use crate::dxo::worker_input::WorkerInput;
     use crate::types::basic::{AtTime, CollectionName, CronMask, FunctionName, WorkerConfig};
     use chrono::DateTime;
     use http::Method;
+    use serde_json::json;
     use url::Url;
 
     #[test]
@@ -78,34 +79,33 @@ mod tests {
                 config: WorkerConfig::serialize(cfg).unwrap(),
             },
         }));
-        let serialized = serde_yaml::to_string(&input).unwrap();
+        let serialized = serde_json::to_value(&input).unwrap();
 
-        let scheduled_on = scheduled_on.to_string();
         let start = serde_json::to_string(&start).unwrap();
         let end = serde_json::to_string(&end).unwrap();
-        let function_version_id = function_version_id.padded_str();
-        let worker_id = worker_id.padded_str();
         assert_eq!(
-            serialized.as_str(),
-            format!(
-                r#"!CronTrigger
-info:
-  worker_id: {worker_id}
-  collection_id: {collection_id}
-  collection: collection
-  function_version_id: {function_version_id}
-  function: function
-  scheduled_on: {scheduled_on}
-  task:
-    url: http://localhost:2457/internal/fn_trigger
-    method: POST
-    headers: {{}}
-    body: false
-  config: '{{"start":{start},"end":{end},"mask":"* * * * *"}}'
-"#
-            )
+            serialized,
+            json!({
+                "CronTrigger": {
+                    "info": {
+                        "worker_id": worker_id.padded_str(),
+                        "collection_id": collection_id,
+                        "collection": "collection",
+                        "function_version_id": function_version_id.padded_str(),
+                        "function": "function",
+                        "scheduled_on": scheduled_on,
+                        "task": {
+                            "url": "http://localhost:2457/internal/fn_trigger",
+                            "method": "POST",
+                            "headers": {},
+                            "body": false
+                        },
+                        "config": format!(r#"{{"start":{start},"end":{end},"mask":"* * * * *"}}"#)
+                    }
+                }
+            })
         );
-        let deserialized: WorkerInput = serde_yaml::from_str(&serialized).unwrap();
+        let deserialized: WorkerInput = serde_json::from_value(serialized).unwrap();
         assert_eq!(input, deserialized);
     }
 }

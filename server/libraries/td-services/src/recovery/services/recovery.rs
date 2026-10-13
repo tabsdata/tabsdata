@@ -200,11 +200,14 @@ mod races;
 mod tests {
     use super::*;
     use crate::Services;
-    use crate::scheduler::test_wiring::dispatch_services;
+    use crate::scheduler::test_wiring::{dispatch_services, sending_to};
     use std::str::FromStr;
     use std::time::Duration;
     use td_bridge::Orchestrator;
-    use td_bridge::messaging::{CronRequest, OrchestratorMessagePayload, StageTriggerRequest};
+    use td_bridge::messaging::memory::InMemoryOrchestratorMessageQueue;
+    use td_bridge::messaging::{
+        CronRequest, FunctionRequest, OrchestratorMessagePayload, StageTriggerRequest,
+    };
     use td_bridge::test::{StaticWorkloadObserver, TestBridgeProvider};
     use td_database::access::LockInstant;
     use td_database::pool::TdPool;
@@ -221,23 +224,26 @@ mod tests {
     use td_objects::dxo::physical_function_run::{
         PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB,
     };
-    use td_objects::dxo::worker::WorkerDB;
+    use td_objects::dxo::worker::{WorkerDB, WorkerRetryUpdateDB};
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, ExecutionStatus,
         FunctionIdName, FunctionOnly, FunctionRuntimeValues, FunctionVersionId,
         LogicalFunctionRunStatus, OverrideDisabledTrigger, PhysicalFunctionRunStatus, ProjectId,
-        ReuseFrozen, SkipIfRunning, TableNameDto, UserId, WorkerMessageStatus, WorkerStatus,
-        WorkerType,
+        Retry, ReuseFrozen, SkipIfRunning, TableNameDto, UserId, WorkerStatus, WorkerType,
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     /// A recovery tick over an empty cluster observation, so every in-flight
     /// workload reads as missing.
-    fn kubernetes_recovery_services(db: &TdPool, config: RecoveryConfig) -> Services {
+    fn kubernetes_recovery_services(
+        db: &TdPool,
+        config: RecoveryConfig,
+    ) -> (Services, InMemoryOrchestratorMessageQueue) {
         let mut services = dispatch_services(db);
         services.recovery_config = Ctx::new(config);
-        services.bridge = Ctx::new(BridgeProviderHandle::new(std::sync::Arc::new(
+        sending_to(
+            services,
             TestBridgeProvider::default()
                 .with_orchestrator(Orchestrator::Kubernetes)
                 .with_workload_observer(StaticWorkloadObserver::default()),
@@ -249,16 +255,16 @@ mod tests {
     async fn recovery_and_request_tick(
         db: &TdPool,
         timeout: StuckRequestedTimeout,
-    ) -> Result<Services, TdError> {
+    ) -> Result<InMemoryOrchestratorMessageQueue, TdError> {
         let mut recovery = dispatch_services(db);
         recovery.recovery_config = Ctx::new(RecoveryConfig {
             stuck_requested_timeout: timeout,
             ..RecoveryConfig::default()
         });
         recovery.recovery(()).await?;
-        let request = dispatch_services(db);
-        request.clone().request(()).await?;
-        Ok(request)
+        let (request, sent) = sending_to(dispatch_services(db), TestBridgeProvider::default());
+        request.request(()).await?;
+        Ok(sent)
     }
 
     #[td_test::test(db)]
@@ -318,7 +324,7 @@ mod tests {
             .in_project(p.id);
         let execution = dispatch_services(&db).execute_function(request).await?.data;
 
-        let context_1 = dispatch_services(&db);
+        let (context_1, sent_1) = sending_to(dispatch_services(&db), TestBridgeProvider::default());
         context_1.clone().request(()).await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .timeline()
@@ -328,15 +334,7 @@ mod tests {
         let pfr_old = pfrs[0].clone();
         assert_eq!(pfr_old.base.status, PhysicalFunctionRunStatus::Dispatched);
         assert!(pfr_old.base.dispatched_on.is_some());
-        assert_eq!(
-            context_1
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .len(),
-            1
-        );
+        assert_eq!(sent_1.messages().len(), 1);
 
         // A freshly-dispatched run is well within the default timeout — the
         // sweep must not touch it.
@@ -346,14 +344,7 @@ mod tests {
             .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.base.id)
             .await?;
         assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Dispatched);
-        assert!(
-            context_fresh
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .is_empty()
-        );
+        assert!(sent_fresh.messages().is_empty());
 
         let sent_2 = recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
 
@@ -383,17 +374,9 @@ mod tests {
             ))
             .await?;
         assert_eq!(lfr.base.status, LogicalFunctionRunStatus::Requested);
-        assert_eq!(
-            context_2
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .len(),
-            1
-        );
+        assert_eq!(sent_2.messages().len(), 1);
 
-        let context_3 = dispatch_services(&db);
+        let (context_3, sent_3) = sending_to(dispatch_services(&db), TestBridgeProvider::default());
         context_3.clone().request(()).await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .timeline()
@@ -405,14 +388,7 @@ mod tests {
             .fetch_one::<PhysicalFunctionRunDB>(&pfr_new.base.id)
             .await?;
         assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Dispatched);
-        assert!(
-            context_3
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .is_empty()
-        );
+        assert!(sent_3.messages().is_empty());
 
         Ok(())
     }
@@ -519,14 +495,7 @@ mod tests {
             .fetch_one::<PhysicalFunctionRunDB>(&lfr.base.id)
             .await?;
         assert_eq!(current.base.id, replay_response.new_function_run_id);
-        assert!(
-            context_2
-                .bridge
-                .message_queue()
-                .locked_messages()
-                .await
-                .is_empty()
-        );
+        assert!(sent_2.messages().is_empty());
 
         Ok(())
     }
@@ -576,13 +545,7 @@ mod tests {
         let worker = db
             .scoped(project_id)
             .seed()
-            .worker(
-                &collection,
-                &function,
-                &worker_type,
-                &worker_status,
-                &WorkerMessageStatus::Unlocked,
-            )
+            .worker(&collection, &function, &worker_type, &worker_status)
             .await?;
         Ok((collection, function, worker))
     }
@@ -632,7 +595,7 @@ mod tests {
         let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
         services.clone().recovery(()).await?;
 
-        let messages = services.bridge.message_queue().locked_messages().await;
+        let messages = sent.messages();
         assert_eq!(messages.len(), 2);
         let cron_message = messages
             .iter()
@@ -840,7 +803,7 @@ mod tests {
         let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
         services.clone().recovery(()).await?;
 
-        let messages = services.bridge.message_queue().locked_messages().await;
+        let messages = sent.messages();
         assert!(messages.is_empty());
 
         Ok(())
@@ -871,7 +834,7 @@ mod tests {
         let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
         services.clone().recovery(()).await?;
 
-        let messages = services.bridge.message_queue().locked_messages().await;
+        let messages = sent.messages();
         assert_eq!(messages.len(), 1);
         let cron_message = &messages[0];
         assert_eq!(cron_message.id, cron.base.id.to_string());

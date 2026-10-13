@@ -3,7 +3,7 @@
 //
 
 use td_error::TdError;
-use td_objects::dxo::yaml::location::Location;
+use td_objects::dxo::worker_input::location::Location;
 use td_objects::types::basic::EnvPrefix;
 use td_storage::{SPath, Storage};
 

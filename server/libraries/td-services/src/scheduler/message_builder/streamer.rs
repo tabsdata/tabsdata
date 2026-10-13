@@ -7,7 +7,7 @@ use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::worker::WorkerDBWithNames;
-use td_objects::dxo::yaml::stream::{StreamerInfo, StreamerInput};
+use td_objects::dxo::worker_input::stream::{StreamerInfo, StreamerInput};
 use td_objects::types::basic::AtTime;
 use td_queries::Queries;
 use td_storage::Storage;

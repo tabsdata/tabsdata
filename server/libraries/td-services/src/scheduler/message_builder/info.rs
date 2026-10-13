@@ -6,7 +6,7 @@ use super::build_external_location;
 use crate::function_run::raw_data::raw_data_dir;
 use td_error::TdError;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
-use td_objects::dxo::yaml::function::FunctionInfo;
+use td_objects::dxo::worker_input::function::FunctionInfo;
 use td_objects::types::basic::{AtTime, Decorator};
 use td_storage::Storage;
 use td_storage::location::StorageLocation;

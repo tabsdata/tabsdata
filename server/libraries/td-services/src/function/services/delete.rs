@@ -85,7 +85,7 @@ mod tests {
     use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, Decorator, FunctionRuntimeValues, UserId, WorkerConfig,
-        WorkerMessageStatus, WorkerStatus, WorkerType, WorkerTypeDto,
+        WorkerStatus, WorkerType, WorkerTypeDto,
     };
     use td_objects::types::basic::{
         CollectionId, CollectionName, FunctionType, ProjectId, TableName, TableNameDto, TableStatus,
@@ -597,7 +597,6 @@ mod tests {
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
         assert_eq!(worker.base.function_version_id, function.id);
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
         assert!(worker.base.ended_on.is_some());
         assert_eq!(worker.base.status, WorkerStatus::Stopped);

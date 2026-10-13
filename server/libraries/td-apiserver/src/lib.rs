@@ -9,7 +9,7 @@ use crate::apiserver::{ApiServer, ApiServerCtx};
 use crate::bridge::ServerBridgeFactory;
 use crate::config::{Config, Params};
 use crate::recovery::WorkerRecoverer;
-use crate::scheduler::{FunctionDispatcher, FunctionRequester};
+use crate::scheduler::FunctionRequester;
 use std::sync::Arc;
 use std::time::Duration;
 use ta_services::service::Ctx;
@@ -193,7 +193,6 @@ pub fn run() {
                 })?;
 
             let function_request_server = FunctionRequester::new(&server_context.services).await;
-            let function_dispatch_server = FunctionDispatcher::new(&server_context.services).await;
             let worker_recovery_server = WorkerRecoverer::new(&server_context.services).await;
 
             let outcome = ServerRunner::default()
@@ -201,7 +200,6 @@ pub fn run() {
                 .server(api_server)
                 .server(internal_server)
                 .server(function_request_server)
-                .server(function_dispatch_server)
                 .server(worker_recovery_server)
                 .run()
                 .await;

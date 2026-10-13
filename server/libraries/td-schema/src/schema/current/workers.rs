@@ -34,7 +34,6 @@ pub enum Workers {
     TransactionId,
     FunctionVersionId,
     PhysicalFunctionRunId,
-    MessageStatus,
     StartedOn,
     EndedOn,
     Status,
@@ -114,7 +113,6 @@ impl Entity for Defs {
                 .col(logical_id_column(Workers::TransactionId).null())
                 .col(logical_id_column(Workers::FunctionVersionId).not_null())
                 .col(logical_id_column(Workers::PhysicalFunctionRunId).null())
-                .col(ColumnDef::new(Workers::MessageStatus).text().not_null())
                 .col(ColumnDef::new(Workers::StartedOn).timestamp_with_time_zone().null())
                 .col(ColumnDef::new(Workers::EndedOn).timestamp_with_time_zone().null())
                 .col(ColumnDef::new(Workers::Status).text().not_null())

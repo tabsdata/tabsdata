@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::yaml::location::{Location, Locations};
+use crate::dxo::worker_input::location::{Location, Locations};
 use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId,
     ExecutionName, FunctionName, FunctionVersionId, InputIdx, IsEmptyVersions, PartitionFileName,
@@ -251,7 +251,7 @@ pub enum WrittenTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::yaml::{WorkerInput, WorkerOutput};
+    use crate::dxo::worker_input::{WorkerInput, WorkerOutput};
     use crate::types::basic::{EnvPrefix, FunctionId};
     use itertools::Itertools;
     use std::collections::HashSet;

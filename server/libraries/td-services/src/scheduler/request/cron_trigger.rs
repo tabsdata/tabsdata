@@ -13,8 +13,8 @@ use td_common::id;
 use td_common::worker::{Callback, MessageAction, RequestMessagePayload, WorkerClass, WorkerName};
 use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::worker::{CronTriggerConfig, WorkerDBWithNames};
-use td_objects::dxo::yaml::cron_trigger::CronTriggerInput;
-use td_objects::dxo::yaml::{WorkerInput, cron_trigger};
+use td_objects::dxo::worker_input::cron_trigger::CronTriggerInput;
+use td_objects::dxo::worker_input::{WorkerInput, cron_trigger};
 use td_objects::types::basic::{AtTime, WorkerConfig};
 use tracing::{instrument, warn};
 

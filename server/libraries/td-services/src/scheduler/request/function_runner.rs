@@ -20,10 +20,10 @@ use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunc
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionInsertDB;
 use td_objects::dxo::worker::WorkerInsertDB;
-use td_objects::dxo::yaml::WorkerInput;
+use td_objects::dxo::worker_input::WorkerInput;
 use td_objects::types::basic::{
     AtTime, Enabled, ExecutionId, LogicalFunctionRunId, PhysicalFunctionRunId, WorkerId,
-    WorkerMessageStatus, WorkerStatus, WorkerType,
+    WorkerStatus, WorkerType,
 };
 use td_queries::Queries;
 use td_storage::Storage;
@@ -347,7 +347,6 @@ pub async fn create_locked_function_runner_workers_start_request<
                 transaction_id: Some(f.base.base.base.transaction_id.clone()),
                 physical_function_run_id: Some(f.base.base.base.id.clone()),
                 function_version_id: f.base.base.base.function_version_id.clone(),
-                message_status: WorkerMessageStatus::Locked,
                 started_on: None,
                 ended_on: None,
                 status: WorkerStatus::Requested,

@@ -34,8 +34,6 @@ pub enum QueueError {
     QueuePlannedCreationError { queue: PathBuf, cause: Error },
     #[error("Message already exists: {id}")]
     MessageAlreadyExisting { id: String },
-    #[error("Message does no exist: {id}")]
-    MessageNonExisting { id: String },
     #[error("An IO error occurred serializing the message file: {0}")]
     SerdeError(#[from] serde_yaml::Error),
     #[error("An IO error occurred generating the message file: {0}")]
@@ -52,12 +50,4 @@ pub trait OrchestratorMessageQueue: Send + Sync {
         id: String,
         payload: OrchestratorMessagePayload<Value>,
     ) -> Result<OrchestratorMessage<Value>, QueueError>;
-
-    /// Commits a message in the queue.
-    async fn commit(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError>;
-
-    /// Rollbacks a message in the queue.
-    async fn rollback(&self, message: &OrchestratorMessage<Value>) -> Result<(), QueueError>;
-
-    async fn locked_messages(&self) -> Vec<OrchestratorMessage<Value>>;
 }

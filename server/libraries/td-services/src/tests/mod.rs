@@ -42,5 +42,6 @@ mod table_delete;
 mod tick_retries;
 mod transaction_settlement;
 mod upload_transaction;
+mod worker_resolve;
 mod worker_stops;
 mod write_order;

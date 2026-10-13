@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::yaml::location::{Location, Locations};
+use crate::dxo::worker_input::location::{Location, Locations};
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, ProjectId, WorkerConfig,
     WorkerId,
@@ -52,10 +52,11 @@ pub type StageTriggerOutput = ();
 mod tests {
     use super::*;
     use crate::dxo::worker::StageTriggerConfig;
-    use crate::dxo::yaml::WorkerInput;
+    use crate::dxo::worker_input::WorkerInput;
     use crate::types::basic::{CollectionName, FunctionName, WorkerConfig};
     use chrono::DateTime;
     use http::Method;
+    use serde_json::json;
     use std::collections::HashMap;
     use td_common::datetime::Timestamp;
     use url::Url;
@@ -123,60 +124,52 @@ mod tests {
                 config: WorkerConfig::serialize(cfg).unwrap(),
             },
         }));
-        let serialized = serde_yaml::to_string(&input).unwrap();
+        let serialized = serde_json::to_value(&input).unwrap();
 
-        let scheduled_on = scheduled_on.to_string();
         let start = serde_json::to_string(&start).unwrap();
         let end = serde_json::to_string(&end).unwrap();
-
-        let defined_on = serde_json::to_string(&defined_on).unwrap();
-
-        let function_version_id = function_version_id.padded_str();
-        let worker_id = worker_id.padded_str();
-
         assert_eq!(
-            serialized.as_str(),
-            format!(
-                r#"!StageTrigger
-info:
-  worker_id: {worker_id}
-  project_id: {project_id}
-  collection_id: {collection_id}
-  collection: collection
-  function_version_id: {function_version_id}
-  function_defined_on: {defined_on}
-  function: function
-  function_bundle:
-    uri: file:///bundle
-    env_prefix: null
-  function_stage:
-    uri: file:///stage
-    env_prefix: null
-  function_checkpoint:
-    uri: file:///checkpoint
-    env_prefix: null
-  scheduled_on: {scheduled_on}
-  fn_trigger:
-    url: http://localhost:2457/internal/fn_trigger
-    method: POST
-    headers: {{}}
-    body: false
-  fn_state:
-    url: http://localhost:2457/internal/fn_state
-    method: GET
-    headers:
-      content-type: application/parquet
-    body: false
-  fn_status:
-    url: http://localhost:2457/internal/fn_status
-    method: GET
-    headers: {{}}
-    body: false
-  config: '{{"timeout_threshold_min":60,"size_threshold":10000,"start":{start},"end":{end}}}'
-"#
-            )
+            serialized,
+            json!({
+                "StageTrigger": {
+                    "info": {
+                        "worker_id": worker_id.padded_str(),
+                        "project_id": project_id,
+                        "collection_id": collection_id,
+                        "collection": "collection",
+                        "function_version_id": function_version_id.padded_str(),
+                        "function_defined_on": defined_on,
+                        "function": "function",
+                        "function_bundle": { "uri": "file:///bundle", "env_prefix": null },
+                        "function_stage": { "uri": "file:///stage", "env_prefix": null },
+                        "function_checkpoint": { "uri": "file:///checkpoint", "env_prefix": null },
+                        "scheduled_on": scheduled_on,
+                        "fn_trigger": {
+                            "url": "http://localhost:2457/internal/fn_trigger",
+                            "method": "POST",
+                            "headers": {},
+                            "body": false
+                        },
+                        "fn_state": {
+                            "url": "http://localhost:2457/internal/fn_state",
+                            "method": "GET",
+                            "headers": { "content-type": "application/parquet" },
+                            "body": false
+                        },
+                        "fn_status": {
+                            "url": "http://localhost:2457/internal/fn_status",
+                            "method": "GET",
+                            "headers": {},
+                            "body": false
+                        },
+                        "config": format!(
+                            r#"{{"timeout_threshold_min":60,"size_threshold":10000,"start":{start},"end":{end}}}"#
+                        )
+                    }
+                }
+            })
         );
-        let deserialized: WorkerInput = serde_yaml::from_str(&serialized).unwrap();
+        let deserialized: WorkerInput = serde_json::from_value(serialized).unwrap();
         assert_eq!(input, deserialized);
     }
 }

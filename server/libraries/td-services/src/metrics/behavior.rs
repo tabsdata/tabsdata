@@ -20,8 +20,8 @@ use td_objects::dxo::metrics::{
     Dimension, EdgeRow, MetricsRequest, MetricsResponse, NodeKind, NodeRow, NodeStatusMeasures,
 };
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
-use td_objects::dxo::yaml::WorkerOutput;
-use td_objects::dxo::yaml::function::{FunctionOutput, TableInfo, WrittenTable};
+use td_objects::dxo::worker_input::WorkerOutput;
+use td_objects::dxo::worker_input::function::{FunctionOutput, TableInfo, WrittenTable};
 use td_objects::types::basic::{
     AccessTokenId, CollectionName, ColumnCount, EpochMs, ExecutionStatus, FunctionName,
     IncludePrivate, IncludeReplaced, LogicalFunctionRunStatus, ProjectId, RowCount, SchemaHash,

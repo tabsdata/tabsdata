@@ -15,7 +15,7 @@ use td_common::status::ExitStatus;
 use td_common::worker::{REQUEST_FILE, WORKER_PID_FILE};
 use td_objects::dxo::execution::InternalExecutionRequest;
 use td_objects::dxo::worker::CronTriggerConfig;
-use td_objects::dxo::yaml::WorkerInput;
+use td_objects::dxo::worker_input::WorkerInput;
 use td_objects::types::basic::{ExecutionName, FunctionOnly, SkipIfRunning, TriggerType};
 use td_process::launcher::cli::{Cli, NoConfig};
 use td_process::launcher::params::ArgumentParameters;

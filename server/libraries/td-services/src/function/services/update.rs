@@ -130,7 +130,7 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BasePath, Decorator, Depth, FunctionName, FunctionRuntimeValues,
         FunctionStatus, ResetStage, SNIPPET_MAX_LEN, TableId, TableName, TableStatus, UserId,
-        WorkerMessageStatus, WorkerStatus, WorkerType,
+        WorkerStatus, WorkerType,
     };
     use td_objects::types::basic::{
         AtTime, BundleId, CollectionName, ResetState, ReuseFrozen, TableNameDto, WorkerConfig,
@@ -2450,7 +2450,6 @@ mod tests {
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
         assert_eq!(worker.base.function_version_id, updated_function_1.id);
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
         assert_eq!(worker.base.ended_on, None);
         assert_eq!(worker.base.status, WorkerStatus::Scheduled);
@@ -2488,7 +2487,6 @@ mod tests {
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
         assert_eq!(worker.base.function_version_id, updated_function_1.id);
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
         assert!(worker.base.ended_on.is_some());
         assert_eq!(worker.base.status, WorkerStatus::Stopped);
@@ -2506,7 +2504,6 @@ mod tests {
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
         assert_eq!(worker.base.function_version_id, updated_function_2.id);
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
         assert_eq!(worker.base.ended_on, None);
         assert_eq!(worker.base.status, WorkerStatus::Scheduled);
@@ -2547,7 +2544,6 @@ mod tests {
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
         assert_eq!(worker.base.function_version_id, updated_function_2.id);
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
         assert!(worker.base.ended_on.is_some());
         assert_eq!(worker.base.status, WorkerStatus::Stopped);
@@ -2565,7 +2561,6 @@ mod tests {
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
         assert_eq!(worker.base.function_version_id, updated_function_3.id);
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
         assert_eq!(worker.base.ended_on, None);
         assert_eq!(worker.base.status, WorkerStatus::Scheduled);
@@ -2603,7 +2598,6 @@ mod tests {
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
         assert_eq!(worker.base.function_version_id, updated_function_3.id);
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
         assert!(worker.base.ended_on.is_some());
         assert_eq!(worker.base.status, WorkerStatus::Stopped);

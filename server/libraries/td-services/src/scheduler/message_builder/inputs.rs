@@ -23,7 +23,7 @@ use td_objects::dxo::physical_table_data_version::{
     PhysicalTableDataVersionDB, PhysicalTableDataVersionDBWithNames,
 };
 use td_objects::dxo::table::TableDB;
-use td_objects::dxo::yaml::function::{InputTable, InputTableVersion};
+use td_objects::dxo::worker_input::function::{InputTable, InputTableVersion};
 use td_objects::types::basic::{
     AtTime, CollectionId, DependencyPos, ExecutionId, FunctionId, HasData, LogicalFunctionRunId,
     LogicalTableDataVersionId, PhysicalFunctionRunId, PhysicalTableDataVersionId, TableVersionId,

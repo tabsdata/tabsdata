@@ -697,17 +697,7 @@ pub enum TriggerType {
     StageTrigger,
 }
 
-#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
-pub enum WorkerMessageStatus {
-    #[typed_enum(rename = "N")]
-    None,
-    #[typed_enum(rename = "L")]
-    Locked,
-    #[typed_enum(rename = "U")]
-    Unlocked,
-}
-
-#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Copy)]
 pub enum WorkerStatus {
     #[typed_enum(rename = "S")]
     Scheduled,

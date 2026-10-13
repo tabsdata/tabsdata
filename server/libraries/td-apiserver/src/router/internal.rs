@@ -19,7 +19,7 @@ use td_objects::dxo::file::DownloadResponse;
 use td_objects::dxo::function::FunctionVersionParam;
 use td_objects::dxo::physical_function_run::{FunctionRunParam, PhysicalFunctionRun};
 use td_objects::dxo::worker::{CallbackRequest, WorkerParam};
-use td_objects::dxo::yaml::WorkerInput;
+use td_objects::dxo::worker_input::WorkerInput;
 use td_services::Services;
 use td_services::internal_api::InternalRoutes;
 

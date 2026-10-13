@@ -57,4 +57,4 @@ pub mod trigger;
 pub mod user;
 pub mod user_role;
 pub mod worker;
-pub mod yaml;
+pub mod worker_input;

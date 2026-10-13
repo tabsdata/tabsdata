@@ -39,6 +39,14 @@ WHERE i."requirement_dependency_pos" IS NOT NULL
   AND t."table_id" = d."table_id"
   AND t."valid_from" <= r."triggered_on" AND r."triggered_on" < t."valid_to"
 
+ALTER TABLE "workers" ADD COLUMN "failures" integer NOT NULL DEFAULT 0, ADD COLUMN "retry_at" timestamp with time zone NULL, ADD COLUMN "destination_write_on" timestamp with time zone NULL, DROP COLUMN "message_status"
+
+UPDATE workers
+SET status = 'SP', ended_on = transaction_timestamp()
+WHERE status = 'SPS'
+  AND NOT worker_enabled
+  AND worker_type IN ('CT', 'ST')
+
 ALTER TABLE "logical_function_runs" ADD COLUMN "recoveries" integer NOT NULL DEFAULT 0
 
 UPDATE physical_table_data_versions t

@@ -4,7 +4,7 @@
 
 use td_error::TdError;
 use td_objects::dxo::worker::WorkerDBWithNames;
-use td_objects::dxo::yaml::cron::{CronInfo, CronInput};
+use td_objects::dxo::worker_input::cron::{CronInfo, CronInput};
 use td_objects::types::basic::{AtTime, WorkerConfig};
 
 /// Build the lean k8s cron `request.yaml` from a cron-trigger worker:

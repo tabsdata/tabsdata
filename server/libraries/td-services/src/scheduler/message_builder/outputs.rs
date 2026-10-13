@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use td_error::TdError;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
-use td_objects::dxo::yaml::function::{OutputTable, OutputTableVersion};
+use td_objects::dxo::worker_input::function::{OutputTable, OutputTableVersion};
 use td_storage::Storage;
 use td_storage::location::StorageLocation;
 

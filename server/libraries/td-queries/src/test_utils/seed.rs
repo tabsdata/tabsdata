@@ -366,7 +366,6 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
         function: &FunctionDB,
         worker_type: &WorkerType,
         worker_status: &WorkerStatus,
-        message_status: &WorkerMessageStatus,
     ) -> Result<WorkerDB, TdError>
     where
         E: Domained<Scope = InProject>,
@@ -377,7 +376,6 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
             function,
             worker_type,
             worker_status,
-            message_status,
         )
         .await
     }
@@ -387,18 +385,11 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
         execution: &ExecutionDB,
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
-        status: &WorkerMessageStatus,
     ) -> Result<WorkerDB, TdError>
     where
         E: Domained<Scope = InProject>,
     {
-        seed_function_runner_worker(
-            self.executor,
-            execution,
-            transaction,
-            physical_function_run,
-            status,
-        )
-        .await
+        seed_function_runner_worker(self.executor, execution, transaction, physical_function_run)
+            .await
     }
 }

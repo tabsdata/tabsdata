@@ -12,7 +12,7 @@ use td_common::worker::LOG_FOLDER;
 use td_common::worker::{
     INPUT_FOLDER, OUTPUT_FOLDER, REQUEST_FOLDER, RESPONSE_FOLDER, RequestMessagePayload,
 };
-use td_objects::dxo::yaml::WorkerInput;
+use td_objects::dxo::worker_input::WorkerInput;
 use thiserror::Error;
 
 // The instance's on-disk tree, navigated by the launcher (and measured by the

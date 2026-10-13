@@ -24,7 +24,6 @@ pub(crate) async fn seed_worker(
     function: &FunctionDB,
     worker_type: &WorkerType,
     worker_status: &WorkerStatus,
-    message_status: &WorkerMessageStatus,
 ) -> Result<WorkerDB, TdError> {
     // Production cron-trigger workers always carry a serialized
     // `CronTriggerConfig` (the k8s start path reads the schedule mask
@@ -44,7 +43,6 @@ pub(crate) async fn seed_worker(
         transaction_id: None,
         physical_function_run_id: None,
         function_version_id: function.base.id.clone(),
-        message_status: message_status.clone(),
         started_on: None,
         ended_on: None,
         status: *worker_status,
@@ -62,7 +60,6 @@ pub(crate) async fn seed_function_runner_worker(
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     physical_function_run: &PhysicalFunctionRunDB,
-    status: &WorkerMessageStatus,
 ) -> Result<WorkerDB, TdError> {
     let worker_db = WorkerInsertDB {
         id: WorkerId::new(),
@@ -71,7 +68,6 @@ pub(crate) async fn seed_function_runner_worker(
         transaction_id: Some(transaction.base.id.clone()),
         physical_function_run_id: Some(physical_function_run.base.id.clone()),
         function_version_id: physical_function_run.base.function_version_id.clone(),
-        message_status: status.clone(),
         started_on: None,
         ended_on: None,
         status: match physical_function_run.base.status {
@@ -95,7 +91,6 @@ pub(crate) async fn seed_function_runner_worker(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::function::FunctionRegister;
@@ -180,12 +175,7 @@ mod tests {
         let worker = db
             .scoped(p.id)
             .seed()
-            .function_runner_worker(
-                &execution,
-                &transaction,
-                &physical_function_run,
-                &WorkerMessageStatus::Locked,
-            )
+            .function_runner_worker(&execution, &transaction, &physical_function_run)
             .await
             .unwrap();
 
@@ -200,6 +190,5 @@ mod tests {
             worker.base.function_version_id,
             physical_function_run.base.function_version_id
         );
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::Locked);
     }
 }

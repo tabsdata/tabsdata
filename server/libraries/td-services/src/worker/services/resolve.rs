@@ -15,8 +15,8 @@ use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::WorkerParam;
-use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerMessageStatusUpdateDB};
-use td_objects::dxo::yaml::WorkerInput;
+use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames};
+use td_objects::dxo::worker_input::WorkerInput;
 use td_objects::types::basic::{
     AtTime, PhysicalFunctionRunStatus, WorkerId, WorkerStatus, WorkerType,
 };
@@ -50,7 +50,7 @@ async fn resolve_worker_message(
 /// kubernetes pull path uses (the replacement for the supervisor dispatch
 /// tick — the pod pulls its message here instead of the scheduler renaming
 /// a queue file). Dispatches on the worker's type to build the matching
-/// `WorkerInput`, then flips the worker message status `Locked → Unlocked`.
+/// `WorkerInput`.
 #[instrument(
     name = "scheduler.resolve_worker_message",
     skip_all,
@@ -63,8 +63,11 @@ pub async fn resolve_worker_message<S: SeesProjectRows, M: WriteMode>(
     worker_id: &WorkerId,
     at: &AtTime,
 ) -> Result<WorkerInput, TdError> {
-    // 404 guard + type dispatch: a rolled-back request leaves no worker
-    // row, so an orphan pod resolving its message gets a clean not-found.
+    // Every cancel, recovery or stop writes the worker row. Locking it makes
+    // them wait for this request to be handed out, or, if one already ended
+    // the attempt, makes this unit retry and answer not-found. A pod whose
+    // worker row was rolled back gets not-found here too.
+    let _: WorkerDB = conn.for_update().fetch_one(worker_id).await?;
     let worker: WorkerDBWithNames = conn.fetch_one::<WorkerDBWithNames>(worker_id).await?;
 
     let input = match worker.base.base.worker_type {
@@ -157,12 +160,6 @@ pub async fn resolve_worker_message<S: SeesProjectRows, M: WriteMode>(
             }
         }
     };
-
-    // Flip Locked → Unlocked — the "make ready" the dispatch tick did for
-    // the supervisor path. Idempotent: a pod restart can re-pull.
-    let update = WorkerMessageStatusUpdateDB::unlocked();
-    conn.update(&update, worker_id).await?;
-
     Ok(input)
 }
 
@@ -176,14 +173,12 @@ mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues,
-        LogicalFunctionRunStatus, TableNameDto, TransactionKey, UserId, WorkerMessageStatus,
+        LogicalFunctionRunStatus, TableNameDto, TransactionKey, UserId,
     };
-    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
-    /// Seed a publisher + a Locked function-runner worker, then resolve its
-    /// message via the endpoint service: it returns a resolved Function
-    /// for the FR and flips the worker status Locked -> Unlocked.
+    /// Seed a publisher + a function-runner worker, then resolve its message
+    /// via the endpoint service: it returns a resolved Function for the FR.
     #[td_test::test(db)]
     async fn test_resolve_worker_message(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
@@ -237,7 +232,7 @@ mod tests {
         let worker = db
             .scoped(p.id)
             .seed()
-            .function_runner_worker(&execution, &transaction, &pfr, &WorkerMessageStatus::Locked)
+            .function_runner_worker(&execution, &transaction, &pfr)
             .await?;
 
         let param = WorkerParam {
@@ -253,12 +248,6 @@ mod tests {
             panic!("expected Function");
         };
         assert_eq!(message.info.function_run_id, pfr.base.id);
-
-        let worker_after: WorkerDB = db.fetch_one::<WorkerDB>(&worker.base.id).await?;
-        assert_eq!(
-            worker_after.base.message_status,
-            WorkerMessageStatus::Unlocked
-        );
 
         Ok(())
     }

@@ -9,7 +9,7 @@ use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
-use td_objects::dxo::yaml::function::FunctionInput;
+use td_objects::dxo::worker_input::function::FunctionInput;
 use td_storage::Storage;
 
 /// Assemble the resolved `Function` worker input for one FR: identity

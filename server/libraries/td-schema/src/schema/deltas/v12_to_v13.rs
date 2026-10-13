@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! v12 → v13: Runs, attempts and workers admit only their declared status
+//! v12 → v13: runs, attempts and workers admit only their declared status
 //! transitions, and a run's new attempt opens only once its current one has
 //! ended. The runs' sticky-terminals guard is subsumed by its transitions
 //! trigger. An attempt's materializations stay pending until it reports Done:
@@ -10,16 +10,17 @@
 //! the settled versions around them are spliced back together. Transactions
 //! roll up atomically and executions from their transactions, so both stored
 //! statuses are recomputed, transactions first. A failed stream restarts with
-//! backoff: workers count failures in a row and when the next restart is due.
-//! Runs count recovery's own re-dispatches, which are capped. An attempt
-//! records when it began a destination write a re-run would repeat. Live names
-//! are unique through partial indexes, so a rename never takes a key lock; the
-//! upgrade stops, listing them, when two live functions or tables of a
-//! collection share a name. A membership references its user, so a grant racing
-//! the user's delete cannot leave one behind; memberships of users already gone
-//! are deleted. A run's input records the version of the table its plan read,
-//! backfilled from the dependency of the run's function version and the table
-//! as of the run's trigger.
+//! backoff: workers count failures in a row and when the next restart is due,
+//! and no longer record a message status. Runs count recovery's own
+//! re-dispatches, which are capped. An attempt records when it began a
+//! destination write a re-run would repeat. Live names are unique through
+//! partial indexes, so a rename never takes a key lock; the upgrade stops,
+//! listing them, when two live functions or tables of a collection share a
+//! name. A membership references its user, so a grant
+//! racing the user's delete cannot leave one behind; memberships of users
+//! already gone are deleted. A run's input records the version of the table
+//! its plan read, backfilled from the dependency of the run's function
+//! version and the table as of the run's trigger.
 
 use sea_query::{ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, IntoIden, Query, Table};
 
@@ -33,6 +34,7 @@ const DERIVATION_WORK_MEM: &str = "64MB";
 #[derive(Iden, Clone, Copy)]
 enum Workers {
     Table,
+    MessageStatus,
     Failures,
     RetryAt,
     DestinationWriteOn,
@@ -293,6 +295,7 @@ impl SchemaDelta for Migration {
             .add_column(ColumnDef::new(Workers::Failures).integer().not_null().default(0))
             .add_column(ColumnDef::new(Workers::RetryAt).timestamp_with_time_zone().null())
             .add_column(ColumnDef::new(Workers::DestinationWriteOn).timestamp_with_time_zone().null())
+            .drop_column(Workers::MessageStatus)
             .to_owned();
         let orphan_memberships = Query::delete()
             .from_table(UsersRoles::Table)

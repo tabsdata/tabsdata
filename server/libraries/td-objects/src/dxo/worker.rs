@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::yaml::WorkerOutput;
+use crate::dxo::worker_input::WorkerOutput;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, DestinationWrite,
     Enabled, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
@@ -32,7 +32,6 @@ pub struct WorkerInsertDB {
     pub transaction_id: Option<TransactionId>,
     pub physical_function_run_id: Option<PhysicalFunctionRunId>,
     pub function_version_id: FunctionVersionId,
-    pub message_status: WorkerMessageStatus,
     pub started_on: Option<Started<AtTime>>,
     pub ended_on: Option<Ended<AtTime>>,
     pub status: WorkerStatus,
@@ -159,8 +158,6 @@ pub struct Worker {
     #[dto(list(filter, filter_like, order_by))]
     pub function_version_id: FunctionVersionId,
     #[dto(list(filter, order_by))]
-    pub message_status: WorkerMessageStatus,
-    #[dto(list(filter, order_by))]
     pub started_on: Option<Started<AtTime>>,
     #[dto(list(filter, order_by))]
     pub ended_on: Option<Ended<AtTime>>,
@@ -198,7 +195,6 @@ impl FromDao for Worker {
             transaction_id: dao.base.base.transaction_id,
             physical_function_run_id: dao.base.base.physical_function_run_id,
             function_version_id: dao.base.base.function_version_id,
-            message_status: dao.base.base.message_status,
             started_on: dao.base.base.started_on,
             ended_on: dao.base.base.ended_on,
             status: dao.base.base.status,

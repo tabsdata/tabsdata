@@ -21,7 +21,7 @@ use td_objects::types::basic::{
     FunctionStatus, FunctionType, FunctionVersionId, Parent, Partitioned, Private, Snippet,
     StageId, StorageVersion, System, TableFunctionParamPos, TableId, TableName, TableStatus,
     TableType, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, WorkerId,
-    WorkerMessageStatus, WorkerStatus,
+    WorkerStatus,
 };
 
 /// Runs every statement on the caller's executor; if it is project-scoped
@@ -196,7 +196,6 @@ async fn seed_function_with_parent(
                 transaction_id: None,
                 physical_function_run_id: None,
                 function_version_id: function_db.id.clone(),
-                message_status: WorkerMessageStatus::None,
                 started_on: None,
                 ended_on: None,
                 status: WorkerStatus::Scheduled,

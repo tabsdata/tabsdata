@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::yaml::location::{Location, Locations};
+use crate::dxo::worker_input::location::{Location, Locations};
 use crate::types::basic::{CollectionName, FunctionName};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;

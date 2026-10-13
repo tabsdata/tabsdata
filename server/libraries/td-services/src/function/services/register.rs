@@ -94,7 +94,7 @@ mod tests {
         AccessTokenId, BasePath, BundleStatus, CollectionType, ConnectionKind, Decorator, Enabled,
         FunctionIdName, FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionType,
         GroupName, Parent, ProjectId, SNIPPET_MAX_LEN, TableName, TableStatus, TableType,
-        TriggerStatus, UserId, WorkerMessageStatus, WorkerStatus, WorkerType,
+        TriggerStatus, UserId, WorkerStatus, WorkerType,
     };
     use td_objects::types::basic::{
         BundleId, CollectionIdName, CollectionName, ReuseFrozen, TableNameDto, WorkerConfig,
@@ -1532,7 +1532,6 @@ mod tests {
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
         assert_eq!(worker.base.function_version_id, res.id);
-        assert_eq!(worker.base.message_status, WorkerMessageStatus::None);
         assert_eq!(worker.base.started_on, None);
         assert_eq!(worker.base.ended_on, None);
         assert_eq!(worker.base.status, WorkerStatus::Scheduled);

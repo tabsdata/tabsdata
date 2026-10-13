@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::dxo::yaml::location::{Location, Locations};
+use crate::dxo::worker_input::location::{Location, Locations};
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, WorkerConfig, WorkerId,
 };
@@ -43,7 +43,7 @@ pub struct CronInfo {
 mod tests {
     use super::*;
     use crate::dxo::worker::CronTriggerConfig;
-    use crate::dxo::yaml::WorkerInput;
+    use crate::dxo::worker_input::WorkerInput;
     use crate::types::basic::CronMask;
 
     #[test]
@@ -66,20 +66,16 @@ mod tests {
                 config: WorkerConfig::serialize(cfg).unwrap(),
             },
         }));
-        let serialized = serde_yaml::to_string(&input).unwrap();
-
-        // Lean: no `task` callback.
-        assert!(serialized.starts_with("!Cron\ninfo:"));
-        assert!(!serialized.contains("task"));
-
-        // Logical ids are written in the padded, at-rest form.
-        assert!(serialized.contains(&format!("worker_id: {}\n", worker_id.padded_str())));
-        assert!(serialized.contains(&format!(
-            "function_version_id: {}\n",
+        let serialized = serde_json::to_value(&input).unwrap();
+        let info = &serialized["Cron"]["info"];
+        assert!(info.get("task").is_none());
+        assert_eq!(info["worker_id"], worker_id.padded_str());
+        assert_eq!(
+            info["function_version_id"],
             function_version_id.padded_str()
-        )));
+        );
 
-        let deserialized: WorkerInput = serde_yaml::from_str(&serialized).unwrap();
+        let deserialized: WorkerInput = serde_json::from_value(serialized).unwrap();
         assert_eq!(input, deserialized);
     }
 }

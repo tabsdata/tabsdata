@@ -176,8 +176,8 @@ pub(crate) mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBWithNames;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
-    use td_objects::dxo::yaml::WorkerOutput;
-    use td_objects::dxo::yaml::function::{FunctionOutput, TableInfo, WrittenTable};
+    use td_objects::dxo::worker_input::WorkerOutput;
+    use td_objects::dxo::worker_input::function::{FunctionOutput, TableInfo, WrittenTable};
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName, HasData,
         LogicalFunctionRunStatus, ProjectId, RowCount, SchemaChanged, SchemaHash, TableName,
