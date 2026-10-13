@@ -14,7 +14,7 @@ from __future__ import annotations
 import random
 from dataclasses import asdict, dataclass
 
-GENERATOR = 4
+GENERATOR = 5
 
 PUBLISHER = "publisher"
 CRON_PUBLISHER = "cron_publisher"
@@ -151,13 +151,14 @@ class Plan:
     faults: bool
     fleet: Fleet
     ops: tuple[Op, ...]
+    generator: int = GENERATOR
 
     def lane_ops(self, lane: int) -> list[Op]:
         return [op for op in self.ops if op.lane == lane]
 
     def to_dict(self) -> dict:
         return {
-            "generator": GENERATOR,
+            "generator": self.generator,
             "seed": self.seed,
             "lanes": self.lanes,
             "faults": self.faults,
@@ -188,6 +189,7 @@ class Plan:
                 functions=tuple(FunctionSpec(**spec) for spec in fleet["functions"]),
             ),
             ops=tuple(Op(**op) for op in data["ops"]),
+            generator=data["generator"],
         )
 
 

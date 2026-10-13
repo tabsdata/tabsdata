@@ -5,16 +5,25 @@
 """Runs a monkey plan against a cluster instance and checks what it leaves.
 
 While the lanes run, a monitor samples the run's project on the cluster and
-records every moment two unfinished workloads of one function and kind
-coexist. Afterwards the run settles: every execution it triggered must reach a
-final status, the functions the server reports must match the model, and the
-cluster must hold exactly one trigger workload (cron job or streamer) for each
-enabled cron or stream function, at its current version, and no unfinished
-run of anything else. Any 5xx or unexpected error from an operation, and any
-operation accepted on a function that should not exist, is a problem too."""
+records every moment two unfinished trigger workloads (cron jobs or streamers)
+of one function coexist. A run's workload may still be exiting when the next
+run of its function starts, so runs are checked on the server instead: no two
+runs of one function may overlap in time. Afterwards the run settles: every
+execution of the project, triggered by the run, a cron or a dependency, must
+reach a final status, the functions the server reports must match the model,
+and the cluster must hold exactly one trigger workload for each enabled cron or
+stream function, at its current version, and no unfinished run of anything
+else. Every triggered execution and its transactions must agree with their
+parts (see ``rollups``). Any unexpected error from an operation, any 5xx in the
+apiserver log other than a 503 (which tells a client to retry), and any
+operation accepted on a function that should not exist, is a problem too.
+
+From generator 5, cancels and recoveries aim at a random recent execution and
+transaction; older plans replay as recorded."""
 
 from __future__ import annotations
 
+import random
 import re
 import threading
 import time
@@ -33,6 +42,7 @@ from tabsdatak.sdk.status_utils.function_run import (
     function_run_status_to_mapping,
 )
 from tabsdatak.sdk.status_utils.transaction import (
+    TRANSACTION_FINAL_STATUSES,
     TransactionStatus,
     transaction_status_to_mapping,
 )
@@ -53,6 +63,7 @@ from testi_tabsdatak.conn.common.cluster import (
     label_value,
     orphan_spec,
 )
+from testi_tabsdatak.conn.common.monkey.held import held_transactions
 from testi_tabsdatak.conn.common.monkey.model import (
     ERROR,
     OK,
@@ -95,6 +106,11 @@ from testi_tabsdatak.conn.common.monkey.progress import (
     counted,
     spoken,
 )
+from testi_tabsdatak.conn.common.monkey.rollups import (
+    execution_problems,
+    transaction_problems,
+    worker_problems,
+)
 
 RUN_DECORATORS = ("publisher", "transformer", "subscriber")
 TRIGGER_DECORATORS = {
@@ -103,7 +119,7 @@ TRIGGER_DECORATORS = {
 }
 FUNCTION_RUN = "F"
 
-EXECUTIONS_TIMEOUT = 1800
+EXECUTIONS_TIMEOUT = 14400
 SETTLE_TIMEOUT = 900
 POLL_SECONDS = 5
 STALL_SECONDS = 600
@@ -126,6 +142,7 @@ WORKER_TYPES = {"F": "function run", "CT": "cron trigger", "ST": "stream trigger
 MONITOR_SECONDS = 2.0
 DETAIL_LENGTH = 500
 REPORTED_VIOLATIONS = 20
+EXAMPLES_PER_KIND = 3
 
 Connect = Callable[[], TabsdataServer]
 
@@ -166,6 +183,9 @@ def classify(error: BaseException) -> tuple[str, int | None]:
 
 WORKER_ID_TEXT = re.compile(r"\b([a-z]+\d{8})-(\d+)\b")
 LOG_MARGIN_SECONDS = 60
+RETRY_STATUS = "503"
+TARGETED_FROM_GENERATOR = 5
+RECENT_EXECUTIONS = 5
 
 
 def worker_keys(text: str) -> set[tuple[str, int]]:
@@ -255,6 +275,8 @@ class ProjectMonitor:
                     item.metadata.name
                 )
             for (function_id, decorator), names in groups.items():
+                if decorator in RUN_DECORATORS:
+                    continue
                 key = (function_id, decorator, frozenset(names))
                 if len(names) > 1 and key not in self._seen:
                     self._seen.add(key)
@@ -357,16 +379,29 @@ class MonkeyRun:
             self._problem(f"Could not read the apiserver log: {error.reason}")
             return
         ours: dict[tuple[str, str, str], int] = defaultdict(int)
+        retried = 0
         for method, uri, status in errors:
             if (
                 f"/projects/{self.project}/" in uri
                 or self.project_id in uri
                 or worker_keys(uri) & workers
             ):
-                ours[(method, uri, status)] += 1
+                if status == RETRY_STATUS:
+                    retried += 1
+                else:
+                    ours[(method, uri, status)] += 1
+        if retried:
+            self.progress(
+                f"The server answered {counted(retried, 'request')} of this run "
+                f"with {RETRY_STATUS}, telling the client to retry",
+                SETTLE,
+            )
         if not ours:
             self.progress(
-                "The server answered no request of this run with a 5xx", SETTLE, GOOD
+                "The server answered no request of this run with a 5xx other than "
+                f"{RETRY_STATUS}",
+                SETTLE,
+                GOOD,
             )
         for (method, uri, status), count in sorted(ours.items()):
             times = "once" if count == 1 else f"{count} times"
@@ -493,7 +528,7 @@ class MonkeyRun:
             with self._lock:
                 self._executions[spec.name].append(execution)
         elif op.action in (CANCEL_EXECUTION, RECOVER_EXECUTION):
-            execution = self._latest(spec.name)
+            execution = self._target(op)
             if execution is None:
                 return "No execution yet"
             acted_on.append(f"Execution {execution.id}")
@@ -502,17 +537,16 @@ class MonkeyRun:
             else:
                 execution.recover()
         elif op.action in (CANCEL_TRANSACTION, RECOVER_TRANSACTION):
-            execution = self._latest(spec.name)
+            execution = self._target(op)
             transactions = execution.transactions if execution is not None else []
             if not transactions:
                 return "No transaction yet"
-            acted_on.append(
-                f"Transaction {transactions[0].id} of execution {execution.id}"
-            )
+            transaction = self._pick(op, transactions, transactions[0])
+            acted_on.append(f"Transaction {transaction.id} of execution {execution.id}")
             if op.action == CANCEL_TRANSACTION:
-                transactions[0].cancel()
+                transaction.cancel()
             else:
-                transactions[0].recover()
+                transaction.recover()
         elif op.action == LOSE_JOB:
             return self._lose_job(spec, acted_on)
         elif op.action == LOSE_STREAMER:
@@ -523,6 +557,18 @@ class MonkeyRun:
         with self._lock:
             executions = self._executions.get(function)
             return executions[-1] if executions else None
+
+    def _target(self, op: Op) -> Execution | None:
+        with self._lock:
+            recent = self._executions.get(op.function, [])[-RECENT_EXECUTIONS:]
+        if not recent:
+            return None
+        return self._pick(op, recent, recent[-1])
+
+    def _pick(self, op: Op, items: list, fixed):
+        if self.plan.generator < TARGETED_FROM_GENERATOR:
+            return fixed
+        return random.Random(f"{self.plan.seed}-{op.index}-{len(items)}").choice(items)
 
     def _lose_job(self, spec: FunctionSpec, acted_on: list[str]) -> str | None:
         execution = self._latest(spec.name)
@@ -579,8 +625,11 @@ class MonkeyRun:
 
     def _settle(self) -> dict:
         server = self.connect()
+        others = self._untracked_executions(server)
         self._await_executions()
+        self._await_untracked(others)
         self._check_transactions(server)
+        self._check_run_overlaps(server)
         functions = self._functions(server)
         self.progress(
             f"The server lists {counted(len(functions), 'function')}; "
@@ -662,8 +711,57 @@ class MonkeyRun:
                 for execution in executions
             ]
 
-    def _await_executions(self) -> None:
-        pending = self._tracked()
+    def _untracked_executions(
+        self, server: TabsdataServer
+    ) -> list[tuple[str, Execution]]:
+        tracked = {execution.id for _, execution in self._tracked()}
+        return [
+            (f"{execution.function} ({execution.trigger_type})", execution)
+            for execution in server.list_executions()
+            if execution.id not in tracked
+            and execution.status not in EXECUTION_FINAL_STATUSES
+        ]
+
+    def _await_untracked(self, others: list[tuple[str, Execution]]) -> None:
+        if not others:
+            return
+        self.progress(
+            f"Waiting for {counted(len(others), 'execution')} triggered by crons "
+            "or dependencies to finish",
+            SETTLE,
+            WAITING,
+        )
+        unfinished = self._unfinished
+        self._await_executions(others, "untriggered")
+        self._unfinished = unfinished + self._unfinished
+
+    def _check_run_overlaps(self, server: TabsdataServer) -> None:
+        by_function: dict[str, list] = defaultdict(list)
+        for run in server.list_function_runs():
+            if run.started_on is not None:
+                by_function[run.kwargs.get("function_id")].append(run)
+        overlaps = 0
+        for runs in by_function.values():
+            runs.sort(key=lambda run: run.started_on)
+            for before, after in zip(runs, runs[1:]):
+                if before.ended_on is None or after.started_on < before.ended_on:
+                    overlaps += 1
+                    self._problem(
+                        f"Runs {before.id} and {after.id} of {before.function} "
+                        f"overlap: the second started before the first ended"
+                    )
+        if not overlaps:
+            self.progress(
+                "No two runs of one function overlapped in time", SETTLE, GOOD
+            )
+
+    def _await_executions(
+        self,
+        pending: list[tuple[str, Execution]] | None = None,
+        label: str = "triggered",
+    ) -> None:
+        if pending is None:
+            pending = self._tracked()
         deadline = time.monotonic() + min(EXECUTIONS_TIMEOUT, self._remaining())
         reported = None
         changed = reported_at = time.monotonic()
@@ -695,6 +793,15 @@ class MonkeyRun:
                 )
                 for line in self._execution_lines(pending):
                     self.progress(line, SETTLE)
+                held = self._held_executions({execution.id for _, execution in pending})
+                if held:
+                    self.progress(
+                        f"{counted(len(held), 'execution')} wait to commit behind a "
+                        "stalled transaction; counting them as settled",
+                        SETTLE,
+                    )
+                    pending = [item for item in pending if item[1].id not in held]
+                    reported = len(pending)
             still = []
             for function, execution in pending:
                 try:
@@ -709,31 +816,77 @@ class MonkeyRun:
                 time.sleep(POLL_SECONDS)
         self._unfinished = pending
         if not pending:
-            self.progress("Every triggered execution has finished", SETTLE, GOOD)
+            self.progress(f"Every {label} execution has finished", SETTLE, GOOD)
         for function, execution in pending:
             self._problem(
                 f"Execution {execution.id} of {function} never finished "
                 f"(last status {execution.status!r})"
             )
 
-    def _check_transactions(self, server: TabsdataServer) -> None:
-        tracked = {execution.id for _, execution in self._tracked()}
+    def _parts(
+        self, server: TabsdataServer, execution_ids: set[str]
+    ) -> tuple[list, dict[str, list]]:
         transactions = [
             transaction
             for transaction in server.list_transactions()
-            if transaction.execution in tracked
+            if transaction.execution.id in execution_ids
         ]
         ids = {transaction.id for transaction in transactions}
         runs: dict[str, list] = defaultdict(list)
         for run in server.list_function_runs():
-            if run.transaction in ids:
-                runs[run.transaction].append(run)
+            if run.transaction.id in ids:
+                runs[run.transaction.id].append(run)
+        return transactions, runs
+
+    def _upstream(self, function: str) -> str | None:
+        spec = next(
+            (spec for spec in self.plan.fleet.functions if spec.name == function), None
+        )
+        return spec.upstream if spec else None
+
+    def _held(self, transactions: list, runs: dict[str, list]) -> set[str]:
+        return held_transactions(transactions, runs, self._upstream)
+
+    def _held_executions(self, execution_ids: set[str]) -> set[str]:
+        """Executions whose unfinished transactions all wait to commit behind a
+        stalled one."""
+        try:
+            transactions, runs = self._parts(self.connect(), execution_ids)
+        except Exception:
+            return set()
+        held = self._held(transactions, runs)
+        by_execution: dict[str, list] = defaultdict(list)
+        for transaction in transactions:
+            by_execution[transaction.execution.id].append(transaction)
+        return {
+            execution_id
+            for execution_id, parts in by_execution.items()
+            if any(transaction.id in held for transaction in parts)
+            and all(
+                transaction.id in held
+                or transaction.status in TRANSACTION_FINAL_STATUSES
+                for transaction in parts
+            )
+        }
+
+    def _check_transactions(self, server: TabsdataServer) -> None:
+        tracked = {execution.id for _, execution in self._tracked()}
+        transactions, runs = self._parts(server, tracked)
+        held = self._held(transactions, runs)
+        if held:
+            self.progress(
+                f"{counted(len(held), 'transaction')} of the triggered executions "
+                "wait to commit behind a stalled transaction",
+                SETTLE,
+            )
         stuck = 0
         for transaction in transactions:
             statuses = {run.status for run in runs[transaction.id]}
             finished = bool(statuses) and statuses <= FINISHED_RUNS
             if transaction.status == TRANSACTION_UNEXPECTED or (
-                transaction.status == TRANSACTION_RUNNING and finished
+                transaction.status == TRANSACTION_RUNNING
+                and finished
+                and transaction.id not in held
             ):
                 stuck += 1
                 listed = ", ".join(
@@ -741,13 +894,49 @@ class MonkeyRun:
                 )
                 self._problem(
                     f"Transaction {transaction.id} of execution "
-                    f"{transaction.execution} is {transaction.status} although all "
+                    f"{transaction.execution.id} is {transaction.status} although all "
                     f"its function runs finished: {listed}"
                 )
         if not stuck:
             self.progress(
                 f"All {counted(len(transactions), 'transaction')} of the triggered "
                 "executions have a status that matches their function runs",
+                SETTLE,
+                GOOD,
+            )
+        self._check_rollups(server, tracked, transactions, runs)
+
+    def _check_rollups(
+        self,
+        server: TabsdataServer,
+        tracked: set[str],
+        transactions: list,
+        runs: dict[str, list],
+    ) -> None:
+        problems = []
+        by_execution: dict[str, list] = defaultdict(list)
+        for transaction in transactions:
+            problems += transaction_problems(transaction, runs[transaction.id])
+            by_execution[transaction.execution.id].append(transaction)
+        executions = [
+            execution
+            for execution in server.list_executions()
+            if execution.id in tracked
+        ]
+        for execution in executions:
+            problems += execution_problems(execution, by_execution[execution.id])
+            problems += worker_problems(execution, execution.workers)
+        by_kind: dict[str, list[str]] = defaultdict(list)
+        for problem in problems:
+            by_kind[problem.kind].append(problem.text)
+        for kind, texts in by_kind.items():
+            examples = "; ".join(texts[:EXAMPLES_PER_KIND])
+            self._problem(f"{kind}: {len(texts)}, for example {examples}")
+        if not problems:
+            self.progress(
+                f"All {counted(len(executions), 'triggered execution')} span their "
+                "transactions, end only once all their parts end, and leave no live "
+                "function worker",
                 SETTLE,
                 GOOD,
             )

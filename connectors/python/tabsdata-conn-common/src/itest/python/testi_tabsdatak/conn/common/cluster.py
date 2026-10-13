@@ -27,12 +27,21 @@ JOB_NAME_LABELS = ["batch.kubernetes.io/job-name", "job-name"]
 FINISHED_POD_PHASES = ("Succeeded", "Failed")
 APISERVER_POD_PREFIX = "srv-apiserver-"
 SERVER_ERROR = re.compile(
-    r"method=(\S+) uri=(\S+) .*response failed classification=Status code: (5\d\d)"
+    r"method=(\S+) uri=(\S+) .*?response failed classification=Status code: (5\d\d)"
 )
+
 
 WORKER_ID_PATTERN = re.compile(r"^([A-Za-z]+\d{8})-(\d+)$")
 
 T = TypeVar("T")
+
+
+def server_errors_in(log: str) -> list[tuple[str, str, str]]:
+    return [
+        match.groups()
+        for line in log.splitlines()
+        if (match := SERVER_ERROR.search(line)) is not None
+    ]
 
 
 def label_value(value: str) -> str:
@@ -199,10 +208,13 @@ class Cluster:
         for pod in self.core.list_namespaced_pod(self.namespace).items:
             if not pod.metadata.name.startswith(APISERVER_POD_PREFIX):
                 continue
-            log = self.core.read_namespaced_pod_log(
-                pod.metadata.name, self.namespace, since_seconds=since_seconds
+            response = self.core.read_namespaced_pod_log(
+                pod.metadata.name,
+                self.namespace,
+                since_seconds=since_seconds,
+                _preload_content=False,
             )
-            errors += [match.groups() for match in SERVER_ERROR.finditer(log)]
+            errors += server_errors_in(response.data.decode("utf-8", errors="replace"))
         return errors
 
     def delete_pod(self, name: str) -> None:
