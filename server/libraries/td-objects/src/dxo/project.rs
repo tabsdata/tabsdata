@@ -129,8 +129,8 @@ pub struct ProjectUpdate {
 #[ta_objects::Dao]
 #[dao(table = "projects", ops(update(ProjectInsertDB)))]
 pub struct ProjectUpdateDB {
-    pub name: ProjectName,
-    pub description: Description,
+    pub name: Option<ProjectName>,
+    pub description: Option<Description>,
     pub modified_on: Modified<AtTime>,
     pub modified_by_id: Modified<UserId>,
 }
@@ -187,17 +187,6 @@ impl From<ProjectInsertDB> for ActiveProjectDB {
         }
     }
 }
-impl From<ActiveProjectDB> for ProjectUpdateDB {
-    fn from(src: ActiveProjectDB) -> Self {
-        ProjectUpdateDB {
-            name: src.name,
-            description: src.description,
-            modified_on: src.modified_on,
-            modified_by_id: src.modified_by_id,
-        }
-    }
-}
-
 #[ta_objects::UrlParam]
 pub struct ProjectParam {
     pub project: ProjectIdName,

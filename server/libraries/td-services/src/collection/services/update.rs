@@ -64,10 +64,7 @@ async fn update_collection(
         // source/destination collections carry connection config: manage_project
         escalate_for_connected(&authz, conn, &ctx, &project, &collection.collection_type).await?;
         update_collection_validate(&update)?;
-        let mut update_db = CollectionUpdateDB::from(&collection);
-        update_db.modified_on = ctx.time.into();
-        update_db.modified_by_id = ctx.user_id.into();
-        update.apply_to(&mut update_db);
+        let update_db = update.to_dao(&ctx);
         let plan = plan_collection_update(conn, &collection, &update, &update_db).await?;
         (plan, grant)
     };

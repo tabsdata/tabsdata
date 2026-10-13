@@ -91,36 +91,30 @@ pub struct UserUpdate {
 }
 
 impl UserUpdate {
-    /// Seed the update row from the current user, stamp it, and merge the
-    /// set fields (a set password re-hashes and forces a change on login).
+    /// A set password is re-hashed and forces a change on login.
     pub fn to_dao(
         self,
-        user: UserDB,
         ctx: &RequestContext,
         password_hashing_config: &PasswordHashingConfig,
     ) -> Result<UserUpdateDB, TdError> {
-        let mut db = UserUpdateDB::from(user);
-        db.modified_on = ctx.time.into();
-        db.modified_by_id = ctx.user_id.into();
-        if let Some(full_name) = self.full_name {
-            db.full_name = full_name;
-        }
-        // Re-wrap as `Some(inner)` so update_values writes the column; the
-        // DTO's outer `None` falls through here (unchanged).
-        if let Some(email) = self.email {
-            db.email = Some(email);
-        }
+        let mut db = UserUpdateDB {
+            full_name: self.full_name,
+            email: self.email,
+            modified_on: ctx.time.into(),
+            modified_by_id: ctx.user_id.into(),
+            password_hash: None,
+            password_set_on: None,
+            password_must_change: None,
+            enabled: self.enabled,
+        };
         if let Some(password) = self.password {
-            db.password_hash = PasswordHash::try_from(create_password_hash(
+            db.password_hash = Some(PasswordHash::try_from(create_password_hash(
                 password_hashing_config,
                 password.trim(),
-            ))?;
-            db.password_set_on = PasswordChangeTime::try_from(&ctx.time)?;
-            db.password_must_change = PasswordMustChange::TRUE;
+            ))?);
+            db.password_set_on = Some(PasswordChangeTime::try_from(&ctx.time)?);
+            db.password_must_change = Some(PasswordMustChange::TRUE);
         };
-        if let Some(enabled) = self.enabled {
-            db.enabled = enabled;
-        }
         Ok(db)
     }
 }
@@ -128,17 +122,16 @@ impl UserUpdate {
 #[ta_objects::Dao]
 #[dao(table = "users", ops(update(UserDB)))]
 pub struct UserUpdateDB {
-    pub full_name: FullName,
-    // Tri-state for update_values: outer `None` skips the column (unchanged),
-    // `Some(None)` sets it NULL (clear), `Some(Some(v))` sets `v`. Seeded from
-    // the current `UserDB`, overridden by the update layer.
+    // Each column is written only when set: an update writes what its request
+    // changed, never a copy of the rest of the row.
+    pub full_name: Option<FullName>,
     pub email: Option<Option<Email>>,
     pub modified_on: Modified<AtTime>,
     pub modified_by_id: Modified<UserId>,
-    pub password_hash: PasswordHash,
-    pub password_set_on: PasswordChangeTime,
-    pub password_must_change: PasswordMustChange,
-    pub enabled: UserEnabled,
+    pub password_hash: Option<PasswordHash>,
+    pub password_set_on: Option<PasswordChangeTime>,
+    pub password_must_change: Option<PasswordMustChange>,
+    pub enabled: Option<UserEnabled>,
 }
 
 #[ta_objects::Dto]
@@ -206,21 +199,6 @@ pub struct UserInfo {
 
     pub user_roles: Vec<Role>,
 }
-impl From<UserDB> for UserUpdateDB {
-    fn from(src: UserDB) -> Self {
-        UserUpdateDB {
-            full_name: src.full_name,
-            email: Some(src.email),
-            modified_on: src.modified_on,
-            modified_by_id: src.modified_by_id,
-            password_hash: src.password_hash,
-            password_set_on: src.password_set_on,
-            password_must_change: src.password_must_change,
-            enabled: src.enabled,
-        }
-    }
-}
-
 #[ta_objects::UrlParam]
 pub struct UserParam {
     pub user: UserIdName,

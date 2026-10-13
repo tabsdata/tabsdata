@@ -261,7 +261,8 @@ mod tests {
             modified_on: AtTime::now().into(),
             modified_by_id: UserId::admin().into(),
             base_path: Some(Some(prod.clone())),
-            ..CollectionUpdateDB::from(&collection)
+            name: None,
+            description: None,
         };
         db.update::<CollectionUpdateDB>(&update, &collection.id)
             .await?;

@@ -164,17 +164,13 @@ pub struct CollectionUpdate {
 }
 
 impl CollectionUpdate {
-    pub fn apply_to(&self, db: &mut CollectionUpdateDB) {
-        if let Some(name) = &self.name {
-            db.name = name.clone();
-        }
-        if let Some(description) = &self.description {
-            db.description = description.clone();
-        }
-        // Re-wrap as `Some(inner)` so `update_values` writes the column; the
-        // DTO's outer `None` falls through here (unchanged).
-        if let Some(base_path) = &self.base_path {
-            db.base_path = Some(base_path.clone());
+    pub fn to_dao(&self, ctx: &RequestContext) -> CollectionUpdateDB {
+        CollectionUpdateDB {
+            name: self.name.clone(),
+            description: self.description.clone(),
+            modified_on: ctx.time.into(),
+            modified_by_id: ctx.user_id.into(),
+            base_path: self.base_path.clone(),
         }
     }
 }
@@ -182,13 +178,12 @@ impl CollectionUpdate {
 #[ta_objects::Dao]
 #[dao(table = "collections", ops(update(CollectionDB)), project_scoped)]
 pub struct CollectionUpdateDB {
-    pub name: CollectionName,
-    pub description: Description,
+    // Each column is written only when set (an outer `None` skips it): an
+    // update writes what its request changed, never a copy of the row.
+    pub name: Option<CollectionName>,
+    pub description: Option<Description>,
     pub modified_on: Modified<AtTime>,
     pub modified_by_id: Modified<UserId>,
-    // DAO side of `CollectionUpdate::base_path`'s tri-state (here the outer
-    // `None` skips the column). Seeded from the current `ActiveCollectionDB`,
-    // overridden by the update layer.
     pub base_path: Option<Option<BasePath>>,
 }
 
@@ -252,18 +247,6 @@ impl FromDao for CollectionRead {
             modified_by,
             group,
         })
-    }
-}
-
-impl From<&ActiveCollectionDB> for CollectionUpdateDB {
-    fn from(src: &ActiveCollectionDB) -> Self {
-        CollectionUpdateDB {
-            name: src.name.clone(),
-            description: src.description.clone(),
-            modified_on: src.modified_on,
-            modified_by_id: src.modified_by_id,
-            base_path: Some(src.base_path.clone()),
-        }
     }
 }
 
