@@ -35,12 +35,6 @@ async fn create_service_token(
     let (ctx, param, create) = request.into_parts();
     let expires_on = expires_on(&settings, &ctx.time, &create.expires_in_days)?;
 
-    let mut trx = db.begin().await?;
-    let grant = authz
-        .require::<User, SelfUser>(&mut trx, &ctx, &ctx.user_id)
-        .await?;
-    let conn = trx.get(grant);
-
     let token = ServiceToken::try_from(token::generate())?;
     let hint = token::hint(&token).ok_or_else(|| {
         api_error!(

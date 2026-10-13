@@ -15,6 +15,7 @@ use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::project::{
     ActiveProjectDB, ActiveProjectDBWithNames, ProjectCreate, ProjectRead,
 };
+use td_objects::errors::SqlError;
 use td_queries::Queries;
 
 #[service_factory]

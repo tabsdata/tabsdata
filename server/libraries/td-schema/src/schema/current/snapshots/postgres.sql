@@ -15,7 +15,7 @@ CREATE TABLE "collections" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "projec
 
 CREATE TABLE "roles" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "name" text NOT NULL, "description" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C", "kind" text NOT NULL, "project_id" text NULL COLLATE "C", "fixed" bool NOT NULL, FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "users_roles" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "user_id" text NOT NULL COLLATE "C", "role_id" text NOT NULL COLLATE "C", "added_on" timestamp with time zone NOT NULL, "added_by_id" text NOT NULL COLLATE "C", "fixed" bool NOT NULL, FOREIGN KEY ("role_id") REFERENCES "roles" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "users_roles" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "user_id" text NOT NULL COLLATE "C", "role_id" text NOT NULL COLLATE "C", "added_on" timestamp with time zone NOT NULL, "added_by_id" text NOT NULL COLLATE "C", "fixed" bool NOT NULL, FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("role_id") REFERENCES "roles" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "sessions" ( "access_token_id" text NOT NULL PRIMARY KEY COLLATE "C", "refresh_token_id" text NOT NULL UNIQUE COLLATE "C", "user_id" text NOT NULL COLLATE "C", "created_on" timestamp with time zone NOT NULL, "expires_on" timestamp with time zone NOT NULL, "status_change_on" timestamp with time zone NOT NULL, "status" text NOT NULL )
 

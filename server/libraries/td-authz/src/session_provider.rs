@@ -2,15 +2,11 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use chrono::{DateTime, Utc};
-use std::collections::HashMap;
-use std::sync::Arc;
 use td_database::domain::Apiserver;
 use td_error::{TdError, td_error};
 use td_objects::dxo::auth::SessionDBWithNames;
 use td_objects::types::basic::{AccessTokenId, SessionStatus};
-use td_queries::{Queries, QueryExecutor, Writes};
-use tokio::sync::Mutex;
+use td_queries::{Queries, QueryExecutor};
 
 pub type Session = SessionDBWithNames;
 pub type SessionMap = HashMap<AccessTokenId, Arc<Session>>;

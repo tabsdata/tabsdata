@@ -2,6 +2,7 @@
 // Copyright 2024 Tabsdata Inc.
 //
 
+use crate::auth::retire_sessions::retire_sessions;
 use crate::user::UserError;
 use crate::user::assert_user_is_not_system;
 use ta_services::factory::service_factory;
@@ -16,7 +17,7 @@ use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::user::{
     UserDB, UserDBWithNames, UserParam, UserRead, UserUpdate, UserUpdateDB,
 };
-use td_objects::types::basic::UserId;
+use td_objects::types::basic::{SessionStatus, UserEnabled, UserId};
 use td_queries::Queries;
 use td_security::config::PasswordHashingConfig;
 

@@ -23,4 +23,8 @@ ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_name_key
 
 ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_name_key
 
+DELETE FROM "users_roles" WHERE "user_id" NOT IN (SELECT "id" FROM "users")
+
+ALTER TABLE "users_roles" ADD FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT
+
 UPDATE tabsdata_system SET value = '13' WHERE name = 'db_version'

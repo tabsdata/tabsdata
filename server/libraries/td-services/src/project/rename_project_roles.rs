@@ -89,7 +89,8 @@ pub async fn rename_project_roles<S: DbScope, M: WriteMode>(
             modified_by_id: context.user_id.into(),
         };
         conn.update::<RoleUpdateDB>(&role_update_db, role.id)
-            .await?;
+            .await
+            .map_err(SqlError::already_exists)?;
     }
 
     Ok(())

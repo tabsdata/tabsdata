@@ -210,6 +210,17 @@ fn classify(entity: String, error: sqlx::Error, values: &[(String, String)]) -> 
 }
 
 impl SqlError {
+    /// A unique violation as the "already exists" its pre-check reports: a
+    /// concurrent write can take the value after the check passed.
+    pub fn already_exists(self) -> Self {
+        match self {
+            SqlError::UniqueViolation(entity, hint, _) => {
+                SqlError::EntityAlreadyExists(entity, hint)
+            }
+            other => other,
+        }
+    }
+
     /// Classify a `sqlx::Error` for a write operation (insert/update),
     /// with DAO values available for hint enrichment.
     pub fn on_write<D: Dao>(error: sqlx::Error, values: &[(String, String)]) -> Self {

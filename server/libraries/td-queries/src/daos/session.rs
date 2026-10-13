@@ -4,7 +4,7 @@
 
 use crate::QueryExecutor;
 use crate::Writes;
-use sea_query::{DeleteStatement, Expr, ExprTrait, Query};
+use sea_query::{DeleteStatement, Expr, ExprTrait, LockBehavior, LockType, Query};
 use ta_objects::Dao;
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
@@ -21,8 +21,9 @@ impl<E> Sessions<E>
 where
     E: QueryExecutor + Writes,
 {
-    /// Delete every session whose `expires_on` is in the past; returns how
-    /// many were deleted.
+    /// Deletes one batch of sessions whose `expires_on` is in the past,
+    /// passing over any another transaction holds, so a purge never waits on
+    /// a request; returns how many were deleted.
     pub async fn purge(self) -> Result<u64, SqlError> {
         let now = AtTime::now();
         Ok(purge_query(&now)
@@ -34,10 +35,20 @@ where
     }
 }
 
+/// The most sessions one [`Sessions::purge`] deletes.
+pub const PURGE_BATCH: u64 = 1000;
+
 pub(crate) fn purge_query(now: &AtTime) -> DeleteStatement {
+    let expired = Query::select()
+        .column(SessionDBIden::AccessTokenId)
+        .from(SessionDB::TABLE)
+        .and_where(Expr::col(SessionDBIden::ExpiresOn).lt(now.as_sea_expr()))
+        .limit(PURGE_BATCH)
+        .lock_with_behavior(LockType::Update, LockBehavior::SkipLocked)
+        .take();
     Query::delete()
         .from_table(SessionDB::TABLE)
-        .cond_where(Expr::col(SessionDBIden::ExpiresOn).lt(now.as_sea_expr()))
+        .cond_where(Expr::col(SessionDBIden::AccessTokenId).in_subquery(expired))
         .take()
 }
 
@@ -53,7 +64,7 @@ mod tests {
         let sql = purge_query(&now).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"DELETE FROM "sessions" WHERE "expires_on" < '2023-11-14 22:13:20.000000 +00:00'"#
+            r#"DELETE FROM "sessions" WHERE "access_token_id" IN (SELECT "access_token_id" FROM "sessions" WHERE "expires_on" < '2023-11-14 22:13:20.000000 +00:00' LIMIT 1000 FOR UPDATE SKIP LOCKED)"#
         );
     }
 }

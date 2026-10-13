@@ -5,6 +5,8 @@
 use crate::auth::AuthError;
 use crate::auth::assert_current_password::assert_current_password;
 use crate::auth::assert_user_enabled::assert_user_enabled;
+use crate::auth::purge_expired_sessions::purge_expired_sessions;
+use crate::auth::retire_sessions::retire_sessions;
 use argon2::PasswordHasher;
 use argon2::password_hash::SaltString;
 use argon2::password_hash::rand_core::OsRng;
@@ -14,7 +16,7 @@ use ta_services::service::Ctx;
 use td_database::access::{AccessMode, DbPool, DbScope, Global, Grant, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::auth::{PasswordChange, SessionInvalidateDB};
+use td_objects::dxo::auth::PasswordChange;
 use td_objects::dxo::user::{UserDB, UserUpdateDB};
 use td_objects::types::basic::PasswordHash;
 use td_objects::types::basic::{AtTime, PasswordChangeTime, PasswordMustChange, SessionStatus};
@@ -24,7 +26,6 @@ use td_security::config::PasswordHashingConfig;
 #[service_factory]
 async fn password_change(
     password_hashing_config: Ctx<PasswordHashingConfig>,
-    sessions: Ctx<Sessions>,
     db: DbPool<Global>,
     request: PasswordChange,
 ) -> Result<(), TdError> {

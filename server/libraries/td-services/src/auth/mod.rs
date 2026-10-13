@@ -31,4 +31,6 @@ pub enum AuthError {
 pub mod assert_current_password;
 pub mod assert_user_enabled;
 pub mod create_access_token;
+pub mod purge_expired_sessions;
+pub mod retire_sessions;
 pub mod set_session_expiration;

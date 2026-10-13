@@ -4,7 +4,9 @@
 
 //! v12 → v13: Live names are unique through partial indexes, so a rename never
 //! takes a key lock; the upgrade stops, listing them, when two live functions
-//! or tables of a collection share a name.
+//! or tables of a collection share a name. A membership references its user, so
+//! a grant racing the user's delete cannot leave one behind; memberships of
+//! users already gone are deleted.
 
 use sea_query::{ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, IntoIden, Query, Table};
 
@@ -12,6 +14,18 @@ use crate::schema::render::{render_query, render_schema, update_db_version};
 use crate::schema::sql::id_column;
 use crate::schema::sql::{Children, Parent, Physical, RollupArm, RollupDef, Runs};
 use crate::schema::version::SchemaDelta;
+
+#[derive(Iden, Clone, Copy)]
+enum Users {
+    Table,
+    Id,
+}
+
+#[derive(Iden, Clone, Copy)]
+enum UsersRoles {
+    Table,
+    UserId,
+}
 
 pub struct Migration;
 
@@ -50,10 +64,27 @@ impl SchemaDelta for Migration {
     }
 
     fn up() -> Vec<String> {
+        let orphan_memberships = Query::delete()
+            .from_table(UsersRoles::Table)
+            .and_where(Expr::col(UsersRoles::UserId).not_in_subquery(Query::select().column(Users::Id).from(Users::Table).to_owned()))
+            .to_owned();
+        let membership_user = Table::alter()
+            .table(UsersRoles::Table)
+            .add_foreign_key(
+                ForeignKey::create()
+                    .from(UsersRoles::Table, UsersRoles::UserId)
+                    .to(Users::Table, Users::Id)
+                    .on_delete(ForeignKeyAction::Restrict)
+                    .on_update(ForeignKeyAction::Restrict)
+                    .get_foreign_key(),
+            )
+            .to_owned();
         vec![
             DUPLICATE_LIVE_NAMES.to_string(),
             "ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_name_key".to_string(),
             "ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_name_key".to_string(),
+            render_query(orphan_memberships),
+            render_schema(membership_user),
             update_db_version(Self::TO_VERSION),
         ]
     }

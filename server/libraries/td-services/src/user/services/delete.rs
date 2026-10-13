@@ -2,6 +2,7 @@
 // Copyright 2024 Tabsdata Inc.
 //
 
+use crate::auth::retire_sessions::retire_sessions;
 use crate::user::UserError;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -15,7 +16,7 @@ use td_objects::dxo::service_token::ServiceTokenDB;
 use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user::UserParam;
 use td_objects::dxo::user_role::UserRoleDB;
-use td_objects::types::basic::UserId;
+use td_objects::types::basic::{SessionStatus, UserId};
 use td_queries::Queries;
 
 #[service_factory]

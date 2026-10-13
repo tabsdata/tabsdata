@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::auth::purge_expired_sessions::purge_expired_sessions;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -15,7 +16,6 @@ use td_queries::Queries;
 #[service_factory]
 async fn logout(
     authz: Ctx<AuthzContext>,
-    sessions: Ctx<Sessions>,
     db: DbPool<Global>,
     ctx: RequestContext,
 ) -> Result<(), TdError> {

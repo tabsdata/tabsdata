@@ -5,11 +5,11 @@
 use crate::auth::AuthError;
 use crate::auth::assert_user_enabled::assert_user_enabled;
 use crate::auth::create_access_token::create_access_token;
+use crate::auth::purge_expired_sessions::purge_expired_sessions;
 use crate::auth::set_session_expiration::session_expiration;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_authz::session_provider::Sessions;
 use td_common::jwt::JwtConfig;
 use td_common::jwt::decode_token;
 use td_database::access::{DbPool, Global, retrying};
@@ -27,7 +27,6 @@ use td_queries::Queries;
 async fn refresh(
     authz: Ctx<AuthzContext>,
     jwt_config: Ctx<JwtConfig>,
-    sessions: Ctx<Sessions>,
     db: DbPool<Global>,
     request: UpdateRequest<RefreshToken>,
 ) -> Result<TokenResponse, TdError> {

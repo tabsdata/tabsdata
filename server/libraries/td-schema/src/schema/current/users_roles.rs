@@ -47,6 +47,13 @@ impl Entity for Defs {
                 .col(ColumnDef::new(UsersRoles::Fixed).boolean().not_null())
                 .foreign_key(
                     ForeignKey::create()
+                        .from(UsersRoles::Table, UsersRoles::UserId)
+                        .to(Users::Table, Users::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
                         .from(UsersRoles::Table, UsersRoles::RoleId)
                         .to(Roles::Table, Roles::Id)
                         .on_delete(ForeignKeyAction::Restrict)

@@ -71,45 +71,81 @@ pub async fn ensure_sys_admin_permissions<S: DbScope, M: WriteMode>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use td_database::access::{InProject, RW};
+    use std::time::Duration;
+    use td_database::access::{Attempt, DbPool, Global, Grant, retrying};
+    use td_database::connection::PgConnectionExt;
+    use td_database::domain::DomainPools;
     use td_database::pool::TdPool;
+
+    const EXTRAS: &[(&str, &str)] = &[("ai", "manage_ai")];
+
+    fn pools(db: &TdPool) -> DbPool<Global> {
+        DbPool::new(DomainPools::of_apiserver(db.clone()), Global)
+    }
+
+    async fn reconcile(db: &TdPool) -> Result<(), TdError> {
+        let pools = pools(db);
+        retrying(|attempt| async {
+            let mut trx = pools.begin(attempt).await?;
+            ensure_sys_admin_permissions(trx.get(Grant::asserted("boot")), EXTRAS).await?;
+            trx.commit().await?;
+            Ok(())
+        })
+        .await
+    }
+
+    async fn count_ai(db: &TdPool) -> Result<usize, TdError> {
+        let mut conn = pools(db).read().await?;
+        let perms = conn
+            .get(Grant::asserted("count"))
+            .fetch_all::<PermissionDB>(())
+            .await?;
+        Ok(perms
+            .iter()
+            .filter(|p| {
+                p.role_id == RoleId::sys_admin()
+                    && p.entity_type.as_str() == "ai"
+                    && p.permission_type.as_str() == "manage_ai"
+            })
+            .count())
+    }
 
     #[td_test::test(db)]
     async fn test_ensure_sys_admin_permissions_is_idempotent(db: TdPool) -> Result<(), TdError> {
-        let extras: &[(&str, &str)] = &[("ai", "manage_ai")];
-
-        // Run the reconciler in a committed read-write transaction (the
-        // production startup path) so the row persists between calls.
-        async fn reconcile(db: &TdPool, extras: &[(&str, &str)]) -> Result<(), TdError> {
-            let tx = db.begin().await.unwrap();
-            let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(tx);
-            ensure_sys_admin_permissions(&mut conn, extras).await?;
-            conn.commit().await.unwrap();
-            Ok(())
-        }
-
-        async fn count_ai(db: &TdPool) -> Result<usize, TdError> {
-            let mut conn = db.begin().await.unwrap();
-            let perms = conn.fetch_all::<PermissionDB>(()).await?;
-            Ok(perms
-                .iter()
-                .filter(|p| {
-                    p.role_id == RoleId::sys_admin()
-                        && p.entity_type.as_str() == "ai"
-                        && p.permission_type.as_str() == "manage_ai"
-                })
-                .count())
-        }
-
-        // not present initially
         assert_eq!(count_ai(&db).await?, 0);
-        // first run inserts the row
-        reconcile(&db, extras).await?;
+        reconcile(&db).await?;
         assert_eq!(count_ai(&db).await?, 1);
-        // second run is a no-op (no duplicate, no unique-index violation)
-        reconcile(&db, extras).await?;
+        reconcile(&db).await?;
         assert_eq!(count_ai(&db).await?, 1);
+        Ok(())
+    }
 
+    /// Two apiservers boot together and reconcile the same missing
+    /// permission. Having read that the row was missing, the second fails to
+    /// serialize rather than on the unique index, and its retry finds it.
+    #[td_test::test(db)]
+    async fn test_concurrent_reconciles_both_succeed(db: TdPool) -> Result<(), TdError> {
+        let pools = pools(&db);
+        let mut first = pools.begin(Attempt::unretried()).await?;
+        ensure_sys_admin_permissions(first.get(Grant::asserted("first boot")), EXTRAS).await?;
+
+        let second = tokio::spawn({
+            let db = db.clone();
+            async move { reconcile(&db).await }
+        });
+        assert!(
+            first
+                .get(Grant::asserted("blocking probe"))
+                .wait_until_blocking(Duration::from_secs(10))
+                .await
+                .unwrap(),
+            "the second reconcile never waited on the first"
+        );
+        first.commit().await?;
+
+        let second = second.await.expect("second reconcile");
+        assert!(second.is_ok(), "the second boot failed: {second:?}");
+        assert_eq!(count_ai(&db).await?, 1);
         Ok(())
     }
 }

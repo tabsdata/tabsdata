@@ -6,38 +6,54 @@ use crate::auth::AuthError;
 use crate::auth::assert_current_password::assert_current_password;
 use crate::auth::assert_user_enabled::assert_user_enabled;
 use crate::auth::create_access_token::create_access_token;
+use crate::auth::purge_expired_sessions::purge_expired_sessions;
 use crate::auth::set_session_expiration::session_expiration;
+use std::sync::OnceLock;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
-use td_authz::session_provider::Sessions;
 use td_common::jwt::JwtConfig;
 use td_database::access::{DbPool, Global, Grant, retrying};
 use td_error::TdError;
 use td_objects::dxo::auth::{Login, SessionDB, TokenResponse};
 use td_objects::dxo::user::UserDB;
-use td_objects::types::basic::AtTime;
+use td_objects::types::basic::{AtTime, PasswordHash};
 use td_queries::Queries;
+use td_security::config::PasswordHashingConfig;
+use td_security::password::create_password_hash;
 
 #[service_factory]
 async fn login(
     jwt_config: Ctx<JwtConfig>,
-    sessions: Ctx<Sessions>,
+    password_settings: Ctx<PasswordHashingConfig>,
     db: DbPool<Global>,
     request: Login,
 ) -> Result<TokenResponse, TdError> {
-    let mut gated_trx = db.begin().await?;
-    let conn = gated_trx.get(Grant::asserted("login credential verification"));
+    let grant = Grant::asserted("login credential verification");
     // request time (we don't have a request context in this service)
     let at = AtTime::default();
 
+    // The password is checked outside any transaction, and against a stand-in
+    // hash when the user does not exist, so the check costs the same either
+    // way and holds no pooled connection.
+    let found: Option<UserDB> = {
+        let mut conn = db.read().await?;
+        conn.get(grant).fetch_optional(&request.name).await?
+    };
+    let checked_hash = found
+        .as_ref()
+        .map(|user| user.password_hash.clone())
+        .unwrap_or_else(|| unknown_user_hash(&password_settings));
+    let password = request.password.clone();
+    let verified = tokio::task::spawn_blocking(move || {
+        assert_current_password(&checked_hash, &password).map(|_| checked_hash)
+    })
+    .await
+    .map_err(|_| TdError::from(AuthError::AuthenticationFailed))?;
     // unknown user and wrong password both surface as AuthenticationFailed so
     // neither can be distinguished; enabled/password-change errors below keep
     // their own codes so a valid login can act on them
-    let user: Option<UserDB> = conn.fetch_optional(&request.name).await?;
-    let user = assert_login_user(user)?;
-    assert_current_password(&user.password_hash, &request.password)?;
-    assert_user_enabled(&user)?;
-    assert_no_password_change_required(&user)?;
+    let user = assert_login_user(found)?;
+    let verified = verified?;
 
     let token = retrying(|attempt| async {
         let mut gated_trx = db.begin(attempt).await?;
@@ -68,6 +84,17 @@ async fn login(
     .await?;
     purge_expired_sessions(&db).await;
     Ok(token)
+}
+
+/// A hash of no one's password, checked against when the user does not
+/// exist; hashed once, with the configured cost.
+fn unknown_user_hash(config: &PasswordHashingConfig) -> PasswordHash {
+    static HASH: OnceLock<PasswordHash> = OnceLock::new();
+    HASH.get_or_init(|| {
+        PasswordHash::try_from(create_password_hash(config, "no such user"))
+            .expect("a PHC string is a valid password hash")
+    })
+    .clone()
 }
 
 pub fn assert_login_user(user: Option<UserDB>) -> Result<UserDB, TdError> {

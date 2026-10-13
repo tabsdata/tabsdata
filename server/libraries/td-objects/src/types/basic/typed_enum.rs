@@ -502,13 +502,13 @@ impl SimplePermissionType {
         )
     }
 
-    /// For a project-scoped permission, the `<project>_<suffix>` per-project
-    /// role suffix it maps to (`admin`/`dev`/`view`). `None` for system perms.
-    pub fn project_role_suffix(&self) -> Option<&'static str> {
+    /// For a project-scoped permission, the kind of the per-project role it
+    /// maps to. `None` for system perms.
+    pub fn project_role_kind(&self) -> Option<RoleKind> {
         match self {
-            Self::ManageProject => Some("admin"),
-            Self::DevelopProject => Some("dev"),
-            Self::ViewProject => Some("view"),
+            Self::ManageProject => Some(RoleKind::ProjectAdmin),
+            Self::DevelopProject => Some(RoleKind::ProjectDev),
+            Self::ViewProject => Some(RoleKind::ProjectView),
             _ => None,
         }
     }

@@ -128,20 +128,22 @@ pub async fn resolve_grant<S: DbScope, M: AccessMode>(
         SimplePermissionType::ViewProject
         | SimplePermissionType::DevelopProject
         | SimplePermissionType::ManageProject => {
-            let suffix = grant
+            let kind = grant
                 .permission
-                .project_role_suffix()
-                .expect("project-scoped permission has a role suffix");
+                .project_role_kind()
+                .expect("project-scoped permission has a role kind");
             let project_id_name = grant
                 .project
                 .clone()
                 .expect("project-scoped permission carries a project (validated)");
             let project = conn.fetch_one::<ActiveProjectDB>(&project_id_name).await?;
-            let role_name = per_project_role_name(&project.name, suffix)?;
-            let role = conn
-                .fetch_optional::<RoleDB>(&role_name)
-                .await?
-                .ok_or_else(|| SimplePermissionError::ProjectRoleNotFound(role_name.to_string()))?;
+            // By the project's id, not its name: a rename racing the grant
+            // must not send it to the role of another project now holding
+            // the name.
+            let roles: Vec<RoleDB> = conn.fetch_all::<RoleDB>(Some(project.id)).await?;
+            let role = roles.into_iter().find(|r| r.kind == kind).ok_or_else(|| {
+                SimplePermissionError::ProjectRoleNotFound(format!("{} {kind}", project.name))
+            })?;
             Ok(ResolvedGrant {
                 user_id: user.id,
                 role_id: role.id,
