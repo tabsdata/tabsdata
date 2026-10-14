@@ -755,9 +755,6 @@ class Wal2JsonIngester(CdcIngester):
         self._base_offset: LsnOffset | None = None
         self._replicator: Any | None = None
         self._cursor: Any | None = None
-        self._bound: int | None = None
-        self._bound_reached = False
-        self._held: list[Any] = []
         self._accepted_gap = accepted_gap
         # Per schema version: the all-null row image, and the coercion each
         # column's values go through, chosen once from the Arrow type rather
@@ -1189,7 +1186,7 @@ class Wal2JsonIngester(CdcIngester):
         logger.debug("Confirmed LSN offset %d", offset.lsn)
 
     def _confirm_idle(self) -> None:
-        if self._cursor is None or self._bound is not None or self._unacknowledged:
+        if self._cursor is None or self._unacknowledged:
             return
         wal_end = self._cursor.wal_end
         if wal_end <= self._confirmed:
@@ -1396,40 +1393,6 @@ class Wal2JsonIngester(CdcIngester):
     # Poll loop body
     # ------------------------------------------------------------------
 
-    def bound_stream(self, end: CdcOffset) -> None:
-        if not isinstance(end, LsnOffset):
-            raise PostgresErrorCode.POSTGRES_16.exception(actual=type(end).__name__)
-        self._bound = end.lsn
-        self._bound_reached = False
-
-    def stream_bound_reached(self) -> bool:
-        return self._bound_reached
-
-    def _past_bound(self, commit: int, message: Any) -> bool:
-        """Whether a transaction committing at `commit` is past the bound:
-        then its opening `message` is held for the next poll, which reads on
-        unbounded, and the bound is reached."""
-        if self._bound is None or commit <= self._bound:
-            return False
-        self._held.append(message)
-        self._reach_bound()
-        return True
-
-    def _bound_passed_quietly(self) -> bool:
-        """Whether the server has sent everything up to the bound with no
-        transaction past it to say so: its keepalives report how far it
-        has decoded."""
-        if self._bound is None or self._cursor is None:
-            return False
-        if self._cursor.wal_end < self._bound:
-            return False
-        self._reach_bound()
-        return True
-
-    def _reach_bound(self) -> None:
-        self._bound = None
-        self._bound_reached = True
-
     def poll_changes(self, session: Any) -> Generator[CdcChange, None, None]:
         match self._wal2json_format_version:
             case 1:
@@ -1451,8 +1414,6 @@ class Wal2JsonIngester(CdcIngester):
         # ``pending`` replaces the deadline -- when a v2 BEGIN has
         # arrived but COMMIT hasn't, wait for the next message until
         # ``pending_timeout`` so we don't synthesize a torn transaction.
-        if self._held:
-            return self._held.pop(0)
         effective = pending_timeout if pending else deadline
         while True:
             remaining = effective - time.monotonic()
@@ -1491,13 +1452,10 @@ class Wal2JsonIngester(CdcIngester):
             )
             if message is None:
                 self._confirm_idle()
-                self._bound_passed_quietly()
                 break
             payload = orjson.loads(message.payload)
             xid = str(payload.get("xid", ""))
             commit = self._commit_lsn(payload, xid, field="nextlsn")
-            if self._past_bound(commit, message):
-                break
             timestamp = datetime.fromisoformat(payload["timestamp"]).astimezone(
                 timezone.utc
             )
@@ -1607,15 +1565,12 @@ class Wal2JsonIngester(CdcIngester):
                 if pending:
                     raise PostgresErrorCode.POSTGRES_18.exception(xid=xid)
                 self._confirm_idle()
-                self._bound_passed_quietly()
                 break
             payload = orjson.loads(message.payload)
             action = payload.get("action")
             if action == _V2Actions.BEGIN:
                 xid = str(payload.get("xid", ""))
                 commit = self._commit_lsn(payload, xid)
-                if self._past_bound(commit, message):
-                    break
                 timestamp = datetime.fromisoformat(payload["timestamp"]).astimezone(
                     timezone.utc
                 )
@@ -1625,9 +1580,6 @@ class Wal2JsonIngester(CdcIngester):
                 self._mark = LsnOffset(lsn=message.wal_end)
                 xid = None
                 timestamp = None
-                if self._bound is not None and commit == self._bound:
-                    self._reach_bound()
-                    break
                 continue
             if action == _V2Actions.MESSAGE:
                 continue

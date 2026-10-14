@@ -1771,79 +1771,6 @@ def test_a_numeric_sent_as_text_keeps_every_digit():
 
 
 # =====================================================================
-# The initial load's window: polls bounded at its end
-# =====================================================================
-
-
-def _bounded(messages, end: str, wal_end: str = "0/0") -> Wal2JsonIngester:
-    bi = _format_2_ingester(messages)
-    bi._cursor.wal_end = lsn_to_int(wal_end)
-    bi.bound_stream(LsnOffset(lsn=lsn_to_int(end)))
-    return bi
-
-
-def test_a_bounded_poll_stops_before_the_first_transaction_past_the_bound():
-    inside = _transaction(10, "0/100", [("0/90", 1)], "0/120")
-    past = _transaction(11, "0/300", [("0/280", 2)], "0/320")
-    bi = _bounded(inside + past, end="0/200")
-
-    window = list(bi._poll_changes_v2(None))
-    assert [change.new_values["id"] for change in window] == [1]
-    assert bi.stream_bound_reached()
-
-    after = list(bi._poll_changes_v2(None))
-    assert [change.new_values["id"] for change in after] == [2]
-
-
-def test_a_bounded_format_1_poll_holds_the_transaction_past_the_bound():
-    def message(start: str, xid: int, row_id: int) -> _Message:
-        return _Message(
-            start,
-            {
-                "xid": xid,
-                "nextlsn": start,
-                "timestamp": "2026-09-29 19:15:18+00",
-                "change": [
-                    {
-                        "kind": "insert",
-                        "schema": "public",
-                        "table": "t",
-                        "columnnames": ["id"],
-                        "columntypes": ["integer"],
-                        "columnvalues": [row_id],
-                    }
-                ],
-            },
-        )
-
-    bi = _bounded([message("0/100", 10, 1), message("0/300", 11, 2)], end="0/200")
-    bi._wal2json_format_version = 1
-
-    assert [c.new_values["id"] for c in bi._poll_changes_v1(None)] == [1]
-    assert bi.stream_bound_reached()
-    assert [c.new_values["id"] for c in bi._poll_changes_v1(None)] == [2]
-
-
-def test_a_quiet_stream_reaches_the_bound_once_the_server_has_passed_it():
-    bi = _bounded([], end="0/200", wal_end="0/250")
-    assert list(bi._poll_changes_v2(None)) == []
-    assert bi.stream_bound_reached()
-
-
-def test_a_quiet_stream_short_of_the_bound_keeps_reading():
-    bi = _bounded([], end="0/200", wal_end="0/150")
-    assert list(bi._poll_changes_v2(None)) == []
-    assert not bi.stream_bound_reached()
-
-
-def test_an_unbounded_poll_holds_nothing_back():
-    past = _transaction(11, "0/300", [("0/280", 2)], "0/320")
-    bi = _format_2_ingester(past)
-    assert [c.new_values["id"] for c in bi._poll_changes_v2(None)] == [2]
-    assert not bi.stream_bound_reached()
-
-
-# =====================================================================
 # Attaching to a slot the previous stream still holds
 # =====================================================================
 
@@ -1898,16 +1825,6 @@ def test_delivered_changes_hold_the_idle_confirmation_until_they_are_staged():
     assert list(bi._poll_changes_v2(None)) == []
     assert bi._cursor.confirmed == [0x280, 0x900]
     assert [offset.lsn for offset in recorded] == [0x900]
-
-
-def test_a_bounded_poll_does_not_confirm_past_its_window():
-    bi, recorded = _idle(wal_end="0/150")
-    bi.bound_stream(LsnOffset(lsn=0x200))
-
-    assert list(bi._poll_changes_v2(None)) == []
-
-    assert bi._cursor.confirmed == []
-    assert recorded == []
 
 
 def test_an_idle_confirmation_is_not_repeated_until_the_server_moves_on():

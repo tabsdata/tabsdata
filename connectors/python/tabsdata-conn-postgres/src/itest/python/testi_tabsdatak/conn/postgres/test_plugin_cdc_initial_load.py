@@ -1076,12 +1076,13 @@ KEEPALIVE_TIMEOUT_SECONDS = 30.0
 def test_the_server_reports_its_decoded_position_with_nothing_to_send(
     domain_postgrescdc_employees_xs: PostgrescdcDomain,
 ):
-    """The quiet end of a reused-slot load's window rests on this: with no
-    change to send, the server's keepalives carry how far it has decoded
-    (``sentPtr``), and psycopg2 exposes it as ``cursor.wal_end``. A logical
-    message wal2json filters out is WAL with no output, so only a keepalive
-    can report past it. Should a server, wal2json or psycopg2 upgrade change
-    this, the window's read would no longer end on a quiet stream. Any other
+    """An idle stream confirms its slot up to where the server has decoded,
+    and that rests on this: with no change to send, the server's keepalives
+    carry how far it has decoded (``sentPtr``), and psycopg2 exposes it as
+    ``cursor.wal_end``. A logical message wal2json filters out is WAL with no
+    output, so only a keepalive can report past it. Should a server, wal2json
+    or psycopg2 upgrade change this, an idle stream would hold its slot back
+    and the server's WAL would pile up behind it. Any other
     transaction committing in the database meanwhile is framed by BEGIN and
     COMMIT objects even with no change to send, so those are left out."""
     domain = domain_postgrescdc_employees_xs
@@ -1141,9 +1142,8 @@ def test_the_server_reports_its_decoded_position_with_nothing_to_send(
 def test_a_reused_slot_load_with_nothing_committed_after_it_stages(
     domain_postgrescdc_employees_xs: PostgrescdcDomain, tmp_path: Path
 ):
-    """Nothing commits after the load, so no transaction past the window's
-    end says it is over: only the server's reported position can end the
-    window's read, and without it the load would never stage."""
+    """A load on a slot that already exists, with nothing committed after
+    it: the load stages its rows alone, with no change following."""
     domain = domain_postgrescdc_employees_xs
     with cdc_probe(domain, "td_il_quiet") as probe:
         for identifier in (1, 2, 3):
