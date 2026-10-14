@@ -1153,9 +1153,10 @@ class SqlReplicaIngester(CdcIngester):
         connection: Any,
     ) -> dict[str, bytes]:
         """One UNION ALL query for the per-CD-table
-        ``max(IBMSNAP_COMMITSEQ)`` -- the upper bound for the next
-        poll iteration. Tables with no rows yield ``COMMITSEQ_ORIGIN``
-        and are skipped by the caller."""
+        ``max(IBMSNAP_COMMITSEQ)``: a table whose newest row is at or below
+        its position has nothing new to read. The read itself stops at
+        Capture's committed position, shared by every table. Tables with no
+        rows yield ``COMMITSEQ_ORIGIN`` and are skipped by the caller."""
         watermarks: dict[str, bytes] = {}
         if not self._tracked_tables:
             return watermarks
@@ -1343,7 +1344,15 @@ class SqlReplicaIngester(CdcIngester):
                         qualified,
                         COMMITSEQ_ORIGIN,
                     )
+                    # Every table is read up to the one position Capture has
+                    # committed to all CD tables, not up to its own newest row:
+                    # a transaction commits at one position in every table, so
+                    # a pass then reads it whole or not at all.
                     watermark = watermarks.get(qualified)
+                    if captured is None:
+                        watermark = None
+                    elif watermark is not None and watermark > captured:
+                        watermark = captured
                     end = bound.commits.get(qualified) if bound else None
                     if watermark is not None and end is not None and watermark > end:
                         watermark = end

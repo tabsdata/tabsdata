@@ -247,3 +247,40 @@ def test_a_table_read_but_not_staged_keeps_its_starting_position(monkeypatch):
     staged = bi.staged_offset(CommitSeqOffset())
 
     assert staged.commits == started
+
+
+def _read_bounds(monkeypatch, bi: SqlReplicaIngester) -> dict[str, bytes]:
+    reads: dict[str, bytes] = {}
+
+    def changes(**kwargs):
+        reads[kwargs["tracked"].cdc_table.qualified] = kwargs["watermark"]
+        return iter(())
+
+    monkeypatch.setattr(bi, "_query_table_changes", changes)
+    bi.seed_offset(
+        CommitSeqOffset(commits={f"ASN.{cd}": LOAD_START for cd in TABLES.values()})
+    )
+    list(bi.poll_changes(_Session()))
+    return reads
+
+
+def test_every_table_is_read_up_to_what_capture_has_committed(monkeypatch):
+    """Q's newest row is past what Capture had committed when the pass began:
+    a transaction there may still be missing from T, read in the same pass.
+    Every table stops at Capture's committed position, so a transaction,
+    which commits at one position in every table, is read whole or not at
+    all."""
+    bi = _ingester(monkeypatch)
+    beyond = _commitseq(7, 0x700)
+    monkeypatch.setattr(
+        bi, "_query_table_watermarks", lambda c: {"ASN.T_CD": ROW, "ASN.Q_CD": beyond}
+    )
+
+    assert _read_bounds(monkeypatch, bi) == {"ASN.T_CD": ROW, "ASN.Q_CD": CAPTURED}
+
+
+def test_nothing_is_read_before_capture_has_committed_anything(monkeypatch):
+    bi = _ingester(monkeypatch)
+    monkeypatch.setattr(bi, "_captured_position", lambda connection: None)
+
+    assert _read_bounds(monkeypatch, bi) == {}
