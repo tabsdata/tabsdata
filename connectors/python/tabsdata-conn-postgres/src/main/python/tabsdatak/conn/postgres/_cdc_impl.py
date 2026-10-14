@@ -601,7 +601,10 @@ class LsnOffset(CdcOffset):
             raise PostgresErrorCode.POSTGRES_16.exception(
                 actual=type(other).__name__,
             )
-        self.lsn = other.lsn
+        # Transactions arrive in commit order, but a later one can hold rows
+        # written before an earlier one's: the offset keeps the furthest, as
+        # every transaction still unread commits after it.
+        self.lsn = max(self.lsn, other.lsn)
         if other.system_identifier is not None:
             self.system_identifier = other.system_identifier
             self.timeline = other.timeline

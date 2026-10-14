@@ -11,5 +11,8 @@ class StreamLifecycle[O: StreamOffset]:
     def checkpoint(self, offset: O) -> bool:
         return False
 
+    def advance(self, offset: O) -> None:
+        pass
+
     def settle(self) -> None:
         pass

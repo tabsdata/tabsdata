@@ -212,6 +212,10 @@ class BufferSentinel[R, O: StreamOffset]:
         self._bytes = 0
         self._last_flushed = self._clock()
 
+    def advance(self, offset: O) -> None:
+        # Folded in order with the offsets of the records read before it.
+        self._pending.append(offset)
+
     def discard(self, offset: O) -> None:
         self._pending.clear()
         for records in self._records.values():

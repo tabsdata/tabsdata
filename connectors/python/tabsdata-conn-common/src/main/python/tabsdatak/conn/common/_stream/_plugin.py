@@ -55,6 +55,7 @@ class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
         self.ledger: FileLedger | None = None
         self.disk: DiskSentinel | None = None
         self.buffer: BufferSentinel[R, O] | None = None
+        self.unarmed_advances: list[O] = []
 
     def arm(
         self,
@@ -65,9 +66,30 @@ class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
         self.ledger = ledger
         self.disk = disk
         self.buffer = buffer
+        for offset in self.unarmed_advances:
+            buffer.advance(offset)
+        self.unarmed_advances.clear()
 
     def checkpoint(self, offset: O) -> bool:
+        """Record `offset` now when nothing read before it waits to be
+        staged, and otherwise carry it into the next stage: recorded now,
+        a crash would resume past the rows still waiting. Returns whether
+        it was recorded now."""
+        if offset is None:
+            return self.plugin.checkpoint(self.run, offset)
+        self.advance(offset)
+        if self.disk is not None and self.disk.has_data:
+            return False
         return self.plugin.checkpoint(self.run, offset)
+
+    def advance(self, offset: O) -> None:
+        """Make `offset` the position the next stage records: the source
+        reports it holds nothing unread before it. One reported before the
+        run is armed is kept until it is."""
+        if self.buffer is None:
+            self.unarmed_advances.append(offset)
+        else:
+            self.buffer.advance(offset)
 
     def settle(self) -> None:
         if self.buffer is None:

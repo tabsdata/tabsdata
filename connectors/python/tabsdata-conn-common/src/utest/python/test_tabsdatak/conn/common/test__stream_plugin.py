@@ -27,6 +27,7 @@ from tabsdatak.conn.common._stream._offset import StreamOffset
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._plugin import (
     PipelineStreamSrcPlugin,
+    RunLifecycle,
     StreamRun,
 )
 
@@ -127,9 +128,13 @@ class FakeBuffer:
         self._due = due
         self._moves_to = moves_to
         self.discarded: list = []
+        self.advanced: list = []
 
     def reset_timer(self) -> None:
         pass
+
+    def advance(self, offset) -> None:
+        self.advanced.append(offset)
 
     def discard(self, offset) -> None:
         self.discarded.append(offset)
@@ -661,6 +666,97 @@ def test_no_checkpoint_while_the_ledger_holds_unstaged_data(monkeypatch):
 
     assert ctx.checkpoints == []
     assert ctx.staged == []
+
+
+def _armed(disk, *, first_stage=False):
+    ctx = FakeCtx(active_values=[], first_stage=first_stage, stream_state={"x": 1})
+    run = run_of(ctx, OwnedOffsetIngester())
+    buffer = BufferSentinel(
+        ledger=disk,
+        encoder=SilentEncoder(),
+        slots=["s.t"],
+        max_rows=1_000,
+        max_bytes=None,
+        max_secs=10_000,
+        offset=Positions(),
+    )
+    lifecycle = RunLifecycle(Plugin(), run)
+    lifecycle.arm(disk, disk, buffer)
+    return ctx, run, buffer, lifecycle
+
+
+def test_a_checkpoint_waits_for_the_stage_of_the_data_read_before_it():
+    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
+    ctx, run, buffer, lifecycle = _armed(disk)
+    buffer.add("read")
+
+    assert lifecycle.checkpoint(Positions(["moved"])) is False
+    assert ctx.checkpoints == []
+
+    buffer.flush()
+    assert Plugin().publish(run, disk, disk, buffer) is True
+    assert ctx.staged[0][1]["offset"].applied == ["read", "moved"]
+
+
+def test_a_checkpoint_with_nothing_waiting_is_recorded_and_kept_for_the_next_stage():
+    disk = FakeDisk(manifest=[[]])
+    ctx, _, buffer, lifecycle = _armed(disk)
+
+    assert lifecycle.checkpoint(Positions(["moved"])) is True
+    assert [state["offset"].applied for state in ctx.checkpoints] == [["moved"]]
+
+    buffer.flush()
+    assert buffer.offset.applied == ["moved"]
+
+
+def test_a_checkpoint_before_a_first_stage_is_carried_into_it():
+    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
+    disk.has_data = False
+    ctx, run, buffer, lifecycle = _armed(disk, first_stage=True)
+
+    assert lifecycle.checkpoint(Positions(["moved"])) is False
+    assert ctx.checkpoints == []
+
+    buffer.flush()
+    Plugin().publish(run, disk, disk, buffer)
+    assert ctx.staged[0][1]["offset"].applied == ["moved"]
+
+
+def test_a_checkpoint_before_the_run_is_armed_is_carried_into_its_first_stage():
+    ctx = FakeCtx(active_values=[], first_stage=True)
+    run = run_of(ctx, OwnedOffsetIngester())
+    lifecycle = RunLifecycle(Plugin(), run)
+
+    assert lifecycle.checkpoint(Positions(["early"])) is False
+    assert ctx.checkpoints == []
+
+    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
+    buffer = BufferSentinel(
+        ledger=disk,
+        encoder=SilentEncoder(),
+        slots=["s.t"],
+        max_rows=1_000,
+        max_bytes=None,
+        max_secs=10_000,
+        offset=Positions(),
+    )
+    lifecycle.arm(disk, disk, buffer)
+    buffer.add("read")
+    buffer.flush()
+    Plugin().publish(run, disk, disk, buffer)
+
+    assert ctx.staged[0][1]["offset"].applied == ["early", "read"]
+
+
+def test_a_restart_drops_an_advanced_offset_with_the_pending_work():
+    disk = FakeDisk(manifest=[[Path("t0.parquet")]])
+    _, _, buffer, lifecycle = _armed(disk)
+    lifecycle.advance(Positions(["moved"]))
+
+    buffer.discard(Positions(["staged"]))
+    buffer.flush()
+
+    assert buffer.offset.applied == ["staged"]
 
 
 def test_a_source_kept_checkpoint_invokes_the_state_callable():

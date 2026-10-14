@@ -16,17 +16,31 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 import psycopg2
+import pyarrow as pa
 import pytest
 import sqlalchemy.types as sa_types
 from sqlalchemy.dialects.postgresql import BYTEA, JSON, JSONB, OID, TEXT
 from sqlalchemy.types import LargeBinary, Text
 
-from tabsdatak.api import Secret
+from tabsdatak.api import BatchThresholds, Secret, StreamThresholds
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._ledger import FileLedger
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream._lifecycle import StreamLifecycle
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._plugin import RunLifecycle
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._sentinels import BufferSentinel, DiskSentinel
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.common._stream._signal import StopSignal
 from tabsdatak.conn.common.sql.cdc._ingester import CDC_OFFSET_STATE_KEY
 from tabsdatak.conn.common.sql.cdc._model import TableObject, TrackedTable
+from tabsdatak.conn.common.sql.cdc._runner import CdcRunConfig
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 from tabsdatak.conn.common.sql.cdc.typing import CdcFormat
 from tabsdatak.conn.common.types import UserPassword
@@ -39,7 +53,9 @@ from tabsdatak.conn.postgres._cdc_impl import (
     Wal2JsonIngester,
     accepted_gap,
     lsn_to_int,
+    lsn_to_text,
 )
+from tabsdatak.conn.postgres._cdc_plugin import PostgresCdcStreamSrcPlugin
 from tabsdatak.conn.postgres.error import PostgresErrorCode
 from tabsdatak.error import TabsdataException
 
@@ -1087,6 +1103,84 @@ def test_a_stream_never_attached_settles_nothing(monkeypatch):
     bi.settle_offset()
 
 
+class _StagedCtx:
+    def __init__(self, staged: int) -> None:
+        self.first_stage = False
+        self.thresholds = StreamThresholds(batch=BatchThresholds(max_rows=1 << 62))
+        self.stream_state = {CDC_OFFSET_STATE_KEY: _identified(staged).write()}
+        self.checkpoints: list[dict] = []
+        self.staged: list[dict] = []
+
+    def checkpoint(self, new_state) -> None:
+        self.checkpoints.append(new_state)
+
+    def stage(self, tables_files, new_state) -> None:
+        self.staged.append(new_state)
+
+
+def _armed(monkeypatch, tmp_path, *, staged: int, moved: int) -> tuple:
+    """A run staged up to `staged` whose ledger holds a transaction not staged
+    yet, attached to a slot the watch reads at `moved`."""
+    bi, _ = _attached(monkeypatch, staged=staged, rows=[(moved, PID)])
+    ctx = _StagedCtx(staged)
+    plugin = PostgresCdcStreamSrcPlugin()
+    run = plugin.build_run(
+        ctx=ctx, ingester=bi, cfg=CdcRunConfig(), stop_signal=StopSignal()
+    )
+    run.staged = _identified(staged)
+    ledger = FileLedger(landing=tmp_path, slots=["public.t"])
+    ledger.write("public.t", pa.table({"id": [4]}))
+    buffer = BufferSentinel(
+        ledger=ledger,
+        encoder=MagicMock(),
+        slots=["public.t"],
+        max_rows=None,
+        max_bytes=None,
+        max_secs=60,
+        offset=_identified(0x2EF8DA0),
+    )
+    disk = DiskSentinel(
+        ledger=ledger, buffer=buffer, max_rows=None, max_bytes=None, max_secs=60
+    )
+    lifecycle = RunLifecycle(plugin, run)
+    lifecycle.arm(ledger, disk, buffer)
+    bi.attach_lifecycle(lifecycle)
+    return bi, ctx, plugin, run, ledger, disk, buffer
+
+
+def test_a_slot_move_past_unstaged_changes_is_not_recorded(monkeypatch, tmp_path):
+    """CDC-5: a stream staged up to 0/2EF8E28, then read a whole transaction
+    (S4, commit ending 0/2EF8F08) into its ledger without staging it, and
+    psycopg2 moved the held slot to 0/2EF8F08 on a keepalive. The slot watch
+    must not record a position past what is staged while S4 waits to be
+    staged: a crash before the next stage would resume after S4 and lose it."""
+    staged, moved = 0x2EF8E28, 0x2EF8F08
+    bi, ctx, *_ = _armed(monkeypatch, tmp_path, staged=staged, moved=moved)
+
+    bi._watch_slot()
+
+    recorded = [
+        LsnOffset.read(state[CDC_OFFSET_STATE_KEY]).lsn for state in ctx.checkpoints
+    ]
+    assert all(lsn <= staged for lsn in recorded), [lsn_to_text(n) for n in recorded]
+
+
+def test_a_slot_move_past_unstaged_changes_is_staged_with_them(monkeypatch, tmp_path):
+    staged, moved = 0x2EF8E28, 0x2EF8F08
+    bi, ctx, plugin, run, ledger, disk, buffer = _armed(
+        monkeypatch, tmp_path, staged=staged, moved=moved
+    )
+    bi._watch_slot()
+    # Left to the advanced offset alone, without the lift at stage time.
+    bi._slot_floor = staged
+
+    buffer.flush()
+    assert plugin.publish(run, ledger, disk, buffer) is True
+
+    [state] = ctx.staged
+    assert LsnOffset.read(state[CDC_OFFSET_STATE_KEY]).lsn == moved
+
+
 # =====================================================================
 # SlotSnapshotSession
 # =====================================================================
@@ -1427,6 +1521,24 @@ def test_a_transaction_committed_later_is_positioned_after_an_earlier_one():
     # The offset still records where each row was written, which a resume
     # starts from.
     assert changes[1].offset.lsn == lsn_to_int("0/3689F90")
+
+
+def test_the_offset_of_overlapping_transactions_never_moves_back():
+    """CDC-5: S1 wrote its row first (0/1BDC230) and committed last; S2 wrote
+    later (0/1BDC328) and committed first, so S2's row arrives first. Folding
+    each change's offset into the stream's offset, as the buffer does when it
+    flushes, must never move the recorded position backwards: a lower saved
+    position than the slot's confirmed one fails the next start with a false
+    POSTGRES_25 gap."""
+    s2 = _transaction(968, "0/1BDC3F0", [("0/1BDC328", 2)], "0/1BDC3F0")
+    s1 = _transaction(967, "0/1BDC420", [("0/1BDC230", 1)], "0/1BDC420")
+    offset = _identified(0x1BDC1F8)
+    positions = []
+    for change in _format_2_ingester(s2 + s1)._poll_changes_v2(None):
+        offset.update(change.offset)
+        positions.append(offset.lsn)
+
+    assert positions == sorted(positions), [lsn_to_text(n) for n in positions]
 
 
 def test_a_begin_without_its_commit_position_fails():
