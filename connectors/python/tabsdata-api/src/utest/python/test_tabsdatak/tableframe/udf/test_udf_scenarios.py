@@ -169,7 +169,7 @@ def test_several_features_become_several_columns(style, mode, signature):
 
 
 @pytest.mark.parametrize("style, mode, signature", STYLES)
-def test_renamed_and_retyped_outputs_reach_the_frame(style, mode, signature):
+def test_renamed_outputs_reach_the_frame(style, mode, signature):
     pair = build(
         style,
         mode,
@@ -182,13 +182,11 @@ def test_renamed_and_retyped_outputs_reach_the_frame(style, mode, signature):
         ],
     )
 
-    renamed = pair.with_columns([("smallest", Float64)]).with_columns(
-        {1: ("largest", None)}
-    )
+    renamed = pair.with_names(["smallest", "largest"])
     rows = _rows(_penguins().udf(["flipper_length_mm", "body_mass_g"], renamed))
 
-    assert renamed.columns() == [("smallest", Float64), ("largest", Int64)]
-    assert rows["smallest"] == [181.0, 211.0, 192.0, 190.0, 230.0]
+    assert renamed.columns() == [("smallest", Int64), ("largest", Int64)]
+    assert rows["smallest"] == [181, 211, 192, 190, 230]
     assert rows["largest"] == PENGUINS["body_mass_g"]
     assert pair.columns() == [("low", Int64), ("high", Int64)]
 

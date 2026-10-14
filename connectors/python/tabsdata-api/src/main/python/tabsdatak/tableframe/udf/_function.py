@@ -5,7 +5,8 @@
 from __future__ import annotations
 
 import copy
-from abc import ABC
+import inspect
+from abc import ABC, ABCMeta
 from collections import Counter
 from typing import TYPE_CHECKING, Any, Callable, Literal, TypeAlias, get_args
 
@@ -21,29 +22,54 @@ SIGNATURE_PACKED, SIGNATURE_UNPACKED = get_args(Signature)
 
 OutputColumn: TypeAlias = tuple[str, ColumnDataType]
 OutputColumns: TypeAlias = OutputColumn | list[OutputColumn]
-OutputOverride: TypeAlias = tuple[str | None, ColumnDataType | None]
-OutputOverrides: TypeAlias = (
-    OutputOverride | list[OutputOverride] | dict[int, OutputOverride]
-)
+OutputNames: TypeAlias = str | list[str]
 
-_SEALED = ("__call__", "columns", "with_columns")
+_SEALED = ("__call__", "columns", "with_names")
+_RENAMING = ("output_names", "output_prefix", "output_suffix")
 
 
-class UDF(ABC):
+class _UDFMeta(ABCMeta):
+    def __call__(
+        cls,
+        *args: Any,
+        output_names: OutputNames | None = None,
+        output_prefix: str | None = None,
+        output_suffix: str | None = None,
+        **kwargs,
+    ):
+        function = super().__call__(*args, **kwargs)
+        if (output_names, output_prefix, output_suffix) != (None, None, None):
+            function._outputs = function._renamed(
+                output_names, output_prefix, output_suffix
+            )
+        return function
+
+
+class UDF(ABC, metaclass=_UDFMeta):
     """A user defined function, applied to a `TableFrame` with
     `TableFrame.udf`.
 
     :categories: udf
 
     Subclass it, call `super().__init__(output_columns)` with the columns the
-    function adds, and implement exactly one of `on_batch` or `on_element`.
-    The function reads the columns `TableFrame.udf` selects, and its output
+    function adds, and implement `on_batch`, `on_element` or both. The
+    function reads the columns `TableFrame.udf` selects, and its output
     columns are appended to the frame; it never sees any other column.
 
     Data is processed as a stream of batches: `on_batch` is called once per
     batch with pyarrow arrays, and `on_element` once per row with Python
     values. A batch holds an arbitrary slice of rows, so the output for a row
-    must depend only on that row.
+    must depend only on that row. A function implementing only `on_element`
+    gets an `on_batch` that calls it for each row of the batch; one
+    implementing both is run through its own `on_batch`.
+
+    Every function also takes the `output_names`, `output_prefix` and
+    `output_suffix` keywords when it is created, renaming all its output
+    columns, so the same function can be applied more than once without
+    their names colliding. `output_names` gives one new name per output
+    column, in order; `output_prefix` and `output_suffix` are then added to
+    every name. Any of them may be used alone or together, and the data
+    types stay as declared.
 
     To write the function as a plain function or a lambda instead of a
     class, use the `on_batch` and `on_element` decorators.
@@ -55,16 +81,66 @@ class UDF(ABC):
     Examples:
         .. code-block:: python
 
+            import pyarrow as pa
             import pyarrow.compute as pc
 
             class Total(UDF):
                 def __init__(self):
                     super().__init__(("total", Int64))
 
-                def on_batch(self, arrays):
+                def on_batch(self, arrays: list[pa.Int64Array]) -> list[pa.Int64Array]:
                     return [pc.add(arrays[0], arrays[1])]
 
             tf.udf(["a", "b"], Total())
+
+        Renaming the output column when the function is created:
+
+        .. code-block:: python
+
+            import pyarrow as pa
+            import pyarrow.compute as pc
+
+            class Total(UDF):
+                def __init__(self):
+                    super().__init__(("total", Int64))
+
+                def on_batch(self, arrays: list[pa.Int64Array]) -> list[pa.Int64Array]:
+                    return [pc.add(arrays[0], arrays[1])]
+
+            tf.udf(["a", "b"], Total(output_names="a_plus_b"))
+            tf.udf(["c", "n"], Total(output_names=["c_plus_n"]))
+
+        Several output columns, each renamed:
+
+        .. code-block:: python
+
+            class Bounds(UDF):
+                def __init__(self):
+                    super().__init__([("low", Int64), ("high", Int64)])
+
+                def on_element(self, values: list[int]) -> list[int]:
+                    return [min(values), max(values)]
+
+            tf.udf(["a", "b"], Bounds())
+            tf.udf(["a", "b"], Bounds(output_names=["smallest", "largest"]))
+
+        The same function applied twice, told apart by a prefix or a suffix:
+
+        .. code-block:: python
+
+            class Bounds(UDF):
+                def __init__(self):
+                    super().__init__([("low", Int64), ("high", Int64)])
+
+                def on_element(self, values: list[int]) -> list[int]:
+                    return [min(values), max(values)]
+
+            tf.udf(["a", "b"], Bounds(output_prefix="ab_")).udf(
+                ["c", "n"], Bounds(output_prefix="cn_")
+            )
+            tf.udf(["a", "b"], Bounds(output_suffix="_ab")).udf(
+                ["c", "n"], Bounds(output_names=["min", "max"], output_suffix="_cn")
+            )
     """
 
     def __init__(self, output_columns: OutputColumns):
@@ -77,9 +153,16 @@ class UDF(ABC):
         for member in _SEALED:
             if getattr(cls, member) is not getattr(UDF, member):
                 raise UDFErrorCode.UDF_3.exception(udf=cls.__name__, member=member)
+        if "__init__" in cls.__dict__:
+            parameters = inspect.signature(cls.__init__).parameters
+            reserved = [name for name in _RENAMING if name in parameters]
+            if reserved:
+                raise UDFErrorCode.UDF_18.exception(
+                    udf=cls.__name__, parameters=reserved
+                )
         if ABC in cls.__bases__:
             return
-        if (cls.on_batch is UDF.on_batch) == (cls.on_element is UDF.on_element):
+        if cls.on_batch is UDF.on_batch and cls.on_element is UDF.on_element:
             raise UDFErrorCode.UDF_2.exception(udf=cls.__name__)
 
     @property
@@ -98,10 +181,12 @@ class UDF(ABC):
                         super().__init__(("ratio", Float64))
 
                     @property
-                    def signature(self):
+                    def signature(self) -> Signature:
                         return "unpacked"
 
-                    def on_element(self, numerator, denominator):
+                    def on_element(
+                        self, numerator: int, denominator: int
+                    ) -> list[float]:
                         return [numerator / denominator]
 
                 tf.udf(["a", "n"], Ratio())
@@ -116,21 +201,52 @@ class UDF(ABC):
         per input row. With a single output column, the array alone may be
         returned instead of a list.
 
+        Each input array is of the pyarrow array class for its column's data
+        type: an `Int64` column arrives as a `pa.Int64Array`, a `Float64` one
+        as a `pa.DoubleArray`, a `String` one as a `pa.LargeStringArray`, and
+        so on.
+
+        Unless overridden, it calls `on_element` for each row of the batch.
+
         Examples:
             .. code-block:: python
 
+                import pyarrow as pa
                 import pyarrow.compute as pc
 
                 class Total(UDF):
                     def __init__(self):
                         super().__init__(("total", Int64))
 
-                    def on_batch(self, arrays):
+                    def on_batch(
+                        self, arrays: list[pa.Int64Array]
+                    ) -> list[pa.Int64Array]:
                         return [pc.add(arrays[0], arrays[1])]
 
                 tf.udf(["a", "b"], Total())
+
+            Calling the `on_batch` of a function implementing only
+            `on_element`:
+
+            .. code-block:: python
+
+                import pyarrow as pa
+
+                class Initial(UDF):
+                    def __init__(self):
+                        super().__init__(("initial", String))
+
+                    def on_element(self, values: list[str | None]) -> list[str | None]:
+                        name = values[0]
+                        return [name.strip()[:1].upper() if name else None]
+
+                Initial().on_batch([pa.array(["ada", None])])
         """
-        raise NotImplementedError
+        import polars as pl
+
+        columns = arrays[0] if self.signature == SIGNATURE_PACKED else arrays
+        outputs = self._elements([pl.Series(array) for array in columns])
+        return [series.to_arrow() for series in outputs]
 
     def on_element(self, *values: Any) -> list[Any]:
         """Compute the output values for one row.
@@ -147,11 +263,12 @@ class UDF(ABC):
                     def __init__(self):
                         super().__init__(("initial", String))
 
-                    def on_element(self, values):
+                    def on_element(self, values: list[str | None]) -> list[str | None]:
                         name = values[0]
                         return [name.strip()[:1].upper() if name else None]
 
                 tf.udf("name", Initial())
+                tf.udf("name", Initial(output_names="first_letter"))
         """
         raise NotImplementedError
 
@@ -165,20 +282,30 @@ class UDF(ABC):
                     def __init__(self):
                         super().__init__([("low", Int64), ("high", Int64)])
 
-                    def on_element(self, values):
+                    def on_element(self, values: list[int]) -> list[int]:
                         return [min(values), max(values)]
 
                 Bounds().columns()
+                Bounds(output_names=["smallest", "largest"]).columns()
+                Bounds(output_prefix="ab_").columns()
         """
         return list(self._declared())
 
-    def with_columns(self, output_columns: OutputOverrides) -> UDF:
-        """A copy of this function with its output columns renamed or retyped.
+    def with_names(
+        self,
+        output_names: OutputNames | None = None,
+        *,
+        output_prefix: str | None = None,
+        output_suffix: str | None = None,
+    ) -> UDF:
+        """A copy of this function with all its output columns renamed.
 
-        A `(name, data type)` tuple or a list of them overrides the output
-        columns from the first one on; a dictionary overrides them by index.
-        A `None` name or data type keeps the current one. The function itself
-        is left unchanged.
+        Takes the same keywords as creating the function: `output_names`
+        gives one new name per output column, in order (a name alone for a
+        function with a single output column, or a list of them), and
+        `output_prefix` and `output_suffix` are then added to every name.
+        The data types stay as declared, and the function itself is left
+        unchanged.
 
         Examples:
             .. code-block:: python
@@ -187,21 +314,42 @@ class UDF(ABC):
                     def __init__(self):
                         super().__init__([("low", Int64), ("high", Int64)])
 
-                    def on_element(self, values):
+                    def on_element(self, values: list[int]) -> list[int]:
                         return [min(values), max(values)]
 
-                tf.udf(["a", "b"], Bounds().with_columns(("smallest", None)))
-                tf.udf(["a", "b"], Bounds().with_columns({1: ("largest", Float64)}))
+                bounds = Bounds()
+                tf.udf(["a", "b"], bounds.with_names(["smallest", "largest"]))
+
+            A decorated function renamed the same way:
+
+            .. code-block:: python
+
+                @on_element(("ratio", Float64))
+                def ratio(numerator: int, denominator: int) -> float:
+                    return numerator / denominator
+
+                tf.udf(["a", "n"], ratio.with_names("a_per_n"))
+                tf.udf(["b", "n"], ratio.with_names("b_per_n"))
+
+            Adding a prefix, a suffix or both to every output column:
+
+            .. code-block:: python
+
+                @on_element([("ratio", Float64), ("label", String)])
+                def ratio(numerator: int, denominator: int) -> list[float | str]:
+                    return [numerator / denominator, f"{numerator}/{denominator}"]
+
+                tf.udf(["a", "n"], ratio.with_names(output_prefix="a_"))
+                tf.udf(["b", "n"], ratio.with_names(output_suffix="_b"))
+                tf.udf(
+                    ["c", "n"],
+                    ratio.with_names(
+                        ["share", "fraction"], output_prefix="c_", output_suffix="_n"
+                    ),
+                )
         """
-        current = self._declared()
-        merged = list(current)
-        for index, (name, dtype) in _overrides(output_columns, len(current)).items():
-            merged[index] = (
-                current[index][0] if name is None else name,
-                current[index][1] if dtype is None else dtype,
-            )
         function = copy.copy(self)
-        function._outputs = _outputs(merged)
+        function._outputs = self._renamed(output_names, output_prefix, output_suffix)
         return function
 
     def __call__(self, batch: pl.Series) -> pl.Series:
@@ -209,10 +357,7 @@ class UDF(ABC):
 
         inputs = [batch.struct.field(name) for name in batch.struct.fields]
         try:
-            if type(self).on_batch is not UDF.on_batch:
-                outputs = self._batch(inputs, len(batch))
-            else:
-                outputs = self._elements(inputs)
+            outputs = self._batch(inputs, len(batch))
         except UDFException:
             raise
         except Exception as error:
@@ -231,6 +376,37 @@ class UDF(ABC):
         if outputs is None:
             raise UDFErrorCode.UDF_4.exception(udf=self._label())
         return outputs
+
+    def _renamed(
+        self,
+        output_names: OutputNames | None,
+        output_prefix: str | None,
+        output_suffix: str | None,
+    ) -> tuple[OutputColumn, ...]:
+        declared = self._declared()
+        if output_names is None:
+            names = [name for name, _ in declared]
+        else:
+            names = [output_names] if isinstance(output_names, str) else output_names
+            if not isinstance(names, list) or len(names) != len(declared):
+                raise UDFErrorCode.UDF_17.exception(
+                    udf=self._label(),
+                    width=len(declared),
+                    got=_described(output_names),
+                )
+        for keyword, affix in (
+            ("output_prefix", output_prefix),
+            ("output_suffix", output_suffix),
+        ):
+            if affix is not None and not isinstance(affix, str):
+                raise UDFErrorCode.UDF_19.exception(
+                    udf=self._label(), keyword=keyword, got=type(affix).__name__
+                )
+        prefix, suffix = output_prefix or "", output_suffix or ""
+        return _outputs([
+            (f"{prefix}{name}{suffix}" if isinstance(name, str) else name, dtype)
+            for name, (_, dtype) in zip(names, declared)
+        ])
 
     def _dtype(self) -> pl.Struct:
         import polars as pl
@@ -327,8 +503,8 @@ class UDFPacked(UDF, ABC):
 
     :categories: udf
 
-    Implement `on_batch(self, arrays: list[pa.Array]) -> list[pa.Array]` or
-    `on_element(self, values: list[Any]) -> list[Any]`.
+    Implement `on_batch(self, arrays: list[pa.Array]) -> list[pa.Array]`,
+    `on_element(self, values: list[Any]) -> list[Any]` or both.
 
     Examples:
         .. code-block:: python
@@ -337,10 +513,11 @@ class UDFPacked(UDF, ABC):
                 def __init__(self):
                     super().__init__(("spread", Int64))
 
-                def on_element(self, values):
+                def on_element(self, values: list[int]) -> list[int]:
                     return [max(values) - min(values)]
 
             tf.udf(["a", "b", "n"], Spread())
+            tf.udf(["a", "b", "n"], Spread(output_names="range"))
     """
 
     @property
@@ -354,8 +531,8 @@ class UDFUnpacked(UDF, ABC):
     :categories: udf
 
     Implement `on_batch(self, first: pa.Array, second: pa.Array, ...) ->
-    list[pa.Array]` or `on_element(self, first: Any, second: Any, ...) ->
-    list[Any]`.
+    list[pa.Array]`, `on_element(self, first: Any, second: Any, ...) ->
+    list[Any]` or both.
 
     Examples:
         .. code-block:: python
@@ -364,10 +541,34 @@ class UDFUnpacked(UDF, ABC):
                 def __init__(self):
                     super().__init__(("ratio", Float64))
 
-                def on_element(self, numerator, denominator):
+                def on_element(self, numerator: int, denominator: int) -> list[float]:
                     return [numerator / denominator]
 
             tf.udf(["a", "n"], Ratio())
+            tf.udf(["a", "n"], Ratio(output_names="share"))
+
+        Both methods, the batch one doing the work and the row one at hand
+        for checking a single row:
+
+        .. code-block:: python
+
+            import pyarrow as pa
+            import pyarrow.compute as pc
+
+            class Ratio(UDFUnpacked):
+                def __init__(self):
+                    super().__init__(("ratio", Float64))
+
+                def on_batch(
+                    self, numerator: pa.Int64Array, denominator: pa.Int64Array
+                ) -> pa.DoubleArray:
+                    return pc.divide(pc.cast(numerator, pa.float64()), denominator)
+
+                def on_element(self, numerator: int, denominator: int) -> list[float]:
+                    return [numerator / denominator]
+
+            tf.udf(["a", "n"], Ratio())
+            Ratio().on_element(3, 4)
     """
 
     @property
@@ -436,25 +637,31 @@ def on_batch(
     Examples:
         .. code-block:: python
 
+            import pyarrow as pa
             import pyarrow.compute as pc
 
             @on_batch(("total", Int64))
-            def total(a, b):
+            def total(a: pa.Int64Array, b: pa.Int64Array) -> pa.Int64Array:
                 return pc.add(a, b)
 
             tf.udf(["a", "b"], total)
+            tf.udf(["c", "n"], total.with_names("c_plus_n"))
 
         Several output columns, from a list of arrays:
 
         .. code-block:: python
 
+            import pyarrow as pa
             import pyarrow.compute as pc
 
             @on_batch([("low", Int64), ("high", Int64)])
-            def bounds(a, b):
+            def bounds(
+                a: pa.Int64Array, b: pa.Int64Array
+            ) -> list[pa.Int64Array]:
                 return [pc.min_element_wise(a, b), pc.max_element_wise(a, b)]
 
             tf.udf(["a", "b"], bounds)
+            tf.udf(["a", "b"], bounds.with_names(["smallest", "largest"]))
 
         Inline, with a lambda receiving its inputs packed in one list:
 
@@ -504,20 +711,22 @@ def on_element(
         .. code-block:: python
 
             @on_element(("ratio", Float64))
-            def ratio(numerator, denominator):
+            def ratio(numerator: int, denominator: int) -> float:
                 return numerator / denominator
 
             tf.udf(["a", "n"], ratio)
+            tf.udf(["b", "n"], ratio.with_names("b_per_n"))
 
         Several output columns, from a list of values:
 
         .. code-block:: python
 
             @on_element([("ratio", Float64), ("label", String)])
-            def ratio(numerator, denominator):
+            def ratio(numerator: int, denominator: int) -> list[float | str]:
                 return [numerator / denominator, f"{numerator}/{denominator}"]
 
             tf.udf(["a", "n"], ratio)
+            tf.udf(["a", "n"], ratio.with_names(["share", "fraction"]))
 
         Inline, with a lambda, plainly or receiving its inputs packed in one
         list:
@@ -566,29 +775,6 @@ def _outputs(output_columns) -> tuple[OutputColumn, ...]:
     if repeated:
         raise UDFErrorCode.UDF_7.exception(names=repeated)
     return tuple(outputs)
-
-
-def _overrides(output_columns, width: int) -> dict[int, OutputOverride]:
-    if isinstance(output_columns, tuple):
-        output_columns = [output_columns]
-    if isinstance(output_columns, list):
-        if len(output_columns) > width:
-            raise UDFErrorCode.UDF_5.exception(
-                got=f"{len(output_columns)} columns for a function with {width}"
-            )
-        output_columns = dict(enumerate(output_columns))
-    if not isinstance(output_columns, dict):
-        raise UDFErrorCode.UDF_5.exception(got=_described(output_columns))
-    for index, column in output_columns.items():
-        if not isinstance(index, int) or not 0 <= index < width:
-            raise UDFErrorCode.UDF_6.exception(
-                index=index, reason="there is no output column at that index"
-            )
-        if not isinstance(column, tuple) or len(column) != 2:
-            raise UDFErrorCode.UDF_6.exception(
-                index=index, reason="it is not a (name, data type) tuple"
-            )
-    return output_columns
 
 
 def _holds_sequences(dtype) -> bool:

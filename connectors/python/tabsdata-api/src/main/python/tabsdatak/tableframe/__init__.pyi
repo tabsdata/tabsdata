@@ -884,13 +884,16 @@ class TableFrame(EngineFrame):
         Examples:
             .. code-block:: python
 
+                import pyarrow as pa
                 import pyarrow.compute as pc
 
                 class Total(UDF):
                     def __init__(self):
                         super().__init__(("total", Int64))
 
-                    def on_batch(self, arrays):
+                    def on_batch(
+                        self, arrays: list[pa.Int64Array]
+                    ) -> list[pa.Int64Array]:
                         return [pc.add(arrays[0], arrays[1])]
 
                 tf.udf(["a", "b"], Total())
@@ -903,7 +906,7 @@ class TableFrame(EngineFrame):
                     def __init__(self):
                         super().__init__(("ratio", Float64))
 
-                    def on_element(self, numerator, denominator):
+                    def on_element(self, numerator: int, denominator: int) -> list[float]:
                         return [numerator / denominator]
 
                 tf.udf(col("a", "n"), Ratio())
@@ -913,24 +916,37 @@ class TableFrame(EngineFrame):
             .. code-block:: python
 
                 @on_element(("ratio", Float64))
-                def ratio(numerator, denominator):
+                def ratio(numerator: int, denominator: int) -> float:
                     return numerator / denominator
 
                 tf.udf(["a", "n"], ratio)
                 tf.udf("name", on_element(("upper", String))(lambda name: name.upper()))
 
-            Renaming an output column:
+            Renaming the output columns, when the function is created or
+            afterwards: every output column gets a new name, a prefix, a
+            suffix or any of them together, and keeps its data type. This
+            lets the same function be applied more than once:
 
             .. code-block:: python
 
-                class Ratio(UDFUnpacked):
+                class Bounds(UDF):
                     def __init__(self):
-                        super().__init__(("ratio", Float64))
+                        super().__init__([("low", Int64), ("high", Int64)])
 
-                    def on_element(self, numerator, denominator):
-                        return [numerator / denominator]
+                    def on_element(self, values: list[int]) -> list[int]:
+                        return [min(values), max(values)]
 
-                tf.udf(["a", "n"], Ratio().with_columns(("share", None)))
+                @on_element(("ratio", Float64))
+                def ratio(numerator: int, denominator: int) -> float:
+                    return numerator / denominator
+
+                tf.udf(["a", "b"], Bounds(output_names=["smallest", "largest"]))
+                tf.udf(["a", "b"], Bounds().with_names(["smallest", "largest"]))
+                tf.udf(["a", "n"], ratio.with_names("a_per_n"))
+                tf.udf(["a", "b"], Bounds(output_prefix="ab_")).udf(
+                    ["c", "n"], Bounds(output_prefix="cn_")
+                )
+                tf.udf(["b", "n"], ratio.with_names(output_suffix="_b_per_n"))
         """
 
     @classmethod

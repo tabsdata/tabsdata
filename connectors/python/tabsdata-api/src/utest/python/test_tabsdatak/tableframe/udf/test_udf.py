@@ -116,14 +116,62 @@ def test_an_output_named_like_an_existing_column_replaces_it():
     assert _rows(frame.udf(["a", "b"], Total()))["total"] == [11, 22]
 
 
-def test_with_columns_renames_and_retypes_a_copy():
-    function = Ratio()
-    renamed = function.with_columns({1: ("text", None)})
-    retyped = function.with_columns([(None, String)])
+def test_output_names_rename_every_column_when_the_function_is_created():
+    function = Ratio(output_names=["share", "text"])
+    frame = _frame({"n": [1], "d": [2]}).udf(["n", "d"], function)
 
-    assert renamed.columns() == [("ratio", Float64), ("text", String)]
-    assert retyped.columns() == [("ratio", String), ("label", String)]
+    assert function.columns() == [("share", Float64), ("text", String)]
+    assert _rows(frame) == {"n": [1], "d": [2], "share": [0.5], "text": ["1/2"]}
+
+
+def test_a_single_output_may_be_renamed_with_a_name_alone():
+    assert Total(output_names="sum").columns() == [("sum", Int64)]
+    assert Total().with_names("sum").columns() == [("sum", Int64)]
+
+
+def test_with_names_renames_a_copy_and_keeps_the_data_types():
+    function = Ratio()
+    renamed = function.with_names(["share", "text"])
+
+    assert renamed.columns() == [("share", Float64), ("text", String)]
     assert function.columns() == [("ratio", Float64), ("label", String)]
+
+
+def test_a_prefix_and_a_suffix_are_added_to_every_output_name():
+    assert Ratio(output_prefix="nd_").columns() == [
+        ("nd_ratio", Float64),
+        ("nd_label", String),
+    ]
+    assert Ratio().with_names(output_suffix="_nd").columns() == [
+        ("ratio_nd", Float64),
+        ("label_nd", String),
+    ]
+    assert Ratio(
+        output_names=["share", "text"], output_prefix="p_", output_suffix="_s"
+    ).columns() == [("p_share_s", Float64), ("p_text_s", String)]
+
+
+def test_the_same_function_applied_twice_is_told_apart_by_a_prefix():
+    frame = (
+        _frame({"a": [1], "b": [2], "c": [3], "d": [4]})
+        .udf(["a", "b"], Total(output_prefix="ab_"))
+        .udf(["c", "d"], Total(output_prefix="cd_"))
+    )
+
+    assert _rows(frame) == {
+        "a": [1],
+        "b": [2],
+        "c": [3],
+        "d": [4],
+        "ab_total": [3],
+        "cd_total": [7],
+    }
+
+
+def test_output_names_reach_a_function_with_its_own_constructor_arguments():
+    function = Echo(("copy", Int64), lambda arrays: arrays, output_names="echo")
+
+    assert _rows(_frame({"a": [1]}).udf("a", function)) == {"a": [1], "echo": [1]}
 
 
 def test_the_function_streams_batch_by_batch(tmp_path):
@@ -154,8 +202,15 @@ def test_the_function_streams_batch_by_batch(tmp_path):
         (lambda: Echo(("", Int64), None), UDFErrorCode.UDF_6),
         (lambda: Echo(("x", int), None), UDFErrorCode.UDF_6),
         (lambda: Echo([("x", Int64), ("x", String)], None), UDFErrorCode.UDF_7),
-        (lambda: Total().with_columns({1: ("y", None)}), UDFErrorCode.UDF_6),
-        (lambda: Total().with_columns([("y", None), ("z", None)]), UDFErrorCode.UDF_5),
+        (lambda: Ratio(output_names=["share"]), UDFErrorCode.UDF_17),
+        (lambda: Ratio().with_names("share"), UDFErrorCode.UDF_17),
+        (lambda: Total().with_names(["y", "z"]), UDFErrorCode.UDF_17),
+        (lambda: Total().with_names(("y",)), UDFErrorCode.UDF_17),
+        (lambda: Total(output_names=[""]), UDFErrorCode.UDF_6),
+        (lambda: Total(output_names=[1]), UDFErrorCode.UDF_6),
+        (lambda: Ratio().with_names(["x", "x"]), UDFErrorCode.UDF_7),
+        (lambda: Total(output_prefix=1), UDFErrorCode.UDF_19),
+        (lambda: Total().with_names(output_suffix=["_x"]), UDFErrorCode.UDF_19),
         (lambda: _frame({"a": [1]}).udf([], Total()), UDFErrorCode.UDF_9),
     ],
 )
@@ -171,15 +226,26 @@ def test_a_function_defined_wrongly_fails_when_it_is_defined(build, code):
     [
         ({}, UDFErrorCode.UDF_2),
         (
-            {
-                "on_batch": lambda self, arrays: arrays,
-                "on_element": lambda self, values: values,
-            },
-            UDFErrorCode.UDF_2,
-        ),
-        (
             {"on_batch": lambda self, arrays: arrays, "columns": lambda self: []},
             UDFErrorCode.UDF_3,
+        ),
+        (
+            {"on_batch": lambda self, arrays: arrays, "with_names": lambda self: []},
+            UDFErrorCode.UDF_3,
+        ),
+        (
+            {
+                "__init__": lambda self, output_names: None,
+                "on_batch": lambda self, arrays: arrays,
+            },
+            UDFErrorCode.UDF_18,
+        ),
+        (
+            {
+                "__init__": lambda self, output_suffix=None: None,
+                "on_batch": lambda self, arrays: arrays,
+            },
+            UDFErrorCode.UDF_18,
         ),
     ],
 )
@@ -188,6 +254,35 @@ def test_a_subclass_defined_wrongly_fails_when_it_is_declared(body, code):
         type("Wrong", (UDF,), body)
 
     assert error.value.api_error is code
+
+
+def test_on_batch_runs_on_element_for_each_row_by_default():
+    packed = on_element(("sum", Int64), signature="packed")(lambda values: sum(values))
+    unpacked = Ratio()
+
+    assert packed.on_batch([pa.array([1, 2]), pa.array([10, 20])])[0].to_pylist() == [
+        11,
+        22,
+    ]
+    assert [
+        array.to_pylist() for array in unpacked.on_batch(pa.array([1, 3]), pa.array([2, 4]))
+    ] == [[0.5, 0.75], ["1/2", "3/4"]]
+
+
+def test_a_function_implementing_both_methods_runs_on_batch():
+    class Both(UDFUnpacked):
+        def __init__(self):
+            super().__init__(("total", Int64))
+
+        def on_batch(self, a, b):
+            return pc.add(a, b)
+
+        def on_element(self, a, b):
+            raise AssertionError("on_element must not run")
+
+    frame = _frame({"a": [1, 2], "b": [10, 20]}).udf(["a", "b"], Both())
+
+    assert _rows(frame)["total"] == [11, 22]
 
 
 def test_a_subclass_that_skips_super_init_fails_when_applied():
@@ -385,12 +480,13 @@ def test_a_decorated_function_is_a_udf():
     frame = _frame({"a": [1, 3], "b": [2, 4]}).udf(["a", "b"], total)
 
     assert isinstance(total, UDF)
-    assert _rows(frame.udf(["a", "b"], ratio.with_columns(("share", None)))) == {
+    renamed = ratio.with_names(["share", "fraction"])
+    assert _rows(frame.udf(["a", "b"], renamed)) == {
         "a": [1, 3],
         "b": [2, 4],
         "total": [3, 7],
         "share": [0.5, 0.75],
-        "label": ["1/2", "3/4"],
+        "fraction": ["1/2", "3/4"],
     }
 
 

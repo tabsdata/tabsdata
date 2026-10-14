@@ -65,7 +65,7 @@ class UDFErrorCode(ErrorCode):
     )
     UDF_2 = ErrorDef(
         UDFDefinitionException,
-        "{udf} must implement exactly one of 'on_batch' or 'on_element'.",
+        "{udf} must implement 'on_batch', 'on_element' or both.",
     )
     UDF_3 = ErrorDef(
         UDFDefinitionException,
@@ -128,4 +128,18 @@ class UDFErrorCode(ErrorCode):
         UDFDefinitionException,
         "The user defined function input {input} reads a column the frame does "
         "not have.",
+    )
+    UDF_17 = ErrorDef(
+        UDFDefinitionException,
+        "{udf} output names must be a list of {width} names, one per output "
+        "column; got {got}.",
+    )
+    UDF_18 = ErrorDef(
+        UDFDefinitionException,
+        "{udf}.__init__() must not take the parameters {parameters}; every user "
+        "defined function reserves them to rename its output columns.",
+    )
+    UDF_19 = ErrorDef(
+        UDFDefinitionException,
+        "{udf} {keyword} must be a string; got {got}.",
     )

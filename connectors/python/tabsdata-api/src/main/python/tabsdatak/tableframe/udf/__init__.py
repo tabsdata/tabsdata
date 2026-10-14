@@ -6,9 +6,11 @@
 
 Subclass `UDF` (or `UDFPacked` / `UDFUnpacked`, which fix how inputs are
 passed), declare the columns it adds, and implement `on_batch` (vectorized,
-over pyarrow arrays) or `on_element` (row by row, over Python values). Or
-turn a plain function or lambda into one with the `on_batch` / `on_element`
-decorators. Apply it with `TableFrame.udf`.
+over pyarrow arrays), `on_element` (row by row, over Python values) or both.
+Or turn a plain function or lambda into one with the `on_batch` /
+`on_element` decorators. Apply it with `TableFrame.udf`, renaming its output
+columns with `output_names`, `output_prefix` and `output_suffix`, or
+`UDF.with_names`, when needed.
 """
 
 from __future__ import annotations
@@ -17,8 +19,7 @@ from tabsdatak.tableframe.udf._function import (
     UDF as UDF,
     OutputColumn as OutputColumn,
     OutputColumns as OutputColumns,
-    OutputOverride as OutputOverride,
-    OutputOverrides as OutputOverrides,
+    OutputNames as OutputNames,
     Signature as Signature,
     UDFPacked as UDFPacked,
     UDFUnpacked as UDFUnpacked,
