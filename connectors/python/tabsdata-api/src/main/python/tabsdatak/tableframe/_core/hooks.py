@@ -86,6 +86,13 @@ class RenameParams(TypedDict):
     mapping: Any
 
 
+class UdfParams(TypedDict):
+    """Params a 'udf' op passes to its hooks."""
+
+    inputs: tuple
+    outputs: dict
+
+
 @dataclass(frozen=True)
 class FrameView:
     """Immutable snapshot of a source frame's attributes.

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -64,6 +65,7 @@ from tabsdatak.server._tdrunner.function.commands.run_function.error import (
 from tabsdatak.spi import DestContext, FunctionCtx, SrcPluginCtx, TableMode
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
+from test_tabsdatak.server.conftest import TESTING_RESOURCES_FOLDER
 from test_tabsdatak.server.test_tdrunner.test_function.conftest import (
     info_payload as _info,
 )
@@ -75,31 +77,6 @@ _MOD = "tabsdatak.server._tdrunner.function.commands.run_function.runner"
 
 
 # --- shared fixtures ----------------------------------------------------
-
-
-_USER_PUBLISHER_SRC = """\
-from __future__ import annotations
-
-from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
-from tabsdatak.conn.localfile import LocalFileSrc
-
-_SRC = LocalFileSrc(
-    paths=["*.parquet"],
-)
-
-
-@publisher(source=_SRC, output_tables=["my_table", "untouched"])
-def my_publisher(in_1: TableFramesSpec) -> tuple[TableFrameSpec, TableFrameSpec]:
-    # Append a marker column to the first input frame; second output
-    # is None to exercise the "not modified" branch of the outputs
-    # manifest.
-    import polars as pl
-    if in_1 and in_1[0] is not None:
-        first = in_1[0].with_columns(pl.lit("from_user_fn").alias("marker"))
-    else:
-        first = None
-    return (first, None)
-"""
 
 
 def _write_sample_parquet(path: Path) -> None:
@@ -125,24 +102,43 @@ def _slot_entry(name: str, table_pos: int, files: list[str]) -> dict:
     )
 
 
+_PROJECTS = Path(TESTING_RESOURCES_FOLDER) / "run_function"
+
+
+def _copy_project(tmp_path: Path, monkeypatch, name: str) -> Path:
+    """Copy a user project from the test resources into ``tmp_path`` and
+    make it importable."""
+    project = tmp_path / name
+    shutil.copytree(
+        _PROJECTS / name, project, ignore=shutil.ignore_patterns("__pycache__")
+    )
+    monkeypatch.syspath_prepend(str(project))
+    importlib.invalidate_caches()
+    return project
+
+
+def _bundle(tmp_path: Path, project: Path, function) -> Path:
+    bundle_path = tmp_path / f"{project.name}.tar.zst"
+    build_bundle(function, project, bundle_path)
+    extracted = tmp_path / f"{project.name}_extracted"
+    extract_bundle(bundle_path, extracted)
+    return extracted
+
+
+def _forget(package: str) -> None:
+    for name in list(sys.modules):
+        if name == package or name.startswith(f"{package}."):
+            del sys.modules[name]
+
+
 @pytest.fixture
 def user_project(tmp_path, monkeypatch) -> Path:
     """Materialise a user project on disk with a real @publisher
     function, make it importable, return the project root."""
     srcdata = tmp_path / "srcdata"
     srcdata.mkdir()
-
-    project = tmp_path / "project"
-    pkg = project / "my_pkg"
-    pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text(_USER_PUBLISHER_SRC)
-    monkeypatch.syspath_prepend(str(project))
-    importlib.invalidate_caches()
-    yield project
-    for name in list(sys.modules):
-        if name == "my_pkg" or name.startswith("my_pkg."):
-            del sys.modules[name]
+    yield _copy_project(tmp_path, monkeypatch, "publisher_project")
+    _forget("my_pkg")
 
 
 @pytest.fixture
@@ -155,99 +151,38 @@ def fixture_publisher(user_project) -> PublisherInfo:
 
 @pytest.fixture
 def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
-    bundle_path = tmp_path / "bundle.tar.zst"
-    build_bundle(fixture_publisher, user_project, bundle_path)
-    extracted = tmp_path / "extracted"
-    extract_bundle(bundle_path, extracted)
-    return extracted
+    return _bundle(tmp_path, user_project, fixture_publisher)
 
 
 # A trivial @transformer source used to build a transformer bundle.
 # Just enough to round-trip through `_load_function_def` and verify
 # the kind-dispatch picks TransformerInfo. The body never runs.
-_USER_TRANSFORMER_SRC = """\
-from __future__ import annotations
-
-from tabsdatak.api import TableFrameSpec, transformer
-
-
-@transformer(input_tables=["c1/t_in"], output_tables=["t_out"])
-def my_transformer(in_1: TableFrameSpec) -> TableFrameSpec:
-    return in_1
-"""
-
-
 @pytest.fixture
 def transformer_bundle(tmp_path, monkeypatch) -> Path:
     """Materialise a tiny @transformer-decorated function in a fresh
     project, build + extract its bundle, return the extracted dir."""
-    project = tmp_path / "tx_project"
-    pkg = project / "tx_pkg"
-    pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
-    (pkg / "transformer.py").write_text(_USER_TRANSFORMER_SRC)
-    monkeypatch.syspath_prepend(str(project))
-    importlib.invalidate_caches()
-
+    project = _copy_project(tmp_path, monkeypatch, "tx_project")
     from tx_pkg.transformer import my_transformer  # noqa: E402
 
-    bundle_path = tmp_path / "tx_bundle.tar.zst"
-    build_bundle(my_transformer, project, bundle_path)
-    extracted = tmp_path / "tx_extracted"
-    extract_bundle(bundle_path, extracted)
+    yield _bundle(tmp_path, project, my_transformer)
 
-    yield extracted
-
-    for name in list(sys.modules):
-        if name == "tx_pkg" or name.startswith("tx_pkg."):
-            del sys.modules[name]
+    _forget("tx_pkg")
 
 
 # A trivial @subscriber-decorated function used to verify kind dispatch
 # routes correctly to SubscriberInfo and that output table names are
 # synthesised (LocalFileDest with one path → cardinality 1 → one
 # synthetic `out_0`).
-_USER_SUBSCRIBER_SRC = """\
-from __future__ import annotations
-
-from tabsdatak.api import TableFrameSpec, subscriber
-from tabsdatak.conn.localfile import LocalFileDest
-
-_DEST = LocalFileDest(
-    paths=["sink.parquet"],
-)
-
-
-@subscriber(destination=_DEST, input_tables=["c1/t_in"])
-def my_subscriber(in_1: TableFrameSpec) -> TableFrameSpec:
-    return in_1
-"""
-
-
 @pytest.fixture
 def subscriber_bundle(tmp_path, monkeypatch) -> Path:
     """Materialise a tiny @subscriber-decorated function in a fresh
     project, build + extract its bundle, return the extracted dir."""
-    project = tmp_path / "sub_project"
-    pkg = project / "sub_pkg"
-    pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
-    (pkg / "subscriber.py").write_text(_USER_SUBSCRIBER_SRC)
-    monkeypatch.syspath_prepend(str(project))
-    importlib.invalidate_caches()
-
+    project = _copy_project(tmp_path, monkeypatch, "sub_project")
     from sub_pkg.subscriber import my_subscriber  # noqa: E402
 
-    bundle_path = tmp_path / "sub_bundle.tar.zst"
-    build_bundle(my_subscriber, project, bundle_path)
-    extracted = tmp_path / "sub_extracted"
-    extract_bundle(bundle_path, extracted)
+    yield _bundle(tmp_path, project, my_subscriber)
 
-    yield extracted
-
-    for name in list(sys.modules):
-        if name == "sub_pkg" or name.startswith("sub_pkg."):
-            del sys.modules[name]
+    _forget("sub_pkg")
 
 
 # A trivial @stream_publisher-decorated function used to verify kind
@@ -256,82 +191,22 @@ def subscriber_bundle(tmp_path, monkeypatch) -> Path:
 # materialised inputs on disk (via run_source_plugin's stream-publisher
 # substitution + stamp-inputs) so the call shape here is identical to a
 # regular publisher's.
-_USER_STREAM_PUBLISHER_SRC = """\
-from __future__ import annotations
-
-from tabsdatak.api import TableFrameSpec, TableFramesSpec, stream_publisher
-from tabsdatak.conn.kafka import KafkaStreamSrc
-
-
-@stream_publisher(
-    source=KafkaStreamSrc(data_format="json", schema="{}", topic="people"),
-    batch_max_secs=60,
-    output_tables=["people_streamed"],
-)
-def my_stream_publisher(t: TableFramesSpec) -> TableFrameSpec:
-    return None
-"""
-
-
 @pytest.fixture
 def stream_publisher_bundle(tmp_path, monkeypatch) -> Path:
     """Materialise a tiny @stream_publisher-decorated function in a
     fresh project, build + extract its bundle, return the extracted
     dir."""
-    project = tmp_path / "sp_project"
-    pkg = project / "sp_pkg"
-    pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
-    (pkg / "stream_publisher.py").write_text(_USER_STREAM_PUBLISHER_SRC)
-    monkeypatch.syspath_prepend(str(project))
-    importlib.invalidate_caches()
-
+    project = _copy_project(tmp_path, monkeypatch, "sp_project")
     from sp_pkg.stream_publisher import my_stream_publisher  # noqa: E402
 
-    bundle_path = tmp_path / "sp_bundle.tar.zst"
-    build_bundle(my_stream_publisher, project, bundle_path)
-    extracted = tmp_path / "sp_extracted"
-    extract_bundle(bundle_path, extracted)
+    yield _bundle(tmp_path, project, my_stream_publisher)
 
-    yield extracted
-
-    for name in list(sys.modules):
-        if name == "sp_pkg" or name.startswith("sp_pkg."):
-            del sys.modules[name]
+    _forget("sp_pkg")
 
 
 # A 2-path publisher (cardinality 2). The source plugin produces one
 # slot per path; the function receives one TableFramesSpec parameter
 # per slot. Concatenates the two inputs into one output.
-_USER_PUBLISHER_MULTI_SRC = """\
-from __future__ import annotations
-
-from tabsdatak.api import TableFrameSpec, TableFramesSpec, publisher
-from tabsdatak.conn.localfile import LocalFileSrc
-
-_SRC = LocalFileSrc(
-    paths=["a.parquet", "b.parquet"],
-)
-
-
-@publisher(source=_SRC, output_tables=["concat"])
-def multi_publisher(
-    in_a: TableFramesSpec, in_b: TableFramesSpec
-) -> TableFrameSpec:
-    import polars as pl
-    from tabsdatak.tableframe import TableFrame
-
-    frames = []
-    for slot in (in_a, in_b):
-        if slot:
-            frames.extend(f._to_polars_lf() for f in slot if f is not None)
-    if not frames:
-        return None
-    combined = pl.concat(frames, how="vertical_relaxed")
-    return TableFrame.from_polars(combined)
-"""
-
-
 @pytest.fixture
 def multi_publisher_bundle(tmp_path, monkeypatch) -> Path:
     """A publisher whose source has 2 paths → cardinality 2 → user
@@ -339,84 +214,42 @@ def multi_publisher_bundle(tmp_path, monkeypatch) -> Path:
     srcdata = tmp_path / "mp_srcdata"
     srcdata.mkdir()
 
-    project = tmp_path / "mp_project"
-    pkg = project / "mp_pkg"
-    pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text(_USER_PUBLISHER_MULTI_SRC)
-    monkeypatch.syspath_prepend(str(project))
-    importlib.invalidate_caches()
-
+    project = _copy_project(tmp_path, monkeypatch, "mp_project")
     from mp_pkg.publisher import multi_publisher  # noqa: E402
 
-    bundle_path = tmp_path / "mp_bundle.tar.zst"
-    build_bundle(multi_publisher, project, bundle_path)
-    extracted = tmp_path / "mp_extracted"
-    extract_bundle(bundle_path, extracted)
+    yield _bundle(tmp_path, project, multi_publisher)
 
-    yield extracted
-
-    for name in list(sys.modules):
-        if name == "mp_pkg" or name.startswith("mp_pkg."):
-            del sys.modules[name]
+    _forget("mp_pkg")
 
 
 # A 3-input transformer. Mixes SINGLE and ARRAY modes to also exercise
 # the per-slot mode inference. Concatenates everything.
-_USER_TRANSFORMER_MULTI_SRC = """\
-from __future__ import annotations
-
-from tabsdatak.api import TableFrameSpec, TableFramesSpec, transformer
-
-
-@transformer(
-    input_tables=["c1/t_a", "c1/t_b", "c1/t_c"],
-    output_tables=["merged"],
-)
-def multi_transformer(
-    a: TableFrameSpec, b: TableFramesSpec, c: TableFrameSpec
-) -> TableFrameSpec:
-    import polars as pl
-    from tabsdatak.tableframe import TableFrame
-
-    frames = []
-    if a is not None:
-        frames.append(a._to_polars_lf())
-    if b:
-        frames.extend(f._to_polars_lf() for f in b if f is not None)
-    if c is not None:
-        frames.append(c._to_polars_lf())
-    if not frames:
-        return None
-    combined = pl.concat(frames, how="vertical_relaxed")
-    return TableFrame.from_polars(combined)
-"""
-
-
 @pytest.fixture
 def multi_transformer_bundle(tmp_path, monkeypatch) -> Path:
     """A transformer with 3 input_tables → 3 input parameters,
     mixing SINGLE and ARRAY slot modes."""
-    project = tmp_path / "mtx_project"
-    pkg = project / "mtx_pkg"
-    pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
-    (pkg / "transformer.py").write_text(_USER_TRANSFORMER_MULTI_SRC)
-    monkeypatch.syspath_prepend(str(project))
-    importlib.invalidate_caches()
-
+    project = _copy_project(tmp_path, monkeypatch, "mtx_project")
     from mtx_pkg.transformer import multi_transformer  # noqa: E402
 
-    bundle_path = tmp_path / "mtx_bundle.tar.zst"
-    build_bundle(multi_transformer, project, bundle_path)
-    extracted = tmp_path / "mtx_extracted"
-    extract_bundle(bundle_path, extracted)
+    yield _bundle(tmp_path, project, multi_transformer)
 
-    yield extracted
+    _forget("mtx_pkg")
 
-    for name in list(sys.modules):
-        if name == "mtx_pkg" or name.startswith("mtx_pkg."):
-            del sys.modules[name]
+
+@pytest.fixture(
+    params=["udf_transformer", "broken_udf_transformer"], ids=["valid", "broken"]
+)
+def udf_transformer_bundle(request, tmp_path, monkeypatch) -> tuple[Path, bool]:
+    """A transformer applying a UDF; the broken one returns a row short."""
+    project = _copy_project(tmp_path, monkeypatch, "udf_project")
+    function = getattr(importlib.import_module("udf_pkg.transformer"), request.param)
+
+    yield (
+        _bundle(tmp_path, project, function),
+        request.param == "broken_udf_transformer",
+    )
+
+    _forget("udf_pkg")
 
 
 def _input_table(entry: dict, index: int) -> dict:
@@ -1145,6 +978,42 @@ def test_main_multi_cardinality_transformer_with_mixed_modes(
     assert sorted(df["id"].to_list()) == [1, 2, 3]
 
 
+def test_main_transformer_with_a_udf(
+    tmp_path, udf_transformer_bundle, monkeypatch, http_ok_url
+):
+    bundle, broken = udf_transformer_bundle
+    request_path = _write_request(tmp_path / "request.yaml")
+    source = tmp_path / "raw" / "in.parquet"
+    _write_sample_parquet(source)
+    inputs_manifest = tmp_path / "inputs.yaml"
+    write_inputs_manifest([_slot_entry("t_in", 0, [str(source)])], inputs_manifest)
+    out_dir = tmp_path / "fn_out"
+    _set_argv(
+        monkeypatch,
+        request_path,
+        bundle,
+        inputs_manifest,
+        out_dir,
+        tmp_path / "outputs.yaml",
+        tmp_path / "live",
+        responder_url=http_ok_url,
+    )
+
+    rc = main()
+
+    if broken:
+        assert rc == OutputWriteFailedError.exit_code
+        return
+    assert rc == 0, f"main() returned {rc}"
+    df = pl.read_parquet(out_dir / "slot0" / "t_out.parquet")
+    assert df.select("id", "name", "doubled", "label").to_dicts() == [
+        {"id": 1, "name": "a", "doubled": 2, "label": "A"},
+        {"id": 2, "name": "b", "doubled": 4, "label": "B"},
+        {"id": 3, "name": "c", "doubled": 6, "label": "C"},
+    ]
+    assert "$td.id" in df.columns
+
+
 def test_main_manifest_length_mismatch_returns_bad_manifest(
     tmp_path, multi_publisher_bundle, monkeypatch, http_ok_url
 ):
@@ -1231,27 +1100,6 @@ def test_infer_table_modes_does_not_skip_without_ctx():
 # Helper to build a self-contained user project with a ctx-aware
 # publisher whose user function reads / writes initial_values through
 # the trailing ctx parameter.
-
-_CTX_PUBLISHER_SRC = """\
-from __future__ import annotations
-
-from tabsdatak.api import TableFrameSpec, TableFramesSpec, TrxCtx, publisher
-from tabsdatak.conn.localfile import LocalFileSrc
-
-_SRC = LocalFileSrc(
-    paths=["*.parquet"],
-)
-
-
-@publisher(source=_SRC, output_tables=["my_table"])
-def my_publisher(in_1: TableFramesSpec, ctx: TrxCtx) -> TableFrameSpec:
-    seen = ctx.get_attr("my-key")
-    new = "from-user-fn" if seen is None else "again-after-" + str(seen)
-    ctx.set_attr("my-key", new)
-    return None
-"""
-
-
 @pytest.fixture
 def ctx_aware_built_bundle(tmp_path, monkeypatch) -> Path:
     """Build + extract a bundle whose @publisher function declares a
@@ -1260,26 +1108,12 @@ def ctx_aware_built_bundle(tmp_path, monkeypatch) -> Path:
     srcdata.mkdir()
     _write_sample_parquet(srcdata / "rows.parquet")
 
-    project = tmp_path / "project"
-    pkg = project / "my_pkg"
-    pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text(_CTX_PUBLISHER_SRC)
-    monkeypatch.syspath_prepend(str(project))
-    importlib.invalidate_caches()
-
+    project = _copy_project(tmp_path, monkeypatch, "ctx_project")
     from my_pkg.publisher import my_publisher  # noqa: E402
 
-    bundle_path = tmp_path / "bundle.tar.zst"
-    build_bundle(my_publisher, project, bundle_path)
-    extracted = tmp_path / "extracted"
-    extract_bundle(bundle_path, extracted)
+    yield _bundle(tmp_path, project, my_publisher)
 
-    yield extracted
-
-    for name in list(sys.modules):
-        if name == "my_pkg" or name.startswith("my_pkg."):
-            del sys.modules[name]
+    _forget("my_pkg")
 
 
 def _write_inputs_manifest_for(input_files: list[str], path: Path) -> None:
@@ -1494,43 +1328,10 @@ def test_main_creates_out_dir_before_invoking_user_function(
     srcdata.mkdir()
     _write_sample_parquet(srcdata / "rows.parquet")
 
-    project = tmp_path / "project"
-    pkg = project / "my_pkg"
-    pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
-    (pkg / "publisher.py").write_text("""\
-from __future__ import annotations
-
-from tabsdatak.api import TableFrameSpec, TableFramesSpec, TrxCtx, publisher
-from tabsdatak.conn.localfile import LocalFileSrc
-
-_SRC = LocalFileSrc(
-    paths=["*.parquet"],
-)
-
-
-@publisher(source=_SRC, output_tables=["my_table"])
-def my_publisher(
-    in_1: TableFramesSpec, ctx: TrxCtx
-) -> TableFrameSpec:
-    import os
-    # ctx.work_dir == --out-dir for run-function. Must already exist
-    # by the time the user function runs, so a body that writes a
-    # sidecar / probes the directory doesn't crash.
-    assert os.path.isdir(ctx.work_dir), (
-        f"ctx.work_dir {ctx.work_dir} does not exist; runtime "
-        f"created out_dir too late"
-    )
-    return None
-""")
-    monkeypatch.syspath_prepend(str(project))
-    importlib.invalidate_caches()
+    project = _copy_project(tmp_path, monkeypatch, "work_dir_project")
     from my_pkg.publisher import my_publisher  # noqa: E402
 
-    bundle_path = tmp_path / "bundle.tar.zst"
-    build_bundle(my_publisher, project, bundle_path)
-    extracted = tmp_path / "extracted"
-    extract_bundle(bundle_path, extracted)
+    extracted = _bundle(tmp_path, project, my_publisher)
 
     req = _request_with_state_slots(tmp_path / "request.yaml")
     inputs_manifest = tmp_path / "inputs.yaml"
@@ -1552,10 +1353,7 @@ def my_publisher(
         responder_url=http_ok_url,
     )
     rc = main()
-    # Cleanup: the temporary `my_pkg` import lingers in sys.modules.
-    for name in list(sys.modules):
-        if name == "my_pkg" or name.startswith("my_pkg."):
-            del sys.modules[name]
+    _forget("my_pkg")
 
     assert rc == 0, rc
 
@@ -1569,80 +1367,24 @@ def my_publisher(
 # the ctx surface in the future hits a test failure.
 
 
-_CTX_TRANSFORMER_SRC = """\
-from __future__ import annotations
-
-from tabsdatak.api import TableFrameSpec, TrxCtx, transformer
-
-
-@transformer(input_tables=["c1/t_in"], output_tables=["t_out"])
-def my_transformer(
-    in_1: TableFrameSpec, ctx: TrxCtx
-) -> TableFrameSpec:
-    seen = ctx.get_attr("smoke.last-seen")
-    ctx.set_attr("smoke.last-seen", "tx-after-" + str(seen))
-    return in_1
-"""
-
-
-_CTX_SUBSCRIBER_SRC = """\
-from __future__ import annotations
-
-from tabsdatak.api import TableFrameSpec, TrxCtx, subscriber
-from tabsdatak.conn.localfile import LocalFileDest
-
-_DEST = LocalFileDest(
-    paths=["sink.parquet"],
-)
-
-
-@subscriber(destination=_DEST, input_tables=["c1/t_in"])
-def my_subscriber(
-    in_1: TableFrameSpec, ctx: TrxCtx
-) -> TableFrameSpec:
-    seen = ctx.get_attr("smoke.last-seen")
-    ctx.set_attr("smoke.last-seen", "sub-after-" + str(seen))
-    return in_1
-"""
-
-
 def _build_extracted_bundle(
     tmp_path: Path,
     monkeypatch,
     request,
     *,
+    project_name: str,
     pkg_name: str,
     module_name: str,
-    source: str,
     decorated_name: str,
 ) -> Path:
-    """Materialise a single-module user project under ``tmp_path``,
-    import the decorated function, build + extract the bundle, return
-    the extracted dir. Cleans up ``sys.modules`` registration via a
-    pytest ``request`` finalizer."""
-    project = tmp_path / f"{pkg_name}_project"
-    pkg = project / pkg_name
-    pkg.mkdir(parents=True)
-    (pkg / "__init__.py").write_text("")
-    (pkg / f"{module_name}.py").write_text(source)
-    monkeypatch.syspath_prepend(str(project))
-    importlib.invalidate_caches()
-
+    """Copy a single-module user project from the test resources, import
+    the decorated function, build + extract the bundle, return the
+    extracted dir. Cleans up ``sys.modules`` registration via a pytest
+    ``request`` finalizer."""
+    project = _copy_project(tmp_path, monkeypatch, project_name)
     mod = importlib.import_module(f"{pkg_name}.{module_name}")
-    decorated = getattr(mod, decorated_name)
-
-    bundle_path = tmp_path / f"{pkg_name}_bundle.tar.zst"
-    build_bundle(decorated, project, bundle_path)
-    extracted = tmp_path / f"{pkg_name}_extracted"
-    extract_bundle(bundle_path, extracted)
-
-    def _cleanup():
-        for name in list(sys.modules):
-            if name == pkg_name or name.startswith(f"{pkg_name}."):
-                del sys.modules[name]
-
-    request.addfinalizer(_cleanup)
-    return extracted
+    request.addfinalizer(lambda: _forget(pkg_name))
+    return _bundle(tmp_path, project, getattr(mod, decorated_name))
 
 
 def test_main_ctx_aware_transformer_hydrates_and_drains(
@@ -1655,9 +1397,9 @@ def test_main_ctx_aware_transformer_hydrates_and_drains(
         tmp_path,
         monkeypatch,
         request,
+        project_name="tx_ctx_project",
         pkg_name="tx_ctx_pkg",
         module_name="transformer",
-        source=_CTX_TRANSFORMER_SRC,
         decorated_name="my_transformer",
     )
 
@@ -1704,9 +1446,9 @@ def test_main_ctx_aware_subscriber_hydrates_and_drains(
         tmp_path,
         monkeypatch,
         request,
+        project_name="sub_ctx_project",
         pkg_name="sub_ctx_pkg",
         module_name="subscriber",
-        source=_CTX_SUBSCRIBER_SRC,
         decorated_name="my_subscriber",
     )
 

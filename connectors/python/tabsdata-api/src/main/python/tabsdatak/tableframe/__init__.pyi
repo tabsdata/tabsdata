@@ -52,6 +52,7 @@ from tabsdatak.tableframe._typing import (
     UniqueKeepStrategy,
 )
 from tabsdatak.tableframe.grok import ColumnDefinition
+from tabsdatak.tableframe.udf import UDF
 
 class TableFrame(EngineFrame):
     """A lazy, immutable tabular frame -- Tabsdata's wrapper over polars
@@ -838,6 +839,98 @@ class TableFrame(EngineFrame):
 
             When a pattern repeats a capture name, the extra columns are
             disambiguated with a numeric suffix (`field`, `field[1]`).
+        """
+
+    def udf(
+        self,
+        on: str | Expr | list[str | Expr],
+        function: UDF,
+    ) -> TableFrame:
+        """Append the columns a user defined function computes.
+
+        :categories: udf, projection
+
+        `function` reads the columns `on` selects, and nothing else, and
+        its output columns are appended to the frame, keeping every
+        existing column. An output column named like an existing one
+        replaces it. The function runs as part of the lazy plan, streaming
+        over the data one batch at a time: `on_batch` receives a pyarrow
+        array per input column, and `on_element` a Python value per input
+        column, row by row. `function` is a `UDF` subclass instance, or a
+        plain function or lambda turned into one with the `on_batch` /
+        `on_element` decorators; see `tabsdatak.tableframe.udf`.
+
+        Args:
+            on: Name of the input column, an expression resolving to one or
+                more columns, or a list of them. They are passed to the
+                function in this order, and each column at most once.
+            function: The `UDF` computing the output columns.
+
+        Returns:
+            A new `TableFrame` with the function's output columns.
+
+        Raises:
+            UDFDefinitionException: When `on` selects no column, a column
+                twice or a column the frame does not have, or `function` is
+                not a `UDF` or is not defined correctly.
+            SystemColumnWriteError: When an output column is a `$td.*`
+                system column.
+            UDFOutputException: When the data is processed, if the function
+                returns a different number of columns or rows than it
+                should, or values that do not fit an output data type.
+            UDFException: When the data is processed, if the function
+                raises an error of its own, which becomes its cause.
+
+        Examples:
+            .. code-block:: python
+
+                import pyarrow.compute as pc
+
+                class Total(UDF):
+                    def __init__(self):
+                        super().__init__(("total", Int64))
+
+                    def on_batch(self, arrays):
+                        return [pc.add(arrays[0], arrays[1])]
+
+                tf.udf(["a", "b"], Total())
+
+            Row by row, receiving each input as its own argument:
+
+            .. code-block:: python
+
+                class Ratio(UDFUnpacked):
+                    def __init__(self):
+                        super().__init__(("ratio", Float64))
+
+                    def on_element(self, numerator, denominator):
+                        return [numerator / denominator]
+
+                tf.udf(col("a", "n"), Ratio())
+
+            A plain function, or an inline lambda:
+
+            .. code-block:: python
+
+                @on_element(("ratio", Float64))
+                def ratio(numerator, denominator):
+                    return numerator / denominator
+
+                tf.udf(["a", "n"], ratio)
+                tf.udf("name", on_element(("upper", String))(lambda name: name.upper()))
+
+            Renaming an output column:
+
+            .. code-block:: python
+
+                class Ratio(UDFUnpacked):
+                    def __init__(self):
+                        super().__init__(("ratio", Float64))
+
+                    def on_element(self, numerator, denominator):
+                        return [numerator / denominator]
+
+                tf.udf(["a", "n"], Ratio().with_columns(("share", None)))
         """
 
     @classmethod

@@ -276,6 +276,14 @@ def test_hooks_module_has_per_op_typed_params(main_root):
     assert "class FrameView:" in hooks
 
 
+def test_hooks_module_types_the_params_of_engine_frame_ops(main_root):
+    perform(_report(), ROOT, str(main_root))
+    hooks = (main_root / "pkg" / "wrap" / "_core" / "hooks.py").read_text()
+    assert "class UdfParams(TypedDict):" in hooks
+    assert "inputs: tuple" in hooks
+    assert "outputs: dict" in hooks
+
+
 def test_multiple_classes_in_one_module(main_root):
     # a module may hold several wrapper classes (e.g. when/then builders)
     report = Report(

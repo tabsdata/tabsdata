@@ -31,6 +31,7 @@ import tabsdatak.tableframe.datatypes as datatypes
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe.functions import col, concat, lit
 import tabsdatak.tableframe.grok as grok
+import tabsdatak.tableframe.udf as udf
 from tabsdatak.tableframe.grok import ColumnDefinition
 
 apidoc = pytest.importorskip(
@@ -83,6 +84,7 @@ def _sources() -> list[pathlib.Path]:
     found = [
         *sorted(_TABLEFRAME.glob("*.pyi")),
         *sorted((_TABLEFRAME / "grok").glob("*.py")),
+        *sorted((_TABLEFRAME / "udf").glob("*.py")),
         *sorted((_API / "dataquality").glob("*.py")),
     ]
     # An empty list would turn every test below into a silent skip.
@@ -95,7 +97,7 @@ def _public_names(path: pathlib.Path) -> set[str] | None:
     when everything in it is published (the stubs)."""
     if path.suffix == ".pyi":
         return None
-    module = dq if path.parent.name == "dataquality" else grok
+    module = {"dataquality": dq, "grok": grok, "udf": udf}[path.parent.name]
     return {name for name in dir(module) if not name.startswith("_")}
 
 
@@ -226,6 +228,8 @@ def _namespace() -> dict:
     }
     names.update({n: getattr(datatypes, n) for n in dir(datatypes) if n[0].isupper()})
     names.update({n: getattr(dq, n) for n in dir(dq) if n[0].isupper()})
+    names.update({n: getattr(udf, n) for n in dir(udf) if n[0].isupper()})
+    names.update({"on_batch": udf.on_batch, "on_element": udf.on_element})
     return names
 
 

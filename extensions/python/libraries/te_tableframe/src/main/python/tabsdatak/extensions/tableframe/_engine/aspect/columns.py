@@ -34,6 +34,8 @@ def _offending(op, params) -> set[str]:
         return _system(_rename_targets(params["mapping"]))
     if op == "drop":
         return _system(_drop_names(params["columns"]))
+    if op == "udf":
+        return _system(params["outputs"])
     return set()
 
 

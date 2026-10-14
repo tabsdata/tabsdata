@@ -19,7 +19,7 @@ def install(frame_cls) -> None:
     from tabsdatak.extensions.tableframe._engine.aspect import columns, progress
     from tabsdatak.tableframe._core.hooks import set_hook, set_sink_observer
 
-    for op in ("select", "with_columns", "drop", "rename"):
+    for op in ("select", "with_columns", "drop", "rename", "udf"):
         set_hook(frame_cls, op, columns.guard, phase="before")
 
     set_hook(frame_cls, "join", _join_hook_after, phase="after")

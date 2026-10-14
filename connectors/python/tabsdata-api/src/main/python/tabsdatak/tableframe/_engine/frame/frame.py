@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from tabsdatak.tableframe.datatypes import DataType
     from tabsdatak.tableframe.expr import Expr
     from tabsdatak.tableframe.grok import ColumnDefinition
+    from tabsdatak.tableframe.udf import UDF
 
 
 class EngineFrame(BaseFrame):
@@ -317,18 +318,16 @@ class EngineFrame(BaseFrame):
         return self._strip(drop_system_columns)
 
     def _to_polars_df(self, drop_system_columns=True):
-        return self._strip(drop_system_columns).collect(no_optimization=True)
+        return self._strip(drop_system_columns).collect(engine="streaming")
 
     def _to_pandas(self, drop_system_columns=True):
-        return (
-            self._strip(drop_system_columns).collect(no_optimization=True).to_pandas()
-        )
+        return self._strip(drop_system_columns).collect(engine="streaming").to_pandas()
 
     def _to_dict(self, drop_system_columns=True):
         return (
             self
             ._strip(drop_system_columns)
-            .collect(no_optimization=True)
+            .collect(engine="streaming")
             .to_dict(as_series=False)
         )
 
@@ -405,6 +404,54 @@ class EngineFrame(BaseFrame):
     #     from tabsdatak.common._actions.dataquality.engine import DataQualityEngine
     #
     #     return DataQualityEngine(self)
+
+    def udf(self, on: str | Expr | list[str | Expr], function: UDF) -> Self:
+        """Append the output columns of a user defined function.
+
+        The function reads only the columns `on` selects and runs as part of
+        the streaming plan, one batch at a time.
+        """
+        from collections import Counter
+
+        import polars as pl
+
+        from tabsdatak.tableframe._core.hooks import compute
+        from tabsdatak.tableframe._core.translate import unwrap
+        from tabsdatak.tableframe.udf import UDF
+        from tabsdatak.tableframe.udf.error import UDFErrorCode
+
+        if not isinstance(function, UDF):
+            raise UDFErrorCode.UDF_15.exception(got=type(function).__name__)
+        selected = on if isinstance(on, (list, tuple)) else [on]
+        inputs = tuple(
+            pl.col(item) if isinstance(item, str) else unwrap(item) for item in selected
+        )
+        if not inputs:
+            raise UDFErrorCode.UDF_9.exception()
+        names: Counter[str] = Counter()
+        for expression in inputs:
+            try:
+                names.update(self._lf.select(expression).collect_schema().names())
+            except pl.exceptions.ColumnNotFoundError as error:
+                raise UDFErrorCode.UDF_16.exception(cause=error, input=str(expression))
+        repeated = sorted(name for name, count in names.items() if count > 1)
+        if repeated:
+            raise UDFErrorCode.UDF_13.exception(names=repeated)
+        dtype = function._dtype()
+        # Elementwise, so the streaming engine feeds the function batch by
+        # batch instead of collecting whole columns first.
+        output = (
+            pl
+            .struct(*inputs)
+            .map_batches(function, return_dtype=dtype, is_elementwise=True)
+            .struct.unnest()
+        )
+        return compute(
+            "udf",
+            (self,),
+            {"inputs": inputs, "outputs": dict(dtype.to_schema())},
+            call=lambda lf: lf.with_columns(output),
+        )
 
     def grok(
         self,

@@ -18,7 +18,9 @@ Module kinds:
 
 Per-op behavior is selected by each symbol's ``hook_name`` from the manifest
 ("-" = no hook by default; "project"/"join"/"group_by"/"agg"/"drop"/"rename" set
-by the user). The generated code carries NO provenance policy — it only wraps and
+by the user). Ops handwritten on ``EngineFrame`` that dispatch hooks (``udf``)
+are listed in ``_ENGINE_HOOKS`` so their params types are generated too. The
+generated code carries NO provenance policy — it only wraps and
 dispatches hooks; column lineage etc. lives in handwritten hook modules that the
 consumer registers via ``set_hook``/``chain``.
 """
@@ -98,8 +100,16 @@ _HOOK_SHAPES: dict[str, tuple[int, list[tuple[str, str]]]] = {
             ("named_aggs", "dict"),
         ],
     ),
+    "udf": (1, [("inputs", "tuple"), ("outputs", "dict")]),
 }
 _HOOK_NAMES = set(_HOOK_SHAPES)
+
+# Hooked ops handwritten on EngineFrame (op name -> hook_name). They are not
+# polars symbols, so the manifest never lists them; their bodies route through
+# compute() by hand, and only their params types are generated.
+_ENGINE_HOOKS: dict[str, str] = {
+    "udf": "udf",
+}
 
 # Constructors of generator-scaffolded classes (class name -> parameter names).
 # These have no manifest symbol — the runtime renderers emit them as
@@ -158,11 +168,14 @@ def perform(
     hookable = sorted({
         _member(symbol) for symbol in whitelisted if symbol.hook_name in _HOOK_NAMES
     })
-    hook_specs = sorted({
-        (_member(symbol), symbol.hook_name)
-        for symbol in whitelisted
-        if symbol.hook_name in _HOOK_NAMES
-    })
+    hook_specs = sorted(
+        {
+            (_member(symbol), symbol.hook_name)
+            for symbol in whitelisted
+            if symbol.hook_name in _HOOK_NAMES
+        }
+        | set(_ENGINE_HOOKS.items())
+    )
 
     # The datatypes.py module is always emitted (aliased leaf types); it is not a
     # manifest module but must be a submodule so the __init__ loop imports it
