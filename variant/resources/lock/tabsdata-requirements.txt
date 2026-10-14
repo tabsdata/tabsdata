@@ -24,8 +24,8 @@ azure-storage-blob==12.28.0
 base32hex==1.0.2
 boto3==1.43.78
 boto3-stubs==1.43.78
-botocore==1.43.111
-botocore-stubs==1.43.67
+botocore==1.43.113
+botocore-stubs==1.43.113
 build==1.6.1
 cachetools==6.2.6
 certifi==2026.7.22
@@ -38,7 +38,7 @@ cloudpickle==3.1.2
 colorama==0.4.6
 confluent-kafka==2.14.0
 connectorx==0.4.5
-cramjam==2.13.0
+cramjam==2.14.0
 croniter==6.2.2
 cryptography==47.0.0
 databricks-sdk==0.102.0
@@ -52,7 +52,7 @@ filelock==3.25.2
 frozenlist==1.8.0
 fsspec==2026.9.0
 google-api-core==2.30.3
-google-auth==2.61.0
+google-auth==2.62.0
 google-cloud-bigquery==3.40.1
 google-cloud-compute==1.52.0
 google-cloud-container==2.66.0
@@ -87,12 +87,12 @@ markdown-it-py==4.2.0
 mdit-py-plugins==0.6.1
 mdurl==0.1.2
 mmh3==5.3.1
-more-itertools==11.1.0
+more-itertools==11.2.0
 msal==1.39.0
 msal-extensions==1.3.1
 msrest==0.7.1
 multidict==7.1.0
-mypy-boto3-glue==1.43.110
+mypy-boto3-glue==1.43.113
 mysql-replication==1.0.15
 numpy==2.4.3
 oauthlib==3.3.1
@@ -163,7 +163,7 @@ textual==8.2.3
 thrift==0.20.0
 tomlkit==0.15.1
 types-pyyaml==6.0.3
-types-s3transfer==0.16.0
+types-s3transfer==0.19.2
 typing-extensions==4.15.0
 typing-inspection==0.4.4
 tzdata==2026.5
