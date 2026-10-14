@@ -55,7 +55,7 @@ class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
         self.ledger: FileLedger | None = None
         self.disk: DiskSentinel | None = None
         self.buffer: BufferSentinel[R, O] | None = None
-        self.unarmed_advances: list[O] = []
+        self.advances: list[O] = []
 
     def arm(
         self,
@@ -66,9 +66,9 @@ class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
         self.ledger = ledger
         self.disk = disk
         self.buffer = buffer
-        for offset in self.unarmed_advances:
+        for offset in self.advances:
             buffer.advance(offset)
-        self.unarmed_advances.clear()
+        self.advances.clear()
 
     def checkpoint(self, offset: O) -> bool:
         """Record `offset` now when nothing read before it waits to be
@@ -87,7 +87,7 @@ class RunLifecycle[R, O: StreamOffset](StreamLifecycle[O]):
         reports it holds nothing unread before it. One reported before the
         run is armed is kept until it is."""
         if self.buffer is None:
-            self.unarmed_advances.append(offset)
+            self.advances.append(offset)
         else:
             self.buffer.advance(offset)
 

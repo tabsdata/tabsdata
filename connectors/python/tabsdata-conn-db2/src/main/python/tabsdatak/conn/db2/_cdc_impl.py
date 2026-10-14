@@ -1308,12 +1308,12 @@ class SqlReplicaIngester(CdcIngester):
             self._mark.commits[qualified] = captured
 
     def staged_offset(self, offset: CdcOffset) -> CdcOffset:
-        """The staged offset, with each quiet table at the position it was
-        moved on to, once the stage covers the last row read from it: a
-        stage short of that row cannot skip it."""
-        if not self._quiet:
-            return offset
-        commits = dict(offset.commits)
+        """The staged offset over every tracked table: one the stage has no
+        row of stands where the stream started it, and each quiet table at
+        the position it was moved on to, once the stage covers the last row
+        read from it: a stage short of that row cannot skip it."""
+        commits = dict(self._base_offset.commits) if self._base_offset else {}
+        commits.update(offset.commits)
         for table, (last_row, moved_to) in self._quiet.items():
             staged = commits.get(table)
             if staged is not None and staged >= last_row and moved_to > staged:
@@ -1387,6 +1387,9 @@ class SqlReplicaIngester(CdcIngester):
                         self._mark.commits[table] = max(
                             self._mark.commits.get(table, COMMITSEQ_ORIGIN), end
                         )
+                    # Everything up to the bound is staged with the load, so
+                    # the stream starts there rather than at the load's pin.
+                    self._base_offset = self._mark.copy()
                     self._bound = None
                     self._bound_reached = True
                     return
