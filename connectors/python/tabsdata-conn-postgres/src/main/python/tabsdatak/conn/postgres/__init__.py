@@ -65,8 +65,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
-from pydantic import model_validator
-
 # Private modules are imported as modules (not by symbol) so each
 # call-site is explicit about reaching into private surface.
 # noinspection PyProtectedMember
@@ -83,7 +81,6 @@ from tabsdatak.conn.common import _validation as _common_validation
 # noinspection PyProtectedMember
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream import _validation as _stream_validation
-from tabsdatak.conn.common.sql.cdc.typing import validate_start
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
     CfgSpec,
@@ -403,11 +400,13 @@ class LsnPosition:
 
 
 PostgresCdcStartFromSpec: TypeAlias = Union[
+    Literal["full"],
     RelativePositionSpec,
     LsnPosition,
 ]
-"""Where a Postgres CDC stream begins: a `"head"` / `"tail"` keyword
-or an `LsnPosition`."""
+"""Where a Postgres CDC stream begins: `"full"` (a snapshot of every tracked
+table, then the changes after it), a `"head"` / `"tail"` keyword or an
+`LsnPosition`."""
 
 
 # --- PostgresCdcStreamSrc.src_cfg keys ------------------------------
@@ -495,22 +494,21 @@ class PostgresCdcStreamSrc(StreamSrc):
     Args:
         tables: Qualified `schema.table` names to track.
         replication_slot: Logical replication slot to attach to.
-        start_from: Where to begin -- `"head"` (replay from the oldest
-            retained WAL), `"tail"` (current WAL LSN) or an
-            `LsnPosition`. Required unless `initial_load` is `True`, and
-            not allowed with it.
-        initial_load: When `True`, the stream first emits a full
-            snapshot of every tracked table (rows marked as inserts,
-            preceded by a `LOAD` control row per table) and then captures
-            changes from the exact position of that snapshot, so no
-            `start_from` may be given. Defaults to `False`.
+        start_from: Where to begin -- `"full"`, `"head"` (replay from the
+            oldest retained WAL), `"tail"` (current WAL LSN) or an
+            `LsnPosition`. Required.
 
-            To resynchronise a destination later, keep `initial_load=True`
+            `"full"` first emits a full snapshot of every tracked table
+            (rows marked as inserts, preceded by a `LOAD` control row per
+            table) and then captures changes from the exact position of
+            that snapshot.
+
+            To resynchronise a destination later, keep `start_from="full"`
             and reset the function's stage (`tdk fn update --reset-stage`):
             a fresh stage holds no stream state, so the stream starts again
             with the snapshot and emits the `LOAD` rows first. A stage reset
-            without `initial_load` restarts at `start_from` and sends no
-            `LOAD` row.
+            with any other `start_from` restarts there and sends no `LOAD`
+            row.
 
             Beyond the privileges plain CDC needs, the connecting role
             must be able to `SELECT` every tracked table, since the
@@ -526,7 +524,7 @@ class PostgresCdcStreamSrc(StreamSrc):
             the stream's, which the server drops once the load is read.
         replication_slot_behavior: `"reuse"` (default, slot must
             exist) or `"create"` (create it, no-op if it exists). It
-            also selects how `initial_load` snapshots -- see there.
+            also selects how a `"full"` start snapshots -- see `start_from`.
         publication_name: Optional publication scoping the slot's output
             (wal2json's `publication_names` option).
         columns_format: Layout for the new (and old) columns payload on
@@ -554,15 +552,9 @@ class PostgresCdcStreamSrc(StreamSrc):
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)
     tables: list[PostgresTableNameSpec]
     replication_slot: str
-    start_from: PostgresCdcStartFromSpec | None = None
-    initial_load: bool = False
+    start_from: PostgresCdcStartFromSpec
     replication_slot_behavior: ReplicationSlotBehaviorSpec = "reuse"
     publication_name: str | None = None
     columns_format: CdcColumnsFormatSpec = "columns"
     flatten_columns: bool = True
     src_cfg: CdcSrcCfgSpec | None = None
-
-    @model_validator(mode="after")
-    def _validate_start(self):
-        validate_start(self.initial_load, self.start_from)
-        return self

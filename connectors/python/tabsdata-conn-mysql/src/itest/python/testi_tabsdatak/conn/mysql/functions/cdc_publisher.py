@@ -24,7 +24,7 @@ SRC_CFG = {
 @stream_publisher(
     source=MySQLCdcStreamSrc(
         tables=[TRACKED_TABLE],
-        initial_load=True,
+        start_from="full",
         src_cfg=SRC_CFG,
     ),
     batch_min_secs=unsafe_seconds(1),

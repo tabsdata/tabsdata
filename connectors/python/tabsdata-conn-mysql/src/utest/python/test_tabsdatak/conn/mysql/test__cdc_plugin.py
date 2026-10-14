@@ -268,3 +268,11 @@ def test_build_ingester_poll_max_secs_falls_back_to_default():
     kw = mock_ingester_cls.call_args.kwargs
     # DEFAULT_POLL_MAX_SECS from common-sql constants.
     assert kw["poll_max_secs"] == 1
+
+
+@pytest.mark.parametrize(("start_from", "loads"), [("full", True), ("tail", False)])
+def test_only_a_full_start_runs_the_initial_load(start_from, loads):
+    src = _src(start_from=start_from)
+    assert _build_cdc_run_config(src).initial_load is loads
+    expected = None if loads else start_from
+    assert _to_internal_start_from(src.start_from) == expected

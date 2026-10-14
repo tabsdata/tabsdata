@@ -64,8 +64,6 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
-from pydantic import model_validator
-
 # Private modules are imported as modules (not by symbol) so each
 # call-site is explicit about reaching into private surface.
 # noinspection PyProtectedMember
@@ -82,7 +80,6 @@ from tabsdatak.conn.common import _validation as _common_validation
 # noinspection PyProtectedMember
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream import _validation as _stream_validation
-from tabsdatak.conn.common.sql.cdc.typing import validate_start
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
     CfgSpec,
@@ -421,12 +418,14 @@ class TimestampPosition:
 
 
 Db2CdcStartFromSpec: TypeAlias = Union[
+    Literal["full"],
     RelativePositionSpec,
     CommitSeqPosition,
     TableCommitSeqPosition,
     TimestampPosition,
 ]
-"""Where a Db2 CDC stream begins: a `"head"` / `"tail"` keyword, a
+"""Where a Db2 CDC stream begins: `"full"` (a snapshot of every tracked
+source table, then the changes after it), a `"head"` / `"tail"` keyword, a
 `CommitSeqPosition`, a `TableCommitSeqPosition` or a
 `TimestampPosition`."""
 
@@ -511,31 +510,29 @@ class Db2CdcStreamSrc(StreamSrc):
 
     Args:
         tables: Qualified `cd_schema.cd_table` CD table names.
-        start_from: Where to begin -- `"head"` (replay each tracked CD
-            table from the origin), `"tail"` (each table's current
-            watermark), a `CommitSeqPosition`, a
-            `TableCommitSeqPosition` or a `TimestampPosition`. Required
-            unless `initial_load` is `True`, and not allowed with it.
-        initial_load: When `True`, the stream first emits a full
-            snapshot of every tracked source table (rows marked as
-            inserts, preceded by a `LOAD` control row per table) and then
-            captures changes from the exact position of that snapshot, so
-            no `start_from` may be given. Defaults to `False`.
+        start_from: Where to begin -- `"full"`, `"head"` (replay each
+            tracked CD table from the origin), `"tail"` (each table's
+            current watermark), a `CommitSeqPosition`, a
+            `TableCommitSeqPosition` or a `TimestampPosition`. Required.
 
-            To resynchronise a destination later, keep `initial_load=True`
+            `"full"` first emits a full snapshot of every tracked source
+            table (rows marked as inserts, preceded by a `LOAD` control row
+            per table) and then captures changes from the exact position of
+            that snapshot.
+
+            To resynchronise a destination later, keep `start_from="full"`
             and reset the function's stage (`tdk fn update --reset-stage`):
             a fresh stage holds no stream state, so the stream starts again
             with the snapshot and emits the `LOAD` rows first. A stage reset
-            without `initial_load` restarts at `start_from` and sends no
-            `LOAD` row.
+            with any other `start_from` restarts there and sends no `LOAD`
+            row.
 
             Beyond the privileges plain CDC needs, the connecting user
             must be able to `SELECT` every tracked *source* table (plain
-            CDC only reads the CD tables) and to lock those tables
-            briefly while the capture position is read. The snapshot
-            reads the source tables themselves rather than the CD tables,
-            so the source tables must be readable even where only the CD
-            tables were needed before.
+            CDC only reads the CD tables), since the snapshot reads the
+            source tables themselves, and needs `EXECUTE` on
+            `SYSPROC.MON_GET_TRANSACTION_LOG` or `SYSMON` authority to read
+            the log position the snapshot is pinned to. No table is locked.
         columns_format: Layout for the new (and old) columns payload on
             each change row -- `"columns"` (default), `"struct"` or
             `"map"`.
@@ -552,13 +549,7 @@ class Db2CdcStreamSrc(StreamSrc):
 
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)
     tables: list[Db2TableNameSpec]
-    start_from: Db2CdcStartFromSpec | None = None
-    initial_load: bool = False
+    start_from: Db2CdcStartFromSpec
     columns_format: CdcColumnsFormatSpec = "columns"
     flatten_columns: bool = True
     src_cfg: CdcSrcCfgSpec | None = None
-
-    @model_validator(mode="after")
-    def _validate_start(self):
-        validate_start(self.initial_load, self.start_from)
-        return self

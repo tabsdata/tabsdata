@@ -63,8 +63,6 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Any, Literal, TypeAlias, Union
 
-from pydantic import model_validator
-
 # Private modules are imported as modules (not by symbol) so each
 # call-site is explicit about reaching into private surface.
 # noinspection PyProtectedMember
@@ -81,7 +79,6 @@ from tabsdatak.conn.common import _validation as _common_validation
 # noinspection PyProtectedMember
 # noinspection PyProtectedMember
 from tabsdatak.conn.common._stream import _validation as _stream_validation
-from tabsdatak.conn.common.sql.cdc.typing import validate_start
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
     CfgSpec,
@@ -179,12 +176,14 @@ class TimestampPosition:
 
 
 MySQLCdcStartFromSpec: TypeAlias = Union[
+    Literal["full"],
     RelativePositionSpec,
     GtidPosition,
     BinlogPosition,
     TimestampPosition,
 ]
-"""Where a MySQL CDC stream begins: a `"head"` / `"tail"` keyword, a
+"""Where a MySQL CDC stream begins: `"full"` (a snapshot of every tracked
+table, then the changes after it), a `"head"` / `"tail"` keyword, a
 `GtidPosition`, a `BinlogPosition` or a `TimestampPosition`."""
 
 # --- Type aliases ----------------------------------------------------
@@ -521,23 +520,22 @@ class MySQLCdcStreamSrc(StreamSrc):
 
     Args:
         tables: Qualified `schema.table` names to track.
-        start_from: Where to begin reading the binlog when no prior
-            offset is persisted -- `"head"` / `"tail"` keyword, a
-            `GtidPosition`, a `BinlogPosition` or a
-            `TimestampPosition`. Required unless `initial_load` is
-            `True`, and not allowed with it.
-        initial_load: When `True`, the stream first emits a full
-            snapshot of every tracked table (rows marked as inserts,
-            preceded by a `LOAD` control row per table) and then captures
-            changes from the exact position of that snapshot, so no
-            `start_from` may be given. Defaults to `False`.
+        start_from: Where to begin reading when no prior offset is
+            persisted -- `"full"`, the `"head"` / `"tail"` keyword, a
+            `GtidPosition`, a `BinlogPosition` or a `TimestampPosition`.
+            Required.
 
-            To resynchronise a destination later, keep `initial_load=True`
+            `"full"` first emits a full snapshot of every tracked table
+            (rows marked as inserts, preceded by a `LOAD` control row per
+            table) and then captures changes from the exact position of
+            that snapshot.
+
+            To resynchronise a destination later, keep `start_from="full"`
             and reset the function's stage (`tdk fn update --reset-stage`):
             a fresh stage holds no stream state, so the stream starts again
             with the snapshot and emits the `LOAD` rows first. A stage reset
-            without `initial_load` restarts at `start_from` and sends no
-            `LOAD` row.
+            with any other `start_from` restarts there and sends no `LOAD`
+            row.
 
             Beyond the privileges plain CDC needs, the connecting user
             must hold `RELOAD` (to briefly take the global read lock
@@ -569,13 +567,7 @@ class MySQLCdcStreamSrc(StreamSrc):
 
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)
     tables: list[MySQLTableNameSpec]
-    start_from: MySQLCdcStartFromSpec | None = None
-    initial_load: bool = False
+    start_from: MySQLCdcStartFromSpec
     columns_format: CdcColumnsFormatSpec = "columns"
     flatten_columns: bool = True
     src_cfg: CdcSrcCfgSpec | None = None
-
-    @model_validator(mode="after")
-    def _validate_start(self):
-        validate_start(self.initial_load, self.start_from)
-        return self

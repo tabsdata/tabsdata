@@ -178,7 +178,7 @@ def _stream_src(tables: list[str], slot: str, **cfg) -> PostgresCdcStreamSrc:
         tables=tables,
         replication_slot=slot,
         replication_slot_behavior="reuse",
-        initial_load=True,
+        start_from="full",
         src_cfg=CDC_CFG | cfg,
     )
 
@@ -824,7 +824,7 @@ def _creating_stream_src(tables: list[str], slot: str, **cfg) -> PostgresCdcStre
         tables=tables,
         replication_slot=slot,
         replication_slot_behavior="create",
-        initial_load=True,
+        start_from="full",
         src_cfg=CDC_CFG | cfg,
     )
 

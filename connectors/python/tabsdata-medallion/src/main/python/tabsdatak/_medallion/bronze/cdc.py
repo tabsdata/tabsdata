@@ -48,11 +48,11 @@ def build_cdc_bronze(
     single bronze stream.
 
     New pipelines pass ``full_commits=[]`` and take the initial load from the
-    CDC stream itself: set ``initial_load=True`` on the ``*CdcStreamSrc``, and
+    CDC stream itself: set ``start_from="full"`` on the ``*CdcStreamSrc``, and
     the stream emits an ``l`` (load) row followed by the snapshot rows as
     inserts, then continues from the snapshot's exact log position with no gap
     and no duplicates. To resync, reset the stream publisher's stage
-    (``tdk fn update --reset-stage``) with ``initial_load=True``. CDC rows pass
+    (``tdk fn update --reset-stage``) with ``start_from="full"``. CDC rows pass
     through with their op, including ``l`` and ``t`` (truncate); silver treats
     both as resets.
 

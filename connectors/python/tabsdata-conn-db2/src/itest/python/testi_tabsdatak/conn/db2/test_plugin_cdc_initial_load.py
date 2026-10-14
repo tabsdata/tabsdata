@@ -199,7 +199,7 @@ class _CdcCtx(StreamSrcPluginCtx):
 
 
 def _src(tables: list[str], **cfg) -> Db2CdcStreamSrc:
-    return Db2CdcStreamSrc(tables=tables, initial_load=True, src_cfg=_SRC_CFG | cfg)
+    return Db2CdcStreamSrc(tables=tables, start_from="full", src_cfg=_SRC_CFG | cfg)
 
 
 @contextmanager

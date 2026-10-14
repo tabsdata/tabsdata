@@ -45,6 +45,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
 )
 from tabsdatak.conn.common.sql.cdc.typing import (
+    FULL_START,
     CdcFormat as _CommonCdcFormat,
 )
 from tabsdatak.conn.postgres import (
@@ -89,9 +90,12 @@ def _to_internal_start_from(spec: PostgresCdcStartFromSpec):
     ingester / runner consume. Postgres has no public types that
     are distinct from the internal ones (no ``TimestampPosition``,
     no driver-specific position): ``LsnPosition`` / ``"head"`` /
-    ``"tail"`` all pass through as-is. The function exists for
+    ``"tail"`` all pass through as-is. ``"full"`` gives no position: the
+    initial load fixes where change capture starts. The function exists for
     symmetry with the mysql plugin so future divergence (e.g.
     a wall-clock position) has a single conversion site."""
+    if spec == FULL_START:
+        return None
     return spec
 
 
@@ -118,7 +122,7 @@ def _build_cdc_run_config(
         max_large_text_length=int(
             cfg.get(_KEY_CDC_MAX_LARGE_TEXT_LENGTH, DEFAULT_MAX_LARGE_TEXT_LENGTH)
         ),
-        initial_load=src.initial_load,
+        initial_load=src.start_from == FULL_START,
         fetch_size=int(cfg.get(_KEY_CDC_FETCH_SIZE, DEFAULT_FETCH_SIZE)),
         chunk_size=int(cfg.get(_KEY_CDC_CHUNK_SIZE, DEFAULT_CHUNK_SIZE)),
         initial_load_max_window_changes=int(

@@ -166,7 +166,7 @@ class _CdcCtx(StreamSrcPluginCtx):
 
 
 def _stream_src(tables: list[str], **cfg) -> MySQLCdcStreamSrc:
-    return MySQLCdcStreamSrc(tables=tables, initial_load=True, src_cfg=CDC_CFG | cfg)
+    return MySQLCdcStreamSrc(tables=tables, start_from="full", src_cfg=CDC_CFG | cfg)
 
 
 @contextmanager

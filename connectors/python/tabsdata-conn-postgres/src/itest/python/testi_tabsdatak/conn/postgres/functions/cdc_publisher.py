@@ -27,7 +27,7 @@ SRC_CFG = {
         tables=[TRACKED_TABLE],
         replication_slot=REPLICATION_SLOT,
         replication_slot_behavior="reuse",
-        initial_load=True,
+        start_from="full",
         src_cfg=SRC_CFG,
     ),
     batch_min_secs=unsafe_seconds(1),

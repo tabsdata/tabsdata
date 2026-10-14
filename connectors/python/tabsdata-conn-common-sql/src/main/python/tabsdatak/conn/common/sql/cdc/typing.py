@@ -23,19 +23,9 @@ change still retained, `"tail"` starts at the current position so only
 changes made after the stream starts are emitted."""
 
 
-def validate_start(initial_load: bool, start_from: object) -> None:
-    """Enforce that a CDC source names exactly one way to start: a
-    `start_from` position, or `initial_load=True`, which snapshots the
-    tracked tables and resumes change capture right after the snapshot,
-    so a start position would contradict it. Raises `ValueError`, which
-    the connector dataclass surfaces under its own error code."""
-    if initial_load and start_from is not None:
-        raise ValueError(
-            "start_from cannot be set together with initial_load=True: the "
-            "initial load fixes the position change capture resumes from"
-        )
-    if not initial_load and start_from is None:
-        raise ValueError("either start_from or initial_load=True is required")
+FULL_START = "full"
+"""The `start_from` value asking for a snapshot of every tracked table before
+the changes that follow it."""
 
 
 @dataclass(frozen=True, init=False)

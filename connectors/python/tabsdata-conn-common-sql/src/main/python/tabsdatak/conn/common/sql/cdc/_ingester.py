@@ -292,7 +292,7 @@ class CdcIngester(StreamIngester[CdcChange, CdcOffset], ABC):
         tables from (see :class:`InitialLoadSession`). Called before
         :meth:`open_session`; the session's offset then seeds the mark."""
         raise NotImplementedError(
-            f"{type(self).__name__} does not support initial_load"
+            f'{type(self).__name__} does not support start_from="full"'
         )
 
     def bound_stream(self, end: CdcOffset) -> None:

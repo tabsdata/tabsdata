@@ -45,6 +45,7 @@ from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
 )
 from tabsdatak.conn.common.sql.cdc.typing import (
+    FULL_START,
     CdcFormat as _CommonCdcFormat,
     TimestampPosition as _CommonTimestampPosition,
 )
@@ -83,7 +84,11 @@ def _to_internal_start_from(spec: MySQLCdcStartFromSpec):
     ingester / runner consume. ``GtidPosition`` and ``BinlogPosition``
     stay mysql-local (the ingester is mysql-only); the mysql-local
     :class:`TimestampPosition` is mapped onto the common one so the
-    ingester's match arms (which use the common type) fire."""
+    ingester's match arms (which use the common type) fire.
+    ``"full"`` gives no position: the initial load fixes where change
+    capture starts."""
+    if spec == FULL_START:
+        return None
     if isinstance(spec, TimestampPosition):
         return _CommonTimestampPosition(ts=spec.ts)
     return spec
@@ -112,7 +117,7 @@ def _build_cdc_run_config(
         max_large_text_length=int(
             cfg.get(_KEY_CDC_MAX_LARGE_TEXT_LENGTH, DEFAULT_MAX_LARGE_TEXT_LENGTH)
         ),
-        initial_load=src.initial_load,
+        initial_load=src.start_from == FULL_START,
         fetch_size=int(cfg.get(_KEY_CDC_FETCH_SIZE, DEFAULT_FETCH_SIZE)),
         chunk_size=int(cfg.get(_KEY_CDC_CHUNK_SIZE, DEFAULT_CHUNK_SIZE)),
         logging_level=int(cfg.get(_KEY_CDC_LOGGING_LEVEL, logging.ERROR)),
