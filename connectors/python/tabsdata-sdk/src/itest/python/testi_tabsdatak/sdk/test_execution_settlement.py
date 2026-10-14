@@ -257,6 +257,7 @@ def test_recovering_a_stalled_transaction_runs_the_failing_function_again(
 
 @tabsdata_instance(consumer="tdtest")
 @pytest.mark.timeout(1500)
+@pytest.mark.monkey
 @pytest.mark.ep_case01
 def test_canceling_an_execution_does_not_half_cancel_a_later_one(
     instance_tdtest: Instance,
@@ -297,6 +298,7 @@ def test_canceling_an_execution_does_not_half_cancel_a_later_one(
 
 @tabsdata_instance(consumer="tdtest")
 @pytest.mark.timeout(1500)
+@pytest.mark.monkey
 @pytest.mark.ep_case02
 def test_a_finished_run_beside_a_canceled_one_is_published_or_discarded(
     instance_tdtest: Instance,
@@ -331,6 +333,7 @@ def test_a_finished_run_beside_a_canceled_one_is_published_or_discarded(
 
 @tabsdata_instance(consumer="tdtest")
 @pytest.mark.timeout(1500)
+@pytest.mark.monkey
 @pytest.mark.ep_case03
 def test_a_stalled_execution_stays_stalled_when_another_transaction_is_canceled(
     instance_tdtest: Instance,

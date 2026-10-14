@@ -255,6 +255,11 @@ script = [
         if eq ${argument} "--warp"
             at_warp = set true
         end
+        is_with_monkey = starts_with ${argument} "--with-monkey="
+        if ${is_with_monkey}
+            with_monkey = replace ${argument} "--with-monkey=" ""
+            set_env TD_WITH_MONKEY ${with_monkey}
+        end
         if eq ${argument} "--help"
             seen_help = set true
         end
@@ -463,6 +468,49 @@ script = [
     end
     TD_WITH_TESTS_RUN = get_env TD_WITH_TESTS_RUN
     debug "🔅 Using td with tests run: '${TD_WITH_TESTS_RUN}'"
+
+    with_monkey = get_env TD_WITH_MONKEY
+    if is_empty ${with_monkey}
+        with_monkey = set "false"
+    end
+    with_monkey_true = eq ${with_monkey} "true"
+    with_monkey_false = eq ${with_monkey} "false"
+    with_monkey_only = eq ${with_monkey} "only"
+    with_monkey_valid = set ${with_monkey_true} or ${with_monkey_false} or ${with_monkey_only}
+    if not ${with_monkey_valid}
+        error ""
+        error "🧨 Invalid '--with-monkey=${with_monkey}': use 'true', 'false' or 'only'."
+        error ""
+        assert false
+    end
+    set_env TD_WITH_MONKEY ${with_monkey}
+    debug "🔅 Using td with monkey: '${with_monkey}'"
+
+    markers_base_captured = get_env TD_MARKERS_BASE_CAPTURED
+    if eq ${markers_base_captured} "true"
+        markers_base = get_env TD_MARKERS_BASE
+    else
+        markers_base = get_env MARKERS
+        set_env TD_MARKERS_BASE "${markers_base}"
+        set_env TD_MARKERS_BASE_CAPTURED "true"
+    end
+    monkey_markers = set ""
+    if ${with_monkey_false}
+        monkey_markers = set "not monkey"
+    end
+    if ${with_monkey_only}
+        monkey_markers = set "monkey"
+    end
+    markers = set "${markers_base}"
+    if not is_empty ${monkey_markers}
+        if is_empty ${markers_base}
+            markers = set "${monkey_markers}"
+        else
+            markers = set "(${markers_base}) and ${monkey_markers}"
+        end
+    end
+    set_env MARKERS "${markers}"
+    debug "🔅 Using markers: '${markers}'"
 
     make_with_banners = get_env TD_MAKE_WITH_BANNERS
     make_with_banners_empty = is_empty ${make_with_banners}

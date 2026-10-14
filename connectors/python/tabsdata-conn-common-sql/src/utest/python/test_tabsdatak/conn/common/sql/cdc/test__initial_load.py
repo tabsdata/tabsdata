@@ -166,8 +166,8 @@ def test_each_table_loaded_logs_its_rows_as_one_poll_of_the_source(monkeypatch, 
     with caplog.at_level("DEBUG", logger="tabsdatak.conn.common._stream._poll"):
         loader._load_table(MagicMock(qualified="s.t"), MagicMock(), PINNED_AT)
 
-    polled = [r.getMessage() for r in caplog.records if "Polled" in r.getMessage()]
-    assert [line.split(" from")[0] for line in polled] == ["Polled 7 record(s)"]
+    polled = [r for r in caplog.records if r.name.endswith("._poll")]
+    assert [r.args[0] for r in polled] == [7]
 
 
 def test_every_loaded_row_carries_the_time_the_snapshot_began(monkeypatch):
