@@ -13,7 +13,7 @@ from tabsdatak.server._tdrunner.function._commons.run import command as command_
 from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     notify_status,
-    notify_writing_destination,
+    notify_step_destination_write,
     run_command,
 )
 from tabsdatak.server._tdrunner.function._lib.errors import (
@@ -191,7 +191,7 @@ def _posted(monkeypatch) -> list[dict]:
     bodies: list[dict] = []
     monkeypatch.setattr(
         command_module,
-        "_call_back",
+        "notify",
         lambda _arguments, body, _what: bodies.append(body),
     )
     return bodies
@@ -208,5 +208,5 @@ def test_a_status_report_names_no_operation(monkeypatch):
 
 def test_a_destination_write_names_its_operation_only(monkeypatch):
     bodies = _posted(monkeypatch)
-    notify_writing_destination(argparse.Namespace())
+    notify_step_destination_write(argparse.Namespace())
     assert bodies == [{"op": "destination_write"}]

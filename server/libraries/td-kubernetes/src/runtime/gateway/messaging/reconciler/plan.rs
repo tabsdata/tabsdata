@@ -277,9 +277,7 @@ impl<P> State<P> {
         }
     }
 
-    /// The function runs whose Start was accepted and whose workload is not
-    /// listed yet.
-    pub(crate) fn queued_runs(&self) -> HashSet<WorkerId> {
+    pub(crate) fn queued(&self) -> HashSet<WorkerId> {
         self.creates
             .keys()
             .chain(self.settling.values().map(|settling| &settling.key))

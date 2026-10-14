@@ -8,9 +8,6 @@ from enum import Enum
 
 
 class WorkerCallbackStatus(str, Enum):
-    """Mirror of the Rust ``WorkerCallbackStatus`` enum in
-    ``td-common/src/execution_status.rs``."""
-
     RUNNING = "Running"
     DONE = "Done"
     FAILED = "Failed"
@@ -18,9 +15,10 @@ class WorkerCallbackStatus(str, Enum):
 
 
 class MessageAction(str, Enum):
-    """Mirror of the Rust ``MessageAction`` enum in
-    ``td-common/src/server.rs`` (serialized lowercase)."""
-
     START = "start"
     STOP = "stop"
     NOTIFY = "notify"
+
+
+class DestinationWriteOp(str, Enum):
+    DESTINATION_WRITE = "destination_write"

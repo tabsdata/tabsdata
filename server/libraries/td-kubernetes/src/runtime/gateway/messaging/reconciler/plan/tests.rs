@@ -421,13 +421,13 @@ fn a_run_is_queued_from_its_start_until_its_workload_is_listed() {
     let start = Instant::now();
     state.submit(run("a"), submission("a"));
     state.submit(key(WorkloadKind::CronTrigger), submission("b"));
-    assert_eq!(state.queued_runs(), HashSet::from([worker("a")]));
+    assert_eq!(state.queued(), HashSet::from([worker("a")]));
     state.plan(&[], start);
     state.issued("pub-a", start + 2 * CREATE_SETTLE);
-    assert_eq!(state.queued_runs(), HashSet::from([worker("a")]));
+    assert_eq!(state.queued(), HashSet::from([worker("a")]));
     let landed = running("pub-a", WorkloadKind::Function);
     state.plan(&[landed], start + 2 * CREATE_SETTLE);
-    assert!(state.queued_runs().is_empty());
+    assert!(state.queued().is_empty());
 }
 
 #[test]

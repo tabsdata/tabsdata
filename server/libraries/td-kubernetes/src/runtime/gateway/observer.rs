@@ -44,7 +44,6 @@ impl KubernetesWorkloadObserver {
         }
     }
 
-    /// Also reports the runs `queue` still has to create.
     pub(crate) fn with_queue(context: KubeContext, queue: Arc<Reconciler>) -> Self {
         Self {
             context,
@@ -365,12 +364,10 @@ impl FromKubernetes for ObservedWorkload {
 #[async_trait]
 impl WorkloadObserver for KubernetesWorkloadObserver {
     async fn observe(&self) -> Result<WorkloadObservation, ObserverError> {
-        // Read before listing: a create landing in between is then listed,
-        // queued, or both, never neither.
         let queued = self
             .queue
             .as_ref()
-            .map(|queue| queue.queued_runs())
+            .map(|queue| queue.queued())
             .unwrap_or_default();
         let jobs = list_jobs_of_workers(&self.context).await?;
         let cronjobs = list_cronjobs_of_workers(&self.context).await?;

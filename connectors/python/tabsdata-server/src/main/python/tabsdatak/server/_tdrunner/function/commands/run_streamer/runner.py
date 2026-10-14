@@ -22,7 +22,7 @@ from tabsdatak._connectors import get_stream_src
 from tabsdatak._info import KIND_STREAM_PUBLISHER_DEF, StreamPublisherInfo, _unwrap_info
 from tabsdatak.extensions.variant.version import version as _tabsdata_version
 from tabsdatak.server._tdrunner.function._commons.http.retry import is_retriable
-from tabsdatak.server._tdrunner.function._commons.run.command import notify_done
+from tabsdatak.server._tdrunner.function._commons.run.command import notify_status_done
 from tabsdatak.server._tdrunner.function._commons.run.shutdown import (
     is_shutdown_requested,
     request_shutdown,
@@ -184,7 +184,7 @@ def run(args: argparse.Namespace) -> int:
 
 def report_completion(args: argparse.Namespace) -> None:
     try:
-        notify_done(args)
+        notify_status_done(args)
     except Exception as error:
         if not (is_shutdown_requested() and is_retriable(error)):
             raise

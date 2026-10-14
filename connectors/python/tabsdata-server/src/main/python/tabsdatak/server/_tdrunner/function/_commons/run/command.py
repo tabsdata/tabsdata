@@ -43,6 +43,12 @@ from tabsdatak.server._tdrunner.function.commands import tabsdata_command
 
 logger = logging.getLogger(__name__)
 
+ANSWER_DATA_KEY = "data"
+ANSWER_OUTCOME_KEY = "outcome"
+STALE_OUTCOME = "Stale"
+
+DESTINATION_WRITE_REPORT = "destination write"
+
 
 class Parser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:  # type: ignore[override]
@@ -162,29 +168,20 @@ def run_command(main: Callable[[], int | None]) -> int:
     return int(result)
 
 
-def notify_status(
-    arguments: argparse.Namespace,
-    payload: ResponseMessagePayload,
-) -> None:
-    status = payload.status
-    logger.info(f"Reporting {status}: exit_status={payload.exit_status}")
-    _call_back(arguments, payload.to_body(), str(status))
-
-
-def _call_back(
+def notify(
     arguments: argparse.Namespace,
     body: dict[str, Any],
     what: str,
 ) -> None:
-    def post(request: urllib.request.Request) -> bytes:
+    def post(notify_request: urllib.request.Request) -> bytes:
         try:
             with urllib.request.urlopen(
-                request, timeout=DEFAULT_TIMEOUT_SECONDS
+                notify_request, timeout=DEFAULT_TIMEOUT_SECONDS
             ) as response:
                 return response.read()
         except urllib.error.HTTPError as error:
-            body = error.read().decode("utf-8", errors="replace")
-            error.msg = f"{error.msg}: {body}" if body else error.msg
+            error_body = error.read().decode("utf-8", errors="replace")
+            error.msg = f"{error.msg}: {error_body}" if error_body else error.msg
             raise
 
     url = resolve_value(arguments.responder_url)
@@ -202,19 +199,28 @@ def _call_back(
     logger.info(f"Posting responder {what}: {method} {url}")
     answer = call_with_retry(post, request)
     logger.info(f"Posted responder {what}: {method} {url}")
-    if _outcome(answer) == "Stale":
+    if outcome(answer) == STALE_OUTCOME:
         raise CommandErrorCode.CMD_8.exception(status=what)
 
 
-def _outcome(answer: bytes) -> str | None:
+def outcome(answer: bytes) -> str | None:
     try:
-        data = json.loads(answer).get("data")
+        data = json.loads(answer).get(ANSWER_DATA_KEY)
     except (ValueError, AttributeError):
         return None
-    return data.get("outcome") if isinstance(data, dict) else None
+    return data.get(ANSWER_OUTCOME_KEY) if isinstance(data, dict) else None
 
 
-def notify_running(arguments: argparse.Namespace) -> None:
+def notify_status(
+    arguments: argparse.Namespace,
+    payload: ResponseMessagePayload,
+) -> None:
+    status = payload.status
+    logger.info(f"Reporting {status}: exit_status={payload.exit_status}")
+    notify(arguments, payload.to_body(), str(status))
+
+
+def notify_status_running(arguments: argparse.Namespace) -> None:
     journal = Journal.load(
         Path(arguments.journal_file),
         strict=True,
@@ -228,14 +234,7 @@ def notify_running(arguments: argparse.Namespace) -> None:
     )
 
 
-def notify_writing_destination(arguments: argparse.Namespace) -> None:
-    """Tells the server the run is about to make a write a re-run would
-    repeat. Bounded like the Running report: a run that cannot say so fails
-    before writing anything."""
-    _call_back(arguments, DestinationWriteMessage().to_body(), "destination write")
-
-
-def notify_done(
+def notify_status_done(
     arguments: argparse.Namespace,
     *,
     context: Any | None = None,
@@ -245,7 +244,7 @@ def notify_done(
         Path(arguments.journal_file),
         strict=True,
     )
-    logger.debug(f"notify_done context: {context}")
+    logger.debug(f"notify_status_done context: {context}")
     notify_status(
         arguments,
         ResponseMessagePayload(
@@ -258,7 +257,7 @@ def notify_done(
     )
 
 
-def notify_failed(
+def notify_status_failed(
     arguments: argparse.Namespace | None,
     exit_code: int,
     error: BaseException,
@@ -293,6 +292,14 @@ def notify_failed(
         logger.warning("Failed to post Failed status to responder", exc_info=True)
 
 
+def notify_step_destination_write(arguments: argparse.Namespace) -> None:
+    notify(
+        arguments,
+        DestinationWriteMessage().to_body(),
+        DESTINATION_WRITE_REPORT,
+    )
+
+
 def command(
     *,
     name: str,
@@ -325,12 +332,12 @@ def command(
                         f"promoting to {InconsistentError.exit_code}"
                     )
                     exit_code = InconsistentError.exit_code
-                notify_failed(arguments, exit_code, error)
+                notify_status_failed(arguments, exit_code, error)
                 return exit_code
             except Exception as exception:
                 exit_code = UnexpectedError.exit_code
                 logger.exception("Unhandled exception caught by command")
-                notify_failed(arguments, exit_code, exception)
+                notify_status_failed(arguments, exit_code, exception)
                 return exit_code
             except SystemExit as exit_event:
                 exit_code = PrematureError.exit_code
@@ -338,12 +345,12 @@ def command(
                     f"Exit ({exit_event.code}) intercepted by command; "
                     f"promoting to {exit_code}"
                 )
-                notify_failed(arguments, exit_code, exit_event)
+                notify_status_failed(arguments, exit_code, exit_event)
                 return exit_code
             except BaseException as exception:
                 exit_code = UnexpectedError.exit_code
                 logger.exception("Unhandled core exception caught by command")
-                notify_failed(arguments, exit_code, exception)
+                notify_status_failed(arguments, exit_code, exception)
                 return exit_code
 
         return main

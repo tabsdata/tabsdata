@@ -42,7 +42,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 def _write_journal(path: Path, *, start: int = 1780000000000) -> Path:
     """Write a minimal valid journal so report-completion can stamp
-    ``end`` and ``notify_done`` can read ``start`` / ``end`` back."""
+    ``end`` and ``notify_status_done`` can read ``start`` / ``end`` back."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump({"start": start, "end": None}))
     return path
@@ -519,7 +519,7 @@ def test_responder_http_error_surfaces_response_body(
         journal_file=str(journal),
     )
     with pytest.raises(urllib.error.HTTPError) as caught:
-        command_lib.notify_done(args, context=None)
+        command_lib.notify_status_done(args, context=None)
     rendered = str(caught.value)
     assert "Bad Request" in rendered
     assert apiserver_body.decode("utf-8") in rendered

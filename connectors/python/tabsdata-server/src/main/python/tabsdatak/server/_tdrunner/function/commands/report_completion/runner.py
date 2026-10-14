@@ -17,7 +17,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tabsdatak.server._tdrunner.function._commons.run.command import notify_done
+from tabsdatak.server._tdrunner.function._commons.run.command import notify_status_done
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     load_outputs_manifest_or_raise,
@@ -95,6 +95,6 @@ def run(args: argparse.Namespace) -> int:
         )
 
     logger.info("report-completion: recorded end=%s", end)
-    notify_done(args, context=response.to_worker_output())
+    notify_status_done(args, context=response.to_worker_output())
     logger.info("Reported completion to apiserver successfully")
     return 0

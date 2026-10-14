@@ -184,11 +184,11 @@ def test_rs_7_resolves_to_unsupported_stage_scheme():
 # --- report_completion -----------------------------------------------
 
 
-def failing_notify_done(error: BaseException):
-    def notify_done(arguments):
+def failing_notify_status_done(error: BaseException):
+    def notify_status_done(arguments):
         raise error
 
-    return notify_done
+    return notify_status_done
 
 
 @pytest.fixture
@@ -202,8 +202,8 @@ def test_completion_lost_to_a_stopped_apiserver_is_tolerated_on_shutdown(
     shutdown.request_shutdown()
     monkeypatch.setattr(
         runner,
-        "notify_done",
-        failing_notify_done(urllib.error.URLError("connection refused")),
+        "notify_status_done",
+        failing_notify_status_done(urllib.error.URLError("connection refused")),
     )
 
     assert runner.report_completion(None) is None
@@ -211,7 +211,7 @@ def test_completion_lost_to_a_stopped_apiserver_is_tolerated_on_shutdown(
 
 def test_completion_failure_outside_shutdown_propagates(monkeypatch, shutdown_flag):
     error = urllib.error.URLError("connection refused")
-    monkeypatch.setattr(runner, "notify_done", failing_notify_done(error))
+    monkeypatch.setattr(runner, "notify_status_done", failing_notify_status_done(error))
 
     with pytest.raises(urllib.error.URLError) as raised:
         runner.report_completion(None)
@@ -221,7 +221,7 @@ def test_completion_failure_outside_shutdown_propagates(monkeypatch, shutdown_fl
 def test_completion_rejected_on_shutdown_propagates(monkeypatch, shutdown_flag):
     shutdown.request_shutdown()
     error = urllib.error.HTTPError("http://r", 403, "Forbidden", {}, None)
-    monkeypatch.setattr(runner, "notify_done", failing_notify_done(error))
+    monkeypatch.setattr(runner, "notify_status_done", failing_notify_status_done(error))
 
     with pytest.raises(urllib.error.HTTPError):
         runner.report_completion(None)

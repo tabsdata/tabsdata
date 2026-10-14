@@ -34,8 +34,8 @@ impl Reconciler {
         self.wake.notify_one();
     }
 
-    pub(crate) fn queued_runs(&self) -> HashSet<WorkerId> {
-        self.state().queued_runs()
+    pub(crate) fn queued(&self) -> HashSet<WorkerId> {
+        self.state().queued()
     }
 
     fn state(&self) -> MutexGuard<'_, State<Payload>> {

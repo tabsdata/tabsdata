@@ -17,7 +17,9 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from tabsdatak.server._tdrunner.function._commons.run.command import notify_running
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    notify_status_running,
+)
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function.commands.begin_execution.error import (
     BeginExecutionErrorCode,
@@ -41,5 +43,5 @@ def run(args: argparse.Namespace) -> int:
             detail=str(exc),
         )
     logger.info("begin-execution: recorded start=%s", start)
-    notify_running(args)
+    notify_status_running(args)
     return 0

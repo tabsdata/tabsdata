@@ -294,7 +294,7 @@ class CommandErrorCode(ErrorCode):
     # Raised by ``_lib.transporter`` when TRANSPORTER_MODE is neither the
     # legacy nor the current implementation.
 
-    # Raised by ``_commons.run.command._call_back``.
+    # Raised by ``_commons.run.command.notify``.
     CMD_8 = ErrorDef(
         StaleReportError,
         "The apiserver answered the {status} report as stale; the attempt was "

@@ -20,7 +20,7 @@ ctx's job (see :mod:`stage_layout` for the layout convention and
 
 Pod chain (see ``stream-publisher_kminus.yaml``):
 
-  * ``0010-begin-execution`` -- initialise journal + notify_running
+  * ``0010-begin-execution`` -- initialise journal + notify_status_running
   * ``0020-fetch-request`` -- pull request.yaml from apiserver
   * ``0030-localize-fn-bundle`` -- download + extract the user bundle
   * ``0900-manifest-trigger`` -- sidecar (NU7); scans

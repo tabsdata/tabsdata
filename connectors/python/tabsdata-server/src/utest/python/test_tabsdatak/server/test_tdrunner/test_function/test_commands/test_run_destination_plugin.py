@@ -539,7 +539,7 @@ def test_main_tells_the_server_before_it_writes(
     seen: list[bool] = []
     monkeypatch.setattr(
         runner_module,
-        "notify_writing_destination",
+        "notify_step_destination_write",
         lambda _args: seen.append(shipped.exists()),
     )
     assert main() == 0
@@ -555,7 +555,7 @@ def test_main_writes_nothing_when_the_server_cannot_be_told(
     def unreachable(_args):
         raise OSError("apiserver unreachable")
 
-    monkeypatch.setattr(runner_module, "notify_writing_destination", unreachable)
+    monkeypatch.setattr(runner_module, "notify_step_destination_write", unreachable)
     assert main() != 0
     assert not shipped.exists()
 
