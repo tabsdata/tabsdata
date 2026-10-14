@@ -935,12 +935,12 @@ def test_the_user_without_reload_loads_without_the_global_read_lock(
     """The lock-free runs above are only that if the server does refuse the
     lock to the domain's user without RELOAD."""
     domain = domain_mysqlcdc_employees_xs
-    refused: list[str] = []
+    refusals: list[str] = []
     open_bracketed = BinlogInitialLoadSession._open_bracketed
 
-    def record(self, cursor, refused_by):
-        refused.append(str(refused_by))
-        return open_bracketed(self, cursor, refused_by)
+    def record(self, cursor, refused):
+        refusals.append(str(refused))
+        return open_bracketed(self, cursor, refused)
 
     monkeypatch.setattr(BinlogInitialLoadSession, "_open_bracketed", record)
     with cdc_probe(domain, "td_il_no_lock") as probe:
@@ -950,7 +950,7 @@ def test_the_user_without_reload_loads_without_the_global_read_lock(
         with _running(ctx, no_lock_src_conn(domain), src):
             frame = _await(ctx, "the snapshot", lambda f: _loaded_ids(f) == [1])
 
-    assert len(refused) == 1
+    assert len(refusals) == 1
     assert _ops(frame).count(LOAD) == 1
 
 
