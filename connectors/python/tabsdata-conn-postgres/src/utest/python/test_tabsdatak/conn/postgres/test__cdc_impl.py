@@ -1541,6 +1541,64 @@ def test_the_offset_of_overlapping_transactions_never_moves_back():
     assert positions == sorted(positions), [lsn_to_text(n) for n in positions]
 
 
+def _format_1_transaction(
+    start: str, xid: int, row_ids: list[int], commit_end: str
+) -> _Message:
+    return _Message(
+        start,
+        {
+            "xid": xid,
+            "nextlsn": commit_end,
+            "timestamp": "2026-09-29 19:15:18+00",
+            "change": [
+                {
+                    "kind": "insert",
+                    "schema": "public",
+                    "table": "t",
+                    "columnnames": ["id"],
+                    "columntypes": ["integer"],
+                    "columnvalues": [row_id],
+                }
+                for row_id in row_ids
+            ],
+        },
+    )
+
+
+def test_a_format_1_transaction_committed_later_is_positioned_after_an_earlier_one():
+    """CDC-4: with wal2json format 1, T1 began at 0/368A090 and committed
+    first; T2 began earlier, at 0/3689F90, and committed later, so T1's
+    message arrives first. Once T1 is published, the publisher keeps only
+    rows positioned after T1's, so every row of T2 must be positioned after
+    every row of T1, as format 2 already does; today format 1 positions each
+    row at its transaction's start and T2's rows are dropped."""
+    t1 = _format_1_transaction("0/368A090", 816, [2], "0/368A1C8")
+    t2 = _format_1_transaction("0/3689F90", 815, [1, 3], "0/368A2E0")
+    bi = _format_2_ingester([t1, t2])
+    bi._wal2json_format_version = 1
+
+    changes = list(bi._poll_changes_v1(None))
+
+    assert [change.new_values["id"] for change in changes] == [2, 1, 3]
+    published = (changes[0].segment, changes[0].ordinal)
+    assert all((c.segment, c.ordinal) > published for c in changes[1:]), [
+        (lsn_to_text(c.segment), c.ordinal) for c in changes
+    ]
+
+
+def test_a_format_1_transaction_without_its_commit_position_fails():
+    message = _format_1_transaction("0/100", 9, [1], "0/180")
+    payload = json.loads(message.payload)
+    del payload["nextlsn"]
+    message.payload = json.dumps(payload)
+    bi = _format_2_ingester([message])
+    bi._wal2json_format_version = 1
+
+    with pytest.raises(TabsdataException) as ei:
+        list(bi._poll_changes_v1(None))
+    assert ei.value.api_error is PostgresErrorCode.POSTGRES_30
+
+
 def test_a_begin_without_its_commit_position_fails():
     messages = _transaction(9, "0/100", [("0/90", 1)], "0/120")
     messages[0].payload = json.dumps(
@@ -1743,6 +1801,7 @@ def test_a_bounded_format_1_poll_holds_the_transaction_past_the_bound():
             start,
             {
                 "xid": xid,
+                "nextlsn": start,
                 "timestamp": "2026-09-29 19:15:18+00",
                 "change": [
                     {

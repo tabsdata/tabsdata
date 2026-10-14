@@ -1493,10 +1493,11 @@ class Wal2JsonIngester(CdcIngester):
                 self._confirm_idle()
                 self._bound_passed_quietly()
                 break
-            if self._past_bound(message.data_start, message):
-                break
             payload = orjson.loads(message.payload)
             xid = str(payload.get("xid", ""))
+            commit = self._commit_lsn(payload, xid, field="nextlsn")
+            if self._past_bound(commit, message):
+                break
             timestamp = datetime.fromisoformat(payload["timestamp"]).astimezone(
                 timezone.utc
             )
@@ -1511,6 +1512,7 @@ class Wal2JsonIngester(CdcIngester):
                     sequence=sequence,
                     timestamp=timestamp,
                     offset=lsn_offset,
+                    segment=commit,
                 )
                 if produced is not None:
                     self._unacknowledged += 1
@@ -1525,6 +1527,7 @@ class Wal2JsonIngester(CdcIngester):
         sequence: int,
         timestamp: datetime,
         offset: LsnOffset,
+        segment: int,
     ) -> CdcDataChange | None:
         qualified = self._resolve_table(change)
         if qualified is None:
@@ -1561,7 +1564,7 @@ class Wal2JsonIngester(CdcIngester):
             new_values=new_values,
             old_values=old_values,
             offset=offset,
-            segment=offset.lsn,
+            segment=segment,
         )
 
     @staticmethod
@@ -1661,8 +1664,11 @@ class Wal2JsonIngester(CdcIngester):
                 yield produced
 
     @staticmethod
-    def _commit_lsn(payload: dict, xid: str) -> int:
-        """The commit position of the transaction a format-2 BEGIN opens.
+    def _commit_lsn(payload: dict, xid: str, field: str = "lsn") -> int:
+        """The commit position of a transaction: the `lsn` of the format-2
+        BEGIN that opens it, or the `nextlsn` of its format-1 message, where
+        its commit ends (that message's own position is where the
+        transaction began).
 
         Every row of the transaction takes it as its segment. A row's own
         position is where it was written, which can be long before its
@@ -1671,7 +1677,7 @@ class Wal2JsonIngester(CdcIngester):
         would sort below what the stage publisher has already published and
         be dropped. Commit positions grow in the order transactions
         arrive."""
-        lsn = payload.get("lsn")
+        lsn = payload.get(field)
         if not isinstance(lsn, str):
             raise PostgresErrorCode.POSTGRES_30.exception(xid=xid)
         return lsn_to_int(lsn)
