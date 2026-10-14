@@ -276,3 +276,8 @@ def test_only_a_full_start_runs_the_initial_load(start_from, loads):
     assert _build_cdc_run_config(src).initial_load is loads
     expected = None if loads else start_from
     assert _to_internal_start_from(src.start_from) == expected
+
+
+def test_a_load_without_the_global_read_lock_bounds_its_window():
+    src = _src(src_cfg={"tabsdata.cdc.initial_load.max_window_changes": 7})
+    assert _build_cdc_run_config(src).initial_load_max_window_changes == 7

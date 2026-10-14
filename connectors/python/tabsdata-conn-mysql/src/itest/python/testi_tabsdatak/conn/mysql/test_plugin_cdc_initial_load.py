@@ -22,17 +22,20 @@ from testi_tabsdatak.conn.mysql.backend import (
     cdc_probe,
     cdc_src_conn,
     cdc_table,
+    no_lock_src_conn,
 )
 
 # noinspection PyProtectedMember
 from tabsdatak.api import BatchThresholds, StreamThresholds
-from tabsdatak.conn.mysql import MySQLCdcStreamSrc, MySQLCdcStreamSrcConn
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.mysql._cdc_impl import BinlogIngester
+from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
+from tabsdatak.conn.mysql import MySQLCdcStreamSrc, MySQLCdcStreamSrcConn
+from tabsdatak.conn.mysql._cdc_impl import BinlogIngester, BinlogInitialLoadSession
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.mysql._cdc_plugin import MySQLCdcStreamSrcPlugin
+from tabsdatak.error import TabsdataException
 from tabsdatak.spi import StreamSrcPluginCtx
 
 pytestmark = [
@@ -169,6 +172,18 @@ def _stream_src(tables: list[str], **cfg) -> MySQLCdcStreamSrc:
     return MySQLCdcStreamSrc(tables=tables, start_from="full", src_cfg=CDC_CFG | cfg)
 
 
+SourceConn = Callable[[MysqlcdcDomain], MySQLCdcStreamSrcConn]
+
+
+@pytest.fixture(params=["locked", "lock-free"])
+def source_conn(request) -> SourceConn:
+    """How the stream connects: as the domain owner, whose load pins its
+    snapshot under the global read lock, or as the domain's user without
+    RELOAD, refused that lock as managed services such as Amazon RDS refuse
+    it, whose load brackets its snapshot and deduplicates the window."""
+    return cdc_src_conn if request.param == "locked" else no_lock_src_conn
+
+
 @contextmanager
 def _running(
     ctx: _CdcCtx, conn: MySQLCdcStreamSrcConn, src: MySQLCdcStreamSrc
@@ -255,7 +270,9 @@ def _ops_for(frame: pl.DataFrame, identifier: int) -> list[str]:
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_initial_load_emits_every_existing_row_once(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_rows") as probe:
@@ -264,7 +281,7 @@ def test_initial_load_emits_every_existing_row_once(
 
         src = _stream_src([cdc_table(domain, probe.name)])
         ctx = _CdcCtx(work_dir(tmp_path))
-        with _running(ctx, cdc_src_conn(domain), src):
+        with _running(ctx, source_conn(domain), src):
             frame = _await(ctx, "the whole snapshot", lambda f: len(_ids(f)) >= 20)
 
     assert _loaded_ids(frame) == list(range(1, 21))
@@ -274,7 +291,9 @@ def test_initial_load_emits_every_existing_row_once(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_changes_during_the_initial_load_are_not_lost(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_concurrent") as probe:
@@ -286,7 +305,7 @@ def test_changes_during_the_initial_load_are_not_lost(
             **{"tabsdata.cdc.fetch_size": 10, "tabsdata.cdc.chunk_size": 10},
         )
         ctx = _CdcCtx(work_dir(tmp_path))
-        with _running(ctx, cdc_src_conn(domain), src):
+        with _running(ctx, source_conn(domain), src):
             for identifier in range(1000, 1010):
                 probe.insert(identifier, f"during-{identifier}")
                 time.sleep(0.05)
@@ -308,7 +327,10 @@ def test_changes_during_the_initial_load_are_not_lost(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_a_commit_right_after_the_snapshot_opens_arrives_once(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path, monkeypatch
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    monkeypatch,
+    source_conn: SourceConn,
 ):
     """The load reads the tracked tables' catalog after its snapshot opens,
     and a row committed right after that read is not in the snapshot, so it
@@ -332,7 +354,7 @@ def test_a_commit_right_after_the_snapshot_opens_arrives_once(
         monkeypatch.setattr(BinlogIngester, "collect_tables", collect_then_commit)
         ctx = _CdcCtx(work_dir(tmp_path))
         with _running(
-            ctx, cdc_src_conn(domain), _stream_src([cdc_table(domain, probe.name)])
+            ctx, source_conn(domain), _stream_src([cdc_table(domain, probe.name)])
         ):
             frame = _await(
                 ctx,
@@ -346,7 +368,9 @@ def test_a_commit_right_after_the_snapshot_opens_arrives_once(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_changes_right_after_the_initial_load_are_captured(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_after") as probe:
@@ -354,7 +378,7 @@ def test_changes_right_after_the_initial_load_are_captured(
 
         src = _stream_src([cdc_table(domain, probe.name)])
         ctx = _CdcCtx(work_dir(tmp_path))
-        with _running(ctx, cdc_src_conn(domain), src):
+        with _running(ctx, source_conn(domain), src):
             _await(ctx, "the snapshot", lambda f: _loaded_ids(f) == [1])
             probe.insert(2, "after")
             probe.update(1, "seed-changed")
@@ -372,7 +396,9 @@ def test_changes_right_after_the_initial_load_are_captured(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_restart_after_the_initial_load_does_not_reload(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_restart") as probe:
@@ -381,14 +407,14 @@ def test_restart_after_the_initial_load_does_not_reload(
         src = _stream_src([cdc_table(domain, probe.name)])
 
         first = _CdcCtx(work_dir(tmp_path, "first"))
-        with _running(first, cdc_src_conn(domain), src):
+        with _running(first, source_conn(domain), src):
             _await(first, "the snapshot", lambda f: _loaded_ids(f) == [1])
         carried = first.persisted_state()
 
         probe.insert(2, "while-stopped")
 
         second = _CdcCtx(work_dir(tmp_path, "second"), carry_over=carried)
-        with _running(second, cdc_src_conn(domain), src):
+        with _running(second, source_conn(domain), src):
             frame = _await(
                 second, "the row written while stopped", lambda f: 2 in _ids(f)
             )
@@ -400,7 +426,9 @@ def test_restart_after_the_initial_load_does_not_reload(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_initial_load_stages_one_manifest_for_every_tracked_table(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_m1") as first_probe:
@@ -424,7 +452,7 @@ def test_initial_load_stages_one_manifest_for_every_tracked_table(
                 },
             )
             ctx = _CdcCtx(work_dir(tmp_path))
-            with _running(ctx, cdc_src_conn(domain), src):
+            with _running(ctx, source_conn(domain), src):
                 _await(
                     ctx,
                     "both tables' snapshots",
@@ -445,7 +473,9 @@ def test_initial_load_stages_one_manifest_for_every_tracked_table(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_truncate_after_the_initial_load_is_captured(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_truncate") as probe:
@@ -453,7 +483,7 @@ def test_truncate_after_the_initial_load_is_captured(
 
         src = _stream_src([cdc_table(domain, probe.name)])
         ctx = _CdcCtx(work_dir(tmp_path))
-        with _running(ctx, cdc_src_conn(domain), src):
+        with _running(ctx, source_conn(domain), src):
             _await(ctx, "the snapshot", lambda f: _loaded_ids(f) == [1])
             probe.insert(2, "second")
             probe.truncate()
@@ -465,7 +495,9 @@ def test_truncate_after_the_initial_load_is_captured(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_truncate_of_each_tracked_table_is_reported_separately(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_tr1") as first_probe:
@@ -478,7 +510,7 @@ def test_truncate_of_each_tracked_table_is_reported_separately(
                 cdc_table(domain, second_probe.name),
             ])
             ctx = _CdcCtx(work_dir(tmp_path))
-            with _running(ctx, cdc_src_conn(domain), src):
+            with _running(ctx, source_conn(domain), src):
                 _await(
                     ctx,
                     "both snapshots",
@@ -504,7 +536,9 @@ def test_truncate_of_each_tracked_table_is_reported_separately(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_the_initial_load_state_carries_both_the_flag_and_the_offset(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_state") as probe:
@@ -512,7 +546,7 @@ def test_the_initial_load_state_carries_both_the_flag_and_the_offset(
 
         src = _stream_src([cdc_table(domain, probe.name)])
         ctx = _CdcCtx(work_dir(tmp_path))
-        with _running(ctx, cdc_src_conn(domain), src):
+        with _running(ctx, source_conn(domain), src):
             _await(ctx, "the snapshot", lambda f: _loaded_ids(f) == [1])
         staged = ctx.persisted_state()
 
@@ -522,7 +556,9 @@ def test_the_initial_load_state_carries_both_the_flag_and_the_offset(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_resetting_the_flag_reloads_every_row_including_the_new_ones(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_reset") as probe:
@@ -532,7 +568,7 @@ def test_resetting_the_flag_reloads_every_row_including_the_new_ones(
         src = _stream_src([cdc_table(domain, probe.name)])
 
         first = _CdcCtx(work_dir(tmp_path, "first"))
-        with _running(first, cdc_src_conn(domain), src):
+        with _running(first, source_conn(domain), src):
             _await(first, "the first snapshot", lambda f: _loaded_ids(f) == [1, 2])
         carried = first.persisted_state()
 
@@ -540,7 +576,7 @@ def test_resetting_the_flag_reloads_every_row_including_the_new_ones(
 
         reset = dict(carried) | {"cdc.initial-load": True}
         second = _CdcCtx(work_dir(tmp_path, "second"), carry_over=reset)
-        with _running(second, cdc_src_conn(domain), src):
+        with _running(second, source_conn(domain), src):
             frame = _await(
                 second, "a second full snapshot", lambda f: _loaded_ids(f) == [1, 2, 3]
             )
@@ -552,7 +588,9 @@ def test_resetting_the_flag_reloads_every_row_including_the_new_ones(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_a_reset_reload_does_not_also_replay_the_rows_as_changes(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_reset_nodup") as probe:
@@ -561,7 +599,7 @@ def test_a_reset_reload_does_not_also_replay_the_rows_as_changes(
         src = _stream_src([cdc_table(domain, probe.name)])
 
         first = _CdcCtx(work_dir(tmp_path, "first"))
-        with _running(first, cdc_src_conn(domain), src):
+        with _running(first, source_conn(domain), src):
             _await(first, "the first snapshot", lambda f: _loaded_ids(f) == [1])
         carried = first.persisted_state()
 
@@ -569,7 +607,7 @@ def test_a_reset_reload_does_not_also_replay_the_rows_as_changes(
 
         reset = dict(carried) | {"cdc.initial-load": True}
         second = _CdcCtx(work_dir(tmp_path, "second"), carry_over=reset)
-        with _running(second, cdc_src_conn(domain), src):
+        with _running(second, source_conn(domain), src):
             _await(second, "the second snapshot", lambda f: _loaded_ids(f) == [1, 2])
             probe.insert(3, "after-second-load")
             frame = _await(
@@ -608,7 +646,9 @@ def test_a_source_without_initial_load_never_loads_whatever_the_state_says(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_a_run_interrupted_before_the_load_stages_redoes_it(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_interrupted") as probe:
@@ -618,13 +658,13 @@ def test_a_run_interrupted_before_the_load_stages_redoes_it(
 
         aborted = _CdcCtx(work_dir(tmp_path, "aborted"), fail_on_stage=True)
         with pytest.raises(_StageFailed):
-            with _running(aborted, cdc_src_conn(domain), src):
+            with _running(aborted, source_conn(domain), src):
                 time.sleep(POLL_SECONDS)
 
         assert aborted.persisted_state() == {}
 
         retry = _CdcCtx(work_dir(tmp_path, "retry"))
-        with _running(retry, cdc_src_conn(domain), src):
+        with _running(retry, source_conn(domain), src):
             frame = _await(retry, "the snapshot", lambda f: _loaded_ids(f) == [1])
 
     assert _loaded_ids(frame) == [1]
@@ -633,7 +673,9 @@ def test_a_run_interrupted_before_the_load_stages_redoes_it(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_two_consecutive_restarts_each_resume_without_replaying(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_chain") as probe:
@@ -642,14 +684,14 @@ def test_two_consecutive_restarts_each_resume_without_replaying(
         src = _stream_src([cdc_table(domain, probe.name)])
 
         first = _CdcCtx(work_dir(tmp_path, "first"))
-        with _running(first, cdc_src_conn(domain), src):
+        with _running(first, source_conn(domain), src):
             _await(first, "the snapshot", lambda f: _loaded_ids(f) == [1])
         state = first.persisted_state()
 
         probe.insert(2, "between-one-and-two")
 
         second = _CdcCtx(work_dir(tmp_path, "second"), carry_over=state)
-        with _running(second, cdc_src_conn(domain), src):
+        with _running(second, source_conn(domain), src):
             _await(second, "the second run's row", lambda f: 2 in _ids(f))
         second_frame = _rows(second)
         state = second.persisted_state()
@@ -657,7 +699,7 @@ def test_two_consecutive_restarts_each_resume_without_replaying(
         probe.insert(3, "between-two-and-three")
 
         third = _CdcCtx(work_dir(tmp_path, "third"), carry_over=state)
-        with _running(third, cdc_src_conn(domain), src):
+        with _running(third, source_conn(domain), src):
             _await(third, "the third run's row", lambda f: 3 in _ids(f))
         third_frame = _rows(third)
 
@@ -672,7 +714,9 @@ def test_two_consecutive_restarts_each_resume_without_replaying(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_updates_and_deletes_of_loaded_rows_arrive_after_the_load(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_mutate") as probe:
@@ -682,7 +726,7 @@ def test_updates_and_deletes_of_loaded_rows_arrive_after_the_load(
         src = _stream_src([cdc_table(domain, probe.name)])
 
         first = _CdcCtx(work_dir(tmp_path, "first"))
-        with _running(first, cdc_src_conn(domain), src):
+        with _running(first, source_conn(domain), src):
             _await(first, "the snapshot", lambda f: _loaded_ids(f) == [1, 2])
         state = first.persisted_state()
 
@@ -690,7 +734,7 @@ def test_updates_and_deletes_of_loaded_rows_arrive_after_the_load(
         probe.delete(2)
 
         second = _CdcCtx(work_dir(tmp_path, "second"), carry_over=state)
-        with _running(second, cdc_src_conn(domain), src):
+        with _running(second, source_conn(domain), src):
             frame = _await(
                 second,
                 "the update and the delete",
@@ -704,7 +748,9 @@ def test_updates_and_deletes_of_loaded_rows_arrive_after_the_load(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_a_table_added_after_the_load_is_not_back_filled(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_add1") as first_probe:
@@ -715,7 +761,7 @@ def test_a_table_added_after_the_load_is_not_back_filled(
             loaded = _stream_src([cdc_table(domain, first_probe.name)])
 
             first = _CdcCtx(work_dir(tmp_path, "first"))
-            with _running(first, cdc_src_conn(domain), loaded):
+            with _running(first, source_conn(domain), loaded):
                 _await(first, "the snapshot", lambda f: _loaded_ids(f) == [1])
             state = first.persisted_state()
 
@@ -726,7 +772,7 @@ def test_a_table_added_after_the_load_is_not_back_filled(
             second_probe.insert(2, "written-while-tracked")
 
             second = _CdcCtx(work_dir(tmp_path, "second"), carry_over=state)
-            with _running(second, cdc_src_conn(domain), widened):
+            with _running(second, source_conn(domain), widened):
                 _await(
                     second,
                     "the new table's change",
@@ -744,7 +790,9 @@ def test_a_table_added_after_the_load_is_not_back_filled(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_per_table_offsets_advance_independently_after_the_load(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_off1") as first_probe:
@@ -758,7 +806,7 @@ def test_per_table_offsets_advance_independently_after_the_load(
             ])
 
             first = _CdcCtx(work_dir(tmp_path, "first"))
-            with _running(first, cdc_src_conn(domain), src):
+            with _running(first, source_conn(domain), src):
                 _await(
                     first,
                     "both snapshots",
@@ -772,7 +820,7 @@ def test_per_table_offsets_advance_independently_after_the_load(
             second_probe.insert(2, "only-the-second-table")
 
             second = _CdcCtx(work_dir(tmp_path, "second"), carry_over=state)
-            with _running(second, cdc_src_conn(domain), src):
+            with _running(second, source_conn(domain), src):
                 _await(
                     second,
                     "the second table's change",
@@ -791,7 +839,9 @@ def test_per_table_offsets_advance_independently_after_the_load(
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_truncate_then_reinsert_after_the_load_keeps_their_order(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with cdc_probe(domain, "td_il_tr_reinsert") as probe:
@@ -799,7 +849,7 @@ def test_truncate_then_reinsert_after_the_load_keeps_their_order(
 
         src = _stream_src([cdc_table(domain, probe.name)])
         ctx = _CdcCtx(work_dir(tmp_path))
-        with _running(ctx, cdc_src_conn(domain), src):
+        with _running(ctx, source_conn(domain), src):
             _await(ctx, "the snapshot", lambda f: _loaded_ids(f) == [1])
             probe.truncate()
             probe.insert(9, "after-the-truncate")
@@ -857,7 +907,9 @@ def _insert_zoo_row(domain: MysqlcdcDomain, table: str, id_: int) -> None:
 
 @mysqlcdc_domain("mysqlcdc_employees_xs")
 def test_loaded_rows_and_changes_share_one_schema_hash(
-    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain,
+    tmp_path: Path,
+    source_conn: SourceConn,
 ):
     domain = domain_mysqlcdc_employees_xs
     with _type_zoo(domain, "td_il_types") as table:
@@ -865,7 +917,7 @@ def test_loaded_rows_and_changes_share_one_schema_hash(
 
         src = _stream_src([cdc_table(domain, table)])
         ctx = _CdcCtx(work_dir(tmp_path))
-        with _running(ctx, cdc_src_conn(domain), src):
+        with _running(ctx, source_conn(domain), src):
             _await(ctx, "the snapshot", lambda f: _loaded_ids(f) == [1])
             _insert_zoo_row(domain, table, 2)
             frame = _await(ctx, "the change", lambda f: 2 in _captured_ids(f))
@@ -874,3 +926,247 @@ def test_loaded_rows_and_changes_share_one_schema_hash(
     assert len(hashes) == 1, (
         f"the load and the stream normalized the schema differently: {hashes}"
     )
+
+
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_the_user_without_reload_loads_without_the_global_read_lock(
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path, monkeypatch
+):
+    """The lock-free runs above are only that if the server does refuse the
+    lock to the domain's user without RELOAD."""
+    domain = domain_mysqlcdc_employees_xs
+    refused: list[str] = []
+    open_bracketed = BinlogInitialLoadSession._open_bracketed
+
+    def record(self, cursor, refused_by):
+        refused.append(str(refused_by))
+        return open_bracketed(self, cursor, refused_by)
+
+    monkeypatch.setattr(BinlogInitialLoadSession, "_open_bracketed", record)
+    with cdc_probe(domain, "td_il_no_lock") as probe:
+        probe.insert(1, "row-1")
+        ctx = _CdcCtx(work_dir(tmp_path))
+        src = _stream_src([cdc_table(domain, probe.name)])
+        with _running(ctx, no_lock_src_conn(domain), src):
+            frame = _await(ctx, "the snapshot", lambda f: _loaded_ids(f) == [1])
+
+    assert len(refused) == 1
+    assert _ops(frame).count(LOAD) == 1
+
+
+# --- A load without the global read lock: changes inside its window -----
+
+
+def _inside_the_window(monkeypatch, commit: Callable[[], None]) -> list[bool]:
+    """Run `commit` once, right after the window's start is read and before the
+    snapshot opens: the change is then both in the snapshot and in the window,
+    which is what the deduplication is for."""
+    committed: list[bool] = []
+    open_bracketed = BinlogInitialLoadSession._open_bracketed
+
+    class _Hooked:
+        def __init__(self, cursor: Any) -> None:
+            self._cursor = cursor
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self._cursor, name)
+
+        def execute(self, statement: str, *args: Any) -> Any:
+            result = self._cursor.execute(statement, *args)
+            if statement == "select @@global.gtid_executed" and not committed:
+                commit()
+                committed.append(True)
+            return result
+
+    def bracketed(self, cursor, refused):
+        return open_bracketed(self, _Hooked(cursor), refused)
+
+    monkeypatch.setattr(BinlogInitialLoadSession, "_open_bracketed", bracketed)
+    return committed
+
+
+def _loaded_names(frame: pl.DataFrame) -> dict[int, str]:
+    seg = _column(frame, SEG_COLUMN_SUFFIX)
+    loaded = frame.filter(pl.col(seg) == INITIAL_LOAD_SEG).drop_nulls("id")
+    return dict(zip(loaded["id"].to_list(), loaded["name"].to_list(), strict=True))
+
+
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_a_row_inserted_inside_the_window_arrives_once(
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path, monkeypatch
+):
+    domain = domain_mysqlcdc_employees_xs
+    with cdc_probe(domain, "td_il_window_insert") as probe:
+        probe.insert(1, "seed")
+        committed = _inside_the_window(monkeypatch, lambda: probe.insert(2, "window"))
+        ctx = _CdcCtx(work_dir(tmp_path))
+        src = _stream_src([cdc_table(domain, probe.name)])
+        with _running(ctx, no_lock_src_conn(domain), src):
+            frame = _await(ctx, "the load", lambda f: _loaded_ids(f) == [1, 2])
+            probe.insert(3, "after")
+            frame = _await(ctx, "the change after", lambda f: 3 in _ids(f))
+
+    assert committed
+    assert _ids(frame) == [1, 2, 3]
+    assert _captured_ids(frame) == [3]
+
+
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_a_loaded_row_updated_inside_the_window_arrives_once_with_its_value(
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path, monkeypatch
+):
+    """The snapshot already holds the new value, so the window's update is
+    dropped: replaying it would publish the same row a second time."""
+    domain = domain_mysqlcdc_employees_xs
+    with cdc_probe(domain, "td_il_window_update") as probe:
+        probe.insert(1, "seed")
+        _inside_the_window(monkeypatch, lambda: probe.update(1, "updated"))
+        ctx = _CdcCtx(work_dir(tmp_path))
+        src = _stream_src([cdc_table(domain, probe.name)])
+        with _running(ctx, no_lock_src_conn(domain), src):
+            frame = _await(ctx, "the load", lambda f: _loaded_ids(f) == [1])
+            probe.insert(2, "after")
+            frame = _await(ctx, "the change after", lambda f: 2 in _ids(f))
+
+    assert _loaded_names(frame) == {1: "updated"}
+    assert _captured_ids(frame) == [2]
+
+
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_a_loaded_row_deleted_inside_the_window_does_not_appear(
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path, monkeypatch
+):
+    domain = domain_mysqlcdc_employees_xs
+    with cdc_probe(domain, "td_il_window_delete") as probe:
+        probe.insert(1, "seed")
+        probe.insert(2, "kept")
+        _inside_the_window(monkeypatch, lambda: probe.delete(1))
+        ctx = _CdcCtx(work_dir(tmp_path))
+        src = _stream_src([cdc_table(domain, probe.name)])
+        with _running(ctx, no_lock_src_conn(domain), src):
+            frame = _await(ctx, "the load", lambda f: _loaded_ids(f) == [2])
+            probe.insert(3, "after")
+            frame = _await(ctx, "the change after", lambda f: 3 in _ids(f))
+
+    assert 1 not in _ids(frame)
+    assert _captured_ids(frame) == [3]
+
+
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_a_transaction_over_two_tables_inside_the_window_arrives_once_in_each(
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path, monkeypatch
+):
+    domain = domain_mysqlcdc_employees_xs
+    with (
+        cdc_probe(domain, "td_il_window_left") as left,
+        cdc_probe(domain, "td_il_window_right") as right,
+    ):
+
+        def both() -> None:
+            engine = create_engine(domain.sqlalchemy_uri)
+            try:
+                with engine.begin() as conn:
+                    for table in (left.name, right.name):
+                        conn.execute(
+                            text(f"INSERT INTO `{table}` VALUES (7, 'together')")
+                        )
+            finally:
+                engine.dispose()
+
+        _inside_the_window(monkeypatch, both)
+        ctx = _CdcCtx(work_dir(tmp_path))
+        src = _stream_src([cdc_table(domain, left.name), cdc_table(domain, right.name)])
+        with _running(ctx, no_lock_src_conn(domain), src):
+            _await(
+                ctx,
+                "both tables loaded",
+                lambda _f: all(
+                    _rows(ctx, slot=slot) is not None
+                    and 7 in _loaded_ids(_rows(ctx, slot=slot))
+                    for slot in (0, 1)
+                ),
+            )
+            left_rows, right_rows = _rows(ctx, slot=0), _rows(ctx, slot=1)
+
+    assert _ids(left_rows).count(7) == 1
+    assert _ids(right_rows).count(7) == 1
+
+
+WINDOW_CHANGES = 50
+
+
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_many_changes_inside_the_window_each_arrive_once(
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path, monkeypatch
+):
+    domain = domain_mysqlcdc_employees_xs
+    with cdc_probe(domain, "td_il_window_many") as probe:
+        probe.insert(1, "seed")
+
+        def many() -> None:
+            for identifier in range(2, 2 + WINDOW_CHANGES):
+                probe.insert(identifier, f"window-{identifier}")
+            probe.update(1, "seed-updated")
+
+        _inside_the_window(monkeypatch, many)
+        ctx = _CdcCtx(work_dir(tmp_path))
+        src = _stream_src([cdc_table(domain, probe.name)])
+        expected = list(range(1, 2 + WINDOW_CHANGES))
+        with _running(ctx, no_lock_src_conn(domain), src):
+            frame = _await(ctx, "the load", lambda f: _loaded_ids(f) == expected)
+            probe.insert(100, "after")
+            frame = _await(ctx, "the change after", lambda f: 100 in _ids(f))
+
+    assert _ids(frame) == [*expected, 100]
+    assert _loaded_names(frame)[1] == "seed-updated"
+
+
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_a_window_past_its_limit_fails_the_load(
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path, monkeypatch
+):
+    domain = domain_mysqlcdc_employees_xs
+    with cdc_probe(domain, "td_il_window_limit") as probe:
+        probe.insert(1, "seed")
+
+        def three() -> None:
+            for identifier in (2, 3, 4):
+                probe.insert(identifier, "window")
+
+        _inside_the_window(monkeypatch, three)
+        ctx = _CdcCtx(work_dir(tmp_path))
+        src = _stream_src(
+            [cdc_table(domain, probe.name)],
+            **{"tabsdata.cdc.initial_load.max_window_changes": 2},
+        )
+        with pytest.raises(TabsdataException) as ei:
+            with _running(ctx, no_lock_src_conn(domain), src):
+                ctx._stop.wait(timeout=CAPTURE_TIMEOUT_SECONDS)
+
+    assert ei.value.api_error is SqlCdcErrorCode.CDC_29
+    assert ctx.manifests() == []
+
+
+@mysqlcdc_domain("mysqlcdc_employees_xs")
+def test_a_restart_after_a_load_with_window_changes_replays_nothing(
+    domain_mysqlcdc_employees_xs: MysqlcdcDomain, tmp_path: Path, monkeypatch
+):
+    """The load is staged at every transaction its window read, so a restart
+    resumes past them instead of sending them again."""
+    domain = domain_mysqlcdc_employees_xs
+    with cdc_probe(domain, "td_il_window_restart") as probe:
+        probe.insert(1, "seed")
+        _inside_the_window(monkeypatch, lambda: probe.insert(2, "window"))
+        src = _stream_src([cdc_table(domain, probe.name)])
+        first = _CdcCtx(work_dir(tmp_path, "first"))
+        with _running(first, no_lock_src_conn(domain), src):
+            _await(first, "the load", lambda f: _loaded_ids(f) == [1, 2])
+
+        second = _CdcCtx(
+            work_dir(tmp_path, "second"), carry_over=first.persisted_state()
+        )
+        with _running(second, no_lock_src_conn(domain), src):
+            probe.insert(3, "after-the-restart")
+            frame = _await(second, "the change after", lambda f: 3 in _ids(f))
+
+    assert _ids(frame) == [3]

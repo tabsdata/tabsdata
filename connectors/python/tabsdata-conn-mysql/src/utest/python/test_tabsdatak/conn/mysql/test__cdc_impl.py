@@ -46,6 +46,7 @@ from tabsdatak.conn.mysql._cdc_impl import (
     INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS,
     BinlogIngester,
     BinlogInitialLoadSession,
+    BinlogWindowEnd,
     GtidOffset,
     GtidSet,
     MySQLDialect,
@@ -1504,3 +1505,145 @@ class _Rows:
 def test_a_user_gtid_set_is_not_flattened():
     assert BinlogIngester._as_gtid_set("u:1-5,v:7") == "u:1-5,v:7"
     assert BinlogIngester._as_gtid_set("u:42") == "u:1-42"
+
+
+# =====================================================================
+# An initial load without the global read lock
+# =====================================================================
+
+
+ACCESS_DENIED = 1227
+BINLOG_STATUS = ("mysql-bin.000004", 1234, "", "", "uuid:1-6")
+
+
+def _refusing(log: list[str], error: Exception):
+    class _RefusingCursor(_Cursor):
+        def execute(self, sql: str) -> None:
+            if sql == "flush tables with read lock":
+                self._log.append(sql)
+                raise error
+            super().execute(sql)
+            if sql == "show binary log status":
+                self._row = BINLOG_STATUS
+
+    class _RefusingConnection(_PymysqlConnection):
+        def cursor(self) -> _Cursor:
+            return _RefusingCursor(self._log)
+
+    return lambda **settings: _RefusingConnection(log)
+
+
+def test_a_refused_global_read_lock_brackets_the_snapshot(
+    initial_load_log, monkeypatch
+):
+    """Managed services such as Amazon RDS refuse the lock. The executed
+    GTIDs are read before the snapshot, which sees all of them, and the
+    binlog position after it, which is past everything it sees."""
+    error = _cdc_impl.pymysql.err.OperationalError(ACCESS_DENIED, "Access denied")
+    monkeypatch.setattr(
+        _cdc_impl.pymysql, "connect", _refusing(initial_load_log, error)
+    )
+
+    session = BinlogInitialLoadSession(connection_settings={})
+
+    log = initial_load_log
+    assert (
+        log.index("flush tables with read lock")
+        < log.index("select @@global.gtid_executed")
+        < log.index("start transaction with consistent snapshot, read only")
+        < log.index("show binary log status")
+    )
+    assert "unlock tables" not in log
+    assert session.offset.gtid == "uuid:1-5"
+    assert (session.window_end.file, session.window_end.pos) == BINLOG_STATUS[:2]
+
+
+def test_a_locked_snapshot_has_no_window(initial_load_log):
+    assert BinlogInitialLoadSession(connection_settings={}).window_end is None
+
+
+def test_a_global_read_lock_failing_for_another_reason_fails_the_load(
+    initial_load_log, monkeypatch
+):
+    error = _cdc_impl.pymysql.err.OperationalError(1205, "Lock wait timeout")
+    monkeypatch.setattr(
+        _cdc_impl.pymysql, "connect", _refusing(initial_load_log, error)
+    )
+    with pytest.raises(TabsdataException) as ei:
+        BinlogInitialLoadSession(connection_settings={})
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_21
+
+
+class _PositionedStream:
+    """A binlog reader that stands at the end of each event it hands over."""
+
+    def __init__(self, events: list[tuple[object, int]]):
+        self._events = events
+        self.log_file = "mysql-bin.000004"
+        self.log_pos = 0
+        self.closed = False
+
+    def __iter__(self):
+        for event, end in self._events:
+            self.log_pos = end
+            yield event
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def _windowed(events: list[tuple[object, int]], end: int) -> BinlogIngester:
+    bi = _ingester_with_tables(["app.users"])
+    bi._executed = GtidSet.parse("uuid:1-5")
+    bi._mark = GtidOffset(gtid="uuid:1-5")
+    bi._stream = _PositionedStream(events)
+    bi.bound_stream(BinlogWindowEnd(file="mysql-bin.000004", pos=end))
+    return bi
+
+
+def _transaction(gtid: str, start: int, end: int) -> list[tuple[object, int]]:
+    from pymysqlreplication.event import XidEvent
+
+    opening = _gtid_event(gtid)
+    return [(opening, start + opening.event_size), (_event(XidEvent), end)]
+
+
+def test_the_window_is_read_up_to_its_end_and_no_further():
+    """The first transaction starting at the window's end is past it: it is
+    left for the stream, which the reader is opened again to deliver."""
+    stream = _transaction("uuid:6", 100, 300) + _transaction("uuid:7", 300, 500)
+    bi = _windowed(stream, end=300)
+
+    list(bi.poll_changes(session=None))
+
+    assert bi.stream_bound_reached()
+    assert bi.base_offset().gtid == "uuid:1-6"
+    assert bi._stream is None and bi._reopen
+
+
+def test_a_quiet_window_ends_at_a_heartbeat_past_it():
+    heartbeat = _event(HeartbeatLogEvent)
+    bi = _windowed([(heartbeat, 250), (heartbeat, 400)], end=300)
+
+    list(bi.poll_changes(session=None))
+
+    assert bi.stream_bound_reached()
+    assert bi.base_offset().gtid == "uuid:1-5"
+
+
+def test_the_stream_after_the_window_opens_the_reader_again(monkeypatch):
+    bi = _windowed(_transaction("uuid:7", 300, 500), end=300)
+    list(bi.poll_changes(session=None))
+    opened = []
+    monkeypatch.setattr(bi, "init_stream", lambda: opened.append(bi._mark.gtid))
+
+    list(bi.poll_changes(session=None))
+
+    assert opened == ["uuid:1-5"]
+
+
+def test_a_window_bound_must_be_a_binlog_position():
+    bi = _ingester_with_tables(["app.users"])
+    with pytest.raises(TabsdataException) as ei:
+        bi.bound_stream(GtidOffset(gtid="uuid:1-5"))
+    assert ei.value.api_error is MysqlErrorCode.MYSQL_17

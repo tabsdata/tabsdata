@@ -273,7 +273,10 @@ def _stage_initial_load(
     manifest = [
         loaded + changes for loaded, changes in zip(pending.manifest, kept, strict=True)
     ]
-    _stage_load_manifest(ctx, ingester, manifest, pending.window_end)
+    # Where the window's read left the stream, not the window's end itself:
+    # an end that is no resumable offset (a binlog position) bounds the read,
+    # and the offset is what the read reached up to it.
+    _stage_load_manifest(ctx, ingester, manifest, ingester.base_offset())
     logger.info(
         "Initial load staged with %d deduplicated change file(s)",
         sum(len(files) for files in kept),

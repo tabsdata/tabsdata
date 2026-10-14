@@ -446,15 +446,17 @@ def _with_window(monkeypatch, tmp_path, *, window):
     ingester = FakeIngester()
     ingester.schema_registry = _FakeRegistry()
     ingester.stage_state_marker = {"cdc.offset": "end"}
+    reached = object()
+    ingester.base_offset = lambda: reached
     ctx = FakeCtx(active_values=[False], stream_state=None)
     ctx.work_dir = tmp_path
     _stream(ctx, ingester, _cfg(initial_load=True))
-    return ctx, ingester, deduplicated, end, load_file, kept_file
+    return ctx, ingester, deduplicated, reached, load_file, kept_file
 
 
 def test_the_load_is_staged_with_what_deduplication_keeps(monkeypatch, tmp_path):
     window_file = tmp_path / "window.parquet"
-    ctx, ingester, deduplicated, end, load_file, kept_file = _with_window(
+    ctx, ingester, deduplicated, reached, load_file, kept_file = _with_window(
         monkeypatch, tmp_path, window=[[window_file]]
     )
     assert ctx.staged == [
@@ -463,8 +465,10 @@ def test_the_load_is_staged_with_what_deduplication_keeps(monkeypatch, tmp_path)
             {"cdc.offset": "end", CDC_INITIAL_LOAD_STATE_KEY: False},
         )
     ]
-    assert ingester.stage_state_arg is end
-    assert ingester.acknowledged_offsets == [end]
+    # Where the window's read left the stream, which a window ending at a
+    # binlog position, no resumable offset, needs.
+    assert ingester.stage_state_arg is reached
+    assert ingester.acknowledged_offsets == [reached]
     (call,) = deduplicated
     assert call["loaded"] == [[load_file]]
     assert call["changes"] == [[window_file]]

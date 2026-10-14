@@ -42,6 +42,7 @@ from tabsdatak.conn.common.sql.cdc._stage_plugin import CdcStageSrc
 from tabsdatak.conn.common.sql.cdc.constants import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_FETCH_SIZE,
+    DEFAULT_INITIAL_LOAD_MAX_WINDOW_CHANGES,
     DEFAULT_MAX_LARGE_TEXT_LENGTH,
 )
 from tabsdatak.conn.common.sql.cdc.typing import (
@@ -77,6 +78,9 @@ _KEY_CDC_POLL_IDLE_SECS: CdcSrcCfgKey = "tabsdata.cdc.poll.idle_secs"
 _KEY_CDC_MAX_LARGE_TEXT_LENGTH: CdcSrcCfgKey = "tabsdata.cdc.max_large_text_length"
 _KEY_CDC_FETCH_SIZE: CdcSrcCfgKey = "tabsdata.cdc.fetch_size"
 _KEY_CDC_CHUNK_SIZE: CdcSrcCfgKey = "tabsdata.cdc.chunk_size"
+_KEY_CDC_INITIAL_LOAD_MAX_WINDOW_CHANGES: CdcSrcCfgKey = (
+    "tabsdata.cdc.initial_load.max_window_changes"
+)
 
 
 def _to_internal_start_from(spec: MySQLCdcStartFromSpec):
@@ -120,6 +124,12 @@ def _build_cdc_run_config(
         initial_load=src.start_from == FULL_START,
         fetch_size=int(cfg.get(_KEY_CDC_FETCH_SIZE, DEFAULT_FETCH_SIZE)),
         chunk_size=int(cfg.get(_KEY_CDC_CHUNK_SIZE, DEFAULT_CHUNK_SIZE)),
+        initial_load_max_window_changes=int(
+            cfg.get(
+                _KEY_CDC_INITIAL_LOAD_MAX_WINDOW_CHANGES,
+                DEFAULT_INITIAL_LOAD_MAX_WINDOW_CHANGES,
+            )
+        ),
         logging_level=int(cfg.get(_KEY_CDC_LOGGING_LEVEL, logging.ERROR)),
     )
 

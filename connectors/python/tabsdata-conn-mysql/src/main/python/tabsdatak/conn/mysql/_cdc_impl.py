@@ -438,6 +438,15 @@ class BinlogInitialLoadSession(InitialLoadSession):
     Reading the position without the lock would let a transaction commit
     between the snapshot forming and the position being read, and those
     changes would be in neither the snapshot nor the resumed stream.
+
+    Where the lock is refused for want of privilege, as managed services
+    such as Amazon RDS and Aurora refuse it, the snapshot is taken without
+    it and bracketed instead: the executed GTID set read before it, which
+    every transaction it sees is past (MySQL adds a GTID to it only after
+    committing the transaction in the engine), and the binlog position read
+    after it, which every transaction it sees is before (a transaction is
+    written to the binlog before it commits). The changes in between, the
+    window, are read after the load and deduplicated against it.
     """
 
     def __init__(self, *, connection_settings: dict[str, Any]):
@@ -472,21 +481,52 @@ class BinlogInitialLoadSession(InitialLoadSession):
         cursor.execute(
             f"set session lock_wait_timeout = {INITIAL_LOAD_LOCK_WAIT_TIMEOUT_SECONDS}"
         )
+        self._window_end: BinlogWindowEnd | None = None
         try:
             cursor.execute("flush tables with read lock")
         except pymysql.Error as error:
-            self.close()
-            raise MysqlErrorCode.MYSQL_21.exception(cause=error, reason=str(error))
-        try:
-            cursor.execute("start transaction with consistent snapshot, read only")
-            cursor.execute("select @@global.gtid_executed")
-            gtid = cursor.fetchone()[0] or ""
-        finally:
-            cursor.execute("unlock tables")
+            if not _lock_refused(error):
+                self.close()
+                raise MysqlErrorCode.MYSQL_21.exception(cause=error, reason=str(error))
+            gtid = self._open_bracketed(cursor, refused=error)
+        else:
+            try:
+                cursor.execute("start transaction with consistent snapshot, read only")
+                cursor.execute("select @@global.gtid_executed")
+                gtid = cursor.fetchone()[0] or ""
+            finally:
+                cursor.execute("unlock tables")
         cursor.execute("select utc_timestamp(6)")
         self._timestamp = cursor.fetchone()[0].replace(tzinfo=timezone.utc)
         self._offset = GtidOffset(gtid=gtid)
         logger.info("Initial load snapshot is consistent at GTID set %r", gtid)
+
+    def _open_bracketed(self, cursor: Any, refused: Exception) -> str:
+        logger.warning(
+            "The global read lock was refused (%s); the initial load reads the "
+            "changes committed while it runs and deduplicates them instead",
+            refused,
+        )
+        cursor.execute("select @@global.gtid_executed")
+        gtid = cursor.fetchone()[0] or ""
+        cursor.execute("start transaction with consistent snapshot, read only")
+        status = BinlogIngester._query_binlog_status(cursor)
+        if not status:
+            self.close()
+            raise MysqlErrorCode.MYSQL_15.exception(position="the window's end")
+        self._window_end = BinlogWindowEnd(file=status[0], pos=int(status[1]))
+        logger.info(
+            "Initial load snapshot opened past GTID set %r; its window ends at "
+            "binlog %s:%d",
+            gtid,
+            self._window_end.file,
+            self._window_end.pos,
+        )
+        return gtid
+
+    @property
+    def window_end(self) -> CdcOffset | None:
+        return self._window_end
 
     def _require_gtid_mode(self) -> None:
         cursor = self._connection.cursor()
@@ -538,6 +578,21 @@ class BinlogInitialLoadSession(InitialLoadSession):
 
 
 _GTID_INTERVAL = re.compile(r"^(\d+)(?:-(\d+))?$")
+
+# What MySQL answers a statement the user lacks the privilege for: access to
+# a database, the user's own access, and a privilege such as RELOAD. Amazon
+# RDS answers the global read lock with the second even though it grants
+# RELOAD.
+_ACCESS_DENIED_ERRORS = frozenset({1044, 1045, 1227})
+
+
+def _lock_refused(error: Exception) -> bool:
+    return bool(error.args) and error.args[0] in _ACCESS_DENIED_ERRORS
+
+
+def _binlog_coordinates(file: str, pos: int) -> tuple[int, int]:
+    """A binlog position as something ordered: binlog files are numbered."""
+    return int(file.rpartition(".")[2]), pos
 
 
 def _opens_transaction(event: Any) -> bool:
@@ -685,6 +740,34 @@ class GtidOffset(CdcOffset):
         return GtidOffset(gtid=self.gtid, source=self.source)
 
 
+class BinlogWindowEnd(CdcOffset):
+    """Where the window of an initial load taken without the global read
+    lock ends: the binlog position read once its snapshot was open. It
+    bounds a read and is never persisted."""
+
+    def __init__(self, file: str, pos: int):
+        self.file = file
+        self.pos = pos
+
+    def update(self, other: CdcOffset) -> None:
+        raise MysqlErrorCode.MYSQL_17.exception(actual=type(other).__name__)
+
+    def write(self) -> str:
+        return json.dumps({"file": self.file, "pos": self.pos})
+
+    @classmethod
+    def read(cls, data: str) -> "BinlogWindowEnd":
+        payload = json.loads(data)
+        return cls(file=payload["file"], pos=payload["pos"])
+
+    def reached_at(self, file: str | None, pos: int) -> bool:
+        if file is None:
+            return False
+        return _binlog_coordinates(file, pos) >= _binlog_coordinates(
+            self.file, self.pos
+        )
+
+
 # ---------------------------------------------------------------------
 # Ingester
 # ---------------------------------------------------------------------
@@ -750,6 +833,12 @@ class BinlogIngester(CdcIngester):
         # The server UUID (and tag) every transaction must come from, once
         # known: recorded by the first one, and kept across a reload.
         self._source: str | None = None
+        # The window of an initial load taken without the global read lock:
+        # read up to its end, then the reader is opened again from what was
+        # read, so a transaction past the end comes again in the stream.
+        self._bound: BinlogWindowEnd | None = None
+        self._bound_reached = False
+        self._reopen = False
 
     @property
     def ingester_type(self) -> CdcIngesterType:
@@ -956,6 +1045,43 @@ class BinlogIngester(CdcIngester):
     def _complete_transaction(self, gtid: str) -> None:
         self._executed.add(gtid)
         self._mark = self._offset_of(self._executed)
+
+    def bound_stream(self, end: CdcOffset) -> None:
+        if not isinstance(end, BinlogWindowEnd):
+            raise MysqlErrorCode.MYSQL_17.exception(actual=type(end).__name__)
+        self._bound = end
+        self._bound_reached = False
+
+    def stream_bound_reached(self) -> bool:
+        return self._bound_reached
+
+    def _window_read_before(self, event: Any, gtid: str | None) -> bool:
+        """Whether every transaction up to the window's end was read before
+        `event`, with none open: the binlog stands at the end, where `event`
+        starts or, a heartbeat, where the server reports it is. The window's
+        end lies between transactions, so one that starts there is past it."""
+        if self._bound is None or gtid is not None:
+            return False
+        position = self._stream.log_pos
+        if not isinstance(event, HeartbeatLogEvent):
+            position -= event.event_size
+        return self._bound.reached_at(self._stream.log_file, position)
+
+    def _reach_bound(self) -> None:
+        """The window is read: the stream stands at every transaction read,
+        and the reader is opened again from there at the next poll, since it
+        may already have taken the event opening the first one past the
+        end."""
+        self._bound = None
+        self._bound_reached = True
+        self._base_offset = self._mark.copy()
+        stream, self._stream = self._stream, None
+        self._carry_gtid = None
+        self._reopen = True
+        try:
+            stream.close()
+        except Exception as exc:  # pragma: no cover
+            logger.warning("Failed to close the window's binlog stream: %s", exc)
 
     def _verify_server_settings(self) -> None:
         """Fail on a server whose binlog the stream cannot rely on: one
@@ -1240,14 +1366,15 @@ class BinlogIngester(CdcIngester):
         # blocking=True + a stream that's idle would hang the
         # runner forever.
         deadline = time.monotonic() + self._poll_max_secs
-        gtid: str | None = self._carry_gtid
-        self._carry_gtid = None
-        offset = self._begin_transaction(gtid) if gtid is not None else None
+        gtid, offset = self._resume_poll()
         committed_at: datetime | None = None
         seq: int = 0
         if self._stream is None:
             return
         for event in self._stream:
+            if self._window_read_before(event, gtid):
+                self._reach_bound()
+                return
             if isinstance(event, GtidEvent):
                 if gtid is not None and seq == 0:
                     # The transaction before ended with no commit event of its
@@ -1340,6 +1467,17 @@ class BinlogIngester(CdcIngester):
                         ordinal=seq,
                         schema=schema_version,
                     )
+
+    def _resume_poll(self) -> tuple[str | None, GtidOffset | None]:
+        """Open the reader again after a window, and take back the GTID of a
+        transaction the previous poll had begun."""
+        if self._stream is None and self._reopen:
+            self._reopen = False
+            self.init_stream()
+        gtid, self._carry_gtid = self._carry_gtid, None
+        if gtid is None:
+            return None, None
+        return gtid, self._begin_transaction(gtid)
 
     def _committed_at(self, event: Any) -> datetime | None:
         """The commit instant every row of the transaction ``event`` opens is

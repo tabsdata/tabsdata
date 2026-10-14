@@ -450,6 +450,7 @@ CdcSrcCfgKey: TypeAlias = Literal[
     "tabsdata.cdc.max_large_text_length",
     "tabsdata.cdc.fetch_size",
     "tabsdata.cdc.chunk_size",
+    "tabsdata.cdc.initial_load.max_window_changes",
 ]
 
 CdcSrcCfgSpec: TypeAlias = Annotated[
@@ -538,16 +539,18 @@ class MySQLCdcStreamSrc(StreamSrc):
             row.
 
             Beyond the privileges plain CDC needs, the connecting user
-            must hold `RELOAD` (to briefly take the global read lock
-            that pins the snapshot to a binlog position) and `SELECT` on
-            every tracked table, since the snapshot reads the tables
-            themselves rather than the binlog. The server must run with
-            `gtid_mode=ON`, and the tracked tables must be InnoDB. The
-            lock is held only while the position is read, not while the
-            tables are scanned. Managed services that withhold `RELOAD`
-            (such as Amazon RDS and Aurora) cannot support an initial
-            load, and the stream refuses to start rather than take a
-            snapshot that may lose changes.
+            must hold `SELECT` on every tracked table, since the
+            snapshot reads the tables themselves rather than the binlog.
+            The server must run with `gtid_mode=ON`, and the tracked
+            tables must be InnoDB. With `RELOAD`, the snapshot is pinned
+            to its exact binlog position by a global read lock held only
+            while the position is read, not while the tables are
+            scanned. Where that lock is refused, as managed services
+            such as Amazon RDS and Aurora refuse it, the load takes no
+            lock: it reads the changes committed while it ran and keeps
+            only those the loaded rows do not already hold. A table
+            without a primary key is not deduplicated that way, so such
+            a change may then arrive twice.
         columns_format: Layout for the new (and old, when present)
             columns payload on each change row -- `"columns"`
             (default), `"struct"` or `"map"`.
@@ -562,7 +565,9 @@ class MySQLCdcStreamSrc(StreamSrc):
             plugin falls back to its built-in defaults for missing keys.
             A byte threshold is measured on every change and slows
             ingestion down; bounding by rows is the cheap option and the
-            preferred one.
+            preferred one. `tabsdata.cdc.initial_load.max_window_changes`
+            bounds the changes a load without the global read lock reads
+            and deduplicates after its snapshot (100,000 by default).
     """
 
     # devguide-ref: CDC cursor / resume (start_from, offset persistence)

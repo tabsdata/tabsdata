@@ -9,11 +9,14 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+import pytest
 from sqlalchemy import create_engine, text
 from tabsdatax.itest.fixture.backends.mysql import MysqlDomain
 from tabsdatax.itest.fixture.backends.mysqlcdc import MysqlcdcDomain
 from tabsdatax.itest.fixture.functions.sql import SqlAlchemyStore, sql_credentials
 
+from tabsdatak.api import Secret
+from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.mysql import (
     GtidPosition,
     MySQLCdcStreamSrcConn,
@@ -44,6 +47,22 @@ def cdc_src_conn(domain: MysqlcdcDomain) -> MySQLCdcStreamSrcConn:
     carries the REPLICATION SLAVE / CLIENT grants the stream needs; the connector's
     default ``server_id`` (512) is free, the server itself being 1."""
     return MySQLCdcStreamSrcConn(uri=domain.uri, credentials=sql_credentials(domain))
+
+
+def no_lock_src_conn(domain: MysqlcdcDomain) -> MySQLCdcStreamSrcConn:
+    """The connection of the domain's user without RELOAD: the server refuses it
+    the global read lock, as managed services such as Amazon RDS refuse it to
+    every user, so an initial load through it reads a deduplicated window."""
+    if not domain.no_lock_user:
+        pytest.fail(
+            "the mysqlcdc domain predates its user without RELOAD; create it again"
+        )
+    return MySQLCdcStreamSrcConn(
+        uri=domain.uri,
+        credentials=UserPassword(
+            user=Secret(domain.no_lock_user), password=Secret(domain.password)
+        ),
+    )
 
 
 def cdc_table(domain: MysqlcdcDomain, table: str) -> str:

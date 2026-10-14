@@ -128,11 +128,11 @@ class MysqlErrorCode(ErrorCode):
     )  # open_initial_load
     MYSQL_21 = ErrorDef(
         MySQLRuntimeException,
-        "An initial load could not acquire the global read lock that pins the "
-        "snapshot to a binlog position, so no snapshot can be taken without "
-        "risking lost changes. Grant RELOAD to the connecting user; managed "
-        'services that withhold it cannot support start_from="full". Cause: '
-        "{reason}",
+        "An initial load could not take the global read lock that pins the "
+        "snapshot to a binlog position: {reason}. A lock refused for want of "
+        "privilege is not this failure (the load then reads the changes made "
+        "while it runs and deduplicates them instead), so resolve the cause and "
+        "run the load again",
     )  # open_initial_load
     MYSQL_22 = ErrorDef(
         MySQLRuntimeException,
