@@ -696,6 +696,18 @@ def test_a_write_survives_a_busy_server(monkeypatch, method):
 
 
 @pytest.mark.parametrize("method", ["post", "delete"])
+def test_a_write_waits_out_a_server_busy_for_minutes(monkeypatch, method):
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+    assert write_against(method, [503] * 40 + [200]) == (200, 41)
+
+
+@pytest.mark.parametrize("method", ["post", "delete"])
+def test_a_write_gives_up_on_a_server_busy_for_over_five_minutes(monkeypatch, method):
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+    assert write_against(method, [503] * 100) == (503, 61)
+
+
+@pytest.mark.parametrize("method", ["post", "delete"])
 def test_a_write_is_not_repeated_after_another_server_error(monkeypatch, method):
     monkeypatch.setattr(time, "sleep", lambda seconds: None)
     assert write_against(method, [500, 200]) == (500, 1)

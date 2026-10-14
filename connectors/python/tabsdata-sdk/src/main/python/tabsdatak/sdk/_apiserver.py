@@ -60,6 +60,9 @@ logger = logging.getLogger(__name__)
 def configure_request_connection_pool():
     http_retries_delay = 5
     http_attempts = 12
+    # A busy server stays busy while its writes keep conflicting, which under
+    # many concurrent clients lasts minutes: five, at the same pace.
+    http_busy_attempts = 60
 
     class ConstantWaitRetry(Retry):
         def sleep(self, _response=None):
@@ -68,11 +71,11 @@ def configure_request_connection_pool():
     # A 503 means the server applied nothing: it was too busy to run the
     # request, so any request may be repeated after one.
     default_retry_strategy = ConstantWaitRetry(
-        total=http_attempts,
+        total=http_busy_attempts,
         connect=http_attempts,
         read=0,
         redirect=http_attempts,
-        status=http_attempts,
+        status=http_busy_attempts,
         other=0,
         allowed_methods=None,
         status_forcelist={503},
