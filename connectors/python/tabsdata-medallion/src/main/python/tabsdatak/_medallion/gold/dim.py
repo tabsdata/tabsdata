@@ -85,10 +85,7 @@ def build_type1_dim(silver_head: TableFrame | None) -> TableFrame | None:
     """
     if silver_head is None:
         return None
-    nk = _natural_key(silver_head)
-    out = silver_head.with_columns(
-        _surrogate_key(nk).alias(MEDALLION_SYSTEM_COLUMN_ENTITY_SK)
-    )
+    out = _with_surrogate_key(silver_head, [], MEDALLION_SYSTEM_COLUMN_ENTITY_SK)
     return _drop_pk(out)
 
 
@@ -97,13 +94,23 @@ def _to_history_rows(silver: TableFrame) -> TableFrame:
     schema: add ``@td.medallion.version_sk`` and drop ``@td.medallion.pk``. The
     ``@td.medallion.valid_from`` /
     ``@td.medallion.valid_to`` effective-dating columns ride through unchanged."""
-    nk = _natural_key(silver)
-    shaped = silver.with_columns(
-        _surrogate_key([*nk, MEDALLION_SYSTEM_COLUMN_VALID_FROM]).alias(
-            MEDALLION_SYSTEM_COLUMN_VERSION_SK
-        )
+    shaped = _with_surrogate_key(
+        silver, [MEDALLION_SYSTEM_COLUMN_VALID_FROM], MEDALLION_SYSTEM_COLUMN_VERSION_SK
     )
     return _drop_pk(shaped)
+
+
+def _with_surrogate_key(
+    tf: TableFrame, extra_cols: list[str], alias: str
+) -> TableFrame:
+    """Add ``alias`` as the surrogate key of the natural key plus
+    ``extra_cols``. An empty frame (a reset emptied the table) has no row to
+    read ``@td.medallion.pk`` from, so it gets a typed null column instead."""
+    if _is_empty(tf):
+        return tf.with_columns(pl.lit(None, dtype=pl.UInt64).alias(alias))
+    return tf.with_columns(
+        _surrogate_key([*_natural_key(tf), *extra_cols]).alias(alias)
+    )
 
 
 def build_type2_dim(

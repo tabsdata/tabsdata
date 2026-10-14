@@ -12,6 +12,7 @@ from tabsdatak.tableframe.functions import col
 from tabsdatak._medallion.bronze.cdc import (
     OP_DELETE,
     OP_INSERT,
+    OP_LOAD,
     OP_TOMBSTONE,
     OP_UPDATE,
 )
@@ -343,8 +344,8 @@ def test_t_sentinel_wipes_prior_state():
 
 
 def test_t_sentinel_drops_ops_before_cutoff():
-    """Ops at-or-before the T's source_ts are dropped; ops after are
-    kept. The pre-T row should NOT land in the output."""
+    """Ops before the T are wiped by it; ops after are kept. The pre-T
+    row should NOT land in the output."""
     # Embed both the pre-T row and the T sentinel in a single
     # TableFrame so the diagonal-concat at the helper entry doesn't
     # have to unify tabsdata's $td.src column across separate
@@ -388,6 +389,51 @@ def test_latest_t_takes_precedence():
     rows = to_rows(out)
     assert len(rows) == 1
     assert rows[0]["name"] == "after-T2"
+
+
+def test_t_sentinel_cuts_by_arrival_order_among_equal_timestamps():
+    """A T sharing its source_ts with the rows around it cuts at its
+    position: the row before it is wiped, the row after it is kept."""
+    bronze = [
+        make_bronze_batch(
+            [
+                ("t1", 2, "before", OP_INSERT, TS_2),
+                (None, None, None, OP_TOMBSTONE, TS_2),
+                ("t1", 3, "after", OP_INSERT, TS_2),
+            ]
+        )
+    ]
+    out = call(bronze, scd1_head=None)
+
+    assert [r["name"] for r in to_rows(out)] == ["after"]
+
+
+def test_load_row_resets_and_never_becomes_a_row():
+    """A CDC L row empties the table; the inserts after it are the new
+    state, and the L row itself (null key) never lands in the output."""
+    prior = make_scd1_head([("t1", 9, "Gone", TS_PRIOR)])
+    bronze = [
+        make_bronze_batch(
+            [
+                (None, None, None, OP_LOAD, TS_1),
+                ("t1", 1, "Alice", OP_INSERT, TS_1),
+                ("t1", 2, "Bob", OP_INSERT, TS_1),
+            ]
+        )
+    ]
+    out = call(bronze, scd1_head=prior)
+
+    assert sorted(int(r["entity_id"]) for r in to_rows(out)) == [1, 2]
+
+
+def test_reset_only_batch_empties_state_and_next_fire_keeps_it_empty():
+    """A batch holding only a reset leaves an empty state; the next fire
+    with no bronze rows returns it instead of raising."""
+    prior = make_scd1_head([("t1", 1, "Alice", TS_PRIOR)])
+    out = call([make_t_sentinel(TS_1)], scd1_head=prior)
+    assert to_rows(out) == []
+
+    assert to_rows(call([], scd1_head=out)) == []
 
 
 # ── Bronze-metadata flow-through ────────────────────────────────────────────

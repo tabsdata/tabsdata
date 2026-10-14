@@ -12,6 +12,7 @@ from tabsdatak.tableframe.functions import col
 from tabsdatak._medallion.bronze.cdc import (
     OP_DELETE,
     OP_INSERT,
+    OP_LOAD,
     OP_TOMBSTONE,
     OP_UPDATE,
 )
@@ -490,9 +491,10 @@ def test_t_sentinel_closes_all_prior_valid_into_expired():
     assert by_name["Bob@v0"][VALID_TO].to_pydatetime() == TS_2
 
 
-def test_t_sentinel_drops_ops_before_cutoff():
-    """Ops at-or-before the T's source_ts are dropped. Only ops with
-    source_ts > T.source_ts are folded.
+def test_t_sentinel_closes_ops_before_it_into_expired():
+    """Ops before the T are applied first: the version they open is closed
+    at the T's source_ts and kept in expired. Only ops after the T reach
+    valid.
 
     The T sentinel and surrounding ops are inlined into a single bronze
     frame here. With multiple frames, synthetic test data has unmaterialized
@@ -504,41 +506,144 @@ def test_t_sentinel_drops_ops_before_cutoff():
     bronze = [
         make_bronze_batch(
             [
-                ("t1", 1, "before", OP_INSERT, TS_1),  # before T → dropped
-                (None, None, None, OP_TOMBSTONE, TS_2),  # T sentinel
-                ("t1", 2, "after", OP_INSERT, TS_3),  # after T → kept
+                ("t1", 1, "before", OP_INSERT, TS_1),
+                (None, None, None, OP_TOMBSTONE, TS_2),
+                ("t1", 2, "after", OP_INSERT, TS_3),
             ]
         )
     ]
-    new_valid, _ = call(bronze, valid_head=None)
+    new_valid, new_expired = call(bronze, valid_head=None)
 
     valid_rows = to_rows(new_valid)
     assert len(valid_rows) == 1
     assert valid_rows[0]["name"] == "after"
     assert int(valid_rows[0]["entity_id"]) == 2
 
+    expired_rows = to_rows(new_expired)
+    assert len(expired_rows) == 1
+    assert expired_rows[0]["name"] == "before"
+    assert expired_rows[0][VALID_FROM].to_pydatetime() == TS_1
+    assert expired_rows[0][VALID_TO].to_pydatetime() == TS_2
 
-def test_latest_t_takes_precedence():
-    """Two T's in the batch — the LATEST T sets the cutoff."""
+
+def test_each_t_closes_the_versions_opened_before_it():
+    """Two T's in the batch: the version opened between them is closed by
+    the second T; only ops after the last T reach valid."""
     bronze = [
         make_t_sentinel(TS_1),
         make_bronze_batch(
             [
-                ("t1", 1, "between", OP_INSERT, TS_2),  # between T1 and T2 — dropped
+                ("t1", 1, "between", OP_INSERT, TS_2),
             ]
         ),
         make_t_sentinel(TS_3),
         make_bronze_batch(
             [
-                ("t1", 2, "after-T2", OP_INSERT, TS_4),  # after T2 — kept
+                ("t1", 2, "after-T2", OP_INSERT, TS_4),
             ]
         ),
     ]
-    new_valid, _ = call(bronze, valid_head=None)
+    new_valid, new_expired = call(bronze, valid_head=None)
 
     valid_rows = to_rows(new_valid)
     assert len(valid_rows) == 1
     assert valid_rows[0]["name"] == "after-T2"
+
+    expired_rows = to_rows(new_expired)
+    assert len(expired_rows) == 1
+    assert expired_rows[0]["name"] == "between"
+    assert expired_rows[0][VALID_TO].to_pydatetime() == TS_3
+
+
+def test_t_sentinel_cuts_by_arrival_order_among_equal_timestamps():
+    """A T sharing its source_ts with the rows around it (one source
+    transaction) cuts at its position: the row before it closes, the row
+    after it stays valid. An update before the T is kept in history."""
+    prior = make_valid_head([("t1", 1, "Alice@v0", TS_PRIOR)])
+    bronze = [
+        make_bronze_batch(
+            [
+                ("t1", 1, "Alice@v1", OP_UPDATE, TS_1),
+                ("t1", 2, "Bob", OP_INSERT, TS_2),
+                (None, None, None, OP_TOMBSTONE, TS_2),
+                ("t1", 3, "Carol", OP_INSERT, TS_2),
+            ]
+        )
+    ]
+    new_valid, new_expired = call(bronze, valid_head=prior)
+
+    valid_rows = to_rows(new_valid)
+    assert [r["name"] for r in valid_rows] == ["Carol"]
+
+    by_name = {r["name"]: r for r in to_rows(new_expired)}
+    # Bob opens and closes at TS_2: zero-length, dropped.
+    assert set(by_name) == {"Alice@v0", "Alice@v1"}
+    assert by_name["Alice@v0"][VALID_TO].to_pydatetime() == TS_1
+    assert by_name["Alice@v1"][VALID_FROM].to_pydatetime() == TS_1
+    assert by_name["Alice@v1"][VALID_TO].to_pydatetime() == TS_2
+
+
+def test_load_row_resets_and_never_becomes_a_version():
+    """A CDC L row empties the table like a T; the inserts after it are the
+    new state. Keys missing from the load close at the L's source_ts, and
+    the L row itself (null key) never lands in either output."""
+    prior = make_valid_head(
+        [
+            ("t1", 1, "Alice@v0", TS_PRIOR),
+            ("t1", 9, "Gone", TS_PRIOR),
+        ]
+    )
+    bronze = [
+        make_bronze_batch(
+            [
+                (None, None, None, OP_LOAD, TS_1),
+                ("t1", 1, "Alice@v0", OP_INSERT, TS_1),
+                ("t1", 2, "Bob", OP_INSERT, TS_1),
+            ]
+        )
+    ]
+    new_valid, new_expired = call(bronze, valid_head=prior)
+
+    valid_rows = to_rows(new_valid)
+    assert sorted(int(r["entity_id"]) for r in valid_rows) == [1, 2]
+    assert all(r[VALID_FROM].to_pydatetime() == TS_1 for r in valid_rows)
+
+    expired_rows = to_rows(new_expired)
+    assert sorted(int(r["entity_id"]) for r in expired_rows) == [1, 9]
+    assert all(r[VALID_TO].to_pydatetime() == TS_1 for r in expired_rows)
+
+
+def test_reset_only_batch_empties_valid_and_next_fire_keeps_it_empty():
+    """A batch holding only a reset closes everything and leaves valid
+    empty. The next fire with no bronze rows returns that empty state
+    instead of raising."""
+    prior = make_valid_head([("t1", 1, "Alice@v0", TS_PRIOR)])
+    new_valid, new_expired = call([make_t_sentinel(TS_1)], valid_head=prior)
+
+    assert to_rows(new_valid) == []
+    assert [r["name"] for r in to_rows(new_expired)] == ["Alice@v0"]
+
+    next_valid, next_expired = call([], valid_head=new_valid, expired_head=new_expired)
+    assert to_rows(next_valid) == []
+    assert [r["name"] for r in to_rows(next_expired)] == ["Alice@v0"]
+
+
+def test_ops_sharing_a_timestamp_leave_no_zero_length_version():
+    """I then U on one key at the same source_ts: the I version would open
+    and close at the same instant, so it is dropped rather than kept with
+    the same valid_from as the U version."""
+    bronze = [
+        make_bronze_batch(
+            [
+                ("t1", 1, "v0", OP_INSERT, TS_1),
+                ("t1", 1, "v1", OP_UPDATE, TS_1),
+            ]
+        )
+    ]
+    new_valid, new_expired = call(bronze, valid_head=None)
+
+    assert [r["name"] for r in to_rows(new_valid)] == ["v1"]
+    assert to_rows(new_expired) == []
 
 
 # ── Bronze-metadata flow-through ────────────────────────────────────────────

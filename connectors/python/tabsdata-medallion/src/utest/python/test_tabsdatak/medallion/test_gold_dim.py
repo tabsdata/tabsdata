@@ -204,6 +204,17 @@ def test_type1_none_silver_head_returns_none():
     assert build_type1_dim(None) is None
 
 
+def test_type1_empty_silver_head_returns_empty_dim():
+    """A reset emptied the silver table → an empty dim that still carries
+    entity_sk, with no @td.medallion.pk to read the natural key from."""
+    empty_valid = empty_like(make_valid_silver([("t1", 1, "NYC", TS_1)]))
+    out = build_type1_dim(empty_valid)
+
+    assert to_rows(out) == []
+    assert ENTITY_SK in user_cols(out)
+    assert M_PK not in user_cols(out)
+
+
 def test_type1_entity_sk_deterministic_for_same_key():
     valid_a = make_valid_silver([("t1", 1, "NYC", TS_1)])
     valid_b = make_valid_silver([("t1", 1, "BOSTON", TS_3)])  # same key, diff value
@@ -340,6 +351,19 @@ def test_type2_empty_expired_frame_is_skipped():
     empty_expired = empty_like(make_expired_silver([("t1", 9, "X", TS_1, TS_2)]))
     out = build_type2_dim(None, [empty_expired], valid)
     assert len(to_rows(out)) == 1
+
+
+def test_type2_empty_valid_head_after_reset():
+    """A reset closed every version and emptied the valid silver table →
+    history holds only the closed versions; the empty valid branch adds no
+    rows and does not fail reading the natural key."""
+    empty_valid = empty_like(make_valid_silver([("t1", 1, "NYC", TS_1)]))
+    expired = make_expired_silver([("t1", 1, "NYC", TS_1, TS_2)])
+    out = build_type2_dim(None, [expired], empty_valid)
+
+    rows = to_rows(out)
+    assert len(rows) == 1
+    assert rows[0][VERSION_SK] is not None
 
 
 def test_type2_multiple_expired_commits_concatenated():

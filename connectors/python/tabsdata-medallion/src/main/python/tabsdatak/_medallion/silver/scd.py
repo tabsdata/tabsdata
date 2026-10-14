@@ -7,7 +7,7 @@ from datetime import timezone
 
 import polars as pl
 
-from tabsdatak._medallion.bronze.cdc import OP_DELETE, OP_TOMBSTONE
+from tabsdatak._medallion.bronze.cdc import OP_DELETE, RESET_OPS
 from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_BRONZE_TS,
     MEDALLION_SYSTEM_COLUMN_OP,
@@ -17,9 +17,16 @@ from tabsdatak._medallion.constants import (
     MEDALLION_SYSTEM_COLUMN_VALID_TO,
 )
 from tabsdatak.tableframe import TableFrame
-from tabsdatak.tableframe.functions import col, concat, lit
+from tabsdatak.tableframe.functions import col, concat
 
 logger = logging.getLogger(__name__)
+
+_POSITION = "_position"
+_SEGMENT = "_segment"
+_CLOSING_SEGMENT = "_closing_segment"
+_RESET_TS = "_reset_ts"
+_NEXT_TS = "_next_ts"
+_HELPER_COLUMNS = [_POSITION, _SEGMENT, _CLOSING_SEGMENT, _RESET_TS, _NEXT_TS]
 
 
 def _is_empty(tf: TableFrame) -> bool:
@@ -51,13 +58,25 @@ def build_scd2_silver(
     The PK column list is read from the bronze rows' ``@td.medallion.pk`` column
     (stamped by the bronze helpers) — no ``pk`` arg needed.
 
-    T-sentinel behavior:
-      - The latest T in the batch acts as a hard reset of the valid
-        state. Ops at-or-before the latest T's source_ts are dropped;
-        ops after are re-folded into the new ``_valid_raw``.
-      - ALL prior-valid rows are moved into ``_expired_raw`` with
-        ``@td.medallion.valid_to = T.source_ts``. Nothing disappears — the T
-        is recorded as the closing event for every active row.
+    Ordering: rows are applied by ``@td.medallion.source_ts``; rows with
+    equal timestamps keep their arrival order (commit order, then row order
+    within a commit), which is the source's log order for CDC bronze.
+
+    Reset behavior (T sentinel or CDC L load row):
+      - A reset empties the table at its position in that order. Every
+        version open at that point — prior valid rows and versions opened
+        earlier in the batch — closes with
+        ``@td.medallion.valid_to = reset.source_ts`` and moves to
+        ``_expired_raw``. Rows after the reset start from an empty table.
+      - Rows before the reset are applied first, so their versions are kept
+        in ``_expired_raw``; nothing is dropped. A batch may hold several
+        resets.
+      - Reset rows never become versions.
+
+    Versions that close at the instant they open (``valid_from ==
+    valid_to``, e.g. two ops on a key in one transaction) are dropped: no
+    point in time falls inside them, and keeping them would give two versions
+    of a key the same ``valid_from``.
 
     Bronze metadata (``@td.medallion.op`` / ``@td.medallion.bronze_ts`` /
     ``@td.medallion.pk`` /
@@ -84,139 +103,96 @@ def build_scd2_silver(
     frames = [frame for frame in (bronze or []) if frame is not None]
     incoming = concat(frames, how="diagonal_relaxed") if frames else None
 
-    # No new bronze rows this fire → there's nothing to fold. Return
-    # the prior valid state unchanged plus an empty expired frame
-    # (same schema as valid_head so the caller's write of
-    # `_expired_raw` doesn't drift from the existing schema).
+    # No new bronze rows this fire → there's nothing to fold. Return the
+    # prior state unchanged. An empty valid_head is legitimate (a reset
+    # emptied the table); only a missing one leaves nothing to return.
     if incoming is None or _is_empty(incoming):
-        if valid_head is None or _is_empty(valid_head):
+        if valid_head is None:
             raise ValueError(
                 "build_scd2_silver: bronze input is empty and valid_head is "
-                "None/empty — nothing to process and no schema reference for "
-                "the empty expired output."
+                "None — nothing to process."
             )
         return valid_head, expired_head
 
-    incoming = incoming.sort(MEDALLION_SYSTEM_COLUMN_SOURCE_TS, maintain_order=True)
+    incoming = _in_arrival_order(incoming)
+    pk_cols = _pk_cols(incoming)
 
-    # PK column names ride on every bronze row in `@td.medallion.pk`. Read from
-    # the first row. ``.item()`` can't be used here — its
-    # implementation aggregates via ``.min()``, which polars rejects
-    # for List dtypes — so we go through pandas to extract the cell.
-    pk_cols = list(
-        incoming
-        .select(col(MEDALLION_SYSTEM_COLUMN_PK))
-        ._to_pandas()[MEDALLION_SYSTEM_COLUMN_PK]
-        .iloc[0]
-    )
-
-    # T sentinels signal a state reset. Drop ops at-or-before the
-    # latest T's source_ts; re-fold from ops after. ALL prior valid
-    # rows are closed at the T's source_ts and moved to expired_raw
-    # via the bridge logic below (no rows disappear).
-    t_rows = incoming.filter(col(MEDALLION_SYSTEM_COLUMN_OP) == OP_TOMBSTONE)
-    has_erase = not _is_empty(t_rows)
-    if has_erase:
-        cutoff = (
-            t_rows
-            .select(col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).max())
-            ._to_polars_df()
-            .item()
-        )
-        ops = incoming.filter(
-            (col(MEDALLION_SYSTEM_COLUMN_OP) != OP_TOMBSTONE)
-            & (col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS) >= cutoff)
-        )
-        t_close_ts = cutoff
-    else:
-        ops = incoming.filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_TOMBSTONE)
-        t_close_ts = None
-    prior_valid: TableFrame | None = valid_head
-
-    # Per-PK shift: for each op, look up the source_ts of the NEXT op
-    # in this PK's history. That source_ts becomes the row's @td.medallion.valid_to.
-    # Tabsdata's sort(by, *more_by) wraps `by` and prepends — pass the
-    # columns positionally so each becomes its own sort key rather
-    # than a single list-literal expression.
-    ops_sorted = ops.sort(*pk_cols, MEDALLION_SYSTEM_COLUMN_SOURCE_TS)
-    enriched = ops_sorted.with_columns([
-        pl
-        .col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS)
-        .shift(-1)
-        .over(pk_cols)
-        .alias("_next_ts")
+    is_reset = col(MEDALLION_SYSTEM_COLUMN_OP).is_in(list(RESET_OPS))
+    ops = incoming.filter(~is_reset)
+    # Segment k (k >= 1) starts at the k-th reset; each reset closes the
+    # segment before it.
+    resets = incoming.filter(is_reset).select([
+        col(_SEGMENT).alias(_CLOSING_SEGMENT),
+        col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).alias(_RESET_TS),
     ])
+    first_reset_ts = (
+        None
+        if _is_empty(resets)
+        else resets.select(col(_RESET_TS).min())._to_polars_df().item()
+    )
 
-    # New EXPIRED from intra-batch transitions: every I/U row whose
-    # next op exists (U or D) was closed within this batch.
-    intra_batch_expired = (
-        enriched
+    # Each version ends at the next op on its key in the same segment, else
+    # at the reset that closes its segment, else it stays open.
+    versions = (
+        ops
+        .sort(*pk_cols, MEDALLION_SYSTEM_COLUMN_SOURCE_TS, _POSITION)
+        .with_columns([
+            pl
+            .col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS)
+            .shift(-1)
+            .over([*pk_cols, _SEGMENT])
+            .alias(_NEXT_TS),
+            (pl.col(_SEGMENT) + 1).alias(_CLOSING_SEGMENT),
+        ])
+        .join(resets, on=_CLOSING_SEGMENT, how="left")
         .filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_DELETE)
-        .filter(col("_next_ts").is_not_null())
         .with_columns([
             col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).alias(
                 MEDALLION_SYSTEM_COLUMN_VALID_FROM
             ),
-            col("_next_ts").alias(MEDALLION_SYSTEM_COLUMN_VALID_TO),
+            pl
+            .coalesce(pl.col(_NEXT_TS), pl.col(_RESET_TS))
+            .cast(pl.Datetime(time_zone=timezone.utc))
+            .alias(MEDALLION_SYSTEM_COLUMN_VALID_TO),
         ])
-        .drop("_next_ts")
+        .drop(_HELPER_COLUMNS)
+    )
+    # A D op closes the key's previous version (through _next_ts above) and
+    # opens nothing.
+    new_valid = versions.filter(col(MEDALLION_SYSTEM_COLUMN_VALID_TO).is_null())
+    batch_expired = _drop_zero_length(
+        versions.filter(col(MEDALLION_SYSTEM_COLUMN_VALID_TO).is_not_null())
     )
 
-    # New VALID: the last I/U op per PK in the batch (no next op).
-    # If the last op for a PK is D, no row lands here — the PK has no
-    # valid version anymore. The prior I/U row's _next_ts already
-    # captured the close in intra_batch_expired.
-    new_valid = (
-        enriched
-        .filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_DELETE)
-        .filter(col("_next_ts").is_null())
-        .with_columns([
-            col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).alias(
-                MEDALLION_SYSTEM_COLUMN_VALID_FROM
-            ),
-            pl.lit(None, dtype=pl.Datetime(time_zone=timezone.utc)).alias(
-                MEDALLION_SYSTEM_COLUMN_VALID_TO
-            ),
-        ])
-        .drop("_next_ts")
-    )
-
-    # Bridge into prior valid state. Two cases:
-    #   - T fired: ALL prior valid rows close at the T's source_ts.
-    #     No rows carry forward — every row in prior_valid moves to
-    #     expired_raw with @td.medallion.valid_to = T.source_ts.
-    #   - Normal: only PKs whose first batch op exists close their
-    #     prior valid row, stamwped with @td.medallion.valid_to = that first batch
-    #     op's source_ts. PKs untouched in this batch carry through.
+    # Bridge into prior valid state: a prior row closes at its key's first
+    # op before the first reset, else at the first reset. With no reset,
+    # untouched keys carry through.
+    prior_valid: TableFrame | None = valid_head
     if prior_valid is None or _is_empty(prior_valid):
         logger.debug("No prior valid state; skipping bridge logic")
         prior_carried: TableFrame | None = None
         bridge_expired: TableFrame | None = None
-    elif has_erase:
-        logger.debug(
-            "T sentinel detected; closing ALL prior valid rows at %s", t_close_ts
-        )
-        bridge_expired = prior_valid.with_columns(
-            lit(t_close_ts).alias(MEDALLION_SYSTEM_COLUMN_VALID_TO)
-        )
-        prior_carried = None
     else:
-        first_op_per_pk = ops_sorted.unique(subset=pk_cols, keep="first").select([
-            *pk_cols,
-            col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).alias("_close_ts"),
-        ])
+        first_op_per_pk = (
+            ops
+            .filter(col(_SEGMENT) == 0)
+            .sort(*pk_cols, MEDALLION_SYSTEM_COLUMN_SOURCE_TS, _POSITION)
+            .unique(subset=pk_cols, keep="first")
+            .select([*pk_cols, col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).alias(_NEXT_TS)])
+        )
         prior_joined = prior_valid.join(first_op_per_pk, on=pk_cols, how="left")
-        # Touched → move to expired with the new @td.medallion.valid_to.
-        bridge_expired = (
+        if first_reset_ts is not None:
+            logger.debug("Reset detected; closing all prior valid rows")
+            prior_joined = prior_joined.with_columns(
+                pl.col(_NEXT_TS).fill_null(pl.lit(first_reset_ts))
+            )
+        bridge_expired = _drop_zero_length(
             prior_joined
-            .filter(col("_close_ts").is_not_null())
-            .with_columns(col("_close_ts").alias(MEDALLION_SYSTEM_COLUMN_VALID_TO))
-            .drop("_close_ts")
+            .filter(col(_NEXT_TS).is_not_null())
+            .with_columns(col(_NEXT_TS).alias(MEDALLION_SYSTEM_COLUMN_VALID_TO))
+            .drop(_NEXT_TS)
         )
-        # Untouched → still valid; carry through.
-        prior_carried = prior_joined.filter(col("_close_ts").is_null()).drop(
-            "_close_ts"
-        )
+        prior_carried = prior_joined.filter(col(_NEXT_TS).is_null()).drop(_NEXT_TS)
 
     # Combine for the two outputs.
     valid_pieces: list[TableFrame] = [new_valid]
@@ -224,7 +200,7 @@ def build_scd2_silver(
         valid_pieces.insert(0, prior_carried)
     new_valid_state = concat(valid_pieces, how="diagonal_relaxed")
 
-    expired_pieces: list[TableFrame] = [intra_batch_expired]
+    expired_pieces: list[TableFrame] = [batch_expired]
     if bridge_expired is not None:
         expired_pieces.insert(0, bridge_expired)
     if expired_head is not None:
@@ -241,10 +217,11 @@ def build_scd1_silver(
     """
     SCD1 change-detect for the silver layer (reference data).
 
-    Folds CDC bronze rows (I/U/D/T ops) into a single SCD1-shaped raw
-    table: one row per PK, always reflecting the latest observed state.
-    I/U → upsert; D → drop; T → reset prior state and re-fold from ops
-    after the latest T's source_ts.
+    Folds CDC bronze rows (I/U/D ops, T/L resets) into a single SCD1-shaped
+    raw table: one row per PK, always reflecting the latest observed state.
+    I/U → upsert; D → drop; a reset (T sentinel or CDC L load row) empties
+    the table, so only the ops after the last reset are folded, in the order
+    ``build_scd2_silver`` describes.
 
     The helper is called by a stage-1 silver transformer that writes
     ``_scd1_raw`` in REPLACE mode — the helper emits the full new
@@ -271,47 +248,29 @@ def build_scd1_silver(
     incoming = concat(frames, how="diagonal_relaxed") if frames else None
 
     # No new bronze rows this fire → return the prior scd1 state
-    # unchanged. If there's no prior state either there's nothing to
-    # return — surface that as a precondition violation rather than
-    # silently emitting an empty frame with an unknown schema.
+    # unchanged. An empty scd1_head is legitimate (a reset emptied the
+    # table); only a missing one leaves nothing to return.
     if incoming is None or _is_empty(incoming):
-        if scd1_head is None or _is_empty(scd1_head):
+        if scd1_head is None:
             raise ValueError(
                 "build_scd1_silver: bronze input is empty and scd1_head is "
-                "None/empty — nothing to process."
+                "None — nothing to process."
             )
         return scd1_head
 
-    incoming = incoming.sort(MEDALLION_SYSTEM_COLUMN_SOURCE_TS, maintain_order=True)
-    pk_cols = list(
-        incoming
-        .select(col(MEDALLION_SYSTEM_COLUMN_PK))
-        ._to_pandas()[MEDALLION_SYSTEM_COLUMN_PK]
-        .iloc[0]
-    )
+    incoming = _in_arrival_order(incoming)
+    pk_cols = _pk_cols(incoming)
 
-    # T sentinels reset prior state.
-    t_rows = incoming.filter(col(MEDALLION_SYSTEM_COLUMN_OP) == OP_TOMBSTONE)
-    has_erase = not _is_empty(t_rows)
-    if has_erase:
-        cutoff = (
-            t_rows
-            .select(col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS).max())
-            ._to_polars_df()
-            .item()
-        )
-        ops = incoming.filter(
-            (col(MEDALLION_SYSTEM_COLUMN_OP) != OP_TOMBSTONE)
-            & (col(MEDALLION_SYSTEM_COLUMN_SOURCE_TS) >= cutoff)
-        )
-        prior: TableFrame | None = None
-    else:
-        ops = incoming.filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_TOMBSTONE)
-        prior = scd1_head
+    last_segment = incoming.select(col(_SEGMENT).max())._to_polars_df().item()
+    ops = incoming.filter(
+        (col(_SEGMENT) == last_segment)
+        & ~col(MEDALLION_SYSTEM_COLUMN_OP).is_in(list(RESET_OPS))
+    )
+    prior = scd1_head if last_segment == 0 else None
 
     # SCD1: only the LAST op per PK in this batch matters. I→U→D
     # collapses to "deleted"; I→D→I collapses to "inserted".
-    latest = ops.unique(subset=pk_cols, keep="last")
+    latest = ops.unique(subset=pk_cols, keep="last").drop([_POSITION, _SEGMENT])
 
     upserts = latest.filter(col(MEDALLION_SYSTEM_COLUMN_OP) != OP_DELETE)
     affected_pks = latest.select(pk_cols)
@@ -321,6 +280,52 @@ def build_scd1_silver(
 
     survivors = prior.join(affected_pks, on=pk_cols, how="anti")
     return concat([survivors, upserts], how="diagonal_relaxed")
+
+
+def _in_arrival_order(incoming: TableFrame) -> TableFrame:
+    """Order bronze rows for folding and number their reset segments.
+
+    Sorts by ``@td.medallion.source_ts``; rows with equal timestamps keep
+    their arrival order (``_POSITION``: commit order, then row order), so a
+    reset sharing a timestamp with its neighbours stays between them.
+    ``_SEGMENT`` counts the resets at or before each row: segment 0 is
+    everything before the first reset.
+    """
+    return (
+        incoming
+        .with_columns(pl.int_range(pl.len()).alias(_POSITION))
+        .sort(MEDALLION_SYSTEM_COLUMN_SOURCE_TS, _POSITION)
+        .with_columns(
+            pl
+            .col(MEDALLION_SYSTEM_COLUMN_OP)
+            .is_in(list(RESET_OPS))
+            .cast(pl.Int64)
+            .cum_sum()
+            .alias(_SEGMENT)
+        )
+    )
+
+
+def _pk_cols(incoming: TableFrame) -> list[str]:
+    """PK column names, read from the first bronze row's ``@td.medallion.pk``.
+
+    ``.item()`` can't be used here — its implementation aggregates via
+    ``.min()``, which polars rejects for List dtypes — so we go through
+    pandas to extract the cell.
+    """
+    return list(
+        incoming
+        .select(col(MEDALLION_SYSTEM_COLUMN_PK))
+        ._to_pandas()[MEDALLION_SYSTEM_COLUMN_PK]
+        .iloc[0]
+    )
+
+
+def _drop_zero_length(expired: TableFrame) -> TableFrame:
+    """Drop versions that close at the instant they open."""
+    return expired.filter(
+        col(MEDALLION_SYSTEM_COLUMN_VALID_FROM) != col(MEDALLION_SYSTEM_COLUMN_VALID_TO)
+    )
 
 
 def _strip_bronze_metadata(tf: TableFrame) -> TableFrame:

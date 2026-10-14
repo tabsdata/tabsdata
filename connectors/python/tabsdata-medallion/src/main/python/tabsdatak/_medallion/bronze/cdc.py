@@ -29,7 +29,13 @@ from tabsdatak.tableframe.schema import Schema
 OP_INSERT = "i"
 OP_UPDATE = "u"
 OP_DELETE = "d"
-OP_TOMBSTONE = "t"  # erase sentinel — wipes prior state
+# Table emptied at this position: a synthetic bootstrap reset, or a source TRUNCATE
+# in a CDC stream.
+OP_TOMBSTONE = "t"
+# CDC initial load — wipes prior state; the inserts that follow are the full state.
+OP_LOAD = "l"
+# Ops that empty the table at their position: every version open there closes.
+RESET_OPS = (OP_TOMBSTONE, OP_LOAD)
 
 
 def build_cdc_bronze(
@@ -38,15 +44,27 @@ def build_cdc_bronze(
     pk: list[dict],
 ) -> TableFrame:
     """
-    Combine CDC commits (and an optional bootstrap snapshot) into a single bronze
-    stream.
+    Combine CDC commits (and, in legacy pipelines, a bootstrap snapshot) into a
+    single bronze stream.
+
+    New pipelines pass ``full_commits=[]`` and take the initial load from the
+    CDC stream itself: set ``initial_load=True`` on the ``*CdcStreamSrc``, and
+    the stream emits an ``l`` (load) row followed by the snapshot rows as
+    inserts, then continues from the snapshot's exact log position with no gap
+    and no duplicates. To resync, reset the stream publisher's stage
+    (``tdk fn update --reset-stage``) with ``initial_load=True``. CDC rows pass
+    through with their op, including ``l`` and ``t`` (truncate); silver treats
+    both as resets.
 
     Args:
-        full_commits: Tableframes representing full commits (bootstraps). These are
-            complete snapshots of the source data at a point in time. They are used for
-            initial onboarding or full resyncs.
-        cdc_commits: TableFrames representing CDC commits. These are incremental change
-            logs that capture inserts, updates, and deletes after the initial bootstrap.
+        full_commits: Legacy, kept only for existing deployments. Full snapshots
+            read by a separate batch publisher, used to bootstrap or resync
+            bronze: the latest one is emitted as a ``t`` reset row plus inserts.
+            Such a snapshot has no log position, so CDC events landing in the
+            same run that are not newer than the bootstrap time are dropped.
+            Pass ``[]`` in new pipelines.
+        cdc_commits: TableFrames representing CDC commits: the stream's rows
+            (``i``/``u``/``d``, and ``l``/``t`` control rows) in log order.
         pk: ordered list of single-key dicts mapping each primary-key column name to its
             tabsdata dtype. Example:
                 [{"tenant_id": td.String}, {"entity_id": td.Int64}]
