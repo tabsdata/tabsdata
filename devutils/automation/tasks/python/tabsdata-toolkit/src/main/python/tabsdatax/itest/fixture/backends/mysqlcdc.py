@@ -43,6 +43,8 @@ class MysqlcdcDomain(Domain):
     model: str | None = None
     data: str | None = None
     entities: dict[str, int] | None = None  # {table: record count}, once loaded
+    # A user without RELOAD, refused the global read lock (same password).
+    no_lock_user: str | None = None
 
 
 def mysqlcdc_system(name: str):
