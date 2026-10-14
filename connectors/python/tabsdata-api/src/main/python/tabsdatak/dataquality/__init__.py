@@ -62,9 +62,9 @@ from tabsdatak.dataquality._operator import (
     RowCountThreshold as RowCountThreshold,
     Select as Select,
     Summary as Summary,
-    SummaryTrend as SummaryTrend,
     TagOperator as TagOperator,
     Threshold as Threshold,
+    Trends as Trends,
 )
 from tabsdatak.dataquality._typing import (
     MAX_BINS as MAX_BINS,

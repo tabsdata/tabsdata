@@ -247,7 +247,7 @@ class DataQualityProcessor:
             for operator in action.operators or []:
                 if not isinstance(operator, Summary):
                     continue
-                trend = operator.trend
+                trend = operator.trends
                 if trend is None:
                     continue
                 names.append(
@@ -268,9 +268,9 @@ class DataQualityProcessor:
         One :class:`TransformerInfo` per ``Summary`` operator declared on an
         output action. Each reads that operator's summary table plus its own
         previous version, and writes the trend table named by
-        ``SummaryTrend.table``, falling back to ``<target>_dq_summary_trends``
+        ``Trends.table``, falling back to ``<target>_dq_summary_trends``
         when it is ``None``. Each is named ``<trend table>_trend``. A
-        ``Summary`` whose ``trend`` is ``None`` contributes nothing.
+        ``Summary`` whose ``trends`` is ``None`` contributes nothing.
         """
         transformers: list[TrendTransformerInfo] = []
         for action in self._output_actions:
@@ -278,7 +278,7 @@ class DataQualityProcessor:
             for operator in action.operators or []:
                 if not isinstance(operator, Summary):
                     continue
-                trend = operator.trend
+                trend = operator.trends
                 if trend is None:
                     continue
                 summary_table = self.table_name_for_summary(

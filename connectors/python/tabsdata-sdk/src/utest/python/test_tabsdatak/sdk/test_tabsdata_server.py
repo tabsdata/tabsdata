@@ -385,16 +385,20 @@ def test_create_archive_publisher_cron_extracts_metadata(project_root, _no_op_bu
 def test_create_archive_parents_each_derived_table_on_its_output(
     project_root, _no_op_bundle
 ):
-    from tabsdatak.dataquality import DataQuality, IsNull, Summary
+    from tabsdatak.dataquality import DataQuality, IsNull, Summary, Trends
 
     info = _transformer_info(output_tables=["b", "c"])
     info.on_tables = [
-        DataQuality("b", classifiers=[IsNull(["value"])], operators=[Summary()]),
+        DataQuality(
+            "b",
+            classifiers=[IsNull(["value"])],
+            operators=[Summary(trends=Trends())],
+        ),
         # A custom name still summarizes the table its action is declared on.
         DataQuality(
             "c",
             classifiers=[IsNull(["value"])],
-            operators=[Summary(table="c_custom")],
+            operators=[Summary(table="c_custom", trends=Trends())],
         ),
     ]
     with tempfile.TemporaryDirectory() as tmp:

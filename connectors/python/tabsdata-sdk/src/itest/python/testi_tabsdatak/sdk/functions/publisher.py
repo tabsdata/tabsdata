@@ -15,7 +15,7 @@ import polars as pl
 
 from tabsdatak.api import TableFrameSpec, publisher
 from tabsdatak.conn.dev import Data, DataGenSrc
-from tabsdatak.dataquality import DataQuality, IsPositive, Summary, SummaryTrend
+from tabsdatak.dataquality import DataQuality, IsPositive, Summary, Trends
 
 PUBLISHED_TABLE = "trend_source"
 
@@ -44,22 +44,22 @@ def _movable_summary_of(table: str) -> DataQuality:
     return DataQuality(
         table=table,
         classifiers=[IsPositive(["amount"])],
-        operators=[Summary(table=MOVABLE_SUMMARY_TABLE, trend=None)],
+        operators=[Summary(table=MOVABLE_SUMMARY_TABLE)],
     )
 
 
-def _action(trend: SummaryTrend | None) -> DataQuality:
+def _action(trends: Trends | None) -> DataQuality:
     return DataQuality(
         table=PUBLISHED_TABLE,
         classifiers=[IsPositive(["amount"])],
-        operators=[Summary(trend=trend)],
+        operators=[Summary(trends=trends)],
     )
 
 
 @publisher(
     source=_SOURCE,
     output_tables=[PUBLISHED_TABLE],
-    on_tables=[_action(SummaryTrend())],
+    on_tables=[_action(Trends())],
 )
 def pub_with_default_trend(frame: TableFrameSpec) -> TableFrameSpec:
     return frame
@@ -68,7 +68,7 @@ def pub_with_default_trend(frame: TableFrameSpec) -> TableFrameSpec:
 @publisher(
     source=_SOURCE,
     output_tables=[PUBLISHED_TABLE],
-    on_tables=[_action(SummaryTrend(table=CUSTOM_TREND_TABLE))],
+    on_tables=[_action(Trends(table=CUSTOM_TREND_TABLE))],
 )
 def pub_with_custom_trend(frame: TableFrameSpec) -> TableFrameSpec:
     return frame
@@ -77,7 +77,7 @@ def pub_with_custom_trend(frame: TableFrameSpec) -> TableFrameSpec:
 @publisher(
     source=_SOURCE,
     output_tables=[PUBLISHED_TABLE],
-    on_tables=[_action(SummaryTrend(days=1, weeks=2, months=3))],
+    on_tables=[_action(Trends(days=1, weeks=2, months=3))],
 )
 def pub_with_custom_retention(frame: TableFrameSpec) -> TableFrameSpec:
     return frame

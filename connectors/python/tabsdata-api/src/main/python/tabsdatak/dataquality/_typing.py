@@ -112,7 +112,7 @@ A type alias that specifies which side of a range is closed (inclusive).
 # --- Value Set Specifications ---
 
 ValuesSpec: TypeAlias = Annotated[
-    Set[Union[PythonDataTypeSpec, None]], _api.NON_EMPTY_LIST_FIELD
+    frozenset[Union[PythonDataTypeSpec, None]], _api.NON_EMPTY_LIST_FIELD
 ]
 """
 A non-empty set of values to check membership against (``None`` is allowed, to
@@ -161,7 +161,7 @@ A type alias for a percentage value, which can be an integer or a float between
 
 RetentionSpec: TypeAlias = Annotated[StrictInt, Field(ge=0)]
 """
-A type alias for how long one `SummaryTrend` tier keeps a row, counted in that
+A type alias for how long one `Trends` tier keeps a row, counted in that
 tier's own unit of days, weeks or months. A value of zero disables the tier; a
 trend with every tier disabled is refused.
 """

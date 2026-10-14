@@ -212,7 +212,7 @@ def test_a_summary_without_a_trend_is_parented_too(
     collection_factory: CollectionFactory,
 ) -> None:
     # The summary's parent comes from its own action, not from the trend
-    # function, so a summary that opted out of trends still carries it.
+    # function, so a summary without a trend still carries it.
     collection = source_collection(collection_factory)
     register(collection, publisher.pub_without_trend)
 

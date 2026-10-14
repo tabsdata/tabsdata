@@ -19,7 +19,7 @@ from tabsdatak.dataquality import (
     IsPositive,
     RowCountThreshold,
     Summary,
-    SummaryTrend,
+    Trends,
 )
 from tabsdatak.dataquality._error import (
     DataQualityErrorCode,
@@ -198,17 +198,17 @@ def test_table_name_for_trends_takes_a_custom_name_verbatim():
 
 
 def test_trend_table_names_defaults_to_the_target():
-    processor = _processor(_action("out", Summary()))
+    processor = _processor(_action("out", Summary(trends=Trends())))
     assert [i.table for i in processor.trend_table_names()] == ["out_dq_summary_trends"]
 
 
 def test_trend_table_names_uses_a_declared_trend_table():
-    processor = _processor(_action("out", Summary(trend=SummaryTrend(table="t"))))
+    processor = _processor(_action("out", Summary(trends=Trends(table="t"))))
     assert [i.table for i in processor.trend_table_names()] == ["t"]
 
 
-def test_trend_table_names_skips_a_summary_that_opted_out():
-    processor = _processor(_action("out", Summary(trend=None)))
+def test_trend_table_names_skips_a_summary_without_a_trend():
+    processor = _processor(_action("out", Summary()))
     assert processor.trend_table_names() == []
 
 
@@ -227,8 +227,8 @@ def test_table_names_validates_trend_tables_alongside_the_rest():
     processor = _processor(
         _action(
             "out",
-            Summary(table="one", trend=SummaryTrend(table="clash")),
-            Summary(table="two", trend=SummaryTrend(table="clash")),
+            Summary(table="one", trends=Trends(table="clash")),
+            Summary(table="two", trends=Trends(table="clash")),
         )
     )
     with pytest.raises(Exception) as exc:
@@ -239,7 +239,7 @@ def test_table_names_validates_trend_tables_alongside_the_rest():
 def test_build_trend_transformers_info_reads_the_summary_and_its_own_table(
     transformers,
 ):
-    processor = _processor(_action("out", Summary()))
+    processor = _processor(_action("out", Summary(trends=Trends())))
     (built,) = transformers(processor)
 
     assert built.info.output_tables == ["out_dq_summary_trends"]
@@ -252,29 +252,27 @@ def test_build_trend_transformers_info_reads_the_summary_and_its_own_table(
 
 
 def test_build_trend_transformers_info_follows_a_custom_summary_table(transformers):
-    processor = _processor(_action("out", Summary(table="my_summary")))
+    processor = _processor(_action("out", Summary(table="my_summary", trends=Trends())))
     (built,) = transformers(processor)
     assert built.info.input_tables[0] == "c/my_summary@HEAD"
 
 
 def test_build_trend_transformers_info_names_the_child_after_its_table(transformers):
-    processor = _processor(_action("out", Summary()))
+    processor = _processor(_action("out", Summary(trends=Trends())))
     (built,) = transformers(processor)
     assert built.function_name == "out_dq_summary_trends_trend"
     assert built.table_types == {"out_dq_summary_trends": "DQST"}
 
 
 def test_build_trend_transformers_info_follows_a_custom_trend_table(transformers):
-    processor = _processor(
-        _action("out", Summary(trend=SummaryTrend(table="my_trend")))
-    )
+    processor = _processor(_action("out", Summary(trends=Trends(table="my_trend"))))
     (built,) = transformers(processor)
     assert built.info.output_tables == ["my_trend"]
     assert built.info.input_tables[1] == "my_trend@HEAD"
 
 
-def test_build_trend_transformers_info_skips_a_summary_that_opted_out(transformers):
-    processor = _processor(_action("out", Summary(trend=None)))
+def test_build_trend_transformers_info_skips_a_summary_without_a_trend(transformers):
+    processor = _processor(_action("out", Summary()))
     assert transformers(processor) == []
 
 
@@ -291,8 +289,8 @@ def test_build_trend_transformers_info_builds_one_per_summary(transformers):
     processor = _processor(
         _action(
             "out",
-            Summary(table="one", trend=SummaryTrend(table="one_trend")),
-            Summary(table="two", trend=SummaryTrend(table="two_trend")),
+            Summary(table="one", trends=Trends(table="one_trend")),
+            Summary(table="two", trends=Trends(table="two_trend")),
         )
     )
     built = transformers(processor)
@@ -301,14 +299,14 @@ def test_build_trend_transformers_info_builds_one_per_summary(transformers):
 
 def test_build_trend_transformers_info_bakes_the_declared_retention_in(transformers):
     processor = _processor(
-        _action("out", Summary(trend=SummaryTrend(days=1, weeks=2, months=3)))
+        _action("out", Summary(trends=Trends(days=1, weeks=2, months=3)))
     )
     (built,) = transformers(processor)
     assert built.info.func.__module__.startswith("dq_trend_1d_2w_3m_")
 
 
 def test_build_trend_transformers_info_owns_the_directory_it_generated(transformers):
-    processor = _processor(_action("out", Summary()))
+    processor = _processor(_action("out", Summary(trends=Trends())))
     (built,) = transformers(processor)
     assert isinstance(built.project_root, TemporaryDirectory)
     assert Path(built.project_root.name).is_dir()

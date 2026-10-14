@@ -394,7 +394,7 @@ class Enrich(TagOperator):
 
 
 @_api.dataclass(DataQualityErrorCode.DQC_32)
-class SummaryTrend(_api.JsonSerde):
+class Trends(_api.JsonSerde):
     """The rolling trend derived from DQ Summary runs.
 
     :categories: dq-operator
@@ -426,24 +426,20 @@ class SummaryTrend(_api.JsonSerde):
             Defaults to 24.
 
     Examples:
+        Maintain the trend table with the default retention:
+
         .. code-block:: python
 
-            Summary()
+            Summary(trends=Trends())
 
         Keep exact rows for a week, weeks for a quarter, and no month tier:
 
         .. code-block:: python
 
-            Summary(trend=SummaryTrend(days=7, weeks=13, months=0))
-
-        Opt out of the trend table entirely:
-
-        .. code-block:: python
-
-            Summary(trend=None)
+            Summary(trends=Trends(days=7, weeks=13, months=0))
     """
 
-    __kind__ = "dqSummaryTrend"
+    __kind__ = "dqTrends"
 
     table: TableNameSpec | None = None
     days: RetentionSpec = 7
@@ -451,7 +447,7 @@ class SummaryTrend(_api.JsonSerde):
     months: RetentionSpec = 24
 
     @model_validator(mode="after")
-    def validate_retention_tiers(self) -> "SummaryTrend":
+    def validate_retention_tiers(self) -> "Trends":
         # At least 1 tier has to be non-zero
         if not (self.days or self.weeks or self.months):
             raise DataQualityErrorCode.DQC_33.exception()
@@ -471,9 +467,9 @@ class Summary(TagOperator):
         table: Table to write the report to; a valid table name. If
             `None` (default), a table named `<target>_dq_summary` is
             used.
-        trend: The rolling trend table derived from this report. A
-            default `SummaryTrend()` is used when omitted; pass `None` to
-            opt out of the trend table entirely.
+        trends: The rolling trend table derived from this report. If `None`
+            (default), no trend table is maintained; pass `Trends()` for one
+            with the default retention.
 
     Examples:
         .. code-block:: python
@@ -486,12 +482,18 @@ class Summary(TagOperator):
         .. code-block:: python
 
             Summary(table="orders_quality", tags=["required"])
+
+        Also maintain a rolling trend table with the default retention:
+
+        .. code-block:: python
+
+            Summary(trends=Trends())
     """
 
     __kind__ = "dqSummary"
 
     table: TableNameSpec | None = None
-    trend: SummaryTrend | None = field(default_factory=SummaryTrend)
+    trends: Trends | None = None
 
 
 @_api.dataclass(DataQualityErrorCode.DQC_20)
