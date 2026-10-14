@@ -453,22 +453,27 @@ class RegistrationPositions:
     set ``IBMSNAP_PRUNCNTL`` subscribes to the table), up to which normal
     pruning deletes its rows. ``IBMSNAP_PRUNCNTL.SYNCHPOINT`` is not that
     position: Capture sets it at the subscription's handshake and never
-    moves it again."""
+    moves it again. Also where Capture last cold-started
+    (``IBMSNAP_RESTART.CAPTURE_FIRST_SEQ``): a cold start empties every CD
+    table and captures only from there."""
 
     state: str
     state_info: str | None
     capture_start: bytes | None
     prune_bound: bytes | None
     splits_updates: bool = False
+    cold_start: bytes | None = None
 
     @property
     def floor(self) -> bytes | None:
         """The lowest position every retained row sits above."""
         if self.capture_start is None:
             return None
-        if self.prune_bound is None:
-            return self.capture_start
-        return max(self.capture_start, self.prune_bound)
+        return max(
+            position
+            for position in (self.capture_start, self.prune_bound, self.cold_start)
+            if position is not None
+        )
 
 
 def registration_positions(
@@ -490,7 +495,8 @@ def registration_positions(
             "on p.target_server = s.target_server "
             "and p.apply_qual = s.apply_qual and p.set_name = s.set_name "
             "where p.phys_change_owner = r.cd_owner "
-            "and p.phys_change_table = r.cd_table) "
+            "and p.phys_change_table = r.cd_table), "
+            f"(select capture_first_seq from {ASN_SCHEMA}.ibmsnap_restart) "
             f"from {ASN_SCHEMA}.ibmsnap_register r where {matches}"
         )
     ).fetchall()
@@ -502,9 +508,19 @@ def registration_positions(
                 capture_start=capture_start,
                 prune_bound=prune_bound,
                 splits_updates=(splits or "").strip().upper() == "Y",
+                cold_start=cold_start,
             )
         )
-        for owner, table, state, state_info, capture_start, splits, prune_bound in rows
+        for (
+            owner,
+            table,
+            state,
+            state_info,
+            capture_start,
+            splits,
+            prune_bound,
+            cold_start,
+        ) in rows
     }
 
 
@@ -516,10 +532,11 @@ def verify_positions(
     """Fail unless every row after each table's position is still there.
 
     Capture only removes rows from the oldest up, and only at or below one
-    of the two positions it records: the capture start of the registration
-    or the prune bound of its subscriptions. With both at or below a
-    table's position, nothing after it can have been removed; with either
-    past it, rows after it may have been, so the stream cannot continue."""
+    of the positions it records: the capture start of the registration, the
+    prune bound of its subscriptions, or its last cold start, which empties
+    every CD table. With all of them at or below a table's position,
+    nothing after it can have been removed; with any past it, rows after it
+    may have been, so the stream cannot continue."""
     for cd_table in cd_tables:
         qualified = cd_table.qualified
         position = commits.get(qualified)
@@ -533,6 +550,12 @@ def verify_positions(
                 table=qualified,
                 state=registration.state,
                 info=registration.state_info or "none",
+            )
+        if registration.cold_start is not None and registration.cold_start > position:
+            raise Db2ErrorCode.DB2_36.exception(
+                table=qualified,
+                first=registration.cold_start.hex(),
+                position=position.hex(),
             )
         if registration.capture_start is None or registration.capture_start > position:
             raise Db2ErrorCode.DB2_31.exception(

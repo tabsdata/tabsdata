@@ -214,3 +214,10 @@ class Db2ErrorCode(ErrorCode):
         "an insert (CHG_UPD_TO_DEL_INS = 'Y'), which an initial load cannot "
         "deduplicate: a key swap in one statement would lose a row",
     )  # SqlReplicaInitialLoadSession._pin
+    DB2_36 = ErrorDef(
+        Db2RuntimeException,
+        "Capture cold-started at {first}, past the stream's position {position} "
+        "for CD table {table!r}: a cold start empties every CD table and captures "
+        "only from that point, so changes the stream had not read, and any made "
+        "while Capture was down, are gone. Run the initial load again",
+    )  # verify_positions

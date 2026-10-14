@@ -70,7 +70,7 @@ class _Connection:
         sql = str(statement)
         if "ibmsnap_register r" in sql:
             return _Result([
-                ("ASN", cd, "A", None, CAPTURE_START, "N", CAPTURE_START)
+                ("ASN", cd, "A", None, CAPTURE_START, "N", CAPTURE_START, None)
                 for cd in TABLES.values()
             ])
         if "IBMSNAP_RESTART" in sql:

@@ -503,7 +503,7 @@ CAPTURE_START = b"\x00" * 7 + b"\x01" + b"\x00" * 7 + b"\x10"
 def _registrations(
     *tables, state="A", start=CAPTURE_START, bound=CAPTURE_START, splits="N"
 ):
-    return [("ASN", table, state, None, start, splits, bound) for table in tables]
+    return [("ASN", table, state, None, start, splits, bound, None) for table in tables]
 
 
 SERVER_NOW = datetime(2026, 1, 1, 12, 0, 0)
@@ -806,6 +806,7 @@ def test_a_position_capture_still_covers_passes():
         ({"capture_start": None}, Db2ErrorCode.DB2_31),
         ({"capture_start": _commitseq(6, 0x600)}, Db2ErrorCode.DB2_31),
         ({"prune_bound": _commitseq(6, 0x600)}, Db2ErrorCode.DB2_32),
+        ({"cold_start": _commitseq(6, 0x600)}, Db2ErrorCode.DB2_36),
     ],
 )
 def test_a_position_capture_no_longer_covers_fails(change, code):
@@ -836,6 +837,17 @@ def test_the_floor_is_the_higher_of_the_two_positions():
         prune_bound=_commitseq(2, 0x200),
     )
     assert registration.floor == _commitseq(2, 0x200)
+
+
+def test_a_stream_starting_after_a_cold_start_starts_past_it():
+    registration = RegistrationPositions(
+        state="A",
+        state_info=None,
+        capture_start=_commitseq(1, 0x100),
+        prune_bound=None,
+        cold_start=_commitseq(3, 0x300),
+    )
+    assert registration.floor == _commitseq(3, 0x300)
 
 
 # --- Resume and poll ---------------------------------------------------
@@ -894,6 +906,7 @@ def test_rows_pruned_while_a_poll_reads_them_fail_the_poll(monkeypatch):
             _registrations("T_CD"),
             _registrations("T_CD", bound=_commitseq(6, 0x600)),
         ],
+        captured=_commitseq(9, 0x900),
     )
     watermark = _commitseq(9, 0x900)
     monkeypatch.setattr(bi, "_query_table_watermarks", lambda c: {"ASN.T_CD": watermark})
@@ -919,6 +932,7 @@ def test_a_bounded_poll_reads_up_to_the_bound_once_and_stands_at_it(monkeypatch)
         monkeypatch,
         {"ASN.T_CD": POSITION, "ASN.Q_CD": POSITION},
         [_registrations("T_CD", "Q_CD")],
+        captured=_commitseq(9, 0x900),
     )
     bi._tracked_tables = {"SRC.T": _tracked("T_CD"), "SRC.Q": _tracked("Q_CD")}
     bi._before_img_prefixes = {"SRC.T": None, "SRC.Q": None}
@@ -1081,7 +1095,7 @@ def test_the_prune_bound_is_how_far_the_subscribing_apply_programs_have_read():
     class _Connection:
         def execute(self, statement):
             statements.append(" ".join(str(statement).lower().split()))
-            row = ("ASN", "T_CD", "A", None, COMMITSEQ_ORIGIN, "N", applied)
+            row = ("ASN", "T_CD", "A", None, COMMITSEQ_ORIGIN, "N", applied, None)
             return MagicMock(fetchall=lambda: [row])
 
     positions = registration_positions(
