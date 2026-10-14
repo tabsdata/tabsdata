@@ -672,7 +672,8 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
         except sa.exc.DBAPIError as error:
             logger.warning(
                 "Could not read the cur_commit database setting, so the initial "
-                "load may wait behind uncommitted changes: %s",
+                "load may wait behind uncommitted changes; what it reads stays "
+                "correct either way: %s",
                 error,
             )
             return
@@ -681,7 +682,8 @@ class SqlReplicaInitialLoadSession(InitialLoadSession):
             logger.warning(
                 "The cur_commit database setting is %r rather than 'ON', so the "
                 "initial load waits behind uncommitted changes instead of reading "
-                "the last committed version of each row",
+                "the last committed version of each row; what it reads stays "
+                "correct either way, only slower while writers hold rows",
                 setting,
             )
 

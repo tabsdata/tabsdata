@@ -14,6 +14,10 @@ from sqlalchemy.dialects import mysql
 
 from tabsdatak.conn.common.sql.cdc._json import orjson_default
 
+# The widest decimal a tableframe holds: a 128-bit decimal. A column declared
+# wider, or with no precision at all, is published as text, every digit kept.
+DECIMAL_MAX_PRECISION = 38
+
 # Types whose meaning differs from the generic type they reflect as. A MySQL
 # TIME is an interval of up to 838 hours either way, read as a timedelta by
 # both its driver and its binlog reader, so it is a duration as batch reads
@@ -21,10 +25,6 @@ from tabsdatak.conn.common.sql.cdc._json import orjson_default
 # neither its binlog description (a byte length) nor its catalog one (a
 # precision only when declared) tells that apart reliably, so it is a double,
 # as batch reads publish it.
-# The widest decimal a tableframe holds: a 128-bit decimal. A column declared
-# wider, or with no precision at all, is published as text, every digit kept.
-DECIMAL_MAX_PRECISION = 38
-
 DIALECT_TYPES: dict[type, pa.DataType] = {
     mysql.TIME: pa.duration("us"),
     mysql.FLOAT: pa.float64(),
