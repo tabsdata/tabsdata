@@ -59,7 +59,7 @@ def test_every_table_is_removed_in_one_container_call(cdc):
     for statement in (
         "delete from ASN.ibmsnap_register",
         "delete from ASN.ibmsnap_pruncntl",
-        "drop trigger ASN.LM_TD_X__A",
+        "drop table ASN.TD_X__A",
         "drop table ASN.TD_X__B",
     ):
         assert statement in call
@@ -112,8 +112,8 @@ def test_every_table_is_registered_in_one_container_call(cdc):
     for table in ("A", "B", "D"):
         assert f"alter table S.{table} data capture changes" in call
         assert f"create registration (S.{table})" in call
-        assert "LM_TD_" in call and f"'{table}', 0, 'TDQUAL'" in call
-    assert call.count("IBMSNAP_LOGMARKER TIMESTAMP") == 3
+        assert f"'{table}', 0, 'TDQUAL'" in call
+    assert "IBMSNAP_LOGMARKER" not in call and "create trigger" not in call
     assert call.count("'CAPSTART'") == 3
 
 

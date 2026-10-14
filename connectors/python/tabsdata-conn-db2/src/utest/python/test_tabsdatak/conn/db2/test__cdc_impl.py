@@ -1111,3 +1111,65 @@ def test_the_prune_bound_is_how_far_the_subscribing_apply_programs_have_read():
         "where p.phys_change_owner = r.cd_owner "
         "and p.phys_change_table = r.cd_table)"
     ) in sql
+
+
+# --- The commit's time from the unit of work ---------------------------
+
+
+class _ChangeRows:
+    def __init__(self, rows: list[dict]):
+        self.rows = rows
+        self.statements: list[str] = []
+
+    def execute(self, statement, parameters=None):
+        self.statements.append(" ".join(str(statement).split()))
+        rows = [MagicMock(_mapping=row) for row in self.rows]
+        return MagicMock(yield_per=lambda size: rows)
+
+
+def _changes_read(monkeypatch, logmarker) -> tuple[list, _ChangeRows]:
+    for name in ("OPERATION", "COMMITSEQ", "INTENTSEQ", "LOGMARKER"):
+        column = f"IBMSNAP_{name}"
+        monkeypatch.setattr(
+            _cdc_impl, column, _cdc_impl._SystemColumn(column, column.lower())
+        )
+    bi = _ingester_with_tables(["ASN.T_CD"])
+    bi._server_tz = timezone.utc
+    commit = _commitseq(5, 0x500)
+    connection = _ChangeRows([
+        {
+            "ibmsnap_operation": "I",
+            "ibmsnap_commitseq": commit,
+            "ibmsnap_intentseq": commit,
+            "ibmsnap_logmarker": logmarker,
+        }
+    ])
+    changes = list(
+        bi._query_table_changes(
+            connection=connection,
+            tracked=_tracked("T_CD"),
+            commitseq=_commitseq(1, 0x100),
+            watermark=commit,
+            schema_version=MagicMock(),
+        )
+    )
+    return changes, connection
+
+
+def test_a_change_takes_its_commit_time_from_the_unit_of_work(monkeypatch):
+    committed = datetime(2026, 10, 13, 9, 30)
+    [change], connection = _changes_read(monkeypatch, committed)
+
+    assert change.timestamp == committed.replace(tzinfo=timezone.utc)
+    [sql] = connection.statements
+    assert (
+        'from ASN.T_CD c left join ASN.IBMSNAP_UOW u '
+        'on u."IBMSNAP_COMMITSEQ" = c."IBMSNAP_COMMITSEQ"'
+    ) in sql
+    assert 'u."IBMSNAP_LOGMARKER"' in sql
+
+
+def test_a_change_without_its_unit_of_work_fails_the_read(monkeypatch):
+    with pytest.raises(TabsdataException) as ei:
+        _changes_read(monkeypatch, None)
+    assert ei.value.api_error is Db2ErrorCode.DB2_37

@@ -221,3 +221,9 @@ class Db2ErrorCode(ErrorCode):
         "only from that point, so changes the stream had not read, and any made "
         "while Capture was down, are gone. Run the initial load again",
     )  # verify_positions
+    DB2_37 = ErrorDef(
+        Db2RuntimeException,
+        "CD table {table!r} holds a change committed at {commitseq} with no unit "
+        "of work in IBMSNAP_UOW, which Capture writes in the same commit: its "
+        "time is unknown and the read cannot go on. Run the initial load again",
+    )  # SqlReplicaIngester._query_table_changes

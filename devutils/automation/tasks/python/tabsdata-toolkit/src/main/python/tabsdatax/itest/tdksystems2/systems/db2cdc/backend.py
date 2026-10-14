@@ -13,8 +13,7 @@ apparatus set up at TWO points:
   the ``ASN.IBMSNAP_*`` control tables (``asnclp``), then start ``asncap``.
 * Model install (``after_install_schema``, per table): mark each source table
   ``DATA CAPTURE CHANGES``, ``asnclp create registration`` to materialise its CD
-  staging table, add the ``IBMSNAP_LOGMARKER`` column + trigger the ingester
-  needs, then signal CAPSTART and wait for the registration to go Active.
+  staging table, then signal CAPSTART and wait for the registration to go Active.
   First, for all tables at once, the CD table names are claimed
   (:meth:`Db2Cdc._claim_cd_tables`): an earlier install of this domain's own is
   re-registered, a leftover no live registration holds is reclaimed.
@@ -497,8 +496,8 @@ class Db2Cdc(Db2):
         from `ddl` first when one is given, and return its CD table.
 
         This is the same sequence ``after_install_schema`` runs for the model's
-        tables -- ``data capture changes``, ``asnclp create registration``, the
-        reserved ``IBMSNAP_LOGMARKER`` column, CAPSTART, wait for Active. A test
+        tables -- ``data capture changes``, ``asnclp create registration``,
+        CAPSTART, wait for Active. A test
         that needs a source table of its own goes through here rather than
         reimplementing it, so registration stays defined in one place.
         """
@@ -578,7 +577,6 @@ class Db2Cdc(Db2):
                 f"delete from {_ASN}.ibmsnap_pruncntl where source_owner = "
                 f"'{schema}' and source_table in ({names})",
             ]
-            + [f"drop trigger {_ASN}.LM_{staging}" for staging in stagings]
             + [f"drop table {_ASN}.{staging}" for staging in stagings]
             + (after or [])
         )
@@ -662,7 +660,7 @@ class Db2Cdc(Db2):
     def _drop_cd_table(self, container: str, staging: str) -> None:
         self._clp_batch(
             container,
-            [f"drop trigger {_ASN}.LM_{staging}", f"drop table {_ASN}.{staging}"],
+            [f"drop table {_ASN}.{staging}"],
             ignore_failure=True,
         )
         self._require_cd_tables_gone(container, [staging])
@@ -681,7 +679,7 @@ class Db2Cdc(Db2):
         The inherited teardown only drops the schema, which is not enough here:
         a registration lives in the SHARED ``ASN`` schema, not in the domain's,
         so dropping the domain leaves its ``ASN.IBMSNAP_REGISTER`` /
-        ``IBMSNAP_PRUNCNTL`` rows, ``ASN.LM_TD_<TAG>__<T>`` triggers and
+        ``IBMSNAP_PRUNCNTL`` rows and
         ``ASN.TD_<TAG>__<T>`` CD tables behind — still ``STATE='A'``, pointing at a
         schema that no longer exists.
 
@@ -991,9 +989,9 @@ class Db2Cdc(Db2):
         self, container: str, schema: str, tables: list[str]
     ) -> list[str]:
         """``data capture changes``, ``asnclp create registration``, the
-        ``IBMSNAP_LOGMARKER`` column and trigger, the prune control row and the
-        CAPSTART signal for every one of `tables`, in ONE container call over
-        one connection, with one asnclp run generating every registration.
+        prune control row and the CAPSTART signal for every one of `tables`,
+        in ONE container call over one connection, with one asnclp run
+        generating every registration.
 
         Per table, a call of its own cost a ``docker exec``, a CLP connect and
         an asnclp start -- about 3.5s before any DDL, most of a model install's
@@ -1013,13 +1011,6 @@ class Db2Cdc(Db2):
         after: list[str] = []
         for table, staging, map_id in zip(tables, stagings, map_ids):
             after += [
-                f"alter table {_ASN}.{staging} add column IBMSNAP_LOGMARKER "
-                f"TIMESTAMP NOT NULL WITH DEFAULT CURRENT TIMESTAMP",
-                f"create trigger {_ASN}.LM_{staging} no cascade before insert on "
-                f"{_ASN}.{staging} referencing new as N for each row "
-                f"set N.IBMSNAP_LOGMARKER = coalesce((select IBMSNAP_LOGMARKER from "
-                f"{_ASN}.IBMSNAP_UOW where IBMSNAP_COMMITSEQ = N.IBMSNAP_COMMITSEQ), "
-                f"CURRENT TIMESTAMP)",
                 f"insert into {_ASN}.ibmsnap_pruncntl (target_server, target_owner, "
                 f"target_table, source_owner, source_table, source_view_qual, "
                 f"apply_qual, set_name, cntl_server, target_structure, "

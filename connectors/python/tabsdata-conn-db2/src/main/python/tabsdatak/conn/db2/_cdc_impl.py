@@ -140,7 +140,8 @@ _OPERATION_MAP = {
 }
 
 
-# CD tables prepend these system columns to every row event.
+# CD tables prepend these system columns to every row event; the commit's
+# time, IBMSNAP_LOGMARKER, is read from the unit-of-work table instead.
 @dataclass(frozen=True)
 class _SystemColumn:
     db_name: str
@@ -160,7 +161,6 @@ _SYSTEM_COLUMNS = (
     IBMSNAP_OPERATION,
     IBMSNAP_COMMITSEQ,
     IBMSNAP_INTENTSEQ,
-    IBMSNAP_LOGMARKER,
 )
 
 _CD_SYSTEM_COLUMN_NAMES = frozenset(c.db_name for c in _SYSTEM_COLUMNS)
@@ -1216,29 +1216,34 @@ class SqlReplicaIngester(CdcIngester):
         watermark: bytes,
         schema_version: Any,
     ) -> Generator[CdcDataChange, None, None]:
-        column_names = [f'"{column.name}"' for column in tracked.columns]
+        column_names = [f'c."{column.name}"' for column in tracked.columns]
         column_inames = [
-            f'"{column.oname}"' for column in tracked.columns if column.oname
+            f'c."{column.oname}"' for column in tracked.columns if column.oname
         ]
         select_columns = (
             [
-                IBMSNAP_OPERATION.quoted,
-                IBMSNAP_COMMITSEQ.quoted,
-                IBMSNAP_INTENTSEQ.quoted,
-                IBMSNAP_LOGMARKER.quoted,
+                f"c.{IBMSNAP_OPERATION.quoted}",
+                f"c.{IBMSNAP_COMMITSEQ.quoted}",
+                f"c.{IBMSNAP_INTENTSEQ.quoted}",
+                f"u.{IBMSNAP_LOGMARKER.quoted}",
             ]
             + column_names
             + column_inames
         )
         select_clause = ", ".join(select_columns)
         cd_qualified = f"{tracked.cdc_table.schema}{DOT}{tracked.cdc_table.table}"
+        # The commit's time is in Capture's unit-of-work table, committed with
+        # the CD rows; a left join, so a missing unit of work fails the read
+        # rather than dropping the rows of its transaction.
         query = text(
             f"select {select_clause} "
-            f"from {cd_qualified} "
-            f"where {IBMSNAP_COMMITSEQ.quoted} > :commitseq "
-            f"and {IBMSNAP_COMMITSEQ.quoted} <= :watermark "
-            f"order by {IBMSNAP_COMMITSEQ.quoted}, "
-            f"{IBMSNAP_INTENTSEQ.quoted}"
+            f"from {cd_qualified} c "
+            f"left join {ASN_SCHEMA}.IBMSNAP_UOW u "
+            f"on u.{IBMSNAP_COMMITSEQ.quoted} = c.{IBMSNAP_COMMITSEQ.quoted} "
+            f"where c.{IBMSNAP_COMMITSEQ.quoted} > :commitseq "
+            f"and c.{IBMSNAP_COMMITSEQ.quoted} <= :watermark "
+            f"order by c.{IBMSNAP_COMMITSEQ.quoted}, "
+            f"c.{IBMSNAP_INTENTSEQ.quoted}"
         )
         result = connection.execute(
             query,
@@ -1256,7 +1261,13 @@ class SqlReplicaIngester(CdcIngester):
                 )
             commit_seq = row_map[IBMSNAP_COMMITSEQ.sa_name]
             intent_seq = row_map[IBMSNAP_INTENTSEQ.sa_name]
-            commit_ts = utc_instant(row_map[IBMSNAP_LOGMARKER.sa_name], self._server_tz)
+            logmarker = row_map[IBMSNAP_LOGMARKER.sa_name]
+            if logmarker is None:
+                raise Db2ErrorCode.DB2_37.exception(
+                    commitseq=commit_seq.hex(),
+                    table=tracked.cdc_table.qualified,
+                )
+            commit_ts = utc_instant(logmarker, self._server_tz)
             new_values = {col.name: row_map.get(col.sa_name) for col in tracked.columns}
             if op == CdcOperation.UPDATE:
                 old_values = {}
