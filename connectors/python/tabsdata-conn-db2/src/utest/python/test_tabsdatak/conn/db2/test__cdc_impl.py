@@ -41,6 +41,7 @@ from tabsdatak.conn.db2._cdc_impl import (
     SqlReplicaInitialLoadSession,
     commitseq_lsn,
     match_cd_columns,
+    registration_positions,
     verify_positions,
 )
 from tabsdatak.conn.db2.error import Db2ErrorCode
@@ -1068,3 +1069,31 @@ def test_a_poll_moves_a_table_on_once_its_rows_are_read(monkeypatch):
     # The first pass reads T up to its row; the next ones find it quiet.
     assert bi._mark.commits == {"ASN.T_CD": captured, "ASN.Q_CD": captured}
     assert bi._quiet["ASN.T_CD"] == (row, captured)
+
+
+def test_the_prune_bound_is_how_far_the_subscribing_apply_programs_have_read():
+    """Normal pruning deletes CD rows up to the lowest IBMSNAP_PRUNE_SET.SYNCHPOINT
+    of the sets subscribing to the table, which each Apply moves as it reads;
+    IBMSNAP_PRUNCNTL.SYNCHPOINT is set once, at the subscription's handshake."""
+    statements: list[str] = []
+    applied = b"\x00" * 8 + b"\x00" * 7 + b"\x09"
+
+    class _Connection:
+        def execute(self, statement):
+            statements.append(" ".join(str(statement).lower().split()))
+            row = ("ASN", "T_CD", "A", None, COMMITSEQ_ORIGIN, "N", applied)
+            return MagicMock(fetchall=lambda: [row])
+
+    positions = registration_positions(
+        _Connection(), [TableObject(schema="ASN", table="T_CD")]
+    )
+
+    assert positions["ASN.T_CD"].prune_bound == applied
+    [sql] = statements
+    assert (
+        "(select min(s.synchpoint) from asn.ibmsnap_prune_set s "
+        "join asn.ibmsnap_pruncntl p on p.target_server = s.target_server "
+        "and p.apply_qual = s.apply_qual and p.set_name = s.set_name "
+        "where p.phys_change_owner = r.cd_owner "
+        "and p.phys_change_table = r.cd_table)"
+    ) in sql

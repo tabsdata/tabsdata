@@ -449,8 +449,11 @@ class RegistrationPositions:
     log position it has captured from without a break (``CD_OLD_SYNCHPOINT``,
     moved up by a restart of the registration, a cold start or
     retention-limit pruning), and the lowest position the Apply
-    subscriptions to it have read (``IBMSNAP_PRUNCNTL.SYNCHPOINT``), up to
-    which normal pruning deletes its rows."""
+    subscriptions to it have read (``IBMSNAP_PRUNE_SET.SYNCHPOINT`` of every
+    set ``IBMSNAP_PRUNCNTL`` subscribes to the table), up to which normal
+    pruning deletes its rows. ``IBMSNAP_PRUNCNTL.SYNCHPOINT`` is not that
+    position: Capture sets it at the subscription's handshake and never
+    moves it again."""
 
     state: str
     state_info: str | None
@@ -481,8 +484,11 @@ def registration_positions(
     rows = connection.execute(
         text(
             "select r.cd_owner, r.cd_table, r.state, r.state_info, "
-            "r.cd_old_synchpoint, r.chg_upd_to_del_ins, (select min(p.synchpoint) "
-            f"from {ASN_SCHEMA}.ibmsnap_pruncntl p "
+            "r.cd_old_synchpoint, r.chg_upd_to_del_ins, (select min(s.synchpoint) "
+            f"from {ASN_SCHEMA}.ibmsnap_prune_set s "
+            f"join {ASN_SCHEMA}.ibmsnap_pruncntl p "
+            "on p.target_server = s.target_server "
+            "and p.apply_qual = s.apply_qual and p.set_name = s.set_name "
             "where p.phys_change_owner = r.cd_owner "
             "and p.phys_change_table = r.cd_table) "
             f"from {ASN_SCHEMA}.ibmsnap_register r where {matches}"
