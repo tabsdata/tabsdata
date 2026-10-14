@@ -365,9 +365,16 @@ def test_postgres_cdc_stream_src_accepts_publication_name():
     assert src.publication_name == "pub_users"
 
 
-def test_postgres_cdc_stream_src_rejects_unknown_src_cfg_key():
+@pytest.mark.parametrize(
+    "key",
+    ["bogus.key", "tabsdata.cdc.initial_load.max_window_changes"],
+    ids=["unknown", "load-window"],
+)
+def test_postgres_cdc_stream_src_rejects_unknown_src_cfg_key(key):
+    """A Postgres load reads an exact snapshot, so it has no window of changes
+    to bound and takes no setting for one."""
     with pytest.raises(ConnInitException) as ei:
-        _cdc_stream_src(src_cfg={"bogus.key": 1})  # type: ignore[dict-item]
+        _cdc_stream_src(src_cfg={key: 1})  # type: ignore[dict-item]
     assert ei.value.api_error is PostgresErrorCode.POSTGRES_11
 
 
