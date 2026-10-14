@@ -260,6 +260,11 @@ script = [
             with_monkey = replace ${argument} "--with-monkey=" ""
             set_env TD_WITH_MONKEY ${with_monkey}
         end
+        is_monkey_weight = starts_with ${argument} "--monkey-weight="
+        if ${is_monkey_weight}
+            monkey_weight = replace ${argument} "--monkey-weight=" ""
+            set_env TD_MONKEY_WEIGHT ${monkey_weight}
+        end
         if eq ${argument} "--help"
             seen_help = set true
         end
@@ -485,6 +490,23 @@ script = [
     end
     set_env TD_WITH_MONKEY ${with_monkey}
     debug "🔅 Using td with monkey: '${with_monkey}'"
+
+    monkey_weight = get_env TD_MONKEY_WEIGHT
+    if is_empty ${monkey_weight}
+        monkey_weight = set "heavy"
+    end
+    monkey_weight_light = eq ${monkey_weight} "light"
+    monkey_weight_medium = eq ${monkey_weight} "medium"
+    monkey_weight_heavy = eq ${monkey_weight} "heavy"
+    monkey_weight_valid = set ${monkey_weight_light} or ${monkey_weight_medium} or ${monkey_weight_heavy}
+    if not ${monkey_weight_valid}
+        error ""
+        error "🧨 Invalid '--monkey-weight=${monkey_weight}': use 'light', 'medium' or 'heavy'."
+        error ""
+        assert false
+    end
+    set_env TD_MONKEY_WEIGHT ${monkey_weight}
+    debug "🔅 Using td monkey weight: '${monkey_weight}'"
 
     markers_base_captured = get_env TD_MARKERS_BASE_CAPTURED
     if eq ${markers_base_captured} "true"
