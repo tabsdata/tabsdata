@@ -4,7 +4,7 @@
 
 accessify==0.3.1
 aiohappyeyeballs==2.7.1
-aiohttp==3.14.4
+aiohttp==3.14.5
 aiosignal==1.4.0
 annotated-types==0.8.0
 anyio==4.14.2
@@ -80,16 +80,18 @@ jmespath==1.1.0
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 kubernetes==36.0.3
+linkify-it-py==2.2.0
 lxml==6.1.3
 lz4==4.4.5
 markdown-it-py==4.2.0
+mdit-py-plugins==0.6.1
 mdurl==0.1.2
 mmh3==5.3.1
 more-itertools==11.1.0
 msal==1.39.0
 msal-extensions==1.3.1
 msrest==0.7.1
-multidict==6.9.1
+multidict==7.1.0
 mypy-boto3-glue==1.43.110
 mysql-replication==1.0.15
 numpy==2.4.3
@@ -157,6 +159,7 @@ sqlglot==30.0.3
 starlette==1.0.0
 strictyaml==1.7.3
 tenacity==9.1.4
+textual==8.2.3
 thrift==0.20.0
 tomlkit==0.15.1
 types-pyyaml==6.0.3

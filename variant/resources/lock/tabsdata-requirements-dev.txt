@@ -216,7 +216,7 @@ setuptools==83.0.0
 six==1.17.0
 smmap==5.0.3
 sortedcontainers==2.4.0
-soupsieve==2.10
+soupsieve==3.0.1
 spinners==0.0.24
 sqlalchemy==2.0.48
 starlette==1.0.0

@@ -1245,3 +1245,15 @@ def test_settings_renders_settings_store_offline(tmp_path):
     result = _invoke(["settings"], client=_client(), tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
     assert "proj-a" in result.output and "coll-a" in result.output
+
+
+def test_table_data_wide_needs_print(tmp_path):
+    client = _client()
+    _set_table_data(client)
+    argv = ["table", "data", "-c", "coll-a", "--name", "tbl-a", "--wide"]
+
+    result = _invoke(argv, client=client, tmp_path=tmp_path)
+
+    assert result.exit_code == 2
+    assert "'--wide' needs '--print'" in result.output
+    client.sample_table.assert_not_called()

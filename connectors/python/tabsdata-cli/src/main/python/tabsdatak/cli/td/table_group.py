@@ -383,6 +383,26 @@ def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
         "both. Defaults to 'none'."
     ),
 )
+@click.option(
+    "--print",
+    "print_table",
+    is_flag=True,
+    default=False,
+    help=(
+        "Print the table and return, instead of opening it in the viewer. Each "
+        "row stays on one line, cut at the width of the terminal; add '--wide' to "
+        "keep every column and let the terminal wrap the rows instead."
+    ),
+)
+@click.option(
+    "--wide",
+    is_flag=True,
+    default=False,
+    help=(
+        "With '--print', print every column at its full width, letting the "
+        "terminal wrap rows wider than itself, instead of cutting them."
+    ),
+)
 @format_option
 @click.pass_context
 def data(
@@ -397,8 +417,12 @@ def data(
     at_trx: str,
     version: str,
     extra_cols: str,
+    print_table: bool,
+    wide: bool,
 ):
     """Show rows of data from the table"""
+    if wide and not print_table:
+        raise click.UsageError("'--wide' needs '--print'.")
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the table")
     coll = (
@@ -421,9 +445,17 @@ def data(
         )
 
         def _table():
+            from tabsdatak.cli._table_viewer import show_table
+
             click.echo()
-            click.echo(f"Data of table '{name}'")
-            click.echo(table_data)
+            show_table(
+                name,
+                table_data,
+                collection=coll,
+                project=server.connection.project,
+                viewer=not print_table,
+                wide=wide,
+            )
             click.echo()
 
         # table_data is a polars DataFrame -> its rows are the full info.
