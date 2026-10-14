@@ -34,6 +34,7 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
+from tabsdatak.common._actions.dataquality.record import Check
 from tabsdatak.server._tdrunner import dataquality
 from tabsdatak.server._tdrunner.function._lib import (
     inputs_manifest,
@@ -355,18 +356,29 @@ def _sink_outputs(
     out_dir: Path,
     *,
     public: bool,
+    checks: list[Check] | None = None,
 ) -> list[dict]:
-    """Sink each non-None output to `<out_dir>/slot<i>/<table>.parquet`
-    and build the outputs-manifest entries.
+    """Sink each non-None output to `<out_dir>/slot<i>/<table>.parquet`,
+    settle the data-quality checks, and build the outputs-manifest entries.
 
     Publisher / transformer outputs become stored tables, so they sink
     natively with the framework's persisted system columns. Subscriber
     outputs feed a destination plugin and leave the system, so they sink
     publicly: stripped of every `$td.` system and `@td.` connector
     column, leaving only the user's own columns for the plugin to write.
+
+    Every output is written, and every check evaluated, in one streaming
+    pass, so the plan the outputs share runs once.
     """
     entries: list[dict] = []
-    for i, (table_name, value) in enumerate(zip(output_tables, result)):
+    plans: list[pl.LazyFrame] = []
+    written: list[str] = []
+    for i, (table_name, value) in enumerate(
+        zip(
+            output_tables,
+            result,
+        )
+    ):
         if value is None:
             entries.append({
                 outputs_manifest.MANIFEST_NAME_KEY: table_name,
@@ -374,23 +386,44 @@ def _sink_outputs(
             })
             continue
         slot_dir = out_dir / f"slot{i}"
-        dest = slot_dir / f"{table_name}.parquet"
+        destination = slot_dir / f"{table_name}.parquet"
         try:
             slot_dir.mkdir(parents=True, exist_ok=True)
-            # [TODO: tabsdatak.tableframe scan and sink migration] revisit when
-            # tabsdatak.tableframe ships scan and sink methods.
             if public:
-                value._sink_public(dest)
+                plans.append(value._sink_public_plan(destination))
             else:
-                value._sink_native(dest)
-        except Exception as exc:
+                plans.append(value._sink_native_plan(destination))
+        except Exception as error:
             raise RunFunctionErrorCode.RF_16.exception(
-                cause=exc, table=table_name, path=dest, detail=str(exc)
+                cause=error,
+                table=table_name,
+                path=destination,
+                detail=str(error),
             )
+        written.append(table_name)
         entries.append({
             outputs_manifest.MANIFEST_NAME_KEY: table_name,
-            outputs_manifest.MANIFEST_FILE_KEY: str(dest.absolute()),
+            outputs_manifest.MANIFEST_FILE_KEY: str(destination.absolute()),
         })
+    pending = checks or []
+    if plans or pending:
+        try:
+            results = pl.collect_all(
+                [*plans, *(check.verdict for check in pending)],
+                engine="streaming",
+            )
+        except Exception as error:
+            raise RunFunctionErrorCode.RF_16.exception(
+                cause=error,
+                table=", ".join(written),
+                path=out_dir,
+                detail=str(error),
+            )
+        for check, verdict in zip(
+            pending,
+            results[len(plans) :],
+        ):
+            check.enforce(verdict)
     return entries
 
 
@@ -487,6 +520,10 @@ def run(args: argparse.Namespace) -> int:
         len(output_tables),
     )
     result = _invoke_user_function(func, call_args, output_tables)
+    # Data quality and the sinks below all read the frames the function
+    # returned; caching them makes the single streaming pass that writes the
+    # outputs compute each frame once, however many tables and checks read it.
+    result = tuple(None if frame is None else frame._cached() for frame in result)
 
     if ctx is not None:
         drain_ctx_to_state_or_raise(
@@ -500,6 +537,7 @@ def run(args: argparse.Namespace) -> int:
     # registration. Skipped entirely when no data-quality action is declared, so
     # ordinary runs are unaffected. Derived tables register under their kind's
     # TableType at registration time, not here.
+    checks: list[Check] = []
     if dataquality.driver.has_data_quality(getattr(info, "on_tables", None)):
         dq_result = dataquality.driver.run_data_quality(
             collection=request.info.collection,
@@ -508,6 +546,7 @@ def run(args: argparse.Namespace) -> int:
             on_tables=info.on_tables,
         )
         result = list(dq_result.output_frames)
+        checks = dq_result.checks
         for derived in dq_result.derived:
             output_tables.append(derived.name)
             result.append(derived.frame)
@@ -522,6 +561,7 @@ def run(args: argparse.Namespace) -> int:
         output_tables,
         out_dir,
         public=isinstance(info, SubscriberInfo),
+        checks=checks,
     )
     written = sum(
         1 for e in entries_out if e.get(outputs_manifest.MANIFEST_FILE_KEY) is not None

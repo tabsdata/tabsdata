@@ -177,6 +177,7 @@ def test_datatypes_module_aliases_passthrough_and_allowlist(main_root):
     ) in dt
     assert "Int64 = pl.Int64" in dt and "String = pl.String" in dt
     assert "DataType = pl.DataType" in dt
+    assert "ColumnDataType: TypeAlias = DataType | type[DataType]" in dt
     # editable allow-list seeded with every alias, plus the validator + registration
     assert "_ALLOWED_TYPES = [" in dt and "    Int64," in dt
     assert "def _valid_type(dtype):" in dt

@@ -435,8 +435,9 @@ def test_a_fail_operator_sees_the_strict_band_that_used_to_be_lost():
         ],
         [strict_only],
     )
+    check = harvest(declared, strict_only).check
     with pytest.raises(DataQualityProcessingError) as exc:
-        harvest(declared, strict_only)
+        check.run()
     assert exc.value.api_error is DataQualityErrorCode.DQPE_14
 
 
@@ -449,7 +450,7 @@ def test_a_fail_operator_passes_when_only_the_lenient_band_is_checked():
         ],
         [lenient_only],
     )
-    assert harvest(declared, lenient_only) is not None
+    harvest(declared, lenient_only).check.run()
 
 
 def test_deserializing_an_action_revalidates_the_verdict_columns():

@@ -16,12 +16,12 @@ if TYPE_CHECKING:
     import polars as pl_
 
     from tabsdatak.tableframe._engine.model.column import (
-        SystemColumnDataType as SystemColumnDataType_,
-        SystemColumnDefault as SystemColumnDefault_,
+        ColumnDefault as ColumnDefault_,
     )
     from tabsdatak.tableframe._engine.model.frame import (
         DataVersion as DataVersion_,
     )
+    from tabsdatak.tableframe.datatypes import ColumnDataType as ColumnDataType_
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,8 +64,8 @@ class IdxGenerator:
 
 
 def as_expression(
-    value: SystemColumnDefault_,
-    dtype: SystemColumnDataType_,
+    value: ColumnDefault_,
+    dtype: ColumnDataType_,
 ) -> pl_.Expr:
     import polars as pl
 
@@ -77,8 +77,8 @@ def as_expression(
 def seed_default(
     lf: pl_.LazyFrame,
     column: str,
-    dtype: SystemColumnDataType_,
-    default: SystemColumnDefault_,
+    dtype: ColumnDataType_,
+    default: ColumnDefault_,
     context: GeneratorContext,
 ) -> pl_.LazyFrame:
     # A 0-column, 0-row frame would gain a spurious single row when a literal is

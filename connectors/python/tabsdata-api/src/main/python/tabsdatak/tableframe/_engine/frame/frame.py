@@ -227,24 +227,46 @@ class EngineFrame(BaseFrame):
         ]
         return stored._lf.select(keep)
 
+    def _cached(self) -> Self:
+        return self._clone(self._lf.cache())
+
     def _sink_native(self, path) -> None:
-        self._sink(self._persisted(), path)
+        self._sink_native_plan(path).collect(engine="streaming")
 
     def _sink_user(self, path) -> None:
-        self._sink(self._strip(drop_system_columns=True), path)
+        self._sink_user_plan(path).collect(engine="streaming")
 
     def _sink_public(self, path) -> None:
-        self._sink(
-            self._strip(drop_system_columns=True, drop_internal_columns=True), path
+        self._sink_public_plan(path).collect(engine="streaming")
+
+    def _sink_native_plan(self, path):
+        return self._sink_plan(
+            self._persisted(),
+            path,
         )
 
-    def _sink(self, lf, path) -> None:
+    def _sink_user_plan(self, path):
+        return self._sink_plan(
+            self._strip(drop_system_columns=True),
+            path,
+        )
+
+    def _sink_public_plan(self, path):
+        return self._sink_plan(
+            self._strip(
+                drop_system_columns=True,
+                drop_internal_columns=True,
+            ),
+            path,
+        )
+
+    def _sink_plan(self, lf, path):
         from tabsdatak.tableframe._core.hooks import get_sink_observer
 
         observer = get_sink_observer(type(self))
         if observer is not None:
             lf = observer(lf, "sink_parquet", path)
-        lf.sink_parquet(path, engine="streaming")
+        return lf.sink_parquet(path, engine="streaming", lazy=True)
 
     # Construction surface. Class methods so cls is the concrete subclass and the
     # wrapped result is a TableFrame; each normalizes its input to a polars

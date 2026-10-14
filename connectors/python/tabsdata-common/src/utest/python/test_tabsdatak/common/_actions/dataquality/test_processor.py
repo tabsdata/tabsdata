@@ -21,7 +21,10 @@ from tabsdatak.dataquality import (
     Summary,
     SummaryTrend,
 )
-from tabsdatak.dataquality._error import DataQualityErrorCode
+from tabsdatak.dataquality._error import (
+    DataQualityErrorCode,
+    DataQualityProcessingError,
+)
 from tabsdatak.dataquality._symbols import TableType
 from tabsdatak.dataquality._tableinfo import TableKind
 from tabsdatak.tableframe import TableFrame
@@ -309,3 +312,54 @@ def test_build_trend_transformers_info_owns_the_directory_it_generated(transform
     (built,) = transformers(processor)
     assert isinstance(built.project_root, TemporaryDirectory)
     assert Path(built.project_root.name).is_dir()
+
+
+def _settle(action: DataQuality, frame: TableFrame, checks=None) -> None:
+    processor = DataQualityProcessor.from_actions(
+        collection="c", output_tables=[action.table], actions=[action]
+    )
+    processor.tables_data([], [frame], [], checks)
+
+
+def test_a_failing_check_names_its_table():
+    action = DataQuality(
+        table="orders",
+        classifiers=[IsPositive(["a"])],
+        operators=[Fail(AnyFailed(), RowCountThreshold(0))],
+    )
+
+    with pytest.raises(DataQualityProcessingError) as raised:
+        _settle(action, TableFrame.from_dict({"a": [1, -2]}))
+
+    assert raised.value.api_error is DataQualityErrorCode.DQPE_14
+    assert "'orders'" in str(raised.value)
+
+
+def test_a_check_waits_when_the_caller_collects_the_checks():
+    action = DataQuality(
+        table="orders",
+        classifiers=[IsPositive(["a"])],
+        operators=[Fail(AnyFailed(), RowCountThreshold(0))],
+    )
+    checks = []
+
+    _settle(action, TableFrame.from_dict({"a": [1, -2]}), checks)
+
+    assert [check.table for check in checks] == ["orders"]
+    with pytest.raises(DataQualityProcessingError) as raised:
+        checks[0].run()
+    assert raised.value.api_error is DataQualityErrorCode.DQPE_14
+
+
+def test_a_missing_column_names_its_table():
+    action = DataQuality(
+        table="orders",
+        classifiers=[IsPositive(["missing"], on_missing_column="fail")],
+        operators=[Summary()],
+    )
+
+    with pytest.raises(DataQualityProcessingError) as raised:
+        _settle(action, TableFrame.from_dict({"a": [1]}))
+
+    assert raised.value.api_error is DataQualityErrorCode.DQPE_11
+    assert "'orders'" in str(raised.value)

@@ -252,6 +252,25 @@ def udf_transformer_bundle(request, tmp_path, monkeypatch) -> tuple[Path, bool]:
     _forget("udf_pkg")
 
 
+@pytest.fixture(
+    params=["quality_udf_transformer", "failing_quality_udf_transformer"],
+    ids=["passing", "failing"],
+)
+def quality_udf_transformer_bundle(request, tmp_path, monkeypatch):
+    """A transformer applying a UDF with data quality on its output; the
+    failing one does not tolerate the row its Fail operator flags."""
+    project = _copy_project(tmp_path, monkeypatch, "udf_project")
+    module = importlib.import_module("udf_pkg.transformer")
+
+    yield (
+        _bundle(tmp_path, project, getattr(module, request.param)),
+        module,
+        request.param == "failing_quality_udf_transformer",
+    )
+
+    _forget("udf_pkg")
+
+
 def _input_table(entry: dict, index: int) -> dict:
     table = {
         "collection_id": 1,
@@ -716,9 +735,28 @@ def test_sink_outputs_write_failure_maps_to_output_write_failed(tmp_path, monkey
     def broken_sink(self, dest):
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(TableFrame, "_sink_native", broken_sink)
+    monkeypatch.setattr(TableFrame, "_sink_native_plan", broken_sink)
     with pytest.raises(OutputWriteFailedError):
         _sink_outputs((_fake_table_frame(),), ["t1"], tmp_path, public=False)
+
+
+def test_sink_outputs_failure_while_writing_maps_to_output_write_failed(
+    tmp_path, monkeypatch
+):
+    def fail(batch):
+        raise RuntimeError("disk full")
+
+    def failing_sink(self, destination):
+        return pl.LazyFrame({"x": [1]}).map_batches(fail)
+
+    monkeypatch.setattr(TableFrame, "_sink_native_plan", failing_sink)
+    with pytest.raises(OutputWriteFailedError, match="t1, t2"):
+        _sink_outputs(
+            (_fake_table_frame(), _fake_table_frame()),
+            ["t1", "t2"],
+            tmp_path,
+            public=False,
+        )
 
 
 def test_sink_outputs_native_keeps_system_columns(tmp_path):
@@ -999,12 +1037,12 @@ def test_main_transformer_with_a_udf(
         responder_url=http_ok_url,
     )
 
-    rc = main()
+    exit_code = main()
 
     if broken:
-        assert rc == OutputWriteFailedError.exit_code
+        assert exit_code == OutputWriteFailedError.exit_code
         return
-    assert rc == 0, f"main() returned {rc}"
+    assert exit_code == 0, f"main() returned {exit_code}"
     df = pl.read_parquet(out_dir / "slot0" / "t_out.parquet")
     assert df.select("id", "name", "doubled", "label").to_dicts() == [
         {"id": 1, "name": "a", "doubled": 2, "label": "A"},
@@ -1012,6 +1050,41 @@ def test_main_transformer_with_a_udf(
         {"id": 3, "name": "c", "doubled": 6, "label": "C"},
     ]
     assert "$td.id" in df.columns
+
+
+def test_main_evaluates_a_udf_once_per_row_with_data_quality(
+    tmp_path, quality_udf_transformer_bundle, monkeypatch, http_ok_url
+):
+    bundle, module, failing = quality_udf_transformer_bundle
+    request_path = _write_request(tmp_path / "request.yaml")
+    source = tmp_path / "raw" / "in.parquet"
+    _write_sample_parquet(source)
+    inputs_manifest = tmp_path / "inputs.yaml"
+    write_inputs_manifest([_slot_entry("t_in", 0, [str(source)])], inputs_manifest)
+    out_dir = tmp_path / "fn_out"
+    _set_argv(
+        monkeypatch,
+        request_path,
+        bundle,
+        inputs_manifest,
+        out_dir,
+        tmp_path / "outputs.yaml",
+        tmp_path / "live",
+        responder_url=http_ok_url,
+    )
+
+    exit_code = main()
+
+    assert sorted(module.CALLS) == [1, 2, 3]
+    if failing:
+        assert exit_code != 0
+        return
+    assert exit_code == 0, f"main() returned {exit_code}"
+    stored = {path.stem: pl.read_parquet(path) for path in out_dir.glob("*/*.parquet")}
+    assert set(stored) == {"t_out", "t_out_quality", "t_out_quality_summary"}
+    assert stored["t_out"]["doubled"].to_list() == [2, 4, 6]
+    summary = stored["t_out_quality_summary"]
+    assert summary.select("dq.total", "dq.true", "dq.false").row(0) == (3, 2, 1)
 
 
 def test_main_manifest_length_mismatch_returns_bad_manifest(

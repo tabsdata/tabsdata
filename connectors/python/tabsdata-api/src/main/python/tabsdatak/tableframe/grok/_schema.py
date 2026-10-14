@@ -4,32 +4,13 @@
 
 from __future__ import annotations
 
-from typing import TypeAlias
-
-from polars.datatypes import DataTypeClass
 from pydantic import ConfigDict
 
 from tabsdatak import _api
-from tabsdatak.tableframe.datatypes import DataType, String
+from tabsdatak.tableframe.datatypes import ColumnDataType, String
 from tabsdatak.tableframe.grok.error import GrokErrorCode
 
 _ARBITRARY = ConfigDict(arbitrary_types_allowed=True)
-
-ColumnDataType: TypeAlias = DataType | DataTypeClass
-"""The data type a `ColumnDefinition` gives a captured column.
-
-:categories: string, projection
-
-Either a data type from `tabsdatak.tableframe.datatypes` used as a type
-(`Int64`) or an instance of one where the type is parameterized
-(`Datetime("us")`).
-
-Examples:
-    .. code-block:: python
-
-        ColumnDefinition("year", Int64)
-        ColumnDefinition("seen_at", Datetime("us"))
-"""
 
 
 @_api.dataclass(GrokErrorCode.GROK_1, config=_ARBITRARY)

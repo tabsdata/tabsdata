@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from typing import TypeAlias
+
 import polars as pl
 
 from tabsdatak.tableframe._core.translate import (
@@ -43,6 +45,14 @@ UInt64 = pl.UInt64
 UInt8 = pl.UInt8
 Unknown = pl.Unknown
 Utf8 = pl.Utf8
+
+ColumnDataType: TypeAlias = DataType | type[DataType]
+"""The data type of a column: a type from this module used as a type
+(`Int64`), or an instance of one where the type is parameterized
+(`Datetime("us")`).
+
+:categories: type
+"""
 
 
 # The datatypes this API accepts. Defaults to every alias above; remove

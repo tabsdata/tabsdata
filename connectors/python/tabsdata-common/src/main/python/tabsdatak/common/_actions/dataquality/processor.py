@@ -15,6 +15,7 @@ from tabsdatak.common._actions.dataquality.engine import (
     DataQualityEngine,
 )
 from tabsdatak.common._actions.dataquality.record import (
+    Check,
     DerivedTableFrame,
     DerivedTableFrameStatus,
     Harvest,
@@ -591,7 +592,9 @@ class DataQualityProcessor:
         input_table_frames: InputTableSpec,
         output_table_frames: OutputTableSpec,
         derived_table_frames: DerivedTableFrameSpec,
+        checks: list[Check] | None = None,
     ):
+        pending: list[Check] = [] if checks is None else checks
         input_table_frames_vault = list(input_table_frames)
         output_table_frames_vault = list(output_table_frames)
 
@@ -602,6 +605,7 @@ class DataQualityProcessor:
             input_table_frames_vault,
             DataQualityErrorCode.DQPE_5,
             derived_table_frames,
+            pending,
         )
 
         self.run_actions(
@@ -611,7 +615,11 @@ class DataQualityProcessor:
             output_table_frames_vault,
             DataQualityErrorCode.DQPE_6,
             derived_table_frames,
+            pending,
         )
+        if checks is None:
+            for check in pending:
+                check.run()
 
         input_table_frames.clear()
         input_table_frames.extend(input_table_frames_vault)
@@ -626,6 +634,7 @@ class DataQualityProcessor:
         table_frames_vault: list,
         position_error_code: DataQualityErrorCode,
         derived_table_frames: DerivedTableFrameSpec,
+        checks: list[Check],
     ):
         for action in actions:
             collection, table, position = resolve_table(action.table)
@@ -671,12 +680,15 @@ class DataQualityProcessor:
                     dq_tags,
                     table_info,
                     operation,
+                    table=action.table,
                 )
                 if harvest.output is not None:
                     table_frames_vault[position] = harvest.output.derived_tf
                 if harvest.derived is not None:
                     derived_table_frames.append(harvest.derived)
                     table_info_idx += 1
+                if harvest.check is not None:
+                    checks.append(harvest.check)
             if table_info_idx != table_producing_operators:
                 raise DataQualityErrorCode.DQPE_8.exception(
                     table=action.table,
@@ -729,7 +741,7 @@ class DataQualityProcessor:
         dtf: DerivedTableFrame = DerivedTableFrame(
             DerivedTableFrameStatus.INITIALIZED, tableframe, tf
         )
-        dq = DataQualityEngine(tf)
+        dq = DataQualityEngine(tf, table=action.table)
         classifiers = (
             action.classifiers
             if isinstance(action.classifiers, list)
@@ -751,6 +763,7 @@ class DataQualityProcessor:
         tags: dict[str, set[str]] | None,
         _table_info: TableInfo | None,
         operation: Operator,
+        table: str | None = None,
     ) -> Harvest:
         if dtf_i is None:
             return Harvest(output=None, derived=None)
@@ -764,6 +777,7 @@ class DataQualityProcessor:
             schema=schema,
             cols=cols,
             tags=tags,
+            table=table,
         )
 
         match operation:

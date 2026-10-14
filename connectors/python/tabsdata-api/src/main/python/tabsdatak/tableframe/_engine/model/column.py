@@ -16,20 +16,18 @@ from tabsdatak.tableframe._engine.taxonomy.column import (
 
 if TYPE_CHECKING:
     import polars as pl_
-    from polars.datatypes import DataTypeClass as DataTypeClass_
 
-    from tabsdatak.tableframe import datatypes as datatypes_
+    from tabsdatak.tableframe.datatypes import ColumnDataType as ColumnDataType_
 
-    SystemColumnDataType = datatypes_.DataType | DataTypeClass_
-    SystemColumnDefault = pl_.Expr | str | int | datetime | list | None
+    ColumnDefault = pl_.Expr | str | int | datetime | list | None
 
 
 @dataclass(slots=True, frozen=True, eq=True)
 class SystemColumn:
     name: str
     category: SystemColumnCategory
-    dtype: SystemColumnDataType
-    default: SystemColumnDefault
+    dtype: ColumnDataType_
+    default: ColumnDefault
     language: Language
     inception: Inception
     required: bool

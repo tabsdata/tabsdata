@@ -20,16 +20,16 @@ if TYPE_CHECKING:
     import polars as pl_
 
     from tabsdatak.tableframe._engine.model.column import (
-        SystemColumnDataType as SystemColumnDataType_,
-        SystemColumnDefault as SystemColumnDefault_,
+        ColumnDefault as ColumnDefault_,
     )
+    from tabsdatak.tableframe.datatypes import ColumnDataType as ColumnDataType_
 
 
 class IdentifierGenerator:
     def __init__(
         self,
-        dtype: SystemColumnDataType_,
-        default: SystemColumnDefault_,
+        dtype: ColumnDataType_,
+        default: ColumnDefault_,
     ) -> None:
         self.dtype = dtype
         self.default = default
@@ -62,8 +62,8 @@ class IdentifierGenerator:
 class ConstantVersionGenerator:
     def __init__(
         self,
-        dtype: SystemColumnDataType_,
-        default: SystemColumnDefault_,
+        dtype: ColumnDataType_,
+        default: ColumnDefault_,
     ) -> None:
         self.dtype = dtype
         self.default = default

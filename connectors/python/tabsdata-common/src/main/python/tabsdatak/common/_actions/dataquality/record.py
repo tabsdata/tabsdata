@@ -8,7 +8,11 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import TYPE_CHECKING, TypeAlias
 
+from tabsdatak.dataquality._error import DataQualityErrorCode
+
 if TYPE_CHECKING:
+    import polars as pl
+
     from tabsdatak.tableframe import TableFrame
 
 
@@ -78,6 +82,26 @@ class DerivedTableFrame:
 
 
 @dataclass(frozen=True)
+class Check:
+    verdict: pl.LazyFrame
+    table: str | None
+    criteria: str
+    threshold: str
+
+    def enforce(self, verdict: pl.DataFrame) -> None:
+        if not verdict.item():
+            raise DataQualityErrorCode.DQPE_14.exception(
+                table=self.table,
+                criteria=self.criteria,
+                threshold=self.threshold,
+            )
+
+    def run(self) -> None:
+        self.enforce(self.verdict.collect(engine="streaming"))
+
+
+@dataclass(frozen=True)
 class Harvest:
     output: DerivedTableFrame | None
     derived: DerivedTableFrame | None
+    check: Check | None = None

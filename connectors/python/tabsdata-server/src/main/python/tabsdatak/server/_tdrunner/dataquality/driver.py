@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from tabsdatak.common._actions.dataquality.processor import DataQualityProcessor
+from tabsdatak.common._actions.dataquality.record import Check
 from tabsdatak.dataquality import DataQuality
 from tabsdatak.dataquality._symbols import TableType
 from tabsdatak.tableframe import TableFrame
@@ -37,10 +38,13 @@ class DataQualityResult:
 
     ``output_frames`` mirrors the input output-frame list with in-place actions
     applied. ``derived`` holds the extra tables producing actions yielded.
+    ``checks`` holds the verdicts of Fail operators, to settle when the tables
+    are written.
     """
 
     output_frames: list[TableFrame | None]
     derived: list[DerivedTable]
+    checks: list[Check]
 
 
 def has_data_quality(on_tables) -> bool:
@@ -72,7 +76,8 @@ def run_data_quality(
 
     frames = list(output_frames)
     derived_frames: list = []
-    processor.tables_data([], frames, derived_frames)
+    checks: list[Check] = []
+    processor.tables_data([], frames, derived_frames, checks)
 
     derived = [
         DerivedTable(
@@ -82,4 +87,4 @@ def run_data_quality(
         )
         for info, record in zip(output_table_infos, derived_frames)
     ]
-    return DataQualityResult(output_frames=frames, derived=derived)
+    return DataQualityResult(output_frames=frames, derived=derived, checks=checks)

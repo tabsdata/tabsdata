@@ -9,22 +9,21 @@ from abc import ABC
 from collections import Counter
 from typing import TYPE_CHECKING, Any, Callable, Literal, TypeAlias, get_args
 
+from tabsdatak.tableframe.datatypes import Array, ColumnDataType, List, _valid_type
 from tabsdatak.tableframe.udf.error import UDFErrorCode, UDFException
 
 if TYPE_CHECKING:
     import polars as pl
     import pyarrow as pa
 
-    from tabsdatak.tableframe.datatypes import DataType
-
 Signature: TypeAlias = Literal["packed", "unpacked"]
 SIGNATURE_PACKED, SIGNATURE_UNPACKED = get_args(Signature)
 
-OutputColumn: TypeAlias = "tuple[str, DataType]"
-OutputColumns: TypeAlias = "OutputColumn | list[OutputColumn]"
-OutputOverride: TypeAlias = "tuple[str | None, DataType | None]"
+OutputColumn: TypeAlias = tuple[str, ColumnDataType]
+OutputColumns: TypeAlias = OutputColumn | list[OutputColumn]
+OutputOverride: TypeAlias = tuple[str | None, ColumnDataType | None]
 OutputOverrides: TypeAlias = (
-    "OutputOverride | list[OutputOverride] | dict[int, OutputOverride]"
+    OutputOverride | list[OutputOverride] | dict[int, OutputOverride]
 )
 
 _SEALED = ("__call__", "columns", "with_columns")
@@ -309,7 +308,7 @@ class UDF(ABC):
             for values, (name, dtype) in zip(columns, declared)
         ]
 
-    def _typed(self, name: str, dtype: DataType, build) -> pl.Series:
+    def _typed(self, name: str, dtype: ColumnDataType, build) -> pl.Series:
         try:
             return build()
         except UDFException:
@@ -541,8 +540,6 @@ def on_element(
 
 
 def _outputs(output_columns) -> tuple[OutputColumn, ...]:
-    from tabsdatak.tableframe.datatypes import _valid_type
-
     columns = [output_columns] if isinstance(output_columns, tuple) else output_columns
     if not isinstance(columns, list) or not columns:
         raise UDFErrorCode.UDF_5.exception(got=_described(output_columns))
@@ -595,8 +592,6 @@ def _overrides(output_columns, width: int) -> dict[int, OutputOverride]:
 
 
 def _holds_sequences(dtype) -> bool:
-    from tabsdatak.tableframe.datatypes import Array, List
-
     base = dtype if isinstance(dtype, type) else type(dtype)
     return base in (List, Array)
 

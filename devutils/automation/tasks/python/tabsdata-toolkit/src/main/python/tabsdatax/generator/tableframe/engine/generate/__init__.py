@@ -346,12 +346,15 @@ def _render_hook_types(specs: list[tuple[str, str]]) -> str:
 
 
 def _write_datatypes(base: Path, module: str, names: list[str]) -> Path:
-    """Emit datatypes.py: alias the public polars datatypes as ours, register
-    DataType as a passthrough leaf type (wrap() returns them unchanged), and an
-    editable ``_ALLOWED_TYPES`` allow-list enforced via ``_valid_type``."""
+    """Emit datatypes.py: alias the public polars datatypes as ours, the
+    ``ColumnDataType`` alias for the data type of a column, register DataType as
+    a passthrough leaf type (wrap() returns them unchanged), and an editable
+    ``_ALLOWED_TYPES`` allow-list enforced via ``_valid_type``."""
     lines = [
         _py_header(),
         "from __future__ import annotations",
+        "",
+        "from typing import TypeAlias",
         "",
         "import polars as pl",
         "",
@@ -362,6 +365,14 @@ def _write_datatypes(base: Path, module: str, names: list[str]) -> Path:
     for name in names:
         lines.append(f"{name} = pl.{name}")
     lines += [
+        "",
+        "ColumnDataType: TypeAlias = DataType | type[DataType]",
+        '"""The data type of a column: a type from this module used as a type',
+        "(`Int64`), or an instance of one where the type is parameterized",
+        '(`Datetime("us")`).',
+        "",
+        ":categories: type",
+        '"""',
         "",
         "",
         "# The datatypes this API accepts. Defaults to every alias above; remove",
