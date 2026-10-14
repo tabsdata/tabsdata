@@ -77,12 +77,11 @@ class UDFErrorCode(ErrorCode):
     )
     UDF_5 = ErrorDef(
         UDFDefinitionException,
-        "Output columns must be a (name, data type) tuple or a non-empty list of "
-        "them; got {got}.",
+        "Invalid output columns for a user defined function",
     )
     UDF_6 = ErrorDef(
         UDFDefinitionException,
-        "Output column at index {index} is invalid: {reason}.",
+        "Invalid arguments for the on_batch or on_element decorator",
     )
     UDF_7 = ErrorDef(
         UDFDefinitionException,
@@ -117,7 +116,7 @@ class UDFErrorCode(ErrorCode):
     )
     UDF_14 = ErrorDef(
         UDFDefinitionException,
-        "A user defined function must be callable; got {got}.",
+        "A user defined function must be callable",
     )
     UDF_15 = ErrorDef(
         UDFDefinitionException,
@@ -132,7 +131,7 @@ class UDFErrorCode(ErrorCode):
     UDF_17 = ErrorDef(
         UDFDefinitionException,
         "{udf} output names must be a list of {width} names, one per output "
-        "column; got {got}.",
+        "column; got {count}.",
     )
     UDF_18 = ErrorDef(
         UDFDefinitionException,
@@ -141,5 +140,5 @@ class UDFErrorCode(ErrorCode):
     )
     UDF_19 = ErrorDef(
         UDFDefinitionException,
-        "{udf} {keyword} must be a string; got {got}.",
+        "Invalid output names, prefix or suffix for a user defined function",
     )

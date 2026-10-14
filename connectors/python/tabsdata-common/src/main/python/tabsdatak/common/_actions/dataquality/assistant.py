@@ -5,10 +5,11 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Set
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
-from typing import AbstractSet, Any, cast
+from typing import Any, cast
 
 import isodate
 import polars as pl
@@ -710,8 +711,8 @@ class TypeHandler:
 
     @classmethod
     def convert_set(
-        cls, values: AbstractSet[Any], target_dtype: pl.DataType
-    ) -> AbstractSet[type[pl.DataType] | None]:
+        cls, values: Set[Any], target_dtype: pl.DataType
+    ) -> Set[type[pl.DataType] | None]:
         supports_nan = type(target_dtype) in {
             td_dtypes.Float16,
             td_dtypes.Float32,

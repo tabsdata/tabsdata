@@ -17,12 +17,17 @@ from __future__ import annotations
 
 from tabsdatak.tableframe.udf._function import (
     UDF as UDF,
-    OutputColumn as OutputColumn,
-    OutputColumns as OutputColumns,
-    OutputNames as OutputNames,
-    Signature as Signature,
     UDFPacked as UDFPacked,
     UDFUnpacked as UDFUnpacked,
     on_batch as on_batch,
     on_element as on_element,
+)
+from tabsdatak.tableframe.udf._typing import (
+    OutputAffixSpec as OutputAffixSpec,
+    OutputColumnSpec as OutputColumnSpec,
+    OutputColumnsSpec as OutputColumnsSpec,
+    OutputDataTypeSpec as OutputDataTypeSpec,
+    OutputNameSpec as OutputNameSpec,
+    OutputNamesSpec as OutputNamesSpec,
+    SignatureSpec as SignatureSpec,
 )

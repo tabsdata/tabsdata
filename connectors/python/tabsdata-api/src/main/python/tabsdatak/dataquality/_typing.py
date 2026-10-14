@@ -8,12 +8,14 @@ feature.
 
 These types are used for type hinting and validation to ensure that data
 quality operations are performed with the correct data structures and values.
-Collection-valued fields are declared as plain ``list`` / ``frozenset`` types:
-there is no single-value convenience coercion (consistent with the rest of the
-``tabsdatak`` API), so a field that can hold several values always takes a
-collection in the constructor.
+Collection-valued fields are declared as plain ``list`` / ``Set`` types, a
+``Set`` field accepting a ``set`` or a ``frozenset`` and storing a
+``frozenset``: there is no single-value convenience coercion (consistent with
+the rest of the ``tabsdatak`` API), so a field that can hold several values
+always takes a collection in the constructor.
 """
 
+from collections.abc import Set
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Annotated, Literal, TypeAlias, Union
@@ -110,7 +112,7 @@ A type alias that specifies which side of a range is closed (inclusive).
 # --- Value Set Specifications ---
 
 ValuesSpec: TypeAlias = Annotated[
-    frozenset[Union[PythonDataTypeSpec, None]], _api.NON_EMPTY_LIST_FIELD
+    Set[Union[PythonDataTypeSpec, None]], _api.NON_EMPTY_LIST_FIELD
 ]
 """
 A non-empty set of values to check membership against (``None`` is allowed, to
@@ -135,7 +137,7 @@ A type alias for the bin, either an index [0..100] or a special one
 [none, nan, underflow, overflow]
 """
 
-BinsCriteriaSpec: TypeAlias = Annotated[frozenset[BinSpec], _api.NON_EMPTY_LIST_FIELD]
+BinsCriteriaSpec: TypeAlias = Annotated[Set[BinSpec], _api.NON_EMPTY_LIST_FIELD]
 """A non-empty set of bins used in criteria."""
 
 BinCountSpec: TypeAlias = Annotated[StrictInt, Field(ge=1, le=MAX_BINS)]

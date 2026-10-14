@@ -192,33 +192,43 @@ def test_the_function_streams_batch_by_batch(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "build, code",
+    "build, code, detail",
     [
-        (lambda: UDF(("x", Int64)), UDFErrorCode.UDF_1),
-        (lambda: UDFUnpacked(("x", Int64)), UDFErrorCode.UDF_1),
-        (lambda: Echo([], None), UDFErrorCode.UDF_5),
-        (lambda: Echo("x", None), UDFErrorCode.UDF_5),
-        (lambda: Echo([("x",)], None), UDFErrorCode.UDF_6),
-        (lambda: Echo(("", Int64), None), UDFErrorCode.UDF_6),
-        (lambda: Echo(("x", int), None), UDFErrorCode.UDF_6),
-        (lambda: Echo([("x", Int64), ("x", String)], None), UDFErrorCode.UDF_7),
-        (lambda: Ratio(output_names=["share"]), UDFErrorCode.UDF_17),
-        (lambda: Ratio().with_names("share"), UDFErrorCode.UDF_17),
-        (lambda: Total().with_names(["y", "z"]), UDFErrorCode.UDF_17),
-        (lambda: Total().with_names(("y",)), UDFErrorCode.UDF_17),
-        (lambda: Total(output_names=[""]), UDFErrorCode.UDF_6),
-        (lambda: Total(output_names=[1]), UDFErrorCode.UDF_6),
-        (lambda: Ratio().with_names(["x", "x"]), UDFErrorCode.UDF_7),
-        (lambda: Total(output_prefix=1), UDFErrorCode.UDF_19),
-        (lambda: Total().with_names(output_suffix=["_x"]), UDFErrorCode.UDF_19),
-        (lambda: _frame({"a": [1]}).udf([], Total()), UDFErrorCode.UDF_9),
+        (lambda: UDF(("x", Int64)), UDFErrorCode.UDF_1, None),
+        (lambda: UDFUnpacked(("x", Int64)), UDFErrorCode.UDF_1, None),
+        (lambda: Echo([], None), UDFErrorCode.UDF_5, "at least 1 item"),
+        (lambda: Echo("x", None), UDFErrorCode.UDF_5, "valid tuple"),
+        (lambda: Echo(["x", Int64], None), UDFErrorCode.UDF_5, "valid tuple"),
+        (lambda: Echo([("x",)], None), UDFErrorCode.UDF_5, "Field required"),
+        (lambda: Echo(("", Int64), None), UDFErrorCode.UDF_5, "at least 1 character"),
+        (lambda: Echo(("x", int), None), UDFErrorCode.UDF_5, "not a data type"),
+        (
+            lambda: Echo([("x", Int64), ("x", String)], None),
+            UDFErrorCode.UDF_5,
+            "UDF-7",
+        ),
+        (lambda: Ratio(output_names=["share"]), UDFErrorCode.UDF_17, None),
+        (lambda: Ratio().with_names("share"), UDFErrorCode.UDF_17, None),
+        (lambda: Total().with_names(["y", "z"]), UDFErrorCode.UDF_17, None),
+        (lambda: Total().with_names(("y",)), UDFErrorCode.UDF_19, "valid string"),
+        (lambda: Total(output_names=[""]), UDFErrorCode.UDF_19, "at least 1 character"),
+        (lambda: Total(output_names=[1]), UDFErrorCode.UDF_19, "valid string"),
+        (lambda: Ratio().with_names(["x", "x"]), UDFErrorCode.UDF_19, "UDF-7"),
+        (lambda: Total(output_prefix=1), UDFErrorCode.UDF_19, "output_prefix"),
+        (
+            lambda: Total().with_names(output_suffix=["_x"]),
+            UDFErrorCode.UDF_19,
+            "output_suffix",
+        ),
+        (lambda: _frame({"a": [1]}).udf([], Total()), UDFErrorCode.UDF_9, None),
     ],
 )
-def test_a_function_defined_wrongly_fails_when_it_is_defined(build, code):
+def test_a_function_defined_wrongly_fails_when_it_is_defined(build, code, detail):
     with pytest.raises(UDFDefinitionException) as error:
         build()
 
     assert error.value.api_error is code
+    assert detail is None or detail in str(error.value)
 
 
 @pytest.mark.parametrize(
@@ -555,24 +565,34 @@ def test_errors_name_the_decorated_function():
 
 
 @pytest.mark.parametrize(
-    "build, code",
+    "build, code, detail",
     [
-        (lambda: on_element(("x", Int64))(42), UDFErrorCode.UDF_14),
+        (lambda: on_element(("x", Int64))(42), UDFErrorCode.UDF_14, "callable"),
         (
             lambda: on_element(("x", Int64), signature="spread")(lambda a: a),
-            UDFErrorCode.UDF_8,
+            UDFErrorCode.UDF_6,
+            "signature",
         ),
-        (lambda: on_batch([])(lambda a: a), UDFErrorCode.UDF_5),
+        (lambda: on_batch([])(lambda a: a), UDFErrorCode.UDF_6, "at least 1 item"),
+        (
+            lambda: on_element([("x", Int64), ("x", Int64)]),
+            UDFErrorCode.UDF_6,
+            "UDF-7",
+        ),
         (
             lambda: _frame({"a": [1]}).udf(
                 ["a", col("a") + 1], on_element(("x", Int64))(lambda a, b: a)
             ),
             UDFErrorCode.UDF_13,
+            None,
         ),
     ],
 )
-def test_a_function_defined_wrongly_fails_when_decorated_or_applied(build, code):
+def test_a_function_defined_wrongly_fails_when_decorated_or_applied(
+    build, code, detail
+):
     with pytest.raises(UDFDefinitionException) as error:
         build()
 
     assert error.value.api_error is code
+    assert detail is None or detail in str(error.value)

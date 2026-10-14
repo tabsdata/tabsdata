@@ -7,22 +7,24 @@ from __future__ import annotations
 import copy
 import inspect
 from abc import ABC, ABCMeta
-from collections import Counter
-from typing import TYPE_CHECKING, Any, Callable, Literal, TypeAlias, get_args
+from typing import TYPE_CHECKING, Any, Callable, get_args
 
-from tabsdatak.tableframe.datatypes import Array, ColumnDataType, List, _valid_type
+from tabsdatak import _api
+from tabsdatak.tableframe.datatypes import Array, ColumnDataType, List
+from tabsdatak.tableframe.udf._typing import (
+    SIGNATURE_PACKED,
+    SIGNATURE_UNPACKED,
+    OutputAffixSpec,
+    OutputColumnSpec,
+    OutputColumnsSpec,
+    OutputNamesSpec,
+    SignatureSpec,
+)
 from tabsdatak.tableframe.udf.error import UDFErrorCode, UDFException
 
 if TYPE_CHECKING:
     import polars as pl
     import pyarrow as pa
-
-Signature: TypeAlias = Literal["packed", "unpacked"]
-SIGNATURE_PACKED, SIGNATURE_UNPACKED = get_args(Signature)
-
-OutputColumn: TypeAlias = tuple[str, ColumnDataType]
-OutputColumns: TypeAlias = OutputColumn | list[OutputColumn]
-OutputNames: TypeAlias = str | list[str]
 
 _SEALED = ("__call__", "columns", "with_names")
 _RENAMING = ("output_names", "output_prefix", "output_suffix")
@@ -32,9 +34,9 @@ class _UDFMeta(ABCMeta):
     def __call__(
         cls,
         *args: Any,
-        output_names: OutputNames | None = None,
-        output_prefix: str | None = None,
-        output_suffix: str | None = None,
+        output_names: OutputNamesSpec | None = None,
+        output_prefix: OutputAffixSpec | None = None,
+        output_suffix: OutputAffixSpec | None = None,
         **kwargs,
     ):
         function = super().__call__(*args, **kwargs)
@@ -143,10 +145,11 @@ class UDF(ABC, metaclass=_UDFMeta):
             )
     """
 
-    def __init__(self, output_columns: OutputColumns):
+    @_api.validate_call(UDFErrorCode.UDF_5)
+    def __init__(self, output_columns: OutputColumnsSpec):
         if type(self) in _BASES:
             raise UDFErrorCode.UDF_1.exception(udf=type(self).__name__)
-        self._outputs = _outputs(output_columns)
+        self._outputs = tuple(output_columns)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -166,7 +169,7 @@ class UDF(ABC, metaclass=_UDFMeta):
             raise UDFErrorCode.UDF_2.exception(udf=cls.__name__)
 
     @property
-    def signature(self) -> Signature:
+    def signature(self) -> SignatureSpec:
         """How the inputs are passed to `on_batch` and `on_element`.
 
         `"packed"` (the default) passes them together as one list;
@@ -181,7 +184,7 @@ class UDF(ABC, metaclass=_UDFMeta):
                         super().__init__(("ratio", Float64))
 
                     @property
-                    def signature(self) -> Signature:
+                    def signature(self) -> SignatureSpec:
                         return "unpacked"
 
                     def on_element(
@@ -272,7 +275,7 @@ class UDF(ABC, metaclass=_UDFMeta):
         """
         raise NotImplementedError
 
-    def columns(self) -> list[OutputColumn]:
+    def columns(self) -> list[OutputColumnSpec]:
         """The `(name, data type)` of each output column, in order.
 
         Examples:
@@ -293,10 +296,10 @@ class UDF(ABC, metaclass=_UDFMeta):
 
     def with_names(
         self,
-        output_names: OutputNames | None = None,
+        output_names: OutputNamesSpec | None = None,
         *,
-        output_prefix: str | None = None,
-        output_suffix: str | None = None,
+        output_prefix: OutputAffixSpec | None = None,
+        output_suffix: OutputAffixSpec | None = None,
     ) -> UDF:
         """A copy of this function with all its output columns renamed.
 
@@ -371,7 +374,7 @@ class UDF(ABC, metaclass=_UDFMeta):
             )
         return pl.DataFrame(outputs).to_struct()
 
-    def _declared(self) -> tuple[OutputColumn, ...]:
+    def _declared(self) -> tuple[OutputColumnSpec, ...]:
         outputs = getattr(self, "_outputs", None)
         if outputs is None:
             raise UDFErrorCode.UDF_4.exception(udf=self._label())
@@ -379,34 +382,22 @@ class UDF(ABC, metaclass=_UDFMeta):
 
     def _renamed(
         self,
-        output_names: OutputNames | None,
-        output_prefix: str | None,
-        output_suffix: str | None,
-    ) -> tuple[OutputColumn, ...]:
+        output_names: OutputNamesSpec | None,
+        output_prefix: OutputAffixSpec | None,
+        output_suffix: OutputAffixSpec | None,
+    ) -> tuple[OutputColumnSpec, ...]:
+        names, prefix, suffix = _renaming(output_names, output_prefix, output_suffix)
         declared = self._declared()
-        if output_names is None:
+        if names is None:
             names = [name for name, _ in declared]
-        else:
-            names = [output_names] if isinstance(output_names, str) else output_names
-            if not isinstance(names, list) or len(names) != len(declared):
-                raise UDFErrorCode.UDF_17.exception(
-                    udf=self._label(),
-                    width=len(declared),
-                    got=_described(output_names),
-                )
-        for keyword, affix in (
-            ("output_prefix", output_prefix),
-            ("output_suffix", output_suffix),
-        ):
-            if affix is not None and not isinstance(affix, str):
-                raise UDFErrorCode.UDF_19.exception(
-                    udf=self._label(), keyword=keyword, got=type(affix).__name__
-                )
-        prefix, suffix = output_prefix or "", output_suffix or ""
-        return _outputs([
-            (f"{prefix}{name}{suffix}" if isinstance(name, str) else name, dtype)
+        elif len(names) != len(declared):
+            raise UDFErrorCode.UDF_17.exception(
+                udf=self._label(), width=len(declared), count=len(names)
+            )
+        return tuple(
+            (f"{prefix}{name}{suffix}", dtype)
             for name, (_, dtype) in zip(names, declared)
-        ])
+        )
 
     def _dtype(self) -> pl.Struct:
         import polars as pl
@@ -422,7 +413,7 @@ class UDF(ABC, metaclass=_UDFMeta):
         raise UDFErrorCode.UDF_8.exception(
             udf=self._label(),
             signature=signature,
-            signatures=list(get_args(Signature)),
+            signatures=list(get_args(SignatureSpec)),
         )
 
     def _batch(self, inputs: list[pl.Series], rows: int) -> list[pl.Series]:
@@ -521,7 +512,7 @@ class UDFPacked(UDF, ABC):
     """
 
     @property
-    def signature(self) -> Signature:
+    def signature(self) -> SignatureSpec:
         return SIGNATURE_PACKED
 
 
@@ -572,7 +563,7 @@ class UDFUnpacked(UDF, ABC):
     """
 
     @property
-    def signature(self) -> Signature:
+    def signature(self) -> SignatureSpec:
         return SIGNATURE_UNPACKED
 
 
@@ -580,18 +571,10 @@ class _FunctionUDF(UDF, ABC):
     def __init__(self, output_columns, function, signature):
         self._function = function
         self._signature = signature
-        if not callable(function):
-            raise UDFErrorCode.UDF_14.exception(got=type(function).__name__)
-        if signature not in get_args(Signature):
-            raise UDFErrorCode.UDF_8.exception(
-                udf=self._label(),
-                signature=signature,
-                signatures=list(get_args(Signature)),
-            )
         super().__init__(output_columns)
 
     @property
-    def signature(self) -> Signature:
+    def signature(self) -> SignatureSpec:
         return self._signature
 
     def _label(self) -> str:
@@ -611,8 +594,11 @@ class _ElementFunction(_FunctionUDF):
 _BASES = (UDF, UDFPacked, UDFUnpacked, _FunctionUDF)
 
 
+@_api.validate_call(UDFErrorCode.UDF_6)
 def on_batch(
-    output_columns: OutputColumns, *, signature: Signature = SIGNATURE_UNPACKED
+    output_columns: OutputColumnsSpec,
+    *,
+    signature: SignatureSpec = SIGNATURE_UNPACKED,
 ) -> Callable[[Callable[..., Any]], UDF]:
     """Turn a function over batches of pyarrow arrays into a `UDF`.
 
@@ -677,14 +663,18 @@ def on_batch(
             )
     """
 
+    @_api.validate_call(UDFErrorCode.UDF_14)
     def decorate(function: Callable[..., Any]) -> UDF:
         return _BatchFunction(output_columns, function, signature)
 
     return decorate
 
 
+@_api.validate_call(UDFErrorCode.UDF_6)
 def on_element(
-    output_columns: OutputColumns, *, signature: Signature = SIGNATURE_UNPACKED
+    output_columns: OutputColumnsSpec,
+    *,
+    signature: SignatureSpec = SIGNATURE_UNPACKED,
 ) -> Callable[[Callable[..., Any]], UDF]:
     """Turn a function over the values of one row into a `UDF`.
 
@@ -742,39 +732,20 @@ def on_element(
             )
     """
 
+    @_api.validate_call(UDFErrorCode.UDF_14)
     def decorate(function: Callable[..., Any]) -> UDF:
         return _ElementFunction(output_columns, function, signature)
 
     return decorate
 
 
-def _outputs(output_columns) -> tuple[OutputColumn, ...]:
-    columns = [output_columns] if isinstance(output_columns, tuple) else output_columns
-    if not isinstance(columns, list) or not columns:
-        raise UDFErrorCode.UDF_5.exception(got=_described(output_columns))
-    outputs = []
-    for index, column in enumerate(columns):
-        if not isinstance(column, tuple) or len(column) != 2:
-            raise UDFErrorCode.UDF_6.exception(
-                index=index, reason="it is not a (name, data type) tuple"
-            )
-        name, dtype = column
-        if not isinstance(name, str) or not name:
-            raise UDFErrorCode.UDF_6.exception(
-                index=index, reason="its name must be a non-empty string"
-            )
-        try:
-            _valid_type(dtype)
-        except TypeError:
-            raise UDFErrorCode.UDF_6.exception(
-                index=index, reason=f"{dtype!r} is not a supported data type"
-            ) from None
-        outputs.append((name, dtype))
-    counts = Counter(name for name, _ in outputs)
-    repeated = sorted(name for name, count in counts.items() if count > 1)
-    if repeated:
-        raise UDFErrorCode.UDF_7.exception(names=repeated)
-    return tuple(outputs)
+@_api.validate_call(UDFErrorCode.UDF_19)
+def _renaming(
+    output_names: OutputNamesSpec | None,
+    output_prefix: OutputAffixSpec | None,
+    output_suffix: OutputAffixSpec | None,
+) -> tuple[list[str] | None, str, str]:
+    return output_names, output_prefix or "", output_suffix or ""
 
 
 def _holds_sequences(dtype) -> bool:

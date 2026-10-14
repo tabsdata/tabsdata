@@ -8,9 +8,10 @@ import inspect
 import logging
 import math
 from collections import namedtuple
+from collections.abc import Set
 from dataclasses import dataclass
 from enum import Enum, IntEnum
-from typing import TYPE_CHECKING, AbstractSet, Any, Callable, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Self, TypeVar
 
 import polars as pl
 from polars._typing import ClosedInterval
@@ -614,7 +615,7 @@ class PolarsClassifierProvider:
     def _in(
         column: pl.Expr,
         dtype: pl.DataType,
-        values: AbstractSet[Any],
+        values: Set[Any],
     ) -> pl.Expr:
         c_values = TypeHandler.convert_set(values, dtype)
         return column.is_in(c_values)
@@ -940,7 +941,7 @@ class PolarsCriteriaProvider:
             return self._function(criteria)
 
     @staticmethod
-    def _sentinels(bins: AbstractSet[Any]) -> set[int]:
+    def _sentinels(bins: Set[Any]) -> set[int]:
         sentinels = set()
         for binv in bins:
             match binv:
