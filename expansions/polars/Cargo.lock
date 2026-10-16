@@ -6746,7 +6746,7 @@ dependencies = [
 
 [[package]]
 name = "ta-tableframe"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "td-build",
  "td-common",
@@ -6761,7 +6761,7 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "td-attach"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "darling 0.23.0",
  "proc-macro-crate",
@@ -6772,7 +6772,7 @@ dependencies = [
 
 [[package]]
 name = "td-build"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6791,7 +6791,7 @@ dependencies = [
 
 [[package]]
 name = "td-common"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "async-trait",
  "bytes",
@@ -6847,7 +6847,7 @@ dependencies = [
 
 [[package]]
 name = "td-error"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "anyhow",
  "derive_builder",
@@ -6860,7 +6860,7 @@ dependencies = [
 
 [[package]]
 name = "td-security"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "argon2",
  "derive_builder",
@@ -6873,7 +6873,7 @@ dependencies = [
 
 [[package]]
 name = "te-tableframe"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "ta-tableframe",
 ]
@@ -6979,7 +6979,7 @@ checksum = "fd3ca314f692efd6c868f8408f53fe444634a845f96c028b97d35f6a1f79f0ee"
 
 [[package]]
 name = "tm-error"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "quote",
  "syn 2.0.119",
@@ -6987,7 +6987,7 @@ dependencies = [
 
 [[package]]
 name = "tm-workspace"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "quote",
  "rand 0.10.3",
@@ -7247,7 +7247,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "ty-expansions"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "ta-tableframe",
  "td-build",
@@ -7257,7 +7257,7 @@ dependencies = [
 
 [[package]]
 name = "ty-tableframe"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "chrono",
  "dashmap",
@@ -7297,7 +7297,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "tz-tableframe"
-version = "2.2.0"
+version = "2.3.0"
 dependencies = [
  "polars",
  "polars-mem-engine",
