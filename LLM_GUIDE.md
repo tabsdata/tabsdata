@@ -20,6 +20,7 @@ Reads from databases, files, or APIs into internal tables.
 ```python
 import tabsdata as td
 
+
 @td.publisher(
     source=td.MySQLSrc(
         conn=td.MySQLConn(
@@ -138,7 +139,9 @@ td.S3AccessKeyCredentials(
 )
 
 # GCP
-td.GCPServiceAccountKeyCredentials(service_account_key='{"type": "service_account", ...}')
+td.GCPServiceAccountKeyCredentials(
+    service_account_key='{"type": "service_account", ...}'
+)
 
 # Azure
 td.AzureAccountKeyCredentials(account_name="myaccount", account_key="...")
@@ -151,7 +154,7 @@ td.HMACCredentials(access_id="...", secret="...")
 
 For credentials that reference external secret stores:
 ```python
-td.EnvironmentSecret("MY_ENV_VAR")           # Read from environment variable
+td.EnvironmentSecret("MY_ENV_VAR")  # Read from environment variable
 td.HashiCorpSecret(path="secret/data/mydb", key="password")  # HashiCorp Vault
 ```
 
@@ -257,8 +260,9 @@ the source's own columns alone:
 
 ```python
 td.S3Src(paths=["in/*.csv"], src_cfg={"tabsdata.src_metadata.drop": True})
-td.MySQLSrc(queries=["SELECT * FROM city"],
-            src_cfg={"tabsdata.src_metadata.drop": True})
+td.MySQLSrc(
+    queries=["SELECT * FROM city"], src_cfg={"tabsdata.src_metadata.drop": True}
+)
 ```
 
 It covers the file, SQL and Salesforce sources. The Kafka and CDC columns are
@@ -269,20 +273,20 @@ written into the staged data itself, so the key does not affect them.
 Control when functions execute:
 ```python
 # Trigger on all input table changes (default for transformer/subscriber)
-trigger_by=td.ALL_DEPS
+trigger_by = td.ALL_DEPS
 
 # Manual trigger only (default for publisher)
-trigger_by=None
+trigger_by = None
 
 # Cron schedule
-trigger_by=td.CronTrigger(mask="0 */6 * * *")  # every 6 hours
+trigger_by = td.CronTrigger(mask="0 */6 * * *")  # every 6 hours
 
 # Trigger on file staging events
-trigger_by=td.StageTrigger(...)
+trigger_by = td.StageTrigger(...)
 
 # Specific table changes
-trigger_by="collection/table_name"
-trigger_by=["collection/table1", "collection/table2"]
+trigger_by = "collection/table_name"
+trigger_by = ["collection/table1", "collection/table2"]
 ```
 
 ## TableFrame
@@ -310,6 +314,7 @@ Attach data quality checks using `td.DataQuality`:
 ```python
 from tabsdata.dataquality import DataQuality
 
+
 @td.publisher(
     source=td.LocalFileSource("/data/sales.csv"),
     tables="sales",
@@ -330,8 +335,11 @@ def load_sales(df: td.TableFrame) -> td.TableFrame:
     ),
     tables=["orders", "items"],
 )
-def load_data(orders: td.TableFrame, items: td.TableFrame) -> (td.TableFrame, td.TableFrame):
+def load_data(
+    orders: td.TableFrame, items: td.TableFrame
+) -> (td.TableFrame, td.TableFrame):
     return orders, items
+
 
 # Multiple output tables
 @td.subscriber(

@@ -284,19 +284,29 @@ slot count for a given source / destination instance.
 ```python
 from tabsdatak.conn.my import MyConn, MyDest, MySrc
 from tabsdatak.spi import (
-    DestDef, DestPlugin, Explorer,
-    SrcPluginCtx, SrcDef, SrcPlugin, TableFileSpec, TableMode,
+    DestDef,
+    DestPlugin,
+    Explorer,
+    SrcPluginCtx,
+    SrcDef,
+    SrcPlugin,
+    TableFileSpec,
+    TableMode,
 )
 
 
 # The runtime resolves the connection from the collection and passes
 # the `MyConn` instance to each plugin method as `conn`.
 class _MySrcPlugin(SrcPlugin[MyConn, MySrc]):
-    def read_in(self, ctx: SrcPluginCtx, conn: MyConn, src: MySrc) -> list[list[TableFileSpec]]: ...
+    def read_in(
+        self, ctx: SrcPluginCtx, conn: MyConn, src: MySrc
+    ) -> list[list[TableFileSpec]]: ...
 
 
 class _MyDestPlugin(DestPlugin[MyConn, MyDest]):
-    def write_out(self, ctx, conn: MyConn, dest: MyDest, tables: list[TableFileSpec]) -> None: ...
+    def write_out(
+        self, ctx, conn: MyConn, dest: MyDest, tables: list[TableFileSpec]
+    ) -> None: ...
 
 
 class _MyExplorer(Explorer[MyConn]):
@@ -307,17 +317,24 @@ class _MyExplorer(Explorer[MyConn]):
 
 # `conn=MyConn` binds the source/destination to its connection type.
 MY_SRC = SrcDef[MyConn, MySrc](
-    type_="my-sql-in", src_version="v1",
-    conn=MyConn, src=MySrc, table_mode=TableMode.SINGLE,
+    type_="my-sql-in",
+    src_version="v1",
+    conn=MyConn,
+    src=MySrc,
+    table_mode=TableMode.SINGLE,
     cardinality=lambda src: len(src.queries),
-    plugin=_MySrcPlugin, explorer=_MyExplorer,
+    plugin=_MySrcPlugin,
+    explorer=_MyExplorer,
 )
 
 MY_DEST = DestDef[MyConn, MyDest](
-    type_="my-sql-out", dest_version="v1",
-    conn=MyConn, dest=MyDest,
+    type_="my-sql-out",
+    dest_version="v1",
+    conn=MyConn,
+    dest=MyDest,
     cardinality=lambda dest: len(dest.tables),
-    plugin=_MyDestPlugin, explorer=_MyExplorer,
+    plugin=_MyDestPlugin,
+    explorer=_MyExplorer,
 )
 ```
 
@@ -359,7 +376,8 @@ Key decisions:
       def validate(self) -> None:
           if self.tls and self.port is None:
               raise MyErrorCode.MY_5.exception(
-                  port=self.port, tls=self.tls,
+                  port=self.port,
+                  tls=self.tls,
               )
   ```
 
@@ -396,7 +414,7 @@ from tabsdatak.tableframe import TableFrame
 
 @publisher(source=src, output_tables=["out_a", "out_b"])
 def my_pub(users: TableFrame) -> tuple[TableFrame, TableFrame]:
-  return (users, None)
+    return (users, None)
 
 
 s = my_pub.to_json()  # envelope-wrapped string
@@ -416,7 +434,8 @@ Polymorphic load works through any abstract base:
 
 ```python
 from tabsdatak.spi import Conn
-back = Conn.from_json(some_envelope_str)   # returns the right subclass
+
+back = Conn.from_json(some_envelope_str)  # returns the right subclass
 ```
 
 ### What can break round-tripping
@@ -454,7 +473,7 @@ from tabsdatak.api import CronTrigger
 from tabsdatak.error import ApiErrorCode, ApiException
 
 with pytest.raises(ApiException) as excinfo:
-  CronTrigger(mask="not a cron mask")
+    CronTrigger(mask="not a cron mask")
 assert excinfo.value.api_error is ApiErrorCode.API_2
 ```
 

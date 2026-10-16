@@ -27,7 +27,10 @@ Three modules. Everything an end user ever types comes from one of them.
 ```python
 # 1. Core API: decorators + abstract bases + value refs + type aliases.
 from tabsdatak.api import (
-    publisher, stream_publisher, transformer, subscriber,  # entry points
+    publisher,
+    stream_publisher,
+    transformer,
+    subscriber,  # entry points
     CronTrigger,  # firing rule
     Secret,  # secret value ref
     # function-signature slot
@@ -36,9 +39,14 @@ from tabsdatak.tableframe import TableFrame
 
 # 2. Cross-cutting connector types: credentials, cloud locations, conn_cfg.
 from tabsdatak.conn.common.types import (
-    UserPassword, GCPJson, AwsAccessSecretKey,
-    AzureAccountKey, HMAC,
-    S3Location, AzBlobLocation, GCSLocation,
+    UserPassword,
+    GCPJson,
+    AwsAccessSecretKey,
+    AzureAccountKey,
+    HMAC,
+    S3Location,
+    AzBlobLocation,
+    GCSLocation,
 )
 
 # 3. The vendor connector you need (one of ~17). Example:
@@ -62,7 +70,9 @@ from tabsdatak._connectors import avail_srcs, avail_stream_srcs, avail_dests
 
 # 6. (Optional) Vendor-level metadata without importing connectors.
 from tabsdatak.conn.common._connectors import (
-    CONNECTORS, list_connectors, import_connector,
+    CONNECTORS,
+    list_connectors,
+    import_connector,
 )
 # CONNECTORS is a dict[str, ConnectorInfo] keyed by vendor key
 # ("mysql", "s3", ...). Each ConnectorInfo carries class names
@@ -121,17 +131,17 @@ from tabsdatak.tableframe import TableFrame
 from tabsdatak.conn.mysql import MySQLSrc
 
 src = MySQLSrc(
-  queries=["SELECT id, email FROM users"],
+    queries=["SELECT id, email FROM users"],
 )
 
 
 @publisher(
-  source=src,
-  output_tables=["users_out"],
-  trigger_by=CronTrigger(mask="@hourly"),
+    source=src,
+    output_tables=["users_out"],
+    trigger_by=CronTrigger(mask="@hourly"),
 )
 def my_pub(users: TableFrame) -> TableFrame:
-  return users
+    return users
 ```
 
 Three pieces, in order: build a `Src` (or `Dest`) from its own
@@ -186,9 +196,9 @@ Anywhere a field accepts `ValOrRefSpec` (the `str | ValRef` union),
 you can pass either:
 
 ```python
-password="literal-pw"                        # literal string
-password=Var(name="DB_PASSWORD")             # env var lookup at runtime
-password=Secret(name="db-creds#PASSWORD")    # K8s secret lookup
+password = "literal-pw"  # literal string
+password = Var(name="DB_PASSWORD")  # env var lookup at runtime
+password = Secret(name="db-creds#PASSWORD")  # K8s secret lookup
 ```
 
 No special syntax per call site. You don't have to know which
@@ -229,7 +239,7 @@ runtime resolves it and hands it to the connector at run time. A
 has nothing to guess about credentials or URIs:
 
 ```python
-src = MySQLSrc(queries=["SELECT 1"])   # no conn anywhere
+src = MySQLSrc(queries=["SELECT 1"])  # no conn anywhere
 ```
 
 ---
@@ -247,13 +257,13 @@ has a **flat** signature:
 # (or per dest cardinality, for @subscriber). A variadic
 # `tuple[TableFrame, ...]` is rejected.
 def f(
-    in_1: TableFrame,           # one positional param per input slot.
-    in_2: TableFrame,           # input_count = source's cardinality
-                                #   for publisher / stream_publisher;
-                                #   = len(input_tables) for transformer / subscriber.
+    in_1: TableFrame,  # one positional param per input slot.
+    in_2: TableFrame,  # input_count = source's cardinality
+    #   for publisher / stream_publisher;
+    #   = len(input_tables) for transformer / subscriber.
     # extra params (config, logger, ...) are allowed past in_N
     # and are not type-checked.
-) -> tuple[TableFrame, TableFrame, TableFrame]:   # one element per output slot
+) -> tuple[TableFrame, TableFrame, TableFrame]:  # one element per output slot
     ...
 ```
 
@@ -319,6 +329,7 @@ datetime(2025, 1, 1)
 
 # accepted:
 from datetime import datetime, timezone
+
 datetime(2025, 1, 1, tzinfo=timezone.utc)
 ```
 
@@ -337,10 +348,12 @@ descriptor is dumped.
 @publisher(source=src, output_tables=["t"])
 def my_pub(tables): ...
 
+
 # rejected at to_json() time:
 def make_pub():
     @publisher(source=src, output_tables=["t"])
     def my_pub(tables): ...
+
     return my_pub
 ```
 
@@ -371,19 +384,26 @@ carries. The connection looks like:
 
 ```python
 from tabsdatak.conn.common.types import (
-  AwsAccessSecretKey, S3Location, UserPassword,
+    AwsAccessSecretKey,
+    S3Location,
+    UserPassword,
 )
 from tabsdatak.conn.clickhouse import ClickHouseConn
 
 dc = ClickHouseConn(
-  host="ch.local", port=9000, database="analytics",
-  credentials=UserPassword(user="u", password="p"),
-  staging=S3Location(
-    bucket="my-staging", region="us-east-1", base_path="ch/",
-    credentials=AwsAccessSecretKey(
-      access_key_id="...", secret_access_key="...",
+    host="ch.local",
+    port=9000,
+    database="analytics",
+    credentials=UserPassword(user="u", password="p"),
+    staging=S3Location(
+        bucket="my-staging",
+        region="us-east-1",
+        base_path="ch/",
+        credentials=AwsAccessSecretKey(
+            access_key_id="...",
+            secret_access_key="...",
+        ),
     ),
-  ),
 )
 ```
 
@@ -555,7 +575,9 @@ Without a discovery surface, a generated
 ```python
 from tabsdatak._connectors import avail_srcs, avail_dests
 from tabsdatak.conn.common._connectors import (
-  CONNECTORS, list_connectors, import_connector,
+    CONNECTORS,
+    list_connectors,
+    import_connector,
 )
 
 # What's installed?
@@ -568,8 +590,7 @@ DestCls = getattr(sf_mod, CONNECTORS["snowflake"].dest_classes[0])
 
 # Find every ARRAY-mode source (the runtime binding registry
 # carries table_mode):
-[d.src for d in avail_srcs().values()
- if d.table_mode.name == "ARRAY"]
+[d.src for d in avail_srcs().values() if d.table_mode.name == "ARRAY"]
 # [LocalFileSrc, S3Src, GCSSrc, AzureBlobSrc]
 
 # All vendors with a source role, filtered by tag:
@@ -782,8 +803,7 @@ example often omits `credentials` or invents a field like
 ```python
 from tabsdatak.conn.mysql.quickstart import mysql_src
 
-src = mysql_src(uri="mysql://...", user="etl", password=Var(...),
-                queries=["SELECT 1"])
+src = mysql_src(uri="mysql://...", user="etl", password=Var(...), queries=["SELECT 1"])
 ```
 
 The function does the wiring; the LLM only sets actual values. Same

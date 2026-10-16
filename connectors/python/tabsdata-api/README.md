@@ -172,10 +172,13 @@ break the otherwise-circular relationships):
    `_<name>_plugin.py`:
    ```python
    MYSQL_SRC = SrcDef[MySQLConn, MySQLSrc](
-       type_="mysql-sql-in", src_version="v1",
-       src=MySQLSrc, table_mode=TableMode.SINGLE,
+       type_="mysql-sql-in",
+       src_version="v1",
+       src=MySQLSrc,
+       table_mode=TableMode.SINGLE,
        cardinality=lambda src: len(src.queries),
-       plugin=_MySQLSrcPlugin, explorer=_MySQLExplorer,
+       plugin=_MySQLSrcPlugin,
+       explorer=_MySQLExplorer,
    )
    ```
    The package's `pyproject.toml` exposes the constant under the

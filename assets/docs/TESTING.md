@@ -140,9 +140,8 @@ counts are `tables()` and `rows(table)`, the SQL counterpart of `staged()`.
 Python names the same things the same way, so a test reads alike in either language:
 
 ```python
-    @s3_domain("s3_world_xs")
-    def test_reads_seeded_data(domain_s3_world_xs: S3Domain):
-        ...
+@s3_domain("s3_world_xs")
+def test_reads_seeded_data(domain_s3_world_xs: S3Domain): ...
 ```
 
 ## Resolution Order
