@@ -221,27 +221,27 @@ pub fn inject_metadata_into_cronjob(
     annotations: &[(String, String)],
 ) {
     apply_metadata(&mut cronjob.metadata, labels, annotations);
-    if let Some(spec) = cronjob.spec.as_mut() {
-        let job_template_metadata = spec
-            .job_template
+    let spec = &mut cronjob.spec;
+    let job_template_metadata = spec
+        .job_template
+        .metadata
+        .get_or_insert_with(ObjectMeta::default);
+    apply_metadata(job_template_metadata, labels, annotations);
+    if let Some(job_spec) = spec.job_template.spec.as_mut() {
+        let template_metadata = job_spec
+            .template
             .metadata
             .get_or_insert_with(ObjectMeta::default);
-        apply_metadata(job_template_metadata, labels, annotations);
-        if let Some(job_spec) = spec.job_template.spec.as_mut() {
-            let template_metadata = job_spec
-                .template
-                .metadata
-                .get_or_insert_with(ObjectMeta::default);
-            apply_metadata(template_metadata, labels, annotations);
-        }
+        apply_metadata(template_metadata, labels, annotations);
     }
 }
 
 pub fn inject_common_envfrom_into_cronjob(cronjob: &mut CronJob, envfrom: &[EnvFromSource]) {
     let Some(template) = cronjob
         .spec
+        .job_template
+        .spec
         .as_mut()
-        .and_then(|spec| spec.job_template.spec.as_mut())
         .and_then(|job_spec| job_spec.template.spec.as_mut())
     else {
         return;
@@ -253,8 +253,9 @@ pub fn inject_common_envfrom_into_cronjob(cronjob: &mut CronJob, envfrom: &[EnvF
 pub fn inject_connection_envfrom_into_cronjob(cronjob: &mut CronJob, envfrom: &EnvFromSource) {
     let Some(template) = cronjob
         .spec
+        .job_template
+        .spec
         .as_mut()
-        .and_then(|spec| spec.job_template.spec.as_mut())
         .and_then(|job_spec| job_spec.template.spec.as_mut())
     else {
         return;

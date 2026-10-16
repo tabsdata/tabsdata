@@ -473,6 +473,28 @@ class Expr:
                 tf.select(col("v").exp().alias("growth"))
         """
 
+    def erf(self) -> Expr:
+        """Error function of each element.
+
+        :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").erf().alias("erf"))
+        """
+
+    def erfc(self) -> Expr:
+        """Complementary error function (`1 - erf`) of each element.
+
+        :categories: numeric
+
+        Examples:
+            .. code-block:: python
+
+                tf.select(col("v").erfc().alias("erfc"))
+        """
+
     def alias(self, name: Any) -> Expr:
         """Rename the output column of this expression.
 
@@ -1188,22 +1210,13 @@ class Expr:
                 tf.filter(col("a").is_between(2, 4, closed="left"))
         """
 
-    def hash(
-        self,
-        seed: int = 0,
-        seed_1: int | None = None,
-        seed_2: int | None = None,
-        seed_3: int | None = None,
-    ) -> Expr:
+    def hash(self, seed: int = 0) -> Expr:
         """Hash each element to a 64-bit unsigned integer.
 
         :categories: numeric
 
         Args:
-            seed: Base seed for the hash.
-            seed_1: Optional additional seed.
-            seed_2: Optional additional seed.
-            seed_3: Optional additional seed.
+            seed: Seed for the hash.
 
         Examples:
             .. code-block:: python

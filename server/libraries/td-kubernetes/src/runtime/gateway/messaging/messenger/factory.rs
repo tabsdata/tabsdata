@@ -179,8 +179,9 @@ impl WorkloadFactory {
         let placement = PodPlacement::of(cronjob.metadata.labels.as_ref());
         let Some(spec) = cronjob
             .spec
+            .job_template
+            .spec
             .as_mut()
-            .and_then(|cronjob_spec| cronjob_spec.job_template.spec.as_mut())
             .and_then(|job_spec| job_spec.template.spec.as_mut())
         else {
             return Ok(());

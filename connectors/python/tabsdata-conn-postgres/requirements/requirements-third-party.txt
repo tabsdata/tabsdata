@@ -2,4 +2,4 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-orjson==3.11.7
+orjson==3.13.0

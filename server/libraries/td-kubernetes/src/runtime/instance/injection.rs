@@ -80,8 +80,9 @@ pub fn inject_into_cronjob(
     let placement = PodPlacement::of(cronjob.metadata.labels.as_ref());
     let spec = cronjob
         .spec
+        .job_template
+        .spec
         .as_mut()
-        .and_then(|cronjob_spec| cronjob_spec.job_template.spec.as_mut())
         .and_then(|job_spec| job_spec.template.spec.as_mut())
         .ok_or_else(|| LauncherError::SecretEnvInjectionConfigParseFailed {
             config: pod_template_key.to_owned(),

@@ -111,7 +111,7 @@ fn a_missing_function_annotation_is_absent() {
 fn a_workload_with_a_deletion_timestamp_is_being_deleted() {
     let mut metadata = metadata(&[]);
     assert!(!metadata.deleting());
-    metadata.deletion_timestamp = Some(Time(chrono::Utc::now()));
+    metadata.deletion_timestamp = Some(Time(k8s_openapi::jiff::Timestamp::now()));
     assert!(metadata.deleting());
 }
 

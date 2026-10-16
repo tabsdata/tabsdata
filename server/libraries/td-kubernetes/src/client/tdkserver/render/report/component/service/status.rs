@@ -2,7 +2,9 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use chrono::Utc;
+use std::time::SystemTime;
+
+use chrono::{DateTime, Utc};
 use cron_descriptor::cronparser::cron_expression_descriptor;
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
@@ -282,7 +284,7 @@ fn job_row(job: &Job) -> JobRow {
 }
 
 fn cronjob_row(cronjob: &CronJob) -> CronJobRow {
-    let schedule = cronjob.spec.as_ref().map(|spec| spec.schedule.clone());
+    let schedule = Some(cronjob.spec.schedule.clone());
     CronJobRow {
         name: name_of(cronjob.metadata.name.as_ref()),
         status: cronjob_status(cronjob),
@@ -344,11 +346,7 @@ fn job_completions(job: &Job) -> String {
 }
 
 fn cronjob_status(cronjob: &CronJob) -> String {
-    let suspended = cronjob
-        .spec
-        .as_ref()
-        .and_then(|spec| spec.suspend)
-        .unwrap_or(false);
+    let suspended = cronjob.spec.suspend.unwrap_or(false);
     if suspended {
         STATUS_STOPPED.to_owned()
     } else {
@@ -366,7 +364,7 @@ fn age(creation: Option<&Time>) -> String {
         return UNGATHERED_CELL.to_owned();
     };
     let seconds = Utc::now()
-        .signed_duration_since(creation.0)
+        .signed_duration_since(DateTime::<Utc>::from(SystemTime::from(creation.0)))
         .num_seconds()
         .max(0);
     if seconds < 60 {

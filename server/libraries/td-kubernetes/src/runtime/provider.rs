@@ -314,14 +314,7 @@ impl ClusterProvider {
 }
 
 fn cronjob_pod_template(cronjob: &CronJob) -> Option<Pod> {
-    let template = cronjob
-        .spec
-        .as_ref()?
-        .job_template
-        .spec
-        .as_ref()?
-        .template
-        .clone();
+    let template = cronjob.spec.job_template.spec.as_ref()?.template.clone();
     Some(Pod {
         metadata: template.metadata.unwrap_or_default(),
         spec: template.spec,

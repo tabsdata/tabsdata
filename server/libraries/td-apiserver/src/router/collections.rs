@@ -195,6 +195,7 @@ mod tests {
     use td_security::{DESTINATION_GROUP, SOURCE_GROUP};
     use td_services::Services;
     use tower::ServiceExt;
+    use utoipa::openapi::RefOr;
     use utoipa::openapi::path::{Operation, ParameterIn};
 
     /// Mounts the same layers the real apiserver wraps project routes with:
@@ -283,8 +284,10 @@ mod tests {
 
         let has_path_param = |op: &Operation, name: &str| {
             op.parameters.as_ref().is_some_and(|ps| {
-                ps.iter()
-                    .any(|p| p.name == name && matches!(p.parameter_in, ParameterIn::Path))
+                ps.iter().any(|p| match p {
+                    RefOr::T(p) => p.name == name && matches!(p.parameter_in, ParameterIn::Path),
+                    RefOr::Ref(_) => false,
+                })
             })
         };
 

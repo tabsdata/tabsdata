@@ -33,6 +33,7 @@ Int32 = pl.Int32
 Int64 = pl.Int64
 Int8 = pl.Int8
 List = pl.List
+Map = pl.Map
 Null = pl.Null
 Object = pl.Object
 String = pl.String
@@ -80,6 +81,7 @@ _ALLOWED_TYPES = [
     Int64,
     Int8,
     List,
+    Map,
     Null,
     Object,
     String,

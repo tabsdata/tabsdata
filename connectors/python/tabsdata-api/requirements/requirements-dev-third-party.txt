@@ -2,4 +2,4 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-mimesis==19.1.0
+mimesis==22.2.0

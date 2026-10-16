@@ -44,7 +44,7 @@ pub async fn create_cronjob(
             });
     }
 
-    cronjob.spec.get_or_insert_with(Default::default).suspend = Some(true);
+    cronjob.spec.suspend = Some(true);
     let name = cronjob.metadata.name.clone().unwrap_or_default();
 
     let creating = context.clone();

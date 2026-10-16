@@ -3,9 +3,8 @@
 //
 
 use crate::config::PasswordHashingConfig;
-use argon2::password_hash::SaltString;
-use argon2::password_hash::rand_core::OsRng;
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use argon2::password_hash::phc::PasswordHash;
+use argon2::{Argon2, PasswordHasher, PasswordVerifier};
 
 // Verifies the password hash.
 pub fn verify_password(phc_str: &str, password: &str) -> bool {
@@ -25,7 +24,7 @@ pub fn create_password_hash(
     // creates a PHC string
     password_hashing_config
         .password_hasher()
-        .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))
+        .hash_password(password.as_bytes())
         .unwrap()
         .to_string()
 }

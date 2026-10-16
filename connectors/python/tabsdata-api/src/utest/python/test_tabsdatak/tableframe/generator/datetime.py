@@ -126,12 +126,6 @@ def test_date_delegates():
     getattr(inner, "date").assert_called()
 
 
-def test_datetime_delegates():
-    inner = MagicMock()
-    getattr(ExprDateTimeNameSpace._wrap(inner), "datetime")()
-    getattr(inner, "datetime").assert_called()
-
-
 def test_hour_delegates():
     inner = MagicMock()
     getattr(ExprDateTimeNameSpace._wrap(inner), "hour")()
@@ -178,12 +172,6 @@ def test_timestamp_delegates():
     inner = MagicMock()
     getattr(ExprDateTimeNameSpace._wrap(inner), "timestamp")()
     getattr(inner, "timestamp").assert_called()
-
-
-def test_with_time_unit_delegates():
-    inner = MagicMock()
-    getattr(ExprDateTimeNameSpace._wrap(inner), "with_time_unit")()
-    getattr(inner, "with_time_unit").assert_called()
 
 
 def test_cast_time_unit_delegates():

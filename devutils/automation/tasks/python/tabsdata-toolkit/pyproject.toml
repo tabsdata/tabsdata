@@ -4,8 +4,8 @@
 
 [build-system]
 requires = [
-    "setuptools==83.0.0",
-    "wheel==0.47.0"
+    "setuptools==84.0.0",
+    "wheel==0.48.0"
 ]
 build-backend = "setuptools.build_meta"
 
@@ -37,32 +37,32 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-    "archspec==0.2.5",
-    "black==26.5.1",
+    "archspec==0.2.6",
+    "black==26.10.1",
     "colorama==0.4.6",
-    "colorlog==6.10.1",
-    "cryptography==47.0.0",
-    "distlib==0.4.0",
-    "filelock==3.25.2",
-    "gitpython==3.1.46",
-    "griffe==2.1.0",
-    "mypy==2.1.0",
+    "colorlog==6.12.0",
+    "cryptography==50.0.2",
+    "distlib==0.4.3",
+    "filelock==4.2.0",
+    "gitpython==3.2.1",
+    "griffe==2.3.2",
+    "mypy==2.4.0",
     "mypy-extensions==1.1.0",
-    "packaging==26.0",
+    "packaging==26.3",
     "psutil==7.2.2",
     "py-cpuinfo==9.0.0",
-    "pydantic==2.12.5",
-    "pytest==9.0.2",
+    "pydantic==2.14.1",
+    "pytest==9.1.1",
     "python_on_whales==0.81.0",
     "pyyaml==6.0.3",
-    "rich==14.3.3",
-    "rich-click==1.9.7",
-    "setuptools==83.0.0",
-    "tenacity==9.1.4",
-    "textual==8.2.3",
+    "rich==15.0.0",
+    "rich-click==1.9.9",
+    "setuptools==84.0.0",
+    "tenacity==9.2.1",
+    "textual==8.2.8",
     "textual-plotext==1.0.1",
-    "tqdm==4.67.3",
-    "tzlocal==5.3.1",
+    "tqdm==4.70.1",
+    "tzlocal==5.4.4",
 ]
 
 [project.entry-points.pytest11]

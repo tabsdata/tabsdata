@@ -320,17 +320,6 @@ class ExprDateTimeNameSpace:
                 tf.select(col("ts").dt.date().alias("date"))
         """
 
-    def datetime(self) -> Expr:
-        """Extract the datetime value.
-
-        :categories: date
-
-        Examples:
-            .. code-block:: python
-
-                tf.select(col("ts").dt.datetime().alias("moment"))
-        """
-
     def hour(self) -> Expr:
         """Extract the hour of each datetime (0 to 23).
 
@@ -432,26 +421,6 @@ class ExprDateTimeNameSpace:
             .. code-block:: python
 
                 tf.select(col("ts").dt.timestamp("ms").alias("stamp"))
-        """
-
-    def with_time_unit(self, time_unit: TimeUnit) -> Expr:
-        """Relabel the time unit without changing the stored values.
-
-        :categories: date
-
-        Args:
-            time_unit: New unit: `ns`, `us` or `ms`.
-
-        Examples:
-            .. code-block:: python
-
-                tf.select(col("ts").dt.with_time_unit("ms"))
-
-            This relabels the unit and therefore reinterprets the stored numbers; use `cast_time_unit` to keep the same instant:
-
-            .. code-block:: python
-
-                tf.select(col("ts").dt.cast_time_unit("ms"))
         """
 
     def cast_time_unit(self, time_unit: TimeUnit) -> Expr:

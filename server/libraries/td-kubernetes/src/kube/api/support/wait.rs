@@ -13,7 +13,7 @@ use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use kube::Api;
 use kube::Resource as KubeResource;
-use kube::core::ErrorResponse;
+use kube::core::Status;
 use kube::runtime::wait::{Condition, Error as WaitError, await_condition};
 use kube::runtime::watcher::Error as WatcherError;
 use serde::de::DeserializeOwned;
@@ -26,8 +26,6 @@ use crate::kube::api::domain::diagnostics::report_workload;
 use crate::kube::context::KubeContext;
 
 const WATCH_EXPIRED_REASON: &str = "Expired";
-
-const WATCH_FAILURE_STATUS: &str = "Failure";
 
 const WATCH_TIMEOUT_REASON: &str = "Timeout";
 
@@ -140,15 +138,15 @@ where
                     continue;
                 }
                 return Err(WaitError::ProbeFailed(WatcherError::WatchError(
-                    ErrorResponse {
-                        status: WATCH_FAILURE_STATUS.to_owned(),
-                        message: format!(
+                    Status::failure(
+                        &format!(
                             "The wait for '{name}' exceeded the limit of {}",
                             format_duration(AWAIT_CONDITION_TIMEOUT)
                         ),
-                        reason: WATCH_TIMEOUT_REASON.to_owned(),
-                        code: 504,
-                    },
+                        WATCH_TIMEOUT_REASON,
+                    )
+                    .with_code(504)
+                    .boxed(),
                 )));
             }
         };

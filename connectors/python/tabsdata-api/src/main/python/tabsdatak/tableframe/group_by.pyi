@@ -96,20 +96,6 @@ class LazyGroupBy:
                 tf.group_by("g").len("rows")
         """
 
-    def count(self) -> TableFrame:
-        """Count the non-null values of each column within each group.
-
-        :categories: aggregation
-
-        Yields one count column per non-key column. Safe on any
-        `TableFrame` (it counts values, not reduces them).
-
-        Examples:
-            .. code-block:: python
-
-                tf.group_by("g").count()
-        """
-
     def max(self) -> TableFrame:
         """Take the maximum of each non-key column within each group.
 

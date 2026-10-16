@@ -2,17 +2,16 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use kube::core::ErrorResponse;
+use kube::core::Status;
 
 use super::*;
 
 fn api_error(code: u16) -> kube::Error {
-    kube::Error::Api(ErrorResponse {
-        status: "Failure".to_owned(),
-        message: "denied".to_owned(),
-        reason: "Forbidden".to_owned(),
-        code,
-    })
+    kube::Error::Api(
+        Status::failure("denied", "Forbidden")
+            .with_code(code)
+            .boxed(),
+    )
 }
 
 fn connect_error() -> kube::Error {

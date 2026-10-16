@@ -2,5 +2,5 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-pymysql==1.2.0
-mysql-replication==1.0.15
+pymysql==1.2.3
+mysql-replication==1.0.17

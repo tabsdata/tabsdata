@@ -60,22 +60,6 @@ def test_len_runs():
     assert type(result).__module__.split(".", 1)[0] != "polars"
 
 
-def test_count_delegates():
-    group_by = _group_by()
-    group_by.count()
-    group_by._lgb.count.assert_called()
-
-
-def test_count_runs():
-    try:
-        result = _live_group_by().count()
-    except Exception as exc:  # noqa: BLE001
-        if "tableframe:" in str(exc):
-            raise  # a real leak, not an argument problem
-        pytest.skip(f"not callable with simple args: {type(exc).__name__}")
-    assert type(result).__module__.split(".", 1)[0] != "polars"
-
-
 def test_max_delegates():
     group_by = _group_by()
     group_by.max()

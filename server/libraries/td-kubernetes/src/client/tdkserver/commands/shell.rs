@@ -42,9 +42,9 @@ use super::session::set::{SetArguments, command_set};
 use super::session::settings::{SettingsArguments, command_settings};
 use super::session::unset::{UnpinArguments, command_unset};
 use super::venvs::{VenvCommands, command_venv};
-use crate::cerror;
 use crate::client::session::settings::{SettingsContext, tdksettings_path};
 use crate::core::system::exit::CommandResult;
+use crate::{cerror, cwarn};
 
 const TOOL_NAME: &str = "tdkserver";
 const HISTORY_FILE: &str = ".tdkserver.history";
@@ -156,6 +156,11 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
             Signal::Success(line) => line,
             Signal::CtrlC => continue,
             Signal::CtrlD => break,
+            Signal::HostCommand(_) | Signal::ExternalBreak(_) => continue,
+            other => {
+                cwarn!("Unhandled shell signal: {other:?}");
+                continue;
+            }
         };
 
         let line = line.trim();

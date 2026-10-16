@@ -47,7 +47,7 @@ ignored = ["td-build", "td-security", "toml"]
 
 # External dependencies
 
-argon2 = { workspace = true, features = ["std"] }
+argon2 = { workspace = true }
 derive_builder = { workspace = true }
 getset = { workspace = true }
 hex = { workspace = true }

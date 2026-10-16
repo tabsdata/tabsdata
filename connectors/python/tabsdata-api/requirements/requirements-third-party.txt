@@ -2,6 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-pydantic==2.12.5
-croniter==6.2.2
+pydantic==2.14.1
+croniter==6.2.4
 ruamel.yaml==0.19.1

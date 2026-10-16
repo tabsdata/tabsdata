@@ -159,18 +159,7 @@ class TableFrame(EngineFrame):
         *,
         format: ExplainFormat = "plain",
         optimized: bool = True,
-        type_coercion: bool = True,
-        predicate_pushdown: bool = True,
-        projection_pushdown: bool = True,
-        simplify_expression: bool = True,
-        slice_pushdown: bool = True,
-        comm_subplan_elim: bool = True,
-        comm_subexpr_elim: bool = True,
-        cluster_with_columns: bool = True,
-        collapse_joins: bool = True,
-        streaming: bool = False,
         engine: EngineType = "auto",
-        tree_format: bool | None = None,
         optimizations: Any = ...,
     ) -> str:
         """Return the query plan of this `TableFrame` as text.
@@ -181,13 +170,11 @@ class TableFrame(EngineFrame):
             format: `"plain"` or `"tree"` rendering.
             optimized: Show the optimized plan (default) rather than the raw
                 logical plan.
-            streaming: Show the plan for streaming execution.
             engine: Target engine -- `"auto"`, `"in-memory"`,
                 `"streaming"` or `"gpu"`.
-
-        The remaining boolean flags each toggle one query-plan optimization
-        (predicate/projection pushdown, common-subplan elimination, ...);
-        leave them at their defaults unless diagnosing the plan.
+            optimizations: The query-plan optimizations to apply (predicate
+                and projection pushdown, common-subplan elimination, ...);
+                leave the default unless diagnosing the plan.
 
         Examples:
             .. code-block:: python
@@ -209,19 +196,8 @@ class TableFrame(EngineFrame):
         output_path: str | Path | None = None,
         raw_output: bool = False,
         figsize: tuple[float, float] = (16.0, 12.0),
-        type_coercion: bool = True,
-        _type_check: bool = True,
-        predicate_pushdown: bool = True,
-        projection_pushdown: bool = True,
-        simplify_expression: bool = True,
-        slice_pushdown: bool = True,
-        comm_subplan_elim: bool = True,
-        comm_subexpr_elim: bool = True,
-        cluster_with_columns: bool = True,
-        collapse_joins: bool = True,
         engine: EngineType = "auto",
-        plan_stage: PlanStage | None = None,
-        _check_order: bool = True,
+        plan_stage: PlanStage = "physical",
         optimizations: Any = ...,
     ) -> str | None:
         """Render the query plan of this `TableFrame` as a graph.
@@ -237,14 +213,10 @@ class TableFrame(EngineFrame):
             raw_output: Return the raw DOT string instead of rendering.
             figsize: Figure size as `(width, height)` in inches.
             engine: Engine whose plan is graphed; `"auto"` by default.
-            plan_stage: Plan stage to graph, `"ir"` or `"physical"`. Only the
-                streaming engine has a separate physical stage. When omitted it
-                graphs the `"ir"` stage and polars warns that the default
-                becomes `"physical"` in Polars 2.0; pass `plan_stage="ir"` to
-                keep the current output without the warning.
-
-        The remaining boolean flags toggle individual query-plan
-        optimizations; leave them at their defaults unless diagnosing the plan.
+            plan_stage: Plan stage to graph, `"physical"` (default) or `"ir"`.
+                Only the streaming engine has a separate physical stage.
+            optimizations: The query-plan optimizations to apply; leave the
+                default unless diagnosing the plan.
 
         Examples:
             .. code-block:: python

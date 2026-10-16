@@ -49,6 +49,7 @@ mod tests {
     use td_services::Services;
     use te_services::ExtendedServices;
     use tower::ServiceExt;
+    use utoipa::openapi::RefOr;
     use utoipa::openapi::path::ParameterIn;
 
     type Placement = (Listener, Option<Version>, Scope, &'static [SecurityMode]);
@@ -538,8 +539,12 @@ mod tests {
                     let params = op.parameters.clone().unwrap_or_default();
                     let documented: HashSet<&str> = params
                         .iter()
-                        .filter(|p| matches!(p.parameter_in, ParameterIn::Path))
-                        .map(|p| p.name.as_str())
+                        .filter_map(|p| match p {
+                            RefOr::T(p) if matches!(p.parameter_in, ParameterIn::Path) => {
+                                Some(p.name.as_str())
+                            }
+                            _ => None,
+                        })
                         .collect();
                     assert_eq!(
                         placeholders, documented,

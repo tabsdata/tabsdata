@@ -8,8 +8,6 @@ use crate::auth::assert_user_enabled::assert_user_enabled;
 use crate::auth::purge_expired_sessions::purge_expired_sessions;
 use crate::auth::retire_sessions::retire_sessions;
 use argon2::PasswordHasher;
-use argon2::password_hash::SaltString;
-use argon2::password_hash::rand_core::OsRng;
 use std::ops::Deref;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -79,7 +77,7 @@ pub fn create_password_hash<P: Deref<Target = String>>(
 ) -> Result<PasswordHash, TdError> {
     let hash = password_hashing_config
         .password_hasher()
-        .hash_password(password.as_bytes(), &SaltString::generate(&mut OsRng))
+        .hash_password(password.as_bytes())
         .unwrap()
         .to_string();
 

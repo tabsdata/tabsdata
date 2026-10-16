@@ -63,7 +63,7 @@ FillNullStrategy: TypeAlias = Literal[
 IntoExpr: TypeAlias = PythonLiteral | IntoExprColumn | None
 IntoExprColumn: TypeAlias = Expr | str
 JoinStrategy: TypeAlias = Literal[
-    "inner", "left", "right", "full", "semi", "anti", "cross", "outer"
+    "inner", "left", "right", "full", "semi", "anti", "cross"
 ]
 NonExistent: TypeAlias = Literal["raise", "null"]
 NonNestedLiteral: TypeAlias = NumericLiteral | TemporalLiteral | str | bool | bytes

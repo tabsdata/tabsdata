@@ -71,7 +71,7 @@ td-tableframe = { workspace = true }
 
 # External dependencies
 
-argon2 = { workspace = true, features = ["std"] }
+argon2 = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true, features = ["macros"] }
 bytes = { workspace = true }

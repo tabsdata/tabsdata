@@ -3,7 +3,9 @@
 //
 
 use std::collections::BTreeSet;
+use std::time::SystemTime;
 
+use chrono::{DateTime, Utc};
 use indicatif::MultiProgress;
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::batch::v1::{CronJob, Job};
@@ -1050,7 +1052,12 @@ async fn clear_settled_job(
                 .status
                 .as_ref()
                 .and_then(|status| status.start_time.as_ref())
-                .map(|time| format!("at {}", time.0.to_rfc3339()))
+                .map(|time| {
+                    format!(
+                        "at {}",
+                        DateTime::<Utc>::from(SystemTime::from(time.0)).to_rfc3339()
+                    )
+                })
                 .unwrap_or_else(|| "at an unknown time".to_owned()),
             active,
         }

@@ -68,9 +68,6 @@ class ExprDateTimeNameSpace(BaseWrapper):
     def date(self, *args, **kwargs):
         return wrap(self._inner.date(*unwrap(args), **unwrap(kwargs)))
 
-    def datetime(self, *args, **kwargs):
-        return wrap(self._inner.datetime(*unwrap(args), **unwrap(kwargs)))
-
     def hour(self, *args, **kwargs):
         return wrap(self._inner.hour(*unwrap(args), **unwrap(kwargs)))
 
@@ -94,9 +91,6 @@ class ExprDateTimeNameSpace(BaseWrapper):
 
     def timestamp(self, *args, **kwargs):
         return wrap(self._inner.timestamp(*unwrap(args), **unwrap(kwargs)))
-
-    def with_time_unit(self, *args, **kwargs):
-        return wrap(self._inner.with_time_unit(*unwrap(args), **unwrap(kwargs)))
 
     def cast_time_unit(self, *args, **kwargs):
         return wrap(self._inner.cast_time_unit(*unwrap(args), **unwrap(kwargs)))

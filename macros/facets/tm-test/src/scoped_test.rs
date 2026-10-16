@@ -45,11 +45,13 @@ fn try_scoped_test(args: TokenStream, item: TokenStream) -> darling::Result<Toke
     // `TestArgs`; everything else is forwarded verbatim into `#[::tokio::test(...)]`.
     // This lets call sites use any tokio knob (current or future) without
     // touching this macro.
+    let is_td_key = |path: &syn::Path| {
+        path.get_ident()
+            .is_some_and(|id| TD_TEST_KEYS.contains(&id.to_string().as_str()))
+    };
     let (td_meta, tokio_meta): (Vec<_>, Vec<_>) = nested.into_iter().partition(|n| match n {
-        NestedMeta::Meta(m) => m
-            .path()
-            .get_ident()
-            .is_some_and(|id| TD_TEST_KEYS.contains(&id.to_string().as_str())),
+        NestedMeta::Meta(m) => is_td_key(m.path()),
+        NestedMeta::NameValueInvalidExpr(nv) => is_td_key(&nv.path),
         NestedMeta::Lit(_) => false,
     });
     let args = TestArgs::from_list(&td_meta)?;

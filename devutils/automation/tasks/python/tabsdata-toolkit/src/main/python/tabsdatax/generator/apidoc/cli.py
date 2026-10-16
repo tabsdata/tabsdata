@@ -254,7 +254,8 @@ def install_pyi_wins_policy() -> None:
     import griffe._internal.loader as _loader
     import griffe._internal.mixins as _mixins
 
-    def pyi_wins(mod1: Any, mod2: Any) -> Any:
+    # Merge options (e.g. ``prefer_stubs_docs``) are moot: nothing is merged.
+    def pyi_wins(mod1: Any, mod2: Any, **_options: Any) -> Any:
         try:
             mod1_is_stub = mod1.filepath.suffix == ".pyi"
             mod2_is_stub = mod2.filepath.suffix == ".pyi"

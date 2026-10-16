@@ -3,4 +3,4 @@
 #
 
 PyYAML==6.0.3
-types-PyYAML==6.0.3
+types-PyYAML==6.0.12.20260906

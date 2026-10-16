@@ -2,4 +2,4 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-pymongo==4.16.0
+pymongo==4.19.0

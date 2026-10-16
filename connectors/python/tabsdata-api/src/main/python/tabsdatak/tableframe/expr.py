@@ -121,6 +121,12 @@ class Expr(BaseWrapper):
     def exp(self, *args, **kwargs):
         return wrap(self._inner.exp(*unwrap(args), **unwrap(kwargs)))
 
+    def erf(self, *args, **kwargs):
+        return wrap(self._inner.erf(*unwrap(args), **unwrap(kwargs)))
+
+    def erfc(self, *args, **kwargs):
+        return wrap(self._inner.erfc(*unwrap(args), **unwrap(kwargs)))
+
     def alias(self, *args, **kwargs):
         return wrap(self._inner.alias(*unwrap(args), **unwrap(kwargs)))
 

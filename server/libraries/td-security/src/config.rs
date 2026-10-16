@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use argon2::password_hash::phc::PasswordHash;
 use argon2::{Algorithm, Argon2, Params, PasswordHasher, Version};
 use derive_builder::Builder;
 use getset::Getters;
@@ -42,7 +43,7 @@ impl Default for PasswordHashingConfig {
 }
 
 impl PasswordHashingConfig {
-    pub fn password_hasher(&self) -> impl PasswordHasher + use<> {
+    pub fn password_hasher(&self) -> impl PasswordHasher<PasswordHash> + use<> {
         Argon2::new(
             Algorithm::from_str(&self.algorithm)
                 .expect("Invalid configuration: unknown password hashing algorithm. Valid values: argon2d, argon2i, argon2id (default)"),

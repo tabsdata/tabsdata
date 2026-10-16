@@ -10,7 +10,7 @@ use std::env;
 use std::path::{Path, PathBuf};
 use sysinfo::System;
 use tm_workspace::workspace_root;
-use vergen_gix::{BuildBuilder, CargoBuilder, Emitter, GixBuilder, RustcBuilder, SysinfoBuilder};
+use vergen_gix::{Build, Cargo, Emitter, Gix, Rustc, Sysinfo};
 
 const TABSDATA_PROJECT_MARKER: &str = "tabsdata";
 
@@ -200,10 +200,10 @@ impl Stamper for Stamping {
         println!("cargo:rustc-env=VERGEN_TD_ON_GA={}", on_ga);
         let solution: PathBuf = Self::solution();
 
-        let build = BuildBuilder::default()
+        let build = Build::builder()
             .build_date(true)
             .build_timestamp(true)
-            .build()?;
+            .build();
 
         let repositories = load_repositories();
         for repository in &repositories {
@@ -241,8 +241,8 @@ impl Stamper for Stamping {
                 "cargo:rustc-env=VERGEN_GIT_{}_DESCRIPTION={}",
                 repository_prefix, repository.description
             );
-            let gix = GixBuilder::default()
-                .repo_path(Some(repository_path.clone()))
+            let gix = Gix::builder()
+                .local_repo_path(repository_path.clone())
                 .branch(true)
                 .sha(true)
                 .commit_date(true)
@@ -252,7 +252,7 @@ impl Stamper for Stamping {
                 .commit_message(true)
                 .commit_count(true)
                 .describe(true, false, None)
-                .build()?;
+                .build();
             Emitter::default().add_instructions(&gix)?.emit_and_set()?;
             let git_envs = [
                 "VERGEN_GIT_BRANCH",
@@ -330,23 +330,23 @@ impl Stamper for Stamping {
                 }
             }
         }
-        let rust = RustcBuilder::default()
+        let rust = Rustc::builder()
             .semver(true)
             .channel(true)
             .host_triple(true)
             .commit_hash(true)
             .commit_date(true)
             .llvm_version(true)
-            .build()?;
+            .build();
 
-        let cargo = CargoBuilder::default()
+        let cargo = Cargo::builder()
             .target_triple(true)
             .features(true)
             .debug(true)
             .opt_level(true)
-            .build()?;
+            .build();
 
-        let sysinfo = SysinfoBuilder::default()
+        let sysinfo = Sysinfo::builder()
             .cpu_brand(true)
             .cpu_core_count(true)
             .cpu_frequency(true)
@@ -355,7 +355,7 @@ impl Stamper for Stamping {
             .name(true)
             .os_version(true)
             .user(true)
-            .build()?;
+            .build();
         let hostname = hostname::get()
             .ok()
             .and_then(|h| h.into_string().ok())

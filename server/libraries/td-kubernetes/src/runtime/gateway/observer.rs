@@ -4,8 +4,10 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{ObjectMeta, Time};
@@ -53,7 +55,7 @@ impl KubernetesWorkloadObserver {
 }
 
 fn at_time(time: Option<&Time>) -> Option<AtTime> {
-    time.map(|stamp| AtTime::from(stamp.0))
+    time.map(|stamp| AtTime::from(DateTime::<Utc>::from(SystemTime::from(stamp.0))))
 }
 
 trait WorkloadMetadata {
@@ -320,11 +322,7 @@ impl FromKubernetes for ObservedWorkload {
     }
 
     fn from_cronjob(cronjob: &CronJob) -> Result<Self, ObserverError> {
-        let suspended = cronjob
-            .spec
-            .as_ref()
-            .and_then(|spec| spec.suspend)
-            .unwrap_or(false);
+        let suspended = cronjob.spec.suspend.unwrap_or(false);
         Ok(Self {
             worker_id: Some(cronjob.metadata.worker_id()?),
             function_id: cronjob.metadata.function_id(),

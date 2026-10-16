@@ -63,21 +63,6 @@ class LazyGroupBy:
             ),
         )
 
-    def count(self, *args, **kwargs):
-        u_args = unwrap(args)
-        u_kwargs = unwrap(kwargs)
-        system = _system_aggregations("count")
-        return compute(
-            "count",
-            (self._parent,),
-            {},
-            call=lambda *_: (
-                self._lgb.agg(pl.len().alias("count"), *system)
-                if system
-                else self._lgb.count(*u_args, **u_kwargs)
-            ),
-        )
-
     def max(self, *args, **kwargs):
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)

@@ -31,6 +31,8 @@ TABSDATA_EE = "tabsdata-ee"
 TABSDATA_AG = "tabsdata-ag"
 TABSDATA_UI = "tabsdata-ui"
 
+TABSDATA_UI_NPM_PROJECTS = (".", "new-ui")
+
 IGNORED_FOLDERS = {
     ".git",
     ".idea",
@@ -182,26 +184,33 @@ def main():
     root = os.path.basename(args.root.rstrip(os.sep))
     parent = Path(args.root).resolve().parent
     if root == TABSDATA_UI:
-        result = subprocess.run(
-            [
-                "npm",
-                "version",
-                new_version,
-                "--no-git-tag-version",
-                "--allow-same-version",
-            ],
-            cwd=os.path.join(parent, TABSDATA_UI),
-            capture_output=False,
-            text=True,
-            encoding="utf-8",
-            errors="strict",
-        )
-        if result.returncode != 0:
-            logger.error(
-                f"❌ Error: npm version failed for {TABSDATA_UI} with code"
-                f" {result.returncode}"
+        for npm_project in TABSDATA_UI_NPM_PROJECTS:
+            npm_folder = os.path.normpath(
+                os.path.join(parent, TABSDATA_UI, npm_project)
             )
-            exit(1)
+            if not os.path.exists(os.path.join(npm_folder, "package.json")):
+                logger.warning(f"⚠️ No package.json in {npm_folder}; skipping")
+                continue
+            result = subprocess.run(
+                [
+                    "npm",
+                    "version",
+                    new_version,
+                    "--no-git-tag-version",
+                    "--allow-same-version",
+                ],
+                cwd=npm_folder,
+                capture_output=False,
+                text=True,
+                encoding="utf-8",
+                errors="strict",
+            )
+            if result.returncode != 0:
+                logger.error(
+                    f"❌ Error: npm version failed for {npm_folder} with code"
+                    f" {result.returncode}"
+                )
+                exit(1)
     else:
         logger.info(f"✂️ No need for additional upgrades for root: {root}")
 
