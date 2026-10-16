@@ -9,7 +9,12 @@ import yaml
 from tabsdatax.cmake.kupgrader.common.actions import Action, Form, Plan
 from tabsdatax.cmake.kupgrader.common.inventory import Bundle
 from tabsdatax.cmake.kupgrader.common.naming import parse_name
-from tabsdatax.cmake.kupgrader.common.operations import Gap, Synthesis, synthesize
+from tabsdatax.cmake.kupgrader.common.operations import (
+    Gap,
+    Synthesis,
+    synthesize,
+    user_owned_mappings,
+)
 from tabsdatax.cmake.kupgrader.common.renames import rename_operations, renamed
 from tabsdatax.cmake.kupgrader.common.requirements import (
     is_requirements,
@@ -45,9 +50,16 @@ def synthesize_textual(name: str, previous: str, current: str) -> Synthesis:
     return Synthesis(gaps=[textual_gap(name)])
 
 
-def synthesize_yaml(previous: str, current: str, renames: dict[str, str]) -> Synthesis:
+def synthesize_yaml(
+    previous: str,
+    current: str,
+    renames: dict[str, str],
+    user_owned: frozenset[tuple[str, ...]] = frozenset(),
+) -> Synthesis:
     synthesis = synthesize(
-        yaml.safe_load(renamed(previous, renames)), yaml.safe_load(current)
+        yaml.safe_load(renamed(previous, renames)),
+        yaml.safe_load(current),
+        user_owned,
     )
     synthesis.operations = [
         *rename_operations(previous, renames),
@@ -91,6 +103,7 @@ def synthesize_plans(plans: list[Plan], renames: dict[str, str]) -> list[Change]
                         variant.previous.read_text(),
                         variant.current.read_text(),
                         renames,
+                        user_owned_mappings(plan.family, plan.name),
                     ),
                 )
             )
@@ -127,7 +140,10 @@ def synthesize_resolved(bundles: list[Bundle], renames: dict[str, str]) -> list[
                     bundle=bundle.name,
                     name=new[0],
                     synthesis=synthesize_yaml(
-                        old[1].read_text(), new[1].read_text(), renames
+                        old[1].read_text(),
+                        new[1].read_text(),
+                        renames,
+                        user_owned_mappings(RESOLVED_SOURCE_FAMILY, bundle.name),
                     ),
                 )
             )

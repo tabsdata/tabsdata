@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 
 fn keys(items: &[&str]) -> BTreeSet<String> {
@@ -12,7 +14,10 @@ fn keys(items: &[&str]) -> BTreeSet<String> {
 fn no_leaves_and_empty_secret_is_ok() {
     let input = Settlement {
         config: "noseed.yaml",
-        config_yaml: "name: noseed\nhost: example.com\n",
+        config_yaml: indoc! {"
+            name: noseed
+            host: example.com
+        "},
         secret: "td-app-noseed-secret-config-noseed.yaml",
         actual_keys: Some(keys(&[])),
     };
@@ -23,7 +28,10 @@ fn no_leaves_and_empty_secret_is_ok() {
 fn no_leaves_and_no_secret_fails() {
     let input = Settlement {
         config: "noseed.yaml",
-        config_yaml: "name: noseed\nhost: example.com\n",
+        config_yaml: indoc! {"
+            name: noseed
+            host: example.com
+        "},
         secret: "td-app-noseed-secret-config-noseed.yaml",
         actual_keys: None,
     };
@@ -35,7 +43,10 @@ fn no_leaves_and_no_secret_fails() {
 fn no_leaves_but_secret_has_keys_fails() {
     let input = Settlement {
         config: "noseed.yaml",
-        config_yaml: "name: noseed\nhost: example.com\n",
+        config_yaml: indoc! {"
+            name: noseed
+            host: example.com
+        "},
         secret: "td-app-noseed-secret-config-noseed.yaml",
         actual_keys: Some(keys(&["STRAY"])),
     };
@@ -53,7 +64,11 @@ fn no_leaves_but_secret_has_keys_fails() {
 fn leaves_and_no_secret_fails() {
     let input = Settlement {
         config: "apiserver.yaml",
-        config_yaml: "database:\n  postgres:\n    password: ${{secret}}\n",
+        config_yaml: indoc! {"
+            database:
+              postgres:
+                password: ${{secret}}
+        "},
         secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: None,
     };
@@ -65,7 +80,11 @@ fn leaves_and_no_secret_fails() {
 fn matching_keys_pass() {
     let input = Settlement {
         config: "apiserver.yaml",
-        config_yaml: "database:\n  postgres:\n    password: ${{secret}}\n",
+        config_yaml: indoc! {"
+            database:
+              postgres:
+                password: ${{secret}}
+        "},
         secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: Some(keys(&["DATABASE__POSTGRES__PASSWORD"])),
     };
@@ -76,7 +95,11 @@ fn matching_keys_pass() {
 fn extra_keys_fail() {
     let input = Settlement {
         config: "apiserver.yaml",
-        config_yaml: "database:\n  postgres:\n    password: ${{secret}}\n",
+        config_yaml: indoc! {"
+            database:
+              postgres:
+                password: ${{secret}}
+        "},
         secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: Some(keys(&["DATABASE__POSTGRES__PASSWORD", "EXTRA"])),
     };
@@ -94,7 +117,12 @@ fn extra_keys_fail() {
 fn missing_keys_fail() {
     let input = Settlement {
         config: "apiserver.yaml",
-        config_yaml: "database:\n  postgres:\n    password: ${{secret}}\n  user: ${{secret}}\n",
+        config_yaml: indoc! {"
+            database:
+              postgres:
+                password: ${{secret}}
+              user: ${{secret}}
+        "},
         secret: "td-app-apiserver-secret-config-apiserver.yaml",
         actual_keys: Some(keys(&["DATABASE__POSTGRES__PASSWORD"])),
     };

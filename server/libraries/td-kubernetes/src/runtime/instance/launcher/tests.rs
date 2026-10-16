@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use chrono::Utc;
+use indoc::formatdoc;
 use k8s_openapi::api::batch::v1::{CronJob, Job, JobCondition, JobStatus};
 use k8s_openapi::api::core::v1::{Pod, PodCondition, PodStatus};
 use kube::runtime::wait::Condition;
@@ -434,9 +435,15 @@ fn init_template(sequence: Option<&str>) -> String {
         Some(value) => format!("\n    {SEQUENCE_LABEL}: {value}"),
         None => String::new(),
     };
-    format!(
-        "apiVersion: batch/v1\nkind: Job\nmetadata:\n  name: job\n  labels:\n    \
-         {TIER_LABEL}: init{label}\n"
+    formatdoc!(
+        "
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: job
+              labels:
+                {TIER_LABEL}: init{label}
+        "
     )
 }
 

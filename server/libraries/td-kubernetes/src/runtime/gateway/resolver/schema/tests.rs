@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 
 const STORAGE_SCHEMA: &str = "\
@@ -112,14 +114,22 @@ fn absent_directives_section_is_empty_schema() {
 
 #[test]
 fn empty_pattern_is_rejected() {
-    let text = "directives:\n  - at: ''\n    treat: secret\n";
+    let text = indoc! {"
+        directives:
+          - at: ''
+            treat: secret
+    "};
     let result = Schema::parse("x.yamls", text);
     assert!(matches!(result, Err(SchemaError::EmptyPattern { .. })));
 }
 
 #[test]
 fn unsupported_treatment_is_rejected() {
-    let text = "directives:\n  - at: a.b\n    treat: config\n";
+    let text = indoc! {"
+        directives:
+          - at: a.b
+            treat: config
+    "};
     let result = Schema::parse("x.yamls", text);
     assert!(matches!(
         result,
@@ -135,7 +145,10 @@ fn malformed_yaml_is_rejected() {
 
 #[test]
 fn missing_treat_is_rejected() {
-    let text = "directives:\n  - at: a.b\n";
+    let text = indoc! {"
+        directives:
+          - at: a.b
+    "};
     let result = Schema::parse("x.yamls", text);
     assert!(matches!(
         result,
@@ -147,7 +160,11 @@ fn missing_treat_is_rejected() {
 fn leading_wildcard_matches_any_first_segment() {
     let schema = Schema::parse(
         "x.yamls",
-        "directives:\n  - at: '*.token'\n    treat: secret\n",
+        indoc! {"
+            directives:
+              - at: '*.token'
+                treat: secret
+        "},
     )
     .expect("parse");
     assert!(schema.secret_at(&path(&["alpha", "token"])));
@@ -158,8 +175,15 @@ fn leading_wildcard_matches_any_first_segment() {
 
 #[test]
 fn mid_path_wildcard_matches_single_segment() {
-    let schema =
-        Schema::parse("x.yamls", "directives:\n  - at: a.*.c\n    treat: secret\n").expect("parse");
+    let schema = Schema::parse(
+        "x.yamls",
+        indoc! {"
+            directives:
+              - at: a.*.c
+                treat: secret
+        "},
+    )
+    .expect("parse");
     assert!(schema.secret_at(&path(&["a", "anything", "c"])));
     assert!(!schema.secret_at(&path(&["a", "c"])));
     assert!(!schema.secret_at(&path(&["a", "x", "y", "c"])));
@@ -176,7 +200,11 @@ fn pattern_longer_than_path_does_not_full_match() {
 fn list_wildcard_suffix_expands_to_literal_then_wildcard() {
     let schema = Schema::parse(
         "x.yamls",
-        "directives:\n  - at: items[*].pw\n    treat: secret\n",
+        indoc! {"
+            directives:
+              - at: items[*].pw
+                treat: secret
+        "},
     )
     .expect("parse");
     assert!(schema.secret_at(&path(&["items", "0", "pw"])));

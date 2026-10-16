@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 
 #[test]
@@ -12,21 +14,35 @@ fn an_empty_document_yields_no_pods_global_envs() {
 
 #[test]
 fn a_document_without_the_pods_section_yields_no_pods_global_envs() {
-    let config = TabsdataConfig::parse("other:\n  key: value\n").expect("parses");
+    let config = TabsdataConfig::parse(indoc! {"
+        other:
+          key: value
+    "})
+    .expect("parses");
     assert!(config.pods.global.envs.is_empty());
 }
 
 #[test]
 fn an_empty_envs_map_yields_no_pods_global_envs() {
-    let config = TabsdataConfig::parse("pods:\n  global:\n    envs: {}\n").expect("parses");
+    let config = TabsdataConfig::parse(indoc! {"
+        pods:
+          global:
+            envs: {}
+    "})
+    .expect("parses");
     assert!(config.pods.global.envs.is_empty());
 }
 
 #[test]
 fn text_numbers_and_flags_all_render_as_strings() {
-    let config = TabsdataConfig::parse(
-        "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\n      TD_RETRIES: 3\n      TD_STRICT: true\n",
-    )
+    let config = TabsdataConfig::parse(indoc! {"
+            pods:
+              global:
+                envs:
+                  TD_TRACE: verbose
+                  TD_RETRIES: 3
+                  TD_STRICT: true
+        "})
     .expect("parses");
     let envs = config.pods.global.envs;
     assert_eq!(envs["TD_TRACE"].render().as_deref(), Some("verbose"));
@@ -36,9 +52,13 @@ fn text_numbers_and_flags_all_render_as_strings() {
 
 #[test]
 fn an_unspecified_env_value_renders_as_nothing() {
-    let config = TabsdataConfig::parse(
-        "pods:\n  global:\n    envs:\n      TD_UNSET:\n      TD_EMPTY: \"\"\n",
-    )
+    let config = TabsdataConfig::parse(indoc! {r#"
+            pods:
+              global:
+                envs:
+                  TD_UNSET:
+                  TD_EMPTY: ""
+        "#})
     .expect("parses");
     let envs = config.pods.global.envs;
     assert_eq!(envs["TD_UNSET"].render(), None);
@@ -47,16 +67,26 @@ fn an_unspecified_env_value_renders_as_nothing() {
 
 #[test]
 fn a_non_scalar_env_value_fails_to_parse() {
-    let outcome =
-        TabsdataConfig::parse("pods:\n  global:\n    envs:\n      TD_TRACE:\n        nested: v\n");
+    let outcome = TabsdataConfig::parse(indoc! {"
+            pods:
+              global:
+                envs:
+                  TD_TRACE:
+                    nested: v
+        "});
     assert!(outcome.is_err());
 }
 
 #[test]
 fn unknown_sections_are_tolerated_so_the_file_can_grow() {
-    let config = TabsdataConfig::parse(
-        "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\nfuture:\n  section: value\n",
-    )
+    let config = TabsdataConfig::parse(indoc! {"
+            pods:
+              global:
+                envs:
+                  TD_TRACE: verbose
+            future:
+              section: value
+        "})
     .expect("parses");
     assert_eq!(
         config.pods.global.envs["TD_TRACE"].render().as_deref(),
@@ -66,25 +96,44 @@ fn unknown_sections_are_tolerated_so_the_file_can_grow() {
 
 #[test]
 fn a_pods_section_without_global_yields_no_envs() {
-    let config = TabsdataConfig::parse("pods:\n  other: value\n").expect("parses");
+    let config = TabsdataConfig::parse(indoc! {"
+        pods:
+          other: value
+    "})
+    .expect("parses");
     assert!(config.pods.global.envs.is_empty());
 }
 
 #[test]
 fn a_global_section_without_envs_yields_no_envs() {
-    let config = TabsdataConfig::parse("pods:\n  global:\n    other: value\n").expect("parses");
+    let config = TabsdataConfig::parse(indoc! {"
+        pods:
+          global:
+            other: value
+    "})
+    .expect("parses");
     assert!(config.pods.global.envs.is_empty());
 }
 
 #[test]
 fn a_null_envs_entry_yields_no_envs() {
-    let config = TabsdataConfig::parse("pods:\n  global:\n    envs:\n").expect("parses");
+    let config = TabsdataConfig::parse(indoc! {"
+        pods:
+          global:
+            envs:
+    "})
+    .expect("parses");
     assert!(config.pods.global.envs.is_empty());
 }
 
 #[test]
 fn a_file_holding_only_a_comment_yields_no_envs() {
-    let config = TabsdataConfig::parse("#\n# Copyright 2026 Tabsdata Inc.\n#\n").expect("parses");
+    let config = TabsdataConfig::parse(indoc! {"
+        #
+        # Copyright 2026 Tabsdata Inc.
+        #
+    "})
+    .expect("parses");
     assert!(config.pods.global.envs.is_empty());
 }
 

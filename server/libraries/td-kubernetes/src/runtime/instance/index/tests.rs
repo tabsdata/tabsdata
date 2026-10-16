@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::{formatdoc, indoc};
+
 use super::*;
 
 const CONFIG: &str = "\
@@ -162,7 +164,12 @@ fn the_rest_of_the_file_survives() {
 
 #[test]
 fn an_envs_mapping_that_already_has_entries_keeps_them() {
-    let template = "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\n";
+    let template = indoc! {"
+        pods:
+          global:
+            envs:
+              TD_TRACE: verbose
+    "};
     let updated = rewrite(template, REWRITE_INDEX);
     assert_eq!(env_value(&updated, ENV_UV_INDEX), REWRITE_INDEX);
     assert_eq!(env_value(&updated, "TD_TRACE"), "verbose");
@@ -170,9 +177,14 @@ fn an_envs_mapping_that_already_has_entries_keeps_them() {
 
 #[test]
 fn an_existing_uv_index_is_overwritten() {
-    let template = format!(
-        "pods:\n  global:\n    envs:\n      {ENV_UV_INDEX}: http://stale/simple\n      \
-         {ENV_UV_INDEX_STRATEGY}: first-index\n"
+    let template = formatdoc!(
+        "
+            pods:
+              global:
+                envs:
+                  {ENV_UV_INDEX}: http://stale/simple
+                  {ENV_UV_INDEX_STRATEGY}: first-index
+        "
     );
     let updated = rewrite(&template, REWRITE_INDEX);
     assert_eq!(env_value(&updated, ENV_UV_INDEX), REWRITE_INDEX);
@@ -191,7 +203,13 @@ fn a_value_needing_quotes_round_trips() {
 
 #[test]
 fn a_file_without_the_envs_mapping_gains_it() {
-    let updated = rewrite("pods:\n  global: {}\n", REWRITE_INDEX);
+    let updated = rewrite(
+        indoc! {"
+        pods:
+          global: {}
+    "},
+        REWRITE_INDEX,
+    );
     assert_eq!(env_value(&updated, ENV_UV_INDEX), REWRITE_INDEX);
     assert_eq!(
         env_value(&updated, ENV_UV_INDEX_STRATEGY),

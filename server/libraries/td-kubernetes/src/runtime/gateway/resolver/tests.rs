@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 
 fn resolver_with_system(system: SystemValues) -> ConfigurationResolver {
@@ -119,7 +121,10 @@ async fn resolve_secret_substitutes_bare_placeholder() {
     unsafe { std::env::set_var(key, "supersecret") };
 
     let resolver = resolver();
-    let yaml = "td_resolve_test_bare:\n  value: ${{secret}}\n";
+    let yaml = indoc! {"
+        td_resolve_test_bare:
+          value: ${{secret}}
+    "};
     let resolved = resolver.materialize(yaml).await.expect("resolve");
     let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
     assert_eq!(
@@ -136,7 +141,10 @@ async fn resolve_secret_substitutes_named_placeholder_using_path_encoding() {
     unsafe { std::env::set_var(key, "jwt-value") };
 
     let resolver = resolver();
-    let yaml = "td_resolve_test_named:\n  value: ${{secret:jwt_signing_key}}\n";
+    let yaml = indoc! {"
+        td_resolve_test_named:
+          value: ${{secret:jwt_signing_key}}
+    "};
     let resolved = resolver.materialize(yaml).await.expect("resolve");
     let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
     assert_eq!(
@@ -174,7 +182,10 @@ async fn resolve_secret_errors_when_env_var_missing() {
     unsafe { std::env::remove_var("TD_RESOLVE_TEST_MISSING__SECRET") };
 
     let resolver = resolver();
-    let yaml = "td_resolve_test_missing:\n  secret: ${{secret}}\n";
+    let yaml = indoc! {"
+        td_resolve_test_missing:
+          secret: ${{secret}}
+    "};
     let result = resolver.materialize(yaml).await;
     assert!(result.is_err(), "missing env var should error");
 }
@@ -194,7 +205,11 @@ async fn materialize_still_resolves_system_placeholder() {
 #[tokio::test]
 async fn materialize_leaves_plain_scalars_untouched() {
     let resolver = resolver();
-    let yaml = "a: plain\nb: 7\nc: true\n";
+    let yaml = indoc! {"
+        a: plain
+        b: 7
+        c: true
+    "};
     let resolved = resolver.materialize(yaml).await.expect("materialize");
     let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
     assert_eq!(parsed["a"].as_str(), Some("plain"));
@@ -225,7 +240,10 @@ async fn optional_secret_materializes_to_empty_when_absent() {
     unsafe { std::env::remove_var("TD_RESOLVE_TEST_OPTIONAL__SECRET") };
 
     let resolver = resolver();
-    let yaml = "td_resolve_test_optional:\n  secret: ${{secret?}}\n";
+    let yaml = indoc! {"
+        td_resolve_test_optional:
+          secret: ${{secret?}}
+    "};
     let resolved = resolver.materialize(yaml).await.expect("materialize");
     let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
     assert_eq!(

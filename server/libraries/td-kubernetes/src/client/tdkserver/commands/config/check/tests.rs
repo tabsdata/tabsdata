@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 
 fn sources(entries: &[(&str, &str)]) -> Vec<(String, String)> {
@@ -26,7 +28,10 @@ fn editable_placeholders_are_collected() {
 fn non_editable_placeholders_are_ignored() {
     let entries = collect_entries(sources(&[(
         "apiserver.service.yaml",
-        "port: ${{system:tdk_apiserver_public_port}}\nhome: ${{env:HOME}}\n",
+        indoc! {"
+            port: ${{system:tdk_apiserver_public_port}}
+            home: ${{env:HOME}}
+        "},
     )]));
     assert!(entries.is_empty());
 }
@@ -46,7 +51,10 @@ fn optional_placeholders_are_marked_optional() {
 fn auto_placeholders_are_delegated_not_pending() {
     let entries = collect_entries(sources(&[(
         "apiserver.service.yaml",
-        "a: ${{secretAuto:jwt_signing_key}}\nb: ${{secretAuto:service_token?}}\n",
+        indoc! {"
+            a: ${{secretAuto:jwt_signing_key}}
+            b: ${{secretAuto:service_token?}}
+        "},
     )]));
     assert_eq!(entries.len(), 2);
     assert!(entries.iter().all(|e| e.rule == CheckRule::Delegated));
@@ -87,7 +95,10 @@ fn a_category_provided_once_is_one_entry_across_files() {
 fn mandatory_entries_are_listed_before_optional_ones() {
     let entries = collect_entries(sources(&[(
         "config.yaml",
-        "a: ${{secret:zzz?}}\nb: ${{secret:aaa}}\n",
+        indoc! {"
+            a: ${{secret:zzz?}}
+            b: ${{secret:aaa}}
+        "},
     )]));
     assert_eq!(entries.len(), 2);
     assert_eq!(entries[0].rule, CheckRule::Mandatory);
@@ -99,11 +110,17 @@ fn mandatory_entries_are_listed_before_optional_ones() {
 fn provided_is_what_the_template_has_and_the_input_no_longer_shows() {
     let expected = collect_entries(sources(&[(
         "aiagent.yaml",
-        "one: ${{secret:openai-key}}\ntwo: ${{secret:anthropic-key}}\n",
+        indoc! {"
+            one: ${{secret:openai-key}}
+            two: ${{secret:anthropic-key}}
+        "},
     )]));
     let pending = collect_entries(sources(&[(
         "aiagent.yaml",
-        "one: sk-supplied\ntwo: ${{secret:anthropic-key}}\n",
+        indoc! {"
+            one: sk-supplied
+            two: ${{secret:anthropic-key}}
+        "},
     )]));
     let provided = remaining(expected, &pending);
     assert_eq!(provided.len(), 1);

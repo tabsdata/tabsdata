@@ -110,6 +110,9 @@ test_logging = []
 #   tokio conosle
 tokio_console = []
 
+[patch.crates-io]
+zip = { git = "https://github.com/zip-rs/zip2", tag = "v8.6.0" }
+
 [profile.dev]
 codegen-units = 32
 debug = true
@@ -473,6 +476,9 @@ features = ["default", "improved_unicode"]
 
 [workspace.dependencies.inventory]
 version = "0.3"
+
+[workspace.dependencies.indoc]
+version = "2.0.8"
 
 [workspace.dependencies.itertools]
 version = "0.15.0"

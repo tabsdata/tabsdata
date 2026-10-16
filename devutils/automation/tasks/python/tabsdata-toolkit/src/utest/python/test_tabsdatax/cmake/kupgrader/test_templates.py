@@ -2,6 +2,8 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+from textwrap import dedent
+
 import yaml
 
 from tabsdatax.cmake.kupgrader.common.emission import Emission
@@ -18,13 +20,23 @@ def shipped_tree(root):
     upgrades = root / "variant" / "resources" / "kupgrade" / "upgrades"
     (upgrades / "2.0.1").mkdir(parents=True)
     (upgrades / "2.0.1.yaml").write_text("schema: 1\n")
-    (upgrades / "2.0.2.yaml").write_text("schema: 1\nstale: true\n")
+    (upgrades / "2.0.2.yaml").write_text(
+        dedent("""\
+            schema: 1
+            stale: true
+        """)
+    )
     (upgrades / "2.0.2").mkdir()
     (upgrades / "2.0.2" / "stale.yaml").write_text("stale\n")
     (upgrades.parent / "upgrades.yaml").write_text(
-        "schema: 1\nversions:\n"
-        "  - version: 2.0.1\n    upgrader: true\n"
-        "  - version: 2.0.0\n    upgrader: false\n"
+        dedent("""\
+            schema: 1
+            versions:
+              - version: 2.0.1
+                upgrader: true
+              - version: 2.0.0
+                upgrader: false
+        """)
     )
 
 
@@ -33,7 +45,12 @@ def emission_in(folder):
     (content / "configs").mkdir(parents=True)
     (content / "configs" / "fresh.yaml").write_text("fresh\n")
     spec = folder / "2.0.2.yaml"
-    spec.write_text("schema: 1\nfresh: true\n")
+    spec.write_text(
+        dedent("""\
+            schema: 1
+            fresh: true
+        """)
+    )
     return Emission(spec_file=spec, content_folder=content, payloads=[])
 
 

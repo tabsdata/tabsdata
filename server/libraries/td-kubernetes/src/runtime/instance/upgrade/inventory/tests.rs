@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 
 fn inventory(entries: &[(&str, bool)]) -> Inventory {
@@ -151,7 +153,12 @@ fn an_empty_inventory_is_rejected() {
 
 #[test]
 fn an_unsupported_schema_is_rejected() {
-    let yaml = "schema: 99\nversions:\n  - version: 2.0.0\n    upgrader: false\n";
+    let yaml = indoc! {"
+        schema: 99
+        versions:
+          - version: 2.0.0
+            upgrader: false
+    "};
     assert!(matches!(
         deserialize_inventory(yaml),
         Err(UpgradeError::InventorySchemaUnsupported { .. })

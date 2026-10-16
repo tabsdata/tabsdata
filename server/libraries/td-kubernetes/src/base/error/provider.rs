@@ -148,6 +148,8 @@ pub enum ProviderError {
     } = 5126,
     #[error("Could not write the requirements file '{file}': {cause}.")]
     RuntimesRequirementsWriteFailed { file: String, cause: String } = 5127,
+    #[error("Could not read the global environment variables of config '{config}': {cause}.")]
+    GlobalEnvsParseFailed { config: String, cause: String } = 5128,
     #[error(
         "Another process is already building the Python virtual environments under \
          '{folder}'{holder}. Wait for it to finish before provisioning again."

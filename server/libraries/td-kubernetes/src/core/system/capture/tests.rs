@@ -4,6 +4,8 @@
 
 use std::io::Write;
 
+use indoc::indoc;
+
 use super::*;
 
 #[test]
@@ -28,7 +30,13 @@ fn a_writer_appends_rather_than_truncates() {
         writeln!(writer, "{line}").expect("the line is written");
     }
     let held = std::fs::read_to_string(&path).expect("the file is readable");
-    assert_eq!(held, "first\nsecond\n");
+    assert_eq!(
+        held,
+        indoc! {"
+        first
+        second
+    "}
+    );
 }
 
 #[test]

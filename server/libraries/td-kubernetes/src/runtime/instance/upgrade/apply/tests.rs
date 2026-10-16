@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 use crate::base::constants::{
     KPROFILE_CONFIGS_FAMILY, KPROFILE_PODS_FAMILY, TABSDATA_REQUIREMENTS_LOCK_ASSET,
@@ -27,7 +29,12 @@ fn applied(current: &str, changes: &[Operation]) -> (String, bool) {
 #[test]
 fn a_matching_leaf_is_replaced() {
     let (rendered, touched) = applied(
-        "pods:\n  global:\n    envs:\n      UV_INDEX: ''\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  UV_INDEX: ''
+        "},
         &[operation(
             "pods.global.envs.UV_INDEX",
             serde_yaml::Value::from(""),
@@ -41,7 +48,12 @@ fn a_matching_leaf_is_replaced() {
 #[test]
 fn a_leaf_holding_another_value_is_left_alone() {
     let (rendered, touched) = applied(
-        "pods:\n  global:\n    envs:\n      UV_INDEX: mine\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  UV_INDEX: mine
+        "},
         &[operation(
             "pods.global.envs.UV_INDEX",
             serde_yaml::Value::from(""),
@@ -55,7 +67,11 @@ fn a_leaf_holding_another_value_is_left_alone() {
 #[test]
 fn a_missing_leaf_is_left_alone() {
     let (_, touched) = applied(
-        "pods:\n  global:\n    envs: {}\n",
+        indoc! {"
+            pods:
+              global:
+                envs: {}
+        "},
         &[operation(
             "pods.global.envs.UV_INDEX",
             serde_yaml::Value::from(""),
@@ -81,7 +97,12 @@ fn a_missing_branch_is_left_alone() {
 #[test]
 fn a_null_leaf_is_matched_and_replaced() {
     let (rendered, touched) = applied(
-        "pods:\n  global:\n    envs:\n      UV_INDEX:\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  UV_INDEX:
+        "},
         &[operation(
             "pods.global.envs.UV_INDEX",
             serde_yaml::Value::Null,
@@ -95,7 +116,12 @@ fn a_null_leaf_is_matched_and_replaced() {
 #[test]
 fn a_leaf_can_be_set_to_null() {
     let (rendered, touched) = applied(
-        "pods:\n  global:\n    envs:\n      UV_INDEX: keep\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  UV_INDEX: keep
+        "},
         &[operation(
             "pods.global.envs.UV_INDEX",
             serde_yaml::Value::from("keep"),
@@ -109,7 +135,11 @@ fn a_leaf_can_be_set_to_null() {
 #[test]
 fn numbers_and_booleans_are_matched_by_type() {
     let (rendered, touched) = applied(
-        "pool:\n  max_connections: 50\n  test_before_acquire: true\n",
+        indoc! {"
+            pool:
+              max_connections: 50
+              test_before_acquire: true
+        "},
         &[
             operation(
                 "pool.max_connections",
@@ -131,7 +161,10 @@ fn numbers_and_booleans_are_matched_by_type() {
 #[test]
 fn every_change_is_attempted_even_when_one_does_not_match() {
     let (rendered, touched) = applied(
-        "a: 1\nb: 2\n",
+        indoc! {"
+            a: 1
+            b: 2
+        "},
         &[
             operation("a", serde_yaml::Value::from(9), serde_yaml::Value::from(8)),
             operation("b", serde_yaml::Value::from(2), serde_yaml::Value::from(3)),
@@ -186,7 +219,11 @@ fn an_unknown_family_folder_is_an_error() {
 #[test]
 fn a_quoted_segment_addresses_a_dotted_key() {
     let (rendered, touched) = applied(
-        "metadata:\n  labels:\n    app.kubernetes.io/version: \"2.0.0\"\n",
+        indoc! {r#"
+            metadata:
+              labels:
+                app.kubernetes.io/version: "2.0.0"
+        "#},
         &[operation(
             "metadata.labels.\"app.kubernetes.io/version\"",
             serde_yaml::Value::from("2.0.0"),
@@ -200,7 +237,11 @@ fn a_quoted_segment_addresses_a_dotted_key() {
 #[test]
 fn an_unquoted_dotted_key_is_not_reached() {
     let (_, touched) = applied(
-        "metadata:\n  labels:\n    app.kubernetes.io/version: \"2.0.0\"\n",
+        indoc! {r#"
+            metadata:
+              labels:
+                app.kubernetes.io/version: "2.0.0"
+        "#},
         &[operation(
             "metadata.labels.app.kubernetes.io/version",
             serde_yaml::Value::from("2.0.0"),
@@ -238,7 +279,12 @@ fn text(pattern: &str, replacement: &str, before: Option<&str>, after: Option<&s
 #[test]
 fn a_text_change_rewrites_a_container_name() {
     let (rendered, touched) = applied(
-        "spec:\n  containers:\n  - name: 1000-dbcreate\n    image: /dev/null\n",
+        indoc! {"
+            spec:
+              containers:
+              - name: 1000-dbcreate
+                image: /dev/null
+        "},
         &[text(
             "1000-dbcreate",
             "1000-db${{system:tdk_dbmanager_mode}}",
@@ -252,7 +298,13 @@ fn a_text_change_rewrites_a_container_name() {
 
 #[test]
 fn boundaries_anchor_a_pattern_without_consuming_it() {
-    let document = "args:\n    - db\n    - create\nother:\n    - create\n";
+    let document = indoc! {"
+        args:
+            - db
+            - create
+        other:
+            - create
+    "};
     let (rendered, touched) = applied(
         document,
         &[text(
@@ -287,7 +339,14 @@ fn a_pattern_matching_nothing_leaves_the_text_alone() {
 #[test]
 fn text_and_structural_changes_compose() {
     let (rendered, touched) = applied(
-        "metadata:\n  labels:\n    app.kubernetes.io/version: \"2.0.0\"\nspec:\n  containers:\n  - name: 1000-dbcreate\n",
+        indoc! {r#"
+            metadata:
+              labels:
+                app.kubernetes.io/version: "2.0.0"
+            spec:
+              containers:
+              - name: 1000-dbcreate
+        "#},
         &[
             text("1000-dbcreate", "1000-dbupgrade", None, None),
             operation(
@@ -315,7 +374,11 @@ fn an_invalid_pattern_is_an_error() {
 
 #[test]
 fn operations_apply_in_the_declared_order_across_types() {
-    let document = "metadata:\n  labels:\n    version: \"2.0.0\"\n";
+    let document = indoc! {r#"
+        metadata:
+          labels:
+            version: "2.0.0"
+    "#};
     let changes = [
         Operation::ModifyLeafValueIf(ModifyLeafValueIf {
             leaf: "metadata.labels.version".to_owned(),
@@ -413,7 +476,11 @@ fn scoped(
     })
 }
 
-const LABELLED: &str = "metadata:\n  labels:\n    tabsdata.com/tier: regular\n";
+const LABELLED: &str = indoc! {"
+    metadata:
+      labels:
+        tabsdata.com/tier: regular
+"};
 
 #[test]
 fn a_sibling_lands_after_an_existing_leaf() {
@@ -458,7 +525,11 @@ fn a_sibling_lands_before_an_existing_leaf() {
 #[test]
 fn an_absent_anchor_inserts_nothing() {
     let (rendered, touched) = applied(
-        "metadata:\n  labels:\n    app: tabsdata\n",
+        indoc! {"
+            metadata:
+              labels:
+                app: tabsdata
+        "},
         &[sibling(
             "metadata.labels.\"tabsdata.com/tier\"",
             "tabsdata.com/aiagent",
@@ -472,8 +543,12 @@ fn an_absent_anchor_inserts_nothing() {
 
 #[test]
 fn an_existing_sibling_is_left_alone() {
-    let held =
-        "metadata:\n  labels:\n    tabsdata.com/tier: regular\n    tabsdata.com/aiagent: false\n";
+    let held = indoc! {"
+            metadata:
+              labels:
+                tabsdata.com/tier: regular
+                tabsdata.com/aiagent: false
+        "};
     let (rendered, touched) = applied(
         held,
         &[sibling(
@@ -504,7 +579,10 @@ fn inserting_a_sibling_twice_is_a_no_op() {
 #[test]
 fn a_missing_parent_inserts_nothing() {
     let (_, touched) = applied(
-        "metadata:\n  name: srv-aiagent\n",
+        indoc! {"
+            metadata:
+              name: srv-aiagent
+        "},
         &[sibling(
             "metadata.labels.\"tabsdata.com/tier\"",
             "tabsdata.com/aiagent",
@@ -701,8 +779,13 @@ fn the_shipped_ttl_bump_rewrites_the_previous_retention() {
         .get("pymanager_kminus.yaml")
         .expect("its kminus variant is covered");
 
-    let before = "apiVersion: batch/v1\nkind: Job\nspec:\n  backoffLimit: 0\n  \
-                  ttlSecondsAfterFinished: 1800\n";
+    let before = indoc! {"
+        apiVersion: batch/v1
+        kind: Job
+        spec:
+          backoffLimit: 0
+          ttlSecondsAfterFinished: 1800
+    "};
     let (after, touched) =
         modify("2.0.2", "pods/pymanager.yaml", before, action.changes()).expect("modifies");
     assert!(touched, "a 1800 retention must be rewritten");
@@ -769,8 +852,13 @@ fn nest(leaf: &str, under: &str) -> Operation {
     })
 }
 
-const FLAT_POOL: &str = "database_server:\n  pool:\n    min_connections: 1\n    max_connections: \
-                          2\n    test_before_acquire: true\n";
+const FLAT_POOL: &str = indoc! {"
+    database_server:
+      pool:
+        min_connections: 1
+        max_connections: 2
+        test_before_acquire: true
+"};
 
 #[test]
 fn a_flat_block_nests_under_the_new_key() {
@@ -792,7 +880,12 @@ fn a_flat_block_nests_under_the_new_key() {
 
 #[test]
 fn an_already_nested_block_is_left_alone() {
-    let nested = "database_server:\n  pool:\n    admin:\n      min_connections: 1\n";
+    let nested = indoc! {"
+        database_server:
+          pool:
+            admin:
+              min_connections: 1
+    "};
     let (rendered, touched) = applied(nested, &[nest("database_server.pool", "admin")]);
     assert!(!touched);
     assert_eq!(rendered, nested);
@@ -807,7 +900,10 @@ fn a_missing_block_nests_nothing() {
 #[test]
 fn an_empty_block_nests_nothing() {
     let (_, touched) = applied(
-        "database_server:\n  pool: {}\n",
+        indoc! {"
+            database_server:
+              pool: {}
+        "},
         &[nest("database_server.pool", "admin")],
     );
     assert!(!touched);
@@ -920,7 +1016,11 @@ fn child(leaf: &str, child: &str, value: serde_yaml::Value) -> Operation {
 #[test]
 fn a_child_is_added_to_an_empty_mapping() {
     let (rendered, touched) = applied(
-        "pods:\n  global:\n    envs: {}\n",
+        indoc! {"
+            pods:
+              global:
+                envs: {}
+        "},
         &[child(
             "pods.global.envs",
             "UV_INDEX_STRATEGY",
@@ -934,7 +1034,12 @@ fn a_child_is_added_to_an_empty_mapping() {
 #[test]
 fn a_child_that_already_exists_is_left_alone() {
     let (rendered, touched) = applied(
-        "pods:\n  global:\n    envs:\n      UV_INDEX: http://keep/simple\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  UV_INDEX: http://keep/simple
+        "},
         &[child(
             "pods.global.envs",
             "UV_INDEX",
@@ -948,7 +1053,12 @@ fn a_child_that_already_exists_is_left_alone() {
 #[test]
 fn a_child_joins_the_keys_already_present() {
     let (rendered, touched) = applied(
-        "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  TD_TRACE: verbose
+        "},
         &[child(
             "pods.global.envs",
             "UV_INDEX",
@@ -963,7 +1073,11 @@ fn a_child_joins_the_keys_already_present() {
 #[test]
 fn a_null_mapping_is_seeded_before_the_child_is_added() {
     let (rendered, touched) = applied(
-        "pods:\n  global:\n    envs:\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+        "},
         &[child(
             "pods.global.envs",
             "UV_INDEX",
@@ -977,7 +1091,10 @@ fn a_null_mapping_is_seeded_before_the_child_is_added() {
 #[test]
 fn an_absent_parent_block_is_created() {
     let (rendered, touched) = applied(
-        "pods:\n  global: {}\n",
+        indoc! {"
+            pods:
+              global: {}
+        "},
         &[child(
             "pods.global.envs",
             "UV_INDEX",
@@ -992,7 +1109,11 @@ fn an_absent_parent_block_is_created() {
 #[test]
 fn a_leaf_holding_a_scalar_is_not_a_mapping_to_add_to() {
     let (rendered, touched) = applied(
-        "pods:\n  global:\n    envs: plain\n",
+        indoc! {"
+            pods:
+              global:
+                envs: plain
+        "},
         &[child(
             "pods.global.envs",
             "UV_INDEX",
@@ -1006,7 +1127,11 @@ fn a_leaf_holding_a_scalar_is_not_a_mapping_to_add_to() {
 #[test]
 fn an_unset_value_renders_as_an_empty_key() {
     let (rendered, touched) = applied(
-        "pods:\n  global:\n    envs: {}\n",
+        indoc! {"
+            pods:
+              global:
+                envs: {}
+        "},
         &[child(
             "pods.global.envs",
             "UV_INDEX",
@@ -1036,31 +1161,51 @@ fn document(text: &str) -> serde_yaml::Value {
 #[test]
 fn a_derived_item_follows_the_item_it_comes_from_and_keeps_its_port() {
     let (rendered, touched) = applied(
-        "addresses:\n- 0.0.0.0:${{system:tdk_apiserver_public_port}}\n- 10.0.0.7:2457\n",
+        indoc! {"
+            addresses:
+            - 0.0.0.0:${{system:tdk_apiserver_public_port}}
+            - 10.0.0.7:2457
+        "},
         &[ipv6_twin("addresses")],
     );
     assert!(touched);
     assert_eq!(
         document(&rendered),
-        document(
-            "addresses:\n- 0.0.0.0:${{system:tdk_apiserver_public_port}}\n\
-             - '[::]:${{system:tdk_apiserver_public_port}}'\n- 10.0.0.7:2457\n"
-        )
+        document(indoc! {"
+                addresses:
+                - 0.0.0.0:${{system:tdk_apiserver_public_port}}
+                - '[::]:${{system:tdk_apiserver_public_port}}'
+                - 10.0.0.7:2457
+            "})
     );
 }
 
 #[test]
 fn a_customized_port_is_carried_to_the_derived_item() {
-    let (rendered, _) = applied("addresses:\n- 0.0.0.0:3457\n", &[ipv6_twin("addresses")]);
+    let (rendered, _) = applied(
+        indoc! {"
+        addresses:
+        - 0.0.0.0:3457
+    "},
+        &[ipv6_twin("addresses")],
+    );
     assert_eq!(
         document(&rendered),
-        document("addresses:\n- 0.0.0.0:3457\n- '[::]:3457'\n")
+        document(indoc! {"
+            addresses:
+            - 0.0.0.0:3457
+            - '[::]:3457'
+        "})
     );
 }
 
 #[test]
 fn an_item_already_derived_is_not_derived_again() {
-    let current = "addresses:\n- 0.0.0.0:2457\n- '[::]:2457'\n";
+    let current = indoc! {"
+        addresses:
+        - 0.0.0.0:2457
+        - '[::]:2457'
+    "};
     let (rendered, touched) = applied(current, &[ipv6_twin("addresses")]);
     assert!(!touched);
     assert_eq!(rendered, current);
@@ -1068,7 +1213,10 @@ fn an_item_already_derived_is_not_derived_again() {
 
 #[test]
 fn a_customized_bind_that_does_not_match_is_left_alone() {
-    let current = "addresses:\n- 10.0.0.7:2457\n";
+    let current = indoc! {"
+        addresses:
+        - 10.0.0.7:2457
+    "};
     let (rendered, touched) = applied(current, &[ipv6_twin("addresses")]);
     assert!(!touched);
     assert_eq!(rendered, current);
@@ -1077,7 +1225,10 @@ fn a_customized_bind_that_does_not_match_is_left_alone() {
 #[test]
 fn a_loopback_bind_derives_its_ipv6_loopback() {
     let (rendered, _) = applied(
-        "internal_addresses:\n- 127.0.0.1:2458\n",
+        indoc! {"
+            internal_addresses:
+            - 127.0.0.1:2458
+        "},
         &[derive_item(
             "internal_addresses",
             r"^127\.0\.0\.1:(?<port>.+)$",
@@ -1086,7 +1237,11 @@ fn a_loopback_bind_derives_its_ipv6_loopback() {
     );
     assert_eq!(
         document(&rendered),
-        document("internal_addresses:\n- 127.0.0.1:2458\n- '[::1]:2458'\n")
+        document(indoc! {"
+            internal_addresses:
+            - 127.0.0.1:2458
+            - '[::1]:2458'
+        "})
     );
 }
 
@@ -1115,16 +1270,21 @@ fn port_to_internal_addresses() -> Vec<Operation> {
 #[test]
 fn a_scalar_becomes_a_derived_sibling_and_is_removed() {
     let (rendered, touched) = applied(
-        "port: ${{system:tdk_aiagent_private_port}}\nallow_writes: true\n",
+        indoc! {"
+            port: ${{system:tdk_aiagent_private_port}}
+            allow_writes: true
+        "},
         &port_to_internal_addresses(),
     );
     assert!(touched);
     assert_eq!(
         document(&rendered),
-        document(
-            "internal_addresses:\n- 0.0.0.0:${{system:tdk_aiagent_private_port}}\n\
-             - '[::]:${{system:tdk_aiagent_private_port}}'\nallow_writes: true\n"
-        )
+        document(indoc! {"
+                internal_addresses:
+                - 0.0.0.0:${{system:tdk_aiagent_private_port}}
+                - '[::]:${{system:tdk_aiagent_private_port}}'
+                allow_writes: true
+            "})
     );
     let keys: Vec<String> = document(&rendered)
         .as_mapping()
@@ -1140,7 +1300,11 @@ fn a_numeric_scalar_is_derived_as_text() {
     let (rendered, _) = applied("port: 2459\n", &port_to_internal_addresses());
     assert_eq!(
         document(&rendered),
-        document("internal_addresses:\n- 0.0.0.0:2459\n- '[::]:2459'\n")
+        document(indoc! {"
+            internal_addresses:
+            - 0.0.0.0:2459
+            - '[::]:2459'
+        "})
     );
 }
 
@@ -1154,7 +1318,11 @@ fn a_converted_scalar_is_left_alone_on_a_second_run() {
 
 #[test]
 fn an_existing_sibling_is_never_overwritten() {
-    let current = "port: 2459\ninternal_addresses:\n- 10.0.0.7:2459\n";
+    let current = indoc! {"
+        port: 2459
+        internal_addresses:
+        - 10.0.0.7:2459
+    "};
     let (rendered, _) = applied(current, &port_to_internal_addresses()[..1]);
     assert_eq!(rendered, current);
 }

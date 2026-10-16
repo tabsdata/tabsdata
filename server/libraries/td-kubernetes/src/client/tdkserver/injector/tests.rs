@@ -5,6 +5,8 @@
 use std::collections::BTreeMap;
 use std::io::Write;
 
+use indoc::indoc;
+
 use super::*;
 
 const TABSDATA: &str = "\
@@ -443,9 +445,11 @@ fn from_file(content: &str) -> Result<Vec<Setting>, InjectorError> {
 
 #[test]
 fn a_compact_settings_file_uses_the_flag_addresses() {
-    let settings =
-        from_file("tdk_database_host: db.internal\ntabsdata:pods.service.resources.replicas: 2\n")
-            .expect("valid file");
+    let settings = from_file(indoc! {"
+            tdk_database_host: db.internal
+            tabsdata:pods.service.resources.replicas: 2
+        "})
+    .expect("valid file");
     let files = plan(&configs(), &settings).expect("injected");
     assert!(files["tabsdata.yaml"].contains("      replicas: 2\n"));
     assert!(files["dbmanager.database.yaml"].contains("    host: db.internal\n"));
@@ -508,7 +512,10 @@ fn a_settings_file_and_a_flag_cannot_repeat_a_value() {
 #[test]
 fn a_settings_file_cannot_mix_sections_and_compact_entries() {
     assert!(matches!(
-        from_file("values: {}\ntdk_database_host: a\n"),
+        from_file(indoc! {"
+            values: {}
+            tdk_database_host: a
+        "}),
         Err(InjectorError::InvalidSettingsFile { .. })
     ));
 }
@@ -516,7 +523,11 @@ fn a_settings_file_cannot_mix_sections_and_compact_entries() {
 #[test]
 fn a_settings_file_holds_only_final_values() {
     assert!(matches!(
-        from_file("files:\n  tabsdata.yaml:\n    pods: {}\n"),
+        from_file(indoc! {"
+            files:
+              tabsdata.yaml:
+                pods: {}
+        "}),
         Err(InjectorError::InvalidSetting { .. })
     ));
     assert!(matches!(
@@ -542,7 +553,12 @@ fn a_flow_collection_value_is_quoted_safely() {
 fn a_block_scalar_cannot_be_edited_in_place() {
     let configs = BTreeMap::from([(
         "block.yaml".to_owned(),
-        "text: |\n  first\n  second\n".to_owned(),
+        indoc! {"
+            text: |
+              first
+              second
+        "}
+        .to_owned(),
     )]);
     let settings = settings(&["block:text=x"]);
     assert!(matches!(
@@ -555,13 +571,20 @@ fn a_block_scalar_cannot_be_edited_in_place() {
 fn a_key_with_dots_is_quoted_in_the_path() {
     let configs = BTreeMap::from([(
         "labels.yaml".to_owned(),
-        "selectors:\n  kubernetes.io/os: linux\n".to_owned(),
+        indoc! {"
+            selectors:
+              kubernetes.io/os: linux
+        "}
+        .to_owned(),
     )]);
     let settings = settings(&["labels:selectors.\"kubernetes.io/os\"=windows"]);
     let files = plan(&configs, &settings).expect("injected");
     assert_eq!(
         files["labels.yaml"],
-        "selectors:\n  kubernetes.io/os: windows\n"
+        indoc! {"
+            selectors:
+              kubernetes.io/os: windows
+        "}
     );
 }
 
@@ -569,9 +592,19 @@ fn a_key_with_dots_is_quoted_in_the_path() {
 fn non_ascii_text_keeps_offsets_aligned() {
     let configs = BTreeMap::from([(
         "text.yaml".to_owned(),
-        "name: ñandú # bird\nnext: value\n".to_owned(),
+        indoc! {"
+            name: ñandú # bird
+            next: value
+        "}
+        .to_owned(),
     )]);
     let settings = settings(&["text:next=other"]);
     let files = plan(&configs, &settings).expect("injected");
-    assert_eq!(files["text.yaml"], "name: ñandú # bird\nnext: other\n");
+    assert_eq!(
+        files["text.yaml"],
+        indoc! {"
+        name: ñandú # bird
+        next: other
+    "}
+    );
 }

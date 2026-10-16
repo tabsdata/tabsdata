@@ -11,6 +11,10 @@ DERIVED_PORT = "port"
 DERIVED_VALUE = "value"
 MINIMUM_DERIVED_LENGTH = 4
 
+USER_OWNED_MAPPINGS: dict[tuple[str, str], frozenset[tuple[str, ...]]] = {
+    ("configs", "tabsdata.yaml"): frozenset({("pods", "global", "envs")}),
+}
+
 
 @dataclass
 class Operation:
@@ -113,9 +117,17 @@ def sequence_gap(path: tuple[str, ...], previous: Any, current: Any) -> Gap:
     )
 
 
-def synthesize(previous: Any, current: Any) -> Synthesis:
+def user_owned_mappings(family: str, bundle: str) -> frozenset[tuple[str, ...]]:
+    return USER_OWNED_MAPPINGS.get((family, bundle), frozenset())
+
+
+def synthesize(
+    previous: Any,
+    current: Any,
+    user_owned: frozenset[tuple[str, ...]] = frozenset(),
+) -> Synthesis:
     synthesis = Synthesis()
-    walk(synthesis, (), previous, current)
+    walk(synthesis, (), previous, current, user_owned)
     return synthesis
 
 
@@ -124,12 +136,13 @@ def walk(
     path: tuple[str, ...],
     previous: Any,
     current: Any,
+    user_owned: frozenset[tuple[str, ...]],
 ) -> None:
     if previous == current:
         return
 
     if is_mapping(previous) and is_mapping(current):
-        walk_mapping(synthesis, path, previous, current)
+        walk_mapping(synthesis, path, previous, current, user_owned)
         return
 
     if is_sequence(previous) or is_sequence(current):
@@ -241,6 +254,7 @@ def walk_mapping(
     path: tuple[str, ...],
     previous: dict,
     current: dict,
+    user_owned: frozenset[tuple[str, ...]],
 ) -> None:
     under = nested_under(previous, current)
     if under is not None:
@@ -257,7 +271,7 @@ def walk_mapping(
     keys = list(current)
     for position, key in enumerate(keys):
         if key in previous:
-            walk(synthesis, (*path, str(key)), previous[key], current[key])
+            walk(synthesis, (*path, str(key)), previous[key], current[key], user_owned)
             continue
 
         source = moved_from(previous, removed, current[key])
@@ -278,7 +292,7 @@ def walk_mapping(
             )
             continue
 
-        anchor = anchor_of(keys, position, previous)
+        anchor = None if path in user_owned else anchor_of(keys, position, previous)
         if anchor is None:
             synthesis.operations.append(
                 Operation(

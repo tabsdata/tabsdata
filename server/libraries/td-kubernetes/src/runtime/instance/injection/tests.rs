@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use chrono::Utc;
+use indoc::indoc;
 use k8s_openapi::api::core::v1::{
     ConfigMapProjection, Container, ProjectedVolumeSource, Volume, VolumeProjection,
 };
@@ -93,7 +94,12 @@ fn worker_with_no_matching_configs_yields_no_env() {
 fn mounted_config_injects_secret_keys() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${{secret:postgres_system_password}}\njwt:\n  secret: ${{secret:jwt_signing_key}}\n",
+        indoc! {"
+            database:
+              password: ${{secret:postgres_system_password}}
+            jwt:
+              secret: ${{secret:jwt_signing_key}}
+        "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
@@ -108,7 +114,10 @@ fn mounted_config_injects_secret_keys() {
 fn secret_auto_placeholders_are_injected() {
     let profile = build_profile(&[(
         "dbmanager.database.yaml",
-        "database_server:\n  password: ${{secretAuto:postgres_system_password}}\n",
+        indoc! {"
+            database_server:
+              password: ${{secretAuto:postgres_system_password}}
+        "},
     )]);
     let mut spec = build_pod_spec_mounting(&["dbcreate"], &["dbmanager.database.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
@@ -125,11 +134,18 @@ fn server_secrets_stay_out_of_pods_not_mounting_the_file() {
     let profile = build_profile(&[
         (
             "apiserver.database.yaml",
-            "database:\n  apiserver:\n    password: ${{secretAuto:postgres_system_password}}\n",
+            indoc! {"
+                database:
+                  apiserver:
+                    password: ${{secretAuto:postgres_system_password}}
+            "},
         ),
         (
             "dbmanager.database.yaml",
-            "database_server:\n  password: ${{secretAuto:postgres_system_password}}\n",
+            indoc! {"
+                database_server:
+                  password: ${{secretAuto:postgres_system_password}}
+            "},
         ),
     ]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.database.yaml"]);
@@ -149,7 +165,10 @@ fn server_secrets_stay_out_of_pods_not_mounting_the_file() {
 fn mounted_config_targets_all_containers() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${{secret:postgres_system_password}}\n",
+        indoc! {"
+            database:
+              password: ${{secret:postgres_system_password}}
+        "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver", "sidecar"], &["apiserver.yaml"]);
     let mut secrets: BTreeSet<String> = BTreeSet::new();
@@ -164,10 +183,25 @@ fn only_mounted_configs_are_injected() {
     let profile = build_profile(&[
         (
             "apiserver.yaml",
-            "database:\n  password: ${{secret:postgres_system_password}}\n",
+            indoc! {"
+                database:
+                  password: ${{secret:postgres_system_password}}
+            "},
         ),
-        ("apiserver.log.yaml", "audit:\n  token: ${{secret}}\n"),
-        ("tabsdata.yaml", "ignored:\n  secret: ${{secret}}\n"),
+        (
+            "apiserver.log.yaml",
+            indoc! {"
+            audit:
+              token: ${{secret}}
+        "},
+        ),
+        (
+            "tabsdata.yaml",
+            indoc! {"
+            ignored:
+              secret: ${{secret}}
+        "},
+        ),
     ]);
     let mut spec =
         build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml", "apiserver.log.yaml"]);
@@ -189,7 +223,10 @@ fn only_mounted_configs_are_injected() {
 fn missing_secret_in_cluster_is_a_hard_failure() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${{secret:postgres_system_password}}\n",
+        indoc! {"
+            database:
+              password: ${{secret:postgres_system_password}}
+        "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let secrets: BTreeSet<String> = BTreeSet::new();
@@ -203,7 +240,13 @@ fn missing_secret_in_cluster_is_a_hard_failure() {
 
 #[test]
 fn config_without_placeholders_does_not_require_secret() {
-    let profile = build_profile(&[("apiserver.yaml", "noseed:\n  value: literal\n")]);
+    let profile = build_profile(&[(
+        "apiserver.yaml",
+        indoc! {"
+        noseed:
+          value: literal
+    "},
+    )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     let secrets: BTreeSet<String> = BTreeSet::new();
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
@@ -214,7 +257,10 @@ fn config_without_placeholders_does_not_require_secret() {
 fn already_present_env_var_is_not_duplicated() {
     let profile = build_profile(&[(
         "apiserver.yaml",
-        "database:\n  password: ${{secret:postgres_system_password}}\n",
+        indoc! {"
+            database:
+              password: ${{secret:postgres_system_password}}
+        "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.yaml"]);
     if let Some(container) = spec.containers.first_mut() {
@@ -241,7 +287,13 @@ fn already_present_env_var_is_not_duplicated() {
 fn global_envs_reach_every_container() {
     let profile = build_profile(&[(
         "tabsdata.yaml",
-        "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\n      TD_RETRIES: 3\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  TD_TRACE: verbose
+                  TD_RETRIES: 3
+        "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver", "sidecar"], &[]);
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
@@ -256,7 +308,12 @@ fn global_envs_reach_every_container() {
 fn global_envs_do_not_need_the_config_mounted() {
     let profile = build_profile(&[(
         "tabsdata.yaml",
-        "pods:\n  global:\n    envs:\n      TD_TRACE: verbose\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  TD_TRACE: verbose
+        "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
@@ -267,7 +324,12 @@ fn global_envs_do_not_need_the_config_mounted() {
 fn global_envs_apply_to_a_function_pod_spec() {
     let mut spec = build_pod_spec_mounting(&["run-function", "upload"], &[]);
     apply_global_envs(
-        "pods:\n  global:\n    envs:\n      TYPESAFE_API_KEY: key\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  TYPESAFE_API_KEY: key
+        "},
         &mut spec,
     )
     .expect("ok");
@@ -281,7 +343,14 @@ fn global_envs_apply_to_a_function_pod_spec() {
 
 #[test]
 fn an_empty_global_envs_map_injects_nothing() {
-    let profile = build_profile(&[("tabsdata.yaml", "pods:\n  global:\n    envs: {}\n")]);
+    let profile = build_profile(&[(
+        "tabsdata.yaml",
+        indoc! {"
+        pods:
+          global:
+            envs: {}
+    "},
+    )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
     inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new()).expect("ok");
     assert!(names(&spec, "apiserver").is_empty());
@@ -291,7 +360,13 @@ fn an_empty_global_envs_map_injects_nothing() {
 fn an_unspecified_global_env_leaves_the_container_one_alone() {
     let profile = build_profile(&[(
         "tabsdata.yaml",
-        "pods:\n  global:\n    envs:\n      UV_INDEX:\n      UV_INDEX_STRATEGY: \"\"\n",
+        indoc! {r#"
+            pods:
+              global:
+                envs:
+                  UV_INDEX:
+                  UV_INDEX_STRATEGY: ""
+        "#},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
     spec.containers[0].env = Some(vec![
@@ -319,10 +394,38 @@ fn an_unspecified_global_env_leaves_the_container_one_alone() {
 }
 
 #[test]
+fn the_host_receives_only_the_global_envs_with_a_value() {
+    let config = indoc! {r#"
+        pods:
+          global:
+            envs:
+              UV_INDEX:
+              UV_INDEX_STRATEGY: ""
+              UV_DEFAULT_INDEX: https://pypi.org/simple/
+              UV_HTTP_RETRIES: 16
+    "#};
+    assert_eq!(
+        host_global_envs(config).expect("ok"),
+        vec![
+            (
+                "UV_DEFAULT_INDEX".to_owned(),
+                "https://pypi.org/simple/".to_owned()
+            ),
+            ("UV_HTTP_RETRIES".to_owned(), "16".to_owned()),
+        ]
+    );
+}
+
+#[test]
 fn a_global_env_wins_over_a_container_one() {
     let profile = build_profile(&[(
         "tabsdata.yaml",
-        "pods:\n  global:\n    envs:\n      TD_TRACE: global\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  TD_TRACE: global
+        "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
     spec.containers[0].env = Some(vec![EnvVar {
@@ -344,7 +447,12 @@ fn a_global_env_wins_over_a_container_one() {
 fn a_global_env_overrides_an_init_container_one() {
     let profile = build_profile(&[(
         "tabsdata.yaml",
-        "pods:\n  global:\n    envs:\n      UV_INDEX: from-config\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  UV_INDEX: from-config
+        "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
     spec.init_containers = Some(vec![Container {
@@ -371,7 +479,13 @@ fn a_global_env_overrides_an_init_container_one() {
 fn a_non_scalar_global_env_is_a_hard_failure() {
     let profile = build_profile(&[(
         "tabsdata.yaml",
-        "pods:\n  global:\n    envs:\n      TD_TRACE:\n        nested: value\n",
+        indoc! {"
+            pods:
+              global:
+                envs:
+                  TD_TRACE:
+                    nested: value
+        "},
     )]);
     let mut spec = build_pod_spec_mounting(&["apiserver"], &[]);
     let outcome = inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new());

@@ -11,6 +11,9 @@ pods:
       UV_DEFAULT_INDEX: https://pypi.org/simple/
       UV_INDEX:
       UV_INDEX_STRATEGY: unsafe-best-match
+      UV_HTTP_RETRIES: 16
+      UV_HTTP_TIMEOUT: 60
+      UV_HTTP_CONNECT_TIMEOUT: 60
 
   # Sizing and placement. These values are what tabsdata applies: the pod
   # descriptors carry none of their own, so what is written here is what the

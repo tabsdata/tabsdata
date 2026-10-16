@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 
 const APISERVER_DATABASE: &str = "\
@@ -81,7 +83,10 @@ fn explicit_username_is_not_overridden() {
 
 #[test]
 fn unlisted_config_is_left_untouched() {
-    let config = "service:\n  port: 2457\n";
+    let config = indoc! {"
+        service:
+          port: 2457
+    "};
     let amended = amend("apiserver.service.yaml", config, None).expect("amend");
     assert_eq!(amended, config);
 }
@@ -106,7 +111,12 @@ database:
 
 #[test]
 fn missing_section_is_skipped() {
-    let config = "other:\n  apiserver:\n    postgres:\n      database: tabsdata\n";
+    let config = indoc! {"
+        other:
+          apiserver:
+            postgres:
+              database: tabsdata
+    "};
     let amended = amend(APISERVER_DATABASE_CONFIG, config, None).expect("amend");
     assert!(!amended.contains("schema:"));
     assert!(!amended.contains("username:"));
@@ -138,15 +148,29 @@ fn other_properties_are_preserved() {
 
 #[test]
 fn show_unknown_component() {
-    let config = "database:\n  other:\n    postgres:\n      database: tabsdata\n";
+    let config = indoc! {"
+        database:
+          other:
+            postgres:
+              database: tabsdata
+    "};
     let amended = amend(APISERVER_DATABASE_CONFIG, config, None).expect("amend");
     println!("---OUT---\n{amended}---END---");
 }
 
 #[test]
 fn the_schema_comes_from_the_server_database_when_the_component_has_none() {
-    let config = "database:\n  apiserver:\n    postgres:\n      password: p\n";
-    let server = "database_server:\n  postgres:\n    database: tabsdata\n";
+    let config = indoc! {"
+        database:
+          apiserver:
+            postgres:
+              password: p
+    "};
+    let server = indoc! {"
+        database_server:
+          postgres:
+            database: tabsdata
+    "};
     let amended = amend(APISERVER_DATABASE_CONFIG, config, Some(server)).expect("amend");
     assert!(
         amended.contains("schema: tabsdata_apiserver"),
@@ -160,7 +184,12 @@ fn the_schema_comes_from_the_server_database_when_the_component_has_none() {
 
 #[test]
 fn without_a_server_config_the_static_default_is_used() {
-    let config = "database:\n  apiserver:\n    postgres:\n      password: p\n";
+    let config = indoc! {"
+        database:
+          apiserver:
+            postgres:
+              password: p
+    "};
     let amended = amend(APISERVER_DATABASE_CONFIG, config, None).expect("amend");
     assert!(amended.contains("schema: td_apiserver"), "got: {amended}");
 }

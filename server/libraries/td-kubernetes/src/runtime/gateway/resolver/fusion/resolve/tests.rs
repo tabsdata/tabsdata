@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 use crate::runtime::gateway::resolver::placeholder::SystemValues;
 
@@ -110,10 +112,22 @@ database_server:
 
 #[test]
 fn literal_same_category_reuses_value_across_configs() {
-    let first_template = "database:\n  host: ${{literal:dbhost}}\n";
-    let first_init = "database:\n  host: pg.internal\n";
-    let second_template = "dbmanager:\n  host: ${{literal:dbhost}}\n";
-    let second_init = "dbmanager:\n  host: ${{literal:dbhost}}\n";
+    let first_template = indoc! {"
+        database:
+          host: ${{literal:dbhost}}
+    "};
+    let first_init = indoc! {"
+        database:
+          host: pg.internal
+    "};
+    let second_template = indoc! {"
+        dbmanager:
+          host: ${{literal:dbhost}}
+    "};
+    let second_init = indoc! {"
+        dbmanager:
+          host: ${{literal:dbhost}}
+    "};
     let system = SystemValues::default();
     let auto = HashMap::new();
     let vault = RefCell::new(HashMap::new());
@@ -159,9 +173,18 @@ fn literal_same_category_reuses_value_across_configs() {
 
 #[test]
 fn literal_and_secret_of_same_category_do_not_share_stores() {
-    let literal_template = "plain:\n  name: ${{literal:postgres_system_password}}\n";
-    let literal_init = "plain:\n  name: from-literal\n";
-    let secret_template = "guarded:\n  password: ${{secretAuto:postgres_system_password}}\n";
+    let literal_template = indoc! {"
+        plain:
+          name: ${{literal:postgres_system_password}}
+    "};
+    let literal_init = indoc! {"
+        plain:
+          name: from-literal
+    "};
+    let secret_template = indoc! {"
+        guarded:
+          password: ${{secretAuto:postgres_system_password}}
+    "};
     let system = SystemValues::default();
     let auto = HashMap::new();
     let vault = RefCell::new(HashMap::new());
@@ -415,7 +438,10 @@ fn literal_bare_boolean_init_stays_a_boolean() {
 #[test]
 fn non_scalar_init_value_is_structure_mismatch() {
     let template = "count: ${{literal:n}}\n";
-    let init = "count:\n  nested: 7\n";
+    let init = indoc! {"
+        count:
+          nested: 7
+    "};
     let error = resolve_error(template, init);
     assert!(matches!(error, ResolverError::StructureMismatch { .. }));
 }
@@ -471,7 +497,11 @@ fn embedded_system_placeholder_splices_into_surrounding_text() {
 
 #[test]
 fn the_version_label_resolves_from_the_tabsdata_version() {
-    let template = "metadata:\n  labels:\n    app.kubernetes.io/version: \"${{system:tdk_tabsdata_version}}\"\n";
+    let template = indoc! {r#"
+        metadata:
+          labels:
+            app.kubernetes.io/version: "${{system:tdk_tabsdata_version}}"
+    "#};
     let system = SystemValues {
         tabsdata_version: Some("2.0.1".to_owned()),
         ..SystemValues::default()
@@ -498,7 +528,12 @@ fn the_version_label_resolves_from_the_tabsdata_version() {
 
 #[test]
 fn the_dbmanager_mode_resolves_in_the_name_and_the_argument() {
-    let template = "name: 1000-db${{system:tdk_dbmanager_mode}}\nargs:\n  - db\n  - ${{system:tdk_dbmanager_mode}}\n";
+    let template = indoc! {"
+        name: 1000-db${{system:tdk_dbmanager_mode}}
+        args:
+          - db
+          - ${{system:tdk_dbmanager_mode}}
+    "};
     for (mode, container) in [("create", "1000-dbcreate"), ("upgrade", "1000-dbupgrade")] {
         let system = SystemValues {
             dbmanager_mode: Some(mode.to_owned()),
@@ -586,7 +621,10 @@ fn non_editable_placeholder_modified_in_init_errors() {
 
 #[test]
 fn structure_mismatch_when_init_shape_differs() {
-    let template = "database:\n  password: ${{literal:pw}}\n";
+    let template = indoc! {"
+        database:
+          password: ${{literal:pw}}
+    "};
     let init = "database: scalar\n";
     let error = resolve_error(template, init);
     assert!(matches!(error, ResolverError::StructureMismatch { .. }));
@@ -594,7 +632,10 @@ fn structure_mismatch_when_init_shape_differs() {
 
 #[test]
 fn missing_key_in_init_is_structure_mismatch() {
-    let template = "a: ${{literal:x}}\nb: ${{literal:y}}\n";
+    let template = indoc! {"
+        a: ${{literal:x}}
+        b: ${{literal:y}}
+    "};
     let init = "a: one\n";
     let error = resolve_error(template, init);
     assert!(matches!(error, ResolverError::StructureMismatch { .. }));
@@ -602,16 +643,31 @@ fn missing_key_in_init_is_structure_mismatch() {
 
 #[test]
 fn positional_list_length_mismatch_errors() {
-    let template = "hosts:\n- ${{literal:a}}\n- ${{literal:b}}\n";
-    let init = "hosts:\n- one\n";
+    let template = indoc! {"
+        hosts:
+        - ${{literal:a}}
+        - ${{literal:b}}
+    "};
+    let init = indoc! {"
+        hosts:
+        - one
+    "};
     let error = resolve_error(template, init);
     assert!(matches!(error, ResolverError::StructureMismatch { .. }));
 }
 
 #[test]
 fn positional_scalar_list_inlines_each_item() {
-    let template = "hosts:\n- ${{literal:a}}\n- ${{literal:b}}\n";
-    let init = "hosts:\n- alpha\n- beta\n";
+    let template = indoc! {"
+        hosts:
+        - ${{literal:a}}
+        - ${{literal:b}}
+    "};
+    let init = indoc! {"
+        hosts:
+        - alpha
+        - beta
+    "};
     let outcome = resolve(template, init);
     let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
     let hosts = value["hosts"].as_sequence().expect("hosts");
@@ -673,8 +729,14 @@ mounts:
 
 #[test]
 fn diverging_value_for_same_placeholder_identity_errors() {
-    let template = "a: ${{literal:shared}}\nb: ${{literal:shared}}\n";
-    let init = "a: one\nb: two\n";
+    let template = indoc! {"
+        a: ${{literal:shared}}
+        b: ${{literal:shared}}
+    "};
+    let init = indoc! {"
+        a: one
+        b: two
+    "};
     let error = resolve_error(template, init);
     assert!(matches!(
         error,
@@ -684,8 +746,14 @@ fn diverging_value_for_same_placeholder_identity_errors() {
 
 #[test]
 fn same_value_for_same_placeholder_identity_is_accepted() {
-    let template = "a: ${{literal:shared}}\nb: ${{literal:shared}}\n";
-    let init = "a: same\nb: same\n";
+    let template = indoc! {"
+        a: ${{literal:shared}}
+        b: ${{literal:shared}}
+    "};
+    let init = indoc! {"
+        a: same
+        b: same
+    "};
     let outcome = resolve(template, init);
     let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
     assert_eq!(value["a"], Value::String("same".to_owned()));
@@ -714,7 +782,10 @@ fn plain_scalar_without_placeholder_passes_through() {
 
 #[test]
 fn system_null_renders_as_a_yaml_null() {
-    let template = "postgres:\n  ssl_root_cert: ${{system:tdk_database_ssl_root_cert}}\n";
+    let template = indoc! {"
+        postgres:
+          ssl_root_cert: ${{system:tdk_database_ssl_root_cert}}
+    "};
     let system = SystemValues {
         database_ssl_root_cert: Some("null".to_owned()),
         ..SystemValues::default()
@@ -784,8 +855,14 @@ fn resolve_pair(
 
 #[test]
 fn a_supplied_secret_settles_the_same_category_in_another_file() {
-    let template = "server:\n  username: ${{secret:postgres_system_user}}\n";
-    let supplied = "server:\n  username: dbadmin\n";
+    let template = indoc! {"
+        server:
+          username: ${{secret:postgres_system_user}}
+    "};
+    let supplied = indoc! {"
+        server:
+          username: dbadmin
+    "};
     let (first, second) = resolve_pair(
         ("dbmanager.database.yaml", template, supplied),
         ("apiserver.database.yaml", template, template),
@@ -799,8 +876,14 @@ fn a_supplied_secret_settles_the_same_category_in_another_file() {
 
 #[test]
 fn a_supplied_literal_settles_the_same_category_in_another_file() {
-    let template = "server:\n  host: ${{literal:tdk_database_host}}\n";
-    let supplied = "server:\n  host: dimax\n";
+    let template = indoc! {"
+        server:
+          host: ${{literal:tdk_database_host}}
+    "};
+    let supplied = indoc! {"
+        server:
+          host: dimax
+    "};
     let (first, second) = resolve_pair(
         ("dbmanager.database.yaml", template, supplied),
         ("apiserver.database.yaml", template, template),
@@ -814,7 +897,10 @@ fn a_supplied_literal_settles_the_same_category_in_another_file() {
 
 #[test]
 fn a_mandatory_secret_missing_everywhere_still_fails() {
-    let template = "server:\n  username: ${{secret:postgres_system_user}}\n";
+    let template = indoc! {"
+        server:
+          username: ${{secret:postgres_system_user}}
+    "};
     let system = SystemValues::default();
     let auto = HashMap::new();
     let error = resolve_config_file(
@@ -834,7 +920,10 @@ fn a_mandatory_secret_missing_everywhere_still_fails() {
 
 #[test]
 fn an_error_names_the_offending_file() {
-    let template = "server:\n  username: ${{secret:postgres_system_user}}\n";
+    let template = indoc! {"
+        server:
+          username: ${{secret:postgres_system_user}}
+    "};
     let system = SystemValues::default();
     let auto = HashMap::new();
     let error = resolve_config_file(
@@ -858,7 +947,10 @@ fn an_error_names_the_offending_file() {
 
 #[test]
 fn an_optional_secret_stays_empty_when_no_file_supplies_it() {
-    let template = "agent:\n  key: ${{secret:openai-key?}}\n";
+    let template = indoc! {"
+        agent:
+          key: ${{secret:openai-key?}}
+    "};
     let (first, second) = resolve_pair(
         ("aiagent.yaml", template, template),
         ("other.yaml", template, template),
@@ -869,9 +961,19 @@ fn an_optional_secret_stays_empty_when_no_file_supplies_it() {
 
 #[test]
 fn an_optional_secret_supplied_once_settles_the_other_file() {
-    let template = "agent:\n  key: ${{secret:openai-key?}}\n";
+    let template = indoc! {"
+        agent:
+          key: ${{secret:openai-key?}}
+    "};
     let (first, second) = resolve_pair(
-        ("aiagent.yaml", template, "agent:\n  key: sk-real\n"),
+        (
+            "aiagent.yaml",
+            template,
+            indoc! {"
+            agent:
+              key: sk-real
+        "},
+        ),
         ("other.yaml", template, template),
     );
     assert_eq!(first.secrets[0].value, "sk-real");
@@ -883,8 +985,14 @@ fn an_optional_secret_supplied_once_settles_the_other_file() {
 
 #[test]
 fn two_files_giving_the_same_value_is_accepted() {
-    let template = "server:\n  host: ${{literal:tdk_database_host}}\n";
-    let supplied = "server:\n  host: dimax\n";
+    let template = indoc! {"
+        server:
+          host: ${{literal:tdk_database_host}}
+    "};
+    let supplied = indoc! {"
+        server:
+          host: dimax
+    "};
     let (first, second) = resolve_pair(
         ("dbmanager.database.yaml", template, supplied),
         ("apiserver.database.yaml", template, supplied),
@@ -895,7 +1003,10 @@ fn two_files_giving_the_same_value_is_accepted() {
 
 #[test]
 fn diverging_values_across_files_error() {
-    let template = "server:\n  host: ${{literal:tdk_database_host}}\n";
+    let template = indoc! {"
+        server:
+          host: ${{literal:tdk_database_host}}
+    "};
     let system = SystemValues::default();
     let auto = HashMap::new();
     let vault = RefCell::new(HashMap::new());
@@ -904,7 +1015,10 @@ fn diverging_values_across_files_error() {
     resolve_config_file(
         "dbmanager.database.yaml",
         template,
-        "server:\n  host: first\n",
+        indoc! {"
+            server:
+              host: first
+        "},
         &system,
         &auto,
         &vault,
@@ -916,7 +1030,10 @@ fn diverging_values_across_files_error() {
     let error = resolve_config_file(
         "apiserver.database.yaml",
         template,
-        "server:\n  host: second\n",
+        indoc! {"
+            server:
+              host: second
+        "},
         &system,
         &auto,
         &vault,
@@ -937,7 +1054,10 @@ fn diverging_values_across_files_error() {
 
 #[test]
 fn diverging_secret_values_across_files_error() {
-    let template = "server:\n  username: ${{secret:postgres_system_user}}\n";
+    let template = indoc! {"
+        server:
+          username: ${{secret:postgres_system_user}}
+    "};
     let system = SystemValues::default();
     let auto = HashMap::new();
     let vault = RefCell::new(HashMap::new());
@@ -946,7 +1066,10 @@ fn diverging_secret_values_across_files_error() {
     resolve_config_file(
         "dbmanager.database.yaml",
         template,
-        "server:\n  username: dbadmin\n",
+        indoc! {"
+            server:
+              username: dbadmin
+        "},
         &system,
         &auto,
         &vault,
@@ -958,7 +1081,10 @@ fn diverging_secret_values_across_files_error() {
     let error = resolve_config_file(
         "apiserver.database.yaml",
         template,
-        "server:\n  username: someoneelse\n",
+        indoc! {"
+            server:
+              username: someoneelse
+        "},
         &system,
         &auto,
         &vault,
@@ -1008,14 +1134,27 @@ storage:
 
 #[test]
 fn unqualified_placeholders_across_files_are_independent() {
-    let template = "options:\n  token: ${{secret}}\n";
+    let template = indoc! {"
+        options:
+          token: ${{secret}}
+    "};
     let (first, second) = resolve_pair(
         (
             "apiserver.storage.yaml",
             template,
-            "options:\n  token: one\n",
+            indoc! {"
+                options:
+                  token: one
+            "},
         ),
-        ("aiagent.yaml", template, "options:\n  token: two\n"),
+        (
+            "aiagent.yaml",
+            template,
+            indoc! {"
+            options:
+              token: two
+        "},
+        ),
     );
     assert_eq!(first.secrets[0].value, "one");
     assert_eq!(
@@ -1026,8 +1165,14 @@ fn unqualified_placeholders_across_files_are_independent() {
 
 #[test]
 fn unqualified_literals_are_independent_of_each_other() {
-    let template = "a: ${{literal}}\nb: ${{literal}}\n";
-    let init = "a: one\nb: two\n";
+    let template = indoc! {"
+        a: ${{literal}}
+        b: ${{literal}}
+    "};
+    let init = indoc! {"
+        a: one
+        b: two
+    "};
     let outcome = resolve(template, init);
     let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
     assert_eq!(value["a"], Value::String("one".to_owned()));
@@ -1053,7 +1198,11 @@ fn an_optional_mapping_lets_the_initialization_omit_keys() {
     );
     let schema = Schema::parse(
         "apiserver.storage.yaml",
-        "directives:\n  - at: storage.mounts[*].options\n    treat: optional\n",
+        indoc! {"
+            directives:
+              - at: storage.mounts[*].options
+                treat: optional
+        "},
     )
     .expect("schema");
     let system = SystemValues::default();
@@ -1083,11 +1232,24 @@ fn an_optional_mapping_lets_the_initialization_omit_keys() {
 
 #[test]
 fn an_optional_mapping_still_rejects_a_missing_key_elsewhere() {
-    let template = "storage:\n  mounts:\n  - id: ROOT\n    uri: gs://bucket/\n";
-    let supplied = "storage:\n  mounts:\n  - id: ROOT\n";
+    let template = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            uri: gs://bucket/
+    "};
+    let supplied = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+    "};
     let schema = Schema::parse(
         "apiserver.storage.yaml",
-        "directives:\n  - at: storage.mounts[*].options\n    treat: optional\n",
+        indoc! {"
+            directives:
+              - at: storage.mounts[*].options
+                treat: optional
+        "},
     )
     .expect("schema");
     let system = SystemValues::default();

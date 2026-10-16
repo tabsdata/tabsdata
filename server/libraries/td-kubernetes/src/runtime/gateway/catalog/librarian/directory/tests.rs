@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 
 fn mapping(yaml: &str) -> serde_yaml::Mapping {
@@ -57,7 +59,11 @@ fn the_sourcetrack_is_nested_under_a_sourcetrack_key() {
 
 #[test]
 fn a_missing_version_yields_no_document() {
-    let info = mapping("sourcetrack:\n  tabsdata-os:\n    tag: 2.0.2\n");
+    let info = mapping(indoc! {"
+        sourcetrack:
+          tabsdata-os:
+            tag: 2.0.2
+    "});
     assert!(
         KubernetesServerCatalog::server_version(&EtcContent::ServerVersion_yaml, &info)
             .unwrap()
@@ -67,7 +73,13 @@ fn a_missing_version_yields_no_document() {
 
 #[test]
 fn an_absent_or_null_sourcetrack_yields_no_document() {
-    for yaml in ["version: 2.0.2\n", "version: 2.0.2\nsourcetrack: null\n"] {
+    for yaml in [
+        "version: 2.0.2\n",
+        indoc! {"
+        version: 2.0.2
+        sourcetrack: null
+    "},
+    ] {
         assert!(
             KubernetesServerCatalog::server_build_manifest(
                 &EtcContent::ServerBuildManifest_yaml,

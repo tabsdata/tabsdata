@@ -169,7 +169,7 @@ strictyaml==1.7.3
 tenacity==9.2.1
 textual==8.2.8
 thrift==0.24.0
-tomlkit==0.15.1
+tomlkit==0.15.2
 truststore==0.10.5 ; sys_platform != 'emscripten'
 types-pyyaml==6.0.12.20260906
 types-s3transfer==0.19.2

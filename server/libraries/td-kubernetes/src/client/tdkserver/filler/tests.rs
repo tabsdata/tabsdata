@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
 use ratatui::layout::Rect;
 use ratatui::style::Color;
 
@@ -73,14 +74,22 @@ fn a_selector_key_with_a_colon_inside_brackets_stays_a_key() {
 
 #[test]
 fn empty_values_are_counted_and_found() {
-    let content = lines("values:\n  host: \"\"\n  port: ''\n  name: tabsdata\n");
+    let content = lines(indoc! {r#"
+        values:
+          host: ""
+          port: ''
+          name: tabsdata
+    "#});
     assert_eq!(empty_values(&content), 2);
     assert_eq!(first_empty_value(&content), Some(1));
 }
 
 #[test]
 fn an_error_is_located_by_the_key_it_names() {
-    let content = lines("values:\n  tdk_database_host: \"\"\n");
+    let content = lines(indoc! {r#"
+        values:
+          tdk_database_host: ""
+    "#});
     let message = "Setting 'tdk_database_host' in 'stub.yaml' gives placeholder \
                    'literal:tdk_database_host' an empty value, but it is mandatory.";
     assert_eq!(locate(message, &content), Some(1));
@@ -88,14 +97,22 @@ fn an_error_is_located_by_the_key_it_names() {
 
 #[test]
 fn an_error_is_located_by_the_last_segment_of_a_key_path() {
-    let content = lines("files:\n  tabsdata:\n    pods.service.resources.cpu: x\n");
+    let content = lines(indoc! {"
+        files:
+          tabsdata:
+            pods.service.resources.cpu: x
+    "});
     let message = "Setting 'tabsdata:pods.service.resources.cpu' is not valid.";
     assert_eq!(locate(message, &content), Some(2));
 }
 
 #[test]
 fn an_error_naming_a_line_is_located_at_that_line() {
-    let content = lines("a: 1\nb: [\nc: 3\n");
+    let content = lines(indoc! {"
+        a: 1
+        b: [
+        c: 3
+    "});
     assert_eq!(
         locate("The file did not parse at line 2 column 4.", &content),
         Some(1)
@@ -120,7 +137,11 @@ fn a_click_maps_to_the_text_position_under_it() {
         text: Rect::new(1, 2, 40, 10),
         gutter: 4,
     };
-    let text = lines("a: 1\nb: 2\nkey: value\nlast");
+    let text = lines(indoc! {"
+        a: 1
+        b: 2
+        key: value
+        last"});
     assert_eq!(view.position(&text, 7, 2), (2, 2));
     assert_eq!(view.position(&text, 2, 3), (3, 0));
     assert_eq!(view.position(&text, 39, 2), (2, 10));
@@ -129,5 +150,15 @@ fn a_click_maps_to_the_text_position_under_it() {
 
 #[test]
 fn pasted_line_breaks_of_any_platform_become_new_lines() {
-    assert_eq!(line_breaks("a\rb\r\nc\nd"), "a\nb\nc\nd");
+    assert_eq!(
+        line_breaks(indoc! {"
+        a\rb\r
+        c
+        d"}),
+        indoc! {"
+        a
+        b
+        c
+        d"}
+    );
 }

@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 use crate::runtime::gateway::resolver::schema::Schema;
 
@@ -140,10 +142,20 @@ fn secret_with_values_but_missing_entry_falls_back_to_token() {
 
 #[test]
 fn schema_secret_leaf_is_shown_as_token_without_values() {
-    let schema_text = "directives:\n  - at: options.token\n    treat: secret\n";
+    let schema_text = indoc! {"
+        directives:
+          - at: options.token
+            treat: secret
+    "};
     let schema = Schema::parse("x.yamls", schema_text).expect("schema");
-    let template = "options:\n  token: baked-in-value\n";
-    let configmap = "options:\n  token: baked-in-value\n";
+    let template = indoc! {"
+        options:
+          token: baked-in-value
+    "};
+    let configmap = indoc! {"
+        options:
+          token: baked-in-value
+    "};
     let rendered =
         reveal(template, configmap, &schema, false, false, &HashMap::new()).expect("reveal");
     assert!(rendered.contains("token: ${{secret}}"));
@@ -160,7 +172,10 @@ fn empty_configmap_renders_empty_string() {
 #[test]
 fn value_not_in_template_or_schema_passes_through() {
     let template = "known: ${{literal:x}}\n";
-    let configmap = "known: value\nextra: untouched\n";
+    let configmap = indoc! {"
+        known: value
+        extra: untouched
+    "};
     let rendered = reveal_default(template, configmap);
     assert!(rendered.contains("extra: untouched"));
 }

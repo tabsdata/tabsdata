@@ -123,6 +123,7 @@ zstd = { workspace = true, features = ["zstdmt"] }
 [dev-dependencies]
 td-kubernetes = { workspace = true, features = ["td-test"] }
 http = { workspace = true }
+indoc = { workspace = true }
 serial_test = { workspace = true }
 
 

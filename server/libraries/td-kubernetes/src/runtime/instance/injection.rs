@@ -142,6 +142,18 @@ pub fn apply_global_envs(config_yaml: &str, spec: &mut PodSpec) -> Result<(), se
     Ok(())
 }
 
+pub fn host_global_envs(config_yaml: &str) -> Result<Vec<(String, String)>, serde_yaml::Error> {
+    Ok(global_env_entries(config_yaml)?
+        .into_iter()
+        .filter_map(|entry| {
+            entry
+                .value
+                .filter(|value| !value.is_empty())
+                .map(|value| (entry.name, value))
+        })
+        .collect())
+}
+
 fn global_env_entries(config_yaml: &str) -> Result<Vec<EnvVar>, serde_yaml::Error> {
     let config = TabsdataConfig::parse(config_yaml)?;
     Ok(config

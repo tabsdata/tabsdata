@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 
 #[test]
@@ -56,8 +58,16 @@ fn show_box_does_not_panic_on_short_text() {
 
 #[test]
 fn show_box_does_not_panic_on_multiline_text() {
-    let outcome =
-        std::panic::catch_unwind(|| show_box("first line\nsecond line\nthird line", 80, true));
+    let outcome = std::panic::catch_unwind(|| {
+        show_box(
+            indoc! {"
+            first line
+            second line
+            third line"},
+            80,
+            true,
+        )
+    });
     assert!(outcome.is_ok(), "show_box panicked on multiline text");
 }
 

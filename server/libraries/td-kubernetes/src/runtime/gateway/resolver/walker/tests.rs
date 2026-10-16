@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
 use serde_yaml::Value;
 
 use super::*;
@@ -167,7 +168,13 @@ fn walk_str(yaml: &str, render: &str) -> (Value, RecordingVisitor) {
 
 #[test]
 fn walk_visits_mapping_paths() {
-    let (_, visitor) = walk_str("database:\n  password: ${{secret:pw}}\n", "X");
+    let (_, visitor) = walk_str(
+        indoc! {"
+        database:
+          password: ${{secret:pw}}
+    "},
+        "X",
+    );
     assert_eq!(visitor.visits.len(), 1);
     assert_eq!(visitor.visits[0].0, "database.password");
     assert_eq!(visitor.visits[0].2.kind, "secret");
@@ -193,16 +200,27 @@ fn walk_embedded_placeholder_stays_string() {
 
 #[test]
 fn walk_scalar_list_addressed_by_index() {
-    let (_, visitor) = walk_str("hosts:\n- ${{literal:a}}\n- ${{literal:b}}\n", "X");
+    let (_, visitor) = walk_str(
+        indoc! {"
+        hosts:
+        - ${{literal:a}}
+        - ${{literal:b}}
+    "},
+        "X",
+    );
     let paths: Vec<&str> = visitor.visits.iter().map(|v| v.0.as_str()).collect();
     assert_eq!(paths, vec!["hosts.0", "hosts.1"]);
 }
 
 #[test]
 fn walk_keyed_map_list_addressed_by_identity() {
-    let yaml = "mounts:\n\
-                - id: ROOT\n  uri: ${{system:root}}\n\
-                - id: BUNDLES\n  uri: ${{system:bundles}}\n";
+    let yaml = indoc! {"
+        mounts:
+        - id: ROOT
+          uri: ${{system:root}}
+        - id: BUNDLES
+          uri: ${{system:bundles}}
+    "};
     let (_, visitor) = walk_str(yaml, "X");
     let paths: Vec<&str> = visitor.visits.iter().map(|v| v.0.as_str()).collect();
     assert_eq!(paths, vec!["mounts.ROOT.uri", "mounts.BUNDLES.uri"]);
@@ -210,7 +228,14 @@ fn walk_keyed_map_list_addressed_by_identity() {
 
 #[test]
 fn walk_sequence_without_placeholders_is_untouched() {
-    let (_, visitor) = walk_str("hosts:\n- a\n- b\n", "X");
+    let (_, visitor) = walk_str(
+        indoc! {"
+        hosts:
+        - a
+        - b
+    "},
+        "X",
+    );
     assert!(visitor.visits.is_empty());
 }
 
@@ -225,16 +250,28 @@ fn walk_error(yaml: &str) -> ResolverError {
 
 #[test]
 fn walk_mixed_sequence_falls_back_to_positional() {
-    let (_, visitor) = walk_str("items:\n- plain\n- id: A\n  v: ${{secret}}\n", "X");
+    let (_, visitor) = walk_str(
+        indoc! {"
+        items:
+        - plain
+        - id: A
+          v: ${{secret}}
+    "},
+        "X",
+    );
     let paths: Vec<&str> = visitor.visits.iter().map(|v| v.0.as_str()).collect();
     assert_eq!(paths, vec!["items.1.v"]);
 }
 
 #[test]
 fn walk_rejects_first_key_mismatch() {
-    let yaml = "items:\n\
-                - id: A\n  v: ${{secret}}\n\
-                - name: B\n  v: ${{secret}}\n";
+    let yaml = indoc! {"
+        items:
+        - id: A
+          v: ${{secret}}
+        - name: B
+          v: ${{secret}}
+    "};
     let error = walk_error(yaml);
     assert!(matches!(
         error,
@@ -244,9 +281,13 @@ fn walk_rejects_first_key_mismatch() {
 
 #[test]
 fn walk_rejects_duplicate_first_values() {
-    let yaml = "items:\n\
-                - id: A\n  v: ${{secret}}\n\
-                - id: A\n  v: ${{secret}}\n";
+    let yaml = indoc! {"
+        items:
+        - id: A
+          v: ${{secret}}
+        - id: A
+          v: ${{secret}}
+    "};
     let error = walk_error(yaml);
     assert!(matches!(
         error,
@@ -256,8 +297,11 @@ fn walk_rejects_duplicate_first_values() {
 
 #[test]
 fn walk_rejects_placeholder_as_identity() {
-    let yaml = "items:\n\
-                - id: ${{literal:x}}\n  v: ${{secret}}\n";
+    let yaml = indoc! {"
+        items:
+        - id: ${{literal:x}}
+          v: ${{secret}}
+    "};
     let error = walk_error(yaml);
     assert!(matches!(error, ResolverError::PlaceholderAsIdentity { .. }));
 }

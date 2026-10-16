@@ -57,6 +57,7 @@ use crate::kube::kubeconfig::{
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
 use crate::runtime::instance::image::write_venvs_image;
+use crate::runtime::instance::injection::host_global_envs;
 use crate::runtime::instance::launcher::{
     provision_database, provision_pyvenvs, start_database, stop_database,
 };
@@ -70,6 +71,7 @@ use crate::runtime::instance::profile::{
     Profile, RenderedConfigmap, load_profile, parse_from_configmaps, read_family_configmaps,
     render_for_configmaps, resolve_foreign_path, resolve_kprofile_path,
 };
+use crate::runtime::instance::tabsdata::TABSDATA_FILE;
 use crate::runtime::instance::upgrade::guard::ensure_upgraded;
 use crate::runtime::instance::verify_manifest_compatibility;
 use crate::runtime::provider::kminus::cluster::{InstanceFolderGuard, KminusCluster};
@@ -795,6 +797,16 @@ impl KminusProvider {
             UvMode::Local | UvMode::Devpi | UvMode::Pypi | UvMode::Unset => {
                 let context = self.kube_context().await?;
                 let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
+                let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
+                let envs = match configs.get(TABSDATA_FILE) {
+                    Some(config) => host_global_envs(config).map_err(|error| {
+                        ProviderError::GlobalEnvsParseFailed {
+                            config: TABSDATA_FILE.to_owned(),
+                            cause: error.to_string(),
+                        }
+                    })?,
+                    None => Vec::new(),
+                };
                 let folder = tempfile::tempdir().map_err(|error| {
                     ProviderError::RuntimesFolderCreateFailed(
                         std::env::temp_dir().display().to_string(),
@@ -807,6 +819,7 @@ impl KminusProvider {
                     &runtimes_folder,
                     &runtimes_kenvs,
                     &requirements,
+                    &envs,
                     reporter,
                 )
             }
@@ -942,6 +955,7 @@ impl KminusProvider {
         runtimes_folder: &Path,
         runtimes_kenvs: &Path,
         requirements: &[(Venv, PathBuf)],
+        envs: &[(String, String)],
         reporter: &dyn Reporter,
     ) -> CommandResult {
         ensure_no_linked_venvs(runtimes_kenvs)?;
@@ -963,6 +977,7 @@ impl KminusProvider {
                 .arg(format!("--requirements-{}", venv.as_str()))
                 .arg(file);
         }
+        command.envs(envs.iter().map(|(name, value)| (name, value)));
         command.env(ENV_UV_PYTHON_INSTALL_DIR, &runtimes_python);
         apply_detached_flags(&mut command);
         let output = match subprocess::run(&mut command, PYVENV_BINARY, self.verbose) {

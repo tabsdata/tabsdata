@@ -3,3 +3,107 @@
 #
 
 schema: 1
+configs:
+  tabsdata.yaml:
+    tabsdata_aks.yaml:
+      action: modify
+      changes:
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_RETRIES
+          value: 16
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_TIMEOUT
+          value: 60
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_CONNECT_TIMEOUT
+          value: 60
+    tabsdata_docker.yaml:
+      action: modify
+      changes:
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_RETRIES
+          value: 16
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_TIMEOUT
+          value: 60
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_CONNECT_TIMEOUT
+          value: 60
+    tabsdata_eks.yaml:
+      action: modify
+      changes:
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_RETRIES
+          value: 16
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_TIMEOUT
+          value: 60
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_CONNECT_TIMEOUT
+          value: 60
+    tabsdata_fargate.yaml:
+      action: modify
+      changes:
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_DEFAULT_INDEX
+          value: https://pypi.org/simple/
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_INDEX
+          value: null
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_INDEX_STRATEGY
+          value: unsafe-best-match
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_RETRIES
+          value: 16
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_TIMEOUT
+          value: 60
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_CONNECT_TIMEOUT
+          value: 60
+    tabsdata_gke.yaml:
+      action: modify
+      changes:
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_RETRIES
+          value: 16
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_TIMEOUT
+          value: 60
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_CONNECT_TIMEOUT
+          value: 60
+    tabsdata_kminus.yaml:
+      action: modify
+      changes:
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_RETRIES
+          value: 16
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_TIMEOUT
+          value: 60
+        - op: insert-child-if-missing
+          leaf: pods.global.envs
+          child: UV_HTTP_CONNECT_TIMEOUT
+          value: 60

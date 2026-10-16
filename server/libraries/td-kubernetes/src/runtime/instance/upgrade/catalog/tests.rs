@@ -4,6 +4,8 @@
 
 use std::fs;
 
+use indoc::{formatdoc, indoc};
+
 use super::*;
 
 fn lay_out(entries: &[(&str, bool)], specs: &[&str]) -> tempfile::TempDir {
@@ -14,7 +16,12 @@ fn lay_out(entries: &[(&str, bool)], specs: &[&str]) -> tempfile::TempDir {
         .collect::<String>();
     fs::write(
         root.path().join(INVENTORY_FILE),
-        format!("schema: 1\nversions:\n{listed}"),
+        formatdoc!(
+            "
+            schema: 1
+            versions:
+            {listed}"
+        ),
     )
     .expect("inventory");
     let folder = root.path().join(UPGRADES_FOLDER);
@@ -87,7 +94,13 @@ fn a_create_without_content_is_rejected() {
     let root = lay_out(&[("2.0.1", true), ("2.0.0", false)], &["2.0.1"]);
     std::fs::write(
         root.path().join(UPGRADES_FOLDER).join("2.0.1.yaml"),
-        "schema: 1\nconfigs:\n  a.yaml:\n    a.yaml:\n      action: create\n",
+        indoc! {"
+            schema: 1
+            configs:
+              a.yaml:
+                a.yaml:
+                  action: create
+        "},
     )
     .expect("spec");
     assert!(load_spec(root.path(), "2.0.1").is_err());
@@ -98,7 +111,13 @@ fn an_unclaimed_content_file_is_rejected() {
     let root = lay_out(&[("2.0.1", true), ("2.0.0", false)], &["2.0.1"]);
     std::fs::write(
         root.path().join(UPGRADES_FOLDER).join("2.0.1.yaml"),
-        "schema: 1\nconfigs:\n  a.yaml:\n    a.yaml:\n      action: retain\n",
+        indoc! {"
+            schema: 1
+            configs:
+              a.yaml:
+                a.yaml:
+                  action: retain
+        "},
     )
     .expect("spec");
     let configs = root
@@ -116,7 +135,13 @@ fn a_create_with_content_loads() {
     let root = lay_out(&[("2.0.1", true), ("2.0.0", false)], &["2.0.1"]);
     std::fs::write(
         root.path().join(UPGRADES_FOLDER).join("2.0.1.yaml"),
-        "schema: 1\nconfigs:\n  a.yaml:\n    a.yaml:\n      action: create\n",
+        indoc! {"
+            schema: 1
+            configs:
+              a.yaml:
+                a.yaml:
+                  action: create
+        "},
     )
     .expect("spec");
     let configs = root
@@ -161,10 +186,13 @@ fn lay_out_spec(body: &str) -> tempfile::TempDir {
 
 #[test]
 fn a_variant_grouped_under_its_own_suffixed_name_is_rejected() {
-    let root = lay_out_spec(
-        "schema: 1\nconfigs:\n  apiserver.database_kminus.yaml:\n    \
-         apiserver.database_kminus.yaml:\n      action: retain\n",
-    );
+    let root = lay_out_spec(indoc! {"
+            schema: 1
+            configs:
+              apiserver.database_kminus.yaml:
+                apiserver.database_kminus.yaml:
+                  action: retain
+        "});
     let outcome = load_spec(root.path(), "2.0.1");
     assert!(
         outcome.is_err(),
@@ -174,11 +202,15 @@ fn a_variant_grouped_under_its_own_suffixed_name_is_rejected() {
 
 #[test]
 fn variants_grouped_under_their_stripped_name_are_accepted() {
-    let root = lay_out_spec(
-        "schema: 1\nconfigs:\n  apiserver.database.yaml:\n    \
-         apiserver.database_kminus.yaml:\n      action: retain\n    \
-         apiserver.database_docker.yaml:\n      action: retain\n",
-    );
+    let root = lay_out_spec(indoc! {"
+            schema: 1
+            configs:
+              apiserver.database.yaml:
+                apiserver.database_kminus.yaml:
+                  action: retain
+                apiserver.database_docker.yaml:
+                  action: retain
+        "});
     assert!(load_spec(root.path(), "2.0.1").is_ok());
 }
 

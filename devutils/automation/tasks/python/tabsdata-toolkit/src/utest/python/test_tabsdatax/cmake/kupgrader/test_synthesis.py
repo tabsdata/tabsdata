@@ -2,6 +2,10 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+from textwrap import dedent
+
+import yaml
+
 from tabsdatax.cmake.kupgrader.common.actions import Action, Form, Plan
 from tabsdatax.cmake.kupgrader.common.changes import (
     Change,
@@ -11,7 +15,11 @@ from tabsdatax.cmake.kupgrader.common.changes import (
 )
 from tabsdatax.cmake.kupgrader.common.emission import resolved_of
 from tabsdatax.cmake.kupgrader.common.inventory import Bundle, State, Variant
-from tabsdatax.cmake.kupgrader.common.operations import Synthesis, synthesize
+from tabsdatax.cmake.kupgrader.common.operations import (
+    Synthesis,
+    synthesize,
+    user_owned_mappings,
+)
 from tabsdatax.cmake.kupgrader.common.renames import read_renames
 
 RENAMES = {"system:old_port": "system:new_port"}
@@ -45,6 +53,50 @@ def test_an_appended_item_with_another_port_stays_a_gap():
     assert not synthesis.expressible
 
 
+ENVS_PREVIOUS = yaml.safe_load(
+    dedent("""\
+        pods:
+          global:
+            envs:
+              UV_INDEX_STRATEGY: unsafe-best-match
+    """)
+)
+ENVS_CURRENT = yaml.safe_load(
+    dedent("""\
+        pods:
+          global:
+            envs:
+              UV_INDEX_STRATEGY: unsafe-best-match
+              UV_HTTP_RETRIES: 16
+    """)
+)
+
+
+def test_a_new_key_of_a_user_owned_mapping_is_inserted_whatever_keys_remain():
+    owned = user_owned_mappings("configs", "tabsdata.yaml")
+    assert rendered(synthesize(ENVS_PREVIOUS, ENVS_CURRENT, owned)) == [
+        {
+            "op": "insert-child-if-missing",
+            "leaf": "pods.global.envs",
+            "child": "UV_HTTP_RETRIES",
+            "value": 16,
+        }
+    ]
+
+
+def test_a_mapping_not_registered_as_user_owned_keeps_its_order():
+    owned = user_owned_mappings("configs", "apiserver.service.yaml")
+    assert rendered(synthesize(ENVS_PREVIOUS, ENVS_CURRENT, owned)) == [
+        {
+            "op": "insert-sibling-if-existing",
+            "leaf": "pods.global.envs.UV_INDEX_STRATEGY",
+            "sibling": "UV_HTTP_RETRIES",
+            "placement": "after",
+            "value": 16,
+        }
+    ]
+
+
 def test_a_removed_key_is_removed():
     synthesis = synthesize({"port": 1, "keep": True}, {"keep": True})
     assert rendered(synthesis) == [{"op": "remove-leaf-if", "leaf": "port"}]
@@ -73,8 +125,14 @@ def test_a_moved_value_is_derived_before_its_key_is_removed():
 
 def test_a_renamed_placeholder_is_rewritten_before_the_derived_changes():
     synthesis = synthesize_yaml(
-        "agent_addresses:\n- host:${{system:old_port}}\n",
-        "agent_addresses:\n- host:${{system:new_port}}\n",
+        dedent("""\
+            agent_addresses:
+            - host:${{system:old_port}}
+        """),
+        dedent("""\
+            agent_addresses:
+            - host:${{system:new_port}}
+        """),
         RENAMES,
     )
     assert rendered(synthesis) == [
@@ -88,7 +146,13 @@ def test_a_renamed_placeholder_is_rewritten_before_the_derived_changes():
 
 def test_renames_are_read_for_their_version(tmp_path):
     renames = tmp_path / "renames.yaml"
-    renames.write_text("2.2.0:\n  placeholders:\n    system:a: system:b\n")
+    renames.write_text(
+        dedent("""\
+            2.2.0:
+              placeholders:
+                system:a: system:b
+        """)
+    )
     assert read_renames(renames, "2.2.0") == {"system:a": "system:b"}
     assert read_renames(renames, "2.1.0") == {}
     assert read_renames(tmp_path / "missing.yaml", "2.2.0") == {}
@@ -120,7 +184,15 @@ def test_a_bundle_whose_winner_moves_edits_the_held_file(tmp_path):
         family="configs",
         name="aiagent.yaml",
         variants=[
-            variant(tmp_path, "aiagent.yaml", State.DELETED, "port: 1\nkeys: mine\n"),
+            variant(
+                tmp_path,
+                "aiagent.yaml",
+                State.DELETED,
+                dedent("""\
+                    port: 1
+                    keys: mine
+                """),
+            ),
             variant(
                 tmp_path,
                 "aiagent_eks.yaml",

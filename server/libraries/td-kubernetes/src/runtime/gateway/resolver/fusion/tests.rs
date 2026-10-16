@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
 use crate::base::constants::{REQUIREMENTS_TD_ASSET, TABSDATA_REQUIREMENTS_LOCK_ASSET};
 use crate::runtime::instance::manifest::Manifest;
@@ -15,8 +17,16 @@ fn configs(entries: &[(&str, &str)]) -> RenderedConfigmap {
 
 #[test]
 fn bake_schema_secrets_rewrites_matched_leaves_to_tokens() {
-    let schema = "directives:\n  - at: options.token\n    treat: secret\n";
-    let config = "options:\n  token: baked\n  other: keep\n";
+    let schema = indoc! {"
+        directives:
+          - at: options.token
+            treat: secret
+    "};
+    let config = indoc! {"
+        options:
+          token: baked
+          other: keep
+    "};
     let configs = configs(&[("apiserver.yamls", schema)]);
     let baked = bake_schema_secrets(
         "apiserver.yaml",
@@ -32,7 +42,10 @@ fn bake_schema_secrets_rewrites_matched_leaves_to_tokens() {
 
 #[test]
 fn bake_schema_secrets_is_noop_without_schema_file() {
-    let config = "options:\n  token: baked\n";
+    let config = indoc! {"
+        options:
+          token: baked
+    "};
     let configs = configs(&[]);
     let baked = bake_schema_secrets(
         "apiserver.yaml",
@@ -48,7 +61,10 @@ fn bake_schema_secrets_is_noop_without_schema_file() {
 #[test]
 fn bake_schema_secrets_is_noop_for_empty_schema() {
     let schema = "other: 1\n";
-    let config = "options:\n  token: baked\n";
+    let config = indoc! {"
+        options:
+          token: baked
+    "};
     let configs = configs(&[("apiserver.yamls", schema)]);
     let baked = bake_schema_secrets(
         "apiserver.yaml",
@@ -382,10 +398,17 @@ fn seeded(
     (literals.into_inner(), vault.into_inner())
 }
 
-const LITERAL_HOST: &str =
-    "database:\n  apiserver:\n    postgres:\n      host: ${{literal:tdk_database_host}}\n";
-const SECRET_USER: &str =
-    "database_server:\n  postgres:\n    username: ${{secret:postgres_system_user}}\n";
+const LITERAL_HOST: &str = indoc! {"
+        database:
+          apiserver:
+            postgres:
+              host: ${{literal:tdk_database_host}}
+    "};
+const SECRET_USER: &str = indoc! {"
+        database_server:
+          postgres:
+            username: ${{secret:postgres_system_user}}
+    "};
 
 #[test]
 fn a_literal_supplied_in_a_later_file_reaches_an_earlier_one() {
@@ -395,14 +418,22 @@ fn a_literal_supplied_in_a_later_file_reaches_an_earlier_one() {
             ("apiserver.database.yaml", LITERAL_HOST),
             (
                 "dbmanager.database.yaml",
-                "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n",
+                indoc! {"
+                    database_server:
+                      postgres:
+                        host: ${{literal:tdk_database_host}}
+                "},
             ),
         ],
         &[
             ("apiserver.database.yaml", LITERAL_HOST),
             (
                 "dbmanager.database.yaml",
-                "database_server:\n  postgres:\n    host: dimax\n",
+                indoc! {"
+                    database_server:
+                      postgres:
+                        host: dimax
+                "},
             ),
         ],
     );
@@ -420,17 +451,30 @@ fn a_literal_supplied_in_an_earlier_file_reaches_a_later_one() {
             ("apiserver.database.yaml", LITERAL_HOST),
             (
                 "dbmanager.database.yaml",
-                "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n",
+                indoc! {"
+                    database_server:
+                      postgres:
+                        host: ${{literal:tdk_database_host}}
+                "},
             ),
         ],
         &[
             (
                 "apiserver.database.yaml",
-                "database:\n  apiserver:\n    postgres:\n      host: earlyhost\n",
+                indoc! {"
+                    database:
+                      apiserver:
+                        postgres:
+                          host: earlyhost
+                "},
             ),
             (
                 "dbmanager.database.yaml",
-                "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n",
+                indoc! {"
+                    database_server:
+                      postgres:
+                        host: ${{literal:tdk_database_host}}
+                "},
             ),
         ],
     );
@@ -447,18 +491,32 @@ fn a_secret_supplied_in_a_later_file_reaches_an_earlier_one() {
         &[
             (
                 "apiserver.database.yaml",
-                "database:\n  apiserver:\n    postgres:\n      username: ${{secret:postgres_system_user}}\n",
+                indoc! {"
+                    database:
+                      apiserver:
+                        postgres:
+                          username: ${{secret:postgres_system_user}}
+                "},
             ),
             ("dbmanager.database.yaml", SECRET_USER),
         ],
         &[
             (
                 "apiserver.database.yaml",
-                "database:\n  apiserver:\n    postgres:\n      username: ${{secret:postgres_system_user}}\n",
+                indoc! {"
+                    database:
+                      apiserver:
+                        postgres:
+                          username: ${{secret:postgres_system_user}}
+                "},
             ),
             (
                 "dbmanager.database.yaml",
-                "database_server:\n  postgres:\n    username: dbadmin\n",
+                indoc! {"
+                    database_server:
+                      postgres:
+                        username: dbadmin
+                "},
             ),
         ],
     );
@@ -476,17 +534,30 @@ fn the_first_file_in_order_wins_when_two_supply_the_same_category() {
             ("apiserver.database.yaml", LITERAL_HOST),
             (
                 "dbmanager.database.yaml",
-                "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n",
+                indoc! {"
+                    database_server:
+                      postgres:
+                        host: ${{literal:tdk_database_host}}
+                "},
             ),
         ],
         &[
             (
                 "apiserver.database.yaml",
-                "database:\n  apiserver:\n    postgres:\n      host: first\n",
+                indoc! {"
+                    database:
+                      apiserver:
+                        postgres:
+                          host: first
+                "},
             ),
             (
                 "dbmanager.database.yaml",
-                "database_server:\n  postgres:\n    host: second\n",
+                indoc! {"
+                    database_server:
+                      postgres:
+                        host: second
+                "},
             ),
         ],
     );
@@ -520,7 +591,12 @@ fn an_empty_value_is_not_seeded() {
         &[("apiserver.database.yaml", LITERAL_HOST)],
         &[(
             "apiserver.database.yaml",
-            "database:\n  apiserver:\n    postgres:\n      host: \"\"\n",
+            indoc! {r#"
+                database:
+                  apiserver:
+                    postgres:
+                      host: ""
+            "#},
         )],
     );
     assert!(literals.is_empty());
@@ -532,11 +608,21 @@ fn non_string_scalars_are_seeded_as_text() {
         "numeric_value",
         &[(
             "apiserver.database.yaml",
-            "database:\n  apiserver:\n    postgres:\n      port: ${{literal:tdk_database_port}}\n",
+            indoc! {"
+                database:
+                  apiserver:
+                    postgres:
+                      port: ${{literal:tdk_database_port}}
+            "},
         )],
         &[(
             "apiserver.database.yaml",
-            "database:\n  apiserver:\n    postgres:\n      port: 5432\n",
+            indoc! {"
+                database:
+                  apiserver:
+                    postgres:
+                      port: 5432
+            "},
         )],
     );
     assert_eq!(
@@ -551,9 +637,18 @@ fn generated_secrets_are_not_seeded_from_input() {
         "auto_secret",
         &[(
             "apiserver.service.yaml",
-            "jwt:\n  secret: ${{secretAuto:jwt_signing_key}}\n",
+            indoc! {"
+                jwt:
+                  secret: ${{secretAuto:jwt_signing_key}}
+            "},
         )],
-        &[("apiserver.service.yaml", "jwt:\n  secret: leaked\n")],
+        &[(
+            "apiserver.service.yaml",
+            indoc! {"
+            jwt:
+              secret: leaked
+        "},
+        )],
     );
     assert!(
         vault.is_empty(),
@@ -567,11 +662,21 @@ fn system_placeholders_are_not_seeded() {
         "system_placeholder",
         &[(
             "apiserver.database.yaml",
-            "database:\n  apiserver:\n    postgres:\n      host: ${{system:tdk_database_host}}\n",
+            indoc! {"
+                database:
+                  apiserver:
+                    postgres:
+                      host: ${{system:tdk_database_host}}
+            "},
         )],
         &[(
             "apiserver.database.yaml",
-            "database:\n  apiserver:\n    postgres:\n      host: 127.0.0.1\n",
+            indoc! {"
+                database:
+                  apiserver:
+                    postgres:
+                      host: 127.0.0.1
+            "},
         )],
     );
     assert!(literals.is_empty());
@@ -584,9 +689,18 @@ fn a_value_inside_a_sequence_is_seeded() {
         "sequence_value",
         &[(
             "apiserver.service.yaml",
-            "addresses:\n  - ${{literal:tdk_bind_address}}\n",
+            indoc! {"
+                addresses:
+                  - ${{literal:tdk_bind_address}}
+            "},
         )],
-        &[("apiserver.service.yaml", "addresses:\n  - 0.0.0.0:2457\n")],
+        &[(
+            "apiserver.service.yaml",
+            indoc! {"
+            addresses:
+              - 0.0.0.0:2457
+        "},
+        )],
     );
     assert_eq!(
         literals.get("tdk_bind_address").map(|o| o.value.as_str()),
@@ -600,11 +714,21 @@ fn literals_and_secrets_are_seeded_into_their_own_stores() {
         "both_kinds",
         &[(
             "dbmanager.database.yaml",
-            "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n    username: ${{secret:postgres_system_user}}\n",
+            indoc! {"
+                database_server:
+                  postgres:
+                    host: ${{literal:tdk_database_host}}
+                    username: ${{secret:postgres_system_user}}
+            "},
         )],
         &[(
             "dbmanager.database.yaml",
-            "database_server:\n  postgres:\n    host: dimax\n    username: dbadmin\n",
+            indoc! {"
+                database_server:
+                  postgres:
+                    host: dimax
+                    username: dbadmin
+            "},
         )],
     );
     assert_eq!(
@@ -627,12 +751,20 @@ fn a_missing_input_file_is_skipped_without_failing() {
             ("apiserver.database.yaml", LITERAL_HOST),
             (
                 "dbmanager.database.yaml",
-                "database_server:\n  postgres:\n    host: ${{literal:tdk_database_host}}\n",
+                indoc! {"
+                    database_server:
+                      postgres:
+                        host: ${{literal:tdk_database_host}}
+                "},
             ),
         ],
         &[(
             "dbmanager.database.yaml",
-            "database_server:\n  postgres:\n    host: dimax\n",
+            indoc! {"
+                database_server:
+                  postgres:
+                    host: dimax
+            "},
         )],
     );
     assert_eq!(
@@ -647,11 +779,17 @@ fn schema_files_are_not_seeded() {
         "schema_skipped",
         &[(
             "apiserver.storage.yamls",
-            "directives:\n  - at: ${{literal:tdk_ignored}}\n",
+            indoc! {"
+                directives:
+                  - at: ${{literal:tdk_ignored}}
+            "},
         )],
         &[(
             "apiserver.storage.yamls",
-            "directives:\n  - at: something\n",
+            indoc! {"
+                directives:
+                  - at: something
+            "},
         )],
     );
     assert!(literals.is_empty());
