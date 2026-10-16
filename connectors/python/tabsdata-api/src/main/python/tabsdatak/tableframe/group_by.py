@@ -52,12 +52,13 @@ class LazyGroupBy:
         u_args = unwrap(args)
         u_kwargs = unwrap(kwargs)
         system = _system_aggregations("len")
+        column = u_kwargs.get("name") or (u_args[0] if u_args else None)
         return compute(
             "len",
             (self._parent,),
             {},
             call=lambda *_: (
-                self._lgb.agg(pl.len().alias("len"), *system)
+                self._lgb.agg(pl.len().alias(column or "len"), *system)
                 if system
                 else self._lgb.len(*u_args, **u_kwargs)
             ),

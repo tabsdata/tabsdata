@@ -940,8 +940,8 @@ def _render_tableframe_py(
 
 # Group-by reductions that reduce column VALUES: they must run over user columns
 # only, excluding system columns (a string $td.* would break a numeric reducer,
-# and $td.id is per-row so it corrupts the grouping). len/count are excluded --
-# they count rows, not values.
+# and $td.id is per-row so it corrupts the grouping). len is excluded -- it
+# counts rows, not values.
 _GROUPBY_REDUCTIONS = frozenset({
     "sum",
     "min",
@@ -960,7 +960,6 @@ _GROUPBY_REDUCTIONS = frozenset({
 # agg so that system columns aggregating themselves can join the same pass.
 _GROUPBY_COUNTERS = frozenset({
     "len",
-    "count",
 })
 
 
@@ -970,9 +969,10 @@ def _groupby_counter_body(name: str) -> list[str]:
         "        u_args = unwrap(args)",
         "        u_kwargs = unwrap(kwargs)",
         f'        system = _system_aggregations("{name}")',
+        '        column = u_kwargs.get("name") or (u_args[0] if u_args else None)',
         f'        return compute("{name}", (self._parent,), {{}},',
         "            call=lambda *_: self._lgb.agg("
-        f'pl.len().alias("{name}"), *system)'
+        f'pl.len().alias(column or "{name}"), *system)'
         " if system else "
         f"self._lgb.{name}(*u_args, **u_kwargs))",
         "",
