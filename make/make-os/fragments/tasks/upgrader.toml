@@ -40,3 +40,82 @@ script = [
     debug "🚀 tdx-kupgrader ${command} --root ${PROJECT_TABSDATA_ROOT_FOLDER}"
     exec --fail-on-error tdx-kupgrader ${command} --root ${PROJECT_TABSDATA_ROOT_FOLDER}
     ''']
+
+
+[tasks.__os__upgrader_build]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    fn run_upgrader_build
+        root = set ${1}
+        debug "🚀 tdx-kupgrader build --root ${root}"
+        exec --fail-on-error tdx-kupgrader build --root ${root}
+    end
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    if ${on_ga_true}
+        run_upgrader_build ${PROJECT_TABSDATA_ROOT_FOLDER}
+    else
+        project_root_folder = get_env PROJECT_ROOT_FOLDER
+        project_root_folder_basename = basename ${project_root_folder}
+        is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
+        if ${is_tabsdata_ee}
+            run_upgrader_build ${PROJECT_TABSDATA_ROOT_FOLDER}
+
+            info "🐡 Switching to tabsdata-os"
+
+            cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
+            set_env TD_KUPGRADER_BINARY_ROOT ${PROJECT_TABSDATA_ROOT_FOLDER}
+            run_upgrader_build "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
+            unset_env TD_KUPGRADER_BINARY_ROOT
+        else
+            run_upgrader_build ${PROJECT_TABSDATA_ROOT_FOLDER}
+        end
+    end
+    ''']
+
+[tasks.__os__upgrader_check]
+plugin = "td-task-tracker"
+category = "05 - Inspect"
+private = true
+cwd = "${PROJECT_TABSDATA_ROOT_FOLDER}"
+script_runner = "@duckscript"
+script = [
+    '''
+    !include_files ./make/make-os/libraries/log.ds
+
+    fn run_upgrader_check
+        root = set ${1}
+        debug "🚀 tdx-kupgrader check --root ${root}"
+        exec --fail-on-error tdx-kupgrader check --root ${root}
+    end
+
+    on_ga = get_env TD_ON_GA
+    on_ga_true = eq ${on_ga} "true"
+    if ${on_ga_true}
+        run_upgrader_check ${PROJECT_TABSDATA_ROOT_FOLDER}
+    else
+        project_root_folder = get_env PROJECT_ROOT_FOLDER
+        project_root_folder_basename = basename ${project_root_folder}
+        is_tabsdata_ee = eq ${project_root_folder_basename} "tabsdata-ee"
+        if ${is_tabsdata_ee}
+            run_upgrader_check ${PROJECT_TABSDATA_ROOT_FOLDER}
+
+            info "🐡 Switching to tabsdata-os"
+
+            cd "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
+            set_env TD_KUPGRADER_BINARY_ROOT ${PROJECT_TABSDATA_ROOT_FOLDER}
+            run_upgrader_check "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-os"
+            unset_env TD_KUPGRADER_BINARY_ROOT
+        else
+            run_upgrader_check ${PROJECT_TABSDATA_ROOT_FOLDER}
+        end
+    end
+    ''']

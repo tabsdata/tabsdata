@@ -35,6 +35,7 @@ run_task = [
         "kminus",
         "lock",
         "make_rs",
+        "refresh",
         "make_py"
     ] }
 ]
@@ -310,6 +311,17 @@ description = "Generate the sourcetrack metadata"
 run_task = [
     { name = [
         "__os__generate_sourcetrack"
+    ] }
+]
+
+[tasks.refresh]
+plugin = "td-task-tracker"
+category = "02 - Tidy"
+description = "Regenerate the artifacts the Python tests verify (kupgrade upgraders)"
+run_task = [
+    { name = [
+        "__os__upgrader_build",
+        "__os__upgrader_check"
     ] }
 ]
 

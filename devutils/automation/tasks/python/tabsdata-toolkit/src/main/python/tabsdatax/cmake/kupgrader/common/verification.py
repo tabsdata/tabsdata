@@ -3,6 +3,7 @@
 #
 
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -19,6 +20,7 @@ from tabsdatax.cmake.kupgrader.common.versions import Entry, write_inventory
 
 UPGRADER_BINARY = "tdk_kupgrader"
 UPGRADER_PROFILE = "debug"
+TD_KUPGRADER_BINARY_ROOT_VARIABLE = "TD_KUPGRADER_BINARY_ROOT"
 
 
 class VerificationError(KupgraderError):
@@ -46,12 +48,22 @@ class Verification:
 
 
 def locate_binary(root_folder: Path) -> Path:
-    binary = root_folder / "target" / UPGRADER_PROFILE / UPGRADER_BINARY
-    if binary.is_file():
-        return binary
+    preferred_root_folder = os.environ.get(TD_KUPGRADER_BINARY_ROOT_VARIABLE)
+    root_folders = (
+        [Path(preferred_root_folder), root_folder]
+        if preferred_root_folder
+        else [root_folder]
+    )
+    binaries = [
+        root / "target" / UPGRADER_PROFILE / UPGRADER_BINARY for root in root_folders
+    ]
+    for binary in binaries:
+        if binary.is_file():
+            return binary
+    candidate_binaries = "', '".join(str(binary) for binary in binaries)
     raise VerificationError(
-        f"The '{UPGRADER_BINARY}' binary was not found at '{binary}'. It must be "
-        f"compiled with the '{UPGRADER_PROFILE}' profile. Build it with "
+        f"The '{UPGRADER_BINARY}' binary was not found at '{candidate_binaries}'. "
+        f"It must be compiled with the '{UPGRADER_PROFILE}' profile. Build it with "
         f"'cargo build -p td-server --bin {UPGRADER_BINARY}' and run the task again."
     )
 
