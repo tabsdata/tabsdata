@@ -24,6 +24,8 @@ const MANIFEST_FILE: &str = "Manifest.toml";
 
 const FEATURE_FILE: &str = "feature.yaml";
 
+const ENTERPRISE_FEATURE: &str = "enterprise";
+
 const ENV_TD_DISABLE_OPENAPI_DOCS_ENDPOINT: &str = "TD_DISABLE_OPENAPI_DOCS_ENDPOINT";
 const ENABLE_API_DOCS_FEATURE: &str = "api-docs";
 
@@ -42,18 +44,29 @@ impl<'de> Deserialize<'de> for Feature {
     }
 }
 
-pub fn set_cargo_features() -> Result<(), Box<dyn Error>> {
+pub fn workspace_features() -> Result<Vec<String>, Box<dyn Error>> {
     let features_file = find_workspace_root()
         .join(MANIFEST_FOLDER)
         .join(FEATURE_FILE);
-    if features_file.exists() {
-        let features_content = read_to_string(features_file)?;
-        let features: Feature =
-            serde_yaml::from_str(&features_content).unwrap_or(Feature { features: vec![] });
-        for feature in features.features {
-            let configuration = format!("cargo:rustc-cfg=feature=\"{feature}\"");
-            println!("{configuration}");
-        }
+    if !features_file.exists() {
+        return Ok(vec![]);
+    }
+    let features_content = read_to_string(features_file)?;
+    let features: Feature =
+        serde_yaml::from_str(&features_content).unwrap_or(Feature { features: vec![] });
+    Ok(features.features)
+}
+
+pub fn enterprise_edition() -> Result<bool, Box<dyn Error>> {
+    Ok(workspace_features()?
+        .iter()
+        .any(|feature| feature == ENTERPRISE_FEATURE))
+}
+
+pub fn set_cargo_features() -> Result<(), Box<dyn Error>> {
+    for feature in workspace_features()? {
+        let configuration = format!("cargo:rustc-cfg=feature=\"{feature}\"");
+        println!("{configuration}");
     }
 
     let disable_openapi = env::var(ENV_TD_DISABLE_OPENAPI_DOCS_ENDPOINT).unwrap_or_default();
