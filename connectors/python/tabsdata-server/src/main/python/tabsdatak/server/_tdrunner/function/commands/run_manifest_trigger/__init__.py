@@ -13,33 +13,40 @@ The internal trigger answers 200 with a ``TriggerOutcome``
 (``skip_if_running=true``, gates run in order):
 
   * ``Scheduled`` -- newly scheduled.
-  * ``Busy``      -- the function's execution is still running (gate 1,
-    ``running_execution``). Not done yet; leave it, retry.
-  * ``Held`` / ``Consumed`` -- the function is idle *and* this
-    ``external_uid`` is held by an ended run (gate 2,
-    ``external_uid_holder``). Because ``Busy`` gates first on "running",
-    either is a **completion** signal: the execution (and its file read)
-    has ended, so the manifest + files are safe to delete.
+  * ``Busy``      -- the function's execution has a run in flight (gate 1,
+    ``running_execution``: a physical run Requested, Dispatched or
+    Running). Not done yet; leave it, retry.
+  * ``Held``      -- this ``external_uid`` is held by an execution whose
+    trigger run has not committed (gate 2, ``external_uid_holder``). That
+    includes a run not dispatched yet -- it has no physical run, so gate 1
+    does not see it -- and a run that is done but not committed, failed or
+    on hold. Its run still needs the files; leave it, retry.
+  * ``Consumed``  -- the execution holding this ``external_uid`` committed
+    its trigger run: the batch is durably published, the **completion**
+    signal. The manifest + files are safe to delete.
 
 Main loop (per poll), driven by ``next_after(cursor)``:
 
   * Fetch the oldest manifest after the cursor; POST ``fn_trigger`` with
     ``{"skip_if_running": true, "external_uid": <TS>, "trigger_type": "ST", ...}``
     (the ``InternalExecutionRequest`` shape the cron trigger also sends).
-  * On ``Held`` / ``Consumed`` (completed) -> queue the manifest + its files
-    for deletion and **advance the cursor past it**, then fetch the next.
-  * On ``Scheduled`` / ``Busy`` / other transient -> **stop**, leaving the
-    cursor parked *before* this manifest so the next poll re-fetches it and
-    waits for its completion. (Never delete on anything else: a
-    misconfigured ``403`` must not burn through batches.)
+  * On ``Consumed`` (completed) -> queue the manifest + its files for
+    deletion and **advance the cursor past it**, then fetch the next.
+  * On ``Scheduled`` / ``Held`` / ``Busy`` / other transient -> **stop**,
+    leaving the cursor parked *before* this manifest so the next poll
+    re-fetches it and waits for its completion. (Never delete on anything
+    else: a misconfigured ``403`` must not burn through batches, and a
+    ``Held`` batch's run may not have read its files yet.)
   * Then drain the deletion queue for one back-off period.
 
 The cursor advances only on completion, so each manifest is re-triggered
-across its ``Scheduled -> Busy… -> Held/Consumed`` lifetime; that parking
+across its ``Scheduled -> Held/Busy… -> Consumed`` lifetime; that parking
 is what gives the publisher time to consume, and keeps per-poll triggers
-O(1) (no ``Busy`` storm). The cursor is in-memory and resets to epoch on
-restart -- the already-completed front answers ``Held`` / ``Consumed``
-again and is re-deleted (idempotent).
+O(1) (no ``Busy`` storm). A cancelled execution releases its
+``external_uid``, so a parked manifest whose run was cancelled is answered
+``Scheduled`` again and re-runs from its files. The cursor is in-memory and
+resets to epoch on restart -- the already-consumed front answers
+``Consumed`` again and is re-deleted (idempotent).
 
 Lifecycle (Q5 decision): the sidecar exits when the streamer's main
 container exits. K8s native sidecar semantics (init container with
@@ -96,10 +103,10 @@ MAN = (
     "    ... + standard responder/liveness/log/journal args\n\n"
     "Reads request.yaml to discover the function_stage URI. Builds "
     "an HttpRequest from the --trigger-* triplet and replays it per "
-    "manifest under <stage>/manifests/. On Held or Consumed (apiserver's "
-    "external_uid dedup fired) queues the manifest's files + manifest "
-    "itself for back-off-and-delete cleanup; on any other answer "
-    "leaves the manifest in place + logs a warning. Exits when "
+    "manifest under <stage>/manifests/. On Consumed (the execution holding "
+    "the manifest's external_uid committed) queues the manifest's files + "
+    "manifest itself for back-off-and-delete cleanup; on any other answer "
+    "leaves the manifest in place for the next poll. Exits when "
     "SIGTERM/SIGINT arrives (K8s native-sidecar shutdown signal)."
 )
 
