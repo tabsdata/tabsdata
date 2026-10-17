@@ -34,18 +34,21 @@ for a key the target has never seen is a no-op at best and noise in the
 merge statistics. Callers wanting the audit-grain reading -- the batch did
 contain a delete, so record it -- cannot get it from this function.
 
-The markers are :class:`CdcOperation`'s row operations -- ``"i"``,
-``"u"``, ``"d"`` -- the same ones every CDC source in this package emits,
-read case-insensitively so a feed spelling them ``"I"`` / ``"U"`` /
-``"D"`` works unchanged. The resolved marker is always written back in
-lower case, so the output is normalized whatever the input looked like.
+The markers are :class:`CdcOperation`'s -- the row operations ``"i"``,
+``"u"``, ``"d"`` and the control operations ``"l"`` (load) and ``"t"``
+(truncate) -- the same ones every CDC source in this package emits, read
+case-insensitively so a feed spelling them ``"I"`` / ``"U"`` / ``"D"``
+works unchanged. The resolved marker is always written back in lower
+case, so the output is normalized whatever the input looked like.
 
-TODO: the control operations (``"l"`` load, ``"t"`` truncate) are not
-handled yet; today they fall under the unrecognized-marker rule below and
-are dropped. The intended behaviour is that a control record cuts the
-batch: everything coalesced up to that point is emitted first, then a
-reset signal for the table (so the destination is emptied), and the
-records after it are coalesced as a fresh batch.
+A control record **resets** the table: it is emptied at that position.
+Only the batch's last reset matters, since it voids everything before it
+for every key, so the records up to and including it are discarded and
+what follows is reduced against an empty table -- every key that
+survives is an insert, and a key whose last record is a delete is
+dropped. Whether a batch resets at all is not visible in the output; ask
+:func:`cdc_batch_resets`, and empty the target before applying a batch
+that does.
 
 A record carrying anything else -- an unrecognized marker, or none at all
 -- is dropped whole, payload included, before any of the reduction runs.
@@ -65,6 +68,8 @@ from typing import TYPE_CHECKING
 from tabsdatak.conn.common.sql.cdc.constants import (
     OP_DELETE,
     OP_INSERT,
+    OP_LOAD,
+    OP_TRUNCATE,
     OP_UPDATE,
 )
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
@@ -72,7 +77,7 @@ from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode
 if TYPE_CHECKING:
     import polars as pl
 
-__all__ = ["coalesce_cdc_batch"]
+__all__ = ["cdc_batch_resets", "coalesce_cdc_batch"]
 
 
 # Helper columns live in the reserved ``@td.cdc.`` namespace so they
@@ -87,6 +92,7 @@ _KEEP = _COALESCE_PREFIX + "keep"
 _OP = _COALESCE_PREFIX + "op"
 _EPHEMERAL = _COALESCE_PREFIX + "ephemeral"
 _LOWER = _COALESCE_PREFIX + "lower"
+_RESET = _COALESCE_PREFIX + "reset"
 
 # ``CdcOperation`` subclasses ``str``, but ``str()`` on a 3.12 enum member
 # yields ``"CdcOperation.INSERT"``, so the stored text is taken explicitly.
@@ -95,6 +101,31 @@ _UPDATE = OP_UPDATE.value
 _DELETE = OP_DELETE.value
 
 _MARKERS = [_INSERT, _UPDATE, _DELETE]
+_RESETS = [OP_LOAD.value, OP_TRUNCATE.value]
+
+
+def _lowered(op_column: str) -> pl.Expr:
+    """The marker as lower-case text. ``cast(String)`` is what lets the
+    ``str`` namespace reach an Enum / Categorical marker."""
+    import polars as pl
+
+    return pl.col(op_column).cast(pl.String).str.to_lowercase()
+
+
+def cdc_batch_resets(lf: pl.LazyFrame, op_column: str) -> pl.LazyFrame:
+    """Whether the batch carries a control record that empties the table.
+
+    Stays lazy like :func:`coalesce_cdc_batch`: the result is a one-row,
+    one-column boolean frame for the caller to collect. A batch that resets
+    has to be applied onto an emptied target, since the coalesced rows
+    describe the whole table from the last reset on, not changes to it.
+
+    Args:
+        lf: The batch, as passed to :func:`coalesce_cdc_batch`.
+        op_column: Column holding each record's `CdcOperation` marker,
+            matched case-insensitively.
+    """
+    return lf.select(_lowered(op_column).is_in(_RESETS).any())
 
 
 def coalesce_cdc_batch(
@@ -122,6 +153,10 @@ def coalesce_cdc_batch(
     Keys whose records start with an insert and end with a delete are
     dropped entirely -- see the module docstring.
 
+    A load or truncate record voids every record up to and including the
+    batch's last one, and what follows is resolved against an empty table
+    -- see the module docstring.
+
     Args:
         lf: The batch. Must carry the key, operation and (when given)
             order columns; every other column is passed through
@@ -131,21 +166,23 @@ def coalesce_cdc_batch(
             so that a bare `str` -- which would group by its characters
             -- is a type error rather than a puzzle at collect time.
         op_column: Column holding each record's `CdcOperation` marker --
-            `"i"`, `"u"` or `"d"`, matched case-insensitively. A record
-            carrying anything else is dropped. Rewritten in place with the
-            resolved operation in lower case, keeping its dtype (see
-            `op_dtype`) and its position in the frame.
+            `"i"`, `"u"`, `"d"`, `"l"` or `"t"`, matched case-insensitively.
+            A record carrying anything else is dropped, and so is every load
+            or truncate record once it has cut the batch. Rewritten in place
+            with the resolved operation in lower case, keeping its dtype
+            (see `op_dtype`) and its position in the frame.
         order_column: Column establishing the arrival order of records
-            *within* a key -- a log sequence number, binlog offset or
-            commit sequence. Must be unique inside a key group: rows are
-            selected by comparing against this value, so a tie inside one
-            key emits several rows. Defaults to `None`, which numbers the
-            frame positionally; that is well defined for a single
-            materialized batch, but downstream of a partitioned or
-            streaming scan the physical order need not be commit order,
-            and the semantics are asymmetric (``i -> d`` and ``d -> i``
-            differ), so passing a real sequence column is strongly
-            preferred wherever the format carries one.
+            *within* a key, and of a reset against every record -- a log
+            sequence number, binlog offset or commit sequence. Must be
+            unique inside a key group, and order the records following a
+            reset strictly after it: rows are selected by comparing against
+            this value, so a tie inside one key emits several rows. Defaults
+            to `None`, which numbers the frame positionally; that is well
+            defined for a single materialized batch, but downstream of a
+            partitioned or streaming scan the physical order need not be
+            commit order, and the semantics are asymmetric (``i -> d`` and
+            ``d -> i`` differ), so passing a real sequence column is
+            strongly preferred wherever the format carries one.
         op_dtype: Dtype to write the resolved operation as. Needed only
             when `op_column` is an `Enum` or `Categorical`, whose dtype
             cannot be read here without resolving the schema and which a
@@ -179,17 +216,15 @@ def coalesce_cdc_batch(
 
     # The marker is normalized once into a helper column so every
     # expression below reads the same text, and so the value the filter
-    # accepts is the value the reduction matches on. ``cast(String)`` is
-    # what lets the ``str`` namespace reach an Enum / Categorical marker.
-    lowered = pl.col(op_column).cast(pl.String).str.to_lowercase()
-    out = lf.with_columns(lowered.alias(_LOWER))
+    # accepts is the value the reduction matches on.
+    out = lf.with_columns(_lowered(op_column).alias(_LOWER))
 
     # Unreadable records go before any window sees them, so they cannot
     # sway a key's endpoints or leave their payload behind. ``is_in``
     # yields null for a null marker, which this filter drops too.
-    out = out.filter(pl.col(_LOWER).is_in(_MARKERS))
+    out = out.filter(pl.col(_LOWER).is_in(_MARKERS + _RESETS))
 
-    # The ordinal is materialized as a column because four expressions
+    # The ordinal is materialized as a column because several expressions
     # read it. ``int_range(len())`` rather than ``with_row_index`` so the
     # only frame methods used are with_columns / filter / drop -- none of
     # which resolve the schema. It numbers what survived the filter, which
@@ -202,6 +237,13 @@ def coalesce_cdc_batch(
     seq = pl.col(_SEQ)
     op = pl.col(_LOWER)
 
+    # The batch's last reset, taken over the whole frame rather than per
+    # key: it empties the table, so it voids every key's earlier records.
+    # The reset records themselves go too, since each sits at or before it.
+    last_reset = pl.when(op.is_in(_RESETS)).then(seq).otherwise(None).max()
+    out = out.with_columns(last_reset.alias(_RESET))
+    out = out.filter(pl.col(_RESET).is_null() | (seq > pl.col(_RESET)))
+
     # Ordering is by the ordinal alone. The marker must not enter the sort
     # key: `i(A) -> d(B)` and `d(A) -> i(B)` resolve differently yet hold
     # the same multiset of markers, so any order keyed on the marker maps
@@ -209,10 +251,11 @@ def coalesce_cdc_batch(
     first_op = op.sort_by(seq).first().over(keys)
     last_op = op.sort_by(seq).last().over(keys)
 
-    # Plain comparisons: the filter leaves `_LOWER` holding one of the
-    # three markers and nothing else, so no null can reach here to
-    # propagate through a comparison.
-    is_insert = first_op == _INSERT
+    # Plain comparisons: the filters leave `_LOWER` holding one of the
+    # three row markers and nothing else, so no null can reach here to
+    # propagate through a comparison. After a reset the table is empty, so
+    # no key pre-existed what is left of the batch.
+    is_insert = (first_op == _INSERT) | pl.col(_RESET).is_not_null()
     is_delete = last_op == _DELETE
 
     # Latest record of the key, or -- when the key resolves to a delete --
@@ -252,4 +295,4 @@ def coalesce_cdc_batch(
     # column's position, so restoring the marker needs no column list and
     # therefore no schema.
     out = out.with_columns(pl.col(_OP).alias(op_column))
-    return out.drop(_SEQ, _KEEP, _OP, _EPHEMERAL, _LOWER)
+    return out.drop(_SEQ, _KEEP, _OP, _EPHEMERAL, _LOWER, _RESET)

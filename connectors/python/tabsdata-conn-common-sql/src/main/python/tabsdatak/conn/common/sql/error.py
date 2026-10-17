@@ -78,3 +78,9 @@ class SqlCommonErrorCode(ErrorCode):
         " never written, so it cannot double as the watermark the target is"
         " stamped with",
     )  # _watermark.validate_watermark_column()
+    SQL_COMMON_9 = ErrorDef(
+        SqlCommonRuntimeException,
+        "The batch merging onto {table} loads or truncates the table, which"
+        " this destination cannot apply: its rows replace the target's, and"
+        " merging them would keep rows the source no longer has",
+    )  # _merge._driver.merge_batch()

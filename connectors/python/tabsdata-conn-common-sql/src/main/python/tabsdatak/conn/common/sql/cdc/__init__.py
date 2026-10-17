@@ -23,12 +23,16 @@ Public surface (see `__all__`):
   `CdcColumnsFormatSpec` -- the shared table / position / output-format
   specs each connector re-expresses locally.
 * `coalesce_cdc_batch` -- reduces a captured batch to one row per key so
-  it can be merged into a target table.
+  it can be merged into a target table; `cdc_batch_resets` -- whether the
+  batch loads or truncates the table, so the target must be emptied first.
 """
 
 import importlib.metadata
 
-from tabsdatak.conn.common.sql.cdc._coalesce import coalesce_cdc_batch
+from tabsdatak.conn.common.sql.cdc._coalesce import (
+    cdc_batch_resets,
+    coalesce_cdc_batch,
+)
 from tabsdatak.conn.common.sql.cdc._connection import CdcConn
 from tabsdatak.conn.common.sql.cdc._runner import CdcPlugin, CdcRunConfig
 from tabsdatak.conn.common.sql.cdc._stage_plugin import (
@@ -47,6 +51,7 @@ from tabsdatak.conn.common.sql.cdc.typing import (
 
 __all__ = [
     # Batch coalescing
+    "cdc_batch_resets",
     "coalesce_cdc_batch",
     # Connections
     "CdcConn",

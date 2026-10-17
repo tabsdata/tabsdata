@@ -9,10 +9,11 @@ Covers the four specified pairwise rules and the fold counterexample they
 break on, net-state resolution (all-delete, single-record and
 unrecognized-marker sequences), payload selection (latest record, or last
 known image for a delete), dropping of ephemeral keys, ordering by an
-explicit sequence column versus positionally, schema preservation
-including `Enum` markers and composite keys, the laziness contract (no
-`collect`, no `collect_schema`), the fixed `CdcOperation` markers, and
-argument validation.
+explicit sequence column versus positionally, the load and truncate
+records that reset the table, schema preservation including `Enum`
+markers and composite keys, the laziness contract (no `collect`, no
+`collect_schema`), the fixed `CdcOperation` markers, and argument
+validation.
 
 The semantics are pinned twice: once by hand-written cases, and once by
 cross-checking every resolution against a reference implementation that
@@ -27,11 +28,12 @@ import random
 import polars as pl
 import pytest
 
-from tabsdatak.conn.common.sql.cdc import coalesce_cdc_batch
+from tabsdatak.conn.common.sql.cdc import cdc_batch_resets, coalesce_cdc_batch
 from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 from tabsdatak.conn.common.sql.cdc.error import SqlCdcErrorCode, SqlCdcException
 
 INS, UPD, DEL = "i", "u", "d"
+LOAD, TRUNC = "l", "t"
 
 
 # --- Helpers ---------------------------------------------------------
@@ -63,12 +65,15 @@ def _one(records: list[tuple], **kwargs) -> tuple:
     return rows[0]
 
 
-def _reference(records: list[tuple]) -> tuple | None:
+def _reference(records: list[tuple], *, after_reset: bool = False) -> tuple | None:
     """Replay one key's records against a simulated target table.
 
     Independent of the expression implementation: it walks the sequence
     keeping the target's state (`alive`) and the row's last usable payload
     (`image`), rather than reading the sequence's two endpoints.
+
+    `after_reset` replays against a target just emptied, which held nothing
+    whatever the records open with.
 
     Returns the ``(operation, record)`` the target should end up with, or
     `None` when the key must be dropped.
@@ -84,7 +89,7 @@ def _reference(records: list[tuple]) -> tuple | None:
         return None
     records = [(rec[0], rec[1].lower(), *rec[2:]) for rec in records]
     # The target held this key unless the batch opens by inserting it.
-    existed = records[0][1] != INS
+    existed = records[0][1] != INS and not after_reset
     alive = existed
     image = records[0]
     for rec in records:
@@ -329,6 +334,111 @@ class TestOrdering:
         lf = pl.DataFrame({"pk": ["A", "A"], "op": [UPD, UPD], "lsn": [1, 1]}).lazy()
         got = coalesce_cdc_batch(lf, ["pk"], "op", order_column="lsn").collect()
         assert got.height == 2
+
+
+# --- Resets ----------------------------------------------------------
+
+
+def _resets(records: list[tuple]) -> bool:
+    return cdc_batch_resets(_frame(records).lazy(), "op").collect().item()
+
+
+class TestResets:
+    def test_a_load_voids_what_came_before_it(self):
+        records = [("A", INS, 1), ("B", UPD, 2), (None, LOAD, None), ("A", INS, 3)]
+        assert _rows(records) == [("A", INS, 3)]
+
+    def test_a_truncate_voids_what_came_before_it(self):
+        records = [("A", UPD, 1), (None, TRUNC, None), ("B", INS, 2)]
+        assert _rows(records) == [("B", INS, 2)]
+
+    def test_a_reset_at_the_end_leaves_nothing(self):
+        got = _coalesce([("A", INS, 1), ("B", UPD, 2), (None, TRUNC, None)])
+        assert got.is_empty()
+        assert got.columns == ["pk", "op", "v"]
+
+    def test_a_lone_reset_leaves_nothing(self):
+        assert _rows([(None, LOAD, None)]) == []
+
+    def test_only_the_last_reset_counts(self):
+        records = [
+            ("A", INS, 1),
+            (None, LOAD, None),
+            ("B", INS, 2),
+            (None, TRUNC, None),
+            ("C", INS, 3),
+        ]
+        assert _rows(records) == [("C", INS, 3)]
+
+    def test_a_load_followed_by_its_snapshot_inserts_everything(self):
+        records = [(None, LOAD, None), ("A", INS, 1), ("B", INS, 2)]
+        assert _rows(records) == [("A", INS, 1), ("B", INS, 2)]
+
+    def test_an_update_after_a_reset_is_an_insert(self):
+        """The table was emptied, so nothing is left for the update to match:
+        the row it carries has to be inserted."""
+        records = [(None, LOAD, None), ("A", INS, 1), ("A", UPD, 2), ("B", UPD, 3)]
+        assert _rows(records) == [("A", INS, 2), ("B", INS, 3)]
+
+    def test_a_delete_after_a_reset_drops_the_key(self):
+        """The row is gone either way: emptied by the reset, or born and
+        deleted after it."""
+        records = [("A", INS, 1), (None, TRUNC, None), ("A", DEL, 2), ("B", INS, 3)]
+        assert _rows(records) == [("B", INS, 3)]
+        records = [(None, LOAD, None), ("A", INS, 1), ("A", DEL, 2)]
+        assert _rows(records) == []
+
+    def test_a_delete_then_insert_after_a_reset_is_an_insert(self):
+        records = [(None, TRUNC, None), ("A", DEL, 1), ("A", INS, 2)]
+        assert _rows(records) == [("A", INS, 2)]
+
+    def test_upper_case_resets_are_read_the_same(self):
+        records = [("A", INS, 1), (None, "L", None), ("B", INS, 2)]
+        assert _rows(records) == [("B", INS, 2)]
+        records = [("A", INS, 1), (None, "T", None)]
+        assert _rows(records) == []
+
+    def test_unreadable_records_do_not_shift_the_cut(self):
+        records = [("A", INS, 1), ("B", "r", 2), (None, LOAD, None), ("C", None, 3)]
+        assert _rows(records + [("D", INS, 4)]) == [("D", INS, 4)]
+
+    def test_order_column_places_the_reset(self):
+        """Physically last, but by the sequence column the reset comes
+        first: everything after it survives."""
+        lf = pl.DataFrame({
+            "pk": ["A", "B", None],
+            "op": [INS, UPD, LOAD],
+            "v": [1, 2, None],
+            "lsn": [2, 3, 1],
+        }).lazy()
+        got = coalesce_cdc_batch(lf, ["pk"], "op", order_column="lsn").collect()
+        assert sorted(got.rows()) == [("A", INS, 1, 2), ("B", INS, 2, 3)]
+
+    def test_no_reset_leaves_the_reduction_alone(self):
+        assert _one([("A", UPD, 1)]) == ("A", UPD, 1)
+
+    @pytest.mark.parametrize(
+        "records, expected",
+        [
+            ([("A", INS, 1)], False),
+            ([("A", INS, 1), (None, LOAD, None)], True),
+            ([(None, TRUNC, None), ("A", INS, 1)], True),
+            ([(None, "L", None)], True),
+            ([("A", "r", 1), ("A", None, 2)], False),
+        ],
+    )
+    def test_cdc_batch_resets(self, records, expected):
+        assert _resets(records) is expected
+
+    def test_cdc_batch_resets_on_an_empty_batch(self):
+        lf = pl.DataFrame(
+            schema={"pk": pl.String, "op": pl.String, "v": pl.Int64}
+        ).lazy()
+        assert cdc_batch_resets(lf, "op").collect().item() is False
+
+    def test_cdc_batch_resets_stays_lazy(self):
+        lf = pl.scan_csv("/nonexistent/never/created.csv")
+        assert isinstance(cdc_batch_resets(lf, "op"), pl.LazyFrame)
 
 
 # --- Schema ----------------------------------------------------------
@@ -612,6 +722,34 @@ class TestAgainstReference:
                 .rows()
             )
             assert got == sorted(expected)
+
+    def test_randomized_batches_with_resets_match_the_simulation(self):
+        """A reset cuts the whole batch, so these batches are resolved one at
+        a time: the keys before the cut never reach the target, and the keys
+        after it replay against an emptied one."""
+        rng = random.Random(9090)
+        for _ in range(300):
+            groups = {key: [] for key in "ABCD"}
+            records: list[tuple] = []
+            last_reset = -1
+            for position in range(rng.randint(1, 30)):
+                if rng.random() < 0.08:
+                    records.append((None, rng.choice([LOAD, TRUNC]), position))
+                    last_reset = position
+                    continue
+                key = rng.choice("ABCD")
+                record = (key, rng.choice([INS, UPD, DEL]), position)
+                records.append(record)
+                groups[key].append(record)
+            expected = []
+            for key, group in groups.items():
+                group = [rec for rec in group if rec[2] > last_reset]
+                outcome = _reference(group, after_reset=last_reset >= 0)
+                if outcome is not None:
+                    op, image = outcome
+                    expected.append((key, op, image[2]))
+            assert _rows(records) == sorted(expected)
+            assert _resets(records) is (last_reset >= 0)
 
     def test_reference_agrees_on_the_specified_rules(self):
         """Guards the guard: the reference must reproduce the four rules

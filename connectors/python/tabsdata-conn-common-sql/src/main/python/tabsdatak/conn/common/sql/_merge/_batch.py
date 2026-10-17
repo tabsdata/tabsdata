@@ -17,7 +17,7 @@ from tabsdatak.conn.common.sql._merge import MergeCfg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import MergeDialect
-from tabsdatak.conn.common.sql.cdc import coalesce_cdc_batch
+from tabsdatak.conn.common.sql.cdc import cdc_batch_resets, coalesce_cdc_batch
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,30 @@ def incoming_column(
             matches=", ".join(repr(name) for name in matches),
         )
     return matches[0] if matches else None
+
+
+def batch_resets(
+    dialect: MergeDialect,
+    table: str,
+    batch: Path,
+    cfg: MergeCfg,
+) -> bool:
+    """Whether ``batch`` loads or truncates the table, so that applying it
+    means replacing the target's rows rather than merging onto them.
+
+    Asked of the batch as captured: :func:`coalesced_batch` drops the load and
+    truncate records once they have cut the batch, so its output cannot tell.
+    Only the marker column is read.
+    """
+    import polars as pl
+
+    lf = pl.scan_parquet(batch)
+    marker = incoming_column(
+        dialect, lf.collect_schema().names(), cfg._op_column(), table
+    )
+    if marker is None:
+        raise dialect.errors.marker_absent(column=cfg.op_column, table=table)
+    return cdc_batch_resets(lf, marker).collect().item()
 
 
 @contextlib.contextmanager

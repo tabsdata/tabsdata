@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Rendering the ``MERGE`` every SQL destination runs."""
+"""Rendering the statements every SQL destination runs to apply a batch."""
 
 from __future__ import annotations
 
@@ -93,6 +93,54 @@ def render_merge(
         f" INSERT ({inserted}) VALUES ({values})"
     )
     return " ".join(clauses)
+
+
+def render_replace(
+    dialect: MergeDialect,
+    target: str,
+    staged: Staged,
+    cfg: MergeCfg,
+    columns: list[str],
+) -> str:
+    """The statement replacing ``target``'s rows with ``staged``'s.
+
+    For a batch that loads or truncates the table: coalesced, it holds the
+    whole table as of its last reset, every row an insert, so the target keeps
+    none of its own rows -- a key the batch shares with it takes the batch's
+    values, and a key the batch lacks is gone. One statement, so no reader sees
+    the table between being emptied and being refilled, and a failure leaves it
+    as it was.
+
+    ``columns`` are what gets written, as for :func:`render_merge`, and a target
+    column outside them takes a NULL. The marker gates nothing here: every
+    staged row is an insert.
+    """
+    syntax = dialect.syntax
+    quote = dialect.quote_column
+    inserted = ", ".join(quote(name) for name in columns)
+
+    if syntax.replace == "overwrite":
+        return (
+            f"INSERT OVERWRITE INTO {target} ({inserted})"
+            f" SELECT {inserted} FROM {staged.relation}"
+        )
+
+    into, using = syntax.target_alias, syntax.source_alias
+    if syntax.wildcard_writes is not None:
+        marker = quote(cfg._op_column())
+        insert = f"INSERT {syntax.wildcard_writes.format(marker=marker)}"
+    else:
+        values = ", ".join(f"{using}.{quote(name)}" for name in columns)
+        insert = f"INSERT ({inserted}) VALUES ({values})"
+    # ON FALSE matches nothing: every staged row is inserted and every target
+    # row deleted. The insert clause comes first because some grammars take the
+    # NOT MATCHED BY SOURCE clauses last.
+    return " ".join([
+        f"MERGE{syntax.evolution_modifier} INTO {target} AS {into}"
+        f" USING {staged.relation} AS {using} ON FALSE",
+        f"{syntax.not_matched} THEN {insert}",
+        "WHEN NOT MATCHED BY SOURCE THEN DELETE",
+    ])
 
 
 def _assigned(syntax, quote, into: str, name: str) -> str:
