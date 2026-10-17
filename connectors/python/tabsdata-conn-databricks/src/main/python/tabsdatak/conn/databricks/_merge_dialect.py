@@ -101,6 +101,9 @@ class DatabricksMergeDialect(MergeDialect):
         evolution widens ``*`` to the columns the source has and the target does
         not, which is exactly what the marker is. With evolution off, ``*``
         covers the target's own columns, and the marker is not among them.
+
+        A batch that loads or truncates the table replaces the target's rows in
+        one ``MERGE ... ON FALSE``, which evolves the target the same way.
         """
         return MergeSyntax(
             target_alias="target",
@@ -108,6 +111,7 @@ class DatabricksMergeDialect(MergeDialect):
             evolution_modifier=" WITH SCHEMA EVOLUTION" if self._evolving else "",
             not_matched="WHEN NOT MATCHED BY TARGET",
             wildcard_writes="* EXCEPT ({marker})" if self._evolving else "*",
+            replace="merge",
         )
 
     @property

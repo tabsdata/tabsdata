@@ -31,7 +31,7 @@ from tabsdatak.conn.common.sql._merge._driver import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge._statement import render_merge
+from tabsdatak.conn.common.sql._merge._statement import render_merge, render_replace
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import Staged
@@ -287,6 +287,44 @@ class TestMergeStatement:
             CdcOperation.DELETE,
         ):
             assert f"= '{operation.value}'" in sql
+
+
+# ---------------------------------------------------------------------------
+# The replacing MERGE
+#
+# A batch that loads or truncates the table replaces the target's rows: ON FALSE
+# matches nothing, so every staged row is inserted and every target row deleted.
+# ---------------------------------------------------------------------------
+
+
+def _replace_sql(schema_evolution: str = "strict") -> str:
+    dialect = _dialect(_RecordingCursor(), schema_evolution=schema_evolution)
+    return render_replace(
+        dialect, _TARGET, _staged([], relation=_SCRATCH), _cfg(), []
+    )
+
+
+class TestReplaceStatement:
+    def test_emits_the_whole_replace_on_strict(self):
+        assert _replace_sql() == (
+            f"MERGE INTO {_TARGET} AS target USING {_SCRATCH} AS source ON FALSE"
+            " WHEN NOT MATCHED BY TARGET THEN INSERT *"
+            " WHEN NOT MATCHED BY SOURCE THEN DELETE"
+        )
+
+    def test_evolves_and_excludes_the_marker_on_update(self):
+        assert _replace_sql("update") == (
+            f"MERGE WITH SCHEMA EVOLUTION INTO {_TARGET} AS target"
+            f" USING {_SCRATCH} AS source ON FALSE"
+            " WHEN NOT MATCHED BY TARGET THEN INSERT * EXCEPT (`op`)"
+            " WHEN NOT MATCHED BY SOURCE THEN DELETE"
+        )
+
+    def test_takes_the_not_matched_by_source_clause_last(self):
+        """Databricks requires every NOT MATCHED BY SOURCE clause after the NOT
+        MATCHED BY TARGET ones."""
+        sql = _replace_sql()
+        assert sql.index("BY TARGET") < sql.index("BY SOURCE")
 
 
 # ---------------------------------------------------------------------------
@@ -816,6 +854,22 @@ class TestMergeBatch:
         assert not any(
             s.startswith(("CREATE", "COPY INTO", "MERGE")) for s in cursor.statements
         )
+
+    def test_replaces_the_target_for_a_batch_that_truncates(self, tmp_path):
+        batch = _batch(tmp_path / "in.parquet", k=[1, None], op=["i", "t"])
+        cursor = _RecordingCursor([("k", "BIGINT"), ("op", "STRING")])
+        result = self._merge(cursor, batch, schema_evolution="strict")
+        assert result.replaced
+        merge = _only_starting_with(cursor.statements, "MERGE")
+        assert " ON FALSE " in merge
+        assert merge.endswith("WHEN NOT MATCHED BY SOURCE THEN DELETE")
+
+    def test_merges_a_batch_that_does_not_reset(self, tmp_path):
+        batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
+        cursor = _RecordingCursor([("k", "BIGINT"), ("op", "STRING")])
+        result = self._merge(cursor, batch, schema_evolution="strict")
+        assert not result.replaced
+        assert "ON FALSE" not in _only_starting_with(cursor.statements, "MERGE")
 
     def test_checks_the_watermark_before_it_stages_anything(self, tmp_path):
         # Staging is the expensive half, and the scratch table it would leave
