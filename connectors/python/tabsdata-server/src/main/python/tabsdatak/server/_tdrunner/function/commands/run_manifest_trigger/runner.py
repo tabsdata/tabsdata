@@ -132,15 +132,16 @@ class _TriggerOutcome(Enum):
 
     ``DEDUP_DELETED`` and ``SKIPPED`` mean "this manifest needs no
     execution slot" -- the scan may advance to the next candidate.
-    ``TRIGGERED`` and ``TRANSIENT`` both mean an execution slot is now
-    occupied or unavailable (the function runs one execution at a time),
-    so every newer manifest would just get the same ``Busy`` --
-    the scan should stop and let the next poll re-read from the oldest.
+    ``TRIGGERED``, ``HELD`` and ``TRANSIENT`` all mean the manifest still
+    waits on its execution (the function runs one execution at a time, and
+    a batch's run starts only after the previous one commits) -- the scan
+    should stop and let the next poll re-read from the oldest.
     """
 
-    DEDUP_DELETED = auto()  # Held / Consumed: files + manifest queued for deletion
+    DEDUP_DELETED = auto()  # Consumed: files + manifest queued for deletion
     SKIPPED = auto()  # unusable (malformed filename); nothing to trigger
     TRIGGERED = auto()  # Scheduled: execution scheduled
+    HELD = auto()  # Held: its execution has not committed; keep, retry next poll
     TRANSIENT = auto()  # Busy / other answer / connection error; retry next poll
 
 
@@ -148,7 +149,7 @@ class _TriggerOutcome(Enum):
 _SERVER_OUTCOMES = {
     "Scheduled": _TriggerOutcome.TRIGGERED,
     "Busy": _TriggerOutcome.TRANSIENT,
-    "Held": _TriggerOutcome.DEDUP_DELETED,
+    "Held": _TriggerOutcome.HELD,
     "Consumed": _TriggerOutcome.DEDUP_DELETED,
 }
 
@@ -173,14 +174,17 @@ def _trigger_one(
     """POST fn_trigger for one manifest; classify the response.
 
     Outcomes (see :class:`_TriggerOutcome`):
-      * ``Scheduled`` -- ``TRIGGERED``; manifest stays in place (next
-        iteration's ``Held`` / ``Consumed`` is the cue to delete; see
-        module docstring).
-      * ``Held`` / ``Consumed`` -- ``DEDUP_DELETED``; apiserver's
-        ``external_uid`` dedup gate fired: the previous iteration's POST
-        was accepted, the execution was scheduled, and the
-        function-publisher pod will consume (or has consumed) this
-        manifest. Safe to delete the manifest + its files.
+      * ``Scheduled`` -- ``TRIGGERED``; manifest stays in place (a later
+        iteration's ``Consumed`` is the cue to delete; see module
+        docstring).
+      * ``Consumed`` -- ``DEDUP_DELETED``; apiserver's ``external_uid``
+        dedup gate fired and the execution holding the key committed its
+        trigger run: the batch is durably published. Safe to delete the
+        manifest + its files.
+      * ``Held`` -- ``HELD``; an execution holds the key but its trigger run
+        has not committed: not yet dispatched, done but not committed,
+        failed or on hold. Its run still needs the files (to start, or to be
+        retried or recovered), so they stay; the next iteration asks again.
       * ``Busy`` -- ``TRANSIENT``; the function's execution is still running.
       * Any other status or answer, or a connection error -- ``TRANSIENT``;
         anomalous (bad request shape, auth failure, server error,
@@ -189,10 +193,12 @@ def _trigger_one(
         place; the next iteration retries.
       * Malformed filename -- ``SKIPPED``; can't build the external_uid.
 
-    The narrow ``Held`` / ``Consumed``-only delete fixes a prior bug where any 4xx
-    silently deleted the manifest -- in particular, a 403 from a
-    misconfigured trigger JWT scope would burn through every batch
-    the streamer produced without the streamer or operator noticing.
+    Only ``Consumed`` deletes. A delete on any 4xx would let a 403 from a
+    misconfigured trigger JWT scope burn through every batch the streamer
+    produced without the streamer or operator noticing. A delete on
+    ``Held`` would drop the files of a batch whose run has not been
+    dispatched yet, or has failed, before any run read them -- and the
+    source has already advanced past the batch, so nothing replays it.
     """
     try:
         external_uid = external_uid_from_filename(manifest_path.name)
@@ -238,17 +244,24 @@ def _trigger_one(
     if outcome is _TriggerOutcome.TRIGGERED:
         logger.info(
             "run-manifest-trigger: triggered manifest %s; "
-            "deferring deletion until next iteration sees dedup-reject",
+            "deferring deletion until its execution commits",
             manifest_path.name,
         )
         return outcome
     if outcome is _TriggerOutcome.DEDUP_DELETED:
         logger.info(
-            "run-manifest-trigger: manifest %s dedup-rejected; "
-            "external_uid already seen, queueing for deletion",
+            "run-manifest-trigger: manifest %s consumed; "
+            "its execution committed, queueing for deletion",
             manifest_path.name,
         )
         _enqueue_for_deletion(manifest_path, external_uid, backend, deletion_queue)
+        return outcome
+    if outcome is _TriggerOutcome.HELD:
+        logger.info(
+            "run-manifest-trigger: manifest %s held by an execution that has "
+            "not committed; keeping it, retrying next poll",
+            manifest_path.name,
+        )
         return outcome
     if outcome is _TriggerOutcome.TRANSIENT:
         logger.info(
@@ -278,24 +291,26 @@ def _trigger_pending(
     is_active: callable,
 ) -> str | None:
     """Scan manifests oldest-first from ``cursor``, advancing only past
-    *completed* (``Held`` / ``Consumed``) or unusable (``SKIPPED``) ones, and
-    stop at the first manifest still occupying the execution slot.
+    *consumed* (``Consumed``) or unusable (``SKIPPED``) ones, and stop at
+    the first manifest still waiting on its execution.
 
-    The apiserver gates triggers in order: ``Busy`` while the function's
-    execution is still running, then ``Held`` / ``Consumed`` once it has
-    ended (see the module docstring). So either is a *completion* signal --
-    only then is a manifest safe to delete, and only then does the cursor
-    advance past it. ``Scheduled`` or ``Busy``/transient (still running /
-    busy) leaves the cursor **parked** before that manifest, so the next
-    poll re-fetches it and re-checks for its completion. This pipelines one
-    execution per poll (drain the completed front, schedule one new)
-    without re-scanning the whole backlog -- per-poll triggers are O(1),
-    not O(backlog), so no ``Busy`` storm.
+    The apiserver answers ``Busy`` while the function's execution has a run
+    in flight, ``Held`` while an execution holds the manifest's
+    ``external_uid`` but its trigger run has not committed -- including
+    before that run is dispatched, and after it fails -- and ``Consumed``
+    once it has committed (see the module docstring). Only ``Consumed`` is
+    a *completion* signal -- only then is a manifest safe to delete, and
+    only then does the cursor advance past it. ``Scheduled``, ``Held`` or
+    ``Busy``/transient leaves the cursor **parked** before that manifest,
+    so the next poll re-fetches it and re-checks for its completion. This
+    pipelines one execution per poll (drain the completed front, schedule
+    one new) without re-scanning the whole backlog -- per-poll triggers are
+    O(1), not O(backlog), so no ``Busy`` storm.
 
     Returns the advanced cursor. The cursor is in-memory and backend-
     internal (filename for local, last-modified for cloud); on a sidecar
-    restart it resets to ``None`` (epoch) and the already-completed front
-    answers ``Held`` / ``Consumed`` again and is re-deleted -- idempotent, crash-safe.
+    restart it resets to ``None`` (epoch) and the already-consumed front
+    answers ``Consumed`` again and is re-deleted -- idempotent, crash-safe.
     """
     with tempfile.TemporaryDirectory() as scratch:
         scratch_dir = Path(scratch)
@@ -308,9 +323,9 @@ def _trigger_pending(
                 manifest_path, backend, trigger_request, deletion_queue
             )
             if outcome in (_TriggerOutcome.DEDUP_DELETED, _TriggerOutcome.SKIPPED):
-                cursor = next_cursor  # completed / unusable -> advance past it
+                cursor = next_cursor  # consumed / unusable -> advance past it
                 continue
-            return cursor  # TRIGGERED or TRANSIENT -> park
+            return cursor  # TRIGGERED, HELD or TRANSIENT -> park
     return cursor
 
 

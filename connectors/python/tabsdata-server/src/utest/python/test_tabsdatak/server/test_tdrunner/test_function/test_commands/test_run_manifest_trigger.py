@@ -10,8 +10,8 @@ Covers:
     on a local backend, the per-batch dir); empty slots; missing/malformed
   * `_trigger_one`: each server outcome / 4xx / 5xx / connection error /
     malformed filename, returning the right `_TriggerOutcome`
-  * `_trigger_pending`: cursor walk -- advance only on Held / Consumed
-    (completed) / SKIPPED, park on Scheduled / Busy / transient; honours the
+  * `_trigger_pending`: cursor walk -- advance only on Consumed (completed)
+    / SKIPPED, park on Scheduled / Held / Busy / transient; honours the
     active flag
   * `_drain_until`: deletes rels via the backend (files + empty per-batch
     dirs), handles missing/failed deletes, respects deadline + active flag
@@ -320,14 +320,13 @@ def test_trigger_one_scheduled_does_not_enqueue(tmp_path):
     assert list(queue) == []
 
 
-@pytest.mark.parametrize("outcome", ["Held", "Consumed"])
-def test_trigger_one_completed_enqueues(tmp_path, outcome):
+def test_trigger_one_consumed_enqueues(tmp_path):
     ts = _ts(345_000)
     slot0 = _batch_files(ts, "a.parquet")
     manifest = _write_a_manifest(tmp_path, [slot0], ts=ts)
     external_id = external_uid_from_filename(manifest.name)
     queue: deque[str] = deque()
-    with _server(_silent_handler(200, body=_outcome(outcome))) as base_url:
+    with _server(_silent_handler(200, body=_outcome("Consumed"))) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
     assert outcome == _TriggerOutcome.DEDUP_DELETED
@@ -336,6 +335,23 @@ def test_trigger_one_completed_enqueues(tmp_path, outcome):
         f"manifests/{manifest.name}",
         f"files/{external_id}",
     ]
+
+
+def test_trigger_one_held_does_not_enqueue(tmp_path):
+    """Held: an execution holds the key but has not committed -- it may not
+    have been dispatched yet, or may have failed -- so its run still needs
+    the files."""
+    ts = _ts(345_000)
+    slot0 = _batch_files(ts, "a.parquet")
+    manifest = _write_a_manifest(tmp_path, [slot0], ts=ts)
+    queue: deque[str] = deque()
+    with _server(_silent_handler(200, body=_outcome("Held"))) as base_url:
+        req = HttpRequest(url=base_url + "/fn_trigger", headers={})
+        outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
+    assert outcome == _TriggerOutcome.HELD
+    assert list(queue) == []
+    assert manifest.exists()
+    assert (tmp_path / slot0[0]).exists()
 
 
 def test_trigger_one_5xx_does_not_enqueue(tmp_path):
@@ -351,7 +367,7 @@ def test_trigger_one_5xx_does_not_enqueue(tmp_path):
 
 @pytest.mark.parametrize("answer", [400, 401, 403, 404, 410, 422, 425, 200, "Busy"])
 def test_trigger_one_not_completed_does_not_enqueue(tmp_path, answer):
-    """Only Held / Consumed (completed) deletes. Everything else -- including
+    """Only Consumed (completed) deletes. Everything else -- including
     Busy (still running) and an unreadable 200 -- leaves the manifest in
     place."""
     ts = _ts(345_000)
@@ -437,12 +453,14 @@ def test_trigger_pending_parks_after_first_triggered(tmp_path):
 
 
 def test_trigger_pending_advances_through_completed_then_parks(tmp_path):
-    """Two completed (Held, Consumed) manifests are deleted + the cursor
-    advances past them; the third (Busy, still running) parks the cursor."""
+    """Two completed (Consumed) manifests are deleted + the cursor advances
+    past them; the third (Busy, still running) parks the cursor."""
     manifests = _planted_manifests(tmp_path, _ts(1), _ts(2), _ts(3), _ts(4))
     uids: list[str] = []
     queue: deque[str] = deque()
-    with _server(_sequenced_handler(["Held", "Consumed", "Busy"], uids)) as base_url:
+    with _server(
+        _sequenced_handler(["Consumed", "Consumed", "Busy"], uids)
+    ) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         cursor = _trigger_pending(
             _local_backend(tmp_path), None, req, queue, lambda: True
@@ -458,6 +476,44 @@ def test_trigger_pending_advances_through_completed_then_parks(tmp_path):
     assert f"manifests/{manifests[0].name}" in queue
     assert f"manifests/{manifests[1].name}" in queue
     assert f"manifests/{manifests[2].name}" not in queue
+
+
+def test_trigger_pending_parks_when_oldest_held(tmp_path):
+    """A Held manifest parks the cursor before it and is not deleted: the
+    batches after it wait for its execution to commit."""
+    manifests = _planted_manifests(tmp_path, _ts(1), _ts(2))
+    uids: list[str] = []
+    queue: deque[str] = deque()
+    with _server(_sequenced_handler(["Held"], uids)) as base_url:
+        req = HttpRequest(url=base_url + "/fn_trigger", headers={})
+        cursor = _trigger_pending(
+            _local_backend(tmp_path), None, req, queue, lambda: True
+        )
+    assert uids == [external_uid_from_filename(manifests[0].name)]
+    assert cursor is None
+    assert list(queue) == []
+
+
+def test_trigger_pending_deletes_held_manifest_once_consumed(tmp_path):
+    """A manifest answered Held on one poll and Consumed on the next is kept
+    by the first and deleted by the second, and the scan then moves on."""
+    manifests = _planted_manifests(tmp_path, _ts(1), _ts(2))
+    backend = _local_backend(tmp_path)
+    uids: list[str] = []
+    queue: deque[str] = deque()
+    with _server(
+        _sequenced_handler(["Held", "Consumed", "Scheduled"], uids)
+    ) as base_url:
+        req = HttpRequest(url=base_url + "/fn_trigger", headers={})
+        first = _trigger_pending(backend, None, req, queue, lambda: True)
+        assert first is None
+        assert list(queue) == []
+        second = _trigger_pending(backend, first, req, queue, lambda: True)
+    m1, m2 = (external_uid_from_filename(m.name) for m in manifests)
+    assert uids == [m1, m1, m2]
+    assert second == manifests[0].name
+    assert f"manifests/{manifests[0].name}" in queue
+    assert f"manifests/{manifests[1].name}" not in queue
 
 
 def test_trigger_pending_parks_when_oldest_busy(tmp_path):
