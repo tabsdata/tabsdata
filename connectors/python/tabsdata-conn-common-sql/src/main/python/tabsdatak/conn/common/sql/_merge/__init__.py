@@ -6,9 +6,9 @@
 
 :class:`MergeCfg` is the dialect-agnostic half of
 ``if_table_exists="merge"``: which columns incoming rows are matched by,
-and which column carries each row's ``i`` / ``u`` / ``d`` marker. The
-structure and its invariants live here so every SQL destination spells
-them the same way.
+and which column carries each row's ``i`` / ``u`` / ``d`` / ``l`` /
+``t`` marker. The structure and its invariants live here so every SQL
+destination spells them the same way.
 """
 
 from __future__ import annotations
@@ -60,6 +60,14 @@ class MergeCfg(_api.DescriptorBase):
     * `'i'` -- insert the row, if it matches no key.
     * `'u'` -- update the row it matches.
     * `'d'` -- delete the row it matches.
+    * `'l'` -- load: the table is reloaded from the rows that follow.
+    * `'t'` -- truncate: the table is emptied.
+
+    A load or truncate row carries no data of its own -- its other columns are
+    null -- and resets the table at its position: the changes ahead of it in the
+    batch are void, and the target's rows are replaced, in one statement, by
+    what the batch holds after it. A flow between a CDC stream and this
+    destination has to pass these rows through.
 
     Anything else matches no clause and the row is passed over.
 
@@ -71,9 +79,9 @@ class MergeCfg(_api.DescriptorBase):
     Args:
         on: The key columns rows are matched by, joined with `AND`. Must be
             present on both sides.
-        op_column: The column holding each row's `i` / `u` / `d` marker. Read
-            to decide each row's fate and never written, so the target does not
-            need the column and will not gain it.
+        op_column: The column holding each row's `i` / `u` / `d` / `l` /
+            `t` marker. Read to decide each row's fate and never written, so the
+            target does not need the column and will not gain it.
 
     Examples:
         A CDC feed whose `op` column says what to do with each row:

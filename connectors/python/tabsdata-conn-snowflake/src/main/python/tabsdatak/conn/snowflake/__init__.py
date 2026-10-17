@@ -145,6 +145,14 @@ class MergeCfg(_api.DescriptorBase):
     * `'i'` -- insert the row, if it matches no key.
     * `'u'` -- update the row it matches.
     * `'d'` -- delete the row it matches.
+    * `'l'` -- load: the table is reloaded from the rows that follow.
+    * `'t'` -- truncate: the table is emptied.
+
+    A load or truncate row carries no data of its own -- its other columns are
+    null -- and resets the table at its position: the changes ahead of it in the
+    batch are void, and the target's rows are replaced, in one statement, by
+    what the batch holds after it. A flow between a CDC stream and this
+    destination has to pass these rows through.
 
     The marker is lower-cased before it is compared, so a feed emitting `'I'` /
     `'U'` / `'D'` works as well as one emitting lower case. Anything else matches
@@ -164,9 +172,9 @@ class MergeCfg(_api.DescriptorBase):
         on: The key columns rows are matched by, joined with `AND`. Must be
             present on both sides. Each is a Snowflake column identifier --
             unquoted, or double-quoted for a case-sensitive / special-char name.
-        op_column: The column holding each row's `i` / `u` / `d` marker. Read
-            to decide each row's fate and never written, so the target does not
-            need the column and will not gain it.
+        op_column: The column holding each row's `i` / `u` / `d` / `l` /
+            `t` marker. Read to decide each row's fate and never written, so the
+            target does not need the column and will not gain it.
 
     Examples:
         A CDC feed whose `op` column says what to do with each row:
