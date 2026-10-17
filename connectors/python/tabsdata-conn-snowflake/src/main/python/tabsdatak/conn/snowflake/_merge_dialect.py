@@ -70,6 +70,10 @@ _SYNTAX = MergeSyntax(
     evolution_modifier="",
     not_matched="WHEN NOT MATCHED",
     wildcard_writes=None,
+    # Snowflake's MERGE has no WHEN NOT MATCHED BY SOURCE, so a batch that loads
+    # or truncates the table replaces the target's rows with one INSERT
+    # OVERWRITE, which truncates and inserts in a single transaction.
+    replace="overwrite",
 )
 
 _ERRORS = MergeErrors(
