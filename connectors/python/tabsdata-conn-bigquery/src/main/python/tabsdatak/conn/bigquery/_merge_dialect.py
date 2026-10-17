@@ -57,6 +57,9 @@ _SYNTAX = MergeSyntax(
     # An update item takes a bare column name: it can only resolve against the
     # target, and BigQuery reads a qualified name there as an error.
     update_qualified=False,
+    # A batch that loads or truncates the table replaces the target's rows in
+    # one MERGE ... ON FALSE, the replace BigQuery's own MERGE documents.
+    replace="merge",
 )
 
 _ERRORS = MergeErrors(
