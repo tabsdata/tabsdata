@@ -4,7 +4,7 @@
 
 avro==1.12.1
 boto3==1.43.78
-confluent-kafka==2.14.0
+confluent-kafka[avro,json,protobuf,schemaregistry]==2.14.0
 grpcio-tools==1.80.0
 jsonschema==4.26.0
 orjson==3.11.7

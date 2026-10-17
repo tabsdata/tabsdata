@@ -49,7 +49,7 @@ from tabsdatak.server._tdrunner.function.commands.run_streamer.runner import (
 
 __all__ = ["_load_function_def", "_resolve_plugin", "run", "main"]
 
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 INFO = (
     "run-streamer — long-running streamer pod entrypoint; runs the "
     "@stream_publisher's StreamSrcPlugin until SIGTERM"

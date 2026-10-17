@@ -41,7 +41,7 @@ __all__ = ["_stamp_file", "run", "main"]
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 INFO = (
     "stamp-inputs — stamp framework system columns onto the parquets "
     "produced by run-source-plugin"

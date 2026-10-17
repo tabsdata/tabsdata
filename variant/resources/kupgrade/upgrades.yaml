@@ -4,6 +4,8 @@
 
 schema: 1
 versions:
+  - version: 2.2.1
+    upgrader: true
   - version: 2.2.0
     upgrader: true
   - version: 2.1.0

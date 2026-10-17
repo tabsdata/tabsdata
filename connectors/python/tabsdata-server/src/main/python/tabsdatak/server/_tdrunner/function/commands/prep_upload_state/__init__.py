@@ -26,7 +26,7 @@ from tabsdatak.server._tdrunner.function.commands.prep_upload_state.runner impor
 
 __all__ = ["run", "main"]
 
-VERSION = "2.2.0"
+VERSION = "2.2.1"
 INFO = (
     "prep-upload-state — generate the transporter request that pushes "
     "state-out tables to cloud"
