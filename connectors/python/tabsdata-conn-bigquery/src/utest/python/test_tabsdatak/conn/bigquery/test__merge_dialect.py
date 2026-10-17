@@ -36,7 +36,7 @@ from tabsdatak.conn.common.sql._merge._batch import coalesced_batch
 from tabsdatak.conn.common.sql._merge._driver import write_columns
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge._statement import render_merge
+from tabsdatak.conn.common.sql._merge._statement import render_merge, render_replace
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import Staged
@@ -214,6 +214,32 @@ def test_merge_statement_quotes_through_the_iceberg_dialect():
     assert _dialect(MagicMock()).quote_column("weird col") == _iceberg.quote_column(
         "weird col"
     )
+
+
+def _replace_sql(columns: list[str], **cfg) -> str:
+    return render_replace(
+        _dialect(MagicMock()),
+        _QUOTED_TARGET,
+        _staged([]),
+        _merge_cfg(**cfg),
+        columns,
+    )
+
+
+def test_replace_statement_emits_the_whole_replace():
+    """A batch that loads or truncates the table: every staged row inserted,
+    every target row deleted, in one MERGE."""
+    assert _replace_sql(["order_id", "total"]) == (
+        f"MERGE INTO {_QUOTED_TARGET} AS target USING {_QUOTED_STAGING} AS source"
+        " ON FALSE"
+        " WHEN NOT MATCHED BY TARGET THEN INSERT (`order_id`, `total`)"
+        " VALUES (source.`order_id`, source.`total`)"
+        " WHEN NOT MATCHED BY SOURCE THEN DELETE"
+    )
+
+
+def test_replace_statement_never_writes_the_marker_column():
+    assert "`op`" not in _replace_sql(["order_id", "total"])
 
 
 def test_execute_runs_the_statement_through_query_and_wait():

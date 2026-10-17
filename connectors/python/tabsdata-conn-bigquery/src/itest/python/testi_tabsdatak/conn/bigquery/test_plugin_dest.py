@@ -326,6 +326,94 @@ def test_dest_plugin_write_out_merge_coalesces_several_changes_for_one_key(
 
 
 @bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_load_replaces_the_target(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # A load empties the table before its snapshot, so the change ahead of it in
+    # the batch is void, order 1 and order 3 -- in the target but not in the
+    # snapshot -- are gone, and order 2 takes the snapshot's values rather than
+    # being passed over as an insert of a key the target already has. The update
+    # after the snapshot is applied on top of it.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_load"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {
+            "order_id": [1, 2, 3],
+            "status": ["new", "new", "new"],
+            "amount": [10, 20, 30],
+        },
+    )
+    load = _batch(
+        tmp_path / "load.parquet",
+        {
+            "order_id": [1, None, 2, 4, 4],
+            "status": ["packed", None, "shipped", "new", "packed"],
+            "amount": [11, None, 25, 40, 45],
+            "op": ["u", "l", "i", "i", "u"],
+        },
+    )
+    try:
+        _seed_target(conn, work, table, seed)
+        assert db.count(table) == 3
+
+        _merge_out(conn, work, table, load, merge_cfg)
+        assert_frames_match(
+            db.read_table(table),
+            pl.DataFrame({
+                "order_id": [2, 4],
+                "status": ["shipped", "packed"],
+                "amount": [25, 45],
+            }),
+        )
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
+def test_dest_plugin_write_out_merge_truncate_empties_the_target(
+    domain_bigquery: BigQueryDomain,
+    tmp_path: Path,
+):
+    # A truncate with nothing after it leaves the batch no row to stage, and the
+    # target still has to be emptied: the statement runs on an empty relation.
+    db = store(domain_bigquery)
+    table = "td_dest_merge_truncate"
+    work = work_dir(tmp_path)
+    conn = dest_conn(domain_bigquery)
+    merge_cfg = MergeCfg(on=["order_id"], op_column="op")
+    seed = _batch(
+        tmp_path / "seed.parquet",
+        {
+            "order_id": [1, 2, 3],
+            "status": ["new", "new", "new"],
+            "amount": [10, 20, 30],
+        },
+    )
+    truncate = _batch(
+        tmp_path / "truncate.parquet",
+        {
+            "order_id": [1, None],
+            "status": ["packed", None],
+            "amount": [11, None],
+            "op": ["u", "t"],
+        },
+    )
+    try:
+        _seed_target(conn, work, table, seed)
+        assert db.count(table) == 3
+
+        _merge_out(conn, work, table, truncate, merge_cfg)
+        assert db.count(table) == 0
+    finally:
+        db.drop_table(table)
+
+
+@bigquery_domain("bigquery")
 def test_dest_plugin_write_out_merge_reads_a_marker_in_either_case(
     domain_bigquery: BigQueryDomain,
     tmp_path: Path,
