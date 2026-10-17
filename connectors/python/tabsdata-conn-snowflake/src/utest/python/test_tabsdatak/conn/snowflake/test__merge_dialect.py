@@ -39,7 +39,7 @@ from tabsdatak.conn.common.sql._merge._driver import (
 )
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge._statement import render_merge
+from tabsdatak.conn.common.sql._merge._statement import render_merge, render_replace
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge import WatermarkCfg
@@ -398,6 +398,26 @@ def test_merge_statement_carries_no_evolution_modifier():
     """Snowflake evolves nothing from inside a MERGE -- the ALTERs have already
     run by the time the statement does."""
     assert _merge_sql(["C", "STATUS"]).startswith(f"MERGE INTO {_TARGET} AS target")
+
+
+def _replace_sql(columns, **cfg_kwargs):
+    dialect = _dialect(_FakeConnection())
+    return render_replace(
+        dialect, _TARGET, _staged([]), _cfg(**cfg_kwargs), list(columns)
+    )
+
+
+def test_replace_statement_overwrites_the_target_from_the_staging_table():
+    """A batch that loads or truncates the table: Snowflake's MERGE cannot
+    delete what the source lacks, so the rows are overwritten instead."""
+    assert _replace_sql(["C", "STATUS"]) == (
+        f'INSERT OVERWRITE INTO {_TARGET} ("C", "STATUS")'
+        f' SELECT "C", "STATUS" FROM {_SCRATCH}'
+    )
+
+
+def test_replace_statement_never_writes_the_marker():
+    assert '"OP"' not in _replace_sql(["C", "STATUS"])
 
 
 # ---------------------------------------------------------------------------
@@ -1107,3 +1127,30 @@ def test_merge_batch_adds_no_watermark_on_strict_without_one(tmp_path):
     result = _merge(fake, batch, schema_evolution="strict")
     assert result.evolved == []
     assert _alters(fake.log) == []
+
+
+def test_merge_batch_overwrites_the_target_for_a_batch_that_loads(tmp_path):
+    """Everything before the load is void, and what follows it replaces the
+    target's rows rather than being merged onto them."""
+    import polars as pl
+
+    batch = _batch(
+        tmp_path / "in.parquet",
+        c=pl.Series([1, None, 2], dtype=pl.Int64),
+        op=["u", "l", "i"],
+    )
+    fake = column_fakes(["C"], [("C", "NUMBER(38,0)"), ("OP", "TEXT")])
+    result = _merge(fake, batch, schema_evolution="strict")
+    assert result.replaced
+    assert not any(s.startswith("MERGE") for s in fake.log)
+    assert f'INSERT OVERWRITE INTO {_TARGET} ("C") SELECT "C" FROM' in next(
+        s for s in fake.log if s.startswith("INSERT OVERWRITE")
+    )
+
+
+def test_merge_batch_merges_a_batch_that_does_not_reset(tmp_path):
+    batch = _batch(tmp_path / "in.parquet", c=[1], op=["i"])
+    fake = column_fakes(["C"], [("C", "NUMBER(38,0)"), ("OP", "TEXT")])
+    result = _merge(fake, batch, schema_evolution="strict")
+    assert not result.replaced
+    assert not any(s.startswith("INSERT OVERWRITE") for s in fake.log)
