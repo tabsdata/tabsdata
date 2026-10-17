@@ -13,7 +13,7 @@ use td_error::TdError;
 use tracing::info;
 
 use crate::base::constants::{
-    ENV_TD_KUBE_UV_MODE, KPROFILE_ASSETS_FAMILY, UV_MODE_LINKED, UvMode, Venv,
+    ENV_TD_KUBE_UV_MODE, KPROFILE_ASSETS_FAMILY, UV_MODE_LINKED, UvMode, VENVS, Venv,
 };
 use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
@@ -48,13 +48,16 @@ pub struct UpdateArguments {
     #[arg(
         long,
         name = "name",
-        required = true,
+        required = false,
         value_enum,
+        value_delimiter = ',',
         display_order = 20,
-        long_help = "Virtual environment to update. Run 'tdkserver venv list' to see the \
-                     virtual environments and what each one is used for."
+        long_help = "Comma-separated list of the virtual environments to update, such as \
+                     'fn,ag'. Without it, every virtual environment is updated. Run \
+                     'tdkserver venv list' to see the virtual environments and what each one \
+                     is used for."
     )]
-    pub name: Venv,
+    pub name: Vec<Venv>,
 
     #[arg(
         long,
@@ -64,7 +67,7 @@ pub struct UpdateArguments {
         display_order = 30,
         long_help = "File with the complementary packages of the virtual environment, in pip \
                      requirements format. It replaces the requirements file the instance \
-                     currently holds for the virtual environment."
+                     currently holds for each virtual environment updated."
     )]
     pub requirements: PathBuf,
 
@@ -123,9 +126,10 @@ pub async fn command_venv_update(
     let yes = resolved_yes(yes, &settings);
     let verbose = globals.verbose;
 
+    let venvs = selected_venvs(&name);
+
     let provider = provider_for_instance_mutating(instance.value, verbose, None).await?;
     let instance_name = provider.view().instance_name.unwrap_or_default();
-    let asset = name.requirements_asset();
     let quiesces = provider.cluster_provider() == ClusterProvider::Kminus;
 
     let standing = if quiesces {
@@ -136,11 +140,17 @@ pub async fn command_venv_update(
 
     if details.value {
         info!(
-            "About to update the '{}' virtual environment of tabsdata instance \
+            "About to update the virtual environments {} of tabsdata instance \
              '{instance_name}':",
-            name.as_str()
+            listed(&venvs)
         );
-        info!("  - {} from {}", asset, requirements.display());
+        for venv in &venvs {
+            info!(
+                "  - {} from {}",
+                venv.requirements_asset(),
+                requirements.display()
+            );
+        }
         info!("The tabsdata python environments will be rebuilt afterwards.");
         if quiesces && standing.instance {
             info!(
@@ -149,7 +159,16 @@ pub async fn command_venv_update(
             );
         }
     }
-    if !confirm(yes.value, "Proceed with the update?")? {
+    let question = if name.is_empty() {
+        format!(
+            "No virtual environment was named, so all of them ({}) will be updated. \
+             Proceed with the update?",
+            listed(&venvs)
+        )
+    } else {
+        "Proceed with the update?".to_owned()
+    };
+    if !confirm(yes.value, &question)? {
         info!("Operation cancelled.");
         return abort(Cancelled);
     }
@@ -162,12 +181,15 @@ pub async fn command_venv_update(
 
     let context = provider.kube_context().await?;
 
-    let step = reporter.step(&format!("Replacing the {asset} configmap"));
-    if let Err(error) = replace_requirements(&context, asset, &contents).await {
-        step.fail();
-        return Err(error);
+    for venv in &venvs {
+        let asset = venv.requirements_asset();
+        let step = reporter.step(&format!("Replacing the {asset} configmap"));
+        if let Err(error) = replace_requirements(&context, asset, &contents).await {
+            step.fail();
+            return Err(error);
+        }
+        step.done(&format!("Replaced the {asset} configmap"));
     }
-    step.done(&format!("Replaced the {asset} configmap"));
 
     provider.create_runtimes(&reporter).await?;
 
@@ -176,6 +198,25 @@ pub async fn command_venv_update(
     }
 
     Ok(())
+}
+
+fn selected_venvs(named: &[Venv]) -> Vec<Venv> {
+    if named.is_empty() {
+        return VENVS.to_vec();
+    }
+    VENVS
+        .iter()
+        .copied()
+        .filter(|venv| named.contains(venv))
+        .collect()
+}
+
+fn listed(venvs: &[Venv]) -> String {
+    venvs
+        .iter()
+        .map(|venv| format!("'{}'", venv.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn read_requirements(source: &Path) -> CommandResult<String> {

@@ -2,9 +2,26 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use clap::Parser;
 use indoc::indoc;
 
 use super::*;
+
+#[derive(Parser)]
+struct Probe {
+    #[command(flatten)]
+    arguments: UpdateArguments,
+}
+
+fn named(arguments: &[&str]) -> Vec<Venv> {
+    let arguments = ["tdkserver", "--requirements", PROBE]
+        .iter()
+        .chain(arguments);
+    Probe::try_parse_from(arguments)
+        .expect("the arguments parse")
+        .arguments
+        .name
+}
 
 const PROBE: &str = "requirements-probe.txt";
 
@@ -117,4 +134,31 @@ fn the_first_invalid_line_is_the_one_reported() {
         <<< also broken
     "});
     assert!(message.contains("line 2"), "{message}");
+}
+
+#[test]
+fn no_name_selects_every_virtual_environment() {
+    assert!(named(&[]).is_empty());
+    assert_eq!(selected_venvs(&[]), VENVS);
+}
+
+#[test]
+fn a_comma_separated_name_selects_each_virtual_environment() {
+    assert_eq!(named(&["--name", "fn,td"]), [Venv::Fn, Venv::Td]);
+    assert_eq!(selected_venvs(&[Venv::Fn, Venv::Td]), [Venv::Td, Venv::Fn]);
+}
+
+#[test]
+fn a_repeated_name_selects_its_virtual_environment_once() {
+    assert_eq!(
+        named(&["--name", "fn", "--name", "fn"]),
+        [Venv::Fn, Venv::Fn]
+    );
+    assert_eq!(selected_venvs(&[Venv::Fn, Venv::Fn]), [Venv::Fn]);
+}
+
+#[test]
+fn an_unknown_name_is_rejected() {
+    let arguments = ["tdkserver", "--requirements", PROBE, "--name", "fn,xx"];
+    assert!(Probe::try_parse_from(arguments).is_err());
 }
