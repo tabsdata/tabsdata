@@ -14,13 +14,14 @@ from pathlib import Path
 from tabsdatak.conn.common.sql._merge import MergeCfg, WatermarkCfg
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge._batch import coalesced_batch
+from tabsdatak.conn.common.sql._merge._batch import batch_resets, coalesced_batch
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge._statement import render_merge
+from tabsdatak.conn.common.sql._merge._statement import render_merge, render_replace
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import MergeDialect, Staged
+from tabsdatak.conn.common.sql.error import SqlCommonErrorCode
 from tabsdatak.spi import DestContext
 
 logger = logging.getLogger(__name__)
@@ -33,10 +34,13 @@ class MergeResult:
     Args:
         evolved: The target columns the schema-evolution pass added or retyped.
         written: The columns the statement wrote, in the batch's order.
+        replaced: Whether the batch loaded or truncated the table, so the
+            statement replaced the target's rows instead of merging onto them.
     """
 
     evolved: list[str]
     written: list[str]
+    replaced: bool = False
 
 
 def write_columns(
@@ -97,6 +101,12 @@ def merge_batch(
     is not there, evolve its schema if asked to, work out what the statement
     writes, and run it. The staging is torn down however the merge ends.
 
+    A batch that loads or truncates the table is applied by replacing the
+    target's rows with what the batch holds after its last reset -- see
+    :func:`~tabsdatak.conn.common.sql._merge._statement.render_replace` -- and
+    refused before anything is staged by a dialect with no
+    :attr:`MergeSyntax.replace`.
+
     Every engine-specific step is a :class:`MergeDialect` call. A destination
     that needs a step none of the others do belongs inside one of those hooks,
     not in a copy of this function.
@@ -116,6 +126,9 @@ def merge_batch(
         if watermark_column is not None
         else None
     )
+    replacing = batch_resets(dialect, target, batch, cfg)
+    if replacing and dialect.syntax.replace is None:
+        raise SqlCommonErrorCode.SQL_COMMON_9.exception(table=target)
     with coalesced_batch(dialect, target, batch, cfg) as reduced:
         if watermark_cfg is not None:
             logger.debug(
@@ -142,8 +155,21 @@ def merge_batch(
             written = write_columns(dialect, target, staged, cfg)
             if not written:
                 raise dialect.errors.no_shared_columns(table=target)
-            logger.info(
-                "Merging %s into %s on columns %s", staged.relation, target, written
-            )
-            dialect.execute(render_merge(dialect, target, staged, cfg, written))
-    return MergeResult(evolved=evolved, written=written)
+            if replacing:
+                logger.info(
+                    "Replacing the rows of %s with %s on columns %s",
+                    target,
+                    staged.relation,
+                    written,
+                )
+                statement = render_replace(dialect, target, staged, cfg, written)
+            else:
+                logger.info(
+                    "Merging %s into %s on columns %s",
+                    staged.relation,
+                    target,
+                    written,
+                )
+                statement = render_merge(dialect, target, staged, cfg, written)
+            dialect.execute(statement)
+    return MergeResult(evolved=evolved, written=written, replaced=replacing)

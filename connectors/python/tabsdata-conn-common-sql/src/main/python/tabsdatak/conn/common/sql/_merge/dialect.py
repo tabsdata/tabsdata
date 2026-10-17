@@ -18,7 +18,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from tabsdatak.conn.common.sql._merge import WatermarkCfg
 
@@ -70,6 +70,13 @@ class MergeSyntax:
             target alias. Some dialects require the bare column name there --
             an update item can only ever resolve against the target, so they
             read a qualified name as an error rather than as noise.
+        replace: How a batch that loads or truncates the table replaces the
+            target's rows with the staged ones, in one statement so no reader
+            sees the table emptied. ``"merge"`` is a ``MERGE ... ON FALSE``
+            that inserts every staged row and deletes every target row through
+            ``WHEN NOT MATCHED BY SOURCE``; ``"overwrite"`` is an
+            ``INSERT OVERWRITE INTO ... SELECT``. ``None`` refuses such a
+            batch rather than merging it as if nothing had been emptied.
     """
 
     target_alias: str = "target"
@@ -78,6 +85,7 @@ class MergeSyntax:
     not_matched: str = "WHEN NOT MATCHED"
     wildcard_writes: str | None = None
     update_qualified: bool = True
+    replace: Literal["merge", "overwrite"] | None = None
 
 
 @dataclass(frozen=True)
