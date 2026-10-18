@@ -15,7 +15,6 @@ boto3-stubs[glue]==1.43.114
 click==8.5.0
 click-repl==0.4.1
 clickhouse-connect==1.10.1
-cloudpickle==3.1.2
 colorama==0.4.6
 connectorx==0.4.6
 croniter==6.2.4
