@@ -94,7 +94,8 @@ def _output_table(entry, index):
         "collection": "c",
         "table_id": "T-1",
         "table_version_id": "TV-1",
-        "table_data_version_id": "TDV-1",
+        "logical_table_data_version_id": "LDV-1",
+        "physical_table_data_version_id": "TDV-1",
         "location": {"uri": "file:///out.parquet", "env_prefix": "ROOT"},
         "table_pos": index,
         **entry,
@@ -185,8 +186,8 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
     base_url, request_log, _ = responder
     request_yaml = _write_request(
         tmp_path / "request.yaml",
-        output=[{"name": "customers"}],
-        system_output=[{"name": "td-initial-values"}],
+        output=[{"table": "customers"}],
+        system_output=[{"table": "td-initial-values"}],
     )
     state_dir = tmp_path / "state"
     customers_parquet = tmp_path / "out" / "slot0" / "customers.parquet"
@@ -244,7 +245,7 @@ def test_main_stops_without_failed_when_done_is_stale(monkeypatch, tmp_path, res
     base_url, request_log, server = responder
     server.next_body = json.dumps({"data": {"outcome": "Stale"}}).encode()
     request_yaml = _write_request(
-        tmp_path / "request.yaml", output=[{"name": "customers"}]
+        tmp_path / "request.yaml", output=[{"table": "customers"}]
     )
     customers_parquet = tmp_path / "out" / "slot0" / "customers.parquet"
     _write_parquet(customers_parquet, id=[1])
@@ -272,7 +273,7 @@ def test_main_no_info_when_manifest_file_is_null(monkeypatch, tmp_path, responde
     slot) yields a NoData entry in the response."""
     base_url, request_log, _ = responder
     request_yaml = _write_request(
-        tmp_path / "request.yaml", output=[{"name": "missing"}]
+        tmp_path / "request.yaml", output=[{"table": "missing"}]
     )
     manifest = _write_manifest(
         tmp_path / "outputs_manifest.yaml",
@@ -305,7 +306,7 @@ def test_main_no_info_when_state_parquet_missing(monkeypatch, tmp_path, responde
     base_url, _, _ = responder
     request_yaml = _write_request(
         tmp_path / "request.yaml",
-        system_output=[{"name": "unwritten-state"}],
+        system_output=[{"table": "unwritten-state"}],
     )
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     out = tmp_path / "response.yaml"
@@ -407,7 +408,9 @@ def test_main_output_table_missing_from_manifest_returns_mismatch(
     monkeypatch, tmp_path, responder
 ):
     base_url, _, _ = responder
-    request_yaml = _write_request(tmp_path / "request.yaml", output=[{"name": "ghost"}])
+    request_yaml = _write_request(
+        tmp_path / "request.yaml", output=[{"table": "ghost"}]
+    )
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
     journal = _write_journal(tmp_path / "journal.yaml")
     _set_argv(

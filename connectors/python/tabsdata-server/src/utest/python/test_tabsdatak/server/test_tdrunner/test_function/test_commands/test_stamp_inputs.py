@@ -61,9 +61,10 @@ def _write_request(path: Path) -> Path:
         yaml.safe_dump({
             "Function": {
                 "info": info_payload(
-                    function_run_id=7,
-                    transaction_id="tx-42",
                     execution_id="exec-42",
+                    transaction_id="tx-42",
+                    logical_function_run_id=7,
+                    physical_function_run_id=7,
                 ),
             }
         })

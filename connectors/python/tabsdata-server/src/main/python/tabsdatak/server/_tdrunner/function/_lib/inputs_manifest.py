@@ -40,8 +40,8 @@ ordered by `version_pos`):
                                        # (-1 single-version sentinel)
             execution_id: <str|null>   # version metadata of the member
             transaction_id: <str|null>
-            table_data_version_id: <str|null>
             triggered_on: <int|null>   # epoch milliseconds
+            physical_table_data_version_id: <str|null>
       - name: <next slot>
         table_pos: 1
         is_empty: false
@@ -76,7 +76,7 @@ MANIFEST_INPUT_IDX_KEY = "input_idx"
 MANIFEST_VERSION_POS_KEY = "version_pos"
 MANIFEST_EXECUTION_ID_KEY = "execution_id"
 MANIFEST_TRANSACTION_ID_KEY = "transaction_id"
-MANIFEST_VERSION_ID_KEY = "table_data_version_id"
+MANIFEST_PHYSICAL_TABLE_DATA_VERSION_ID_KEY = "physical_table_data_version_id"
 MANIFEST_TRIGGERED_ON_KEY = "triggered_on"
 
 _MANIFEST_INPUTS_KEY = "inputs"
@@ -90,8 +90,8 @@ def build_table_record(
     version_pos: int,
     execution_id: str | None = None,
     transaction_id: str | None = None,
-    table_data_version_id: str | None = None,
     triggered_on: int | None = None,
+    physical_table_data_version_id: str | None = None,
 ) -> dict[str, Any]:
     return {
         MANIFEST_FILE_KEY: file,
@@ -100,7 +100,7 @@ def build_table_record(
         MANIFEST_VERSION_POS_KEY: version_pos,
         MANIFEST_EXECUTION_ID_KEY: execution_id,
         MANIFEST_TRANSACTION_ID_KEY: transaction_id,
-        MANIFEST_VERSION_ID_KEY: table_data_version_id,
+        MANIFEST_PHYSICAL_TABLE_DATA_VERSION_ID_KEY: physical_table_data_version_id,
         MANIFEST_TRIGGERED_ON_KEY: triggered_on,
     }
 

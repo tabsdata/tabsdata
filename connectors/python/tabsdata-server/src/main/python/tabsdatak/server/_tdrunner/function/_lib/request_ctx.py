@@ -39,7 +39,7 @@ State plumbed:
 * ``work_dir``, ``collection_id``, ``collection_name``,
   ``function_id``, ``function_name`` — populated from
   ``request.info`` (or from the streamer-specific envelope).
-  ``function_id`` borrows ``function_run_id`` on the trx-ful path
+  ``function_id`` borrows ``physical_function_run_id`` on the trx-ful path
   and ``function_version_id`` on the streamer path; ``function_name``
   borrows ``function``.
 * ``exec_plan_id``, ``trx_id``, ``exec_plan_ts`` — trx-ful only.
@@ -88,7 +88,7 @@ class FromFlowRequestCtx(FlowCtx):
     context composes this with :class:`StreamSrcPluginCtx` because a
     streamer has no transaction or execution plan -- the per-batch
     publisher pods spawned downstream via ``fn_trigger`` are where
-    real ``execution_id`` / ``transaction_id`` / ``function_run_id``
+    real ``execution_id`` / ``transaction_id`` / ``physical_function_run_id``
     values live.
     """
 

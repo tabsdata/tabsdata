@@ -4,7 +4,7 @@
 
 use super::build_external_location;
 use crate::function_run::raw_data::raw_data_dir;
-use td_error::TdError;
+use td_error::{ApiError, TdError, api_error};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
 use td_objects::dxo::worker_input::function::FunctionInfo;
 use td_objects::types::basic::{AtTime, Decorator};
@@ -66,20 +66,32 @@ pub(crate) fn build_function_info(
         Decorator::Transformer | Decorator::Subscriber => None,
     };
 
+    let project = f.base.project.clone().ok_or_else(|| {
+        api_error!(
+            ApiError::InternalError,
+            "function run [{}] references unknown project {}",
+            f.base.base.base.id,
+            f.base.base.project_id
+        )
+    })?;
+
     let info = FunctionInfo {
         project_id: f.base.base.project_id,
+        project,
         collection_id: f.base.base.base.collection_id,
         collection: f.base.collection.clone(),
+        function_id: f.base.base.base.function_id,
+        function: f.base.name.clone(),
         function_version_id: effective_fvid.clone(),
         function_defined_on: f.defined_on,
-        function: f.base.name.clone(),
-        function_run_id: f.base.base.base.id.clone(),
         function_bundle: bundle_location,
         function_stage: stage_location,
-        triggered_on: AtTime::from(f.base.base.interval.valid_from),
-        transaction_id: f.base.base.base.transaction_id.clone(),
         execution_id: f.base.base.base.execution_id.clone(),
-        execution_name: f.base.execution.clone(),
+        execution: f.base.execution.clone(),
+        transaction_id: f.base.base.base.transaction_id.clone(),
+        logical_function_run_id: f.base.base.base.logical_function_run_id.clone(),
+        physical_function_run_id: f.base.base.base.id.clone(),
+        triggered_on: AtTime::from(f.base.base.interval.valid_from),
         function_data: function_run_location,
         function_raw,
         scheduled_on: AtTime::default(),
@@ -137,8 +149,8 @@ mod tests {
                     interval: Scd2Interval::open(Scd2ValidFrom::asserted(*AtTime::now())),
                 },
                 name: FunctionName::try_from("fn0").unwrap(),
-                collection: CollectionName::try_from("c0").unwrap(),
                 project: Some(ProjectName::try_from("p0").unwrap()),
+                collection: CollectionName::try_from("c0").unwrap(),
                 execution: None,
                 execution_function_version_id: FunctionVersionId::new().into(),
                 storage_version: StorageVersion::V1,

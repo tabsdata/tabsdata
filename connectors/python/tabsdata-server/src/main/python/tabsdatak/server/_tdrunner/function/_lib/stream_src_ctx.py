@@ -142,7 +142,7 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
     streamer is a long-lived worker, not part of any execution plan or
     transaction. The downstream per-batch publisher pods (spawned by
     the manifest-trigger sidecar via ``fn_trigger``) are where real
-    ``execution_id`` / ``transaction_id`` / ``function_run_id`` values
+    ``execution_id`` / ``transaction_id`` / ``physical_function_run_id`` values
     live; the streamer pod itself has none. This is why the runtime
     mixin used here is :class:`FromFlowRequestCtx` rather than the
     full :class:`FromRequestCtx` used by ``_SrcContext`` /

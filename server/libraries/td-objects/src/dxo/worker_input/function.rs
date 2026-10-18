@@ -5,8 +5,9 @@
 use crate::dxo::worker_input::location::{Location, Locations};
 use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId,
-    ExecutionName, FunctionName, FunctionVersionId, InputIdx, IsEmptyVersions, PartitionFileName,
-    PartitionName, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId, RowCount,
+    ExecutionName, FunctionId, FunctionName, FunctionVersionId, InputIdx, IsEmptyVersions,
+    LogicalFunctionRunId, LogicalTableDataVersionId, PartitionFileName, PartitionName,
+    PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId, ProjectName, RowCount,
     SchemaHash, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
     VersionPos,
 };
@@ -42,22 +43,26 @@ pub struct FunctionInfo {
     /// The run's project — workers resolve project-scoped resources (e.g.
     /// the connection artifacts under `connections/<project_id>/`) with it.
     pub project_id: ProjectId,
+    pub project: ProjectName,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
+    pub function_id: FunctionId,
+    pub function: FunctionName,
     #[serde(serialize_with = "td_common::logic_id::padded")]
     pub function_version_id: FunctionVersionId,
     pub function_defined_on: AtTime,
-    pub function: FunctionName,
-    #[serde(serialize_with = "td_common::logic_id::padded")]
-    pub function_run_id: PhysicalFunctionRunId,
     pub function_bundle: Location,
     pub function_stage: Location,
-    pub triggered_on: AtTime,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
+    pub execution_id: ExecutionId,
+    pub execution: Option<ExecutionName>,
     #[serde(serialize_with = "td_common::logic_id::padded")]
     pub transaction_id: TransactionId,
     #[serde(serialize_with = "td_common::logic_id::padded")]
-    pub execution_id: ExecutionId,
-    pub execution_name: Option<ExecutionName>,
+    pub logical_function_run_id: LogicalFunctionRunId,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
+    pub physical_function_run_id: PhysicalFunctionRunId,
+    pub triggered_on: AtTime,
     pub function_data: Location,
     /// Where a publisher run's ingested data is kept, one file per input
     /// index. Absent for functions that ingest nothing.
@@ -68,20 +73,22 @@ pub struct FunctionInfo {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct InputTableVersion {
-    pub name: TableName,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub table_id: TableId,
+    pub table: TableName,
     pub table_version_id: TableVersionId,
     #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub execution_id: Option<ExecutionId>,
     #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub transaction_id: Option<TransactionId>,
     #[serde(serialize_with = "td_common::logic_id::padded_option")]
-    pub function_run_id: Option<PhysicalFunctionRunId>,
+    pub physical_function_run_id: Option<PhysicalFunctionRunId>,
     pub triggered_on: Option<AtTime>,
     #[serde(serialize_with = "td_common::logic_id::padded_option")]
-    pub table_data_version_id: Option<PhysicalTableDataVersionId>,
+    pub logical_table_data_version_id: Option<LogicalTableDataVersionId>,
+    #[serde(serialize_with = "td_common::logic_id::padded_option")]
+    pub physical_table_data_version_id: Option<PhysicalTableDataVersionId>,
     pub location: Option<Location>,
     pub input_idx: InputIdx,
     pub table_pos: DependencyPos,
@@ -101,20 +108,22 @@ impl Locations for InputTableVersion {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct InputPartitionTableVersion {
-    pub name: TableName,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub table_id: TableId,
+    pub table: TableName,
     pub table_version_id: TableVersionId,
     #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub execution_id: Option<ExecutionId>,
     #[serde(serialize_with = "td_common::logic_id::padded_option")]
     pub transaction_id: Option<TransactionId>,
     #[serde(serialize_with = "td_common::logic_id::padded_option")]
-    pub function_run_id: Option<PhysicalFunctionRunId>,
+    pub physical_function_run_id: Option<PhysicalFunctionRunId>,
     pub triggered_on: Option<AtTime>,
     #[serde(serialize_with = "td_common::logic_id::padded_option")]
-    pub table_data_version_id: Option<PhysicalTableDataVersionId>,
+    pub logical_table_data_version_id: Option<LogicalTableDataVersionId>,
+    #[serde(serialize_with = "td_common::logic_id::padded_option")]
+    pub physical_table_data_version_id: Option<PhysicalTableDataVersionId>,
     pub partitions: HashMap<PartitionName, Location>,
     pub input_idx: InputIdx,
     pub table_pos: DependencyPos,
@@ -193,13 +202,15 @@ impl Locations for OutputTable {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct OutputTableVersion {
-    pub name: TableName,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub table_id: TableId,
+    pub table: TableName,
     pub table_version_id: TableVersionId,
     #[serde(serialize_with = "td_common::logic_id::padded")]
-    pub table_data_version_id: PhysicalTableDataVersionId,
+    pub logical_table_data_version_id: LogicalTableDataVersionId,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
+    pub physical_table_data_version_id: PhysicalTableDataVersionId,
     pub location: Location,
     pub table_pos: TableFunctionParamPos,
 }
@@ -207,13 +218,15 @@ pub struct OutputTableVersion {
 #[ta_objects::Dto]
 #[derive(Eq, PartialEq)]
 pub struct OutputPartitionTableVersion {
-    pub name: TableName,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
     pub table_id: TableId,
+    pub table: TableName,
     pub table_version_id: TableVersionId,
     #[serde(serialize_with = "td_common::logic_id::padded")]
-    pub table_data_version_id: PhysicalTableDataVersionId,
+    pub logical_table_data_version_id: LogicalTableDataVersionId,
+    #[serde(serialize_with = "td_common::logic_id::padded")]
+    pub physical_table_data_version_id: PhysicalTableDataVersionId,
     pub base_location: Location,
     pub table_pos: TableFunctionParamPos,
 }
@@ -262,11 +275,14 @@ mod tests {
     #[test]
     fn test_function_runner_input_ser_deser() {
         let collection_id = CollectionId::default();
+        let function_id = FunctionId::default();
         let function_version_id = FunctionVersionId::new();
-        let function_run_id = PhysicalFunctionRunId::new();
+        let logical_function_run_id = LogicalFunctionRunId::new();
+        let physical_function_run_id = PhysicalFunctionRunId::new();
         let table_id = TableId::default();
         let table_version_id = TableVersionId::default();
-        let table_data_version_id = PhysicalTableDataVersionId::new();
+        let logical_table_data_version_id = LogicalTableDataVersionId::new();
+        let physical_table_data_version_id = PhysicalTableDataVersionId::new();
         let triggered_on = AtTime::from(Timestamp::default());
         let transaction_id = TransactionId::new();
         let execution_id = ExecutionId::new();
@@ -277,12 +293,13 @@ mod tests {
         let input = WorkerInput::Function(Box::new(FunctionInput {
             info: FunctionInfo {
                 project_id,
+                project: ProjectName::try_from("project").unwrap(),
                 collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
-                function_version_id: function_version_id.clone(),
+                function_id,
                 function: FunctionName::try_from("function").unwrap(),
+                function_version_id: function_version_id.clone(),
                 function_defined_on: defined_on,
-                function_run_id: function_run_id.clone(),
                 function_bundle: Location {
                     uri: Url::try_from("file:///bundle").unwrap(),
                     env_prefix: None,
@@ -291,10 +308,12 @@ mod tests {
                     uri: Url::try_from("file:///stage").unwrap(),
                     env_prefix: None,
                 },
-                triggered_on,
-                transaction_id: transaction_id.clone(),
                 execution_id: execution_id.clone(),
-                execution_name: None,
+                execution: None,
+                transaction_id: transaction_id.clone(),
+                logical_function_run_id: logical_function_run_id.clone(),
+                physical_function_run_id: physical_function_run_id.clone(),
+                triggered_on,
                 function_data: Location {
                     uri: Url::try_from("file:///foo").unwrap(),
                     env_prefix: None,
@@ -306,44 +325,47 @@ mod tests {
                 scheduled_on,
             },
             system_input: vec![InputTable::Table(InputTableVersion {
-                name: TableName::try_from("table").unwrap(),
-                collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
                 table_id,
                 table_version_id,
+                table: TableName::try_from("table").unwrap(),
+                collection_id,
                 execution_id: None,
                 transaction_id: None,
-                function_run_id: None,
+                physical_function_run_id: None,
                 triggered_on: None,
-                table_data_version_id: None,
+                logical_table_data_version_id: None,
+                physical_table_data_version_id: None,
                 location: None,
                 input_idx: Default::default(),
                 table_pos: Default::default(),
                 version_pos: Default::default(),
             })],
             input: vec![InputTable::Table(InputTableVersion {
-                name: TableName::try_from("table").unwrap(),
-                collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
                 table_id,
                 table_version_id,
+                table: TableName::try_from("table").unwrap(),
+                collection_id,
                 execution_id: None,
                 transaction_id: None,
-                function_run_id: None,
+                physical_function_run_id: None,
                 triggered_on: None,
-                table_data_version_id: None,
+                logical_table_data_version_id: None,
+                physical_table_data_version_id: None,
                 location: None,
                 input_idx: Default::default(),
                 table_pos: Default::default(),
                 version_pos: Default::default(),
             })],
             system_output: vec![OutputTable::Table(OutputTableVersion {
-                name: TableName::try_from("table").unwrap(),
-                collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
                 table_id,
                 table_version_id,
-                table_data_version_id: table_data_version_id.clone(),
+                table: TableName::try_from("table").unwrap(),
+                collection_id,
+                logical_table_data_version_id: logical_table_data_version_id.clone(),
+                physical_table_data_version_id: physical_table_data_version_id.clone(),
                 location: Location {
                     uri: Url::try_from("file:///foo").unwrap(),
                     env_prefix: None,
@@ -351,12 +373,13 @@ mod tests {
                 table_pos: Default::default(),
             })],
             output: vec![OutputTable::Table(OutputTableVersion {
-                name: TableName::try_from("table").unwrap(),
-                collection_id,
                 collection: CollectionName::try_from("collection").unwrap(),
                 table_id,
                 table_version_id,
-                table_data_version_id: table_data_version_id.clone(),
+                table: TableName::try_from("table").unwrap(),
+                collection_id,
+                logical_table_data_version_id: logical_table_data_version_id.clone(),
+                physical_table_data_version_id: physical_table_data_version_id.clone(),
                 location: Location {
                     uri: Url::try_from("file:///foo").unwrap(),
                     env_prefix: None,
@@ -374,8 +397,10 @@ mod tests {
         let function_version_id = function_version_id.padded_str();
         let transaction_id = transaction_id.padded_str();
         let execution_id = execution_id.padded_str();
-        let function_run_id = function_run_id.padded_str();
-        let table_data_version_id = table_data_version_id.padded_str();
+        let logical_function_run_id = logical_function_run_id.padded_str();
+        let physical_function_run_id = physical_function_run_id.padded_str();
+        let logical_table_data_version_id = logical_table_data_version_id.padded_str();
+        let physical_table_data_version_id = physical_table_data_version_id.padded_str();
 
         assert_eq!(
             serialized.as_str(),
@@ -383,22 +408,25 @@ mod tests {
                 r#"!Function
 info:
   project_id: {project_id}
+  project: project
   collection_id: {collection_id}
   collection: collection
+  function_id: {function_id}
+  function: function
   function_version_id: {function_version_id}
   function_defined_on: {defined_on}
-  function: function
-  function_run_id: {function_run_id}
   function_bundle:
     uri: file:///bundle
     env_prefix: null
   function_stage:
     uri: file:///stage
     env_prefix: null
-  triggered_on: {triggered_on}
-  transaction_id: {transaction_id}
   execution_id: {execution_id}
-  execution_name: null
+  execution: null
+  transaction_id: {transaction_id}
+  logical_function_run_id: {logical_function_run_id}
+  physical_function_run_id: {physical_function_run_id}
+  triggered_on: {triggered_on}
   function_data:
     uri: file:///foo
     env_prefix: null
@@ -408,56 +436,60 @@ info:
   scheduled_on: {scheduled_on}
 system_input:
 - !Table
-  name: table
   collection_id: {collection_id}
   collection: collection
   table_id: {table_id}
+  table: table
   table_version_id: {table_version_id}
   execution_id: null
   transaction_id: null
-  function_run_id: null
+  physical_function_run_id: null
   triggered_on: null
-  table_data_version_id: null
+  logical_table_data_version_id: null
+  physical_table_data_version_id: null
   location: null
   input_idx: 0
   table_pos: 0
   version_pos: 0
 input:
 - !Table
-  name: table
   collection_id: {collection_id}
   collection: collection
   table_id: {table_id}
+  table: table
   table_version_id: {table_version_id}
   execution_id: null
   transaction_id: null
-  function_run_id: null
+  physical_function_run_id: null
   triggered_on: null
-  table_data_version_id: null
+  logical_table_data_version_id: null
+  physical_table_data_version_id: null
   location: null
   input_idx: 0
   table_pos: 0
   version_pos: 0
 system_output:
 - !Table
-  name: table
   collection_id: {collection_id}
   collection: collection
   table_id: {table_id}
+  table: table
   table_version_id: {table_version_id}
-  table_data_version_id: {table_data_version_id}
+  logical_table_data_version_id: {logical_table_data_version_id}
+  physical_table_data_version_id: {physical_table_data_version_id}
   location:
     uri: file:///foo
     env_prefix: null
   table_pos: 0
 output:
 - !Table
-  name: table
   collection_id: {collection_id}
   collection: collection
   table_id: {table_id}
+  table: table
   table_version_id: {table_version_id}
-  table_data_version_id: {table_data_version_id}
+  logical_table_data_version_id: {logical_table_data_version_id}
+  physical_table_data_version_id: {physical_table_data_version_id}
   location:
     uri: file:///foo
     env_prefix: null
@@ -473,16 +505,17 @@ output:
     #[test]
     fn test_input_table_version_locations() -> Result<(), TdError> {
         let itv = InputTableVersion {
-            name: "n".try_into()?,
             collection_id: CollectionId::default(),
             collection: "cn".try_into()?,
             table_id: TableId::default(),
+            table: "n".try_into()?,
             table_version_id: TableVersionId::default(),
             execution_id: None,
             transaction_id: None,
-            function_run_id: None,
+            physical_function_run_id: None,
             triggered_on: None,
-            table_data_version_id: None,
+            logical_table_data_version_id: None,
+            physical_table_data_version_id: None,
             location: None,
             input_idx: 1.try_into()?,
             table_pos: 1.try_into()?,
@@ -495,16 +528,17 @@ output:
             env_prefix: None,
         };
         let itv = InputTableVersion {
-            name: "n".try_into()?,
             collection_id: CollectionId::default(),
             collection: "cn".try_into()?,
             table_id: TableId::default(),
+            table: "n".try_into()?,
             table_version_id: TableVersionId::default(),
             execution_id: Some(ExecutionId::new()),
             transaction_id: Some(TransactionId::new()),
-            function_run_id: None,
+            physical_function_run_id: None,
             triggered_on: None,
-            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            logical_table_data_version_id: Some(LogicalTableDataVersionId::new()),
+            physical_table_data_version_id: Some(PhysicalTableDataVersionId::new()),
             location: Some(location.clone()),
             input_idx: 1.try_into()?,
             table_pos: 1.try_into()?,
@@ -517,16 +551,17 @@ output:
     #[test]
     fn test_input_partition_table_version_locations() -> Result<(), TdError> {
         let itv = InputPartitionTableVersion {
-            name: "n".try_into()?,
             collection_id: CollectionId::default(),
             collection: "cn".try_into()?,
             table_id: TableId::default(),
+            table: "n".try_into()?,
             table_version_id: TableVersionId::default(),
             execution_id: Some(ExecutionId::new()),
             transaction_id: Some(TransactionId::new()),
-            function_run_id: Some(PhysicalFunctionRunId::new()),
+            physical_function_run_id: Some(PhysicalFunctionRunId::new()),
             triggered_on: Some(AtTime::default()),
-            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            logical_table_data_version_id: Some(LogicalTableDataVersionId::new()),
+            physical_table_data_version_id: Some(PhysicalTableDataVersionId::new()),
             input_idx: 1.try_into()?,
             table_pos: 1.try_into()?,
             version_pos: 1.try_into()?,
@@ -540,16 +575,17 @@ output:
         };
         let partitions = HashMap::from([(PartitionName::try_from("p")?, location.clone())]);
         let itv = InputPartitionTableVersion {
-            name: "n".try_into()?,
             collection_id: CollectionId::default(),
             collection: "cn".try_into()?,
             table_id: TableId::default(),
+            table: "n".try_into()?,
             table_version_id: TableVersionId::default(),
             execution_id: Some(ExecutionId::new()),
             transaction_id: Some(TransactionId::new()),
-            function_run_id: Some(PhysicalFunctionRunId::new()),
+            physical_function_run_id: Some(PhysicalFunctionRunId::new()),
             triggered_on: Some(AtTime::default()),
-            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            logical_table_data_version_id: Some(LogicalTableDataVersionId::new()),
+            physical_table_data_version_id: Some(PhysicalTableDataVersionId::new()),
             input_idx: 1.try_into()?,
             table_pos: 1.try_into()?,
             version_pos: 1.try_into()?,
@@ -566,16 +602,17 @@ output:
             env_prefix: None,
         };
         let itv = InputTableVersion {
-            name: "n".try_into()?,
             collection_id: CollectionId::default(),
             collection: "cn".try_into()?,
             table_id: TableId::default(),
+            table: "n".try_into()?,
             table_version_id: TableVersionId::default(),
             execution_id: Some(ExecutionId::new()),
             transaction_id: Some(TransactionId::new()),
-            function_run_id: Some(PhysicalFunctionRunId::new()),
+            physical_function_run_id: Some(PhysicalFunctionRunId::new()),
             triggered_on: Some(AtTime::default()),
-            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            logical_table_data_version_id: Some(LogicalTableDataVersionId::new()),
+            physical_table_data_version_id: Some(PhysicalTableDataVersionId::new()),
             location: Some(location.clone()),
             input_idx: 1.try_into()?,
             table_pos: 1.try_into()?,
@@ -592,16 +629,17 @@ output:
         );
 
         let itv = InputPartitionTableVersion {
-            name: "n".try_into()?,
             collection_id: CollectionId::default(),
             collection: "cn".try_into()?,
             table_id: TableId::default(),
+            table: "n".try_into()?,
             table_version_id: TableVersionId::default(),
             execution_id: Some(ExecutionId::new()),
             transaction_id: Some(TransactionId::new()),
-            function_run_id: Some(PhysicalFunctionRunId::new()),
+            physical_function_run_id: Some(PhysicalFunctionRunId::new()),
             triggered_on: Some(AtTime::default()),
-            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            logical_table_data_version_id: Some(LogicalTableDataVersionId::new()),
+            physical_table_data_version_id: Some(PhysicalTableDataVersionId::new()),
             input_idx: 1.try_into()?,
             table_pos: 1.try_into()?,
             version_pos: 1.try_into()?,
@@ -629,12 +667,13 @@ output:
             env_prefix: None,
         };
         let ot = OutputTable::Table(OutputTableVersion {
-            name: "n".try_into()?,
             collection_id: CollectionId::default(),
             collection: "cn".try_into()?,
             table_id: TableId::default(),
+            table: "n".try_into()?,
             table_version_id: TableVersionId::default(),
-            table_data_version_id: PhysicalTableDataVersionId::new(),
+            logical_table_data_version_id: LogicalTableDataVersionId::new(),
+            physical_table_data_version_id: PhysicalTableDataVersionId::new(),
             location: location.clone(),
             table_pos: 1.try_into()?,
         });
@@ -642,12 +681,13 @@ output:
         assert_eq!(ot.locations(), vec![&location]);
 
         let ot = OutputTable::PartitionedTable(OutputPartitionTableVersion {
-            name: "n".try_into()?,
             collection_id: CollectionId::default(),
             collection: "cn".try_into()?,
             table_id: TableId::default(),
+            table: "n".try_into()?,
             table_version_id: TableVersionId::default(),
-            table_data_version_id: PhysicalTableDataVersionId::new(),
+            logical_table_data_version_id: LogicalTableDataVersionId::new(),
+            physical_table_data_version_id: PhysicalTableDataVersionId::new(),
             base_location: location.clone(),
             table_pos: 1.try_into()?,
         });
@@ -722,114 +762,124 @@ output:
             },
         ];
         let itv0 = InputTableVersion {
-            name: format!("fn_state_{}", FunctionId::default()).try_into()?,
             collection_id: CollectionId::default(),
             collection: "collection_1".try_into()?,
             table_id: TableId::default(),
+            table: format!("fn_state_{}", FunctionId::default()).try_into()?,
             table_version_id: TableVersionId::default(),
             execution_id: Some(ExecutionId::new()),
             transaction_id: Some(TransactionId::new()),
-            function_run_id: None,
+            physical_function_run_id: None,
             triggered_on: None,
-            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            logical_table_data_version_id: Some(LogicalTableDataVersionId::new()),
+            physical_table_data_version_id: Some(PhysicalTableDataVersionId::new()),
             location: Some(locations[1].clone()),
             input_idx: 0.try_into()?,
             table_pos: (-1).try_into()?,
             version_pos: 0.try_into()?,
         };
         let itv1 = InputTableVersion {
-            name: "table_1".try_into()?,
             collection_id: CollectionId::default(),
             collection: "collection_1".try_into()?,
             table_id: TableId::default(),
+            table: "table_1".try_into()?,
             table_version_id: TableVersionId::default(),
             execution_id: Some(ExecutionId::new()),
             transaction_id: Some(TransactionId::new()),
-            function_run_id: Some(PhysicalFunctionRunId::new()),
+            physical_function_run_id: Some(PhysicalFunctionRunId::new()),
             triggered_on: Some(AtTime::default()),
-            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            logical_table_data_version_id: Some(LogicalTableDataVersionId::new()),
+            physical_table_data_version_id: Some(PhysicalTableDataVersionId::new()),
             location: Some(locations[2].clone()),
             input_idx: 0.try_into()?,
             table_pos: 0.try_into()?,
             version_pos: 0.try_into()?,
         };
         let itv2 = InputTableVersion {
-            name: "table_2".try_into()?,
             collection_id: CollectionId::default(),
             collection: "collection_1".try_into()?,
             table_id: TableId::default(),
+            table: "table_2".try_into()?,
             table_version_id: TableVersionId::default(),
             execution_id: Some(ExecutionId::new()),
             transaction_id: Some(TransactionId::new()),
-            function_run_id: Some(PhysicalFunctionRunId::new()),
+            physical_function_run_id: Some(PhysicalFunctionRunId::new()),
             triggered_on: Some(AtTime::default()),
-            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            logical_table_data_version_id: Some(LogicalTableDataVersionId::new()),
+            physical_table_data_version_id: Some(PhysicalTableDataVersionId::new()),
             location: Some(locations[3].clone()),
             input_idx: 1.try_into()?,
             table_pos: 0.try_into()?,
             version_pos: 1.try_into()?,
         };
         let itv3 = InputTableVersion {
-            name: "table_3".try_into()?,
             collection_id: CollectionId::default(),
             collection: "collection_1".try_into()?,
             table_id: TableId::default(),
+            table: "table_3".try_into()?,
             table_version_id: TableVersionId::default(),
             execution_id: Some(ExecutionId::new()),
             transaction_id: Some(TransactionId::new()),
-            function_run_id: Some(PhysicalFunctionRunId::new()),
+            physical_function_run_id: Some(PhysicalFunctionRunId::new()),
             triggered_on: Some(AtTime::default()),
-            table_data_version_id: Some(PhysicalTableDataVersionId::new()),
+            logical_table_data_version_id: Some(LogicalTableDataVersionId::new()),
+            physical_table_data_version_id: Some(PhysicalTableDataVersionId::new()),
             location: Some(locations[4].clone()),
             input_idx: 2.try_into()?,
             table_pos: 1.try_into()?,
             version_pos: 0.try_into()?,
         };
         let ot3 = OutputTable::Table(OutputTableVersion {
-            name: format!("fn_state_{}", FunctionId::default()).try_into()?,
             collection_id: CollectionId::default(),
             collection: "collection_1".try_into()?,
             table_id: TableId::default(),
+            table: format!("fn_state_{}", FunctionId::default()).try_into()?,
             table_version_id: TableVersionId::default(),
-            table_data_version_id: PhysicalTableDataVersionId::new(),
+            logical_table_data_version_id: LogicalTableDataVersionId::new(),
+            physical_table_data_version_id: PhysicalTableDataVersionId::new(),
             location: locations[5].clone(),
             table_pos: (-1).try_into()?,
         });
         let ot4 = OutputTable::Table(OutputTableVersion {
-            name: "table_4".try_into()?,
             collection_id: CollectionId::default(),
             collection: "collection_1".try_into()?,
             table_id: TableId::default(),
+            table: "table_4".try_into()?,
             table_version_id: TableVersionId::default(),
-            table_data_version_id: PhysicalTableDataVersionId::new(),
+            logical_table_data_version_id: LogicalTableDataVersionId::new(),
+            physical_table_data_version_id: PhysicalTableDataVersionId::new(),
             location: locations[6].clone(),
             table_pos: 1.try_into()?,
         });
         let ot5 = OutputTable::Table(OutputTableVersion {
-            name: "table_5".try_into()?,
             collection_id: CollectionId::default(),
             collection: "collection_1".try_into()?,
             table_id: TableId::default(),
+            table: "table_5".try_into()?,
             table_version_id: TableVersionId::default(),
-            table_data_version_id: PhysicalTableDataVersionId::new(),
+            logical_table_data_version_id: LogicalTableDataVersionId::new(),
+            physical_table_data_version_id: PhysicalTableDataVersionId::new(),
             location: locations[7].clone(),
             table_pos: 1.try_into()?,
         });
 
         let info = FunctionInfo {
             project_id: ProjectId::default(),
+            project: ProjectName::try_from("pn")?,
             collection_id: CollectionId::default(),
             collection: CollectionName::try_from("cn")?,
+            function_id: FunctionId::default(),
+            function: FunctionName::try_from("fn")?,
             function_version_id: FunctionVersionId::new(),
             function_defined_on: AtTime::from(Timestamp::default()),
-            function: FunctionName::try_from("fn")?,
-            function_run_id: PhysicalFunctionRunId::new(),
             function_bundle: locations[8].clone(),
             function_stage: locations[0].clone(),
-            triggered_on: AtTime::from(Timestamp::default()),
-            transaction_id: TransactionId::new(),
             execution_id: ExecutionId::new(),
-            execution_name: Some(ExecutionName::try_from("en")?),
+            execution: Some(ExecutionName::try_from("en")?),
+            transaction_id: TransactionId::new(),
+            logical_function_run_id: LogicalFunctionRunId::new(),
+            physical_function_run_id: PhysicalFunctionRunId::new(),
+            triggered_on: AtTime::from(Timestamp::default()),
             function_data: locations[0].clone(),
             function_raw: None,
             scheduled_on: AtTime::default(),

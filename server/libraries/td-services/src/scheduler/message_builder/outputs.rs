@@ -34,12 +34,18 @@ pub(crate) fn build_output_tables(
         let (location, _) = build_external_location(storage, &path)?;
 
         let output_table = OutputTableVersion {
-            name: table.base.base.base.name.clone(),
             collection_id: table.base.base.base.collection_id,
             collection: table.collection.clone(),
             table_id: table.base.base.base.table_id,
+            table: table.base.base.base.name.clone(),
             table_version_id: table.base.base.base.table_version_id,
-            table_data_version_id: table.base.base.base.id.clone(),
+            logical_table_data_version_id: table
+                .base
+                .base
+                .base
+                .logical_table_data_version_id
+                .clone(),
+            physical_table_data_version_id: table.base.base.base.id.clone(),
             location,
             table_pos: table.base.base.base.function_param_pos,
         };

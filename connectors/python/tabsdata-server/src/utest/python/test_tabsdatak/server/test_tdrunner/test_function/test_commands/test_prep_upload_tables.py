@@ -30,7 +30,9 @@ def _set_argv(
 ):
     storage_config = Path(out).parent / "storage.yaml"
     storage_config.parent.mkdir(parents=True, exist_ok=True)
-    storage_config.write_text("storage:\n  mounts:\n    - id: ROOT\n      options: {}\n")
+    storage_config.write_text(
+        "storage:\n  mounts:\n    - id: ROOT\n      options: {}\n"
+    )
     monkeypatch.setattr(
         sys,
         "argv",
@@ -69,7 +71,8 @@ def _output_table(entry: dict, index: int) -> dict | None:
         "collection": "c",
         "table_id": "T-1",
         "table_version_id": "TV-1",
-        "table_data_version_id": "PDV-1",
+        "logical_table_data_version_id": "LDV-1",
+        "physical_table_data_version_id": "PDV-1",
         "table_pos": index,
         **entry,
     }
@@ -119,7 +122,7 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
-            {"name": "t1", "location": {"uri": "s3://bucket/t1.parquet"}},
+            {"table": "t1", "location": {"uri": "s3://bucket/t1.parquet"}},
         ],
     )
     manifest = _write_manifest(
@@ -147,8 +150,8 @@ def test_main_skips_null_file(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
-            {"name": "t1", "location": {"uri": "s3://bucket/t1.parquet"}},
-            {"name": "t2", "location": {"uri": "s3://bucket/t2.parquet"}},
+            {"table": "t1", "location": {"uri": "s3://bucket/t1.parquet"}},
+            {"table": "t2", "location": {"uri": "s3://bucket/t2.parquet"}},
         ],
     )
     manifest = _write_manifest(
@@ -178,7 +181,7 @@ def test_main_skips_location_none(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
-            {"name": "t1"},  # no location → apiserver didn't allocate
+            {"table": "t1"},  # no location → apiserver didn't allocate
         ],
     )
     manifest = _write_manifest(
@@ -218,8 +221,8 @@ def test_main_preserves_request_order(monkeypatch, tmp_path, http_ok_url):
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
-            {"name": "t2", "location": {"uri": "s3://bucket/t2.parquet"}},
-            {"name": "t1", "location": {"uri": "s3://bucket/t1.parquet"}},
+            {"table": "t2", "location": {"uri": "s3://bucket/t2.parquet"}},
+            {"table": "t1", "location": {"uri": "s3://bucket/t1.parquet"}},
         ],
     )
     manifest = _write_manifest(
@@ -311,7 +314,7 @@ def test_main_table_missing_from_manifest_returns_mismatch(
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
-            {"name": "t1", "location": {"uri": "s3://bucket/t1.parquet"}},
+            {"table": "t1", "location": {"uri": "s3://bucket/t1.parquet"}},
         ],
     )
     manifest = _write_manifest(tmp_path / "outputs_manifest.yaml", [])
@@ -337,7 +340,7 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         output=[
-            {"name": "t1", "location": {"uri": "ftp://server/t1.parquet"}},
+            {"table": "t1", "location": {"uri": "ftp://server/t1.parquet"}},
         ],
     )
     manifest = _write_manifest(

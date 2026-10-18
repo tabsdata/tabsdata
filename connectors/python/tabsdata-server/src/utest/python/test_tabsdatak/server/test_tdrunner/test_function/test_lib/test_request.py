@@ -36,12 +36,13 @@ def _info_payload(**overrides: Any) -> dict:
     """A complete, valid `info` payload with overridable fields."""
     base: dict[str, Any] = {
         "project_id": "P-1",
+        "project": "p",
         "collection_id": 19,
         "collection": "my_collection",
+        "function_id": "F-1",
+        "function": "publish_people",
         "function_version_id": "FV-1",
         "function_defined_on": 1780000000000,
-        "function": "publish_people",
-        "function_run_id": 60,
         "function_bundle": {
             "uri": "s3://bucket/bundle.tar.zst",
             "env_prefix": "AWS_",
@@ -50,10 +51,12 @@ def _info_payload(**overrides: Any) -> dict:
             "uri": "file:///tmp/stage",
             "env_prefix": "ROOT",
         },
-        "triggered_on": 1780000000100,
-        "transaction_id": 42,
         "execution_id": 24,
-        "execution_name": None,
+        "execution": None,
+        "transaction_id": 42,
+        "logical_function_run_id": 60,
+        "physical_function_run_id": 60,
+        "triggered_on": 1780000000100,
         "function_data": {
             "uri": "file:///tmp/data",
             "env_prefix": "ROOT",
@@ -67,16 +70,17 @@ def _info_payload(**overrides: Any) -> dict:
 def _input_table_payload(**overrides: Any) -> dict:
     """A complete, valid InputTable payload (variant tag included)."""
     base: dict[str, Any] = {
-        "name": "td-initial-values",
         "collection_id": 19,
         "collection": "my_collection",
         "table_id": "T-1",
+        "table": "td-initial-values",
         "table_version_id": "TV-1",
         "execution_id": None,
         "transaction_id": None,
-        "function_run_id": None,
+        "physical_function_run_id": None,
         "triggered_on": None,
-        "table_data_version_id": None,
+        "logical_table_data_version_id": None,
+        "physical_table_data_version_id": None,
         "location": None,
         "input_idx": 0,
         "table_pos": -1,
@@ -89,12 +93,13 @@ def _input_table_payload(**overrides: Any) -> dict:
 def _output_table_payload(**overrides: Any) -> dict:
     """A complete, valid OutputTable payload (variant tag included)."""
     base: dict[str, Any] = {
-        "name": "customers",
         "collection_id": 19,
         "collection": "my_collection",
         "table_id": "T-2",
+        "table": "customers",
         "table_version_id": "TV-2",
-        "table_data_version_id": "PDV-1",
+        "logical_table_data_version_id": "LDV-1",
+        "physical_table_data_version_id": "PDV-1",
         "location": {
             "uri": "s3://bucket/out/customers.parquet",
             "env_prefix": "AWS_",
@@ -145,15 +150,15 @@ def test_load_minimal_fixture():
     assert req.info.collection_id == 19
     assert req.info.execution_id == 24
     assert req.info.transaction_id == 42
-    assert req.info.function_run_id == 60
+    assert req.info.physical_function_run_id == 60
     assert req.info.function_bundle == Location(
         uri="s3://bucket/bundle.tar.zst", env_prefix="AWS_"
     )
     assert req.input == ()
     assert len(req.output) == 1
-    assert req.output[0].name == "customers"
+    assert req.output[0].table == "customers"
     assert req.output[0].location.uri == "s3://bucket/out/customers.parquet"
-    assert req.system_input[0].name == "td-initial-values"
+    assert req.system_input[0].table == "td-initial-values"
     assert req.system_output[0].location.uri == "s3://bucket/state/out.parquet"
 
 
@@ -163,10 +168,11 @@ def test_load_string_ids(tmp_path):
         _request_payload(
             info=_info_payload(
                 collection_id="collection-uuid",
+                function_version_id="fv-uuid",
                 execution_id="exec-uuid",
                 transaction_id="tx-uuid",
-                function_run_id="run-uuid",
-                function_version_id="fv-uuid",
+                logical_function_run_id="run-uuid",
+                physical_function_run_id="run-uuid",
             ),
         ),
     )
@@ -174,7 +180,7 @@ def test_load_string_ids(tmp_path):
     assert req.info.collection_id == "collection-uuid"
     assert req.info.execution_id == "exec-uuid"
     assert req.info.transaction_id == "tx-uuid"
-    assert req.info.function_run_id == "run-uuid"
+    assert req.info.physical_function_run_id == "run-uuid"
 
 
 def test_load_bundle_without_env_prefix(tmp_path):
@@ -211,10 +217,10 @@ def test_load_input_table_without_location_key(tmp_path):
             input=[
                 {
                     "Table": {
-                        "name": "bare_input",
                         "collection_id": 1,
                         "collection": "c",
                         "table_id": "T-x",
+                        "table": "bare_input",
                         "table_version_id": "TV-x",
                         "input_idx": 0,
                         "table_pos": 0,
@@ -227,10 +233,10 @@ def test_load_input_table_without_location_key(tmp_path):
     req = load_request(p)
     assert req.input == (
         InputTable(
-            name="bare_input",
             collection_id=1,
             collection="c",
             table_id="T-x",
+            table="bare_input",
             table_version_id="TV-x",
             input_idx=0,
             table_pos=0,
@@ -282,7 +288,7 @@ def test_load_known_but_unsupported_table_variant(tmp_path):
     handle are reported as recognized-but-not-supported."""
     p = _write(
         tmp_path,
-        _request_payload(input=[{"PartitionedTable": {"name": "x"}}]),
+        _request_payload(input=[{"PartitionedTable": {"table": "x"}}]),
     )
     with pytest.raises(
         InvalidRequestError,
@@ -296,7 +302,7 @@ def test_load_truly_unknown_table_variant(tmp_path):
     list of known variants."""
     p = _write(
         tmp_path,
-        _request_payload(input=[{"NotARealVariant": {"name": "x"}}]),
+        _request_payload(input=[{"NotARealVariant": {"table": "x"}}]),
     )
     with pytest.raises(
         InvalidRequestError,
@@ -355,16 +361,20 @@ def test_load_info_not_a_mapping(tmp_path):
 @pytest.mark.parametrize(
     "missing_field",
     [
-        "collection",
+        "project_id",
+        "project",
         "collection_id",
-        "execution_id",
-        "transaction_id",
-        "function_run_id",
-        "function_bundle",
+        "collection",
+        "function_id",
+        "function",
         "function_version_id",
         "function_defined_on",
-        "function",
+        "function_bundle",
         "function_stage",
+        "execution_id",
+        "transaction_id",
+        "logical_function_run_id",
+        "physical_function_run_id",
         "triggered_on",
         "function_data",
         "scheduled_on",
@@ -446,11 +456,11 @@ def test_load_output_table_requires_location(tmp_path):
         load_request(p)
 
 
-def test_load_output_table_requires_table_data_version_id(tmp_path):
+def test_load_output_table_requires_physical_table_data_version_id(tmp_path):
     payload = _output_table_payload()
-    payload["Table"].pop("table_data_version_id")
+    payload["Table"].pop("physical_table_data_version_id")
     p = _write(tmp_path, _request_payload(output=[payload]))
-    with pytest.raises(InvalidRequestError, match="table_data_version_id"):
+    with pytest.raises(InvalidRequestError, match="physical_table_data_version_id"):
         load_request(p)
 
 
@@ -469,11 +479,11 @@ def test_load_table_entry_not_a_mapping(tmp_path):
         load_request(p)
 
 
-def test_load_table_missing_name(tmp_path):
+def test_load_table_missing_table(tmp_path):
     payload = _output_table_payload()
-    payload["Table"].pop("name")
+    payload["Table"].pop("table")
     p = _write(tmp_path, _request_payload(output=[payload]))
-    with pytest.raises(InvalidRequestError, match="name"):
+    with pytest.raises(InvalidRequestError, match="table"):
         load_request(p)
 
 
@@ -527,10 +537,10 @@ def test_location_is_frozen():
 
 def test_input_table_is_frozen():
     t = InputTable(
-        name="x",
         collection_id=1,
         collection="c",
         table_id="T",
+        table="x",
         table_version_id="TV",
         input_idx=0,
         table_pos=0,
@@ -542,12 +552,13 @@ def test_input_table_is_frozen():
 
 def test_output_table_is_frozen():
     t = OutputTable(
-        name="x",
         collection_id=1,
         collection="c",
         table_id="T",
+        table="x",
         table_version_id="TV",
-        table_data_version_id="PDV",
+        logical_table_data_version_id="LDV",
+        physical_table_data_version_id="PDV",
         location=Location(uri="s3://x"),
         table_pos=0,
     )
@@ -570,17 +581,20 @@ def test_output_table_is_frozen():
 def _build_info(triggered_on: int) -> Info:
     return Info(
         project_id="P-1",
+        project="p",
         collection_id=19,
         collection="c",
+        function_id="F-1",
+        function="publish_people",
         function_version_id="FV-1",
         function_defined_on=1780000000000,
-        function="publish_people",
-        function_run_id=60,
         function_bundle=Location(uri="s3://b/bundle"),
         function_stage=Location(uri="file:///tmp/stage"),
-        triggered_on=triggered_on,
-        transaction_id=42,
         execution_id=24,
+        transaction_id=42,
+        logical_function_run_id=60,
+        physical_function_run_id=60,
+        triggered_on=triggered_on,
         function_data=Location(uri="file:///tmp/data"),
         scheduled_on=1780000000200,
     )

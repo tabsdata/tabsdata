@@ -192,12 +192,13 @@ def _write_request(path: Path, *, bundle_uri: str, a_uri: str, b_uri: str) -> Pa
     handles the egress."""
     body = {
         "info": {
-            "collection": "smoke",
             "collection_id": 1,
+            "collection": "smoke",
+            "function_bundle": {"uri": bundle_uri},
             "execution_id": 1,
             "transaction_id": 1,
-            "function_run_id": 1,
-            "function_bundle": {"uri": bundle_uri},
+            "logical_function_run_id": 1,
+            "physical_function_run_id": 1,
         },
         "input": [
             {"name": "t_a", "location": {"uri": a_uri}},
@@ -232,13 +233,13 @@ def _with_storage_config(argv: list[str]) -> list[str]:
         return argv
     request_path = Path(argv[argv.index("--request") + 1])
     storage_config = request_path.parent / "e2e-storage.yaml"
-    storage_config.write_text("storage:\n  mounts:\n    - id: ROOT\n      options: {}\n")
+    storage_config.write_text(
+        "storage:\n  mounts:\n    - id: ROOT\n      options: {}\n"
+    )
     return [*argv, "--storage-config", str(storage_config)]
 
 
-def _invoke(
-    monkeypatch, main_fn, argv: list[str], *, responder_url: str
-) -> int:
+def _invoke(monkeypatch, main_fn, argv: list[str], *, responder_url: str) -> int:
     monkeypatch.setattr(
         sys,
         "argv",

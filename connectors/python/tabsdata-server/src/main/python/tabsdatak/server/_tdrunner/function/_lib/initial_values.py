@@ -214,13 +214,13 @@ def _state_candidate(
         return None
     slot = slots[0]
     if slot.location is None:
-        logger.debug("state lookup: slot %r has no location", slot.name)
+        logger.debug("state lookup: slot %r has no location", slot.table)
         return None
-    candidate = state_dir / f"{slot.name}.parquet"
+    candidate = state_dir / f"{slot.table}.parquet"
     if not candidate.is_file():
         logger.debug("state lookup: %s not on disk yet", candidate)
         return None
-    logger.debug("state lookup: found %s for slot %r", candidate, slot.name)
+    logger.debug("state lookup: found %s for slot %r", candidate, slot.table)
     return candidate
 
 
@@ -267,7 +267,7 @@ def drain_ctx_to_state_or_raise(
     if slot.location is None:
         return
     state_dir.mkdir(parents=True, exist_ok=True)
-    state_file = state_dir / f"{slot.name}.parquet"
+    state_file = state_dir / f"{slot.table}.parquet"
     try:
         write_initial_values(ctx.drain(), state_file)
     except InvalidInitialValuesError as exc:

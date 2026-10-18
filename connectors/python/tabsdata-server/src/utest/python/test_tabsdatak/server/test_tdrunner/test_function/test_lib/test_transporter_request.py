@@ -42,24 +42,28 @@ from tabsdatak.server._tdrunner.function._lib.transporter1 import (
 def dump_transporter_request(request: TransporterCopyRequest) -> str:
     return yaml.dump(request, Dumper=make_dumper(), sort_keys=False)
 
+
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
 
 def _info(**overrides: Any) -> Info:
     fields: dict[str, Any] = {
         "project_id": "P-1",
+        "project": "p",
         "collection_id": 1,
         "collection": "c",
+        "function_id": "F-1",
+        "function": "fn",
         "function_version_id": "FV-1",
         "function_defined_on": 1780000000000,
-        "function": "fn",
-        "function_run_id": 4,
         "function_bundle": Location(uri="file:///bundle.tar.zst"),
         "function_stage": Location(uri="file:///stage"),
-        "triggered_on": 1780000000100,
-        "transaction_id": 3,
         "execution_id": 2,
-        "execution_name": None,
+        "execution": None,
+        "transaction_id": 3,
+        "logical_function_run_id": 4,
+        "physical_function_run_id": 4,
+        "triggered_on": 1780000000100,
         "function_data": Location(uri="file:///data"),
         "scheduled_on": 1780000000200,
     }
@@ -76,10 +80,10 @@ def _input_table(
     input_idx: int = 0,
 ) -> InputTable:
     return InputTable(
-        name=name,
         collection_id=1,
         collection="c",
         table_id=f"T-{name}",
+        table=name,
         table_version_id=f"TV-{name}",
         location=location,
         input_idx=input_idx,
@@ -95,12 +99,13 @@ def _output_table(
     table_pos: int = 0,
 ) -> OutputTable:
     return OutputTable(
-        name=name,
         collection_id=1,
         collection="c",
         table_id=f"T-{name}",
+        table=name,
         table_version_id=f"TV-{name}",
-        table_data_version_id=f"PDV-{name}",
+        logical_table_data_version_id=f"LDV-{name}",
+        physical_table_data_version_id=f"PDV-{name}",
         location=location,
         table_pos=table_pos,
     )

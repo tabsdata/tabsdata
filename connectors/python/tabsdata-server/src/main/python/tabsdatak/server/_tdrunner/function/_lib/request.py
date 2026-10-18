@@ -70,16 +70,17 @@ class Location(BaseModel):
 class InputTable(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    name: str
     collection_id: str | int
     collection: str
     table_id: str | int
+    table: str
     table_version_id: str | int
     execution_id: str | int | None = None
     transaction_id: str | int | None = None
-    function_run_id: str | int | None = None
+    physical_function_run_id: str | int | None = None
     triggered_on: int | None = None
-    table_data_version_id: str | int | None = None
+    logical_table_data_version_id: str | int | None = None
+    physical_table_data_version_id: str | int | None = None
     location: Location | None = None
     input_idx: int
     table_pos: int
@@ -102,12 +103,13 @@ def input_tables(entry: InputTable | InputTableVersions) -> tuple[InputTable, ..
 class OutputTable(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    name: str
     collection_id: str | int
     collection: str
     table_id: str | int
+    table: str
     table_version_id: str | int
-    table_data_version_id: str | int
+    logical_table_data_version_id: str | int
+    physical_table_data_version_id: str | int
     location: Location
     table_pos: int
 
@@ -116,18 +118,21 @@ class Info(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     project_id: str | int
+    project: str
     collection_id: str | int
     collection: str
+    function_id: str | int
+    function: str
     function_version_id: str | int
     function_defined_on: int
-    function: str
-    function_run_id: str | int
     function_bundle: Location
     function_stage: Location
-    triggered_on: int
-    transaction_id: str | int
     execution_id: str | int
-    execution_name: str | None = None
+    execution: str | None = None
+    transaction_id: str | int
+    logical_function_run_id: str | int
+    physical_function_run_id: str | int
+    triggered_on: int
     function_data: Location
     function_raw: Location | None = None
     scheduled_on: int
@@ -169,8 +174,9 @@ class StreamerInfo(BaseModel):
     Deliberately leaner than :class:`Info`: a streamer is a long-lived
     worker that produces batches (each becoming its own function run
     downstream via ``fn_trigger``), so the per-execution identifiers
-    (``execution_id`` / ``transaction_id`` / ``function_run_id`` /
-    ``triggered_on``) on :class:`Info` do not represent real entities
+    (``execution_id`` / ``transaction_id`` / ``logical_function_run_id`` /
+    ``physical_function_run_id`` / ``triggered_on``) on :class:`Info` do
+    not represent real entities
     at the streamer's lifecycle. They are intentionally absent here.
 
     The apiserver's resolve endpoint builds this payload from DB state;
@@ -183,15 +189,17 @@ class StreamerInfo(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     project_id: str | int
+    project: str
     collection_id: str | int
     collection: str
+    function_id: str | int
+    function: str
     function_version_id: str | int
     function_defined_on: int
-    function: str
     function_bundle: Location
     function_stage: Location
-    scheduled_on: int
     worker_id: str | int
+    scheduled_on: int
 
 
 class StreamerRequest(BaseModel):

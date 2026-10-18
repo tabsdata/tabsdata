@@ -111,7 +111,7 @@ def _build_parser():
             "(populated by prep-localize-state + run-transporter) and "
             "state-out tables are written to (consumed by "
             "prep-upload-state). The convention is "
-            "<state-dir>/<table.name>.parquet, mirroring the wire "
+            "<state-dir>/<table.table>.parquet, mirroring the wire "
             "format prep-localize-state / prep-upload-state already use."
         ),
     )

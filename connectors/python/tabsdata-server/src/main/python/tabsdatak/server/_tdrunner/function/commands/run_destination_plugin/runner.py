@@ -149,7 +149,7 @@ def run(args: argparse.Namespace) -> int:
         exec_plan_ts=request.info.triggered_on_iso,
         collection_id=str(request.info.collection_id),
         collection_name=request.info.collection,
-        function_id=str(request.info.function_run_id),
+        function_id=str(request.info.physical_function_run_id),
         function_name=request.info.function,
     )
     notify_step_destination_write(args)

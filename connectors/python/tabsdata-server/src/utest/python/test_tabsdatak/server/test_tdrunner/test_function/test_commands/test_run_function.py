@@ -291,7 +291,8 @@ def _output_table(entry: dict, index: int) -> dict:
         "collection": "c",
         "table_id": "T-1",
         "table_version_id": "TV-1",
-        "table_data_version_id": "PDV-1",
+        "logical_table_data_version_id": "LDV-1",
+        "physical_table_data_version_id": "PDV-1",
         "location": {"uri": "file:///irrelevant", "env_prefix": "ROOT"},
         "table_pos": index,
         **entry,
@@ -1201,16 +1202,16 @@ def _request_with_state_slots(
     info = _info()
     info["execution_id"] = 2
     info["transaction_id"] = 3
-    info["function_run_id"] = 4
+    info["physical_function_run_id"] = 4
     path.write_text(
         yaml.safe_dump({
             "Function": {
                 "info": info,
-                "output": [_output_table({"name": "my_table"}, 0)],
+                "output": [_output_table({"table": "my_table"}, 0)],
                 "system_input": [
                     _input_table(
                         {
-                            "name": state_in_name,
+                            "table": state_in_name,
                             "location": {"uri": "file:///irrelevant"},
                         },
                         0,
@@ -1219,7 +1220,7 @@ def _request_with_state_slots(
                 "system_output": [
                     _output_table(
                         {
-                            "name": state_out_name,
+                            "table": state_out_name,
                             "location": {"uri": "file:///irrelevant"},
                         },
                         0,

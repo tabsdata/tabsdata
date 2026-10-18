@@ -592,7 +592,7 @@ mod tests {
             physical_function_run.base.function_version_id
         );
         assert_eq!(info.function_version_id, execution.manual_trigger);
-        assert_eq!(info.function_run_id, physical_function_run.base.id);
+        assert_eq!(info.physical_function_run_id, physical_function_run.base.id);
 
         let function_path = SPath::parse(format!(
             "/bundles/c/{}/f/{}.tar.zst",
@@ -611,7 +611,7 @@ mod tests {
         assert!(*info.triggered_on < *info.scheduled_on);
         assert_eq!(info.execution_id, physical_function_run.base.execution_id);
         assert_eq!(
-            info.execution_name,
+            info.execution,
             Some(ExecutionName::try_from("test_execution")?)
         );
 
@@ -632,8 +632,8 @@ mod tests {
         let input_table = &message.input[0];
         match input_table {
             InputTable::Table(input) => {
-                assert!(input.table_data_version_id.is_none());
-                assert_eq!(input.name, TableName::try_from("table_1")?);
+                assert!(input.physical_table_data_version_id.is_none());
+                assert_eq!(input.table, TableName::try_from("table_1")?);
                 assert_eq!(input.collection_id, collection.id);
                 assert_eq!(input.collection, collection.name);
                 assert!(input.location.is_none());
@@ -650,11 +650,14 @@ mod tests {
                     let physical_table_data_version: PhysicalTableDataVersionDBWithNames = db
                         .timeline()
                         .fetch_one::<PhysicalTableDataVersionDBWithNames>(
-                            &(output.table_data_version_id),
+                            &(output.physical_table_data_version_id),
                         )
                         .await?;
 
-                    assert_eq!(output.name, physical_table_data_version.base.base.base.name);
+                    assert_eq!(
+                        output.table,
+                        physical_table_data_version.base.base.base.name
+                    );
                     assert_eq!(output.collection_id, collection.id);
                     assert_eq!(output.collection, collection.name);
                     assert_eq!(
@@ -666,7 +669,7 @@ mod tests {
                         physical_table_data_version.base.base.base.table_version_id
                     );
                     assert_eq!(
-                        output.table_data_version_id,
+                        output.physical_table_data_version_id,
                         physical_table_data_version.base.base.base.id
                     );
 
@@ -817,7 +820,7 @@ mod tests {
             panic!("unexpected WorkerInput version");
         };
         assert_eq!(
-            msg.info.function_run_id,
+            msg.info.physical_function_run_id,
             replay_response.new_function_run_id
         );
 

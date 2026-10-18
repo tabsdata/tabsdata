@@ -380,10 +380,10 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
         };
 
         let input_table = InputTableVersion {
-            name,
             collection_id,
             collection,
             table_id,
+            table: name,
             table_version_id,
             execution_id: found_data_version
                 .as_ref()
@@ -391,13 +391,16 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
             transaction_id: found_data_version
                 .as_ref()
                 .map(|v| v.base.base.base.transaction_id.clone()),
-            function_run_id: found_data_version
+            physical_function_run_id: found_data_version
                 .as_ref()
                 .map(|v| v.base.base.base.physical_function_run_id.clone()),
             triggered_on: found_data_version
                 .as_ref()
                 .map(|v| AtTime::from(v.base.base.interval.valid_from)),
-            table_data_version_id: found_data_version
+            logical_table_data_version_id: found_data_version
+                .as_ref()
+                .map(|v| v.base.base.base.logical_table_data_version_id.clone()),
+            physical_table_data_version_id: found_data_version
                 .as_ref()
                 .map(|v| v.base.base.base.id.clone()),
             location,

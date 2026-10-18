@@ -124,9 +124,10 @@ def _write_request(path: Path, bundle_uri: str = "file:///bundle.tar.zst") -> Pa
             "Function": {
                 "info": info_payload(
                     bundle_uri,
-                    function_run_id=7,
-                    transaction_id=99,
                     execution_id=42,
+                    transaction_id=99,
+                    logical_function_run_id=7,
+                    physical_function_run_id=7,
                 ),
             }
         })

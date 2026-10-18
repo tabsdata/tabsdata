@@ -58,10 +58,10 @@ def localized_input_files(
 ) -> list[tuple[InputTable, Path]]:
     if isinstance(entry, InputTableVersions):
         return [
-            (member, in_dir / f"{member.name}.{member.version_pos}.parquet")
+            (member, in_dir / f"{member.table}.{member.version_pos}.parquet")
             for member in input_tables(entry)
         ]
-    return [(entry, in_dir / f"{entry.name}.parquet")]
+    return [(entry, in_dir / f"{entry.table}.parquet")]
 
 
 def build_localize_state_request(
@@ -82,7 +82,7 @@ def build_localize_state_request(
             continue
         pairs.append((
             handler.location_for(table.location),
-            local_location(state_dir / f"{table.name}.parquet"),
+            local_location(state_dir / f"{table.table}.parquet"),
         ))
     return handler.make_request(pairs)
 
@@ -111,7 +111,7 @@ def build_upload_state_request(
     for table in request.system_output:
         if table.location is None:
             continue
-        source_path = state_dir / f"{table.name}.parquet"
+        source_path = state_dir / f"{table.table}.parquet"
         if not source_path.exists():
             continue
         pairs.append((
@@ -135,12 +135,12 @@ def build_upload_tables_request(
     for table in request.output:
         if table.location is None:
             continue
-        if table.name not in files_by_name:
+        if table.table not in files_by_name:
             raise OutputTableNotInManifestError(
-                f"Output table {table.name!r} declared in request "
+                f"Output table {table.table!r} declared in request "
                 f"has no entry in the outputs manifest."
             )
-        source = files_by_name[table.name]
+        source = files_by_name[table.table]
         if source is None:
             continue
         pairs.append((

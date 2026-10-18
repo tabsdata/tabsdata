@@ -199,12 +199,14 @@ def _input_version(record: dict):
 
     execution_id = record.get(inputs_manifest.MANIFEST_EXECUTION_ID_KEY)
     transaction_id = record.get(inputs_manifest.MANIFEST_TRANSACTION_ID_KEY)
-    table_data_version_id = record.get(inputs_manifest.MANIFEST_VERSION_ID_KEY)
+    physical_table_data_version_id = record.get(
+        inputs_manifest.MANIFEST_PHYSICAL_TABLE_DATA_VERSION_ID_KEY
+    )
     triggered_on = record.get(inputs_manifest.MANIFEST_TRIGGERED_ON_KEY)
     if (
         execution_id is None
         or transaction_id is None
-        or table_data_version_id is None
+        or physical_table_data_version_id is None
         or triggered_on is None
     ):
         return None
@@ -213,7 +215,7 @@ def _input_version(record: dict):
         .builder()
         .with_execution(str(execution_id))
         .with_transaction(str(transaction_id))
-        .with_version(str(table_data_version_id))
+        .with_version(str(physical_table_data_version_id))
         .with_timestamp(triggered_on)
         .build()
     )
@@ -501,7 +503,7 @@ def run(args: argparse.Namespace) -> int:
             exec_plan_ts=request.info.triggered_on_iso,
             collection_id=str(request.info.collection_id),
             collection_name=request.info.collection,
-            function_id=str(request.info.function_run_id),
+            function_id=str(request.info.physical_function_run_id),
             function_name=request.info.function,
         )
         hydrate_ctx_from_state_or_raise(

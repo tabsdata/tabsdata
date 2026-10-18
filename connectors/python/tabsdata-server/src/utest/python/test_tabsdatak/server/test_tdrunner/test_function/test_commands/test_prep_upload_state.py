@@ -36,7 +36,9 @@ def _set_argv(
 ):
     storage_config = Path(out).parent / "storage.yaml"
     storage_config.parent.mkdir(parents=True, exist_ok=True)
-    storage_config.write_text("storage:\n  mounts:\n    - id: ROOT\n      options: {}\n")
+    storage_config.write_text(
+        "storage:\n  mounts:\n    - id: ROOT\n      options: {}\n"
+    )
     monkeypatch.setattr(
         sys,
         "argv",
@@ -70,7 +72,8 @@ def _table(entry: dict, index: int) -> dict:
         "collection": "c",
         "table_id": "T-1",
         "table_version_id": "TV-1",
-        "table_data_version_id": "PDV-1",
+        "logical_table_data_version_id": "LDV-1",
+        "physical_table_data_version_id": "PDV-1",
         "table_pos": index,
         **entry,
     }
@@ -117,7 +120,7 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path, http_ok_url):
         tmp_path / "request.yaml",
         system_output=[
             {
-                "name": "td-initial-values",
+                "table": "td-initial-values",
                 "location": {"uri": "s3://bucket/state-out.parquet"},
             },
         ],
@@ -199,7 +202,7 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(
     request_yaml = _write_request(
         tmp_path / "request.yaml",
         system_output=[
-            {"name": "x", "location": {"uri": "ftp://server/x.parquet"}},
+            {"table": "x", "location": {"uri": "ftp://server/x.parquet"}},
         ],
     )
     # TD-2403: scheme validation only fires for slots whose source

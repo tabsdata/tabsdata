@@ -136,13 +136,13 @@ class Response(BaseModel):
         }
         entries: list[TableEntry] = []
         for table in request.output:
-            if table.name not in files_by_name:
-                raise mismatch_error_code.exception(table=table.name)
+            if table.table not in files_by_name:
+                raise mismatch_error_code.exception(table=table.table)
             entries.append(
-                TableEntry.from_manifest(table.name, files_by_name[table.name])
+                TableEntry.from_manifest(table.table, files_by_name[table.table])
             )
         for table in request.system_output:
-            entries.append(TableEntry.from_state_dir(table.name, state_dir))
+            entries.append(TableEntry.from_state_dir(table.table, state_dir))
         return cls(output=tuple(entries))
 
     def to_worker_output(self) -> dict:

@@ -4,7 +4,8 @@
 
 use crate::dxo::worker_input::location::{Location, Locations};
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionName, FunctionVersionId, ProjectId, WorkerId,
+    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, FunctionVersionId, ProjectId,
+    ProjectName, WorkerId,
 };
 
 /// Lean k8s streamer `request.yaml`: identity + bundle/stage locations only.
@@ -31,17 +32,19 @@ impl Locations for StreamerInput {
 #[derive(Eq, PartialEq)]
 pub struct StreamerInfo {
     pub project_id: ProjectId,
+    pub project: ProjectName,
     pub collection_id: CollectionId,
     pub collection: CollectionName,
+    pub function_id: FunctionId,
+    pub function: FunctionName,
     #[serde(serialize_with = "td_common::logic_id::padded")]
     pub function_version_id: FunctionVersionId,
     pub function_defined_on: AtTime,
-    pub function: FunctionName,
     pub function_bundle: Location,
     pub function_stage: Location,
-    pub scheduled_on: AtTime,
     #[serde(serialize_with = "td_common::logic_id::padded")]
     pub worker_id: WorkerId,
+    pub scheduled_on: AtTime,
 }
 
 #[cfg(test)]
@@ -58,11 +61,13 @@ mod tests {
         let input = WorkerInput::Streamer(Box::new(StreamerInput {
             info: StreamerInfo {
                 project_id: ProjectId::default(),
+                project: ProjectName::try_from("project").unwrap(),
                 collection_id: CollectionId::default(),
                 collection: CollectionName::try_from("collection").unwrap(),
+                function_id: FunctionId::default(),
+                function: FunctionName::try_from("function").unwrap(),
                 function_version_id: function_version_id.clone(),
                 function_defined_on: AtTime::from(Timestamp::default()),
-                function: FunctionName::try_from("function").unwrap(),
                 function_bundle: Location {
                     uri: Url::try_from("file:///bundle").unwrap(),
                     env_prefix: None,
@@ -71,8 +76,8 @@ mod tests {
                     uri: Url::try_from("file:///stage").unwrap(),
                     env_prefix: None,
                 },
-                scheduled_on: AtTime::default(),
                 worker_id: worker_id.clone(),
+                scheduled_on: AtTime::default(),
             },
         }));
         let serialized = serde_json::to_value(&input).unwrap();

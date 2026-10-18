@@ -247,7 +247,7 @@ mod tests {
         let WorkerInput::Function(message) = response else {
             panic!("expected Function");
         };
-        assert_eq!(message.info.function_run_id, pfr.base.id);
+        assert_eq!(message.info.physical_function_run_id, pfr.base.id);
 
         Ok(())
     }

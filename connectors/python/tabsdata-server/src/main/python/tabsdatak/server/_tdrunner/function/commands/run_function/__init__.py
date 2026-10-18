@@ -123,10 +123,10 @@ def _build_parser():
             "prep-localize-state / run-source-plugin / "
             "prep-upload-state. When the user function declares a "
             "trailing ``ctx: TrxCtx`` parameter, the runtime hydrates "
-            "the ctx scratch from <state-dir>/<system_output[0].name>."
-            "parquet (falling back to <system_input[0].name>.parquet) "
+            "the ctx scratch from <state-dir>/<system_output[0].table>."
+            "parquet (falling back to <system_input[0].table>.parquet) "
             "before invoking the function, and drains it back to "
-            "<state-dir>/<system_output[0].name>.parquet afterwards. "
+            "<state-dir>/<system_output[0].table>.parquet afterwards. "
             "Ignored when the user function has no ``ctx`` parameter."
         ),
     )

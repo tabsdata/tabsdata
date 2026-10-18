@@ -80,17 +80,17 @@ def _build_inputs_manifest_entries(request: Request, in_dir: Path) -> list[dict]
                             if member.transaction_id is None
                             else str(member.transaction_id)
                         ),
-                        table_data_version_id=(
+                        physical_table_data_version_id=(
                             None
-                            if member.table_data_version_id is None
-                            else str(member.table_data_version_id)
+                            if member.physical_table_data_version_id is None
+                            else str(member.physical_table_data_version_id)
                         ),
                         triggered_on=member.triggered_on,
                     )
                 )
         entries.append(
             build_entry(
-                name=members[0].name,
+                name=members[0].table,
                 table_pos=members[0].table_pos,
                 tables=records,
                 is_empty=is_empty,
@@ -106,9 +106,9 @@ def _build_state_manifest_entries(request: Request, state_dir: Path) -> list[dic
         if table.location is None:
             files: list[str] = []
         else:
-            files = [str((state_dir / f"{table.name}.parquet").absolute())]
+            files = [str((state_dir / f"{table.table}.parquet").absolute())]
         entries.append({
-            MANIFEST_NAME_KEY: table.name,
+            MANIFEST_NAME_KEY: table.table,
             MANIFEST_FILES_KEY: files,
         })
     return entries

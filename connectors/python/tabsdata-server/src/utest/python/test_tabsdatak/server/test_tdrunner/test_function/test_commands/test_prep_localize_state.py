@@ -41,7 +41,9 @@ def _set_argv(
 ):
     storage_config = Path(out).parent / "storage.yaml"
     storage_config.parent.mkdir(parents=True, exist_ok=True)
-    storage_config.write_text("storage:\n  mounts:\n    - id: ROOT\n      options: {}\n")
+    storage_config.write_text(
+        "storage:\n  mounts:\n    - id: ROOT\n      options: {}\n"
+    )
     monkeypatch.setattr(
         sys,
         "argv",
@@ -117,7 +119,7 @@ def test_main_writes_transporter_yaml(monkeypatch, tmp_path, http_ok_url):
         tmp_path / "request.yaml",
         system_input=[
             {
-                "name": "td-initial-values",
+                "table": "td-initial-values",
                 "location": {"uri": "s3://bucket/state.parquet"},
             },
         ],
@@ -174,11 +176,11 @@ def test_main_inputs_manifest_lists_input_tables(monkeypatch, tmp_path, http_ok_
         tmp_path / "request.yaml",
         inputs=[
             {
-                "name": "t_a",
+                "table": "t_a",
                 "location": {"uri": "s3://bucket/a.parquet"},
             },
             {
-                "name": "t_b",
+                "table": "t_b",
                 "location": {"uri": "s3://bucket/b.parquet"},
             },
         ],
@@ -217,7 +219,7 @@ def test_main_inputs_manifest_empty_files_for_null_location(
     a `None` value)."""
     request_yaml = _write_request(
         tmp_path / "request.yaml",
-        inputs=[{"name": "t_x"}],  # no location
+        inputs=[{"table": "t_x"}],  # no location
     )
     inputs_manifest = tmp_path / "inputs.yaml"
     state_manifest = tmp_path / "state.yaml"
@@ -249,11 +251,11 @@ def test_main_state_manifest_lists_system_input_tables(
         tmp_path / "request.yaml",
         system_input=[
             {
-                "name": "td-initial-values",
+                "table": "td-initial-values",
                 "location": {"uri": "s3://bucket/state.parquet"},
             },
             {
-                "name": "td-cursor",
+                "table": "td-cursor",
                 "location": {"uri": "s3://bucket/cursor.parquet"},
             },
         ],
@@ -312,7 +314,7 @@ def test_main_state_manifest_empty_files_for_null_location(
     manifest entry with an empty `files` list."""
     request_yaml = _write_request(
         tmp_path / "request.yaml",
-        system_input=[{"name": "td-ephemeral"}],
+        system_input=[{"table": "td-ephemeral"}],
     )
     state_manifest = tmp_path / "state.yaml"
     rc = main_with_args(
@@ -404,7 +406,7 @@ def test_main_unsupported_scheme_returns_unsupported_scheme(
         tmp_path / "request.yaml",
         system_input=[
             {
-                "name": "x",
+                "table": "x",
                 "location": {"uri": "ftp://server/x.parquet"},
             },
         ],

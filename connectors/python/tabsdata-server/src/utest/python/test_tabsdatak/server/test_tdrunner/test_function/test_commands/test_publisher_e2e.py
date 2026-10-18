@@ -260,12 +260,13 @@ def _write_request(path: Path, *, bundle_uri: str, uploaded_dir: Path) -> Path:
     destinations under `uploaded_dir`."""
     body = {
         "info": {
-            "collection": "smoke",
             "collection_id": 1,
+            "collection": "smoke",
+            "function_bundle": {"uri": bundle_uri},
             "execution_id": 1,
             "transaction_id": 1,
-            "function_run_id": 1,
-            "function_bundle": {"uri": bundle_uri},
+            "logical_function_run_id": 1,
+            "physical_function_run_id": 1,
         },
         "input": [],
         "output": [
@@ -293,12 +294,13 @@ def _write_multi_request(path: Path, *, bundle_uri: str, uploaded_dir: Path) -> 
     """request.yaml for the multi-input publisher — 3 output tables."""
     body = {
         "info": {
-            "collection": "smoke",
             "collection_id": 1,
+            "collection": "smoke",
+            "function_bundle": {"uri": bundle_uri},
             "execution_id": 1,
             "transaction_id": 1,
-            "function_run_id": 1,
-            "function_bundle": {"uri": bundle_uri},
+            "logical_function_run_id": 1,
+            "physical_function_run_id": 1,
         },
         "input": [],
         "output": [
@@ -345,7 +347,9 @@ def _with_storage_config(argv: list[str]) -> list[str]:
         return argv
     request_path = Path(argv[argv.index("--request") + 1])
     storage_config = request_path.parent / "e2e-storage.yaml"
-    storage_config.write_text("storage:\n  mounts:\n    - id: ROOT\n      options: {}\n")
+    storage_config.write_text(
+        "storage:\n  mounts:\n    - id: ROOT\n      options: {}\n"
+    )
     return [*argv, "--storage-config", str(storage_config)]
 
 
@@ -496,9 +500,7 @@ def test_publisher_full_chain(
     # fixture populated.
     connection_yaml = tmp_path / "connection.yaml"
     connection_yaml.write_text(
-        yaml.safe_dump(
-            LocalFileSrcConn(base_path=str(tmp_path / "srcdata")).to_dict()
-        )
+        yaml.safe_dump(LocalFileSrcConn(base_path=str(tmp_path / "srcdata")).to_dict())
     )
 
     rc = _invoke(

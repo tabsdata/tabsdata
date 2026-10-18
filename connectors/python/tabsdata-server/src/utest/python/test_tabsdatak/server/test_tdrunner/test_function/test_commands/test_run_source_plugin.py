@@ -185,10 +185,10 @@ def built_bundle(tmp_path, user_project, fixture_publisher) -> Path:
 def _input_table_payload(name: str, *, location: dict | None = None) -> dict:
     return {
         "Table": {
-            "name": name,
             "collection_id": 1,
             "collection": "c",
             "table_id": f"T-{name}",
+            "table": name,
             "table_version_id": f"TV-{name}",
             "location": location,
             "input_idx": 0,
@@ -201,12 +201,13 @@ def _input_table_payload(name: str, *, location: dict | None = None) -> dict:
 def _output_table_payload(name: str, *, location: dict) -> dict:
     return {
         "Table": {
-            "name": name,
             "collection_id": 1,
             "collection": "c",
             "table_id": f"T-{name}",
+            "table": name,
             "table_version_id": f"TV-{name}",
-            "table_data_version_id": f"PDV-{name}",
+            "logical_table_data_version_id": f"LDV-{name}",
+            "physical_table_data_version_id": f"PDV-{name}",
             "location": location,
             "table_pos": 0,
         }
@@ -325,7 +326,10 @@ def test_normalise_bare_absolute_path():
     # An already-absolute path is returned posix-canonical and unchanged
     # (on POSIX; on Windows `Path.absolute()` anchors it to the cwd drive,
     # so compare against the same resolution the function performs).
-    assert _normalise_table_file("/tmp/x.parquet") == Path("/tmp/x.parquet").absolute().as_posix()
+    assert (
+        _normalise_table_file("/tmp/x.parquet")
+        == Path("/tmp/x.parquet").absolute().as_posix()
+    )
 
 
 def test_normalise_bare_relative_path(tmp_path, monkeypatch):
@@ -660,8 +664,8 @@ def test_write_inputs_manifest_happy(tmp_path, fixture_publisher):
             "version_pos": -1,
             "execution_id": None,
             "transaction_id": None,
-            "table_data_version_id": None,
             "triggered_on": None,
+            "physical_table_data_version_id": None,
         }
 
     # Each metadata value type round-trips through the manifest YAML.
@@ -905,18 +909,21 @@ def _bare_ctx() -> _SrcContext:
 def _bare_info() -> Info:
     return Info(
         project_id="P-1",
+        project="p",
         collection_id=1,
         collection="c",
+        function_id="F-1",
+        function="fn",
         function_version_id="FV-1",
         function_defined_on=1780000000000,
-        function="fn",
-        function_run_id=4,
         function_bundle=Location(uri="file:///bundle.tar.zst"),
         function_stage=Location(uri="file:///stage"),
-        triggered_on=1780000000100,
-        transaction_id=3,
         execution_id=2,
-        execution_name=None,
+        execution=None,
+        transaction_id=3,
+        logical_function_run_id=4,
+        physical_function_run_id=4,
+        triggered_on=1780000000100,
         function_data=Location(uri="file:///data"),
         scheduled_on=1780000000200,
     )
@@ -924,10 +931,10 @@ def _bare_info() -> Info:
 
 def _input_table(name: str, *, location: Location | None) -> InputTable:
     return InputTable(
-        name=name,
         collection_id=1,
         collection="c",
         table_id=f"T-{name}",
+        table=name,
         table_version_id=f"TV-{name}",
         location=location,
         input_idx=0,
@@ -938,12 +945,13 @@ def _input_table(name: str, *, location: Location | None) -> InputTable:
 
 def _output_table(name: str, *, location: Location) -> OutputTable:
     return OutputTable(
-        name=name,
         collection_id=1,
         collection="c",
         table_id=f"T-{name}",
+        table=name,
         table_version_id=f"TV-{name}",
-        table_data_version_id=f"PDV-{name}",
+        logical_table_data_version_id=f"LDV-{name}",
+        physical_table_data_version_id=f"PDV-{name}",
         location=location,
         table_pos=-1,
     )
@@ -1034,12 +1042,13 @@ def test_drain_noop_when_slot_has_no_location(tmp_path):
     # with model_construct to exercise the drain function's defensive
     # ``if slot.location is None: return`` branch.
     slot = OutputTable.model_construct(
-        name="iv",
         collection_id=1,
         collection="c",
         table_id="T-iv",
+        table="iv",
         table_version_id="TV-iv",
-        table_data_version_id="PDV-iv",
+        logical_table_data_version_id="LDV-iv",
+        physical_table_data_version_id="PDV-iv",
         location=None,
         table_pos=-1,
     )
