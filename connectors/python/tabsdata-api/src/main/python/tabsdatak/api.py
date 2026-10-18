@@ -24,9 +24,10 @@ fires; the `source` / `destination` declares the *where*. The
 -- it is the connection registered on the function's collection,
 which the runtime resolves and hands to the connector at run time.
 
-The `TrxCtx` interface is what the runtime hands to every
-decorated function so it can read trx identifiers and persist
-per-flow scratch state across invocations.
+The `FunctionCtx` interface (`TrxCtx` + `FlowCtx`) is what the
+runtime hands to every decorated function so it can read trx and
+flow identifiers and persist per-flow scratch state across
+invocations.
 """
 
 import importlib
@@ -720,3 +721,49 @@ class TrxCtx(ABC):
     def add_metadata(self, attr: ContextKeySpec, val: BasicTypeSpec | None):
         """Attach trx-level metadata for observability / lineage.
         Not durable across trx invocations."""
+
+
+class FlowCtx(ABC):
+    """Flow-level identifiers (collection / function) shared by every
+    role that runs inside a trx -- plugins *and* user-decorated
+    functions.
+
+    :categories: functions
+
+    Carries no plugin-specific surface (no `work_dir`).
+    """
+
+    @property
+    @abstractmethod
+    def collection_id(self) -> str:
+        """Unique id of the collection the function belongs to."""
+
+    @property
+    @abstractmethod
+    def collection_name(self) -> str:
+        """Human-readable collection name."""
+
+    @property
+    @abstractmethod
+    def function_id(self) -> str:
+        """Unique id of the running function."""
+
+    @property
+    @abstractmethod
+    def function_name(self) -> str:
+        """Human-readable function name."""
+
+
+class FunctionCtx(TrxCtx, FlowCtx, ABC):
+    """Context handed to a user-decorated function (`@publisher` /
+    `@transformer` / `@subscriber`) that declares a trailing
+    `ctx` parameter.
+
+    :categories: functions
+
+    Combines `TrxCtx` (trx identifiers + per-flow scratch state via
+    `get_attr` / `set_attr`) with `FlowCtx` (flow identifiers), so
+    the function can read state from the previous run and persist state
+    for the next. Unlike the plugin contexts of `tabsdatak.spi` it
+    does not carry plugin-only surface such as `work_dir`.
+    """

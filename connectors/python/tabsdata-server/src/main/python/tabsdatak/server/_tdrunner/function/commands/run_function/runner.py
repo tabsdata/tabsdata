@@ -34,6 +34,7 @@ from tabsdatak._info import (
     TransformerInfo,
     _unwrap_info,
 )
+from tabsdatak.api import FunctionCtx
 from tabsdatak.common._actions.dataquality.record import Check
 from tabsdatak.server._tdrunner import dataquality
 from tabsdatak.server._tdrunner.function._lib import (
@@ -52,7 +53,7 @@ from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function.commands.run_function.error import (
     RunFunctionErrorCode,
 )
-from tabsdatak.spi import FunctionCtx, TableMode
+from tabsdatak.spi import TableMode
 
 logger = logging.getLogger(__name__)
 

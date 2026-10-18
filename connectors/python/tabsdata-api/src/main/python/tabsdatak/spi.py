@@ -48,6 +48,7 @@ import tabsdatak._api as _api
 from tabsdatak.api import (
     BasicDictSpec,
     Dest,
+    FlowCtx,
     Src,
     StreamSrc,
     StreamThresholds,
@@ -139,37 +140,6 @@ class TableMode(Enum):
 
     SINGLE = "single"
     ARRAY = "array"
-
-
-class FlowCtx(ABC):
-    """Flow-level identifiers (collection / function) shared by every
-    role that runs inside a trx -- plugins *and* user-decorated
-    functions.
-
-    :categories: spi
-
-    Carries no plugin-specific surface (no `work_dir`).
-    """
-
-    @property
-    @abstractmethod
-    def collection_id(self) -> str:
-        """Unique id of the collection the function belongs to."""
-
-    @property
-    @abstractmethod
-    def collection_name(self) -> str:
-        """Human-readable collection name."""
-
-    @property
-    @abstractmethod
-    def function_id(self) -> str:
-        """Unique id of the running function."""
-
-    @property
-    @abstractmethod
-    def function_name(self) -> str:
-        """Human-readable function name."""
 
 
 class PluginCtx(FlowCtx, ABC):
@@ -462,22 +432,6 @@ class DestPlugin[C: Conn, D: Dest](ABC):
             tables: One parquet file per target; the runtime guarantees
                 `len(tables)` equals `dest`'s declared target count.
         """
-
-
-class FunctionCtx(TrxCtx, FlowCtx, ABC):
-    """Context handed to a user-decorated function (`@publisher` /
-    `@transformer` / `@subscriber`) that declares a trailing
-    `ctx` parameter.
-
-    :categories: spi
-
-    Combines `TrxCtx` (trx identifiers + per-flow scratch state via
-    `get_attr` / `set_attr`) with `FlowCtx` (flow identifiers), so
-    the function can read state from the previous run and persist state
-    for the next. Unlike `SrcPluginCtx` / `DestContext` it does not
-    inherit `PluginCtx` -- user functions never see plugin-only
-    surface such as `work_dir`.
-    """
 
 
 class ConnMetaModel(ABC):

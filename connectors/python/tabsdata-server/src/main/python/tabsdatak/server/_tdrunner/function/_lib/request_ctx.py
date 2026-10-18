@@ -4,28 +4,29 @@
 
 """Shared request-driven context implementation.
 
-Two layers, matching the SPI:
+Two layers, matching the API / SPI context hierarchy:
 
 * :class:`FromFlowRequestCtx` — flow-level surface only (``work_dir``
   + ``collection_id`` / ``collection_name`` / ``function_id`` /
   ``function_name``) plus the per-flow scratch store. Mirrors
-  :class:`tabsdatak.spi.PluginCtx`, which extends :class:`FlowCtx`
-  *without* :class:`TrxCtx`. The streamer-pod context uses this base —
-  a streamer has no transaction or execution plan.
+  :class:`tabsdatak.spi.PluginCtx`, which extends
+  :class:`tabsdatak.api.FlowCtx` *without* :class:`TrxCtx`. The
+  streamer-pod context uses this base — a streamer has no transaction
+  or execution plan.
 * :class:`FromRequestCtx` — extends :class:`FromFlowRequestCtx` with
   the trx-level identifiers (``exec_plan_id`` / ``trx_id`` /
   ``exec_plan_ts``). Mirrors :class:`SrcPluginCtx` / :class:`DestContext`
   / :class:`FunctionCtx`, which extend :class:`TrxCtx`. The per-command
   contexts driven by function-run requests use this base.
 
-The split matches the SPI inheritance:
+The split matches the API (``api``) / SPI (``spi``) inheritance:
 
-    FlowCtx                                ← collection / function ids
-    PluginCtx(FlowCtx)                     ← + work_dir
-    StreamSrcPluginCtx(PluginCtx)          ← stream sources: NO TrxCtx
-    SrcPluginCtx(TrxCtx, PluginCtx)        ← batch sources: TrxCtx
-    DestContext(TrxCtx, PluginCtx)         ← subscribers: TrxCtx
-    FunctionCtx(TrxCtx, FlowCtx)           ← user fn: TrxCtx
+    api.FlowCtx                            ← collection / function ids
+    api.FunctionCtx(TrxCtx, FlowCtx)       ← user fn: TrxCtx
+    spi.PluginCtx(FlowCtx)                 ← + work_dir
+    spi.StreamSrcPluginCtx(PluginCtx)      ← stream sources: NO TrxCtx
+    spi.SrcPluginCtx(TrxCtx, PluginCtx)    ← batch sources: TrxCtx
+    spi.DestContext(TrxCtx, PluginCtx)     ← subscribers: TrxCtx
 
 Each per-command class subclasses
 ``(FromRequestCtx, <role-base>)`` (trx-ful) or
@@ -58,9 +59,9 @@ State *not yet* plumbed (falls back to a documented stub):
 
 :meth:`hydrate` and :meth:`drain` are runtime-only — they're not
 declared on the abstract bases (:class:`tabsdatak.api.TrxCtx`,
-:class:`tabsdatak.spi.FlowCtx`, :class:`tabsdatak.spi.PluginCtx`,
-:class:`tabsdatak.spi.SrcPluginCtx`, :class:`tabsdatak.spi.DestContext`,
-:class:`tabsdatak.spi.FunctionCtx`) so user-typed code never sees
+:class:`tabsdatak.api.FlowCtx`, :class:`tabsdatak.api.FunctionCtx`,
+:class:`tabsdatak.spi.PluginCtx`, :class:`tabsdatak.spi.SrcPluginCtx`,
+:class:`tabsdatak.spi.DestContext`) so user-typed code never sees
 them via autocomplete or static analysis. The runtime is the only
 caller.
 
@@ -73,16 +74,15 @@ from __future__ import annotations
 import copy
 from pathlib import Path
 
-from tabsdatak.api import BasicTypeSpec, ContextKeySpec, TrxCtx
+from tabsdatak.api import BasicTypeSpec, ContextKeySpec, FlowCtx, TrxCtx
 from tabsdatak.server._tdrunner.function._lib.initial_values import _validate_key
-from tabsdatak.spi import FlowCtx
 
 
 class FromFlowRequestCtx(FlowCtx):
     """Flow-only request-driven context: ``work_dir`` + flow-level
     identifiers + scratch state, without the trx-level fields.
 
-    Subclasses :class:`tabsdatak.spi.FlowCtx`, mirroring the SPI's
+    Subclasses :class:`tabsdatak.api.FlowCtx`, mirroring the SPI's
     :class:`PluginCtx` / :class:`StreamSrcPluginCtx`, which extend
     :class:`FlowCtx` but not :class:`TrxCtx`. The streamer pod's
     context composes this with :class:`StreamSrcPluginCtx` because a

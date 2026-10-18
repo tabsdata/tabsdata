@@ -27,7 +27,7 @@ import pytest
 import yaml
 
 from tabsdatak._info import PublisherInfo
-from tabsdatak.api import TableFrameSpec, TableFramesSpec
+from tabsdatak.api import FunctionCtx, TableFrameSpec, TableFramesSpec
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
@@ -62,7 +62,7 @@ from tabsdatak.server._tdrunner.function.commands.run_function.error import (
     OutputWriteFailedError,
     UserFunctionFailedError,
 )
-from tabsdatak.spi import DestContext, FunctionCtx, SrcPluginCtx, TableMode
+from tabsdatak.spi import DestContext, SrcPluginCtx, TableMode
 from tabsdatak.tableframe import TableFrame
 from tabsdatak.tableframe._engine.taxonomy.frame import CreationMode
 from test_tabsdatak.server.conftest import TESTING_RESOURCES_FOLDER

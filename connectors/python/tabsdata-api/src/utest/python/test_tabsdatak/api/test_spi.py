@@ -15,6 +15,8 @@ from tabsdatak.api import (
     BasicDictSpec,
     BatchThresholds,
     Dest,
+    FlowCtx,
+    FunctionCtx,
     Src,
     StreamSrc,
     StreamThresholds,
@@ -28,8 +30,6 @@ from tabsdatak.spi import (
     DestPlugin,
     Explorer,
     FilesSpec,
-    FlowCtx,
-    FunctionCtx,
     PluginCtx,
     SrcDef,
     SrcPlugin,
@@ -289,7 +289,11 @@ class _MismatchConnSrcPlugin(SrcPlugin[_Conn, _SDSrc]):
 
 class _MismatchDestPlugin(DestPlugin[_Conn, _SDDest]):
     def write_out(
-        self, ctx: DestContext, conn: _Conn, dest: _OtherDest, tables: list[TableFileSpec]
+        self,
+        ctx: DestContext,
+        conn: _Conn,
+        dest: _OtherDest,
+        tables: list[TableFileSpec],
     ) -> None:
         return None
 
