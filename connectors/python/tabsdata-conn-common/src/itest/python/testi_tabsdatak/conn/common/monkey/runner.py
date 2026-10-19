@@ -296,8 +296,8 @@ class MonkeyRun:
         namespace: str,
         connect: Connect,
         cluster: Cluster,
-        project: str,
         project_id: str,
+        project: str,
         project_root: Path,
         module: ModuleType,
         progress: Progress | None = None,
@@ -307,8 +307,8 @@ class MonkeyRun:
         self.namespace = namespace
         self.connect = connect
         self.cluster = cluster
-        self.project = project
         self.project_id = project_id
+        self.project = project
         self.project_root = project_root
         self.module = module
         self.model = Model(plan.fleet)

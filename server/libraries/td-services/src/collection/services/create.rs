@@ -68,9 +68,9 @@ async fn create_collection(
         store
             .upsert(
                 &project,
-                connection_id,
-                &plan.create.name,
                 &plan.collection_id,
+                &plan.create.name,
+                connection_id,
                 &payload,
             )
             .await?;

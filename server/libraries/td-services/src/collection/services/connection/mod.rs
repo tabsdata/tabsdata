@@ -39,9 +39,9 @@ pub(crate) async fn drop_connection_best_effort(
 pub(crate) async fn rename_stored_connection(
     store: &dyn ConnectionStore,
     project: &ProjectId,
-    connection_id: &ConnectionId,
     collection_id: &CollectionId,
     new_name: &CollectionName,
+    connection_id: &ConnectionId,
 ) -> Result<(), TdError> {
     let stored = store.fetch(project, connection_id).await?;
     let mut document = stored.connection;
@@ -60,7 +60,7 @@ pub(crate) async fn rename_stored_connection(
         secrets: Some(kept(stored.secret_names)),
     };
     store
-        .upsert(project, connection_id, new_name, collection_id, &payload)
+        .upsert(project, collection_id, new_name, connection_id, &payload)
         .await?;
     Ok(())
 }
@@ -79,9 +79,9 @@ pub(crate) async fn reconcile_stored_connection(
     grant: Grant,
     store: &dyn ConnectionStore,
     project: &ProjectId,
-    connection_id: &ConnectionId,
     collection_id: &CollectionId,
     written: &CollectionName,
+    connection_id: &ConnectionId,
 ) -> Result<Reconciled, TdError> {
     let committed: Option<ActiveCollectionDB> = {
         let mut conn = db.read().await?;
@@ -96,9 +96,9 @@ pub(crate) async fn reconcile_stored_connection(
             rename_stored_connection(
                 store,
                 project,
-                connection_id,
                 collection_id,
                 &collection.name,
+                connection_id,
             )
             .await?;
             Ok(Reconciled::Live)
@@ -279,8 +279,8 @@ fn kept_keys(entries: &[KeyValue]) -> Vec<String> {
 pub struct ConnectionResolution {
     pub row: ConnectionDB,
     pub document: ConnectionDocument,
-    pub collection: CollectionName,
     pub collection_id: CollectionId,
+    pub collection: CollectionName,
 }
 
 /// Resolves the collection's connection ROW for an update. The connection
@@ -302,8 +302,8 @@ pub async fn resolve_connection<S: SeesProjectRows, M: AccessMode>(
     Ok(ConnectionResolution {
         row: existing,
         document: document.clone(),
-        collection: collection.name.clone(),
         collection_id: collection.id,
+        collection: collection.name.clone(),
     })
 }
 

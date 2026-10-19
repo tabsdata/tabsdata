@@ -232,9 +232,9 @@ mod tests {
         store
             .upsert(
                 &p.id,
-                &connection.base.id,
-                &name,
                 &collection.id,
+                &name,
+                &connection.base.id,
                 &ConnectionUpsert {
                     connection: Some(late.connection),
                     secrets: None,
@@ -250,9 +250,9 @@ mod tests {
             Grant::asserted("reconcile"),
             store,
             &p.id,
-            &connection.base.id,
             &collection.id,
             &name,
+            &connection.base.id,
         )
         .await
         .unwrap();

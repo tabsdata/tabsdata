@@ -145,9 +145,9 @@ impl ConnectionStore for FileConnectionStore {
     async fn upsert(
         &self,
         project_id: &ProjectId,
-        connection_id: &ConnectionId,
-        _collection: &CollectionName,
         _collection_id: &CollectionId,
+        _collection: &CollectionName,
+        connection_id: &ConnectionId,
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         let document = connection.connection.as_ref().ok_or_else(|| {
@@ -332,7 +332,7 @@ mod tests {
         let collection = CollectionName::try_from("col").unwrap();
         let collection_id = CollectionId::default();
         store
-            .upsert(project, connection_id, &collection, &collection_id, payload)
+            .upsert(project, &collection_id, &collection, connection_id, payload)
             .await
     }
 

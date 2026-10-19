@@ -17,9 +17,9 @@ impl ConnectionStore for NoopConnectionStore {
     async fn upsert(
         &self,
         _: &ProjectId,
-        _: &ConnectionId,
-        _: &CollectionName,
         _: &CollectionId,
+        _: &CollectionName,
+        _: &ConnectionId,
         _: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         Err(unconfigured())

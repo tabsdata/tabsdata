@@ -45,9 +45,9 @@ impl ConnectionStore for MockStore {
     async fn upsert(
         &self,
         project_id: &ProjectId,
-        connection_id: &ConnectionId,
-        _collection: &CollectionName,
         _collection_id: &CollectionId,
+        _collection: &CollectionName,
+        connection_id: &ConnectionId,
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         self.upserts
@@ -81,9 +81,9 @@ impl ConnectionStore for FailingStore {
     async fn upsert(
         &self,
         _: &ProjectId,
-        _: &ConnectionId,
-        _: &CollectionName,
         _: &CollectionId,
+        _: &CollectionName,
+        _: &ConnectionId,
         _: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         Err(api_error!(
@@ -117,9 +117,9 @@ impl ConnectionStore for KeepStore {
     async fn upsert(
         &self,
         _: &ProjectId,
-        _: &ConnectionId,
-        _: &CollectionName,
         _: &CollectionId,
+        _: &CollectionName,
+        _: &ConnectionId,
         _: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         Ok(stored_read())

@@ -59,9 +59,9 @@ async fn connection_upsert(
     let mut read = store
         .upsert(
             &project,
-            &resolution.row.base.id,
-            &resolution.collection,
             &resolution.collection_id,
+            &resolution.collection,
+            &resolution.row.base.id,
             &payload,
         )
         .await?;
@@ -70,9 +70,9 @@ async fn connection_upsert(
         authz.none(),
         store,
         &project,
-        &resolution.row.base.id,
         &resolution.collection_id,
         &resolution.collection,
+        &resolution.row.base.id,
     )
     .await?;
     if let Reconciled::Deleted = reconciled {

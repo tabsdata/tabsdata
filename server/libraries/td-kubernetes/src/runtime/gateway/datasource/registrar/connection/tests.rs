@@ -17,7 +17,7 @@ fn connection_labels_carry_the_connection_scope_and_ids() {
     let project_id = ProjectId::default();
     let collection_id = CollectionId::default();
     let connection_id = ConnectionId::default();
-    let labels = connection_labels(&project_id, &connection_id, &collection_id);
+    let labels = connection_labels(&project_id, &collection_id, &connection_id);
     assert_eq!(labels.get(LABEL_SCOPE).map(String::as_str), Some("conn"));
     assert_eq!(labels.get(LABEL_PROJECT_ID), Some(&project_id.to_string()));
     assert_eq!(

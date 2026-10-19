@@ -61,9 +61,9 @@ impl ConnectionStore for KubernetesConnectionStore {
     async fn upsert(
         &self,
         project_id: &ProjectId,
-        connection_id: &ConnectionId,
-        collection: &CollectionName,
         collection_id: &CollectionId,
+        collection: &CollectionName,
+        connection_id: &ConnectionId,
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         let document = connection
@@ -74,7 +74,7 @@ impl ConnectionStore for KubernetesConnectionStore {
         let old_object = self.read_object(connection_id).await?;
         let new_object = merge_kept(connection, old_object.as_ref())?;
         let name = self.name_object(connection_id)?;
-        let labels = connection_labels(project_id, connection_id, collection_id);
+        let labels = connection_labels(project_id, collection_id, connection_id);
         let annotations = connection_annotations(collection);
         let document_yaml = serde_yaml::to_string(document).map_err(|error| {
             KubeConnectionError::DocumentSerializationFailed {
@@ -167,8 +167,8 @@ impl ConnectionStore for KubernetesConnectionStore {
 
 fn connection_labels(
     project_id: &ProjectId,
-    connection_id: &ConnectionId,
     collection_id: &CollectionId,
+    connection_id: &ConnectionId,
 ) -> BTreeMap<String, String> {
     BTreeMap::from([
         (

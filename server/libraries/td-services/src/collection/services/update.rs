@@ -77,9 +77,9 @@ async fn update_collection(
         rename_stored_connection(
             store,
             &project,
-            &rename.connection_id,
             &rename.collection_id,
             &rename.new_name,
+            &rename.connection_id,
         )
         .await?;
     }
@@ -98,9 +98,9 @@ async fn update_collection(
             grant,
             store,
             &project,
-            &rename.connection_id,
             &rename.collection_id,
             &rename.new_name,
+            &rename.connection_id,
         )
         .await
     {
@@ -136,10 +136,10 @@ pub struct CollectionUpdatePlan {
 /// transaction can put the store back.
 #[derive(Debug, Clone)]
 pub struct ConnectionRename {
-    pub connection_id: ConnectionId,
     pub collection_id: CollectionId,
     pub old_name: CollectionName,
     pub new_name: CollectionName,
+    pub connection_id: ConnectionId,
 }
 
 pub async fn plan_collection_update<S: SeesProjectRows, M: AccessMode>(
@@ -161,10 +161,10 @@ pub async fn plan_collection_update<S: SeesProjectRows, M: AccessMode>(
     }
     let rename = match (&update.name, collection.connection_id) {
         (Some(name), Some(connection_id)) if *name != collection.name => Some(ConnectionRename {
-            connection_id,
             collection_id: collection.id,
             old_name: collection.name.clone(),
             new_name: name.clone(),
+            connection_id,
         }),
         _ => None,
     };
@@ -657,7 +657,7 @@ mod tests {
             .unwrap();
         let stale = CollectionName::try_from("stale").unwrap();
         let store = bridge.connection_store();
-        rename_stored_connection(store, &p.id, &connection.base.id, &collection.id, &stale)
+        rename_stored_connection(store, &p.id, &collection.id, &stale, &connection.base.id)
             .await
             .unwrap();
 
@@ -668,9 +668,9 @@ mod tests {
             Grant::asserted("reconcile"),
             store,
             &p.id,
-            &connection.base.id,
             &collection.id,
             &stale,
+            &connection.base.id,
         )
         .await
         .unwrap();

@@ -38,9 +38,9 @@ pub trait ConnectionStore: Send + Sync {
     async fn upsert(
         &self,
         project_id: &ProjectId,
-        connection_id: &ConnectionId,
-        collection: &CollectionName,
         collection_id: &CollectionId,
+        collection: &CollectionName,
+        connection_id: &ConnectionId,
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError>;
 

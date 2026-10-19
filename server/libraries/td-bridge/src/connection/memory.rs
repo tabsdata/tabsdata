@@ -26,9 +26,9 @@ impl ConnectionStore for InMemoryConnectionStore {
     async fn upsert(
         &self,
         project_id: &ProjectId,
-        connection_id: &ConnectionId,
-        _collection: &CollectionName,
         _collection_id: &CollectionId,
+        _collection: &CollectionName,
+        connection_id: &ConnectionId,
         connection: &ConnectionUpsert,
     ) -> Result<ConnectionRead, TdError> {
         let mut entries = self.entries.lock().unwrap();
