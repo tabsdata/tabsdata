@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::base::error::upgrade::UpgradeError;
-use crate::core::system::exit::{CommandError, CommandResult};
+use crate::core::system::exit::CommandResult;
 use crate::runtime::instance::upgrade::inventory::{Hop, Inventory, is_micro};
 
 pub const RULES_SCHEMA: u32 = 1;
@@ -107,7 +107,7 @@ pub fn ensure_rules(root: &Path, inventory: &Inventory) -> CommandResult {
 pub fn verify_rules(root: &Path, inventory: &Inventory) -> Vec<String> {
     let mut problems = Vec::new();
     if let Err(error) = ensure_rules(root, inventory) {
-        problems.push(describe(&error));
+        problems.push(error.message());
     }
     for entry in inventory.versions.iter().filter(|entry| entry.upgrader) {
         if !rules_path(root, &entry.version).is_file() {
@@ -116,7 +116,7 @@ pub fn verify_rules(root: &Path, inventory: &Inventory) -> Vec<String> {
         let rules = match load_rules(root, &entry.version) {
             Ok(rules) => rules,
             Err(error) => {
-                problems.push(describe(&error));
+                problems.push(error.message());
                 continue;
             }
         };
@@ -133,13 +133,6 @@ pub fn verify_rules(root: &Path, inventory: &Inventory) -> Vec<String> {
         }
     }
     problems
-}
-
-fn describe(error: &CommandError) -> String {
-    error
-        .source()
-        .map(ToString::to_string)
-        .unwrap_or_else(|| format!("{:?}", error.status()))
 }
 
 fn ensure_no_orphan_rules(root: &Path, inventory: &Inventory) -> CommandResult {

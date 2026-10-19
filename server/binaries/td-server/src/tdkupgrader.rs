@@ -165,12 +165,7 @@ async fn run(command: Command) -> Result<String, String> {
             })
         }
         Command::Rules { kupgrade } => {
-            let inventory = read_inventory(&kupgrade).map_err(|error| {
-                error
-                    .source()
-                    .map(ToString::to_string)
-                    .unwrap_or_else(|| format!("{:?}", error.status()))
-            })?;
+            let inventory = read_inventory(&kupgrade).map_err(|error| error.message())?;
             serde_json::to_string(&Problems {
                 problems: verify_rules(&kupgrade, &inventory),
             })

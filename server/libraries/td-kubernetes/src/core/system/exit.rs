@@ -44,6 +44,15 @@ impl CommandError {
     pub fn source(&self) -> Option<&TdError> {
         self.source.as_ref()
     }
+
+    pub fn message(&self) -> String {
+        match &self.source {
+            Some(error) => std::error::Error::source(error)
+                .map(ToString::to_string)
+                .unwrap_or_else(|| error.to_string()),
+            None => format!("{:?}", self.status),
+        }
+    }
 }
 
 pub fn render_error(error: &TdError, verbose: bool) -> String {
