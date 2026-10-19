@@ -323,9 +323,8 @@ fn seed_v3_deleted_function_sql() -> Vec<String> {
     out
 }
 
-/// v3 → v4 closes what a v3 delete left open under the tombstone: the system
-/// table and the system dependency end with the function, at the tombstone's
-/// instant, while the frozen user table stays open and adoptable.
+/// The ladder ends what a v3 delete left under the tombstone: the system table
+/// and dependency end with the function, and the frozen user table stays open.
 #[tokio::test]
 async fn v3_to_v4_closes_the_leftovers_of_a_deleted_function_postgres() {
     let db = crate::test_utils::postgres::pool().await;
@@ -362,12 +361,7 @@ async fn v3_to_v4_closes_the_leftovers_of_a_deleted_function_postgres() {
     .await;
     assert_eq!(
         tables,
-        [
-            "tv1=A@2026-01-02",
-            "tv2=F@infinity",
-            "tv3=A@2026-01-02",
-            "tv4=A@2026-01-02"
-        ],
+        ["tv1=A@2026-01-02", "tv2=F@infinity", "tv3=A@2026-01-02"],
         "the frozen user table stays open; the system table closes with the function"
     );
 
@@ -380,8 +374,8 @@ async fn v3_to_v4_closes_the_leftovers_of_a_deleted_function_postgres() {
     .await;
     assert_eq!(
         dependencies,
-        ["dv1@2026-01-02", "dv2@2026-01-02"],
-        "the re-registered system dependency closes with the function"
+        ["dv1@2026-01-02"],
+        "the system dependency closes with the function and its re-registered copy goes"
     );
 }
 
@@ -539,6 +533,56 @@ async fn seed_attempts(db: &TdPool) {
         )
         .await;
     }
+}
+
+/// An attempt's duplicate v3 materializations of one table collapse into the
+/// settled one.
+#[tokio::test]
+async fn v3_materializations_of_one_attempt_collapse_into_the_settled_one_postgres() {
+    let db = crate::test_utils::postgres::pool().await;
+    db.admin
+        .upgrade_source(archive::source(3))
+        .await
+        .expect("installing archive v3");
+    seed_attempts(&db.serving).await;
+    let (fv, ep, tx, pfr) = (
+        logical("fv", 1),
+        logical("ep", 1),
+        logical("tx", 1),
+        logical("pfr", 13),
+    );
+    for stmt in [
+        format!(
+            "UPDATE physical_table_data_versions SET has_data = true WHERE id = '{}'",
+            logical("pdv", 33)
+        ),
+        format!(
+            "INSERT INTO physical_table_data_versions (id, project_id, collection_id, table_id, \
+               name, table_version_id, function_version_id, execution_id, transaction_id, \
+               physical_function_run_id, function_param_pos, triggered_on, base_path) \
+             VALUES ('{}', 'p0', 'c0', 'tb-a', 'tb', 'tv1', '{fv}', '{ep}', '{tx}', '{pfr}', 0, \
+               '2026-01-01T03:00:00Z', '/p')",
+            logical("pdv", 34)
+        ),
+    ] {
+        execute(&db.serving, &stmt).await;
+    }
+
+    db.admin
+        .upgrade(&ApiserverComponent)
+        .await
+        .expect("upgrading v3 -> current");
+
+    let materializations = scalars(
+        &db.serving,
+        &format!(
+            "SELECT id || '/' || has_data || '/' || (valid_to = 'infinity') \
+             FROM physical_table_data_versions WHERE physical_function_run_id = {} ORDER BY id",
+            at_rest(13)
+        ),
+    )
+    .await;
+    assert_eq!(materializations, [format!("{}/true/true", at_rest(33))]);
 }
 
 /// v3 → v4 drops the pointer logs: every attempt gets an interval by
