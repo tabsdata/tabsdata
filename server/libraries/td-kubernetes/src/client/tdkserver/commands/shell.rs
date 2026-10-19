@@ -64,7 +64,10 @@ enum ShellCommand {
         arg_required_else_help = true
     )]
     Info(InfoCommands),
-    #[command(about = "Copy the configuration stubs for '--config' into the tabsdata home folder")]
+    #[command(
+        about = "Copy the configuration stubs for '--config', and the project secrets stub, into \
+                 the tabsdata home folder"
+    )]
     Stubs(StubsArguments),
     #[command(about = "Check whether a tabsdata instance can be created")]
     Assess(AssessArguments),

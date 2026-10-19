@@ -8,7 +8,7 @@ use clap_derive::Args;
 use td_error::TdError;
 use tracing::info;
 
-use crate::base::constants::STUBS_FOLDER;
+use crate::base::constants::{PROJECT_SECRET_STUB_FILE, STUBS_FOLDER};
 use crate::base::error::cli::CliError;
 use crate::client::registry::stubs_root;
 use crate::client::session::settings::SettingsContext;
@@ -73,8 +73,10 @@ pub async fn command_stubs(arguments: StubsArguments, globals: &GlobalArguments)
 
     info!(
         "Copied the configuration stubs to folder '{}'. Fill one in and pass it to \
-         'tdkserver quickstart' or 'tdkserver init' as '--config @FILE'.",
-        target.display()
+         'tdkserver quickstart' or 'tdkserver init' as '--config @FILE'. '{}' there is a \
+         template for 'tdk project create' and 'tdk project update' as '--secrets-file FILE'.",
+        target.display(),
+        PROJECT_SECRET_STUB_FILE
     );
     Ok(())
 }

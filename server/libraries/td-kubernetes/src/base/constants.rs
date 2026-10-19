@@ -384,6 +384,7 @@ pub const STAGE_FOLDER: &str = "stage";
 pub const TRASH_FOLDER: &str = "trash";
 pub const STUBS_FOLDER: &str = "stubs";
 pub const STUB_FILE_PREFIX: &str = "stub_";
+pub const PROJECT_SECRET_STUB_FILE: &str = "secret-prj.yaml";
 pub const FILL_FOLDER: &str = "fill";
 pub const FILL_STUB_FILE: &str = "stub.yaml";
 pub const LOG_FOLDER: &str = "log";
