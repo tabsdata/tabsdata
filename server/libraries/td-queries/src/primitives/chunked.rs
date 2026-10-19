@@ -223,6 +223,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "test_chunked", ops(select, insert, delete))]
     struct TestDao {
+        #[dao(pk)]
         pub id: TestId,
         pub name: TestName,
         pub status: TestStatus,

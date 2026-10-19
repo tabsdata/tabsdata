@@ -123,6 +123,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "testdao", ops(select, insert, delete))]
     struct TestDao {
+        #[dao(pk)]
         pub a: StringType,
     }
 

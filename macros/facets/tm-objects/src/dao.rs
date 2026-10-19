@@ -26,7 +26,9 @@ use syn::{DeriveInput, Field, Fields, ItemStruct, Type, parse_macro_input};
 /// (repeatable, `scd2` only; unique among the versions visible at one instant,
 /// so it addresses one version but not one row of the history), `scd2` |
 /// `timeline`, `recursive`, and `project_scoped` /
-/// `project_scoped(unique(A, B), unique_at(A, B))`.
+/// `project_scoped(unique(A, B), unique_at(A, B))`. A table DAO other than an
+/// update marks its primary key column with `#[dao(pk)]`, or flattens a base
+/// that does.
 #[derive(Debug, FromDeriveInput)]
 #[darling(attributes(dao))]
 pub struct DaoArguments {
@@ -803,10 +805,10 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             }
         }
     });
-    if is_versioned && pk.is_none() {
+    if is_table && !is_update && pk.is_none() {
         return Err(syn::Error::new_spanned(
             ident,
-            "scd2/timeline: mark the pk column with #[dao(pk)]",
+            "a table DAO marks its primary key column with #[dao(pk)]",
         ));
     }
 

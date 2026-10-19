@@ -98,6 +98,9 @@ pub struct LogicalFunctionRunInputId(Id);
 pub struct LogicalTableDataVersionId(IdL<DV>);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct MetricsFactId(Id);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct PermissionId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]

@@ -72,6 +72,7 @@ mod tests {
     #[derive(Eq, PartialEq)]
     #[dao(table = "items", ops(select, insert, delete))]
     struct ItemDao {
+        #[dao(pk)]
         pub id: ItemId,
         pub name: Name,
         pub description: Option<Description>,
@@ -143,6 +144,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "ordered_items", ops(select, insert, delete))]
     struct OrderedDao {
+        #[dao(pk)]
         pub id: ItemId,
         #[dao(order_by(asc))]
         pub name: Name,
@@ -613,6 +615,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "jobs", ops(select, insert))]
     struct JobDao {
+        #[dao(pk)]
         pub id: ItemId,
         pub name: Name,
         pub started_on: Option<StartedOn>,

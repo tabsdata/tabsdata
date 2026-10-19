@@ -55,6 +55,7 @@ pub(crate) struct LoadDvDao {
     ops(select, insert, delete, upsert(LogicalTableDataVersionId))
 )]
 pub(crate) struct LoadDvKeyedDao {
+    #[dao(pk)]
     pub id: LogicalTableDataVersionId,
     pub partition_id: DvPartition,
     pub status: DvStatus,

@@ -6,6 +6,7 @@
 //! `render` method that turns it into SQL; the low-level rendering primitives
 //! and expression helpers live in `render`.
 
+pub(crate) mod mint;
 pub(crate) mod partial_index;
 pub(crate) mod rls;
 pub(crate) mod rollup;

@@ -610,6 +610,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "test_cond", ops(select, insert, delete))]
     struct CondDao {
+        #[dao(pk)]
         col: CondStr,
         num: CondI64,
         flag: CondBool,

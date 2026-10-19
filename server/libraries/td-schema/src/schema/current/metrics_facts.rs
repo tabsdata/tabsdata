@@ -49,6 +49,7 @@ pub enum MetricsFacts {
     // Runs per edge become a plain count instead of a `COUNT(DISTINCT)`.
     EdgeFirst,
     EdgeFirstGroup,
+    Id,
 }
 
 /// Carried in both covering indexes so the window is an index-only scan.
@@ -143,6 +144,7 @@ impl Entity for Defs {
                 .col(ColumnDef::new(MetricsFacts::EdgeKind).text().null())
                 .col(flag(MetricsFacts::EdgeFirst))
                 .col(flag(MetricsFacts::EdgeFirstGroup))
+                .col(id_column(MetricsFacts::Id).not_null().primary_key())
                 .to_owned(),
         ]
     }

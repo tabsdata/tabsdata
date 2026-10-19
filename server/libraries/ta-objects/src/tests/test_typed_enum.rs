@@ -113,6 +113,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "test_enum", ops(select, insert, delete))]
     struct EnumTestDao {
+        #[dao(pk)]
         status: Status,
         enabled: Enabled,
     }

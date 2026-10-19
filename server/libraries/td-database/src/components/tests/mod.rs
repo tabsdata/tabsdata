@@ -33,6 +33,7 @@ mod shared_schema;
 mod structure;
 mod trigger_repair;
 mod v13_backfills;
+mod v14_backfills;
 use crate::generated_sql::generated;
 use crate::pool::TdPool;
 use crate::test_utils::TestDb;

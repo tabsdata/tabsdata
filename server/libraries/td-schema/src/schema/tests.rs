@@ -619,6 +619,20 @@ fn test_no_index_is_a_prefix_of_another() {
     }
 }
 
+/// Every table has a primary key, as a column's or as the table's own.
+#[test]
+fn test_every_table_has_a_primary_key() {
+    let keyless: Vec<String> = current::ENTITIES
+        .iter()
+        .flat_map(|e| e.create_tables())
+        .filter(|stmt| {
+            !stmt.get_columns().iter().any(|c| c.get_column_spec().primary_key) && !stmt.get_indexes().iter().any(|i| i.is_primary_key())
+        })
+        .map(|stmt| created_table(&stmt))
+        .collect();
+    assert!(keyless.is_empty(), "tables without a primary key: {keyless:?}");
+}
+
 /// Every id column (`id`, `*_id`) is declared through `id_column`, so it is
 /// `text COLLATE "C"`, or — for a logical id — through `logical_id_column`, so
 /// it is `bigint`; no other column carries that collation. Checked on the

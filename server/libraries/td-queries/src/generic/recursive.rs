@@ -459,6 +459,7 @@ mod tests {
     #[derive(Eq, PartialEq)]
     #[dao(table = "test_basic_table", ops(select, insert, delete), recursive)]
     struct BasicTestDao {
+        #[dao(pk)]
         id: TestId,
         #[dao(recursive(up))]
         current: TestRecursionUp,
@@ -469,6 +470,7 @@ mod tests {
     #[Dao]
     #[dao(table = "test_basic_reference", ops(select, insert, delete))]
     struct BasicReference {
+        #[dao(pk)]
         id: TestId,
         reference_id: TestRecursion,
     }

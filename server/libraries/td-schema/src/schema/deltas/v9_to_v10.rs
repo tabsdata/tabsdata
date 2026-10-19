@@ -5,10 +5,13 @@
 //! v9 → v10: `metrics_facts`, derived from the attempts that ended before v10
 //! in the same transaction that creates it, then the attempt columns the old
 //! `/metrics` aggregated are dropped. The derivation is frozen here like the
-//! rest of the rung, and `metrics_facts_backfill` hands it to the DAO gate.
+//! rest of the rung, and `metrics_facts_backfill` hands it, keyed, to the DAO gate.
 //!
 //! The same rung adds the parents' rolled-up `status` / `started_on` /
 //! `ended_on`, backfilled once here and kept current by the roll-up door.
+
+#[cfg(feature = "td-test")]
+use std::iter::once;
 
 use sea_query::{
     Alias, Asterisk, ColumnDef, CommonTableExpression, Condition, Expr, ExprTrait, Func, Iden, Index, IntoIden, JoinType,
@@ -615,6 +618,23 @@ pub(super) fn backfill_statement() -> String {
         .expect("the projection matches the inserted columns")
         .with_cte(ctes());
     insert.to_string(PostgresQueryBuilder)
+}
+
+/// [`backfill_statement`] into the table as it stands now, which keys every
+/// fact by an `id`: a surrogate, unique among the derived rows, since the gate
+/// compares facts without it.
+#[cfg(feature = "td-test")]
+pub(super) fn keyed_backfill_statement() -> String {
+    let derived = Alias::new("derived");
+    let mut keyed = Query::select();
+    keyed
+        .expr(Expr::cust("lpad((row_number() OVER ())::text, 25, '0') || '0'"))
+        .column((derived.clone(), Asterisk))
+        .from_subquery(rows(), derived);
+    let columns =
+        once("id".to_string()).chain(INSERTED_COLUMNS.map(|c| c.to_string())).map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", ");
+    let select = keyed.with(ctes()).to_string(PostgresQueryBuilder);
+    format!("INSERT INTO \"metrics_facts\" ({columns}) {select}")
 }
 
 /// The listing views the roll-up columns replace. Standing at v9 and absent

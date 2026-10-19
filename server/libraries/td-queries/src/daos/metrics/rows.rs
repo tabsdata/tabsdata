@@ -14,7 +14,7 @@ use td_objects::dxo::metrics_facts::MetricsFactInsertDB;
 use td_objects::types::basic::{
     AtTime, ByteCount, CollectionId, CurrentAttempt, EdgeFirst, EdgeFirstGroup, EdgeKind, EpochMs,
     ExecutionId, FactSide, FunctionId, GroupId, HasData, LogicalFunctionRunId,
-    LogicalFunctionRunStatus, LogicalTableDataVersionId, PhysicalFunctionRunId,
+    LogicalFunctionRunStatus, LogicalTableDataVersionId, MetricsFactId, PhysicalFunctionRunId,
     PhysicalFunctionRunStatus, Private, ReplayOrdinal, RowCount, RunHasInputs, RunHasOutputs,
     TableId, TransactionId,
 };
@@ -79,6 +79,7 @@ impl Row<'_> {
     ) -> Result<MetricsFactInsertDB, TdError> {
         let a = self.attempt;
         Ok(MetricsFactInsertDB {
+            id: MetricsFactId::default(),
             ts: a.ended_on,
             ts_hour_ms: EpochMs::try_from(self.floors.hour_ms)?.into(),
             ts_day_ms: EpochMs::try_from(self.floors.day_ms)?.into(),

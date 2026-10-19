@@ -7,6 +7,7 @@ use crate::daos::metrics::write::{attempts_ended, runs_reattempted, runs_status_
 use crate::test_utils::{SeedEntry, begin_exclusive, derive_metrics_facts};
 use std::collections::HashMap;
 use ta_objects::and;
+use td_common::id::Id;
 use td_database::access::LockInstant;
 use td_database::access::{Grant, InProject, XW};
 use td_database::domain::{Apiserver, DomainConnection};
@@ -32,9 +33,10 @@ use td_objects::test_utils::transitions::path;
 use td_objects::types::basic::{
     AtTime, BasePath, BundleId, ByteCount, CollectionId, CollectionName, Decorator, DependencyPos,
     Description, EdgeKind, EpochMs, FactSide, GroupName, HasData, IncludePrivate, IncludeReplaced,
-    InputIdx, LogicalFunctionRunInputId, LogicalFunctionRunStatus, PhysicalFunctionRunId,
-    PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId, ReuseFrozen, RowCount,
-    TableFunctionParamPos, TableId, TableNameDto, TransactionKey, UserId, VersionPos,
+    InputIdx, LogicalFunctionRunInputId, LogicalFunctionRunStatus, MetricsFactId,
+    PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId,
+    ReuseFrozen, RowCount, TableFunctionParamPos, TableId, TableNameDto, TransactionKey, UserId,
+    VersionPos,
 };
 use td_objects::types::visible_projects::VisibleProjects;
 use td_security::ENCODED_ID_SYSTEM;
@@ -347,9 +349,19 @@ where
     Ok(())
 }
 
+/// Each fact as its content: the writers and the rung mint different ids.
 async fn facts(db: &TdPool) -> Result<Vec<String>, TdError> {
     let rows: Vec<MetricsFactDB> = db.fetch_all(()).await?;
-    let mut out: Vec<String> = rows.iter().map(|r| format!("{r:?}")).collect();
+    let mut out: Vec<String> = rows
+        .into_iter()
+        .map(|r| {
+            let r = MetricsFactDB {
+                id: MetricsFactId::from(Id::_new([0; 16])),
+                ..r
+            };
+            format!("{r:?}")
+        })
+        .collect();
     out.sort();
     Ok(out)
 }

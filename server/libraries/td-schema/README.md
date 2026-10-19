@@ -49,11 +49,18 @@ A **logical** id column is the exception: it is declared with
 the `i64` whose digits are `<YYYYMMDD><COUNTER>`, so the number already orders
 chronologically and needs no collation at all.
 
-`test_id_columns_are_byte_collated` checks both rules on the column definitions.
+`test_id_columns_are_byte_collated` checks both rules on the column definitions,
+and `test_every_table_has_a_primary_key` that every table has a key.
 Note for deltas: PostgreSQL refuses to alter a column an RLS policy reads, so a
 delta touching `project_id` drops and re-creates the table's policies around the
 `ALTER`; and `text` and `bigint` cannot be the two sides of a foreign key, so a
 delta changing an id column's type drops and re-adds the keys that span it.
+
+Ids are minted by the application. A delta backfilling a new id column creates
+`td_mint_id(instant)` (`sql::mint`), which mints the same `Id` as a
+UUIDv7 stamped at `instant`, and drops it before it ends: the schema keeps no
+functions. `td_mint_id_mints_application_ids_postgres` holds it to
+`td_common::id`.
 
 ## Major versions and upgradeability
 

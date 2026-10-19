@@ -586,6 +586,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "testdao", ops(select, insert, delete))]
     struct TestDao {
+        #[dao(pk)]
         a: StringType,
     }
 
@@ -825,6 +826,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "rundao", ops(select, insert, delete))]
     struct RunDao {
+        #[dao(pk)]
         id: StringType,
         name: RunName,
     }
@@ -915,6 +917,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "nullabledao", ops(select, insert, delete))]
     struct NullableDao {
+        #[dao(pk)]
         id: StringType,
         ended: Option<StringType>,
     }

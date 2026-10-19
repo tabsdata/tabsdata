@@ -9,7 +9,7 @@
 use crate::types::basic::{
     AtTime, ByteCount, CollectionId, CurrentAttempt, EdgeFirst, EdgeFirstGroup, EdgeKind, EndedDay,
     EndedHour, EndedMonth, EndedWeek, EpochMs, ExecutionId, FactSide, FunctionId, GroupId, HasData,
-    LogicalFunctionRunId, LogicalFunctionRunStatus, LogicalTableDataVersionId,
+    LogicalFunctionRunId, LogicalFunctionRunStatus, LogicalTableDataVersionId, MetricsFactId,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, Private, ProjectId, ReplayOrdinal, RowCount,
     RunHasInputs, RunHasOutputs, TableId, TransactionId,
 };
@@ -17,6 +17,8 @@ use crate::types::basic::{
 #[ta_objects::Dao]
 #[dao(table = "metrics_facts", ops(insert), project_scoped)]
 pub struct MetricsFactInsertDB {
+    #[dao(pk)]
+    pub id: MetricsFactId,
     pub ts: AtTime,
     pub ts_hour_ms: EndedHour<EpochMs>,
     pub ts_day_ms: EndedDay<EpochMs>,
@@ -53,10 +55,11 @@ pub struct MetricsFactInsertDB {
     pub edge_first_group: EdgeFirstGroup,
 }
 
-/// A fact has no key of its own: it is an event, addressed only in bulk.
 #[ta_objects::Dao]
 #[dao(table = "metrics_facts", ops(select), project_scoped)]
 pub struct MetricsFactDB {
+    #[dao(pk)]
+    pub id: MetricsFactId,
     pub ts: AtTime,
     pub ts_hour_ms: EndedHour<EpochMs>,
     pub ts_day_ms: EndedDay<EpochMs>,

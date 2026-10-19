@@ -165,6 +165,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "test_keyed", ops(select, insert, delete, upsert(TestId)))]
     struct TestKeyedDao {
+        #[dao(pk)]
         pub id: TestId,
         pub name: TestName,
         pub status: TestStatus,

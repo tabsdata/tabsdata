@@ -21,6 +21,7 @@ mod tests {
     #[ta_objects::Dao]
     #[dao(table = "test_table", ops(select, insert, delete))]
     struct TestDao {
+        #[dao(pk)]
         v: VCol,
     }
 
