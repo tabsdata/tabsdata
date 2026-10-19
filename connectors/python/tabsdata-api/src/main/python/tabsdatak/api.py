@@ -800,6 +800,31 @@ class FunctionCtx(TransactionCtx, FlowCtx, ABC):
     Combines `TransactionCtx` (trx identifiers + per-flow scratch state via
     `get_attr` / `set_attr`) with `FlowCtx` (flow identifiers), so
     the function can read state from the previous run and persist state
-    for the next. Unlike the plugin contexts of `tabsdatak.spi` it
-    does not carry plugin-only surface such as `work_dir`.
+    for the next. It also gives the function the secrets of its project
+    (`secret_names` / `secret`). Unlike the plugin contexts of
+    `tabsdatak.spi` it does not carry plugin-only surface such as
+    `work_dir`.
     """
+
+    @property
+    @abstractmethod
+    def secret_names(self) -> list[str]:
+        """Names of the secrets of the function's project."""
+
+    @abstractmethod
+    def secret_keys(self, name: str) -> list[str]:
+        """Keys of the project secret `name`.
+
+        Secret names ignore case. Raises `KeyError` when the project
+        has no secret with that name.
+        """
+
+    @abstractmethod
+    def secret(self, name: str, key: str | None = None) -> str:
+        """Value of a key of a project secret.
+
+        Accepts the secret and the key separately, `secret("aws",
+        "key1")`, or joined by a dot, `secret("aws.key1")`. Secret
+        names and keys ignore case. Raises `KeyError` when the project
+        has no such secret or key.
+        """

@@ -30,6 +30,7 @@ import yaml
 from tabsdatak._info import PublisherInfo
 from tabsdatak.api import FunctionCtx, TableFrameSpec, TableFramesSpec
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
+from tabsdatak.server._tdrunner.function._commons.solver.secrets import ProjectSecret
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
     read_initial_values,
@@ -1153,6 +1154,29 @@ def test_function_context_is_a_function_ctx_subclass():
     assert isinstance(c, FunctionCtx)
     assert not isinstance(c, SrcPluginCtx)
     assert not isinstance(c, DestContext)
+
+
+def test_function_context_serves_the_project_secret():
+    c = _FunctionContext(
+        work_dir=Path("/work"),
+        project_id="p-1",
+        project="p",
+        collection_id="cid",
+        collection="c",
+        function_id="fn",
+        function="publish_people",
+        function_version_id="fv-1",
+        execution_id="ep",
+        execution=None,
+        transaction_id="tx",
+        logical_function_run_id="lfr-1",
+        physical_function_run_id="pfr-1",
+        triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
+    ).with_project_secret(ProjectSecret({"aws": {"key1": "mykey1"}}))
+    assert c.secret_names == ["aws"]
+    assert c.secret_keys("aws") == ["key1"]
+    assert c.secret("aws", "key1") == "mykey1"
+    assert c.secret("aws.key1") == "mykey1"
 
 
 def test_infer_table_modes_skips_trailing_ctx_param():

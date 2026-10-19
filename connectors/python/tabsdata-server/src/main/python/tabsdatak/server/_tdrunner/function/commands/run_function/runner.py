@@ -17,7 +17,7 @@ import inspect
 import logging
 import typing
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Self
 
 import polars as pl
 
@@ -37,6 +37,10 @@ from tabsdatak._info import (
 from tabsdatak.api import FunctionCtx
 from tabsdatak.common._actions.dataquality.record import Check
 from tabsdatak.server._tdrunner import dataquality
+from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
+    ProjectSecret,
+    take_project_secret,
+)
 from tabsdatak.server._tdrunner.function._lib import (
     inputs_manifest,
     outputs_manifest,
@@ -74,10 +78,25 @@ FunctionInfo = PublisherInfo | StreamPublisherInfo | TransformerInfo | Subscribe
 class _FunctionContext(FromRequestCtx, FunctionCtx):
     """Concrete :class:`FunctionCtx` for the run-function command.
 
-    All behaviour comes from :class:`FromRequestCtx`; this class
-    only fixes the abstract base so ``isinstance(ctx, FunctionCtx)``
-    holds at the call boundary.
+    Behaviour comes from :class:`FromRequestCtx`, plus the project
+    secret the runner took from the environment.
     """
+
+    _project_secret = ProjectSecret({})
+
+    def with_project_secret(self, project_secret: ProjectSecret) -> Self:
+        self._project_secret = project_secret
+        return self
+
+    @property
+    def secret_names(self) -> list[str]:
+        return self._project_secret.names
+
+    def secret_keys(self, name: str) -> list[str]:
+        return self._project_secret.keys(name)
+
+    def secret(self, name: str, key: str | None = None) -> str:
+        return self._project_secret.value(name, key)
 
 
 _INFO_BY_KIND: dict[str, type[FunctionInfo]] = {
@@ -431,6 +450,7 @@ def _sink_outputs(
 
 
 def run(args: argparse.Namespace) -> int:
+    project_secret = take_project_secret()
     request_path = Path(args.request)
     bundle_dir = Path(args.bundle_dir)
     inputs_manifest_path = Path(args.inputs_manifest)
@@ -496,7 +516,9 @@ def run(args: argparse.Namespace) -> int:
     # run-source-plugin does not run.
     ctx: _FunctionContext | None = None
     if has_transaction_ctx_param(func):
-        ctx = _FunctionContext.from_info(out_dir, request.info)
+        ctx = _FunctionContext.from_info(out_dir, request.info).with_project_secret(
+            project_secret
+        )
         hydrate_ctx_from_state_or_raise(
             ctx,
             request,
