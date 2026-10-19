@@ -572,7 +572,7 @@ def test_output_table_is_frozen():
 # helper converts that to a tz-aware UTC datetime, consumed by
 # ``stamp-inputs`` to populate ``$td.ver.timestamp`` and by
 # ``FromRequestCtx.triggered_on`` (and, through it, the file
-# destinations' ``${EXEC_PLAN_TS}`` path token). These tests pin the
+# destinations' ``${TRIGGERED_ON}`` path token). These tests pin the
 # conversion shape so a future change to the wire format (e.g. epoch
 # seconds instead of milliseconds) breaks loudly here rather than
 # silently corrupting downstream column values or paths.

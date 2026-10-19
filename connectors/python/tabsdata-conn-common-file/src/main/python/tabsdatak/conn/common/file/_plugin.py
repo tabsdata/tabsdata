@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, cast
 
 from tabsdatak._api import path_timestamp
+from tabsdatak._legacy import warn_renamed
 from tabsdatak.common._fileformat.taxonomy import (
     EXCEL_SHEET_KEY,
     DestFileFormat,
@@ -31,6 +32,7 @@ from tabsdatak.conn.common.file.error import FileCommonErrorCode
 from tabsdatak.conn.common.file.typing_ import (
     EXEC_PLAN_ID,
     EXEC_PLAN_TS,
+    TRIGGERED_ON,
     TRX_ID,
 )
 from tabsdatak.error import ApiException, ErrorCode
@@ -83,10 +85,18 @@ def sheet_in(format_cfg: dict | None) -> int | None:
 
 
 def resolve_dest_tokens(target_path: str, ctx: DestContext) -> str:
+    if EXEC_PLAN_TS in target_path:
+        logger.warning(
+            f"The destination path '{target_path}' uses '{EXEC_PLAN_TS}', which is "
+            f"deprecated; use '{TRIGGERED_ON}' instead."
+        )
+        warn_renamed(EXEC_PLAN_TS, TRIGGERED_ON)
+    triggered_on = path_timestamp(ctx.triggered_on)
     tokens = {
         EXEC_PLAN_ID: ctx.execution_id,
         TRX_ID: ctx.transaction_id,
-        EXEC_PLAN_TS: path_timestamp(ctx.triggered_on),
+        TRIGGERED_ON: triggered_on,
+        EXEC_PLAN_TS: triggered_on,
     }
     resolved = target_path
     for token, value in tokens.items():

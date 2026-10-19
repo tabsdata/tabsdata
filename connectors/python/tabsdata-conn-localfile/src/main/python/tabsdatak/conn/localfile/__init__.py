@@ -246,7 +246,7 @@ class LocalFileDest(Dest):
             one write slot per entry. Each path is relative (no leading
             `/`), must not end with `/`, and must not contain empty
             segments (`//`). Globs are not allowed; the tokens
-            `${EXEC_PLAN_ID}`, `${TRX_ID}` and `${EXEC_PLAN_TS}`
+            `${EXEC_PLAN_ID}`, `${TRX_ID}` and `${TRIGGERED_ON}`
             are substituted at write time. Backslashes and NUL are not
             allowed.
         format: Output format -- one of `AUTO`, `CSV`, `JSON`,

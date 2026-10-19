@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import logging
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -237,21 +239,34 @@ def test_initial_lastmod_to_iso_none():
 def test_resolve_dest_tokens_substitutes():
     ctx = _DestCtx(Path("."))
     resolved = _plugin.resolve_dest_tokens(
-        "out/${EXEC_PLAN_ID}/${TRX_ID}/x.${EXEC_PLAN_TS}.csv", ctx
+        "out/${EXEC_PLAN_ID}/${TRX_ID}/x.${TRIGGERED_ON}.csv", ctx
     )
     assert resolved == "out/test-exec-plan-id/test-trx-id/x.20260101T000000.000Z.csv"
 
 
 def test_resolve_dest_tokens_timestamp_has_a_fixed_length():
-    whole_second = _plugin.resolve_dest_tokens("${EXEC_PLAN_TS}", _DestCtx(Path(".")))
+    whole_second = _plugin.resolve_dest_tokens("${TRIGGERED_ON}", _DestCtx(Path(".")))
     fraction = _plugin.resolve_dest_tokens(
-        "${EXEC_PLAN_TS}",
+        "${TRIGGERED_ON}",
         _TriggeredOnDestCtx(datetime(2026, 1, 1, 0, 0, 0, 376000, tzinfo=timezone.utc)),
     )
     assert whole_second == "20260101T000000.000Z"
     assert fraction == "20260101T000000.376Z"
     assert len(whole_second) == len(fraction)
     assert whole_second < fraction
+
+
+def test_resolve_dest_tokens_keeps_the_deprecated_timestamp_token(caplog):
+    ctx = _DestCtx(Path("."))
+    with (
+        caplog.at_level(logging.WARNING, logger=_plugin.logger.name),
+        warnings.catch_warnings(record=True) as caught,
+    ):
+        warnings.simplefilter("always")
+        resolved = _plugin.resolve_dest_tokens("x.${EXEC_PLAN_TS}.csv", ctx)
+    assert resolved == _plugin.resolve_dest_tokens("x.${TRIGGERED_ON}.csv", ctx)
+    assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+    assert "${TRIGGERED_ON}" in caplog.text
 
 
 def test_resolve_dest_tokens_leaves_unknown_tokens():

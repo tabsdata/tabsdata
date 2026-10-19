@@ -15,8 +15,9 @@ builds its `Src` / `Dest` on the same path and format specs.
   a `Src` / `Dest` takes (one slot per entry).
 * `SrcFormatCfgSpec` / `DestFormatCfgSpec` -- the per-format
   `format_cfg` dict, side-typed by the file-format enum.
-* `EXEC_PLAN_ID` / `TRX_ID` / `EXEC_PLAN_TS` -- substitution
-  tokens allowed in destination paths.
+* `EXEC_PLAN_ID` / `TRX_ID` / `TRIGGERED_ON` -- substitution
+  tokens allowed in destination paths (`EXEC_PLAN_TS` is a deprecated
+  alias of `TRIGGERED_ON`).
 
 The per-format `format_cfg` dict is side-typed: only the keys valid
 for the `Src` side (`has_header`, `separator`, ...) are accepted
@@ -51,7 +52,7 @@ DestPathNameSpec: TypeAlias = Annotated[str, _validation.DEST_PATH_VALIDATION]
 it must not start with `/` (it is relative, not absolute), end with
 `/`, or contain empty segments (`//`). Globs are not allowed;
 backslashes and NUL are not allowed; the tokens `${EXEC_PLAN_ID}`,
-`${TRX_ID}` and `${EXEC_PLAN_TS}` are substituted at write time."""
+`${TRX_ID}` and `${TRIGGERED_ON}` are substituted at write time."""
 DestPathsSpec: TypeAlias = list[DestPathNameSpec]
 """List of destination paths, one write slot per entry (each entry
 follows `DestPathNameSpec`)."""
@@ -174,17 +175,24 @@ time."""
 TRX_ID: str = "${TRX_ID}"
 """Destination-path token replaced with the transaction id at write
 time."""
-EXEC_PLAN_TS: str = "${EXEC_PLAN_TS}"
+TRIGGERED_ON: str = "${TRIGGERED_ON}"
 """Destination-path token replaced at write time with when the function
 run was triggered, as a basic-format ISO 8601 UTC timestamp with
 milliseconds (e.g. `20260604T083428.376Z`): fixed length, so paths
 built from it sort chronologically, and free of characters (`:`, `+`)
 that filesystems or object stores reject or mangle."""
+# A token is text inside a path, so @deprecated cannot mark it: resolving a
+# path that holds it warns instead (see resolve_dest_tokens).
+EXEC_PLAN_TS: str = "${EXEC_PLAN_TS}"
+"""Deprecated since 2.3.0; use `${TRIGGERED_ON}`, which it resolves the
+same as."""
 
 DEST_PATH_TOKENS: frozenset[str] = frozenset({
     EXEC_PLAN_ID,
     TRX_ID,
+    TRIGGERED_ON,
     EXEC_PLAN_TS,
 })
 """The substitution tokens allowed in a destination path:
-`${EXEC_PLAN_ID}`, `${TRX_ID}` and `${EXEC_PLAN_TS}`."""
+`${EXEC_PLAN_ID}`, `${TRX_ID}` and `${TRIGGERED_ON}` (plus the deprecated
+`${EXEC_PLAN_TS}`)."""
