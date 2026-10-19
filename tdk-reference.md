@@ -101,12 +101,28 @@ Required identifiers (`--name`, `--plan`, ...) are shown without brackets; `[...
 ## `tdk project` *(system-scoped — no `--proj`)*
 
 ```
-project create --name NAME [--description D] [--groups g1,g2,...]
-project update --name NAME [--new-name N] [--description D]
-project delete --name NAME [-y]
-project get    --name NAME
+project create  --name NAME [--description D] [--groups g1,g2,...] [--secrets-file FILE]
+project update  --name NAME [--new-name N] [--description D] [--secrets-file FILE]
+                # --secrets-file replaces all the project's secrets
+project delete  --name NAME [-y]
+project get     --name NAME
 project list
+project secrets --name NAME [-o]   # secret names and keys, never values
 ```
+
+`--secrets-file` takes a YAML file (`-` reads stdin) mapping each secret to its
+keys and each key to its value:
+
+```yaml
+aws:
+  key1: mykey1               # the value itself ("" stores an empty value)
+  key2: $secret:AWS_KEY2     # read from the AWS_KEY2 environment variable
+  key3:                      # no value: keep the stored one (empty if none)
+```
+
+A secret or key left out of the file is removed; an empty file removes them
+all. Functions read them through `ctx.secret("aws", "key1")` or
+`ctx.secret("aws.key1")`.
 
 ## `tdk collection` (alias `col`)
 

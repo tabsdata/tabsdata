@@ -1160,10 +1160,16 @@ class APIServer:
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def project_create(
-        self, name: str, description: str, raise_for_status: bool = True
+        self,
+        name: str,
+        description: str,
+        secrets: list[dict] | None = None,
+        raise_for_status: bool = True,
     ):
         endpoint = "/projects"
-        data = self.get_params_dict(["name", "description"], [name, description])
+        data = self.get_params_dict(
+            ["name", "description", "secrets"], [name, description, secrets]
+        )
         response = self.post(endpoint, json=data)
         return self.raise_for_status_or_return(raise_for_status, response)
 
@@ -1199,13 +1205,20 @@ class APIServer:
         name: str,
         new_name: str = None,
         new_description: str = None,
+        new_secrets: list[dict] | None = None,
         raise_for_status: bool = True,
     ):
         endpoint = f"/projects/{name}"
         data = self.get_params_dict(
-            ["name", "description"], [new_name, new_description]
+            ["name", "description", "secrets"],
+            [new_name, new_description, new_secrets],
         )
         response = self.post(endpoint, json=data)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def project_secrets(self, name: str, raise_for_status: bool = True):
+        endpoint = f"/projects/{name}/secrets"
+        response = self.get(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def metrics_get(

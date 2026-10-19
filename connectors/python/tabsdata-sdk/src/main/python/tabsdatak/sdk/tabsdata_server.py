@@ -63,6 +63,7 @@ from tabsdatak.common._temps import tabsdata_temp_folder
 
 # noinspection PyProtectedMember
 from tabsdatak.sdk._apiserver import APIServer, obtain_connection
+from tabsdatak.sdk._project_secret import SecretsSpec, from_read, to_payload
 from tabsdatak.sdk.status_utils.data_version import data_version_status_to_mapping
 from tabsdatak.sdk.status_utils.execution import (
     execution_status_to_mapping,
@@ -2373,10 +2374,13 @@ class Project:
     def _data(self, data_dict: dict | None):
         self._data_dict = data_dict
 
-    def create(self, raise_for_status: bool = True) -> Project:
+    def create(
+        self, secrets: SecretsSpec | None = None, raise_for_status: bool = True
+    ) -> Project:
         response = self.connection.project_create(
             self.name,
             self._description,
+            secrets=None if secrets is None else to_payload(secrets),
             raise_for_status=raise_for_status,
         )
         self.refresh()
@@ -2404,12 +2408,14 @@ class Project:
         self,
         name: str = None,
         description: str = None,
+        secrets: SecretsSpec | None = None,
         raise_for_status: bool = True,
     ) -> Project:
         response = self.connection.project_update(
             self.name,
             new_name=name,
             new_description=description,
+            new_secrets=None if secrets is None else to_payload(secrets),
             raise_for_status=raise_for_status,
         )
         data = response.json().get("data")
@@ -2417,6 +2423,11 @@ class Project:
         self.name = data.get("name")
         self._data = data
         return self
+
+    @property
+    def secrets(self) -> dict[str, list[str]]:
+        response = self.connection.project_secrets(self.name)
+        return from_read(response.json().get("data"))
 
     def __eq__(self, other):
         if not isinstance(other, Project):
@@ -5059,7 +5070,11 @@ class TabsdataServer:
         )
 
     def create_project(
-        self, name: str, description: str, raise_for_status: bool = True
+        self,
+        name: str,
+        description: str,
+        secrets: SecretsSpec | None = None,
+        raise_for_status: bool = True,
     ) -> Project:
         """
         Create a project in the server.
@@ -5067,13 +5082,15 @@ class TabsdataServer:
         Args:
             name (str): The name of the project.
             description (str): The description of the project.
+            secrets (dict, optional): The secrets of the project, as
+                `{secret: {key: value}}`. Defaults to none.
             raise_for_status (bool, optional): Whether to raise on a non-2xx response.
 
         Returns:
             Project: The created project.
         """
         project = Project(self.connection, name, description=description)
-        project.create(raise_for_status=raise_for_status)
+        project.create(secrets=secrets, raise_for_status=raise_for_status)
         return project
 
     def delete_project(self, name: str, raise_for_status: bool = True) -> None:
@@ -5131,14 +5148,27 @@ class TabsdataServer:
         name: str,
         new_name: str = None,
         new_description: str = None,
+        new_secrets: SecretsSpec | None = None,
         raise_for_status: bool = True,
     ) -> Project:
-        """Update a project's name and/or description."""
+        """Update a project's name, description and/or secrets.
+
+        `new_secrets`, as `{secret: {key: value}}`, replaces all the secrets
+        of the project; a `None` value keeps the value already stored for
+        that key, or stores an empty one when there is none. Leaving
+        `new_secrets` out keeps the secrets as they are.
+        """
         return Project(self.connection, name).update(
             name=new_name,
             description=new_description,
+            secrets=new_secrets,
             raise_for_status=raise_for_status,
         )
+
+    def get_project_secrets(self, name: str) -> dict[str, list[str]]:
+        """Names of the secrets of a project, each with its keys. Values are
+        never returned."""
+        return Project(self.connection, name).secrets
 
     def create_role_permission(
         self,

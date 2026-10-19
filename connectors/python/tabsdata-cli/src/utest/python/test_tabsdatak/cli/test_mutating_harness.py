@@ -111,7 +111,7 @@ CASES: tuple[MutCase, ...] = (
         ["project", "create", "-n", "p1", "--description", "desc"],
         "create_project",
         ("p1", "desc"),
-        {},
+        {"secrets": None},
         "Project created successfully",
     ),
     # --- update -----------------------------------------------------------
@@ -136,14 +136,25 @@ CASES: tuple[MutCase, ...] = (
         ["project", "update", "-n", "p1", "--new-name", "p2", "--description", "d"],
         "update_project",
         ("p1",),
-        {"new_name": "p2", "new_description": "d"},
+        {"new_name": "p2", "new_description": "d", "new_secrets": None},
         "Project updated successfully",
     ),
     MutCase(
         "collection-update",
-        ["collection", "update", "-n", "c1", "--new-name", "c2",
-         "--description", "d", "--storage-path", "bp"],
-        "update_collection", ("c1",),
+        [
+            "collection",
+            "update",
+            "-n",
+            "c1",
+            "--new-name",
+            "c2",
+            "--description",
+            "d",
+            "--storage-path",
+            "bp",
+        ],
+        "update_collection",
+        ("c1",),
         {"new_name": "c2", "new_description": "d", "new_base_path": "bp"},
         "Collection updated successfully",
     ),
@@ -456,9 +467,17 @@ def test_fn_register_maps_flags_to_register_function(tmp_path):
     client = _client()
     result = _invoke_fn(
         [
-            "fn", "register", "-c", "coll1", "--path", "/x.py::f",
-            "--description", "desc", "--reuse-tables",
-            "--storage-path", "bp",
+            "fn",
+            "register",
+            "-c",
+            "coll1",
+            "--path",
+            "/x.py::f",
+            "--description",
+            "desc",
+            "--reuse-tables",
+            "--storage-path",
+            "bp",
         ],
         client=client,
         tmp_path=tmp_path,
@@ -467,9 +486,15 @@ def test_fn_register_maps_flags_to_register_function(tmp_path):
     # --requirements and --local-pkg are temporarily disabled: the command
     # always forwards them as None.
     assert client.register_function.call_args == call(
-        "coll1", _INFO, _ROOT,
-        description="desc", local_packages=None, reuse_tables=True,
-        enabled=True, requirements=None, base_path="bp",
+        "coll1",
+        _INFO,
+        _ROOT,
+        description="desc",
+        local_packages=None,
+        reuse_tables=True,
+        enabled=True,
+        requirements=None,
+        base_path="bp",
     )
     assert "registered successfully" in result.output
 
@@ -516,8 +541,18 @@ def test_fn_patch_maps_flags_to_patch_function(tmp_path):
     client = _client()
     result = _invoke_fn(
         [
-            "fn", "patch", "-n", "f1", "-c", "coll1", "--fn-version", "fv1",
-            "--path", "/x.py::f", "--description", "d",
+            "fn",
+            "patch",
+            "-n",
+            "f1",
+            "-c",
+            "coll1",
+            "--fn-version",
+            "fv1",
+            "--path",
+            "/x.py::f",
+            "--description",
+            "d",
         ],
         client=client,
         tmp_path=tmp_path,
