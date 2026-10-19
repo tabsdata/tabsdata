@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::path::Path;
+
 use clap::Parser;
 use indoc::indoc;
 

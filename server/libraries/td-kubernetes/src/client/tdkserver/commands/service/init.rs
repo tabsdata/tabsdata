@@ -32,6 +32,9 @@ use crate::client::tdkserver::injector::{
     self, CONFIG_ARGUMENT, CONFIG_HELP, CONFIG_LONG_HELP, Setting, parse_settings,
 };
 use crate::client::tdkserver::render::{preview, report};
+use crate::client::tdkserver::sources::requirements::{
+    ExtraRequirements, REQUIREMENTS_ARGUMENT, REQUIREMENTS_HELP, REQUIREMENTS_LONG_HELP,
+};
 use crate::core::system::exit::{CommandResult, abort, abort_with};
 use crate::kube::api::entity::namespace::ensure_namespace_exists;
 use crate::kube::api::entity::pod::probe_scheduler;
@@ -83,6 +86,17 @@ pub struct InitArguments {
         long_help = CONFIG_LONG_HELP
     )]
     pub config: Vec<String>,
+
+    #[arg(
+        long = REQUIREMENTS_ARGUMENT,
+        name = REQUIREMENTS_ARGUMENT,
+        value_name = "FILE",
+        required = false,
+        display_order = 85,
+        help = REQUIREMENTS_HELP,
+        long_help = REQUIREMENTS_LONG_HELP
+    )]
+    pub requirements: Option<PathBuf>,
 
     #[arg(
         long,
@@ -139,9 +153,14 @@ pub async fn init_instance(
         yes,
         loglevel,
         config,
+        requirements,
     } = arguments;
     let mut injections = parse_settings(&config).map_err(TdError::from)?;
     injections.extend(extra);
+    let requirements = requirements
+        .as_deref()
+        .map(ExtraRequirements::load)
+        .transpose()?;
 
     let settings = SettingsContext::settings();
     let instance = resolved_instance(instance, &settings);
@@ -285,6 +304,15 @@ pub async fn init_instance(
             return Err(TdError::from(error).into());
         }
         step.done("Injected the configuration settings");
+    }
+
+    if let Some(requirements) = &requirements {
+        let step = reporter.step("Adding the complementary requirements");
+        if let Err(error) = requirements.merge(&init_folder) {
+            step.fail();
+            return Err(error);
+        }
+        step.done("Added the complementary requirements");
     }
 
     let step = reporter.step("Writing tabsdata instance settings");

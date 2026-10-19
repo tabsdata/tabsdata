@@ -8,6 +8,7 @@ pub mod common;
 pub mod filler;
 pub mod injector;
 pub mod render;
+pub mod sources;
 pub mod widgets;
 
 use crate::cerror;

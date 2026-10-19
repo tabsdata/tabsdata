@@ -35,10 +35,11 @@ pub enum CliError {
     } = 15,
     #[error(
         "Argument '--{argument}' is no longer supported by 'tdkserver quickstart'. To declare \
-         additional packages for any of the tabsdata base virtual environments, either run \
-         'tdkserver venv update', which works both with 'tdkserver quickstart' and on an \
-         already created instance, or edit the requirements-*.txt init assets after \
-         'tdkserver init' and before 'tdkserver create'."
+         additional packages for any of the tabsdata base virtual environments, either pass \
+         '--requirements FILE' to 'tdkserver quickstart' or 'tdkserver init', which adds them \
+         to every base virtual environment, run 'tdkserver venv update', which works both \
+         with 'tdkserver quickstart' and on an already created instance, or edit the \
+         requirements-*.txt init assets after 'tdkserver init' and before 'tdkserver create'."
     )]
     ArgumentNoLongerSupported { argument: String } = 4,
     #[error(

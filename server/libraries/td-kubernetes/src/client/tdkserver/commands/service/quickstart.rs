@@ -47,6 +47,9 @@ use crate::client::tdkserver::injector::{
     self, Address, CONFIG_ARGUMENT, CONFIG_EXTENSION, CONFIG_HELP, CONFIG_LONG_HELP, FILE_PREFIX,
     Provided, Setting, key_address, parse_settings,
 };
+use crate::client::tdkserver::sources::requirements::{
+    REQUIREMENTS_ARGUMENT, REQUIREMENTS_HELP, REQUIREMENTS_LONG_HELP,
+};
 #[allow(unused_imports)]
 use crate::client::tdkserver::widgets::show_notice;
 use crate::core::system::exit::{CommandResult, abort, abort_with, render_error};
@@ -214,6 +217,17 @@ pub struct QuickstartArguments {
     pub config: Vec<String>,
 
     #[arg(
+        long = REQUIREMENTS_ARGUMENT,
+        name = REQUIREMENTS_ARGUMENT,
+        value_name = "FILE",
+        required = false,
+        display_order = 95,
+        help = REQUIREMENTS_HELP,
+        long_help = REQUIREMENTS_LONG_HELP
+    )]
+    pub requirements: Option<PathBuf>,
+
+    #[arg(
         long = FILL_ARGUMENT,
         name = FILL_ARGUMENT,
         required = false,
@@ -298,6 +312,7 @@ pub async fn command_quickstart(
         requirements_ag,
         uv_index,
         config,
+        requirements,
         fill,
     } = arguments;
 
@@ -408,6 +423,7 @@ pub async fn command_quickstart(
         requirements_ag,
         */
         injections,
+        requirements,
         filled.as_deref(),
         globals,
     )
@@ -626,6 +642,7 @@ async fn run_quickstart(
     requirements_ag: Option<PathBuf>,
     */
     injections: Vec<Setting>,
+    requirements: Option<PathBuf>,
     filled: Option<&Path>,
     globals: &GlobalArguments,
 ) -> CommandResult {
@@ -638,6 +655,7 @@ async fn run_quickstart(
             yes,
             loglevel,
             config: Vec::new(),
+            requirements,
         },
         globals,
         false,

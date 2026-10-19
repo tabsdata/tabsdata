@@ -3,11 +3,9 @@
 //
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
+use std::path::PathBuf;
 
 use clap_derive::Args;
-use pep508_rs::{Requirement, VerbatimUrl};
 use td_common::status::ExitStatus::Cancelled;
 use td_error::TdError;
 use tracing::info;
@@ -15,7 +13,6 @@ use tracing::info;
 use crate::base::constants::{
     ENV_TD_KUBE_UV_MODE, KPROFILE_ASSETS_FAMILY, UV_MODE_LINKED, UvMode, VENVS, Venv,
 };
-use crate::base::error::cli::CliError;
 use crate::base::error::provider::ProviderError;
 use crate::base::naming::{id_from_file, to_kube_resource_name};
 use crate::base::reporter::{InteractiveReporter, Reporter};
@@ -26,12 +23,11 @@ use crate::client::tdkserver::commands::service::{
 };
 use crate::client::tdkserver::common::{confirm, confirm_at_leisure};
 use crate::client::tdkserver::render::report;
+use crate::client::tdkserver::sources::requirements::{read_requirements, validate_requirements};
 use crate::core::system::exit::{CommandResult, abort};
 use crate::kube::api::entity::configmap::replace_configmap;
 use crate::kube::context::KubeContext;
 use crate::runtime::provider::{ClusterProvider, Provider, provider_for_instance_mutating};
-
-const REQUIREMENTS_OPTION_PREFIX: char = '-';
 
 #[derive(Debug, Clone, Args)]
 pub struct UpdateArguments {
@@ -217,41 +213,6 @@ fn listed(venvs: &[Venv]) -> String {
         .map(|venv| format!("'{}'", venv.as_str()))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-fn read_requirements(source: &Path) -> CommandResult<String> {
-    let contents = std::fs::read_to_string(source).map_err(|error| {
-        TdError::from(CliError::FileReadFailed {
-            file: source.display().to_string(),
-            cause: error.to_string(),
-        })
-    })?;
-    Ok(contents)
-}
-
-fn validate_requirements(source: &Path, contents: &str) -> CommandResult {
-    for (index, line) in contents.lines().enumerate() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let line = match line.split_once(" #") {
-            Some((requirement, _)) => requirement.trim(),
-            None => line,
-        };
-        if line.starts_with(REQUIREMENTS_OPTION_PREFIX) {
-            continue;
-        }
-        if let Err(error) = Requirement::<VerbatimUrl>::from_str(line) {
-            return Err(TdError::from(CliError::RequirementsInvalid {
-                file: source.display().to_string(),
-                line: index + 1,
-                cause: error.to_string(),
-            })
-            .into());
-        }
-    }
-    Ok(())
 }
 
 async fn replace_requirements(context: &KubeContext, asset: &str, contents: &str) -> CommandResult {
