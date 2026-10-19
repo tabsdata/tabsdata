@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import textwrap
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -81,7 +82,12 @@ def test_update_replaces_the_secrets_from_stdin(tmp_path):
         ["project", "update", "-n", "p1", "--secrets-file", "-"],
         client,
         tmp_path,
-        stdin="warehouse:\n  password: p\n",
+        stdin=textwrap.dedent(
+            """\
+            warehouse:
+              password: p
+            """
+        ),
     )
     assert result.exit_code == 0, result.output
     assert client.update_project.call_args.kwargs["new_secrets"] == {
@@ -123,13 +129,69 @@ def test_an_unset_environment_variable_is_refused(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "content",
     [
-        "- aws\n",
-        "aws: mykey1\n",
-        "aws:\n  key1: [a, b]\n",
-        "aws:\n  key1: {a: b}\n",
-        "aws:\n  key1: a\nAWS:\n  key2: b\n",
-        "aws:\n  key1: a\n  KEY1: b\n",
-        "aws: [\n",
+        pytest.param(
+            textwrap.dedent(
+                """\
+                - aws
+                """
+            ),
+            id="a-list-of-secrets",
+        ),
+        pytest.param(
+            textwrap.dedent(
+                """\
+                aws: mykey1
+                """
+            ),
+            id="a-secret-without-keys",
+        ),
+        pytest.param(
+            textwrap.dedent(
+                """\
+                aws:
+                  key1: [a, b]
+                """
+            ),
+            id="a-list-value",
+        ),
+        pytest.param(
+            textwrap.dedent(
+                """\
+                aws:
+                  key1: {a: b}
+                """
+            ),
+            id="a-mapping-value",
+        ),
+        pytest.param(
+            textwrap.dedent(
+                """\
+                aws:
+                  key1: a
+                AWS:
+                  key2: b
+                """
+            ),
+            id="a-secret-repeated-ignoring-case",
+        ),
+        pytest.param(
+            textwrap.dedent(
+                """\
+                aws:
+                  key1: a
+                  KEY1: b
+                """
+            ),
+            id="a-key-repeated-ignoring-case",
+        ),
+        pytest.param(
+            textwrap.dedent(
+                """\
+                aws: [
+                """
+            ),
+            id="invalid-yaml",
+        ),
     ],
 )
 def test_malformed_files_are_refused(tmp_path, content):
