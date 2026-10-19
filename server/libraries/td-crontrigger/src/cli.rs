@@ -10,8 +10,9 @@ use std::time::Duration;
 use td_common::env::get_current_dir;
 use td_common::logging;
 use td_common::logging::LoggingOptions;
-use td_common::server_runner::ServerRunner;
+use td_common::signal::terminate;
 use td_common::status::ExitStatus;
+use td_common::task_group::TaskGroup;
 use td_common::worker::{REQUEST_FILE, WORKER_PID_FILE};
 use td_objects::dxo::execution::InternalExecutionRequest;
 use td_objects::dxo::worker::CronTriggerConfig;
@@ -22,6 +23,8 @@ use td_process::launcher::params::ArgumentParameters;
 use tracing::{Level, error};
 
 const CONFIG_NAME: &str = "crontrigger";
+
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(10);
 
 /// Run the crontrigger scheduler. This function is the entry point for the `crontrigger` binary.
 /// This binary is able to post to the given endpoint (trigger endpoint) at a cron mask rate.
@@ -115,7 +118,10 @@ pub fn run() {
                 Duration::from_secs(30),
             );
 
-            ServerRunner::default().server(task_runner).run().await
+            TaskGroup::new(SHUTDOWN_GRACE)
+                .task(task_runner)
+                .run_until(terminate())
+                .await
         },
         None,
         None,

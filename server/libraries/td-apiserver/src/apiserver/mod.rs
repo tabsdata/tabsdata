@@ -2,19 +2,17 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::apiserver::server::ServerError;
+use crate::apiserver::server::{ServerError, serve};
 use crate::apiserver::v1::ApiServerV1;
 use crate::config::Config;
 use crate::router::internal::internal_routes;
-use async_trait::async_trait;
-use std::error::Error;
 use std::sync::Arc;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::AuthzRegistry;
 use td_authz::token_provider::ServiceTokens;
 use td_bridge::BridgeProviderHandle;
-use td_common::server_runner::ServerRunnable;
+use td_common::task_group::{BoxError, GroupTask};
 use td_database::components::ServingPools;
 use td_error::TdError;
 use td_execution::{RecoveryConfig, SchedulerConfig, SchedulerNotify};
@@ -24,7 +22,7 @@ use td_services::execution::services::runtime_info::RuntimeContext;
 use td_services::internal_api::InternalApi;
 use td_storage::Storage;
 use te_services::{ContextExt, ExtendedServices};
-use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
 
 pub mod internal;
 mod server;
@@ -141,14 +139,12 @@ impl ApiServer {
     }
 }
 
-#[async_trait]
-impl ServerRunnable for ApiServer {
-    async fn run(
-        self: Box<Self>,
-        shutdown: watch::Receiver<()>,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        match *self {
-            ApiServer::V1(server) => server.inner.run(shutdown).await,
+impl GroupTask for ApiServer {
+    const NAME: &'static str = "apiserver";
+
+    async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
+        match self {
+            ApiServer::V1(server) => serve(server.inner, shutdown).await,
         }
     }
 }

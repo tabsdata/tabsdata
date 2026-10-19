@@ -14,8 +14,8 @@ use std::fmt::{Debug, Display};
 use std::sync::Arc;
 use td_error::td_error;
 use tokio::sync::mpsc;
-use tokio::sync::watch;
 use tokio_cron_scheduler::{Job, JobScheduler, JobSchedulerError};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 /// Errors that can occur within the `CronTask`.
@@ -102,7 +102,7 @@ impl<T: Task + 'static> CronTask<T> {
     /// Creates and configures the `JobScheduler`.
     async fn create_scheduler(
         &self,
-        runner_shutdown_rx: watch::Receiver<()>,
+        runner_shutdown: CancellationToken,
         task_error_tx: mpsc::Sender<Box<dyn Error + Send + Sync>>,
     ) -> Result<JobScheduler, CronTaskError> {
         let scheduler = JobScheduler::new()
@@ -121,7 +121,7 @@ impl<T: Task + 'static> CronTask<T> {
                         let self_to_string = self_to_string.clone();
                         let mask = mask.clone();
 
-                        let runner_shutdown_rx = runner_shutdown_rx.clone();
+                        let runner_shutdown = runner_shutdown.clone();
                         let task_error_tx = task_error_tx.clone();
 
                         async move {
@@ -130,7 +130,7 @@ impl<T: Task + 'static> CronTask<T> {
                                 uuid = %uuid,
                                 "cron.fire: tick, {self_to_string}"
                             );
-                            match task.run(runner_shutdown_rx).await {
+                            match task.run(runner_shutdown).await {
                                 Ok(_) => {
                                     debug!("Executed successfully, {self_to_string}, cron job {uuid}.")
                                 }
@@ -178,13 +178,13 @@ impl<T: Task + 'static> CronTask<T> {
 impl<T: Task + 'static> Task for CronTask<T> {
     type Error = CronTaskError;
 
-    async fn run(&self, runner_shutdown_rx: watch::Receiver<()>) -> Result<(), Self::Error> {
-        let mut shutdown_task = runner_shutdown_rx.clone();
+    async fn run(&self, runner_shutdown: CancellationToken) -> Result<(), Self::Error> {
+        let shutdown_task = runner_shutdown.clone();
         let (task_err_tx, mut task_err_rx) = mpsc::channel(1);
 
         // 1. Create the scheduler
         let mut scheduler = self
-            .create_scheduler(runner_shutdown_rx.clone(), task_err_tx)
+            .create_scheduler(runner_shutdown.clone(), task_err_tx)
             .await?;
 
         // We await the result immediately to ensure the background task spawned successfully.
@@ -196,7 +196,7 @@ impl<T: Task + 'static> Task for CronTask<T> {
         info!("Running, {self}.");
 
         tokio::select! {
-            _ = shutdown_task.changed() => {
+            _ = shutdown_task.cancelled() => {
                 info!("Received shutdown signal, {self}.");
 
                 if let Err(e) = scheduler.shutdown().await {
@@ -236,9 +236,9 @@ mod tests {
     use std::fmt;
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
-    use td_common::server_runner::ServerRunnable;
-    use tokio::sync::watch;
+    use td_common::task_group::GroupTask;
     use tokio::time::sleep;
+    use tokio_util::sync::CancellationToken;
 
     struct TestTask {
         run_count: Arc<Mutex<u32>>,
@@ -248,7 +248,7 @@ mod tests {
     impl Task for TestTask {
         type Error = Infallible;
 
-        async fn run(&self, _shutdown_receiver: watch::Receiver<()>) -> Result<(), Self::Error> {
+        async fn run(&self, _shutdown: CancellationToken) -> Result<(), Self::Error> {
             let mut run_count = self.run_count.lock().unwrap();
             *run_count += 1;
             Ok(())
@@ -280,7 +280,7 @@ mod tests {
     impl Task for FailingTask {
         type Error = TaskError;
 
-        async fn run(&self, _shutdown_receiver: watch::Receiver<()>) -> Result<(), Self::Error> {
+        async fn run(&self, _shutdown: CancellationToken) -> Result<(), Self::Error> {
             let mut run_count = self.run_count.lock().unwrap();
             *run_count += 1;
             Err(TaskError)
@@ -306,15 +306,17 @@ mod tests {
 
         let runner = TaskRunner::new(task, None, None);
 
-        let (shutdown_tx, shutdown_rx) = watch::channel(());
+        let shutdown = CancellationToken::new();
+
+        let runner_shutdown = shutdown.clone();
 
         let scheduler_handle = tokio::spawn(async move {
-            Box::new(runner).run(shutdown_rx).await.unwrap();
+            runner.run(runner_shutdown).await.unwrap();
         });
 
         sleep(Duration::from_millis(2500)).await;
 
-        shutdown_tx.send(()).unwrap();
+        shutdown.cancel();
 
         scheduler_handle.await.unwrap();
 
@@ -355,10 +357,12 @@ mod tests {
 
         let runner = TaskRunner::new(task, None, None);
 
-        let (shutdown_tx, shutdown_rx) = watch::channel(());
+        let shutdown = CancellationToken::new();
+
+        let runner_shutdown = shutdown.clone();
 
         let scheduler_handle = tokio::spawn(async move {
-            Box::new(runner).run(shutdown_rx).await.unwrap();
+            runner.run(runner_shutdown).await.unwrap();
         });
 
         sleep(Duration::from_millis(500)).await;
@@ -367,7 +371,7 @@ mod tests {
         sleep(Duration::from_millis(2000)).await;
         assert!(*run_count.lock().unwrap() >= 1);
 
-        shutdown_tx.send(()).unwrap();
+        shutdown.cancel();
 
         scheduler_handle.await.unwrap();
     }
@@ -385,10 +389,8 @@ mod tests {
 
         let runner = TaskRunner::new(task, None, None);
 
-        let (_shutdown_tx, shutdown_rx) = watch::channel(());
-
         let scheduler_handle = tokio::spawn(async move {
-            let result = Box::new(runner).run(shutdown_rx).await;
+            let result = runner.run(CancellationToken::new()).await;
             assert!(result.is_err());
             let err = result.err().unwrap();
 

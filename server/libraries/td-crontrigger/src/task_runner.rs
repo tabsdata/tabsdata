@@ -11,10 +11,10 @@ use std::convert::Infallible;
 use std::error::Error;
 use std::fmt;
 use std::fmt::Debug;
-use td_common::server_runner::ServerRunnable;
+use td_common::task_group::{BoxError, GroupTask};
 use td_error::td_error;
-use tokio::sync::watch;
 use tokio::time::{Duration, sleep};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 /// Errors that can occur within the `TaskRunner`.
@@ -34,7 +34,7 @@ pub trait Task: Send + Sync + fmt::Display {
     /// The error type for the task.
     type Error: Error + Send + Sync;
     /// Executes the task.
-    async fn run(&self, runner_shutdown_rx: watch::Receiver<()>) -> Result<(), Self::Error>;
+    async fn run(&self, runner_shutdown: CancellationToken) -> Result<(), Self::Error>;
 }
 
 /// A dummy struct to represent the absence of a heartbeat task.
@@ -43,7 +43,7 @@ pub struct NoHeartbeat;
 #[async_trait]
 impl Task for NoHeartbeat {
     type Error = Infallible;
-    async fn run(&self, _runner_shutdown_rx: watch::Receiver<()>) -> Result<(), Self::Error> {
+    async fn run(&self, _runner_shutdown: CancellationToken) -> Result<(), Self::Error> {
         Ok(())
     }
 }
@@ -125,14 +125,11 @@ async fn sleep_until(time: DateTime<Utc>) {
 
 /// Waits until the start time, if provided.
 /// Returns `true` if the task should proceed, `false` if shutdown is signaled.
-async fn wait_for_start(
-    start: Option<DateTime<Utc>>,
-    mut runner_shutdown_rx: watch::Receiver<()>,
-) -> bool {
+async fn wait_for_start(start: Option<DateTime<Utc>>, runner_shutdown: CancellationToken) -> bool {
     if let Some(start_time) = start {
         info!("Task will start running at: {start_time}.");
         tokio::select! {
-            _ = runner_shutdown_rx.changed() => {
+            _ = runner_shutdown.cancelled() => {
                 debug!("Task runner shutdown while waiting to start.");
                 false
             },
@@ -161,7 +158,7 @@ async fn finish_on_end(end: Option<DateTime<Utc>>) {
 /// Runs the heartbeat task at the specified interval.
 async fn run_heartbeat<H: Task>(
     heartbeat_fn_interval: Option<(H, Duration)>,
-    mut runner_shutdown_rx: watch::Receiver<()>,
+    runner_shutdown: CancellationToken,
 ) {
     if let Some((heartbeat, heartbeat_interval)) = heartbeat_fn_interval {
         info!("Starting heartbeat loop");
@@ -169,12 +166,12 @@ async fn run_heartbeat<H: Task>(
             tokio::select! {
                 _ = sleep(heartbeat_interval) => {
                     debug!("Running heartbeat task.");
-                    match heartbeat.run(runner_shutdown_rx.clone()).await {
+                    match heartbeat.run(runner_shutdown.clone()).await {
                         Ok(_) => {},
                         Err(err) => warn!("Heartbeat task run failed: {err}.")
                     }
                 }
-                _ = runner_shutdown_rx.changed() => {
+                _ = runner_shutdown.cancelled() => {
                     debug!("Heartbeat task received shutdown signal, it will no longer run.");
                     std::future::pending::<H>().await;
                 }
@@ -182,32 +179,30 @@ async fn run_heartbeat<H: Task>(
         }
     } else {
         info!("Running without heartbeat.");
-        runner_shutdown_rx.changed().await.ok();
+        runner_shutdown.cancelled().await;
         std::future::pending::<H>().await;
     }
 }
 
-#[async_trait]
-impl<T, E, H, HE> ServerRunnable for TaskRunner<T, E, H, HE>
+impl<T, E, H, HE> GroupTask for TaskRunner<T, E, H, HE>
 where
     T: Task<Error = E> + 'static,
     E: Error + Send + Sync + 'static,
     H: Task<Error = HE> + 'static,
-    HE: Error + Send + Sync,
+    HE: Error + Send + Sync + 'static,
 {
-    async fn run(
-        self: Box<Self>,
-        mut runner_shutdown_rx: watch::Receiver<()>,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        if !wait_for_start(self.start, runner_shutdown_rx.clone()).await {
+    const NAME: &'static str = "cron_task_runner";
+
+    async fn run(self, runner_shutdown: CancellationToken) -> Result<(), BoxError> {
+        if !wait_for_start(self.start, runner_shutdown.clone()).await {
             return Ok(());
         }
 
         let end_task = finish_on_end(self.end);
         tokio::pin!(end_task);
 
-        let main_task = self.task.run(runner_shutdown_rx.clone());
-        let heartbeat_task = run_heartbeat(self.heartbeat, runner_shutdown_rx.clone());
+        let main_task = self.task.run(runner_shutdown.clone());
+        let heartbeat_task = run_heartbeat(self.heartbeat, runner_shutdown.clone());
 
         info!(start = ?self.start, end = ?self.end, "crontrigger.task_runner: starting");
         tokio::select! {
@@ -225,7 +220,7 @@ where
            _ = &mut end_task => {
                warn!("End time reached, stopping task. Ok if task is endless.");
            },
-           _ = runner_shutdown_rx.changed() => {
+           _ = runner_shutdown.cancelled() => {
                info!("Shutdown signal received.");
            }
 
@@ -261,10 +256,7 @@ mod tests {
     #[async_trait::async_trait]
     impl Task for TestTask {
         type Error = TestErr;
-        async fn run(
-            &self,
-            mut runner_shutdown_rx: watch::Receiver<()>,
-        ) -> Result<(), Self::Error> {
+        async fn run(&self, runner_shutdown: CancellationToken) -> Result<(), Self::Error> {
             if self.should_fail {
                 return Err(TestErr);
             }
@@ -274,7 +266,7 @@ mod tests {
             }
 
             if self.should_block {
-                runner_shutdown_rx.changed().await.ok();
+                runner_shutdown.cancelled().await;
             }
 
             Ok(())
@@ -307,11 +299,7 @@ mod tests {
         };
 
         let runner = TaskRunner::new(task, None, None);
-        let (shutdown_tx, shutdown_rx) = watch::channel(());
-
-        Box::new(runner).run(shutdown_rx).await.unwrap();
-
-        drop(shutdown_tx);
+        runner.run(CancellationToken::new()).await.unwrap();
 
         assert_eq!(*run_count.lock().unwrap(), 1);
     }
@@ -326,16 +314,12 @@ mod tests {
         };
 
         let runner = TaskRunner::new(task, None, None);
-        let (shutdown_tx, shutdown_rx) = watch::channel(());
-
-        let res = Box::new(runner).run(shutdown_rx).await;
+        let res = runner.run(CancellationToken::new()).await;
 
         assert!(res.is_err());
         let err = res.unwrap_err();
         let err = err.downcast_ref::<TaskRunnerError>().unwrap();
         assert!(matches!(err, &TaskRunnerError::TaskFailure(_)));
-
-        drop(shutdown_tx);
     }
 
     #[tokio::test]
@@ -350,13 +334,15 @@ mod tests {
         let start_time = Utc::now() + TimeDelta::try_seconds(5).unwrap();
         let runner = TaskRunner::new(task, Some(start_time), None);
 
-        let (shutdown_tx, shutdown_rx) = watch::channel(());
+        let shutdown = CancellationToken::new();
+
+        let runner_shutdown = shutdown.clone();
 
         let runner_handle = tokio::spawn(async move {
-            Box::new(runner).run(shutdown_rx).await.unwrap();
+            runner.run(runner_shutdown).await.unwrap();
         });
 
-        let _ = shutdown_tx.send(());
+        shutdown.cancel();
         runner_handle.await.unwrap();
 
         assert_eq!(*run_count.lock().unwrap(), 0);
@@ -373,13 +359,10 @@ mod tests {
 
         let end_time = Utc::now() + TimeDelta::try_seconds(1).unwrap();
         let runner = TaskRunner::new(task, None, Some(end_time));
-
-        let (shutdown_tx, shutdown_rx) = watch::channel(());
-        let res = Box::new(runner).run(shutdown_rx).await;
+        let res = runner.run(CancellationToken::new()).await;
 
         assert!(res.is_ok());
         assert_eq!(*run_count.lock().unwrap(), 1);
-        drop(shutdown_tx);
     }
 
     #[tokio::test]
@@ -402,15 +385,17 @@ mod tests {
         let runner =
             TaskRunner::new_with_heartbeat(task, None, None, heartbeat_task, heartbeat_interval);
 
-        let (shutdown_tx, shutdown_rx) = watch::channel(());
+        let shutdown = CancellationToken::new();
+
+        let runner_shutdown = shutdown.clone();
 
         let runner_handle = tokio::spawn(async move {
-            Box::new(runner).run(shutdown_rx).await.unwrap();
+            runner.run(runner_shutdown).await.unwrap();
         });
 
         wait_for_run_count(heartbeat_run_count.clone(), 3, Duration::from_secs(1)).await;
 
-        let _ = shutdown_tx.send(());
+        shutdown.cancel();
         runner_handle.await.unwrap();
 
         assert_eq!(*task_run_count.lock().unwrap(), 1);

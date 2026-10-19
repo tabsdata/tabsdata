@@ -3,15 +3,11 @@
 //
 
 use crate::scheduler::v1::timed_tick;
-use async_trait::async_trait;
-use std::error::Error;
 use std::time::Duration;
-use td_common::server_runner::ServerRunnable;
+use td_common::task_group::{BoxError, GroupTask};
 use td_services::Services;
-use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, trace};
-
-type BoxError = Box<dyn Error + Send + Sync>;
 
 pub enum WorkerRecoverer {
     V1(Box<WorkerRecovererV1>),
@@ -23,13 +19,11 @@ impl WorkerRecoverer {
     }
 }
 
-#[async_trait]
-impl ServerRunnable for WorkerRecoverer {
-    async fn run(
-        self: Box<Self>,
-        shutdown: watch::Receiver<()>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        match *self {
+impl GroupTask for WorkerRecoverer {
+    const NAME: &'static str = "worker_recoverer";
+
+    async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
+        match self {
             WorkerRecoverer::V1(srv) => srv.run(shutdown).await,
         }
     }
@@ -56,14 +50,8 @@ impl WorkerRecovererV1 {
         timed_tick("recovery", self.tick_timeout, self.services.recovery(())).await?;
         Ok(())
     }
-}
 
-#[async_trait]
-impl ServerRunnable for WorkerRecovererV1 {
-    async fn run(
-        self: Box<Self>,
-        mut shutdown: watch::Receiver<()>,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
         // First tick immediately: cold-start convergence must not wait out
         // a full check period.
         match self.recover().await {
@@ -72,7 +60,7 @@ impl ServerRunnable for WorkerRecovererV1 {
         }
         loop {
             tokio::select! {
-                _ = shutdown.changed() => {
+                _ = shutdown.cancelled() => {
                     debug!("Worker recovery shutting down...");
                     break;
                 }

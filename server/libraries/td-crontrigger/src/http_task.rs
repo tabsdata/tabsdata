@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use td_common::worker::HttpRequest;
-use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
 /// A task that executes an HTTP request.
@@ -54,7 +54,7 @@ impl HttpTask {
 impl Task for HttpTask {
     type Error = TaskRunnerError;
     /// Runs the HTTP request task.
-    async fn run(&self, mut shutdown: watch::Receiver<()>) -> Result<(), Self::Error> {
+    async fn run(&self, shutdown: CancellationToken) -> Result<(), Self::Error> {
         let HttpRequest {
             url,
             method,
@@ -75,7 +75,7 @@ impl Task for HttpTask {
 
         let response_fut = request.send();
         let response = tokio::select! {
-            _ = shutdown.changed() => {
+            _ = shutdown.cancelled() => {
                 info!("Received shutdown signal, {self}.");
                 return Ok(());
             },
@@ -138,9 +138,7 @@ mod tests {
             headers: Default::default(),
             body: false,
         });
-
-        let (_shutdown_tx, shutdown_rx) = watch::channel(());
-        let result = task.run(shutdown_rx).await;
+        let result = task.run(CancellationToken::new()).await;
         assert!(result.is_ok());
     }
 
@@ -160,9 +158,7 @@ mod tests {
             headers: Default::default(),
             body: false,
         });
-
-        let (_shutdown_tx, shutdown_rx) = watch::channel(());
-        let result = task.run(shutdown_rx).await;
+        let result = task.run(CancellationToken::new()).await;
         assert!(result.is_err());
     }
 
@@ -186,9 +182,7 @@ mod tests {
         });
 
         task = task.with_body(move || body_content.to_string());
-
-        let (_shutdown_tx, shutdown_rx) = watch::channel(());
-        let result = task.run(shutdown_rx).await;
+        let result = task.run(CancellationToken::new()).await;
         assert!(result.is_ok());
     }
 }

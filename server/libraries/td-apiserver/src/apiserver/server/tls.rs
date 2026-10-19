@@ -12,6 +12,7 @@ use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
 #[derive(Debug)]
@@ -25,7 +26,7 @@ pub struct TlsServer {
 impl Server for TlsServer {
     async fn handles(
         self: Box<Self>,
-        shutdown: tokio::sync::watch::Receiver<()>,
+        shutdown: CancellationToken,
     ) -> Vec<JoinHandle<Result<(), ServerError>>> {
         let mut handles = Vec::new();
 
@@ -35,7 +36,7 @@ impl Server for TlsServer {
             let router = self.router.clone();
             let tls_config = self.tls_config.clone();
             let handle = Handle::new();
-            let mut shutdown = shutdown.clone();
+            let shutdown = shutdown.clone();
 
             let handle_task = tokio::spawn(async move {
                 info!("Server listening on {dbg_listener} with TLS");
@@ -56,7 +57,7 @@ impl Server for TlsServer {
                             ServerError::Server(dbg_listener.clone(), e)
                         })
                     }
-                    _ = shutdown.changed() => {
+                    _ = shutdown.cancelled() => {
                         debug!("Shutdown signal received, stopping listener {dbg_listener}");
                         handle.graceful_shutdown(Some(Duration::from_secs(10)));
                         Ok(())

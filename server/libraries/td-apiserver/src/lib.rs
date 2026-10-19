@@ -14,8 +14,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use ta_services::service::Ctx;
 use td_bridge::{BridgeProviderFactory, BridgeProviderHandle};
-use td_common::server_runner::ServerRunner;
+use td_common::signal::terminate;
 use td_common::status::ExitStatus;
+use td_common::task_group::TaskGroup;
 use td_database::access::{DbPool, Global};
 use td_execution::SchedulerNotify;
 use td_process::launcher::cli::Cli;
@@ -50,6 +51,10 @@ pub use router::internal::{
 };
 
 pub const CONFIG_NAME: &str = "apiserver";
+
+/// Within what the pod leaves after its `preStop` pause: a 60s termination
+/// grace less the 12s sleep.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(30);
 
 pub fn run() {
     Cli::<Config, Params>::exec_async(
@@ -196,13 +201,12 @@ pub fn run() {
             let function_request_server = FunctionRequester::new(&server_context.services).await;
             let worker_recovery_server = WorkerRecoverer::new(&server_context.services).await;
 
-            let outcome = ServerRunner::default()
-                .graceful_timeout_secs(Duration::from_secs(30))
-                .server(api_server)
-                .server(internal_server)
-                .server(function_request_server)
-                .server(worker_recovery_server)
-                .run()
+            let outcome = TaskGroup::new(SHUTDOWN_GRACE)
+                .task(api_server)
+                .task(internal_server)
+                .task(function_request_server)
+                .task(worker_recovery_server)
+                .run_until(terminate())
                 .await;
 
             // Close every serving pool's connections explicitly, rather than at the

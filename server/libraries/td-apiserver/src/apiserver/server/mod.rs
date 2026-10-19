@@ -14,17 +14,16 @@ use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use http::uri::Scheme;
 use socket2::{Domain, Protocol, Socket, Type};
-use std::error::Error;
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use td_common::crypto::install_crypto_provider;
 use td_common::crypto::{SSL_CERT_PEM_FILE, SSL_KEY_PEM_FILE};
-use td_common::server_runner::ServerRunnable;
+use td_common::task_group::BoxError;
 use td_objects::types::addresses::NonEmptyAddresses;
 use tokio::net::TcpListener;
-use tokio::sync::watch;
 use tokio::task::{JoinError, JoinHandle};
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 #[derive(Debug, thiserror::Error)]
@@ -45,7 +44,7 @@ pub enum ServerError {
 pub trait Server: Debug + Send + Sync {
     async fn handles(
         self: Box<Self>,
-        shutdown: watch::Receiver<()>,
+        shutdown: CancellationToken,
     ) -> Vec<JoinHandle<Result<(), ServerError>>>;
 
     #[allow(unused)]
@@ -55,49 +54,43 @@ pub trait Server: Debug + Send + Sync {
     fn scheme(&self) -> Scheme;
 }
 
-#[async_trait]
-impl ServerRunnable for dyn Server {
-    async fn run(
-        self: Box<Self>,
-        shutdown: watch::Receiver<()>,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let handles = self.handles(shutdown.clone()).await;
+pub async fn serve(server: Box<dyn Server>, shutdown: CancellationToken) -> Result<(), BoxError> {
+    let handles = server.handles(shutdown.clone()).await;
 
-        let mut futures = FuturesUnordered::new();
+    let mut futures = FuturesUnordered::new();
 
-        for mut handle in handles {
-            let mut shutdown = shutdown.clone();
-            futures.push(tokio::spawn(async move {
-                tokio::select! {
-                    res = &mut handle => res.map_err(|e| {
-                        error!("Failed to join server handle: {e:#?}");
-                        ServerError::JoinHandle(e)
-                    })?,
-                    _ = shutdown.changed() => {
-                        debug!("Shutdown signal received, aborting handle");
-                        handle.abort();
-                        Ok(())
-                    }
-                }
-            }));
-        }
-
-        let mut run_result = Ok(());
-        while let Some(res) = futures.next().await {
-            match res {
-                Ok(Ok(())) => {}
-                Ok(Err(e)) => {
-                    error!("Server handle error: {e:#?}");
-                    run_result = Err(e); // store the last error, continue
-                }
-                Err(join_err) => {
-                    error!("Task panicked or was cancelled: {:?}", join_err);
-                    run_result = Err(ServerError::JoinHandle(join_err));
+    for mut handle in handles {
+        let shutdown = shutdown.clone();
+        futures.push(tokio::spawn(async move {
+            tokio::select! {
+                res = &mut handle => res.map_err(|e| {
+                    error!("Failed to join server handle: {e:#?}");
+                    ServerError::JoinHandle(e)
+                })?,
+                _ = shutdown.cancelled() => {
+                    debug!("Shutdown signal received, aborting handle");
+                    handle.abort();
+                    Ok(())
                 }
             }
-        }
-        run_result.map_err(|e| Box::new(e) as Box<dyn Error + Send + Sync>)
+        }));
     }
+
+    let mut run_result = Ok(());
+    while let Some(res) = futures.next().await {
+        match res {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => {
+                error!("Server handle error: {e:#?}");
+                run_result = Err(e); // store the last error, continue
+            }
+            Err(join_err) => {
+                error!("Task panicked or was cancelled: {:?}", join_err);
+                run_result = Err(ServerError::JoinHandle(join_err));
+            }
+        }
+    }
+    run_result.map_err(|e| Box::new(e) as BoxError)
 }
 
 const LISTEN_BACKLOG: i32 = 1024;
@@ -289,11 +282,14 @@ mod tests {
         let addr = server.listeners().first().unwrap().local_addr().unwrap();
         let scheme = server.scheme();
 
-        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+        let shutdown = CancellationToken::new();
         let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
-        let server_handle = tokio::spawn(async move {
-            let _ = ready_tx.send(());
-            server.run(shutdown_rx).await.unwrap();
+        let server_handle = tokio::spawn({
+            let shutdown = shutdown.clone();
+            async move {
+                let _ = ready_tx.send(());
+                serve(server, shutdown).await.unwrap();
+            }
         });
 
         ready_rx.await.expect("Failed to receive server readiness");
@@ -308,7 +304,7 @@ mod tests {
         let body = response.text().await.expect("Failed to read response body");
         assert_eq!(body, "\"test\"");
 
-        shutdown_tx.send(()).unwrap();
+        shutdown.cancel();
         server_handle.await.unwrap();
     }
 

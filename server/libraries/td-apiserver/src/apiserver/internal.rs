@@ -8,7 +8,6 @@ use crate::config::Config;
 use crate::layers::cors::CorsService;
 use crate::layers::internal_token::internal_token_layer;
 use crate::layers::tracing::TraceService;
-use async_trait::async_trait;
 use axum::middleware::from_fn_with_state;
 use http::StatusCode;
 use std::error::Error;
@@ -18,13 +17,13 @@ use ta_apiserver::router::{
     require_registered,
 };
 use ta_apiserver::status::error_status::ErrorStatus;
-use td_common::server_runner::ServerRunnable;
+use td_common::task_group::{BoxError, GroupTask};
 use td_error::{ApiError, api_error};
 use td_objects::types::addresses::{
     InternalServerAddresses, InternalServerEndpoint, NonEmptyAddresses,
 };
 use tokio::net::TcpListener;
-use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
 use tower_http::timeout::TimeoutLayer;
 
 pub struct InternalServer {
@@ -129,12 +128,10 @@ impl InternalServer {
     }
 }
 
-#[async_trait]
-impl ServerRunnable for InternalServer {
-    async fn run(
-        self: Box<Self>,
-        shutdown: watch::Receiver<()>,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        self.inner.run(shutdown).await
+impl GroupTask for InternalServer {
+    const NAME: &'static str = "internal_server";
+
+    async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
+        server::serve(self.inner, shutdown).await
     }
 }

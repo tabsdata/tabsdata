@@ -15,7 +15,7 @@ use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use td_error::td_error;
-use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
 /// A task that "touches" a file, creating it if it doesn't exist
@@ -49,7 +49,7 @@ pub enum TouchFileTaskError {
 impl Task for TouchFileTask {
     type Error = TouchFileTaskError;
 
-    async fn run(&self, _runner_shutdown_rx: watch::Receiver<()>) -> Result<(), Self::Error> {
+    async fn run(&self, _runner_shutdown: CancellationToken) -> Result<(), Self::Error> {
         debug!("Touch, {self}.");
 
         // Open the file.
@@ -89,11 +89,11 @@ mod tests {
         let testdir = td_common::tdtestdir!();
         let file_path = testdir.join("heartbeat.txt");
         let task = TouchFileTask::new(&file_path);
-        let (_shutdown_tx, shutdown_rx) = watch::channel(());
+        let shutdown = CancellationToken::new();
 
         // 1. Test file creation
         assert!(!file_path.exists(), "File should not exist initially");
-        task.run(shutdown_rx.clone()).await.unwrap();
+        task.run(shutdown.clone()).await.unwrap();
         assert!(file_path.exists(), "File should be created after first run");
 
         // 2. Test file modification time update
@@ -103,7 +103,7 @@ mod tests {
         // Sleep for a bit to ensure the modification time will be different
         sleep(Duration::from_millis(10)).await;
 
-        task.run(shutdown_rx).await.unwrap();
+        task.run(shutdown).await.unwrap();
 
         let updated_metadata = fs::metadata(&file_path).unwrap();
         let updated_mod_time = updated_metadata.modified().unwrap();

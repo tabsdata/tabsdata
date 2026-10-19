@@ -64,7 +64,6 @@ tm-workspace = { workspace = true }
 
 # External dependencies
 
-async-trait = { workspace = true }
 bytes = { workspace = true }
 config = { workspace = true, features = ["yaml"] }
 console-subscriber = { workspace = true, optional = true }
@@ -97,6 +96,7 @@ sysinfo = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tokio-util = { workspace = true }
 indicatif = { workspace = true }
 tracing = { workspace = true }
 tracing-indicatif = { workspace = true }

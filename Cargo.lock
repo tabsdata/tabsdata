@@ -10109,6 +10109,7 @@ dependencies = [
  "te-services",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-util",
  "tower",
  "tower-http 0.7.1",
  "tracing",
@@ -10198,7 +10199,6 @@ dependencies = [
 name = "td-common"
 version = "2.3.0"
 dependencies = [
- "async-trait",
  "bytes",
  "chrono",
  "colored",
@@ -10238,6 +10238,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tm-workspace",
  "tokio",
+ "tokio-util",
  "toml 1.1.8+spec-1.1.0",
  "tracing",
  "tracing-indicatif",
@@ -10274,6 +10275,7 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-cron-scheduler",
+ "tokio-util",
  "tracing",
  "wiremock",
 ]

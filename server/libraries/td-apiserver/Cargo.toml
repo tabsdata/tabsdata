@@ -123,6 +123,7 @@ strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tokio-util = { workspace = true }
 tower = { workspace = true, features = ["buffer", "limit", "make", "timeout", "util"] }
 tower-http = { workspace = true, features = ["cors", "compression-full", "timeout", "trace"] }
 url = { workspace = true }

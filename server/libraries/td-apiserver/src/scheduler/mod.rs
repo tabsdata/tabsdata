@@ -3,11 +3,9 @@
 //
 
 use crate::scheduler::v1::FunctionRequesterV1;
-use async_trait::async_trait;
-use std::error::Error;
-use td_common::server_runner::ServerRunnable;
+use td_common::task_group::{BoxError, GroupTask};
 use td_services::Services;
-use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
 
 pub mod v1;
 
@@ -21,13 +19,11 @@ impl FunctionRequester {
     }
 }
 
-#[async_trait]
-impl ServerRunnable for FunctionRequester {
-    async fn run(
-        self: Box<Self>,
-        shutdown: watch::Receiver<()>,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        match *self {
+impl GroupTask for FunctionRequester {
+    const NAME: &'static str = "function_requester";
+
+    async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
+        match self {
             FunctionRequester::V1(server) => server.run(shutdown).await,
         }
     }

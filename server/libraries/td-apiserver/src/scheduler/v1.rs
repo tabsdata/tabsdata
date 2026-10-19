@@ -2,17 +2,13 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use async_trait::async_trait;
-use std::error::Error;
 use std::future::Future;
 use std::time::{Duration, Instant};
-use td_common::server_runner::ServerRunnable;
+use td_common::task_group::BoxError;
 use td_execution::SchedulerNotify;
 use td_services::Services;
-use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, trace, warn};
-
-type BoxError = Box<dyn Error + Send + Sync>;
 
 pub struct FunctionRequesterV1 {
     services: Services,
@@ -35,6 +31,24 @@ impl FunctionRequesterV1 {
 
     async fn request(&self) -> Result<(), BoxError> {
         timed_tick("request", self.tick_timeout, self.services.request(())).await?;
+        Ok(())
+    }
+
+    pub async fn run(self, shutdown: CancellationToken) -> Result<(), BoxError> {
+        loop {
+            tokio::select! {
+                _ = shutdown.cancelled() => {
+                    debug!("Execution plan request scheduler shutting down...");
+                    break;
+                }
+                _ = self.notify.notified_scheduler() => debug!("Request scheduler: tick (notify)"),
+                _ = tokio::time::sleep(self.check_frequency) => debug!("Request scheduler: tick (timer)"),
+            }
+            match self.request().await {
+                Ok(_) => trace!("Execution plan scheduler executed successfully"),
+                Err(e) => error!("Error executing execution plan request scheduler: {e:#?}"),
+            }
+        }
         Ok(())
     }
 }
@@ -64,28 +78,4 @@ pub(crate) async fn timed_tick<T, E: Into<BoxError>>(
         );
     }
     result
-}
-
-#[async_trait]
-impl ServerRunnable for FunctionRequesterV1 {
-    async fn run(
-        self: Box<Self>,
-        mut shutdown: watch::Receiver<()>,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        loop {
-            tokio::select! {
-                _ = shutdown.changed() => {
-                    debug!("Execution plan request scheduler shutting down...");
-                    break;
-                }
-                _ = self.notify.notified_scheduler() => debug!("Request scheduler: tick (notify)"),
-                _ = tokio::time::sleep(self.check_frequency) => debug!("Request scheduler: tick (timer)"),
-            }
-            match self.request().await {
-                Ok(_) => trace!("Execution plan scheduler executed successfully"),
-                Err(e) => error!("Error executing execution plan request scheduler: {e:#?}"),
-            }
-        }
-        Ok(())
-    }
 }

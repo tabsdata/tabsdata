@@ -9,6 +9,7 @@ use http::uri::Scheme;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info};
 
 #[derive(Debug)]
@@ -21,7 +22,7 @@ pub struct PlainServer {
 impl Server for PlainServer {
     async fn handles(
         self: Box<Self>,
-        shutdown: tokio::sync::watch::Receiver<()>,
+        shutdown: CancellationToken,
     ) -> Vec<JoinHandle<Result<(), ServerError>>> {
         let mut handles = Vec::new();
         for listener in self.listeners {
@@ -29,7 +30,7 @@ impl Server for PlainServer {
 
             let router = self.router.clone();
             let make_service = router.into_make_service_with_connect_info::<SocketAddr>();
-            let mut shutdown = shutdown.clone();
+            let shutdown = shutdown.clone();
             let handle = tokio::spawn(async move {
                 info!("Server listening on {dbg_listener}");
 
@@ -37,7 +38,7 @@ impl Server for PlainServer {
                     .with_graceful_shutdown({
                         let dbg_listener = dbg_listener.clone();
                         async move {
-                            shutdown.changed().await.ok();
+                            shutdown.cancelled().await;
                             debug!("Stopping server listening on {dbg_listener}");
                         }
                     })
