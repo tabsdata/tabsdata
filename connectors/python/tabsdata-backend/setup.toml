@@ -8,5 +8,6 @@ package = "tabsdata-backend"
 names = [
     "td_apiserver",
     "td_dbmanager",
+    "td_tdmanager",
     "td_transporter2",
 ]

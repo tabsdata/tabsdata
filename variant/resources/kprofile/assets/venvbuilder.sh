@@ -111,6 +111,7 @@ PRUNED_BIN_FILES_FN=(
    "${PRUNED_BIN_FILES[@]}"
    "td_apiserver"
    "td_dbmanager"
+   "td_tdmanager"
 )
 
 show_usage() {

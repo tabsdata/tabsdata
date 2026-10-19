@@ -59,7 +59,7 @@ use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, Cl
 use crate::runtime::instance::image::write_venvs_image;
 use crate::runtime::instance::injection::host_global_envs;
 use crate::runtime::instance::launcher::{
-    provision_database, provision_pyvenvs, start_database, stop_database,
+    provision_database, provision_pyvenvs, provision_system, start_database, stop_database,
 };
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::{
@@ -453,6 +453,20 @@ impl Provider for KminusProvider {
     async fn upgrade_database(&self, reporter: &dyn Reporter) -> CommandResult {
         self.create_database_as_pod(reporter, DbManagerMode::Upgrade)
             .await
+    }
+
+    async fn upgrade_system(&self, _reporter: &dyn Reporter, rules: &[String]) -> CommandResult {
+        let (context, system, profile) = self.database_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_system(
+            &context,
+            ClusterProvider::Kminus,
+            &system,
+            &profile,
+            &multi,
+            rules,
+        )
+        .await
     }
 
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult {

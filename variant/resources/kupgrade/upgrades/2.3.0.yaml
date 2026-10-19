@@ -3,6 +3,13 @@
 #
 
 schema: 1
+assets:
+  venvbuilder.py:
+    venvbuilder.py:
+      action: replace
+  venvbuilder.sh:
+    venvbuilder.sh:
+      action: replace
 configs:
   tabsdata.yaml:
     tabsdata_aks.yaml:
@@ -107,3 +114,17 @@ configs:
           leaf: pods.global.envs
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
+pods:
+  tdmanager.yaml:
+    tdmanager_aks.yaml:
+      action: create
+    tdmanager_docker.yaml:
+      action: create
+    tdmanager_eks.yaml:
+      action: create
+    tdmanager_fargate.yaml:
+      action: create
+    tdmanager_gke.yaml:
+      action: create
+    tdmanager_kminus.yaml:
+      action: create

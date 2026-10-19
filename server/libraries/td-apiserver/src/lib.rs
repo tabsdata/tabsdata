@@ -33,6 +33,7 @@ mod layers;
 mod recovery;
 mod router;
 mod scheduler;
+pub mod tdmanager;
 
 /// The internal API's route templates, as this server serves them. Exported so
 /// the scheduler that builds callbacks against them — and its tests — read the

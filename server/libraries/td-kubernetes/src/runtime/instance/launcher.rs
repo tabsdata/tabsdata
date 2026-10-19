@@ -60,6 +60,7 @@ use crate::runtime::secrets::source::to_secret_name;
 const DATABASE_COMPONENT: &str = "database";
 const DBMANAGER_COMPONENT: &str = "dbmanager";
 const PYMANAGER_COMPONENT: &str = "pymanager";
+const TDMANAGER_COMPONENT: &str = "tdmanager";
 
 pub async fn ensure_ports_unclaimed(
     context: &KubeContext,
@@ -1279,6 +1280,85 @@ pub async fn provision_database(
     }
 
     drop(phase);
+    Ok(())
+}
+
+pub async fn provision_system(
+    context: &KubeContext,
+    cluster_provider: ClusterProvider,
+    system: &SystemValues,
+    profile: &Profile,
+    multi: &MultiProgress,
+    rules: &[String],
+) -> CommandResult {
+    if rules.is_empty() {
+        return Ok(());
+    }
+    let mut system = system.clone();
+    system.tdmanager_rules = Some(rules.join(","));
+    let system = &system;
+    let available_secrets = list_available_secrets(context).await?;
+
+    let server = if cluster_provider.hosts_database() {
+        let (server_key, server_yaml) = pod_for_component(profile, DATABASE_COMPONENT)?;
+        let workload = prepare_database_workload(
+            cluster_provider,
+            system,
+            profile,
+            &available_secrets,
+            server_key,
+            server_yaml,
+        )
+        .await?;
+        let server_name = database_workload_name(server_key, &workload)?;
+        Some((server_key, workload, server_name))
+    } else {
+        None
+    };
+
+    let (manager_key, manager_yaml) = pod_for_component(profile, TDMANAGER_COMPONENT)?;
+    let mut manager =
+        deserialize_pod_entry::<Job>(manager_key, manager_yaml, Tier::Setup, system).await?;
+    cluster_provider.enrich_init_job(&mut manager)?;
+    inject_into_job(profile, manager_key, &mut manager, &available_secrets)?;
+    let manager_name = job_name(manager_key, &manager)?;
+
+    let phase = phase_spinner_in(multi, "Applying tabsdata upgrade rules");
+
+    if let Some((server_key, workload, server_name)) = &server {
+        let bar = phase.add_resource(server_key);
+        start_database_workload(context, workload, server_name).await?;
+        bar.finish_with_message(format!("{server_key} (started)"));
+    }
+
+    apply_authorization_phase(context, system, profile, multi).await?;
+
+    let bar = phase.add_resource(manager_key);
+    if clear_settled_job(context, TDMANAGER_COMPONENT, &manager_name).await? {
+        bar.set_message(format!("{manager_key} (replacing previous run)"));
+    }
+    job_api::create_job(context, &manager, Vec::new(), Vec::new(), None, None).await?;
+    let settled =
+        job_api::await_job_condition_resumable(context, &manager_name, is_job_settled()).await?;
+    let failed = settled.as_ref().is_some_and(has_failed_condition);
+    bar.finish_with_message(format!(
+        "{manager_key} ({})",
+        if failed { "failed" } else { "completed" }
+    ));
+
+    rbac_api::delete_authorizations(context).await?;
+
+    if let Some((server_key, workload, server_name)) = &server {
+        let bar = phase.add_resource(server_key);
+        delete_database_workload(context, workload, server_name).await?;
+        await_database_workload_absent(context, workload, server_name).await?;
+        bar.finish_with_message(format!("{server_key} (stopped)"));
+    }
+
+    drop(phase);
+    if failed {
+        return Err(LauncherError::JobFailed { name: manager_name }.into());
+    }
     Ok(())
 }
 

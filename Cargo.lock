@@ -10068,6 +10068,7 @@ dependencies = [
  "futures",
  "headers",
  "http",
+ "inventory",
  "itertools 0.15.0",
  "nonempty",
  "reqwest 0.13.5",

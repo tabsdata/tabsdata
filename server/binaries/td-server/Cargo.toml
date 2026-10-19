@@ -41,6 +41,10 @@ path = "src/dbmanager.rs"
 # name = "td_supervisor"
 # path = "src/supervisor.rs"
 
+[[bin]]
+name = "td_tdmanager"
+path = "src/tdmanager.rs"
+
 # [[bin]]
 # name = "td_transporter1"
 # path = "src/transporter1.rs"

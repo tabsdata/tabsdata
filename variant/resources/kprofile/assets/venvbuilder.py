@@ -101,6 +101,7 @@ PRUNED_BIN_FILES: list[str] = [
 PRUNED_BIN_FILES_FN: list[str] = PRUNED_BIN_FILES + [
     "td_apiserver",
     "td_dbmanager",
+    "td_tdmanager",
 ]
 
 STARTED: float = time.monotonic()

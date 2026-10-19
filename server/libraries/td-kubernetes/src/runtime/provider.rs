@@ -51,7 +51,7 @@ use crate::kube::api::entity::configmap::require_configmap;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::resolver::SystemValues;
 use crate::runtime::instance::cluster::{ClusterDescriptor, ClusterProperties, ClusterSettings};
-use crate::runtime::instance::launcher::{provision_database, provision_pyvenvs};
+use crate::runtime::instance::launcher::{provision_database, provision_pyvenvs, provision_system};
 use crate::runtime::instance::manifest::MANIFEST_FILE;
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::bundle::Axis;
@@ -423,6 +423,7 @@ pub trait Provider: Send + Sync {
     async fn upgrade_database(&self, reporter: &dyn Reporter) -> CommandResult {
         self.create_database(reporter).await
     }
+    async fn upgrade_system(&self, reporter: &dyn Reporter, rules: &[String]) -> CommandResult;
 
     async fn cluster_alive(&self) -> bool;
     async fn cluster_dead(&self) -> bool {
@@ -655,6 +656,20 @@ pub(crate) trait ContainerProvider: Provider {
         let (context, system, profile) = self.runtimes_context().await?;
         let multi = td_common::logging::multi_progress().unwrap_or_default();
         provision_pyvenvs(&context, self.cluster_provider(), &system, &profile, &multi).await
+    }
+
+    async fn provision_system_as_pod(&self, rules: &[String]) -> CommandResult {
+        let (context, system, profile) = self.runtimes_context().await?;
+        let multi = td_common::logging::multi_progress().unwrap_or_default();
+        provision_system(
+            &context,
+            self.cluster_provider(),
+            &system,
+            &profile,
+            &multi,
+            rules,
+        )
+        .await
     }
 }
 

@@ -31,7 +31,7 @@ botocore==1.43.114
 botocore-stubs==1.43.114
 build==1.6.1
 cachetools==7.2.3
-certifi==2026.7.22
+certifi==2026.10.18
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
 charset-normalizer==3.5.2
 click==8.5.0
@@ -71,8 +71,8 @@ grpcio==1.84.0
 grpcio-status==1.84.0
 grpcio-tools==1.82.0
 h11==0.16.0 ; sys_platform != 'emscripten'
-httpcore2==2.13.1 ; sys_platform != 'emscripten'
-httpx2==2.13.1
+httpcore2==2.14.0 ; sys_platform != 'emscripten'
+httpx2==2.14.0
 httpx2-jsfetch==1.0 ; sys_platform == 'emscripten'
 humanize==4.16.0
 hvac==2.4.0

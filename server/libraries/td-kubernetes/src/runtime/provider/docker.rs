@@ -313,6 +313,10 @@ impl Provider for DockerProvider {
         self.provision_database_as_pod(DbManagerMode::Upgrade).await
     }
 
+    async fn upgrade_system(&self, _reporter: &dyn Reporter, rules: &[String]) -> CommandResult {
+        self.provision_system_as_pod(rules).await
+    }
+
     async fn create_runtimes(&self, _reporter: &dyn Reporter) -> CommandResult {
         self.create_runtimes_as_pod().await
     }

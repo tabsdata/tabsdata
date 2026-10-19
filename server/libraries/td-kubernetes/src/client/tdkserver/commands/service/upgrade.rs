@@ -566,6 +566,7 @@ async fn instance_upgrade_phase(
     }
     provider.upgrade_runtimes(reporter).await?;
     provider.upgrade_database(reporter).await?;
+    provider.upgrade_system(reporter, &[]).await?;
 
     latch::finalise(context, instance, lock, &preflight.product_version).await?;
 
