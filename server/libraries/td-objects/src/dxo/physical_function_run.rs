@@ -103,6 +103,9 @@ pub struct PhysicalFunctionRun {
     pub collection_id: CollectionId,
     #[dto(list(filter, order_by))]
     pub function_version_id: FunctionVersionId,
+    /// The patch this attempt ran, when it ran one.
+    #[dto(list(filter))]
+    pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
     #[dto(list(filter, filter_like, order_by))]
     pub execution_id: ExecutionId,
     #[dto(list(filter, filter_like, order_by))]
@@ -141,6 +144,7 @@ impl FromDao for PhysicalFunctionRun {
             id: dao.base.base.id,
             collection_id: dao.base.base.collection_id,
             function_version_id: dao.base.base.function_version_id,
+            function_version_patch_id: dao.base.base.function_version_patch_id,
             execution_id: dao.base.base.execution_id,
             transaction_id: dao.base.base.transaction_id,
             triggered_on: dao.base.interval.valid_from.into(),
