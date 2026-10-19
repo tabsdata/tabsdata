@@ -11,10 +11,10 @@ import pytest
 from typing_extensions import deprecated
 
 # noinspection PyProtectedMember
-from tabsdatak.common import _annotations as annotations_module
+from tabsdatak import _annotations as annotations_module
 
 # noinspection PyProtectedMember
-from tabsdatak.common._annotations import (
+from tabsdatak._annotations import (
     TabsdataDeprecatedWarning,
     TabsdataUnstableWarning,
     deprecated_category,

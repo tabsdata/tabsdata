@@ -14,7 +14,7 @@ and re-fires from the wrapped object's first call / construction.
 Typical usage:
 
     from typing_extensions import deprecated
-    from tabsdatak.common._annotations import unstable, unstable_category
+    from tabsdatak._annotations import unstable, unstable_category
 
     @unstable()
     @deprecated(
