@@ -29,6 +29,7 @@ pub mod collection;
 pub mod execution;
 pub mod function;
 pub mod function_run;
+pub mod graph;
 pub mod group;
 pub mod internal_api;
 pub mod logical;
@@ -44,6 +45,7 @@ pub mod table;
 #[cfg(test)]
 mod tests;
 pub mod token;
+pub mod topology;
 pub mod transaction;
 pub mod user;
 pub mod user_role;

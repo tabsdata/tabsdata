@@ -11,9 +11,10 @@ use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::crudl::{OptionalAtTimeParam, RequestContext};
+use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{FunctionParam, FunctionRegister, FunctionUpdate};
 use td_objects::dxo::table::TableParam;
+use td_objects::dxo::topology::TopologyReadParam;
 use td_objects::types::basic::{
     AccessTokenId, CollectionIdName, CollectionName, FunctionIdName, TableIdName, TableNameDto,
     UserId,
@@ -104,7 +105,10 @@ async fn test_flow_renders_after_a_dependency_table_is_deleted(db: TdPool) -> Re
             TableParam {
                 table: TableIdName::from_str("t_out")?,
             },
-            OptionalAtTimeParam { at: None },
+            TopologyReadParam {
+                topology_version: None,
+                at: None,
+            },
         ))
         .in_project(p.id);
     Services::with_defaults(db.clone())

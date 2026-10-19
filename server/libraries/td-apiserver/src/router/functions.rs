@@ -25,6 +25,7 @@ use td_objects::dxo::function::{
     FunctionUpdate, FunctionVersion, FunctionVersionParam, FunctionWithTables,
 };
 use td_objects::dxo::function_upload::FunctionUpload;
+use td_objects::dxo::topology::TopologyReadParam;
 use td_services::Services;
 
 const FUNCTIONS_TAG: &str = "Functions";
@@ -149,7 +150,7 @@ pub async fn list_functions_by_collection(
     method(get),
     path = "/projects/{project}/collections/{collection}/functions/{function}",
     tag(FUNCTIONS_TAG),
-    doc = "Show a function"
+    doc = "Show a function as of a topology version, the latest by default"
 )]
 pub async fn read_function(
     State(state): State<Services>,
@@ -157,10 +158,10 @@ pub async fn read_function(
     Project(project_id): Project,
     Path(collection): Path<CollectionParam>,
     Path(function): Path<FunctionParam>,
-    Query(at): Query<AtTimeParam>,
+    Query(topology): Query<TopologyReadParam>,
 ) -> Result<GetStatus<FunctionWithTables>, ErrorStatus> {
     let request = context
-        .read((collection, function, at))
+        .read((collection, function, topology))
         .in_project(project_id);
     let response = state.read_function(request).await?;
     Ok(GetStatus::OK(response))

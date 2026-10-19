@@ -11,13 +11,15 @@ use ta_apiserver::status::ok_status::{DeleteStatus, GetStatus, ListStatus, NoCon
 use td_apiforge::apiserver_path;
 use td_database::pool::scoped::ScopedExt;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::crudl::{AtTimeParam, ListParams, OptionalAtTimeParam, RequestContext};
+use td_objects::dxo::crudl::{AtTimeParam, ListParams, RequestContext};
 use td_objects::dxo::file::DownloadResponse;
+use td_objects::dxo::graph::TableFlowGraphResponse;
 use td_objects::dxo::logical::TableDataVersion;
 use td_objects::dxo::table::{
     ExtraColsParam, FileFormatParam, SampleLenParam, SampleOffsetParam, SqlParam, Table,
-    TableFlowGraphResponse, TableParam, TableSchema, UncommittedParam,
+    TableParam, TableSchema, UncommittedParam,
 };
+use td_objects::dxo::topology::TopologyReadParam;
 use td_services::Services;
 
 const TABLES_TAG: &str = "Tables";
@@ -216,7 +218,7 @@ pub async fn schema(
     method(get),
     path = "/projects/{project}/collections/{collection}/tables/{table}/flow",
     tag(TABLES_TAG),
-    doc = "Table flow graph"
+    doc = "Table flow graph at a topology version or an instant, the latest by default"
 )]
 pub async fn graph(
     State(state): State<Services>,
@@ -224,9 +226,11 @@ pub async fn graph(
     Project(project_id): Project,
     Path(collection): Path<CollectionParam>,
     Path(table): Path<TableParam>,
-    Query(at): Query<OptionalAtTimeParam>,
+    Query(topology): Query<TopologyReadParam>,
 ) -> Result<GetStatus<TableFlowGraphResponse>, ErrorStatus> {
-    let request = context.read((collection, table, at)).in_project(project_id);
+    let request = context
+        .read((collection, table, topology))
+        .in_project(project_id);
     let response = state.table_flow_graph(request).await?;
     Ok(GetStatus::OK(response))
 }

@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::topology::read_version;
 use std::collections::HashMap;
 use std::ops::Deref;
 use ta_services::factory::service_factory;
@@ -11,11 +12,12 @@ use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::crudl::{AtTimeParam, ReadRequest, WithinProject};
+use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{Function, FunctionDBWithNames, FunctionWithTables};
 use td_objects::dxo::table::TableDBWithNames;
+use td_objects::dxo::topology::TopologyReadParam;
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::types::basic::WorkerType;
@@ -30,10 +32,10 @@ use td_queries::Queries;
 async fn read_function(
     authz: Ctx<AuthzContext>,
     gated_conn: &mut GatedConnection<RO, InProject>,
-    request: WithinProject<ReadRequest<(CollectionParam, FunctionParam, AtTimeParam)>>,
+    request: WithinProject<ReadRequest<(CollectionParam, FunctionParam, TopologyReadParam)>>,
 ) -> Result<FunctionWithTables, TdError> {
     let (project, request) = request.into_parts();
-    let (ctx, (collection_param, function_param, at_param)) = request.into_parts();
+    let (ctx, (collection_param, function_param, topology_param)) = request.into_parts();
     let grant = authz
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
@@ -41,11 +43,11 @@ async fn read_function(
 
     let collection = collection_param.collection;
     let function_id_name = function_param.function;
-    let at = at_param.at;
+    let version = read_version(conn, &project, &topology_param).await?;
 
     let function: FunctionDBWithNames = conn
         .scd2()
-        .as_of(&at)
+        .as_of(&version.interval.valid_from)
         .fetch_one(and!(&collection, &function_id_name))
         .await?;
 
@@ -55,7 +57,7 @@ async fn read_function(
 
     let tables: Vec<TableDBWithNames> = conn
         .scd2()
-        .as_of(&at)
+        .as_of(&version.interval.valid_from)
         .fetch_all(and!(&function_id, TableDBWithNames::user()))
         .await?;
     let table_names = tables
@@ -65,7 +67,7 @@ async fn read_function(
 
     let triggers: Vec<TriggerDBWithNames> = conn
         .scd2()
-        .as_of(&at)
+        .as_of(&version.interval.valid_from)
         .fetch_all(and!(&function_id, TriggerDBWithNames::active()))
         .await?;
     let trigger_table_ids: Vec<TableId> = triggers
@@ -74,7 +76,7 @@ async fn read_function(
         .collect();
     let trigger_tables: Vec<TableDBWithNames> = conn
         .scd2()
-        .as_of(&at)
+        .as_of(&version.interval.valid_from)
         .chunked()
         .fetch_all(&trigger_table_ids, ())
         .await?;
@@ -85,14 +87,14 @@ async fn read_function(
 
     let dependencies: Vec<DependencyDBWithNames> = conn
         .scd2()
-        .as_of(&at)
+        .as_of(&version.interval.valid_from)
         .fetch_all(and!(&function_id, DependencyDBWithNames::user()))
         .await?;
     let dependency_table_ids: Vec<TableId> =
         dependencies.iter().map(|x| x.base.base.table_id).collect();
     let dependency_tables: Vec<TableDBWithNames> = conn
         .scd2()
-        .as_of(&at)
+        .as_of(&version.interval.valid_from)
         .chunked()
         .fetch_all(&dependency_table_ids, ())
         .await?;
@@ -163,6 +165,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::topology::ProjectTopologyDB;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, TableNameDto,
@@ -226,7 +229,10 @@ mod tests {
                 FunctionParam {
                     function: FunctionIdName::from_str("joaquin_workout")?,
                 },
-                AtTimeParam { at: AtTime::now() },
+                TopologyReadParam {
+                    topology_version: None,
+                    at: None,
+                },
             ))
             .in_project(p.id);
 
@@ -291,8 +297,8 @@ mod tests {
         Ok(())
     }
     /// Deleting a collection closes every version interval it owns, so there
-    /// is nothing live left to read; `?at=` is how a plan reads the version
-    /// that ran.
+    /// is nothing live left to read; a topology version, or an instant, reads
+    /// the one that ran.
     #[td_test::test(db)]
     async fn test_read_at_past_instant_after_collection_delete(db: TdPool) -> Result<(), TdError> {
         let collection_name = CollectionName::try_from("doomed")?;
@@ -340,7 +346,7 @@ mod tests {
             )
             .await?;
 
-        let request = |at: AtTime| {
+        let request = |topology: TopologyReadParam| {
             RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read((
                     CollectionParam {
@@ -350,17 +356,41 @@ mod tests {
                     FunctionParam {
                         function: FunctionIdName::from_str("publisher").unwrap(),
                     },
-                    AtTimeParam { at },
+                    topology,
                 ))
                 .in_project(p.id)
         };
 
-        let read = service.read_function(request(registered_at)).await?.data;
-        assert_eq!(read.function.id, function.base.id);
-        assert_eq!(read.function.collection_id, collection.id);
-        assert_eq!(read.tables, vec![TableName::try_from("t0")?]);
+        let registered = db
+            .scd2()
+            .as_of(&registered_at)
+            .fetch_one::<ProjectTopologyDB>(&p.id)
+            .await?;
+        for topology in [
+            TopologyReadParam {
+                topology_version: Some(registered.base.id.clone()),
+                at: None,
+            },
+            TopologyReadParam {
+                topology_version: None,
+                at: Some(registered_at.clone()),
+            },
+        ] {
+            let read = service.read_function(request(topology)).await?.data;
+            assert_eq!(read.function.id, function.base.id);
+            assert_eq!(read.function.collection_id, collection.id);
+            assert_eq!(read.tables, vec![TableName::try_from("t0")?]);
+        }
 
-        assert!(service.read_function(request(AtTime::now())).await.is_err());
+        assert!(
+            service
+                .read_function(request(TopologyReadParam {
+                    topology_version: None,
+                    at: None
+                }))
+                .await
+                .is_err()
+        );
 
         let recreated = db
             .scoped(p.id)
@@ -369,9 +399,21 @@ mod tests {
             .await?;
         let refunction = db.scoped(p.id).seed().function(&recreated, &create).await?;
 
-        let read = service.read_function(request(registered_at)).await?.data;
+        let read = service
+            .read_function(request(TopologyReadParam {
+                topology_version: Some(registered.base.id.clone()),
+                at: None,
+            }))
+            .await?
+            .data;
         assert_eq!(read.function.id, function.base.id);
-        let read = service.read_function(request(AtTime::now())).await?.data;
+        let read = service
+            .read_function(request(TopologyReadParam {
+                topology_version: None,
+                at: None,
+            }))
+            .await?
+            .data;
         assert_eq!(read.function.id, refunction.base.id);
         assert_eq!(read.function.collection_id, recreated.id);
         Ok(())

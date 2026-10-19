@@ -19,8 +19,10 @@ use ta_apiserver::status::ok_status::{
 use td_apiforge::apiserver_path;
 use td_database::pool::scoped::ScopedExt;
 use td_objects::dxo::crudl::{ListParams, RequestContext};
+use td_objects::dxo::graph::ProjectGraphResponse;
 use td_objects::dxo::project::{ProjectCreate, ProjectParam, ProjectRead, ProjectUpdate};
 use td_objects::dxo::secret::SecretsRead;
+use td_objects::dxo::topology::{ProjectTopologyVersion, TopologyReadParam};
 use td_services::Services;
 
 const PROJECTS_TAG: &str = "Projects";
@@ -133,4 +135,45 @@ pub async fn delete_project(
     let request = context.delete(project);
     let response = state.delete_project(request).await?;
     Ok(DeleteStatus::OK(response))
+}
+
+#[apiserver_path(
+    version(v1),
+    scope(project),
+    auth(session, service_token),
+    method(get),
+    path = "/projects/{project}/graph",
+    tag(PROJECTS_TAG),
+    doc = "The project's graph: its functions and tables, and the outputs, dependencies and \
+           triggers between them, at a topology version or an instant, the latest by default"
+)]
+pub async fn project_graph(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Query(topology): Query<TopologyReadParam>,
+) -> Result<GetStatus<ProjectGraphResponse>, ErrorStatus> {
+    let request = context.read(topology).in_project(project_id);
+    let response = state.project_graph(request).await?;
+    Ok(GetStatus::OK(response))
+}
+
+#[apiserver_path(
+    version(v1),
+    scope(project),
+    auth(session, service_token),
+    method(get),
+    path = "/projects/{project}/topology-versions",
+    tag(PROJECTS_TAG),
+    doc = "Lists the project's topology versions, each with the interval it was current for"
+)]
+pub async fn list_topology_versions(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Query(list_params): Query<ListParams>,
+) -> Result<ListStatus<ProjectTopologyVersion>, ErrorStatus> {
+    let request = context.list((), list_params).in_project(project_id);
+    let response = state.list_topology_versions(request).await?;
+    Ok(ListStatus::OK(response))
 }

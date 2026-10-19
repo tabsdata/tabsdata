@@ -244,16 +244,9 @@ pub struct ListResponse<LL> {
     pub next_pagination_id: Option<String>,
 }
 
-/// `?at=` — the point in time a historical read resolves at. Shared by every
-/// domain with a versioned read surface (functions, tables).
+/// `?at=`, now by default: the instant a historical read resolves at.
 #[ta_objects::QueryParam]
 pub struct AtTimeParam {
     #[serde(default)]
     pub at: AtTime,
-}
-
-/// `?at=` whose absence means the live state rather than now.
-#[ta_objects::QueryParam]
-pub struct OptionalAtTimeParam {
-    pub at: Option<AtTime>,
 }

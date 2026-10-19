@@ -3,8 +3,6 @@
 //
 
 use crate::dxo::crudl::RequestContext;
-use crate::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
-use crate::dxo::graph::GraphEdge;
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
@@ -13,9 +11,7 @@ use crate::types::basic::{
     SchemaFieldName, SchemaFieldType, Sql, System, TableFunctionParamPos, TableId, TableIdName,
     TableName, TableStatus, TableType, TableVersionId, UncommittedStatus, UserId, UserLabel,
 };
-use crate::types::composed::TableVersions;
 use polars::prelude::Field;
-use std::collections::{HashMap, HashSet};
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{FromDao, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx, and, or};
 use td_error::TdError;
@@ -160,16 +156,6 @@ impl FromDao for Table {
             function: dao.function,
         })
     }
-}
-
-#[ta_objects::Dto]
-pub struct TableFlowGraphResponse {
-    pub table: TableVersionId,
-    pub all_functions: HashMap<FunctionVersionId, FunctionNodeResponse>,
-    pub all_tables: HashMap<TableVersionId, TableNodeResponse>,
-    pub system_tables: HashSet<TableVersionId>,
-    pub user_tables: HashSet<TableVersionId>,
-    pub relations: Vec<(FunctionVersionId, TableVersionId, GraphEdge<TableVersions>)>,
 }
 
 #[ta_objects::UrlParam]

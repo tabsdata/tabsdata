@@ -23,5 +23,6 @@ mod scheduler_config;
 mod scheduler_notify;
 #[cfg(test)]
 mod test_utils;
+pub mod topology;
 pub mod transaction_map;
 mod version_resolver;

@@ -3,6 +3,7 @@
 //
 
 use crate::table::flow::build_response;
+use crate::topology::read_version;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -12,8 +13,10 @@ use td_error::TdError;
 use td_execution::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
 use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::crudl::{OptionalAtTimeParam, ReadRequest, WithinProject};
-use td_objects::dxo::table::{TableDBWithNames, TableFlowGraphResponse, TableParam};
+use td_objects::dxo::crudl::{ReadRequest, WithinProject};
+use td_objects::dxo::graph::TableFlowGraphResponse;
+use td_objects::dxo::table::{TableDBWithNames, TableParam};
+use td_objects::dxo::topology::TopologyReadParam;
 use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
 
@@ -21,10 +24,10 @@ use td_queries::Queries;
 async fn table_flow_graph(
     authz: Ctx<AuthzContext>,
     gated_conn: &mut GatedConnection<RO, InProject>,
-    request: WithinProject<ReadRequest<(CollectionParam, TableParam, OptionalAtTimeParam)>>,
+    request: WithinProject<ReadRequest<(CollectionParam, TableParam, TopologyReadParam)>>,
 ) -> Result<TableFlowGraphResponse, TdError> {
     let (project, request) = request.into_parts();
-    let (ctx, (collection_param, table_param, at_param)) = request.into_parts();
+    let (ctx, (collection_param, table_param, topology_param)) = request.into_parts();
     let grant = authz
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
@@ -32,21 +35,12 @@ async fn table_flow_graph(
 
     let collection_id_name = collection_param.collection;
     let table_id_name = table_param.table;
-    let at = at_param.at.as_ref();
-
-    let table: TableDBWithNames = match at {
-        Some(at) => {
-            conn.scd2()
-                .as_of(at)
-                .fetch_one(and!(&collection_id_name, &table_id_name))
-                .await?
-        }
-        None => {
-            conn.scd2()
-                .fetch_one(and!(&collection_id_name, &table_id_name))
-                .await?
-        }
-    };
+    let topology = read_version(conn, &project, &topology_param).await?;
+    let table: TableDBWithNames = conn
+        .scd2()
+        .as_of(&topology.interval.valid_from)
+        .fetch_one(and!(&collection_id_name, &table_id_name))
+        .await?;
 
     let table_id = table.base.base.table_id;
     let entrypoint = FunctionOrTable::from(&table_id);
@@ -55,7 +49,7 @@ async fn table_flow_graph(
         include_dependency_functions: true,
         ..GraphConfig::defaults(())
     };
-    let graph = generate_td_graph(conn, config, at, &entrypoint, &recursion).await?;
+    let graph = generate_td_graph(conn, config, &topology, &entrypoint, &recursion).await?;
 
     build_response(&table, &graph).await
 }
@@ -143,7 +137,10 @@ mod tests {
                 TableParam {
                     table: TableIdName::from_str("table_0")?,
                 },
-                OptionalAtTimeParam { at: None },
+                TopologyReadParam {
+                    topology_version: None,
+                    at: None,
+                },
             ))
             .in_project(p.id);
 
@@ -163,6 +160,7 @@ mod tests {
             .map(|f| (f.base.id.clone(), f.base.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
+            .graph
             .all_functions
             .iter()
             .map(|(f_id, f)| (f_id.clone(), f.name.clone()))
@@ -174,6 +172,7 @@ mod tests {
             TableName::try_from("table_1")?,
         ];
         let tables = response
+            .graph
             .all_tables
             .values()
             .map(|t| t.name.clone())
@@ -181,13 +180,18 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(tables, expected_tables);
 
-        assert!(response.system_tables.is_empty());
-        assert_eq!(expected_tables.len(), response.user_tables.len());
+        assert!(response.graph.system_tables.is_empty());
+        assert_eq!(expected_tables.len(), response.graph.user_tables.len());
 
-        let relations = response.relations;
+        let relations = response.graph.relations;
         assert_eq!(relations.len(), 2);
         for (f, t, edge) in relations {
-            let t = response.all_tables.get(&t).map(|t| t.name.clone()).unwrap();
+            let t = response
+                .graph
+                .all_tables
+                .get(&t)
+                .map(|t| t.name.clone())
+                .unwrap();
             if f == function_0.base.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
@@ -302,7 +306,10 @@ mod tests {
                 TableParam {
                     table: TableIdName::from_str("table_0")?,
                 },
-                OptionalAtTimeParam { at: None },
+                TopologyReadParam {
+                    topology_version: None,
+                    at: None,
+                },
             ))
             .in_project(p.id);
 
@@ -322,6 +329,7 @@ mod tests {
             .map(|f| (f.base.id.clone(), f.base.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
+            .graph
             .all_functions
             .iter()
             .map(|(f_id, f)| (f_id.clone(), f.name.clone()))
@@ -335,6 +343,7 @@ mod tests {
             TableName::try_from("table_3")?,
         ];
         let tables = response
+            .graph
             .all_tables
             .values()
             .map(|t| t.name.clone())
@@ -342,13 +351,18 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(tables, expected_tables);
 
-        assert!(response.system_tables.is_empty());
-        assert_eq!(expected_tables.len(), response.user_tables.len());
+        assert!(response.graph.system_tables.is_empty());
+        assert_eq!(expected_tables.len(), response.graph.user_tables.len());
 
-        let relations = response.relations;
+        let relations = response.graph.relations;
         assert_eq!(relations.len(), 8);
         for (f, t, edge) in relations {
-            let t = response.all_tables.get(&t).map(|t| t.name.clone()).unwrap();
+            let t = response
+                .graph
+                .all_tables
+                .get(&t)
+                .map(|t| t.name.clone())
+                .unwrap();
             if f == function_0.base.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
@@ -482,7 +496,10 @@ mod tests {
                 TableParam {
                     table: TableIdName::from_str("table_3")?,
                 },
-                OptionalAtTimeParam { at: None },
+                TopologyReadParam {
+                    topology_version: None,
+                    at: None,
+                },
             ))
             .in_project(p.id);
 
@@ -502,6 +519,7 @@ mod tests {
             .map(|f| (f.base.id.clone(), f.base.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
+            .graph
             .all_functions
             .iter()
             .map(|(f_id, f)| (f_id.clone(), f.name.clone()))
@@ -513,6 +531,7 @@ mod tests {
             TableName::try_from("table_3")?,
         ];
         let tables = response
+            .graph
             .all_tables
             .values()
             .map(|t| t.name.clone())
@@ -520,10 +539,15 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(tables, expected_tables);
 
-        let relations = response.relations;
+        let relations = response.graph.relations;
         assert_eq!(relations.len(), 4);
         for (f, t, edge) in relations {
-            let t = response.all_tables.get(&t).map(|t| t.name.clone()).unwrap();
+            let t = response
+                .graph
+                .all_tables
+                .get(&t)
+                .map(|t| t.name.clone())
+                .unwrap();
             if f == function_0.base.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
@@ -604,7 +628,10 @@ mod tests {
                     TableParam {
                         table: TableIdName::from_str("table_0").unwrap(),
                     },
-                    OptionalAtTimeParam { at },
+                    TopologyReadParam {
+                        topology_version: None,
+                        at,
+                    },
                 ))
                 .in_project(p.id)
         };
@@ -614,7 +641,7 @@ mod tests {
             .await?
             .data;
         assert_eq!(response.table, table.base.base.id);
-        assert!(response.all_functions.contains_key(&function.base.id));
+        assert!(response.graph.all_functions.contains_key(&function.base.id));
 
         assert!(service.table_flow_graph(request(None)).await.is_err());
         Ok(())
