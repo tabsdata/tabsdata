@@ -5,6 +5,7 @@
 use crate::relation::TableDao;
 use crate::sea_value::SeaValue;
 use std::ops::Deref;
+use td_database::access::LockInstant;
 
 /// The relation a DAO maps to and the columns it names.
 #[diagnostic::on_unimplemented(
@@ -144,6 +145,9 @@ pub trait Partitioned: PkDao {
     note = "declare `scd2` and mark `#[dao(partition_by)]`"
 )]
 pub trait Scd2Dao: Partitioned {
+    /// The instant `open(.., at)` and `close(.., at)` take: the unit of work's
+    /// lock instant, or a narrower type only some writes can hold.
+    type At: Into<LockInstant>;
     const VALID_FROM: Self::Iden;
     const VALID_TO: Self::Iden;
 }

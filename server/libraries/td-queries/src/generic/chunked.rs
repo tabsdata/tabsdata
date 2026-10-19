@@ -20,7 +20,6 @@ use ta_objects::{
     InsertDao, InsertableFrom, SameInner, Scd2Dao, Scd2OpenDao, SelectDao, TableDao, TimelineDao,
     UnversionedDao, UpdateDao,
 };
-use td_database::access::LockInstant;
 use td_database::sea_query::builder::SeaQueryExt;
 
 pub struct Chunked<E> {
@@ -103,7 +102,7 @@ impl<E> Scd2Chunked<E> {
         self,
         values: &[impl SqlCondition<D>],
         extra: impl SqlCondition<D>,
-        at: LockInstant,
+        at: D::At,
     ) -> Result<PgQueryResult, SqlError>
     where
         E: Serves<D> + Writes,
@@ -111,6 +110,7 @@ impl<E> Scd2Chunked<E> {
         let mut executor = self.executor;
         warn_if_chunked::<D>(values.len());
         let extra = extra.resolve();
+        let at = at.into();
         let mut result = PgQueryResult::default();
         for chunk in values.chunks(MAX_QUERY_CONDITIONS) {
             let r = close_chunk_query::<D>(chunk, &extra, at)?
@@ -151,12 +151,13 @@ impl<E> Scd2Chunked<E> {
     pub async fn open<D: Scd2OpenDao + InsertableFrom<E::Scope>>(
         self,
         daos: &[D],
-        at: LockInstant,
+        at: D::At,
     ) -> Result<PgQueryResult, SqlError>
     where
         E: Serves<D> + Writes,
     {
         let mut executor = self.executor;
+        let at = at.into();
         let mut result = PgQueryResult::default();
         for chunk in daos.chunks(MAX_INSERT_ROWS) {
             let r = open_vec_query::<D>(chunk, at)?

@@ -14,7 +14,6 @@ use ta_objects::{
     AddressesOneVersion, Dao, InsertableFrom, ListDto, Scd2Dao, Scd2OpenDao, SelectDao, TableDao,
     UpdateDao, single_row,
 };
-use td_database::access::LockInstant;
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
@@ -48,12 +47,12 @@ impl<E> Scd2<E> {
     pub async fn open<D: Scd2OpenDao + InsertableFrom<E::Scope>>(
         self,
         dao: &D,
-        at: LockInstant,
+        at: D::At,
     ) -> Result<PgQueryResult, SqlError>
     where
         E: Serves<D> + Writes,
     {
-        open_query::<D>(dao, at)?
+        open_query::<D>(dao, at.into())?
             .build_query()
             .execute(self.executor)
             .await
@@ -82,13 +81,13 @@ impl<E> Scd2<E> {
     pub async fn close<D: TableDao + Scd2Dao>(
         self,
         condition: impl SqlCondition<D>,
-        at: LockInstant,
+        at: D::At,
     ) -> Result<PgQueryResult, SqlError>
     where
         E: Serves<D> + Writes,
     {
         let values = condition.display_values();
-        close_query::<D>(condition, at)?
+        close_query::<D>(condition, at.into())?
             .build_query()
             .execute(self.executor)
             .await

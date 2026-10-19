@@ -11,7 +11,7 @@ use crate::dao_unique::{Under, addresses};
 use crate::dxo_fields::{callback_ident, fields_callback};
 use crate::type_builder::parse_input_item_struct;
 use darling::ast::NestedMeta;
-use darling::util::{Flag, PathList};
+use darling::util::{Flag, Override, PathList};
 use darling::{FromDeriveInput, FromMeta};
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
@@ -24,7 +24,8 @@ use syn::{DeriveInput, Field, Fields, ItemStruct, Type, parse_macro_input};
 /// or `#[dao(view = "..")]`, plus `db(Domain)`, `unique(A, B)` (repeatable;
 /// unique across the whole relation, index-backed), `unique_at(A, B)`
 /// (repeatable, `scd2` only; unique among the versions visible at one instant,
-/// so it addresses one version but not one row of the history), `scd2` |
+/// so it addresses one version but not one row of the history), `scd2` /
+/// `scd2(at = T)` |
 /// `timeline`, `recursive`, and `project_scoped` /
 /// `project_scoped(unique(A, B), unique_at(A, B))`. A table DAO other than an
 /// update marks its primary key column with `#[dao(pk)]`, or flattens a base
@@ -40,10 +41,17 @@ pub struct DaoArguments {
     unique_types: Vec<PathList>,
     #[darling(default, multiple, rename = "unique_at")]
     unique_at_types: Vec<PathList>,
-    scd2: Flag,
+    scd2: Option<Override<Scd2Arguments>>,
     timeline: Flag,
     recursive: Flag,
     project_scoped: Option<ProjectScopedArguments>,
+}
+
+/// `scd2(at = T)`: the instant type the interval opens and closes at, the lock
+/// instant by default.
+#[derive(Debug, Default, FromMeta)]
+struct Scd2Arguments {
+    at: Option<syn::Path>,
 }
 
 #[derive(Debug, Default, FromMeta)]
@@ -259,7 +267,11 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             ));
         }
     };
-    let is_scd2 = parsed.scd2.is_present();
+    let is_scd2 = parsed.scd2.is_some();
+    let at = match &parsed.scd2 {
+        Some(Override::Explicit(Scd2Arguments { at: Some(at) })) => quote! { #at },
+        _ => quote! { td_database::access::LockInstant },
+    };
     let is_timeline = parsed.timeline.is_present();
     let is_versioned = is_scd2 || is_timeline;
     let is_update = ops.update.is_some();
@@ -852,6 +864,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             let scd2_impl = is_scd2.then(|| {
                 quote! {
                     impl ta_objects::Scd2Dao for #ident {
+                        type At = #at;
                         const VALID_FROM: Self::Iden = #valid_from_col;
                         const VALID_TO: Self::Iden = #valid_to_col;
                     }
