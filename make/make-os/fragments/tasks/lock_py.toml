@@ -107,6 +107,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/yanked.ds
 
     cd "${PROJECT_TABSDATA_ROOT_FOLDER}"
 
@@ -192,6 +193,9 @@ script = [
     debug "📝 Adding copyright header to tabsdata-requirements-dev.txt"
     content = readfile ./variant/resources/lock/tabsdata-requirements-dev.txt
     writefile ./variant/resources/lock/tabsdata-requirements-dev.txt "#\n# Copyright ${current_year} Tabsdata Inc.\n#\n\n${content}"
+
+    check_yanked ./variant/resources/lock/tabsdata-requirements.txt
+    check_yanked ./variant/resources/lock/tabsdata-requirements-dev.txt
     ''']
 
 [tasks.__os__lock_py_connectors]

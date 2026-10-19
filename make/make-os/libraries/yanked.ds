@@ -1,0 +1,36 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+fn check_yanked
+    lock_path = set ${1}
+    lock_file = basename ${lock_path}
+    info "🪦 Checking ${lock_file} for yanked pins"
+    checked = exec --fail-on-error uv pip compile --no-header --no-annotate -p 3.12 ${lock_path}
+    has_yanked = contains ${checked.stderr} "is yanked"
+    if ${has_yanked}
+        title = set "Yanked pins in ${lock_file}: they still install, but review each reason"
+        title_length = length ${title}
+        rule_length = calc ${title_length} + 3
+        rule = set ""
+        indexes = range 0 ${rule_length}
+        for index in ${indexes}
+            rule = set "${rule}━"
+        end
+        release ${indexes}
+        println -s bold -c bright_red ${rule}
+        println -s bold -c bright_red "🚨 ${title}"
+        println -s bold -c bright_red ${rule}
+        lines = split ${checked.stderr} "\n"
+        for line in ${lines}
+            is_yanked_line = contains ${line} "is yanked"
+            if ${is_yanked_line}
+                error "🪦 ${line}"
+            end
+        end
+        release ${lines}
+        println -s bold -c bright_red "━━━━━━━"
+    else
+        info "✅ No yanked pins in ${lock_file}"
+    end
+end
