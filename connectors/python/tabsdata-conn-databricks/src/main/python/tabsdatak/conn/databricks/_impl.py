@@ -1103,7 +1103,7 @@ def write_all_tables(
                 fq_table,
                 _fq_for_sql(fq_table),
                 watermark,
-                cfg.ctx.trx_id,
+                cfg.ctx.transaction_id,
             ):
                 # Asked before the batch is rewritten and uploaded: a rerun that
                 # has nothing to do should not pay to build and ship a file it
@@ -1113,14 +1113,14 @@ def write_all_tables(
                     " already has value %s",
                     fq_table,
                     watermark,
-                    cfg.ctx.trx_id,
+                    cfg.ctx.transaction_id,
                 )
                 continue
             logger.info("databricks: staging parquet for %s", fq_table)
             with watermarked_batch(
                 path,
                 watermark,
-                cfg.ctx.trx_id,
+                cfg.ctx.transaction_id,
                 adapt=narrow_timestamps if has_nanosecond_timestamps(path) else None,
             ) as batch:
                 file_in_volume = upload_file_to_volume(

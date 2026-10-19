@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +19,7 @@ from pymongo.errors import BulkWriteError, ConnectionFailure, PyMongoError
 import tabsdatak.conn.mongodb._plugin as plugin
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
-from tabsdatak.conn.mongodb import MongoDBDestConn, MongoDBDest
+from tabsdatak.conn.mongodb import MongoDBDest, MongoDBDestConn
 from tabsdatak.conn.mongodb._explorer._explorer import MongoDBConnectionExplorer
 from tabsdatak.conn.mongodb.error import (
     MongoDBErrorCode,
@@ -41,16 +42,28 @@ class _Ctx:
         return self._work
 
     @property
-    def exec_plan_id(self) -> str:
+    def execution_id(self) -> str:
         return "mongo-ut-exec"
 
     @property
-    def trx_id(self) -> str:
+    def execution(self) -> str | None:
+        return None
+
+    @property
+    def transaction_id(self) -> str:
         return "mongo-ut-trx"
 
     @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
+    def logical_function_run_id(self) -> str:
+        return "test-logical-function-run-id"
+
+    @property
+    def physical_function_run_id(self) -> str:
+        return "test-physical-function-run-id"
+
+    @property
+    def triggered_on(self) -> datetime:
+        return datetime.fromisoformat("2026-01-01T00:00:00.000000+00:00")
 
 
 def _bare_conn() -> MongoDBDestConn:
@@ -149,9 +162,7 @@ class _FakeDatabase:
         self.collections: dict[str, _FakeCollection] = {}
         self.last_codec_options: Any = None
 
-    def get_collection(
-        self, name: str, codec_options: Any = None
-    ) -> _FakeCollection:
+    def get_collection(self, name: str, codec_options: Any = None) -> _FakeCollection:
         self.last_codec_options = codec_options
         if name not in self.collections:
             self.collections[name] = _FakeCollection(name)
@@ -264,7 +275,8 @@ def test_write_out_upserts_when_id_field_provided(monkeypatch, work_dir):
 
 
 def test_write_out_inserts_when_id_field_and_update_existing_false(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     client = _install_client(monkeypatch, _FakeClient())
     parquet = _make_parquet(
@@ -347,9 +359,7 @@ def test_write_out_uses_transactions_when_enabled(monkeypatch, work_dir):
     assert client.session.aborted == 0
     # The bulk_write call should have received the session.
     coll = client["app"].collections["users"]
-    assert all(
-        c["session"] is client.session for c in coll.bulk_write_calls
-    )
+    assert all(c["session"] is client.session for c in coll.bulk_write_calls)
 
 
 def test_write_out_multiple_collections(monkeypatch, work_dir):
@@ -379,7 +389,10 @@ def test_write_out_raises_mongodb_18_on_count_mismatch(monkeypatch, work_dir):
     )
     with pytest.raises(MongoDBRuntimeException) as ei:
         plugin._MongoDBDestPlugin().write_out(
-            _Ctx(work_dir), _bare_conn(), dest, [parquet],
+            _Ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_18
 
@@ -395,13 +408,17 @@ def test_write_out_raises_mongodb_19_on_connect_failure(monkeypatch, work_dir):
     )
     with pytest.raises(MongoDBRuntimeException) as ei:
         plugin._MongoDBDestPlugin().write_out(
-            _Ctx(work_dir), _bare_conn(), dest, [parquet],
+            _Ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_19
 
 
 def test_write_out_raises_mongodb_22_on_bare_collection_name(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     _install_client(monkeypatch, _FakeClient())
     parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
@@ -413,7 +430,10 @@ def test_write_out_raises_mongodb_22_on_bare_collection_name(
     )
     with pytest.raises(MongoDBRuntimeException) as ei:
         plugin._MongoDBDestPlugin().write_out(
-            _Ctx(work_dir), _bare_conn(), dest, [parquet],
+            _Ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_22
 
@@ -433,7 +453,8 @@ def test_write_out_bare_collection_uses_uri_default_db(monkeypatch, work_dir):
 
 
 def test_write_out_raises_mongodb_21_when_id_field_missing(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     _install_client(monkeypatch, _FakeClient())
     # Document is missing the declared id_field 'user_id'.
@@ -443,20 +464,28 @@ def test_write_out_raises_mongodb_21_when_id_field_missing(
     )
     with pytest.raises(MongoDBRuntimeException) as ei:
         plugin._MongoDBDestPlugin().write_out(
-            _Ctx(work_dir), _bare_conn(), dest, [parquet],
+            _Ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_21
 
 
 def test_write_out_raises_mongodb_20_on_pymongo_write_failure(
-    monkeypatch, work_dir,
+    monkeypatch,
+    work_dir,
 ):
     _install_client(monkeypatch, _FakeClient())
+
     # Cause the bulk_write call to raise.
     def explode(*a, **kw):
         raise PyMongoError("write boom")
+
     monkeypatch.setattr(
-        _FakeCollection, "bulk_write", lambda self, *a, **kw: explode(),
+        _FakeCollection,
+        "bulk_write",
+        lambda self, *a, **kw: explode(),
     )
     parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
     dest = MongoDBDest(
@@ -464,7 +493,10 @@ def test_write_out_raises_mongodb_20_on_pymongo_write_failure(
     )
     with pytest.raises(MongoDBRuntimeException) as ei:
         plugin._MongoDBDestPlugin().write_out(
-            _Ctx(work_dir), _bare_conn(), dest, [parquet],
+            _Ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_20
 
@@ -476,6 +508,7 @@ def test_write_out_swallows_dup_keys_when_configured(monkeypatch, work_dir):
         raise BulkWriteError({
             "writeErrors": [{"code": 11000, "errmsg": "dup"}],
         })
+
     monkeypatch.setattr(_FakeCollection, "bulk_write", explode)
 
     parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
@@ -494,6 +527,7 @@ def test_write_out_propagates_non_dup_key_bulk_errors(monkeypatch, work_dir):
         raise BulkWriteError({
             "writeErrors": [{"code": 9999, "errmsg": "other"}],
         })
+
     monkeypatch.setattr(_FakeCollection, "bulk_write", explode)
 
     parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
@@ -503,7 +537,10 @@ def test_write_out_propagates_non_dup_key_bulk_errors(monkeypatch, work_dir):
     )
     with pytest.raises(MongoDBRuntimeException) as ei:
         plugin._MongoDBDestPlugin().write_out(
-            _Ctx(work_dir), _bare_conn(), dest, [parquet],
+            _Ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [parquet],
         )
     assert ei.value.api_error is MongoDBErrorCode.MONGODB_20
 
@@ -513,6 +550,7 @@ def test_write_out_aborts_transaction_on_failure(monkeypatch, work_dir):
 
     def explode(self, *a, **kw):
         raise PyMongoError("write boom")
+
     monkeypatch.setattr(_FakeCollection, "bulk_write", explode)
 
     parquet = _make_parquet(work_dir / "u.parquet", [{"name": "a"}])
@@ -522,7 +560,10 @@ def test_write_out_aborts_transaction_on_failure(monkeypatch, work_dir):
     )
     with pytest.raises(MongoDBRuntimeException):
         plugin._MongoDBDestPlugin().write_out(
-            _Ctx(work_dir), _bare_conn(), dest, [parquet],
+            _Ctx(work_dir),
+            _bare_conn(),
+            dest,
+            [parquet],
         )
     assert client.session.aborted == 1
     assert client.session.committed == 0
@@ -546,9 +587,7 @@ def test_uri_with_credentials_inlines_user_pass():
         ),
     )
     # ' ' -> '+', '@' -> '%40' (quote_plus).
-    assert plugin._uri_with_credentials(conn) == (
-        "mongodb://us+er:p%40ss@host:27017"
-    )
+    assert plugin._uri_with_credentials(conn) == ("mongodb://us+er:p%40ss@host:27017")
 
 
 def test_pymongo_kwargs_strips_prefix():
@@ -629,6 +668,7 @@ def test_mongodb_dest_cardinality_uses_collections_length():
 
 def test_resolve_dest_cfg_returns_defaults_when_empty():
     import logging as _logging
+
     cfg = plugin._resolve_dest_cfg(None)
     assert cfg.logging_level == _logging.ERROR
 

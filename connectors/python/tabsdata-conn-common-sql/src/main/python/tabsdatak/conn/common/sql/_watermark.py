@@ -44,10 +44,10 @@ logger = logging.getLogger(__name__)
 def watermarked_batch(
     batch: Path,
     column: str | None,
-    trx_id: str,
+    transaction_id: str,
     adapt: Callable[[pl.LazyFrame], pl.LazyFrame] | None = None,
 ) -> Iterator[Path]:
-    """Yield a parquet carrying ``column`` stamped with ``trx_id``, to be staged
+    """Yield a parquet carrying ``column`` stamped with ``transaction_id``, to be staged
     in place of ``batch`` -- or ``batch`` itself when the write neither names a
     watermark nor adapts the batch.
 
@@ -81,9 +81,14 @@ def watermarked_batch(
             frame = adapt(frame)
         if column is not None:
             logger.info(
-                "Stamping %s with %s = %r before staging", batch.name, column, trx_id
+                "Stamping %s with %s = %r before staging",
+                batch.name,
+                column,
+                transaction_id,
             )
-            frame = frame.with_columns(pl.lit(trx_id, dtype=pl.String).alias(column))
+            frame = frame.with_columns(
+                pl.lit(transaction_id, dtype=pl.String).alias(column)
+            )
         frame.sink_parquet(stamped)
         yield stamped
 

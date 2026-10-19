@@ -16,17 +16,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from test_tabsdatak.conn.snowflake.support import (
-    _FakeConnection,
-    _FakeCtx,
-    _INFER_PREFIX,
-    assignments as _assignments,
-    column_fakes,
-    insert_lists as _insert_lists,
-    watermark_answers,
-)
 
-from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
+# noinspection PyProtectedMember
+from tabsdatak.conn.common.sql._merge import WatermarkCfg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge._batch import coalesced_batch, incoming_column
@@ -42,20 +34,26 @@ from tabsdatak.conn.common.sql._merge._driver import (
 from tabsdatak.conn.common.sql._merge._statement import render_merge, render_replace
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.common.sql._merge import WatermarkCfg
-
-# noinspection PyProtectedMember
 from tabsdatak.conn.common.sql._merge.dialect import Staged
-from tabsdatak.conn.snowflake import MergeCfg
+from tabsdatak.conn.common.sql.cdc.constants import CdcOperation
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.snowflake import _iceberg
+from tabsdatak.conn.snowflake import MergeCfg, _iceberg
 
 # noinspection PyProtectedMember
 from tabsdatak.conn.snowflake._merge_dialect import SnowflakeMergeDialect
 from tabsdatak.conn.snowflake.error import (
     SnowflakeErrorCode,
     SnowflakeRuntimeException,
+)
+from test_tabsdatak.conn.snowflake.support import (
+    _INFER_PREFIX,
+    _FakeConnection,
+    _FakeCtx,
+    assignments as _assignments,
+    column_fakes,
+    insert_lists as _insert_lists,
+    watermark_answers,
 )
 
 pytestmark = pytest.mark.snowflake
@@ -78,9 +76,7 @@ def _staged(columns: list[tuple[str, str]], relation: str = _SCRATCH) -> Staged:
 
 
 def _cfg(on=("c",), op_column="op", watermark_column=None) -> MergeCfg:
-    return MergeCfg(
-        on=list(on), op_column=op_column, watermark_column=watermark_column
-    )
+    return MergeCfg(on=list(on), op_column=op_column, watermark_column=watermark_column)
 
 
 def _alters(log: list[str]) -> list[str]:
@@ -238,9 +234,7 @@ def test_evolve_still_adds_beside_a_base_it_cannot_alter():
         target='"T"',
     )
     assert changed == ["NOTE"]
-    assert _alters(fake.log) == [
-        'ALTER TABLE "T" ADD COLUMN IF NOT EXISTS "NOTE" TEXT'
-    ]
+    assert _alters(fake.log) == ['ALTER TABLE "T" ADD COLUMN IF NOT EXISTS "NOTE" TEXT']
 
 
 @pytest.mark.parametrize(
@@ -286,7 +280,6 @@ def test_evolve_adds_and_widens_in_one_pass():
         'ALTER TABLE "T" ADD COLUMN IF NOT EXISTS "AMOUNT" FLOAT',
         'ALTER TABLE "T" ALTER COLUMN "NAME" SET DATA TYPE VARCHAR(20)',
     ]
-
 
 
 def test_evolve_emits_no_ddl_beyond_the_alters():
@@ -353,14 +346,12 @@ def _merge_sql(columns, **cfg_kwargs):
 def test_merge_statement_takes_the_staging_table_whole():
     # No projection: every column the clauses name is verified to be there, and
     # one they do not name costs nothing.
-    assert f'USING {_SCRATCH} AS source' in _merge_sql(["C", "STATUS"])
+    assert f"USING {_SCRATCH} AS source" in _merge_sql(["C", "STATUS"])
 
 
 def test_merge_statement_inserts_every_written_column():
     sql = _merge_sql(["C", "STATUS"])
-    assert (
-        'THEN INSERT ("C", "STATUS") VALUES (source."C", source."STATUS")' in sql
-    )
+    assert 'THEN INSERT ("C", "STATUS") VALUES (source."C", source."STATUS")' in sql
 
 
 def test_merge_statement_inserts_columns_and_values_in_the_same_order():
@@ -488,9 +479,9 @@ def test_written_columns_refuses_a_marker_the_batch_lacks():
 
 def test_merge_statement_gates_every_clause_on_the_marker():
     sql = _merge_sql(["C", "OP"], op_column="op")
-    assert 'WHEN MATCHED AND (LOWER(source."OP") = \'d\') THEN DELETE' in sql
-    assert 'WHEN MATCHED AND (LOWER(source."OP") = \'u\') THEN UPDATE SET' in sql
-    assert 'WHEN NOT MATCHED AND (LOWER(source."OP") = \'i\') THEN INSERT (' in sql
+    assert "WHEN MATCHED AND (LOWER(source.\"OP\") = 'd') THEN DELETE" in sql
+    assert "WHEN MATCHED AND (LOWER(source.\"OP\") = 'u') THEN UPDATE SET" in sql
+    assert "WHEN NOT MATCHED AND (LOWER(source.\"OP\") = 'i') THEN INSERT (" in sql
 
 
 def test_merge_statement_deletes_before_it_updates():
@@ -517,7 +508,7 @@ def test_merge_statement_compares_against_the_bare_marker():
 
 def test_merge_statement_quotes_a_case_sensitive_op_column():
     sql = _merge_sql(["C", "opCol"], op_column='"opCol"')
-    assert 'LOWER(source."opCol") = \'u\'' in sql
+    assert "LOWER(source.\"opCol\") = 'u'" in sql
 
 
 @pytest.mark.parametrize("marker", ["i", "I", "u", "U", "d", "D"])
@@ -552,7 +543,7 @@ def test_ensure_target_excludes_the_marker():
     columns = [("C", "NUMBER(38,0)"), ("OP", "TEXT")]
     _dialect(fake).ensure_target(_TARGET, _staged(columns), "OP")
     assert fake.log == [
-        f'CREATE TABLE IF NOT EXISTS {_TARGET} AS'
+        f"CREATE TABLE IF NOT EXISTS {_TARGET} AS"
         f' SELECT * EXCLUDE ("OP") FROM {_SCRATCH} LIMIT 0'
     ]
 
@@ -969,8 +960,7 @@ def test_incoming_column_matches_a_lower_case_column_by_an_upper_folded_key():
     spells it lower case -- and polars is case-sensitive."""
     dialect = _dialect(_FakeConnection())
     assert (
-        incoming_column(dialect, ["order_id", "op"], "ORDER_ID", "DB.S.T")
-        == "order_id"
+        incoming_column(dialect, ["order_id", "op"], "ORDER_ID", "DB.S.T") == "order_id"
     )
 
 
@@ -1047,7 +1037,7 @@ def _merge(fake, batch, schema_evolution="update", watermark_column=None, **cfg_
         batch=batch,
         cfg=_cfg(**cfg_kwargs),
         schema_evolution=schema_evolution,
-        ctx=_FakeCtx(trx_id=_TRX),
+        ctx=_FakeCtx(transaction_id=_TRX),
         watermark_column=watermark_column,
     )
 

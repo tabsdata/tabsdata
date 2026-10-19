@@ -143,7 +143,7 @@ class _FakeCtx:
     """The slice of ``DestContext`` the write path reads: the trx id a merge
     stamps its watermark rows with, and the directory the plugin stages in."""
 
-    trx_id: str = "TRX_1"
+    transaction_id: str = "TRX_1"
     work: Path | None = None
 
     def work_dir(self) -> Path | None:

@@ -187,7 +187,7 @@ def test_upload_skips_system_output_whose_state_file_is_absent(tmp_path):
     """A declared system_output slot whose state parquet is absent from
     ``state_dir`` is silently skipped — mirrors ``report_completion``'s
     ``!NoData`` convention for the same case. Covers transformers and
-    subscribers whose user function signature omits ``ctx: TrxCtx`` and
+    subscribers whose user function signature omits ``ctx: TransactionCtx`` and
     therefore never drains state for the declared slot."""
     state_dir = tmp_path / "state"
     state_dir.mkdir()

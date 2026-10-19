@@ -20,6 +20,7 @@ import importlib
 import json
 import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -1135,13 +1136,19 @@ def test_function_context_is_a_function_ctx_subclass():
     must NOT also satisfy the SrcPluginCtx / DestContext role tags."""
     c = _FunctionContext(
         work_dir=Path("/work"),
-        exec_plan_id="ep",
-        trx_id="tx",
-        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
+        project_id="p-1",
+        project="p",
         collection_id="cid",
-        collection_name="c",
+        collection="c",
         function_id="fn",
-        function_name="publish_people",
+        function="publish_people",
+        function_version_id="fv-1",
+        execution_id="ep",
+        execution=None,
+        transaction_id="tx",
+        logical_function_run_id="lfr-1",
+        physical_function_run_id="pfr-1",
+        triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
     )
     assert isinstance(c, FunctionCtx)
     assert not isinstance(c, SrcPluginCtx)
@@ -1149,7 +1156,7 @@ def test_function_context_is_a_function_ctx_subclass():
 
 
 def test_infer_table_modes_skips_trailing_ctx_param():
-    """When the user function declares a trailing TrxCtx-typed param,
+    """When the user function declares a trailing TransactionCtx-typed param,
     ``_infer_table_modes`` must skip it — only the input slots are
     real table-mode-bearing parameters."""
 
@@ -1162,7 +1169,7 @@ def test_infer_table_modes_skips_trailing_ctx_param():
 
 def test_infer_table_modes_does_not_skip_without_ctx():
     """No trailing ctx → every parameter is a slot. Sanity check that
-    the trim only kicks in when has_trx_ctx_param is True."""
+    the trim only kicks in when has_transaction_ctx_param is True."""
 
     def f(in_1: TableFrameSpec, in_2: TableFrameSpec) -> TableFrameSpec:
         return None
@@ -1177,7 +1184,7 @@ def test_infer_table_modes_does_not_skip_without_ctx():
 @pytest.fixture
 def ctx_aware_built_bundle(tmp_path, monkeypatch) -> Path:
     """Build + extract a bundle whose @publisher function declares a
-    trailing ``ctx: TrxCtx`` parameter."""
+    trailing ``ctx: TransactionCtx`` parameter."""
     srcdata = tmp_path / "srcdata"
     srcdata.mkdir()
     _write_sample_parquet(srcdata / "rows.parquet")
@@ -1435,7 +1442,7 @@ def test_main_creates_out_dir_before_invoking_user_function(
 # --- ctx parameter works for @transformer and @subscriber too -----------
 #
 # The runtime in ``run_function`` is kind-agnostic: it constructs the
-# FunctionCtx and drains it based on ``has_trx_ctx_param(func)`` only,
+# FunctionCtx and drains it based on ``has_transaction_ctx_param(func)`` only,
 # regardless of which decorator wrapped the user function. These tests
 # pin that behaviour for the two non-publisher kinds so anyone narrowing
 # the ctx surface in the future hits a test failure.
@@ -1464,7 +1471,7 @@ def _build_extracted_bundle(
 def test_main_ctx_aware_transformer_hydrates_and_drains(
     tmp_path, monkeypatch, request, http_ok_url
 ):
-    """A @transformer that declares a trailing ``ctx: TrxCtx`` gets the
+    """A @transformer that declares a trailing ``ctx: TransactionCtx`` gets the
     same hydrate-from-state-out / drain-to-state-out treatment as a
     publisher. Verifies the runtime is kind-agnostic."""
     extracted = _build_extracted_bundle(
@@ -1511,7 +1518,7 @@ def test_main_ctx_aware_transformer_hydrates_and_drains(
 def test_main_ctx_aware_subscriber_hydrates_and_drains(
     tmp_path, monkeypatch, request, http_ok_url
 ):
-    """A @subscriber that declares a trailing ``ctx: TrxCtx`` also
+    """A @subscriber that declares a trailing ``ctx: TransactionCtx`` also
     round-trips state cleanly. Pins kind-agnostic runtime behaviour
     for the third decorator kind."""
     dest_out = tmp_path / "sub_dest"

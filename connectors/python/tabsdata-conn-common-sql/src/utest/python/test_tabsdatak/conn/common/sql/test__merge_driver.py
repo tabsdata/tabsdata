@@ -136,7 +136,7 @@ def _merge(tmp_path, records, syntax=_MERGE):
         batch=_batch(tmp_path, records),
         cfg=_cfg(),
         schema_evolution="strict",
-        ctx=SimpleNamespace(trx_id="trx"),
+        ctx=SimpleNamespace(transaction_id="trx"),
     )
     return dialect, result
 
@@ -153,7 +153,7 @@ def _replace_sql(syntax: MergeSyntax, columns=("pk", "v")) -> str:
 class TestRenderReplace:
     def test_merge_form_matches_nothing(self):
         assert _replace_sql(_MERGE).startswith(
-            f'MERGE INTO {_TARGET} AS target USING {_SCRATCH} AS source ON FALSE'
+            f"MERGE INTO {_TARGET} AS target USING {_SCRATCH} AS source ON FALSE"
         )
 
     def test_merge_form_inserts_every_staged_row(self):
@@ -174,9 +174,8 @@ class TestRenderReplace:
 
     def test_merge_form_writes_the_wildcard_less_the_marker(self):
         syntax = replace(_MERGE, wildcard_writes="* EXCEPT ({marker})")
-        assert (
-            'WHEN NOT MATCHED BY TARGET THEN INSERT * EXCEPT ("op")'
-            in _replace_sql(syntax)
+        assert 'WHEN NOT MATCHED BY TARGET THEN INSERT * EXCEPT ("op")' in _replace_sql(
+            syntax
         )
 
     def test_overwrite_form(self):
@@ -248,15 +247,11 @@ class TestMergeBatch:
         assert dialect.staged_rows == []
         assert dialect.executed == [_replace_sql(_MERGE)]
 
-    def test_the_overwrite_form_is_rendered_for_a_dialect_asking_for_it(
-        self, tmp_path
-    ):
+    def test_the_overwrite_form_is_rendered_for_a_dialect_asking_for_it(self, tmp_path):
         dialect, _ = _merge(tmp_path, [(None, "l", None), ("A", "i", 1)], _OVERWRITE)
         assert dialect.executed == [_replace_sql(_OVERWRITE)]
 
-    def test_a_dialect_without_a_replace_form_refuses_before_staging(
-        self, tmp_path
-    ):
+    def test_a_dialect_without_a_replace_form_refuses_before_staging(self, tmp_path):
         dialect = _FakeDialect(MergeSyntax(), ["pk", "v"])
         with pytest.raises(SqlCommonRuntimeException) as ei:
             merge_batch(
@@ -265,7 +260,7 @@ class TestMergeBatch:
                 batch=_batch(tmp_path, [(None, "l", None), ("A", "i", 1)]),
                 cfg=_cfg(),
                 schema_evolution="strict",
-                ctx=SimpleNamespace(trx_id="trx"),
+                ctx=SimpleNamespace(transaction_id="trx"),
             )
         assert ei.value.api_error is SqlCommonErrorCode.SQL_COMMON_9
         assert _TARGET in str(ei.value)

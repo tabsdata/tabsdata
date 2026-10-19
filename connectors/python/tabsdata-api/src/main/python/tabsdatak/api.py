@@ -24,7 +24,7 @@ fires; the `source` / `destination` declares the *where*. The
 -- it is the connection registered on the function's collection,
 which the runtime resolves and hands to the connector at run time.
 
-The `FunctionCtx` interface (`TrxCtx` + `FlowCtx`) is what the
+The `FunctionCtx` interface (`TransactionCtx` + `FlowCtx`) is what the
 runtime hands to every decorated function so it can read trx and
 flow identifiers and persist per-flow scratch state across
 invocations.
@@ -33,6 +33,7 @@ invocations.
 import importlib
 import warnings
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Annotated, Callable, TypeAlias, Union
 
 from pydantic import Field, model_validator
@@ -408,7 +409,7 @@ def publisher(
     Pulls from `source` and emits `output_tables`. The function
     takes one parameter per source slot -- `TableFrameSpec` (single
     mode) or `TableFramesSpec` (array mode) -- plus an *optional*
-    trailing `ctx: TrxCtx`, and returns one `TableFrame` per output
+    trailing `ctx: TransactionCtx`, and returns one `TableFrame` per output
     table (a lone output may be returned bare rather than as a 1-tuple).
     A slot may be `None` when an upstream batch is absent.
 
@@ -459,7 +460,7 @@ def stream_publisher(
     (always array mode) and returns one `TableFrame` per output
     table. Unlike the other decorators it must **not** declare a
     `ctx` parameter -- it runs inside the runtime's stream loop, not
-    per-trx, so no `TrxCtx` exists at the call boundary.
+    per-trx, so no `TransactionCtx` exists at the call boundary.
 
     The batch thresholds bound the batches the function receives, the
     same way for every stream source (see `BatchThresholds`): at least one
@@ -577,7 +578,7 @@ def transformer(
 
     Reads `input_tables` and emits `output_tables`. The function
     takes one parameter per input table (`TableFrameSpec` or
-    `TableFramesSpec`) plus an *optional* trailing `ctx: TrxCtx`,
+    `TableFramesSpec`) plus an *optional* trailing `ctx: TransactionCtx`,
     and returns one `TableFrame` per output table. Any input slot may
     be `None` when the upstream table produced no batch.
 
@@ -622,7 +623,7 @@ def subscriber(
 
     Reads `input_tables` and writes to `destination`. The function
     takes one `TableFrameSpec` parameter per input table plus an
-    *optional* trailing `ctx: TrxCtx`, and returns one `TableFrame`
+    *optional* trailing `ctx: TransactionCtx`, and returns one `TableFrame`
     per destination slot -- that return value is what gets written;
     return `None` for a slot to write nothing.
 
@@ -671,34 +672,52 @@ BasicTypeSpec: TypeAlias = Union[str, int, float, bool]
 BasicDictSpec: TypeAlias = dict[str, BasicTypeSpec]
 
 
-class TrxCtx(ABC):
+class TransactionCtx(ABC):
     """Per-trx context handed by the runtime to every decorated
     function and connector plugin.
 
-    A function receives it by declaring a trailing `ctx: TrxCtx`
-    parameter (not allowed on `@stream_publisher`). Carries trx-level
-    identifiers (`exec_plan_id`, `trx_id`, `exec_plan_ts`), a
-    per-flow scratch store that survives across invocations
-    (`get_attr` / `set_attr`), and a metadata sink
-    (`add_metadata`).
+    A function receives it by declaring a trailing `ctx: TransactionCtx`
+    parameter (not allowed on `@stream_publisher`). Carries the
+    identifiers of the execution, transaction and function run it
+    belongs to (named as the server API names them), a per-flow
+    scratch store that survives across invocations (`get_attr` /
+    `set_attr`), and a metadata sink (`add_metadata`).
     """
 
-    # devguide-ref: TrxCtx state semantics
+    # devguide-ref: TransactionCtx state semantics
 
     @property
     @abstractmethod
-    def exec_plan_id(self) -> str:
-        """Unique id of the running execution plan."""
+    def execution_id(self) -> str:
+        """Unique id of the execution the run belongs to."""
 
     @property
     @abstractmethod
-    def trx_id(self) -> str:
-        """Unique id of the current trx within the plan."""
+    def execution(self) -> str | None:
+        """Execution name, or `None` when the execution has none."""
 
     @property
     @abstractmethod
-    def exec_plan_ts(self) -> str:
-        """ISO-8601 timestamp of when the plan started."""
+    def transaction_id(self) -> str:
+        """Unique id of the transaction the run belongs to."""
+
+    @property
+    @abstractmethod
+    def logical_function_run_id(self) -> str:
+        """Unique id of the function run, the same across its
+        retries."""
+
+    @property
+    @abstractmethod
+    def physical_function_run_id(self) -> str:
+        """Unique id of this attempt of the function run; each retry
+        gets a new one."""
+
+    @property
+    @abstractmethod
+    def triggered_on(self) -> datetime:
+        """When the function run was triggered, as a timezone-aware
+        UTC `datetime`."""
 
     @abstractmethod
     def get_attr(self, attr: ContextKeySpec) -> BasicTypeSpec | None:
@@ -724,9 +743,9 @@ class TrxCtx(ABC):
 
 
 class FlowCtx(ABC):
-    """Flow-level identifiers (collection / function) shared by every
-    role that runs inside a trx -- plugins *and* user-decorated
-    functions.
+    """Flow-level identifiers (project / collection / function) shared
+    by every role that runs inside a trx -- plugins *and*
+    user-decorated functions.
 
     :categories: functions
 
@@ -735,33 +754,50 @@ class FlowCtx(ABC):
 
     @property
     @abstractmethod
+    def project_id(self) -> str:
+        """Unique id of the project the function belongs to."""
+
+    @property
+    @abstractmethod
+    def project(self) -> str:
+        """Project name."""
+
+    @property
+    @abstractmethod
     def collection_id(self) -> str:
         """Unique id of the collection the function belongs to."""
 
     @property
     @abstractmethod
-    def collection_name(self) -> str:
-        """Human-readable collection name."""
+    def collection(self) -> str:
+        """Collection name."""
 
     @property
     @abstractmethod
     def function_id(self) -> str:
-        """Unique id of the running function."""
+        """Unique id of the function, the same across its versions and
+        runs."""
 
     @property
     @abstractmethod
-    def function_name(self) -> str:
-        """Human-readable function name."""
+    def function(self) -> str:
+        """Function name."""
+
+    @property
+    @abstractmethod
+    def function_version_id(self) -> str:
+        """Unique id of the function version that runs (the patched
+        version, when a patch applies)."""
 
 
-class FunctionCtx(TrxCtx, FlowCtx, ABC):
+class FunctionCtx(TransactionCtx, FlowCtx, ABC):
     """Context handed to a user-decorated function (`@publisher` /
     `@transformer` / `@subscriber`) that declares a trailing
     `ctx` parameter.
 
     :categories: functions
 
-    Combines `TrxCtx` (trx identifiers + per-flow scratch state via
+    Combines `TransactionCtx` (trx identifiers + per-flow scratch state via
     `get_attr` / `set_attr`) with `FlowCtx` (flow identifiers), so
     the function can read state from the previous run and persist state
     for the next. Unlike the plugin contexts of `tabsdatak.spi` it

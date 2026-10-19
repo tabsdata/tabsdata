@@ -11,6 +11,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -85,23 +86,19 @@ class KafkaCtx(StreamSrcPluginCtx):
         return self._work_dir
 
     @property
-    def exec_plan_id(self) -> str:
-        return "kafka-integ-exec-plan"
+    def project_id(self) -> str:
+        return "test-project-id"
 
     @property
-    def trx_id(self) -> str:
-        return "kafka-integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
+    def project(self) -> str:
+        return "test-project"
 
     @property
     def collection_id(self) -> str:
         return "test-collection-id"
 
     @property
-    def collection_name(self) -> str:
+    def collection(self) -> str:
         return "test-collection"
 
     @property
@@ -109,8 +106,36 @@ class KafkaCtx(StreamSrcPluginCtx):
         return "test-function-id"
 
     @property
-    def function_name(self) -> str:
+    def function(self) -> str:
         return "test-function"
+
+    @property
+    def function_version_id(self) -> str:
+        return "test-function-version-id"
+
+    @property
+    def execution_id(self) -> str:
+        return "kafka-integ-exec-plan"
+
+    @property
+    def execution(self) -> str | None:
+        return None
+
+    @property
+    def transaction_id(self) -> str:
+        return "kafka-integ-trx"
+
+    @property
+    def logical_function_run_id(self) -> str:
+        return "test-logical-function-run-id"
+
+    @property
+    def physical_function_run_id(self) -> str:
+        return "test-physical-function-run-id"
+
+    @property
+    def triggered_on(self) -> datetime:
+        return datetime.fromisoformat("2026-01-01T00:00:00.000000+00:00")
 
     def get_attr(self, attr):
         return None

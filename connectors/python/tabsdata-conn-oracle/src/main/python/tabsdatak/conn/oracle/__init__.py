@@ -249,7 +249,7 @@ class OracleSrc(Src):
                 ),
                 output_tables=["or_city_inc"],
             )
-            def ingest_inc(city: TableFrameSpec, ctx: TrxCtx):
+            def ingest_inc(city: TableFrameSpec, ctx: TransactionCtx):
                 if city is not None:
                     row = city.max_for("ID")
                     if row is not None and row["ID"] is not None:
@@ -257,7 +257,7 @@ class OracleSrc(Src):
                 return city
     """
 
-    # devguide-ref: trx context state (initial_values seed / cursor resume)
+    # devguide-ref: transaction context state (initial_values seed / cursor resume)
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None

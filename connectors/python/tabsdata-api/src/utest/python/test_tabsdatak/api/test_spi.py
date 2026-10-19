@@ -20,7 +20,7 @@ from tabsdatak.api import (
     Src,
     StreamSrc,
     StreamThresholds,
-    TrxCtx,
+    TransactionCtx,
 )
 from tabsdatak.error import ApiErrorCode, ApiException
 from tabsdatak.spi import (
@@ -474,7 +474,7 @@ def test_function_ctx_is_abstract():
 
 def test_function_ctx_subclasses_trx_and_flow_ctx():
     """The role tag composes the two orthogonal abstract bases."""
-    assert issubclass(FunctionCtx, TrxCtx)
+    assert issubclass(FunctionCtx, TransactionCtx)
     assert issubclass(FunctionCtx, FlowCtx)
 
 
@@ -504,13 +504,17 @@ def test_function_ctx_distinct_from_src_and_dest_ctx():
 
 def test_function_ctx_concrete_subclass_must_implement_abstracts():
     """A concrete subclass that doesn't implement every abstract member
-    inherited from TrxCtx + FlowCtx is itself abstract."""
+    inherited from TransactionCtx + FlowCtx is itself abstract."""
 
     class _Half(FunctionCtx):
         # Only some abstracts implemented -- still abstract.
         @property
-        def exec_plan_id(self) -> str:
+        def execution_id(self) -> str:
             return "x"
+
+        @property
+        def execution(self) -> str | None:
+            return None
 
     with pytest.raises(TypeError, match="abstract"):
         _Half()  # type: ignore[abstract]
@@ -556,11 +560,23 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
 
     # PluginCtx surface (unused by these tests, stubbed).
     @property
+    def work_dir(self) -> Path:
+        return Path("/tmp")
+
+    @property
+    def project_id(self) -> str:
+        return "test-project-id"
+
+    @property
+    def project(self) -> str:
+        return "test-project"
+
+    @property
     def collection_id(self) -> str:
         return "c-id"
 
     @property
-    def collection_name(self) -> str:
+    def collection(self) -> str:
         return "c"
 
     @property
@@ -568,12 +584,12 @@ class _RecordingStreamCtx(StreamSrcPluginCtx):
         return "f-id"
 
     @property
-    def function_name(self) -> str:
+    def function(self) -> str:
         return "f"
 
     @property
-    def work_dir(self) -> Path:
-        return Path("/tmp")
+    def function_version_id(self) -> str:
+        return "test-function-version-id"
 
     # StreamSrcPluginCtx surface.
     @property

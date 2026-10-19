@@ -90,7 +90,6 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
         tables: list[TableFileSpec],
     ) -> None:
         # noinspection PyProtectedMember
-        # noinspection PyProtectedMember
         from tabsdatak.conn.bigquery._evolution import (
             BigQuerySchemaEvolver,
             batch_columns,
@@ -238,7 +237,7 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                 zip(tables, staging_uris, write_cfg.target_tables), 1
             ):
                 if watermark is not None and check_watermark_column(
-                    bq_client, table_fqn, watermark, ctx.trx_id
+                    bq_client, table_fqn, watermark, ctx.transaction_id
                 ):
                     # Asked before the batch is rewritten and uploaded: a rerun
                     # that has nothing to do should not pay to build and ship a
@@ -248,14 +247,14 @@ class _BigQueryDestPlugin(DestPlugin[BigQueryDestConn, BigQueryDest]):
                         " already has value %s",
                         table_fqn,
                         watermark,
-                        ctx.trx_id,
+                        ctx.transaction_id,
                     )
                     skipped.add(uri)
                     continue
                 logger.debug("bigquery: staging %d/%d to %s", i, total, uri)
                 try:
                     with watermarked_batch(
-                        Path(parquet_path), watermark, ctx.trx_id
+                        Path(parquet_path), watermark, ctx.transaction_id
                     ) as batch:
                         _upload_to_gcs(gcs_client, batch, uri)
                 except Exception as e:

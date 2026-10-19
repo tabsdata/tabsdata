@@ -109,7 +109,7 @@ class StarRocksDestPlugin(DestPlugin[StarRocksDestConn, StarRocksDest]):
 
         # Upload-prefix lives under the dest's working directory so
         # multiple concurrent transactions on the same staging bucket
-        # don't collide. The framework's ``trx_id`` would be ideal but
+        # don't collide. The framework's ``transaction_id`` would be ideal but
         # is opaque here; a uuid is sufficient.
         upload_id = uuid.uuid4().hex
 

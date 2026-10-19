@@ -14,23 +14,22 @@ import polars as pl
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.conn.bigquery import BigQueryDestConn, BigQueryDest, MergeCfg
 
 # noinspection PyProtectedMember
-from tabsdatak.conn.bigquery import _iceberg as iceberg
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.bigquery import _impl as impl
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.bigquery import _plugin as plugin
-from tabsdatak.conn.bigquery.error import (
-    BigQueryRuntimeException,
-    BigQueryErrorCode,
-    BigQueryValidateException,
+from tabsdatak.conn.bigquery import (
+    BigQueryDest,
+    BigQueryDestConn,
+    GCSLocation,
+    MergeCfg,
+    _impl as impl,
+    _plugin as plugin,
 )
 from tabsdatak.conn.bigquery._explorer import BigQueryConnectionExplorer
-from tabsdatak.conn.bigquery import GCSLocation
+from tabsdatak.conn.bigquery.error import (
+    BigQueryErrorCode,
+    BigQueryRuntimeException,
+    BigQueryValidateException,
+)
 from tabsdatak.conn.common.error import ConnInitException
 from tabsdatak.conn.common.types import GCPJson
 
@@ -45,14 +44,14 @@ pytestmark = pytest.mark.bigquery
 @dataclass
 class _Ctx:
     _work: Path
-    trx_id: str = "TRX_1"
+    transaction_id: str = "TRX_1"
 
     def work_dir(self) -> Path:
         return self._work
 
 
-def _dest_ctx(work: Path, trx_id: str = "TRX_1") -> _Ctx:
-    return _Ctx(work, trx_id)
+def _dest_ctx(work: Path, transaction_id: str = "TRX_1") -> _Ctx:
+    return _Ctx(work, transaction_id)
 
 
 def _make_parquet(path: Path, rows: list[dict]) -> Path:
@@ -106,9 +105,7 @@ def _schema_field(name, type_, mode="NULLABLE"):
     return bigquery.SchemaField(name, type_, mode=mode)
 
 
-def _evolving_clients(
-    monkeypatch, target_columns, batch_columns, target_exists=True
-):
+def _evolving_clients(monkeypatch, target_columns, batch_columns, target_exists=True):
     """A bq client whose target has ``target_columns`` and whose staged batch
     loads to a table with ``batch_columns``, each a ``(name, legacy_type)``."""
     from google.cloud.exceptions import NotFound
@@ -146,7 +143,9 @@ def _write(work_dir, dest_cfg=None, schema_evolution="update"):
         dest_cfg=dest_cfg,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}])
-    plugin._BigQueryDestPlugin().write_out(_dest_ctx(work_dir), _bare_conn(), dest, [src])
+    plugin._BigQueryDestPlugin().write_out(
+        _dest_ctx(work_dir), _bare_conn(), dest, [src]
+    )
 
 
 def _alters(bq_client):
@@ -157,9 +156,7 @@ _ICEBERG_ENGINE = {"bigquery.schema_evolution_engine": "iceberg"}
 
 
 def test_dest_plugin_iceberg_engine_widens_a_column(monkeypatch, work_dir):
-    bq_client = _evolving_clients(
-        monkeypatch, [("id", "INTEGER")], [("id", "NUMERIC")]
-    )
+    bq_client = _evolving_clients(monkeypatch, [("id", "INTEGER")], [("id", "NUMERIC")])
     _write(work_dir, _ICEBERG_ENGINE)
     assert _alters(bq_client) == [
         "ALTER TABLE `my-project.analytics.users`"
@@ -183,9 +180,7 @@ def test_dest_plugin_iceberg_engine_adds_a_column_the_target_lacks(
 def test_dest_plugin_iceberg_engine_refuses_a_change_bigquery_cannot_make(
     monkeypatch, work_dir
 ):
-    bq_client = _evolving_clients(
-        monkeypatch, [("id", "NUMERIC")], [("id", "STRING")]
-    )
+    bq_client = _evolving_clients(monkeypatch, [("id", "NUMERIC")], [("id", "STRING")])
     with pytest.raises(BigQueryRuntimeException):
         _write(work_dir, _ICEBERG_ENGINE)
     assert _alters(bq_client) == []
@@ -207,9 +202,7 @@ def test_dest_plugin_iceberg_engine_evolves_before_it_loads(monkeypatch, work_di
 def test_dest_plugin_iceberg_engine_drops_the_table_it_read_the_batch_from(
     monkeypatch, work_dir
 ):
-    bq_client = _evolving_clients(
-        monkeypatch, [("id", "INTEGER")], [("id", "INTEGER")]
-    )
+    bq_client = _evolving_clients(monkeypatch, [("id", "INTEGER")], [("id", "INTEGER")])
     _write(work_dir, _ICEBERG_ENGINE)
     dropped = [c.args[0] for c in bq_client.delete_table.call_args_list]
     assert len(dropped) == 1 and dropped[0].startswith("my-project.analytics.users_")
@@ -540,7 +533,10 @@ def test_column_type_keeps_parameters_on_a_struct_field():
 
 def test_table_column_types_pairs_names_with_googlesql_types():
     client = _field_client({_TARGET: [_field("id", "INTEGER"), _field("s", "STRING")]})
-    assert impl.table_column_types(client, _TARGET) == [("id", "INT64"), ("s", "STRING")]
+    assert impl.table_column_types(client, _TARGET) == [
+        ("id", "INT64"),
+        ("s", "STRING"),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -592,7 +588,8 @@ def test_write_cfg_keeps_a_merge_cfg_per_table_aligned_with_target_tables():
     dest = BigQueryDest(
         tables=["`users`", "`orders`"],
         if_table_exists="merge",
-        merge_cfg=[first, second], dest_cfg=_ICEBERG,
+        merge_cfg=[first, second],
+        dest_cfg=_ICEBERG,
     )
     cfg = impl.BigQueryWriteCfg.from_dest(_bare_conn(), dest)
     assert cfg.target_tables == [
@@ -883,7 +880,8 @@ def test_dest_plugin_loads_a_merge_batch_into_a_staging_table(monkeypatch, work_
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
-        merge_cfg=[MergeCfg(on=["id"], op_column="op")], dest_cfg=_ICEBERG,
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")],
+        dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
@@ -901,9 +899,7 @@ def test_dest_plugin_loads_a_merge_batch_into_a_staging_table(monkeypatch, work_
 
     job_config = call.kwargs["job_config"]
     assert job_config.write_disposition == bigquery.WriteDisposition.WRITE_TRUNCATE
-    assert (
-        job_config.create_disposition == bigquery.CreateDisposition.CREATE_IF_NEEDED
-    )
+    assert job_config.create_disposition == bigquery.CreateDisposition.CREATE_IF_NEEDED
     assert job_config.source_format == bigquery.SourceFormat.PARQUET
     # Evolving the target is the MERGE's job, not this load's.
     assert not job_config.schema_update_options
@@ -952,7 +948,8 @@ def test_dest_plugin_merges_the_staging_table_then_drops_it(monkeypatch, work_di
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
-        merge_cfg=[MergeCfg(on=["id"], op_column="op")], dest_cfg=_ICEBERG,
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")],
+        dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     plugin._BigQueryDestPlugin().write_out(
@@ -1014,7 +1011,8 @@ def _merge_dest(schema_evolution):
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
         schema_evolution=schema_evolution,
-        merge_cfg=[MergeCfg(on=["id"], op_column="op")], dest_cfg=_ICEBERG,
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")],
+        dest_cfg=_ICEBERG,
     )
 
 
@@ -1300,7 +1298,8 @@ def test_dest_plugin_pairs_each_table_with_its_own_merge_cfg(monkeypatch, work_d
         merge_cfg=[
             MergeCfg(on=["id"], op_column="op"),
             MergeCfg(on=["other_id"], op_column="op"),
-        ], dest_cfg=_ICEBERG,
+        ],
+        dest_cfg=_ICEBERG,
     )
     rows = [{"id": 1, "other_id": 10, "op": "i"}]
     src1 = _make_parquet(work_dir / "in1.parquet", rows)
@@ -1334,7 +1333,8 @@ def test_dest_plugin_names_the_staging_table_in_a_failed_merge_load(
     dest = BigQueryDest(
         tables=["`my-project.analytics.users`"],
         if_table_exists="merge",
-        merge_cfg=[MergeCfg(on=["id"], op_column="op")], dest_cfg=_ICEBERG,
+        merge_cfg=[MergeCfg(on=["id"], op_column="op")],
+        dest_cfg=_ICEBERG,
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1, "op": "i"}])
     with pytest.raises(BigQueryRuntimeException) as ei:
@@ -1566,7 +1566,7 @@ def _watermark_write(
     if_table_exists="append",
     schema_evolution="strict",
     dest_cfg=None,
-    trx_id="TRX_1",
+    transaction_id="TRX_1",
 ):
     dest = BigQueryDest(
         tables=[f"`{_TARGET_FQN}`"],
@@ -1577,7 +1577,7 @@ def _watermark_write(
     )
     src = _make_parquet(work_dir / "in.parquet", [{"id": 1}, {"id": 2}])
     plugin._BigQueryDestPlugin().write_out(
-        _dest_ctx(work_dir, trx_id), _bare_conn(), dest, [src]
+        _dest_ctx(work_dir, transaction_id), _bare_conn(), dest, [src]
     )
     return src
 
@@ -1592,9 +1592,7 @@ def _watermark_alters(bq_client):
     ]
 
 
-def test_dest_plugin_append_watermark_stamps_every_uploaded_row(
-    monkeypatch, work_dir
-):
+def test_dest_plugin_append_watermark_stamps_every_uploaded_row(monkeypatch, work_dir):
     _, staged = _watermark_clients(monkeypatch)
     _watermark_write(work_dir)
     _, rows = staged[0]
@@ -1632,9 +1630,7 @@ def test_dest_plugin_append_watermark_removes_the_copy_once_it_is_uploaded(
 def test_dest_plugin_append_watermark_adds_the_column_to_the_target(
     monkeypatch, work_dir
 ):
-    bq_client, _ = _watermark_clients(
-        monkeypatch, target_columns=(("id", "INTEGER"),)
-    )
+    bq_client, _ = _watermark_clients(monkeypatch, target_columns=(("id", "INTEGER"),))
     _watermark_write(work_dir)
     assert _watermark_alters(bq_client) == [
         f"ALTER TABLE `{_TARGET_FQN}` ADD COLUMN IF NOT EXISTS `{_WATERMARK}` STRING"
@@ -1654,9 +1650,7 @@ def test_dest_plugin_append_watermark_adds_the_column_before_the_load(
 ):
     # A load job handed a batch carrying a column the target has not got fails
     # outright rather than dropping it, so the ALTER cannot come afterwards.
-    bq_client, _ = _watermark_clients(
-        monkeypatch, target_columns=(("id", "INTEGER"),)
-    )
+    bq_client, _ = _watermark_clients(monkeypatch, target_columns=(("id", "INTEGER"),))
     _watermark_write(work_dir)
     assert _watermark_alters(bq_client)
     bq_client.load_table_from_uri.assert_called_once()
@@ -1685,9 +1679,7 @@ def test_dest_plugin_append_watermark_leaves_the_iceberg_pass_nothing_to_add(
         target_columns=(("id", "INTEGER"),),
         batch_columns=(("id", "INTEGER"), (_WATERMARK, "STRING")),
     )
-    _watermark_write(
-        work_dir, schema_evolution="update", dest_cfg=_ICEBERG_ENGINE
-    )
+    _watermark_write(work_dir, schema_evolution="update", dest_cfg=_ICEBERG_ENGINE)
     assert len(_watermark_alters(bq_client)) == 1
 
 
@@ -1721,7 +1713,7 @@ def test_dest_plugin_append_checks_the_watermark_before_it_uploads(
 
 
 @pytest.mark.parametrize(
-    "trx_id,literal",
+    "transaction_id,literal",
     [
         ("plain", "'plain'"),
         ("it's", "'it\\'s'"),
@@ -1729,11 +1721,11 @@ def test_dest_plugin_append_checks_the_watermark_before_it_uploads(
     ],
 )
 def test_dest_plugin_append_escapes_the_trx_id_in_the_probe(
-    monkeypatch, work_dir, trx_id, literal
+    monkeypatch, work_dir, transaction_id, literal
 ):
     # There is nowhere to bind a value in a statement built by hand.
     bq_client, _ = _watermark_clients(monkeypatch)
-    _watermark_write(work_dir, trx_id=trx_id)
+    _watermark_write(work_dir, transaction_id=transaction_id)
     assert _alters(bq_client)[0].endswith(f"= {literal}")
 
 
@@ -1755,7 +1747,9 @@ def test_dest_plugin_replace_never_stamps_even_when_handed_a_watermark(
         impl.BigQueryWriteCfg, "from_dest", classmethod(lambda cls, c, d: write_cfg)
     )
     dest = BigQueryDest(
-        tables=[f"`{_TARGET_FQN}`"], if_table_exists="replace", schema_evolution="strict"
+        tables=[f"`{_TARGET_FQN}`"],
+        if_table_exists="replace",
+        schema_evolution="strict",
     )
     plugin._BigQueryDestPlugin().write_out(
         _dest_ctx(work_dir), _bare_conn(), dest, [src]

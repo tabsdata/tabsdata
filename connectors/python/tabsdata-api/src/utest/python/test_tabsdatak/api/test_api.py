@@ -3,6 +3,7 @@
 #
 
 from abc import ABC
+from datetime import datetime
 from typing import Annotated
 
 import pytest
@@ -798,7 +799,7 @@ def test_publisher_output_rejects_list_element_regardless_of_mode():
 
 def test_publisher_signature_rejects_extra_non_ctx_params_after_input_slots():
     # The only param allowed past the input slots is an optional
-    # trailing ``ctx: TrxCtx`` -- arbitrary extras (config / logger /
+    # trailing ``ctx: TransactionCtx`` -- arbitrary extras (config / logger /
     # etc.) are rejected so the runtime can deterministically infer
     # whether to pass a ctx instance.
     src = _src()  # table_count=1
@@ -816,23 +817,23 @@ def test_publisher_signature_rejects_extra_non_ctx_params_after_input_slots():
     assert excinfo.value.api_error is ApiErrorCode.API_17
 
 
-def test_publisher_signature_allows_optional_trailing_trx_ctx():
+def test_publisher_signature_allows_optional_trailing_transaction_ctx():
     src = _src()  # table_count=1
 
     @m.publisher(source=src, output_tables=["t"])
     def my_pub(
         t1: tableframe.TableFrame | None,
-        ctx: m.TrxCtx,
+        ctx: m.TransactionCtx,
     ) -> tableframe.TableFrame | None:
         return t1
 
     assert isinstance(my_pub, _info.PublisherInfo)
 
 
-def test_publisher_signature_rejects_trailing_non_trx_ctx_param():
-    # A trailing param that is neither a slot nor a TrxCtx subclass is
+def test_publisher_signature_rejects_trailing_non_transaction_ctx_param():
+    # A trailing param that is neither a slot nor a TransactionCtx subclass is
     # rejected -- the contract is "tableframes... then an optional
-    # TrxCtx", nothing else.
+    # TransactionCtx", nothing else.
     src = _src()
 
     with pytest.raises(ApiException) as excinfo:
@@ -847,36 +848,48 @@ def test_publisher_signature_rejects_trailing_non_trx_ctx_param():
     assert excinfo.value.api_error is ApiErrorCode.API_17
 
 
-def test_has_trx_ctx_param_detects_trailing_ctx():
+def test_has_transaction_ctx_param_detects_trailing_ctx():
     def f(
-        t1: tableframe.TableFrame | None, ctx: m.TrxCtx
+        t1: tableframe.TableFrame | None, ctx: m.TransactionCtx
     ) -> tableframe.TableFrame | None:
         return t1
 
-    assert _api.has_trx_ctx_param(f) is True
+    assert _api.has_transaction_ctx_param(f) is True
 
 
-def test_has_trx_ctx_param_false_without_ctx():
+def test_has_transaction_ctx_param_false_without_ctx():
     def f(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
         return t1
 
-    assert _api.has_trx_ctx_param(f) is False
+    assert _api.has_transaction_ctx_param(f) is False
 
 
-def test_has_trx_ctx_param_accepts_trx_ctx_subclass():
-    # Subclasses of TrxCtx (e.g. plugin contexts) also count.
-    class _MyCtx(m.TrxCtx):
+def test_has_transaction_ctx_param_accepts_transaction_ctx_subclass():
+    # Subclasses of TransactionCtx (e.g. plugin contexts) also count.
+    class _MyCtx(m.TransactionCtx):
         @property
-        def exec_plan_id(self) -> str:
+        def execution_id(self) -> str:
             return "x"
 
         @property
-        def trx_id(self) -> str:
+        def execution(self) -> str | None:
+            return None
+
+        @property
+        def transaction_id(self) -> str:
             return "x"
 
         @property
-        def exec_plan_ts(self) -> str:
-            return "x"
+        def logical_function_run_id(self) -> str:
+            return "test-logical-function-run-id"
+
+        @property
+        def physical_function_run_id(self) -> str:
+            return "test-physical-function-run-id"
+
+        @property
+        def triggered_on(self) -> datetime:
+            return datetime.fromisoformat("x")
 
         def get_attr(self, attr):
             return None
@@ -892,7 +905,7 @@ def test_has_trx_ctx_param_accepts_trx_ctx_subclass():
     ) -> tableframe.TableFrame | None:
         return t1
 
-    assert _api.has_trx_ctx_param(f) is True
+    assert _api.has_transaction_ctx_param(f) is True
 
 
 def test_publisher_signature_accepts_explicit_table_frame_or_none():
@@ -1224,11 +1237,11 @@ def test_auto_publisher_decorator_default_none_on_tables():
     assert my_pub.on_tables is None
 
 
-def test_stream_publisher_rejects_trailing_trx_ctx_param():
+def test_stream_publisher_rejects_trailing_transaction_ctx_param():
     # ``@stream_publisher`` is the one decorator where the trailing
-    # ``ctx: TrxCtx`` shape is rejected -- stream publishers run
+    # ``ctx: TransactionCtx`` shape is rejected -- stream publishers run
     # inside the runtime's long-lived plugin loop, not per-trx, so
-    # no ``TrxCtx`` is available at the call boundary.
+    # no ``TransactionCtx`` is available at the call boundary.
     with pytest.raises(ApiException) as excinfo:
 
         @m.stream_publisher(
@@ -1238,7 +1251,7 @@ def test_stream_publisher_rejects_trailing_trx_ctx_param():
         )
         def _my_pub(
             t1: list[tableframe.TableFrame | None] | None,
-            ctx: m.TrxCtx,
+            ctx: m.TransactionCtx,
         ) -> tuple[tableframe.TableFrame | None]:
             return (None,)
 
@@ -1246,9 +1259,9 @@ def test_stream_publisher_rejects_trailing_trx_ctx_param():
 
 
 def test_stream_publisher_rejects_any_extra_trailing_param():
-    # Confirm the same is true for a non-TrxCtx extra param; the
+    # Confirm the same is true for a non-TransactionCtx extra param; the
     # error message should mention the no-ctx-allowed rule, not the
-    # "TrxCtx required" rule that applies to the other three
+    # "TransactionCtx required" rule that applies to the other three
     # decorators.
     with pytest.raises(ApiException) as excinfo:
 
@@ -1264,25 +1277,27 @@ def test_stream_publisher_rejects_any_extra_trailing_param():
             return (None,)
 
     assert excinfo.value.api_error is ApiErrorCode.API_18
-    assert "trailing TrxCtx parameter is not supported here" in str(excinfo.value)
+    assert "trailing TransactionCtx parameter is not supported here" in str(
+        excinfo.value
+    )
 
 
-def test_subscriber_signature_allows_optional_trailing_trx_ctx():
+def test_subscriber_signature_allows_optional_trailing_transaction_ctx():
     @m.subscriber(destination=_dest(), input_tables=["coll/t1"])
     def my_sub(
         t1: tableframe.TableFrame | None,
-        ctx: m.TrxCtx,
+        ctx: m.TransactionCtx,
     ) -> tableframe.TableFrame | None:
         return t1
 
     assert isinstance(my_sub, _info.SubscriberInfo)
 
 
-def test_transformer_signature_allows_optional_trailing_trx_ctx():
+def test_transformer_signature_allows_optional_trailing_transaction_ctx():
     @m.transformer(input_tables=["coll/t1"], output_tables=["out"])
     def my_trf(
         t1: tableframe.TableFrame | None,
-        ctx: m.TrxCtx,
+        ctx: m.TransactionCtx,
     ) -> tableframe.TableFrame | None:
         return t1
 
@@ -1334,13 +1349,13 @@ def test_stream_publisher_signature_allows_bare_tableframe_return():
     assert isinstance(my_pub, _info.StreamPublisherInfo)
 
 
-def test_bare_return_allowed_with_trailing_trx_ctx():
+def test_bare_return_allowed_with_trailing_transaction_ctx():
     # The single-output bare-return convenience composes with the
-    # optional trailing ``ctx: TrxCtx`` parameter.
+    # optional trailing ``ctx: TransactionCtx`` parameter.
     @m.transformer(input_tables=["coll/t1"], output_tables=["out"])
     def my_xf(
         t1: tableframe.TableFrame | None,
-        ctx: m.TrxCtx,
+        ctx: m.TransactionCtx,
     ) -> tableframe.TableFrame | None:
         return t1
 

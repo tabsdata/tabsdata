@@ -52,7 +52,7 @@ from tabsdatak.api import (
     Src,
     StreamSrc,
     StreamThresholds,
-    TrxCtx,
+    TransactionCtx,
 )
 from tabsdatak.error import ApiErrorCode
 
@@ -159,8 +159,8 @@ class PluginCtx(FlowCtx, ABC):
         Cleaned up by the runtime after the trx completes."""
 
 
-class SrcPluginCtx(TrxCtx, PluginCtx, ABC):
-    """Context handed to `SrcPlugin.read_in` -- combines `TrxCtx`
+class SrcPluginCtx(TransactionCtx, PluginCtx, ABC):
+    """Context handed to `SrcPlugin.read_in` -- combines `TransactionCtx`
     (trx identifiers + scratch state) with `PluginCtx` (flow
     identifiers + work dir).
 
@@ -401,8 +401,8 @@ class StreamSrcPlugin[C: Conn, SS: StreamSrc](ABC):
         `ctx.thresholds`)."""
 
 
-class DestContext(TrxCtx, PluginCtx, ABC):
-    """Context handed to `DestPlugin.write_out` -- combines `TrxCtx`
+class DestContext(TransactionCtx, PluginCtx, ABC):
+    """Context handed to `DestPlugin.write_out` -- combines `TransactionCtx`
     with `PluginCtx`.
 
     :categories: spi

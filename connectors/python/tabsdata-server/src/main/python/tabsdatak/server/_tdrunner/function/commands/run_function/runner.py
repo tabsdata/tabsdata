@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 import polars as pl
 
-from tabsdatak._api import _is_array_slot, _is_single_slot, has_trx_ctx_param
+from tabsdatak._api import _is_array_slot, _is_single_slot, has_transaction_ctx_param
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import (
     KIND_PUBLISHER_DEF,
@@ -110,7 +110,7 @@ def _infer_table_modes(func: Callable) -> list[TableMode]:
     parameter of the user function from its type annotations.
 
     The count of returned modes equals the number of *slot*
-    parameters: the trailing ``ctx: TrxCtx`` parameter (if declared)
+    parameters: the trailing ``ctx: TransactionCtx`` parameter (if declared)
     is stripped before iteration because it isn't an input slot.
     ``@publisher`` / ``@transformer`` / ``@subscriber`` validate at
     decoration time that the function has exactly the expected slot
@@ -129,9 +129,9 @@ def _infer_table_modes(func: Callable) -> list[TableMode]:
     except Exception as exc:
         raise RunFunctionErrorCode.RF_6.exception(cause=exc, detail=str(exc))
     params = list(inspect.signature(func).parameters.values())
-    # The trailing ``ctx: TrxCtx`` parameter (if declared) is not an
+    # The trailing ``ctx: TransactionCtx`` parameter (if declared) is not an
     # input slot -- skip it when inferring slot modes.
-    if has_trx_ctx_param(func) and params:
+    if has_transaction_ctx_param(func) and params:
         params = params[:-1]
     modes: list[TableMode] = []
     for p in params:
@@ -487,7 +487,7 @@ def run(args: argparse.Namespace) -> int:
         [m.name if hasattr(m, "name") else str(m) for m in table_modes],
     )
 
-    # If the user function declares a trailing ``ctx: TrxCtx``
+    # If the user function declares a trailing ``ctx: TransactionCtx``
     # parameter, construct a FunctionCtx and hydrate it from the
     # state-dir before invocation. Preferring the state-out file
     # (written by run-source-plugin's drain on the same run) over
@@ -495,17 +495,8 @@ def run(args: argparse.Namespace) -> int:
     # state-in handles transformer / subscriber chains where
     # run-source-plugin does not run.
     ctx: _FunctionContext | None = None
-    if has_trx_ctx_param(func):
-        ctx = _FunctionContext(
-            work_dir=out_dir,
-            exec_plan_id=str(request.info.execution_id),
-            trx_id=str(request.info.transaction_id),
-            exec_plan_ts=request.info.triggered_on_iso,
-            collection_id=str(request.info.collection_id),
-            collection_name=request.info.collection,
-            function_id=str(request.info.physical_function_run_id),
-            function_name=request.info.function,
-        )
+    if has_transaction_ctx_param(func):
+        ctx = _FunctionContext.from_info(out_dir, request.info)
         hydrate_ctx_from_state_or_raise(
             ctx,
             request,

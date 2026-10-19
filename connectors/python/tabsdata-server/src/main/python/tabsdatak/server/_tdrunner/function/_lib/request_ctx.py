@@ -7,26 +7,28 @@
 Two layers, matching the API / SPI context hierarchy:
 
 * :class:`FromFlowRequestCtx` — flow-level surface only (``work_dir``
-  + ``collection_id`` / ``collection_name`` / ``function_id`` /
-  ``function_name``) plus the per-flow scratch store. Mirrors
-  :class:`tabsdatak.spi.PluginCtx`, which extends
-  :class:`tabsdatak.api.FlowCtx` *without* :class:`TrxCtx`. The
-  streamer-pod context uses this base — a streamer has no transaction
-  or execution plan.
+  + ``project_id`` / ``project`` / ``collection_id`` / ``collection``
+  / ``function_id`` / ``function`` / ``function_version_id``) plus the
+  per-flow scratch store. Mirrors :class:`tabsdatak.spi.PluginCtx`,
+  which extends :class:`tabsdatak.api.FlowCtx` *without*
+  :class:`TransactionCtx`. The streamer-pod context uses this base — a
+  streamer has no transaction or execution.
 * :class:`FromRequestCtx` — extends :class:`FromFlowRequestCtx` with
-  the trx-level identifiers (``exec_plan_id`` / ``trx_id`` /
-  ``exec_plan_ts``). Mirrors :class:`SrcPluginCtx` / :class:`DestContext`
-  / :class:`FunctionCtx`, which extend :class:`TrxCtx`. The per-command
-  contexts driven by function-run requests use this base.
+  the trx-level identifiers (``execution_id`` / ``execution`` /
+  ``transaction_id`` / ``logical_function_run_id`` /
+  ``physical_function_run_id`` / ``triggered_on``). Mirrors
+  :class:`SrcPluginCtx` / :class:`DestContext` / :class:`FunctionCtx`,
+  which extend :class:`TransactionCtx`. The per-command contexts driven by
+  function-run requests use this base.
 
 The split matches the API (``api``) / SPI (``spi``) inheritance:
 
-    api.FlowCtx                            ← collection / function ids
-    api.FunctionCtx(TrxCtx, FlowCtx)       ← user fn: TrxCtx
+    api.FlowCtx                            ← project / collection / function ids
+    api.FunctionCtx(TransactionCtx, FlowCtx)       ← user fn: TransactionCtx
     spi.PluginCtx(FlowCtx)                 ← + work_dir
-    spi.StreamSrcPluginCtx(PluginCtx)      ← stream sources: NO TrxCtx
-    spi.SrcPluginCtx(TrxCtx, PluginCtx)    ← batch sources: TrxCtx
-    spi.DestContext(TrxCtx, PluginCtx)     ← subscribers: TrxCtx
+    spi.StreamSrcPluginCtx(PluginCtx)      ← stream sources: NO TransactionCtx
+    spi.SrcPluginCtx(TransactionCtx, PluginCtx)    ← batch sources: TransactionCtx
+    spi.DestContext(TransactionCtx, PluginCtx)     ← subscribers: TransactionCtx
 
 Each per-command class subclasses
 ``(FromRequestCtx, <role-base>)`` (trx-ful) or
@@ -36,14 +38,10 @@ Each per-command class subclasses
 
 State plumbed:
 
-* ``work_dir``, ``collection_id``, ``collection_name``,
-  ``function_id``, ``function_name`` — populated from
-  ``request.info`` (or from the streamer-specific envelope).
-  ``function_id`` borrows ``physical_function_run_id`` on the trx-ful path
-  and ``function_version_id`` on the streamer path; ``function_name``
-  borrows ``function``.
-* ``exec_plan_id``, ``trx_id``, ``exec_plan_ts`` — trx-ful only.
-  ``exec_plan_ts`` is the ISO-8601 form of ``triggered_on``.
+* Every identifier is populated from ``request.info`` (or from the
+  streamer-specific envelope) under the same name, which is also the
+  name the server API uses. ``triggered_on`` is the timezone-aware
+  UTC form of the request's epoch-millisecond ``triggered_on``.
 * ``get_attr`` / ``set_attr`` — per-flow scratch state backed by
   an in-memory dict. The runtime populates the dict at invocation
   start (:meth:`hydrate`) and reads it back at the end
@@ -58,7 +56,7 @@ State *not yet* plumbed (falls back to a documented stub):
   shouldn't crash.
 
 :meth:`hydrate` and :meth:`drain` are runtime-only — they're not
-declared on the abstract bases (:class:`tabsdatak.api.TrxCtx`,
+declared on the abstract bases (:class:`tabsdatak.api.TransactionCtx`,
 :class:`tabsdatak.api.FlowCtx`, :class:`tabsdatak.api.FunctionCtx`,
 :class:`tabsdatak.spi.PluginCtx`, :class:`tabsdatak.spi.SrcPluginCtx`,
 :class:`tabsdatak.spi.DestContext`) so user-typed code never sees
@@ -72,10 +70,13 @@ concrete context inherits the upgrade.
 from __future__ import annotations
 
 import copy
+from datetime import datetime
 from pathlib import Path
+from typing import Self
 
-from tabsdatak.api import BasicTypeSpec, ContextKeySpec, FlowCtx, TrxCtx
+from tabsdatak.api import BasicTypeSpec, ContextKeySpec, FlowCtx, TransactionCtx
 from tabsdatak.server._tdrunner.function._lib.initial_values import _validate_key
+from tabsdatak.server._tdrunner.function._lib.request import Info
 
 
 class FromFlowRequestCtx(FlowCtx):
@@ -84,27 +85,34 @@ class FromFlowRequestCtx(FlowCtx):
 
     Subclasses :class:`tabsdatak.api.FlowCtx`, mirroring the SPI's
     :class:`PluginCtx` / :class:`StreamSrcPluginCtx`, which extend
-    :class:`FlowCtx` but not :class:`TrxCtx`. The streamer pod's
+    :class:`FlowCtx` but not :class:`TransactionCtx`. The streamer pod's
     context composes this with :class:`StreamSrcPluginCtx` because a
-    streamer has no transaction or execution plan -- the per-batch
+    streamer has no transaction or execution -- the per-batch
     publisher pods spawned downstream via ``fn_trigger`` are where
-    real ``execution_id`` / ``transaction_id`` / ``physical_function_run_id``
-    values live.
+    real ``execution_id`` / ``transaction_id`` /
+    ``logical_function_run_id`` / ``physical_function_run_id`` values
+    live.
     """
 
     def __init__(
         self,
         work_dir: Path,
+        project_id: str,
+        project: str,
         collection_id: str,
-        collection_name: str,
+        collection: str,
         function_id: str,
-        function_name: str,
+        function: str,
+        function_version_id: str,
     ):
         self._work_dir = work_dir
+        self._project_id = project_id
+        self._project = project
         self._collection_id = collection_id
-        self._collection_name = collection_name
+        self._collection = collection
         self._function_id = function_id
-        self._function_name = function_name
+        self._function = function
+        self._function_version_id = function_version_id
         self._scratch: dict[str, BasicTypeSpec] = {}
 
     @property
@@ -112,26 +120,38 @@ class FromFlowRequestCtx(FlowCtx):
         return self._work_dir
 
     @property
+    def project_id(self) -> str:
+        return self._project_id
+
+    @property
+    def project(self) -> str:
+        return self._project
+
+    @property
     def collection_id(self) -> str:
         return self._collection_id
 
     @property
-    def collection_name(self) -> str:
-        return self._collection_name
+    def collection(self) -> str:
+        return self._collection
 
     @property
     def function_id(self) -> str:
         return self._function_id
 
     @property
-    def function_name(self) -> str:
-        return self._function_name
+    def function(self) -> str:
+        return self._function
+
+    @property
+    def function_version_id(self) -> str:
+        return self._function_version_id
 
     def get_attr(self, attr: ContextKeySpec) -> BasicTypeSpec | None:
         """Read a per-flow scratch value. Returns ``None`` for keys
         that have never been stored (no `KeyError` — matches the
         ``returns None if unset`` contract on
-        :meth:`tabsdatak.api.TrxCtx.get_attr`)."""
+        :meth:`tabsdatak.api.TransactionCtx.get_attr`)."""
         return self._scratch.get(attr)
 
     def set_attr(self, attr: ContextKeySpec, val: BasicTypeSpec | None):
@@ -158,7 +178,7 @@ class FromFlowRequestCtx(FlowCtx):
     #
     # ``hydrate`` and ``drain`` are deliberately not declared on the
     # abstract bases -- user-typed code (which annotates as
-    # ``TrxCtx`` / ``SrcPluginCtx`` / ``DestContext`` / ``FunctionCtx``)
+    # ``TransactionCtx`` / ``SrcPluginCtx`` / ``DestContext`` / ``FunctionCtx``)
     # therefore never sees them. The runtime, which holds a concrete
     # ``FromRequestCtx`` reference, is the only caller.
 
@@ -179,25 +199,27 @@ class FromFlowRequestCtx(FlowCtx):
         return copy.deepcopy(self._scratch)
 
 
-class FromRequestCtx(TrxCtx, FromFlowRequestCtx):
+class FromRequestCtx(TransactionCtx, FromFlowRequestCtx):
     """Flow-level + trx-level request-driven context.
 
     Extends :class:`FromFlowRequestCtx` with the trx-level identifiers
-    (``exec_plan_id`` / ``trx_id`` / ``exec_plan_ts``) populated from
-    ``request.info``. Per-command classes compose this with the
-    role-specific abstract base via multiple inheritance:
+    (``execution_id`` / ``execution`` / ``transaction_id`` /
+    ``logical_function_run_id`` / ``physical_function_run_id`` /
+    ``triggered_on``) populated from ``request.info``. Per-command
+    classes compose this with the role-specific abstract base via
+    multiple inheritance:
 
         class _SrcContext(FromRequestCtx, SrcPluginCtx): ...
         class _DestContext(FromRequestCtx, DestContext): ...
         class _FunctionContext(FromRequestCtx, FunctionCtx): ...
 
-    Subclassing :class:`tabsdatak.api.TrxCtx` keeps the implementation
+    Subclassing :class:`tabsdatak.api.TransactionCtx` keeps the implementation
     type-honestly related to the API contract it satisfies. The base
-    order is ``(TrxCtx, FromFlowRequestCtx)`` so the MRO linearizes
+    order is ``(TransactionCtx, FromFlowRequestCtx)`` so the MRO linearizes
     compatibly with the role-typed bases above, which all list
-    :class:`TrxCtx` before :class:`PluginCtx` (= ``FlowCtx``); listing
+    :class:`TransactionCtx` before :class:`PluginCtx` (= ``FlowCtx``); listing
     ``FromFlowRequestCtx`` first here would put ``FlowCtx`` before
-    ``TrxCtx`` and break the MRO merge in ``_DestContext`` /
+    ``TransactionCtx`` and break the MRO merge in ``_DestContext`` /
     ``_SrcContext`` / ``_FunctionContext``. The streamer-pod context
     uses :class:`FromFlowRequestCtx` directly (no trx fields) and
     does not pass through this class.
@@ -206,43 +228,87 @@ class FromRequestCtx(TrxCtx, FromFlowRequestCtx):
     def __init__(
         self,
         work_dir: Path,
-        exec_plan_id: str,
-        trx_id: str,
-        exec_plan_ts: str,
+        project_id: str,
+        project: str,
         collection_id: str,
-        collection_name: str,
+        collection: str,
         function_id: str,
-        function_name: str,
+        function: str,
+        function_version_id: str,
+        execution_id: str,
+        execution: str | None,
+        transaction_id: str,
+        logical_function_run_id: str,
+        physical_function_run_id: str,
+        triggered_on: datetime,
     ):
         super().__init__(
             work_dir=work_dir,
+            project_id=project_id,
+            project=project,
             collection_id=collection_id,
-            collection_name=collection_name,
+            collection=collection,
             function_id=function_id,
-            function_name=function_name,
+            function=function,
+            function_version_id=function_version_id,
         )
-        self._exec_plan_id = exec_plan_id
-        self._trx_id = trx_id
-        self._exec_plan_ts = exec_plan_ts
+        self._execution_id = execution_id
+        self._execution = execution
+        self._transaction_id = transaction_id
+        self._logical_function_run_id = logical_function_run_id
+        self._physical_function_run_id = physical_function_run_id
+        self._triggered_on = triggered_on
+
+    @classmethod
+    def from_info(cls, work_dir: Path, info: Info) -> Self:
+        """Build the context of the run ``info`` describes."""
+        return cls(
+            work_dir=work_dir,
+            project_id=str(info.project_id),
+            project=info.project,
+            collection_id=str(info.collection_id),
+            collection=info.collection,
+            function_id=str(info.function_id),
+            function=info.function,
+            function_version_id=str(info.function_version_id),
+            execution_id=str(info.execution_id),
+            execution=info.execution,
+            transaction_id=str(info.transaction_id),
+            logical_function_run_id=str(info.logical_function_run_id),
+            physical_function_run_id=str(info.physical_function_run_id),
+            triggered_on=info.triggered_on_datetime,
+        )
 
     @property
-    def exec_plan_id(self) -> str:
-        return self._exec_plan_id
+    def execution_id(self) -> str:
+        return self._execution_id
 
     @property
-    def trx_id(self) -> str:
-        return self._trx_id
+    def execution(self) -> str | None:
+        return self._execution
 
     @property
-    def exec_plan_ts(self) -> str:
-        return self._exec_plan_ts
+    def transaction_id(self) -> str:
+        return self._transaction_id
+
+    @property
+    def logical_function_run_id(self) -> str:
+        return self._logical_function_run_id
+
+    @property
+    def physical_function_run_id(self) -> str:
+        return self._physical_function_run_id
+
+    @property
+    def triggered_on(self) -> datetime:
+        return self._triggered_on
 
     # Re-export the concrete impls from FromFlowRequestCtx so ABCMeta
-    # credits them against TrxCtx's abstract declarations of the same
-    # names. With the MRO (TrxCtx, FromFlowRequestCtx) TrxCtx's
+    # credits them against TransactionCtx's abstract declarations of the same
+    # names. With the MRO (TransactionCtx, FromFlowRequestCtx) TransactionCtx's
     # abstract get_attr / set_attr / add_metadata is visited first
     # at __abstractmethods__ computation, and the resolution machinery
-    # does not always credit a non-TrxCtx descendant's concrete impl
+    # does not always credit a non-TransactionCtx descendant's concrete impl
     # across the multi-inheritance gap. Explicit aliases short-circuit
     # that.
     get_attr = FromFlowRequestCtx.get_attr

@@ -122,7 +122,7 @@ def _build_parser():
             "Local directory mirroring the one used by "
             "prep-localize-state / run-source-plugin / "
             "prep-upload-state. When the user function declares a "
-            "trailing ``ctx: TrxCtx`` parameter, the runtime hydrates "
+            "trailing ``ctx: TransactionCtx`` parameter, the runtime hydrates "
             "the ctx scratch from <state-dir>/<system_output[0].table>."
             "parquet (falling back to <system_input[0].table>.parquet) "
             "before invoking the function, and drains it back to "

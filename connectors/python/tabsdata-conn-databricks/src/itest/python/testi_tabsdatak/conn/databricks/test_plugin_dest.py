@@ -131,7 +131,7 @@ def _types(db, table: str) -> dict[str, str]:
     }
 
 
-class _TrxCtx(PluginDestCtx):
+class _TransactionCtx(PluginDestCtx):
     """A plugin context whose trx id the test picks.
 
     The watermark turns on which trx a write belongs to, and the shared stub
@@ -139,13 +139,21 @@ class _TrxCtx(PluginDestCtx):
     say "the same trx again" apart from "a later one".
     """
 
-    def __init__(self, work: Path, trx_id: str) -> None:
+    def __init__(self, work: Path, transaction_id: str) -> None:
         super().__init__(work)
-        self._trx_id = trx_id
+        self._trx_id = transaction_id
 
     @property
-    def trx_id(self) -> str:
+    def transaction_id(self) -> str:
         return self._trx_id
+
+    @property
+    def logical_function_run_id(self) -> str:
+        return "test-logical-function-run-id"
+
+    @property
+    def physical_function_run_id(self) -> str:
+        return "test-physical-function-run-id"
 
 
 def _merge_out(
@@ -155,11 +163,13 @@ def _merge_out(
     parquet: Path,
     merge_cfg: MergeCfg,
     schema_evolution: str = "strict",
-    trx_id: str | None = None,
+    transaction_id: str | None = None,
     watermark_column: str | None = None,
 ) -> None:
     plugin._DatabricksDestPlugin().write_out(
-        PluginDestCtx(work) if trx_id is None else _TrxCtx(work, trx_id),
+        PluginDestCtx(work)
+        if transaction_id is None
+        else _TransactionCtx(work, transaction_id),
         conn,
         DatabricksDest(
             tables=[table],
@@ -839,7 +849,7 @@ def test_dest_plugin_write_out_merge_stamps_the_rows_it_writes(
             table,
             seed,
             _watermark_cfg(),
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
         assert _types(db, table)[_WATERMARK] == "string"
@@ -882,7 +892,7 @@ def test_dest_plugin_write_out_merge_skips_a_batch_the_trx_already_wrote(
             table,
             seed,
             _watermark_cfg(),
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
         _merge_out(
@@ -891,7 +901,7 @@ def test_dest_plugin_write_out_merge_skips_a_batch_the_trx_already_wrote(
             table,
             rerun,
             _watermark_cfg(),
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
         assert_frames_match(
@@ -933,7 +943,7 @@ def test_dest_plugin_write_out_merge_applies_a_batch_from_a_later_trx(
             table,
             seed,
             _watermark_cfg(),
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
         _merge_out(
@@ -942,7 +952,7 @@ def test_dest_plugin_write_out_merge_applies_a_batch_from_a_later_trx(
             table,
             delta,
             _watermark_cfg(),
-            trx_id="TRX_B",
+            transaction_id="TRX_B",
             watermark_column=_WATERMARK,
         )
         assert_frames_match(
@@ -997,7 +1007,7 @@ def test_dest_plugin_write_out_merge_stamps_an_older_target_on_strict_too(
             _watermark_cfg(),
             watermark_column=_WATERMARK,
             schema_evolution="strict",
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
         )
         assert _types(db, table)[_WATERMARK] == "string"
 
@@ -1009,7 +1019,7 @@ def test_dest_plugin_write_out_merge_stamps_an_older_target_on_strict_too(
             _watermark_cfg(),
             watermark_column=_WATERMARK,
             schema_evolution="strict",
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
         )
         assert_frames_match(
             db.read_table(table),
@@ -1041,11 +1051,13 @@ def _append_out(
     table: str,
     parquet: Path,
     schema_evolution: str = "strict",
-    trx_id: str | None = None,
+    transaction_id: str | None = None,
     watermark_column: str | None = None,
 ) -> None:
     plugin._DatabricksDestPlugin().write_out(
-        PluginDestCtx(work) if trx_id is None else _TrxCtx(work, trx_id),
+        PluginDestCtx(work)
+        if transaction_id is None
+        else _TransactionCtx(work, transaction_id),
         conn,
         DatabricksDest(
             tables=[table],
@@ -1075,7 +1087,12 @@ def test_dest_plugin_write_out_append_stamps_the_rows_it_loads(
     )
     try:
         _append_out(
-            conn, work, table, batch, trx_id="TRX_A", watermark_column=_WATERMARK
+            conn,
+            work,
+            table,
+            batch,
+            transaction_id="TRX_A",
+            watermark_column=_WATERMARK,
         )
         assert_frames_match(
             db.read_table(table),
@@ -1108,7 +1125,12 @@ def test_dest_plugin_write_out_append_skips_a_batch_the_trx_already_loaded(
     try:
         for _ in range(2):
             _append_out(
-                conn, work, table, batch, trx_id="TRX_A", watermark_column=_WATERMARK
+                conn,
+                work,
+                table,
+                batch,
+                transaction_id="TRX_A",
+                watermark_column=_WATERMARK,
             )
         assert db.read_table(table).height == 2
         assert_frames_match(
@@ -1142,7 +1164,12 @@ def test_dest_plugin_write_out_append_loads_again_under_a_later_trx(
     try:
         for parquet, trx in ((first, "TRX_A"), (second, "TRX_B")):
             _append_out(
-                conn, work, table, parquet, trx_id=trx, watermark_column=_WATERMARK
+                conn,
+                work,
+                table,
+                parquet,
+                transaction_id=trx,
+                watermark_column=_WATERMARK,
             )
         assert_frames_match(
             db.read_table(table),
@@ -1187,7 +1214,7 @@ def test_dest_plugin_write_out_append_adds_the_watermark_to_an_older_target(
             table,
             later,
             schema_evolution=schema_evolution,
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
         assert _types(db, table)[_WATERMARK] == "string"
@@ -1221,7 +1248,12 @@ def test_dest_plugin_write_out_append_guards_a_rerun_of_an_older_target(
         _append_out(conn, work, table, seed, schema_evolution="strict")
         for _ in range(2):
             _append_out(
-                conn, work, table, later, trx_id="TRX_A", watermark_column=_WATERMARK
+                conn,
+                work,
+                table,
+                later,
+                transaction_id="TRX_A",
+                watermark_column=_WATERMARK,
             )
         assert db.read_table(table).height == 2
     finally:
@@ -1243,7 +1275,12 @@ def test_dest_plugin_write_out_append_leaves_the_batch_columns_untouched(
     batch = _batch(tmp_path / "batch.parquet", {"order_id": [1], "status": ["new"]})
     try:
         _append_out(
-            conn, work, table, batch, trx_id="TRX_A", watermark_column=_WATERMARK
+            conn,
+            work,
+            table,
+            batch,
+            transaction_id="TRX_A",
+            watermark_column=_WATERMARK,
         )
         assert pl.read_parquet(batch).columns == ["order_id", "status"]
     finally:

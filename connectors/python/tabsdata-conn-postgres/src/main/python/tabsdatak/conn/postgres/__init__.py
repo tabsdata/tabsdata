@@ -79,7 +79,6 @@ from tabsdatak.api import (
 from tabsdatak.conn.common import _validation as _common_validation
 
 # noinspection PyProtectedMember
-# noinspection PyProtectedMember
 from tabsdatak.conn.common._stream import _validation as _stream_validation
 from tabsdatak.conn.common.sql.types import SchemaOverrideSpec
 from tabsdatak.conn.common.types import (
@@ -276,7 +275,7 @@ class PostgresSrc(Src):
                 ),
                 output_tables=["pg_city_inc"],
             )
-            def ingest_inc(city: TableFrameSpec, ctx: TrxCtx):
+            def ingest_inc(city: TableFrameSpec, ctx: TransactionCtx):
                 if city is not None:
                     row = city.max_for("id")
                     if row is not None and row["id"] is not None:
@@ -284,7 +283,7 @@ class PostgresSrc(Src):
                 return city
     """
 
-    # devguide-ref: trx context state (initial_values seed / cursor resume)
+    # devguide-ref: transaction context state (initial_values seed / cursor resume)
     queries: QueriesSpec
     transactional: bool = True
     schema_overrides: SchemaOverrideSpec | None = None

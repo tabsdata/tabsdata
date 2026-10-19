@@ -31,8 +31,6 @@ from tabsdatak.common._transporter.facade import make_handler
 from tabsdatak.common._transporter.handler.handler2 import TRANSPORTER_BINARY_NAME
 
 # noinspection PyProtectedMember
-# noinspection PyProtectedMember
-# noinspection PyProtectedMember
 from tabsdatak.conn.common.file import (
     _input as _input_module,
     _output as _output_module,
@@ -79,23 +77,19 @@ class _SrcCtx(SrcPluginCtx):
         return self._work_dir
 
     @property
-    def exec_plan_id(self) -> str:
-        return "integ-exec-plan"
+    def project_id(self) -> str:
+        return "test-project-id"
 
     @property
-    def trx_id(self) -> str:
-        return "integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
+    def project(self) -> str:
+        return "test-project"
 
     @property
     def collection_id(self) -> str:
         return "test-collection-id"
 
     @property
-    def collection_name(self) -> str:
+    def collection(self) -> str:
         return "test-collection"
 
     @property
@@ -103,8 +97,36 @@ class _SrcCtx(SrcPluginCtx):
         return "test-function-id"
 
     @property
-    def function_name(self) -> str:
+    def function(self) -> str:
         return "test-function"
+
+    @property
+    def function_version_id(self) -> str:
+        return "test-function-version-id"
+
+    @property
+    def execution_id(self) -> str:
+        return "integ-exec-plan"
+
+    @property
+    def execution(self) -> str | None:
+        return None
+
+    @property
+    def transaction_id(self) -> str:
+        return "integ-trx"
+
+    @property
+    def logical_function_run_id(self) -> str:
+        return "test-logical-function-run-id"
+
+    @property
+    def physical_function_run_id(self) -> str:
+        return "test-physical-function-run-id"
+
+    @property
+    def triggered_on(self) -> datetime:
+        return datetime.fromisoformat("2026-01-01T00:00:00.000000+00:00")
 
     def get_attr(self, attr):
         return None
@@ -125,23 +147,19 @@ class _DestCtx(DestContext):
         return self._work_dir
 
     @property
-    def exec_plan_id(self) -> str:
-        return "integ-exec-plan"
+    def project_id(self) -> str:
+        return "test-project-id"
 
     @property
-    def trx_id(self) -> str:
-        return "integ-trx"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
+    def project(self) -> str:
+        return "test-project"
 
     @property
     def collection_id(self) -> str:
         return "test-collection-id"
 
     @property
-    def collection_name(self) -> str:
+    def collection(self) -> str:
         return "test-collection"
 
     @property
@@ -149,8 +167,36 @@ class _DestCtx(DestContext):
         return "test-function-id"
 
     @property
-    def function_name(self) -> str:
+    def function(self) -> str:
         return "test-function"
+
+    @property
+    def function_version_id(self) -> str:
+        return "test-function-version-id"
+
+    @property
+    def execution_id(self) -> str:
+        return "integ-exec-plan"
+
+    @property
+    def execution(self) -> str | None:
+        return None
+
+    @property
+    def transaction_id(self) -> str:
+        return "integ-trx"
+
+    @property
+    def logical_function_run_id(self) -> str:
+        return "test-logical-function-run-id"
+
+    @property
+    def physical_function_run_id(self) -> str:
+        return "test-physical-function-run-id"
+
+    @property
+    def triggered_on(self) -> datetime:
+        return datetime.fromisoformat("2026-01-01T00:00:00.000000+00:00")
 
     def get_attr(self, attr):
         return None

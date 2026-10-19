@@ -10,6 +10,7 @@ The real-Druid happy paths live in ``test__plugin_integration.py``.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -25,23 +26,20 @@ from tabsdatak.conn.common.types import (
     AzureAccountKey,
     UserPassword,
 )
+
+# noinspection PyProtectedMember
 from tabsdatak.conn.druid import (
     AzBlobLocation,
-    DruidDestConn,
     DruidDest,
+    DruidDestConn,
     S3Location,
+    _impl as impl,
+    _plugin as plugin,
 )
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.druid import _impl as impl
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.druid import _plugin as plugin
 from tabsdatak.conn.druid.error import (
     DruidErrorCode,
     DruidRuntimeException,
 )
-
 
 pytestmark = pytest.mark.druid
 
@@ -63,16 +61,28 @@ class _Ctx:
         return self._work
 
     @property
-    def exec_plan_id(self) -> str:
+    def execution_id(self) -> str:
         return "plan-unit"
 
     @property
-    def trx_id(self) -> str:
+    def execution(self) -> str | None:
+        return None
+
+    @property
+    def transaction_id(self) -> str:
         return self._trx
 
     @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
+    def logical_function_run_id(self) -> str:
+        return "test-logical-function-run-id"
+
+    @property
+    def physical_function_run_id(self) -> str:
+        return "test-physical-function-run-id"
+
+    @property
+    def triggered_on(self) -> datetime:
+        return datetime.fromisoformat("2026-01-01T00:00:00.000000+00:00")
 
 
 def _dest_ctx(work: Path) -> _Ctx:

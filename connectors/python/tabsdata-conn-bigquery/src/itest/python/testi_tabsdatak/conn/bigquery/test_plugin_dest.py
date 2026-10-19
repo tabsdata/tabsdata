@@ -191,7 +191,7 @@ def _seed_target(conn, work: Path, table: str, parquet: Path) -> None:
     )
 
 
-class _TrxCtx(PluginDestCtx):
+class _TransactionCtx(PluginDestCtx):
     """A plugin context whose trx id the test picks.
 
     The watermark turns on which trx a write belongs to, and the shared stub
@@ -199,13 +199,21 @@ class _TrxCtx(PluginDestCtx):
     say "the same trx again" apart from "a later one".
     """
 
-    def __init__(self, work: Path, trx_id: str) -> None:
+    def __init__(self, work: Path, transaction_id: str) -> None:
         super().__init__(work)
-        self._trx_id = trx_id
+        self._trx_id = transaction_id
 
     @property
-    def trx_id(self) -> str:
+    def transaction_id(self) -> str:
         return self._trx_id
+
+    @property
+    def logical_function_run_id(self) -> str:
+        return "test-logical-function-run-id"
+
+    @property
+    def physical_function_run_id(self) -> str:
+        return "test-physical-function-run-id"
 
 
 def _merge_out(
@@ -215,11 +223,13 @@ def _merge_out(
     parquet: Path,
     merge_cfg: MergeCfg,
     schema_evolution: str = "strict",
-    trx_id: str | None = None,
+    transaction_id: str | None = None,
     watermark_column: str | None = None,
 ) -> None:
     plugin._BigQueryDestPlugin().write_out(
-        PluginDestCtx(work) if trx_id is None else _TrxCtx(work, trx_id),
+        PluginDestCtx(work)
+        if transaction_id is None
+        else _TransactionCtx(work, transaction_id),
         conn,
         BigQueryDest(
             tables=[table_fqn(table)],
@@ -638,11 +648,13 @@ def _load_out(
     work: Path,
     table: str,
     parquet: Path,
-    trx_id: str | None = None,
+    transaction_id: str | None = None,
     **dest_kwargs,
 ) -> None:
     plugin._BigQueryDestPlugin().write_out(
-        PluginDestCtx(work) if trx_id is None else _TrxCtx(work, trx_id),
+        PluginDestCtx(work)
+        if transaction_id is None
+        else _TransactionCtx(work, transaction_id),
         conn,
         BigQueryDest(
             tables=[table_fqn(table)],
@@ -1157,7 +1169,7 @@ def test_dest_plugin_write_out_merge_evolves_only_while_update_is_asked_for(
 # the target already carrying that id does nothing at all.
 #
 # Which trx a write belongs to is the whole variable here, so these drive the
-# plugin through :class:`_TrxCtx` rather than the shared context stub.
+# plugin through :class:`_TransactionCtx` rather than the shared context stub.
 # ---------------------------------------------------------------------------
 
 _WATERMARK = "wm"
@@ -1192,7 +1204,7 @@ def test_dest_plugin_write_out_merge_stamps_the_rows_it_writes(
             table,
             seed,
             _watermark_cfg(),
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
         assert_frames_match(
@@ -1235,7 +1247,7 @@ def test_dest_plugin_write_out_merge_skips_a_batch_the_trx_already_wrote(
             table,
             seed,
             _watermark_cfg(),
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
         _merge_out(
@@ -1244,7 +1256,7 @@ def test_dest_plugin_write_out_merge_skips_a_batch_the_trx_already_wrote(
             table,
             rerun,
             _watermark_cfg(),
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
         assert db.count(table) == 1
@@ -1287,7 +1299,7 @@ def test_dest_plugin_write_out_merge_applies_a_batch_from_a_later_trx(
             table,
             seed,
             _watermark_cfg(),
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             watermark_column=_WATERMARK,
         )
         _merge_out(
@@ -1296,7 +1308,7 @@ def test_dest_plugin_write_out_merge_applies_a_batch_from_a_later_trx(
             table,
             delta,
             _watermark_cfg(),
-            trx_id="TRX_B",
+            transaction_id="TRX_B",
             watermark_column=_WATERMARK,
         )
         assert_frames_match(
@@ -1351,7 +1363,7 @@ def test_dest_plugin_write_out_merge_stamps_an_older_target_on_strict_too(
             _watermark_cfg(),
             watermark_column=_WATERMARK,
             schema_evolution="strict",
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
         )
         assert db.column_types(table)[_WATERMARK] == ("STRING", None, None)
 
@@ -1363,7 +1375,7 @@ def test_dest_plugin_write_out_merge_stamps_an_older_target_on_strict_too(
             _watermark_cfg(),
             watermark_column=_WATERMARK,
             schema_evolution="strict",
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
         )
         assert_frames_match(
             db.read_table(table),
@@ -1409,7 +1421,7 @@ def test_dest_plugin_write_out_merge_adds_only_the_watermark_on_strict(
             _watermark_cfg(),
             watermark_column=_WATERMARK,
             schema_evolution="strict",
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
         )
         assert "priority" not in db.column_types(table)
         assert_frames_match(
@@ -1492,7 +1504,7 @@ def test_dest_plugin_write_out_append_stamps_the_rows_it_loads(
             work,
             table,
             batch,
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             schema_evolution="strict",
             watermark_column=_WATERMARK,
         )
@@ -1531,7 +1543,7 @@ def test_dest_plugin_write_out_append_skips_a_batch_the_trx_already_loaded(
                 work,
                 table,
                 batch,
-                trx_id="TRX_A",
+                transaction_id="TRX_A",
                 schema_evolution="strict",
                 watermark_column=_WATERMARK,
             )
@@ -1571,7 +1583,7 @@ def test_dest_plugin_write_out_append_loads_again_under_a_later_trx(
                 work,
                 table,
                 parquet,
-                trx_id=trx,
+                transaction_id=trx,
                 schema_evolution="strict",
                 watermark_column=_WATERMARK,
             )
@@ -1617,7 +1629,7 @@ def test_dest_plugin_write_out_append_adds_the_watermark_to_an_older_target(
             work,
             table,
             later,
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             schema_evolution=schema_evolution,
             watermark_column=_WATERMARK,
         )
@@ -1656,7 +1668,7 @@ def test_dest_plugin_write_out_append_guards_a_rerun_of_an_older_target(
                 work,
                 table,
                 later,
-                trx_id="TRX_A",
+                transaction_id="TRX_A",
                 schema_evolution="strict",
                 watermark_column=_WATERMARK,
             )
@@ -1684,7 +1696,7 @@ def test_dest_plugin_write_out_append_leaves_the_batch_columns_untouched(
             work,
             table,
             batch,
-            trx_id="TRX_A",
+            transaction_id="TRX_A",
             schema_evolution="strict",
             watermark_column=_WATERMARK,
         )

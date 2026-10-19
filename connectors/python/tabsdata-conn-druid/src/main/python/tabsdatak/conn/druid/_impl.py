@@ -76,14 +76,14 @@ class StagedFile:
     uri: str
 
 
-def _staging_subdir(ctx_trx_id: str) -> str:
+def _staging_subdir(transaction_id: str) -> str:
     """Return the per-execution subdir under ``staging.base_path``.
 
-    Uses ``trx_id`` so each transaction lands in its own directory and
+    Uses ``transaction_id`` so each transaction lands in its own directory and
     parallel runs never collide. A random suffix is appended so retries
-    of the same trx don't clash with leftovers from a partial prior run.
+    of the same transaction don't clash with leftovers from a partial prior run.
     """
-    return f"td-druid/{ctx_trx_id}/{uuid.uuid4().hex[:8]}"
+    return f"td-druid/{transaction_id}/{uuid.uuid4().hex[:8]}"
 
 
 def staged_uri(location: CloudLocation, key: str) -> str:

@@ -50,6 +50,7 @@ def work_dir(tmp_path: Path) -> Path:
     work.mkdir()
     return work
 
+
 _TARGET = "my-project.analytics.orders"
 _STAGING = "my-project.analytics.orders_a1b2c3d4"
 _QUOTED_TARGET = "`my-project.analytics.orders`"
@@ -94,9 +95,7 @@ def _named_client(schemas: dict[str, list[str]]) -> MagicMock:
 
 
 def _dialect(client, *, uri: str = "gs://bucket/in.parquet") -> BigQueryMergeDialect:
-    return BigQueryMergeDialect(
-        client, MagicMock(), uri=uri, target_fqn=_TARGET
-    )
+    return BigQueryMergeDialect(client, MagicMock(), uri=uri, target_fqn=_TARGET)
 
 
 def _staged(fields: list, relation: str = _QUOTED_STAGING) -> Staged:
@@ -318,9 +317,7 @@ def test_ensure_target_builds_the_target_from_the_staging_table():
 
 
 def test_ensure_target_leaves_the_marker_out_of_the_target():
-    client = _ensure_target(
-        [_field("order_id", "INTEGER"), _field("op", "STRING")]
-    )
+    client = _ensure_target([_field("order_id", "INTEGER"), _field("op", "STRING")])
     (statement,) = _statements(client)
     assert "`op`" not in statement
     assert "`order_id` INT64" in statement
@@ -573,14 +570,18 @@ def test_watermark_reads_unstamped_when_the_target_is_not_there():
     that does not exist yet is not an error -- it has simply never been
     stamped."""
     client = _stamp_client({})
-    assert _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is False
+    assert (
+        _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is False
+    )
     client.query_and_wait.assert_not_called()
 
 
 def test_watermark_does_not_probe_a_target_that_lacks_the_column():
     """Selecting a column the table has not got is an error, not an answer."""
     client = _stamp_client({_TARGET: ["order_id"]})
-    assert _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is False
+    assert (
+        _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is False
+    )
     client.query_and_wait.assert_not_called()
 
 
@@ -591,16 +592,16 @@ def test_watermark_reads_stamped_when_the_target_carries_the_id():
 
 def test_watermark_reads_unstamped_when_the_target_carries_another_id():
     client = _stamp_client({_TARGET: ["order_id", "wm"]}, stamped=False)
-    assert _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is False
+    assert (
+        _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark()) is False
+    )
 
 
 def test_watermark_probe_names_the_target_and_the_transaction():
     client = _stamp_client({_TARGET: ["order_id", "wm"]}, stamped=True)
     _dialect(client).check_watermark_column(_QUOTED_TARGET, _watermark())
     (probe,) = _statements(client)
-    assert probe == (
-        f"SELECT COUNT(*) > 0 FROM {_QUOTED_TARGET} WHERE `wm` = '{_TRX}'"
-    )
+    assert probe == (f"SELECT COUNT(*) > 0 FROM {_QUOTED_TARGET} WHERE `wm` = '{_TRX}'")
 
 
 def test_watermark_matches_the_column_case_insensitively():
@@ -611,20 +612,20 @@ def test_watermark_matches_the_column_case_insensitively():
 
 
 @pytest.mark.parametrize(
-    "trx_id,literal",
+    "transaction_id,literal",
     [
         ("plain", "'plain'"),
         ("it's", r"'it\'s'"),
         ("back\\slash", r"'back\\slash'"),
     ],
 )
-def test_watermark_escapes_the_transaction_id(trx_id, literal):
+def test_watermark_escapes_the_transaction_id(transaction_id, literal):
     """A trx id is a system token, but it is the one value in these statements
     the connector did not choose, and a hand-built statement has nowhere to bind
     it."""
     client = _stamp_client({_TARGET: ["wm"]}, stamped=True)
     _dialect(client).check_watermark_column(
-        _QUOTED_TARGET, _watermark(transaction_id=trx_id)
+        _QUOTED_TARGET, _watermark(transaction_id=transaction_id)
     )
     assert _statements(client)[0].endswith(f"`wm` = {literal}")
 
@@ -700,9 +701,7 @@ def test_staging_stamps_the_staging_table_with_the_transaction_id(
     ]
 
 
-def test_staging_reports_the_watermark_among_the_staged_columns(
-    work_dir, monkeypatch
-):
+def test_staging_reports_the_watermark_among_the_staged_columns(work_dir, monkeypatch):
     # Which is what carries it onward: ensure_target, evolve and the write list
     # all read the target's shape off the staged columns.
     client = _stamp_client({_STAGING: ["order_id", "op"]})
@@ -762,9 +761,7 @@ def test_coalesce_drops_an_ephemeral_key(work_dir):
 def test_coalesce_keeps_the_original_basename(work_dir):
     src = work_dir / "cdc.parquet"
     pl.DataFrame([{"order_id": 1, "op": "i"}]).write_parquet(src)
-    with coalesced_batch(
-        _dialect(MagicMock()), _TARGET, src, _merge_cfg()
-    ) as reduced:
+    with coalesced_batch(_dialect(MagicMock()), _TARGET, src, _merge_cfg()) as reduced:
         assert reduced.name == "cdc.parquet"
         assert reduced != src
 

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -21,13 +22,19 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 def _ctx() -> FromRequestCtx:
     return FromRequestCtx(
         work_dir=Path("/tmp/work"),
-        exec_plan_id="ep-1",
-        trx_id="trx-1",
-        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
+        project_id="p-1",
+        project="p",
         collection_id="c-1",
-        collection_name="col",
+        collection="col",
         function_id="fn-1",
-        function_name="publish_people",
+        function="publish_people",
+        function_version_id="fv-1",
+        execution_id="ep-1",
+        execution=None,
+        transaction_id="trx-1",
+        logical_function_run_id="lfr-1",
+        physical_function_run_id="pfr-1",
+        triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
     )
 
 
@@ -37,13 +44,13 @@ def _ctx() -> FromRequestCtx:
 def test_identifier_properties_round_trip():
     c = _ctx()
     assert c.work_dir == Path("/tmp/work")
-    assert c.exec_plan_id == "ep-1"
-    assert c.trx_id == "trx-1"
-    assert c.exec_plan_ts == "2026-06-04T07:14:28.376000+00:00"
+    assert c.execution_id == "ep-1"
+    assert c.transaction_id == "trx-1"
+    assert c.triggered_on == datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00")
     assert c.collection_id == "c-1"
-    assert c.collection_name == "col"
+    assert c.collection == "col"
     assert c.function_id == "fn-1"
-    assert c.function_name == "publish_people"
+    assert c.function == "publish_people"
 
 
 # --- get_attr / set_attr (real impl) ----------------------------------

@@ -6,7 +6,7 @@
 
 import polars as pl
 
-from tabsdatak.api import TableFrameSpec, TrxCtx, publisher
+from tabsdatak.api import TableFrameSpec, TransactionCtx, publisher
 from tabsdatak.conn.dev import Data, DataGenSrc
 from tabsdatak.conn.mssql import MSSQLSrc
 
@@ -43,7 +43,7 @@ def pub_publisher_reads_table_from_mssql_domain(
     output_tables=[PUBLISHED_TABLE],
 )
 def pub_publisher_initial_values_advance_across_runs(
-    frame: TableFrameSpec, ctx: TrxCtx
+    frame: TableFrameSpec, ctx: TransactionCtx
 ) -> TableFrameSpec:
     ctx.set_attr("wm", WATERMARK_ADVANCE_TO)
     return frame

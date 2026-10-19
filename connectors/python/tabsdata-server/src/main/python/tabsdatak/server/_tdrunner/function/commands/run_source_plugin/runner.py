@@ -342,16 +342,7 @@ def run(args: argparse.Namespace) -> int:
         type(info).__name__,
         cardinality,
     )
-    ctx = _SrcContext(
-        work_dir=out_dir,
-        exec_plan_id=str(request.info.execution_id),
-        trx_id=str(request.info.transaction_id),
-        exec_plan_ts=request.info.triggered_on_iso,
-        collection_id=str(request.info.collection_id),
-        collection_name=request.info.collection,
-        function_id=str(request.info.physical_function_run_id),
-        function_name=request.info.function,
-    )
+    ctx = _SrcContext.from_info(out_dir, request.info)
     hydrate_ctx_from_state_or_raise(
         ctx, request, state_dir, error_code=RunSourcePluginErrorCode.RSP_9
     )

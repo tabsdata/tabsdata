@@ -142,18 +142,11 @@ class Info(BaseModel):
         """`triggered_on` as a timezone-aware UTC datetime.
 
         The wire format is epoch milliseconds; consumers that need a
-        Python datetime (e.g. parquet timestamp columns) read this
-        instead of converting at every call site.
+        Python datetime (e.g. parquet timestamp columns and
+        ``TransactionCtx.triggered_on``) read this instead of converting at
+        every call site.
         """
         return datetime.fromtimestamp(self.triggered_on / 1000, tz=timezone.utc)
-
-    @property
-    def triggered_on_iso(self) -> str:
-        """`triggered_on` as an ISO-8601 string (UTC).
-
-        Used to satisfy the ``TrxCtx.exec_plan_ts`` contract.
-        """
-        return self.triggered_on_datetime.isoformat()
 
 
 class Request(BaseModel):

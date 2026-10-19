@@ -122,7 +122,7 @@ def merge_batch(
     watermark nothing can be stamped in is no watermark at all.
     """
     watermark_cfg = (
-        WatermarkCfg(column=watermark_column, transaction_id=ctx.trx_id)
+        WatermarkCfg(column=watermark_column, transaction_id=ctx.transaction_id)
         if watermark_column is not None
         else None
     )

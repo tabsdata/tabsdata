@@ -142,16 +142,7 @@ def run(args: argparse.Namespace) -> int:
         tables,
     )
 
-    ctx = _DestContext(
-        work_dir=bundle_dir,
-        exec_plan_id=str(request.info.execution_id),
-        trx_id=str(request.info.transaction_id),
-        exec_plan_ts=request.info.triggered_on_iso,
-        collection_id=str(request.info.collection_id),
-        collection_name=request.info.collection,
-        function_id=str(request.info.physical_function_run_id),
-        function_name=request.info.function,
-    )
+    ctx = _DestContext.from_info(bundle_dir, request.info)
     notify_step_destination_write(args)
     logger.info(
         "Invoking %s.write_out: %d table frame(s) -> %s",

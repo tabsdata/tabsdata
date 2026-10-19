@@ -834,7 +834,7 @@ def check_tz_aware_datetime(obj: Any) -> Any:
 #     bare ``TableFrame`` / ``list[TableFrame]`` is rejected because
 #     it does not express the runtime's may-be-``None`` contract.
 #   - An optional final positional parameter may be annotated as
-#     ``TrxCtx`` (or a subclass). When present the framework passes a
+#     ``TransactionCtx`` (or a subclass). When present the framework passes a
 #     transaction-context instance at call time; the function uses
 #     ``ctx.get_attr`` / ``ctx.set_attr`` to read state from the
 #     previous transaction and stage state for the next one. The
@@ -962,7 +962,7 @@ def _format_expected_signature(
     input_count: int,
     input_mode: str,
     output_count: int,
-    allow_trx_ctx: bool = True,
+    allow_transaction_ctx: bool = True,
 ) -> str:
     if input_mode == "array":
         in_t = "TableFramesSpec"
@@ -974,8 +974,8 @@ def _format_expected_signature(
         params = "# no input parameters"
     out_args = ", ".join(["TableFrameSpec"] * output_count) if output_count > 0 else ""
     ctx_note = (
-        " (an optional trailing ``ctx: TrxCtx`` parameter is also allowed)"
-        if allow_trx_ctx
+        " (an optional trailing ``ctx: TransactionCtx`` parameter is also allowed)"
+        if allow_transaction_ctx
         else ""
     )
     # With a single output slot the lone TableFrameSpec may be returned
@@ -999,16 +999,16 @@ def _format_expected_signature(
     )
 
 
-def _is_trx_ctx_slot(t: Any) -> bool:
-    # `TrxCtx` lives in `tabsdatak.api`, which imports from this
+def _is_transaction_ctx_slot(t: Any) -> bool:
+    # `TransactionCtx` lives in `tabsdatak.api`, which imports from this
     # module -- defer the import to avoid a load-time cycle.
-    from tabsdatak.api import TrxCtx
+    from tabsdatak.api import TransactionCtx
 
-    return isinstance(t, type) and issubclass(t, TrxCtx)
+    return isinstance(t, type) and issubclass(t, TransactionCtx)
 
 
-def has_trx_ctx_param(func: Callable[..., Any]) -> bool:
-    """True if ``func``'s last parameter is annotated as ``TrxCtx`` (or a
+def has_transaction_ctx_param(func: Callable[..., Any]) -> bool:
+    """True if ``func``'s last parameter is annotated as ``TransactionCtx`` (or a
     subclass). The runtime uses this to decide whether to pass a
     transaction-context instance when invoking the function."""
     try:
@@ -1020,7 +1020,7 @@ def has_trx_ctx_param(func: Callable[..., Any]) -> bool:
     if not params:
         return False
     last_hint = hints.get(params[-1].name)
-    return last_hint is not None and _is_trx_ctx_slot(last_hint)
+    return last_hint is not None and _is_transaction_ctx_slot(last_hint)
 
 
 def check_callable_signature(
@@ -1029,7 +1029,7 @@ def check_callable_signature(
     input_count: int,
     input_mode: str,
     output_count: int,
-    allow_trx_ctx: bool = True,
+    allow_transaction_ctx: bool = True,
 ) -> None:
     """Validate a decorated function's signature against the
     declared input / output shape.
@@ -1039,12 +1039,12 @@ def check_callable_signature(
         ``TableFrameSpec``), ``"array"`` (each slot is a
         ``TableFramesSpec``), or ``"any"`` (either).
     :param output_count: Number of return-tuple elements.
-    :param allow_trx_ctx: When ``True`` (the default for
+    :param allow_transaction_ctx: When ``True`` (the default for
         ``@publisher`` / ``@transformer`` / ``@subscriber``), a
-        single trailing ``ctx: TrxCtx`` parameter is allowed after
+        single trailing ``ctx: TransactionCtx`` parameter is allowed after
         the input slots. ``@stream_publisher`` passes ``False`` --
         stream publishers run inside the runtime's long-lived
-        plugin loop, not per-trx, so no ``TrxCtx`` is available
+        plugin loop, not per-trx, so no ``TransactionCtx`` is available
         at the call boundary.
     """
     name = getattr(func, "__name__", repr(func))
@@ -1053,7 +1053,7 @@ def check_callable_signature(
         input_count=input_count,
         input_mode=input_mode,
         output_count=output_count,
-        allow_trx_ctx=allow_trx_ctx,
+        allow_transaction_ctx=allow_transaction_ctx,
     )
 
     try:
@@ -1066,38 +1066,38 @@ def check_callable_signature(
 
     # Accepted shape:
     #   - exactly ``input_count`` slot params, or
-    #   - when ``allow_trx_ctx`` is True, ``input_count`` slot
+    #   - when ``allow_transaction_ctx`` is True, ``input_count`` slot
     #     params followed by one optional trailing param
-    #     annotated as ``TrxCtx`` (or a subclass).
+    #     annotated as ``TransactionCtx`` (or a subclass).
     if len(params) < input_count:
         raise ValueError(
             f"{name!r}: must declare at least {input_count} parameter(s) "
             f"(got {len(params)}){expected}"
         )
-    max_params = input_count + (1 if allow_trx_ctx else 0)
+    max_params = input_count + (1 if allow_transaction_ctx else 0)
     if len(params) > max_params:
-        if allow_trx_ctx:
+        if allow_transaction_ctx:
             raise ValueError(
                 f"{name!r}: declares {len(params)} parameter(s) but only "
                 f"{input_count} input slot(s) plus an optional trailing "
-                f"TrxCtx parameter are allowed{expected}"
+                f"TransactionCtx parameter are allowed{expected}"
             )
         raise ValueError(
             f"{name!r}: declares {len(params)} parameter(s) but only "
             f"{input_count} input slot(s) are allowed (a trailing "
-            f"TrxCtx parameter is not supported here){expected}"
+            f"TransactionCtx parameter is not supported here){expected}"
         )
-    if allow_trx_ctx and len(params) == input_count + 1:
+    if allow_transaction_ctx and len(params) == input_count + 1:
         extra = params[input_count]
         extra_hint = hints.get(extra.name)
-        if extra_hint is None or not _is_trx_ctx_slot(extra_hint):
+        if extra_hint is None or not _is_transaction_ctx_slot(extra_hint):
             rendered = (
                 _render_type(extra_hint) if extra_hint is not None else "unannotated"
             )
             raise ValueError(
                 f"{name!r}: trailing parameter {extra.name!r} is "
                 f"annotated as {rendered!r} "
-                f"but must be a TrxCtx subclass{expected}"
+                f"but must be a TransactionCtx subclass{expected}"
             )
 
     # Each of the first input_count parameters must have a slot-type annotation.

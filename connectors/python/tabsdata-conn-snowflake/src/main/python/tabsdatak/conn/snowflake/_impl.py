@@ -359,7 +359,7 @@ def _write_one(
         # business being stamped.
         watermark = cfg.watermark_column if cfg.if_table_exists == "append" else None
         if watermark is not None and check_watermark_column(
-            cursor, sql_table, watermark, cfg.ctx.trx_id
+            cursor, sql_table, watermark, cfg.ctx.transaction_id
         ):
             # Asked before the batch is rewritten and staged: a rerun that has
             # nothing to do should not pay to build the file it will not load.
@@ -367,10 +367,10 @@ def _write_one(
                 "Skipping append onto %s: watermark column %s already has value %s",
                 sql_table,
                 watermark,
-                cfg.ctx.trx_id,
+                cfg.ctx.transaction_id,
             )
             return
-        with watermarked_batch(file_path, watermark, cfg.ctx.trx_id) as batch:
+        with watermarked_batch(file_path, watermark, cfg.ctx.transaction_id) as batch:
             file_name = put_file_to_stage(cursor, batch, stage)
         _create_table_from_inferred_schema(cursor, stage, file_name, sql_table)
         if watermark is not None:

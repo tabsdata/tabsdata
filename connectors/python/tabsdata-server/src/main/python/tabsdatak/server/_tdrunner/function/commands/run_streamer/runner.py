@@ -109,10 +109,13 @@ def run(args: argparse.Namespace) -> int:
     try:
         ctx = StreamerPluginCtx(
             work_dir=out_dir,
+            project_id=str(request.info.project_id),
+            project=request.info.project,
             collection_id=str(request.info.collection_id),
-            collection_name=request.info.collection,
-            function_id=str(request.info.function_version_id),
-            function_name=request.info.function,
+            collection=request.info.collection,
+            function_id=str(request.info.function_id),
+            function=request.info.function,
+            function_version_id=str(request.info.function_version_id),
             function_stage=function_stage,
             thresholds=info.thresholds,
             tabsdata_version=_tabsdata_version(),

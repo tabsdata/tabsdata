@@ -39,6 +39,7 @@ def _col(type_value, *, name="c", precision=None, scale=None):
         type_scale=scale,
     )
 
+
 pytestmark = pytest.mark.databricks
 
 
@@ -46,7 +47,7 @@ class _FakeCtx:
     """The slice of ``DestContext`` a write reads: the trx id a merge stamps its
     watermark rows with."""
 
-    trx_id = "TRX_1"
+    transaction_id = "TRX_1"
 
 
 # ---------------------------------------------------------------------------
@@ -838,9 +839,7 @@ class _BulkCursor:
             self._rows = [(1 if wanted in self._columns else 0,)]
             return
         if "ADD COLUMNS" in statement:
-            self._columns.add(
-                statement.rsplit("(`", 1)[1].split("`", 1)[0].lower()
-            )
+            self._columns.add(statement.rsplit("(`", 1)[1].split("`", 1)[0].lower())
         self._rows = []
 
     def fetchone(self):
@@ -861,9 +860,7 @@ def _bulk_clients(monkeypatch, cursor):
     ws_client = SimpleNamespace(files=SimpleNamespace(upload=upload))
     sql_conn = SimpleNamespace(cursor=lambda: cursor, close=lambda: None)
     monkeypatch.setattr(_impl, "_build_workspace_client", lambda conn: ws_client)
-    monkeypatch.setattr(
-        _impl, "_build_sql_connection", lambda ws, conn: sql_conn
-    )
+    monkeypatch.setattr(_impl, "_build_sql_connection", lambda ws, conn: sql_conn)
     return uploaded
 
 
@@ -991,9 +988,7 @@ def test_append_watermark_is_added_under_update_too(monkeypatch, tmp_path):
     cursor = _BulkCursor(("id",))
     _bulk_clients(monkeypatch, cursor)
     _staged_batches(monkeypatch)
-    _impl.write_all_tables(
-        _wm_cfg(schema_evolution="update"), [_wm_parquet(tmp_path)]
-    )
+    _impl.write_all_tables(_wm_cfg(schema_evolution="update"), [_wm_parquet(tmp_path)])
     assert len(_alters(cursor)) == 1
 
 
@@ -1030,16 +1025,18 @@ def test_append_checks_the_watermark_before_it_stages_anything(monkeypatch, tmp_
 
 
 @pytest.mark.parametrize(
-    "trx_id,literal",
+    "transaction_id,literal",
     [("plain", "'plain'"), ("it's", "'it\\'s'"), ("a\\b", "'a\\\\b'")],
 )
-def test_append_escapes_the_trx_id_in_the_probe(monkeypatch, tmp_path, trx_id, literal):
+def test_append_escapes_the_trx_id_in_the_probe(
+    monkeypatch, tmp_path, transaction_id, literal
+):
     # There is nowhere to bind a value in a statement built by hand.
     class _Ctx:
         pass
 
     ctx = _Ctx()
-    ctx.trx_id = trx_id
+    ctx.transaction_id = transaction_id
     cursor = _BulkCursor(("id", _WATERMARK))
     _bulk_clients(monkeypatch, cursor)
     _staged_batches(monkeypatch)

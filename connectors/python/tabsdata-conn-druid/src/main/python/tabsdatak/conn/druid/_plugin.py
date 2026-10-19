@@ -130,7 +130,7 @@ class DruidDestPlugin(DestPlugin[DruidDestConn, DruidDest]):
         # subdir so the Druid ingestion spec for each datasource sees
         # only the files for that datasource.
         # noinspection PyProtectedMember
-        subdir_root = adapter._staging_subdir(ctx.trx_id)
+        subdir_root = adapter._staging_subdir(ctx.transaction_id)
 
         # ---- Submit one ingestion task per datasource ------------
         logger.debug("druid: establishing overlord client")

@@ -138,36 +138,43 @@ class StreamerPluginCtx(FromFlowRequestCtx, StreamSrcPluginCtx):
 
     Multiple-inheritance composition mirrors the SPI: a streamer is
     :class:`StreamSrcPluginCtx`, which extends :class:`PluginCtx`
-    (= :class:`FlowCtx` + ``work_dir``) but NOT :class:`TrxCtx` -- a
-    streamer is a long-lived worker, not part of any execution plan or
+    (= :class:`FlowCtx` + ``work_dir``) but NOT :class:`TransactionCtx` -- a
+    streamer is a long-lived worker, not part of any execution or
     transaction. The downstream per-batch publisher pods (spawned by
     the manifest-trigger sidecar via ``fn_trigger``) are where real
-    ``execution_id`` / ``transaction_id`` / ``physical_function_run_id`` values
-    live; the streamer pod itself has none. This is why the runtime
+    ``execution_id`` / ``transaction_id`` / ``logical_function_run_id``
+    / ``physical_function_run_id`` values live; the streamer pod
+    itself has none. This is why the runtime
     mixin used here is :class:`FromFlowRequestCtx` rather than the
     full :class:`FromRequestCtx` used by ``_SrcContext`` /
     ``_DestContext`` / ``_FunctionContext`` -- those role-typed
-    contexts inherit :class:`TrxCtx`, so they get the trx fields too.
+    contexts inherit :class:`TransactionCtx`, so they get the trx fields too.
     """
 
     def __init__(
         self,
         *,
         work_dir: Path,
+        project_id: str,
+        project: str,
         collection_id: str,
-        collection_name: str,
+        collection: str,
         function_id: str,
-        function_name: str,
+        function: str,
+        function_version_id: str,
         function_stage: Location,
         thresholds: StreamThresholds,
         tabsdata_version: str,
     ) -> None:
         super().__init__(
             work_dir=work_dir,
+            project_id=project_id,
+            project=project,
             collection_id=collection_id,
-            collection_name=collection_name,
+            collection=collection,
             function_id=function_id,
-            function_name=function_name,
+            function=function,
+            function_version_id=function_version_id,
         )
         self._backend = stage_backend_from_location(function_stage)
         self._thresholds = thresholds

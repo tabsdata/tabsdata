@@ -19,6 +19,7 @@ from __future__ import annotations
 import importlib
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pyarrow as pa
@@ -347,13 +348,19 @@ def _ctx(**kwargs) -> _SrcContext:
     to override what it's exercising."""
     defaults = dict(
         work_dir=Path("/work"),
-        exec_plan_id="exec1",
-        trx_id="tx1",
-        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
+        project_id="p-1",
+        project="p",
         collection_id="c_id",
-        collection_name="c_name",
+        collection="c_name",
         function_id="fn_run_42",
-        function_name="publish_people",
+        function="publish_people",
+        function_version_id="fv-1",
+        execution_id="exec1",
+        execution=None,
+        transaction_id="tx1",
+        logical_function_run_id="lfr-1",
+        physical_function_run_id="pfr-1",
+        triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
     )
     defaults.update(kwargs)
     return _SrcContext(**defaults)
@@ -363,32 +370,34 @@ def test_src_context_returns_work_dir():
     assert _ctx().work_dir == Path("/work")
 
 
-def test_src_context_exposes_exec_plan_id():
-    assert _ctx().exec_plan_id == "exec1"
+def test_src_context_exposes_execution_id():
+    assert _ctx().execution_id == "exec1"
 
 
-def test_src_context_exposes_trx_id():
-    assert _ctx().trx_id == "tx1"
+def test_src_context_exposes_transaction_id():
+    assert _ctx().transaction_id == "tx1"
 
 
 def test_src_context_exposes_collection_id():
     assert _ctx().collection_id == "c_id"
 
 
-def test_src_context_exposes_collection_name():
-    assert _ctx().collection_name == "c_name"
+def test_src_context_exposes_collection():
+    assert _ctx().collection == "c_name"
 
 
 def test_src_context_exposes_function_id():
     assert _ctx().function_id == "fn_run_42"
 
 
-def test_src_context_exposes_function_name():
-    assert _ctx().function_name == "publish_people"
+def test_src_context_exposes_function():
+    assert _ctx().function == "publish_people"
 
 
-def test_src_context_exposes_exec_plan_ts():
-    assert _ctx().exec_plan_ts == "2026-06-04T07:14:28.376000+00:00"
+def test_src_context_exposes_triggered_on():
+    assert _ctx().triggered_on == datetime.fromisoformat(
+        "2026-06-04T07:14:28.376000+00:00"
+    )
 
 
 def test_src_context_get_attr_returns_none_for_unset_key():
@@ -896,13 +905,19 @@ def test_main_carries_tabsdata_command_metadata():
 def _bare_ctx() -> _SrcContext:
     return _SrcContext(
         work_dir=Path("/work"),
-        exec_plan_id="ep",
-        trx_id="tx",
-        exec_plan_ts="2026-06-04T07:14:28.376000+00:00",
+        project_id="p-1",
+        project="p",
         collection_id="cid",
-        collection_name="c",
+        collection="c",
         function_id="fn",
-        function_name="publish_people",
+        function="publish_people",
+        function_version_id="fv-1",
+        execution_id="ep",
+        execution=None,
+        transaction_id="tx",
+        logical_function_run_id="lfr-1",
+        physical_function_run_id="pfr-1",
+        triggered_on=datetime.fromisoformat("2026-06-04T07:14:28.376000+00:00"),
     )
 
 

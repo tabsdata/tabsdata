@@ -569,13 +569,13 @@ def test_output_table_is_frozen():
 # --- Info derived timestamp properties (TD-2313) ----------------------------
 #
 # ``Info.triggered_on`` is epoch milliseconds on the wire. The derived
-# helpers convert that to a tz-aware UTC datetime (consumed by
-# ``stamp-inputs`` to populate ``$td.ver.timestamp``) and to an
-# ISO-8601 string (consumed by ``FromRequestCtx.exec_plan_ts``, which
-# satisfies the public ``TrxCtx.exec_plan_ts`` SPI contract). These
-# tests pin the conversion shape so a future change to the wire format
-# (e.g. epoch seconds instead of milliseconds) breaks loudly here
-# rather than silently corrupting downstream column values.
+# helper converts that to a tz-aware UTC datetime, consumed by
+# ``stamp-inputs`` to populate ``$td.ver.timestamp`` and by
+# ``FromRequestCtx.triggered_on``; file destinations substitute its
+# ``isoformat()`` for the ``${EXEC_PLAN_TS}`` path token. These tests
+# pin the conversion shape so a future change to the wire format (e.g.
+# epoch seconds instead of milliseconds) breaks loudly here rather than
+# silently corrupting downstream column values or paths.
 
 
 def _build_info(triggered_on: int) -> Info:
@@ -616,18 +616,12 @@ def test_info_triggered_on_datetime_handles_zero_millis():
     assert info.triggered_on_datetime == datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
-def test_info_triggered_on_iso_returns_iso_string():
+def test_info_triggered_on_datetime_isoformat_is_pinned():
     info = _build_info(triggered_on=1780562068376)
     # Pinned exactly so a wire-format change (e.g. seconds vs millis,
-    # or losing the tz suffix) fails loudly.
-    assert info.triggered_on_iso == "2026-06-04T08:34:28.376000+00:00"
-
-
-def test_info_triggered_on_iso_matches_datetime_isoformat():
-    """The iso helper is just ``triggered_on_datetime.isoformat()``;
-    pin the relationship so callers can rely on it."""
-    info = _build_info(triggered_on=1780000000100)
-    assert info.triggered_on_iso == info.triggered_on_datetime.isoformat()
+    # or losing the tz suffix) fails loudly: it is the string the
+    # ``${EXEC_PLAN_TS}`` path token resolves to.
+    assert info.triggered_on_datetime.isoformat() == "2026-06-04T08:34:28.376000+00:00"
 
 
 # --- load_request_or_raise --------------------------------------------

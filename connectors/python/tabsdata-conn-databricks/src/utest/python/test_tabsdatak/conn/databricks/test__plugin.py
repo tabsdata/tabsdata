@@ -15,38 +15,33 @@ Databricks integration suite.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
 from tabsdatak.api import Secret
-from tabsdatak.conn.databricks import (
-    DatabricksDestConn,
-    DatabricksSrcConn,
-    DatabricksDest,
-    DatabricksSrc,
-)
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.databricks import _impl as impl
-
-# noinspection PyProtectedMember
-from tabsdatak.conn.databricks import _plugin as plugin
 from tabsdatak.conn.common.sql.constants import (
     SQL_META_INITIAL_VALUES,
     SQL_META_QUERY,
 )
+
+# noinspection PyProtectedMember
+from tabsdatak.conn.databricks import (
+    DatabricksDest,
+    DatabricksDestConn,
+    DatabricksSrc,
+    DatabricksSrcConn,
+    _impl as impl,
+    _plugin as plugin,
+)
 from tabsdatak.conn.databricks._explorer import DatabricksConnectionExplorer
-from tabsdatak.spi import TableFileInput
 from tabsdatak.conn.databricks.error import (
     DatabricksErrorCode,
     DatabricksRuntimeException,
     DatabricksValidateException,
 )
-
-
+from tabsdatak.spi import TableFileInput
 
 pytestmark = pytest.mark.databricks
 
@@ -66,11 +61,11 @@ class _Ctx:
     """
 
     def __init__(
-        self, work: Path, scratch: dict | None = None, trx_id: str = "TRX_1"
+        self, work: Path, scratch: dict | None = None, transaction_id: str = "TRX_1"
     ) -> None:
         self._work = work
         self._scratch: dict = dict(scratch) if scratch else {}
-        self.trx_id = trx_id
+        self.transaction_id = transaction_id
 
     @property
     def work_dir(self) -> Path:

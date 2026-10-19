@@ -83,9 +83,9 @@ def sheet_in(format_cfg: dict | None) -> int | None:
 
 def resolve_dest_tokens(target_path: str, ctx: DestContext) -> str:
     tokens = {
-        EXEC_PLAN_ID: ctx.exec_plan_id,
-        TRX_ID: ctx.trx_id,
-        EXEC_PLAN_TS: ctx.exec_plan_ts,
+        EXEC_PLAN_ID: ctx.execution_id,
+        TRX_ID: ctx.transaction_id,
+        EXEC_PLAN_TS: ctx.triggered_on.isoformat(),
     }
     resolved = target_path
     for token, value in tokens.items():
@@ -214,7 +214,7 @@ RunEnvBuilder = Callable[[Any, TransporterHandler], dict[str, str]]
 # regex declared on `ContextKeySpec`.
 #
 # The ``file-lastmod.`` prefix is reserved for this plugin's
-# bookkeeping; see :meth:`tabsdatak.api.TrxCtx.set_attr` for the
+# bookkeeping; see :meth:`tabsdatak.api.TransactionCtx.set_attr` for the
 # reserved-prefix convention.
 _LASTMOD_KEY_PREFIX = "file-lastmod.slot"
 

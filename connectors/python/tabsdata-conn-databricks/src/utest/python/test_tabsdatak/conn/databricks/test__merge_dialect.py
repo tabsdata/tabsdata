@@ -147,9 +147,7 @@ def _staged(columns: list[tuple[str, str]], relation: str = _SCRATCH) -> Staged:
 
 
 def _cfg(on=("order_id",), op_column="op", watermark_column=None) -> MergeCfg:
-    return MergeCfg(
-        on=list(on), op_column=op_column, watermark_column=watermark_column
-    )
+    return MergeCfg(on=list(on), op_column=op_column, watermark_column=watermark_column)
 
 
 def _index_starting_with(statements: list[str], prefix: str) -> int:
@@ -299,9 +297,7 @@ class TestMergeStatement:
 
 def _replace_sql(schema_evolution: str = "strict") -> str:
     dialect = _dialect(_RecordingCursor(), schema_evolution=schema_evolution)
-    return render_replace(
-        dialect, _TARGET, _staged([], relation=_SCRATCH), _cfg(), []
-    )
+    return render_replace(dialect, _TARGET, _staged([], relation=_SCRATCH), _cfg(), [])
 
 
 class TestReplaceStatement:
@@ -340,7 +336,9 @@ def _ensure_target(op_column: str = "op", schema_evolution: str = "update"):
     cursor = _RecordingCursor()
     columns = [("order_id", "BIGINT"), ("op", "STRING")]
     _dialect(cursor, schema_evolution=schema_evolution).ensure_target(
-        _TARGET, _staged(columns), MergeCfg(on=["order_id"], op_column=op_column)._op_column()
+        _TARGET,
+        _staged(columns),
+        MergeCfg(on=["order_id"], op_column=op_column)._op_column(),
     )
     return cursor.statements
 
@@ -357,9 +355,7 @@ class TestEnsureTarget:
     def test_leaves_an_existing_target_alone(self):
         """IF NOT EXISTS: a merge onto a target that already exists must not
         rebuild it from one batch's schema."""
-        assert any(
-            s.startswith("CREATE TABLE IF NOT EXISTS") for s in _ensure_target()
-        )
+        assert any(s.startswith("CREATE TABLE IF NOT EXISTS") for s in _ensure_target())
 
     @pytest.mark.parametrize("op_column", ["op", "OP", "`opCol`"])
     def test_folds_the_marker_before_excluding_it(self, op_column):
@@ -440,9 +436,7 @@ class TestStaging:
         assert copy.startswith("COPY INTO `main`.`analytics`.`orders_")
         assert not copy.startswith("COPY INTO `main`.`analytics`.`orders` ")
 
-    def test_drops_the_scratch_table_and_the_staged_file_on_the_way_out(
-        self, tmp_path
-    ):
+    def test_drops_the_scratch_table_and_the_staged_file_on_the_way_out(self, tmp_path):
         """Both outlive the statement -- a real catalog table and a file on the
         volume -- so both are cleaned up here."""
         batch = tmp_path / "in.parquet"
@@ -631,9 +625,11 @@ class TestStampingTheScratchTable:
     def test_reports_the_watermark_among_the_staged_columns(self, tmp_path):
         # Read back off DESCRIBE rather than appended by hand, so the column the
         # merge sees is the one the scratch table actually has.
-        cursor = _RecordingCursor(
-            [("order_id", "BIGINT"), ("op", "STRING"), ("wm", "STRING")]
-        )
+        cursor = _RecordingCursor([
+            ("order_id", "BIGINT"),
+            ("op", "STRING"),
+            ("wm", "STRING"),
+        ])
         staged = self._stage(cursor, tmp_path, _watermark())
         assert staged.columns == [
             ("order_id", "BIGINT"),
@@ -657,17 +653,13 @@ class TestWriteColumns:
     def test_keeps_the_batch_order_less_the_marker(self):
         columns = [("order_id", "BIGINT"), ("status", "STRING"), ("op", "STRING")]
         cursor = _RecordingCursor(columns)
-        written = write_columns(
-            _dialect(cursor), _TARGET, _staged(columns), _cfg()
-        )
+        written = write_columns(_dialect(cursor), _TARGET, _staged(columns), _cfg())
         assert written == ["order_id", "status"]
 
     def test_matches_case_insensitively(self):
         cursor = _RecordingCursor([("ORDER_ID", "BIGINT"), ("OP", "STRING")])
         columns = [("order_id", "BIGINT"), ("op", "STRING")]
-        written = write_columns(
-            _dialect(cursor), _TARGET, _staged(columns), _cfg()
-        )
+        written = write_columns(_dialect(cursor), _TARGET, _staged(columns), _cfg())
         assert written == ["order_id"]
 
     def test_refuses_a_marker_the_batch_lacks(self):
@@ -810,8 +802,8 @@ class TestCoalescedBatch:
 
 
 class _FakeCtx:
-    def __init__(self, trx_id: str = _TRX) -> None:
-        self.trx_id = trx_id
+    def __init__(self, transaction_id: str = _TRX) -> None:
+        self.transaction_id = transaction_id
 
 
 class TestMergeBatch:
@@ -875,9 +867,7 @@ class TestMergeBatch:
         # Staging is the expensive half, and the scratch table it would leave
         # behind is one nobody asked for.
         batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
-        cursor = _RecordingCursor(
-            [("k", "BIGINT"), ("op", "STRING"), ("wm", "STRING")]
-        )
+        cursor = _RecordingCursor([("k", "BIGINT"), ("op", "STRING"), ("wm", "STRING")])
         self._merge(cursor, batch, watermark_column="wm")
         probe = _index_starting_with(cursor.statements, "SELECT COUNT(*) FROM")
         create = _index_starting_with(cursor.statements, "CREATE TABLE `main`")
@@ -887,9 +877,7 @@ class TestMergeBatch:
         # WITH SCHEMA EVOLUTION adds the column the source has and the target
         # does not, so there is nothing to ALTER onto the target first.
         batch = _batch(tmp_path / "in.parquet", k=[1], op=["i"])
-        cursor = _RecordingCursor(
-            [("k", "BIGINT"), ("op", "STRING"), ("wm", "STRING")]
-        )
+        cursor = _RecordingCursor([("k", "BIGINT"), ("op", "STRING"), ("wm", "STRING")])
         result = self._merge(cursor, batch, watermark_column="wm")
         assert result.evolved == []
         merge = _only_starting_with(cursor.statements, "MERGE ")

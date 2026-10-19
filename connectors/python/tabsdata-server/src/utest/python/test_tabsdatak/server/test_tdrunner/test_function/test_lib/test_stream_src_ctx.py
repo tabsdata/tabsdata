@@ -88,10 +88,13 @@ def _make_ctx(
     stage.mkdir(parents=True, exist_ok=True)
     return StreamerPluginCtx(
         work_dir=work_dir,
+        project_id="p-1",
+        project="p",
         collection_id="C-1",
-        collection_name="c",
+        collection="c",
         function_id="F-1",
-        function_name="stream_people",
+        function="stream_people",
+        function_version_id="fv-1",
         function_stage=_file_location(stage),
         thresholds=thresholds,
         tabsdata_version=_TABSDATA_VERSION,
@@ -205,10 +208,13 @@ def _construct_ctx_for(stage_uri: str, tmp_path: Path) -> StreamerPluginCtx:
     work_dir.mkdir(exist_ok=True)
     return StreamerPluginCtx(
         work_dir=work_dir,
+        project_id="p-1",
+        project="p",
         collection_id="C-1",
-        collection_name="c",
+        collection="c",
         function_id="F-1",
-        function_name="stream_people",
+        function="stream_people",
+        function_version_id="fv-1",
         function_stage=Location(uri=stage_uri),
         thresholds=StreamThresholds(batch=BatchThresholds(max_secs=300)),
         tabsdata_version=_TABSDATA_VERSION,
@@ -279,10 +285,13 @@ def test_ctx_construction_loads_existing_state(tmp_path):
     work_dir.mkdir()
     ctx = StreamerPluginCtx(
         work_dir=work_dir,
+        project_id="p-1",
+        project="p",
         collection_id="C-1",
-        collection_name="c",
+        collection="c",
         function_id="F-1",
-        function_name="stream_people",
+        function="stream_people",
+        function_version_id="fv-1",
         function_stage=_file_location(stage),
         thresholds=StreamThresholds(batch=BatchThresholds(max_secs=300)),
         tabsdata_version=_TABSDATA_VERSION,

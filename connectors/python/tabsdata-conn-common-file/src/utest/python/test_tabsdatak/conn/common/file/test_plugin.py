@@ -240,7 +240,7 @@ def test_resolve_dest_tokens_substitutes():
         "out/${EXEC_PLAN_ID}/${TRX_ID}/x.${EXEC_PLAN_TS}.csv", ctx
     )
     assert resolved == (
-        "out/test-exec-plan-id/test-trx-id/x.2026-01-01T00:00:00.000000+00:00.csv"
+        "out/test-exec-plan-id/test-trx-id/x.2026-01-01T00:00:00+00:00.csv"
     )
 
 
@@ -287,23 +287,19 @@ class _DestCtx(DestContext):
         return self._work_dir
 
     @property
-    def exec_plan_id(self) -> str:
-        return "test-exec-plan-id"
+    def project_id(self) -> str:
+        return "test-project-id"
 
     @property
-    def trx_id(self) -> str:
-        return "test-trx-id"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
+    def project(self) -> str:
+        return "test-project"
 
     @property
     def collection_id(self) -> str:
         return "test-collection-id"
 
     @property
-    def collection_name(self) -> str:
+    def collection(self) -> str:
         return "test-collection"
 
     @property
@@ -311,8 +307,36 @@ class _DestCtx(DestContext):
         return "test-function-id"
 
     @property
-    def function_name(self) -> str:
+    def function(self) -> str:
         return "test-function"
+
+    @property
+    def function_version_id(self) -> str:
+        return "test-function-version-id"
+
+    @property
+    def execution_id(self) -> str:
+        return "test-exec-plan-id"
+
+    @property
+    def execution(self) -> str | None:
+        return None
+
+    @property
+    def transaction_id(self) -> str:
+        return "test-trx-id"
+
+    @property
+    def logical_function_run_id(self) -> str:
+        return "test-logical-function-run-id"
+
+    @property
+    def physical_function_run_id(self) -> str:
+        return "test-physical-function-run-id"
+
+    @property
+    def triggered_on(self) -> datetime:
+        return datetime.fromisoformat("2026-01-01T00:00:00.000000+00:00")
 
     def get_attr(self, attr):
         return None
@@ -431,7 +455,6 @@ def test_run_write_out_slot_count_mismatch_raises_file_common_16(tmp_path):
 # no real binary needed.
 
 # noinspection PyProtectedMember
-# noinspection PyProtectedMember
 from tabsdatak.conn.common.file import (
     _input as _input_module,
     _output as _output_module,
@@ -449,23 +472,19 @@ class _SrcCtx(SrcPluginCtx):
         return self._work_dir
 
     @property
-    def exec_plan_id(self) -> str:
-        return "test-exec-plan-id"
+    def project_id(self) -> str:
+        return "test-project-id"
 
     @property
-    def trx_id(self) -> str:
-        return "test-trx-id"
-
-    @property
-    def exec_plan_ts(self) -> str:
-        return "2026-01-01T00:00:00.000000+00:00"
+    def project(self) -> str:
+        return "test-project"
 
     @property
     def collection_id(self) -> str:
         return "test-collection-id"
 
     @property
-    def collection_name(self) -> str:
+    def collection(self) -> str:
         return "test-collection"
 
     @property
@@ -473,8 +492,36 @@ class _SrcCtx(SrcPluginCtx):
         return "test-function-id"
 
     @property
-    def function_name(self) -> str:
+    def function(self) -> str:
         return "test-function"
+
+    @property
+    def function_version_id(self) -> str:
+        return "test-function-version-id"
+
+    @property
+    def execution_id(self) -> str:
+        return "test-exec-plan-id"
+
+    @property
+    def execution(self) -> str | None:
+        return None
+
+    @property
+    def transaction_id(self) -> str:
+        return "test-trx-id"
+
+    @property
+    def logical_function_run_id(self) -> str:
+        return "test-logical-function-run-id"
+
+    @property
+    def physical_function_run_id(self) -> str:
+        return "test-physical-function-run-id"
+
+    @property
+    def triggered_on(self) -> datetime:
+        return datetime.fromisoformat("2026-01-01T00:00:00.000000+00:00")
 
     def get_attr(self, attr):
         return None
@@ -1408,5 +1455,3 @@ def _copybook(record: str) -> str:
     """A minimal copybook source. `copybook` carries the COBOL itself, not a
     path to it, so fixtures have to be real (if tiny) layouts."""
     return f"      01  {record}.\n          05  FIELD PIC X(4).\n"
-
-
