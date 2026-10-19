@@ -75,17 +75,34 @@ impl Inventory {
         Ok(self.versions[end..].iter().rev().collect())
     }
 
+    fn start(&self, instance: &str) -> Result<usize, UpgradeError> {
+        if let Some(position) = self.position(instance) {
+            return Ok(position);
+        }
+        let requested = parse(instance)?;
+        if requested < parse(self.floor())? {
+            return self.locate(instance);
+        }
+        for (position, entry) in self.versions.iter().enumerate() {
+            let listed = parse(&entry.version)?;
+            if same_minor(&listed, &requested) && listed <= requested {
+                return Ok(position);
+            }
+        }
+        self.locate(instance)
+    }
+
     /// The hops to walk from `instance` up to `product`, oldest hop first.
     pub fn hops(&self, instance: &str, product: &str) -> Result<Vec<Hop>, UpgradeError> {
-        let start = self.locate(instance)?;
         let end = self.locate(product)?;
-        if end > start {
+        let start = self.start(instance)?;
+        if end > start || parse(instance)? > parse(product)? {
             return Err(UpgradeError::ProductOlderThanInstance {
                 product: product.to_owned(),
                 instance: instance.to_owned(),
             });
         }
-        Ok(self.versions[end..=start]
+        let mut hops: Vec<Hop> = self.versions[end..=start]
             .windows(2)
             .rev()
             .map(|pair| Hop {
@@ -93,8 +110,18 @@ impl Inventory {
                 to: pair[0].version.clone(),
                 upgrader: pair[0].upgrader,
             })
-            .collect())
+            .collect();
+        if let Some(first) = hops.first_mut() {
+            first.from = instance.to_owned();
+        }
+        Ok(hops)
     }
+}
+
+fn same_minor(left: &Version, right: &Version) -> bool {
+    let left = left.release();
+    let right = right.release();
+    left.first() == right.first() && left.get(1) == right.get(1)
 }
 
 fn parse(version: &str) -> Result<Version, UpgradeError> {

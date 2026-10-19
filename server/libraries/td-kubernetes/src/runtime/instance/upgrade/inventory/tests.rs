@@ -94,9 +94,80 @@ fn a_version_newer_than_the_inventory_is_unknown() {
     ));
 }
 
+fn walked(hops: &[Hop]) -> Vec<(&str, &str, bool)> {
+    hops.iter()
+        .map(|hop| (hop.from.as_str(), hop.to.as_str(), hop.upgrader))
+        .collect()
+}
+
+fn released_before_its_patches() -> Inventory {
+    inventory(&[
+        ("2.4.0", true),
+        ("2.3.0", true),
+        ("2.2.0", true),
+        ("2.1.0", true),
+        ("2.0.0", false),
+    ])
+}
+
 #[test]
-fn an_unlisted_version_inside_the_range_is_unknown() {
-    let outcome = sample().hops("2.0.3", "2.0.5");
+fn an_unlisted_patch_walks_the_listed_versions_above_its_minor() {
+    let hops = released_before_its_patches()
+        .hops("2.2.3", "2.4.0")
+        .expect("hops");
+    assert_eq!(
+        walked(&hops),
+        vec![("2.2.3", "2.3.0", true), ("2.3.0", "2.4.0", true)]
+    );
+}
+
+#[test]
+fn an_unlisted_patch_starts_from_the_greatest_listed_patch_below_it() {
+    let inventory = inventory(&[
+        ("2.4.0", true),
+        ("2.3.0", true),
+        ("2.2.1", true),
+        ("2.2.0", true),
+        ("2.0.0", false),
+    ]);
+    let hops = inventory.hops("2.2.3", "2.4.0").expect("hops");
+    assert_eq!(
+        walked(&hops),
+        vec![("2.2.3", "2.3.0", true), ("2.3.0", "2.4.0", true)]
+    );
+}
+
+#[test]
+fn an_unlisted_patch_inside_the_range_walks_from_its_minor() {
+    let hops = sample().hops("2.0.3", "2.0.5").expect("hops");
+    assert_eq!(
+        walked(&hops),
+        vec![("2.0.3", "2.0.4", false), ("2.0.4", "2.0.5", true)]
+    );
+}
+
+#[test]
+fn an_unlisted_patch_newer_than_the_product_is_rejected() {
+    let outcome = released_before_its_patches().hops("2.2.3", "2.2.0");
+    assert!(matches!(
+        outcome,
+        Err(UpgradeError::ProductOlderThanInstance { .. })
+    ));
+}
+
+#[test]
+fn an_unlisted_patch_of_an_unlisted_minor_is_unknown() {
+    let inventory = inventory(&[("2.6.0", true), ("2.4.0", true), ("2.0.0", false)]);
+    let outcome = inventory.hops("2.5.1", "2.6.0");
+    assert!(matches!(
+        outcome,
+        Err(UpgradeError::VersionNotInInventory { .. })
+    ));
+}
+
+#[test]
+fn an_unlisted_product_is_unknown() {
+    let outcome = released_before_its_patches().hops("2.2.0", "2.4.1");
     assert!(matches!(
         outcome,
         Err(UpgradeError::VersionNotInInventory { .. })
