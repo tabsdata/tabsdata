@@ -40,6 +40,7 @@ from pydantic import Field, model_validator
 
 # noinspection PyProtectedMember
 from tabsdatak import _api
+from tabsdatak._legacy import FlowCtxLegacy, TransactionCtxLegacy, module_getattr
 from tabsdatak.error import ApiErrorCode
 from tabsdatak.tableframe import TableFrame
 
@@ -672,7 +673,7 @@ BasicTypeSpec: TypeAlias = Union[str, int, float, bool]
 BasicDictSpec: TypeAlias = dict[str, BasicTypeSpec]
 
 
-class TransactionCtx(ABC):
+class TransactionCtx(TransactionCtxLegacy, ABC):
     """Per-trx context handed by the runtime to every decorated
     function and connector plugin.
 
@@ -742,7 +743,7 @@ class TransactionCtx(ABC):
         Not durable across trx invocations."""
 
 
-class FlowCtx(ABC):
+class FlowCtx(FlowCtxLegacy, ABC):
     """Flow-level identifiers (project / collection / function) shared
     by every role that runs inside a trx -- plugins *and*
     user-decorated functions.
@@ -774,6 +775,10 @@ class FlowCtx(ABC):
 
     @property
     @abstractmethod
+    # Until 2.2 this returned the function run id (the function version id in
+    # stream publishers). The name is unchanged, so it cannot be deprecated:
+    # code that needs the old value reads physical_function_run_id or
+    # function_version_id instead.
     def function_id(self) -> str:
         """Unique id of the function, the same across its versions and
         runs."""
@@ -828,3 +833,6 @@ class FunctionCtx(TransactionCtx, FlowCtx, ABC):
         names and keys ignore case. Raises `KeyError` when the project
         has no such secret or key.
         """
+
+
+__getattr__ = module_getattr(__name__, {"TrxCtx": (__name__, "TransactionCtx")})

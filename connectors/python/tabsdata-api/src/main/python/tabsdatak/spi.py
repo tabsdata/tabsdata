@@ -45,10 +45,11 @@ from typing import (
 from pydantic import ConfigDict, model_validator
 
 import tabsdatak._api as _api
+from tabsdatak._legacy import module_getattr
 from tabsdatak.api import (
     BasicDictSpec,
     Dest,
-    FlowCtx,
+    FlowCtx as _FlowCtx,
     Src,
     StreamSrc,
     StreamThresholds,
@@ -142,7 +143,7 @@ class TableMode(Enum):
     ARRAY = "array"
 
 
-class PluginCtx(FlowCtx, ABC):
+class PluginCtx(_FlowCtx, ABC):
     """Common context surface shared by every plugin variant
     (batch source, stream source, destination).
 
@@ -745,3 +746,12 @@ class DestDef[D: Dest]:
             check_plugin_param_type(self.explorer, "metadata", "conn", self.conn)
             check_plugin_param_type(self.explorer, "data", "conn", self.conn)
         return self
+
+
+__getattr__ = module_getattr(
+    __name__,
+    {
+        "FlowCtx": ("tabsdatak.api", "FlowCtx"),
+        "FunctionCtx": ("tabsdatak.api", "FunctionCtx"),
+    },
+)

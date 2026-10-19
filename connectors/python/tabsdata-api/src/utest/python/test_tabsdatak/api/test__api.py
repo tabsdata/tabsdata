@@ -8,6 +8,7 @@ import inspect
 import logging
 import sys
 from dataclasses import FrozenInstanceError
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from pydantic import ConfigDict, ValidationError
@@ -1240,3 +1241,27 @@ def test_only_seconds_below_the_floor_can_be_marked(seconds):
 
 def test_a_marked_value_round_trips():
     assert _api.decode_seconds(KEY, _api.unsafe_seconds(7)) == 7
+
+
+# --- path_timestamp -------------------------------------------------------
+
+
+def test_path_timestamp_uses_only_path_safe_characters():
+    stamp = _api.path_timestamp(
+        datetime(2026, 6, 4, 8, 34, 28, 376000, tzinfo=timezone.utc)
+    )
+    assert stamp == "20260604T083428.376Z"
+    assert set(stamp) <= set("0123456789T.Z")
+
+
+def test_path_timestamp_converts_to_utc():
+    offset = timezone(timedelta(hours=2))
+    stamp = _api.path_timestamp(datetime(2026, 6, 4, 10, 34, 28, tzinfo=offset))
+    assert stamp == "20260604T083428.000Z"
+
+
+def test_path_timestamp_truncates_to_milliseconds():
+    stamp = _api.path_timestamp(
+        datetime(2026, 6, 4, 8, 34, 28, 376999, tzinfo=timezone.utc)
+    )
+    assert stamp == "20260604T083428.376Z"

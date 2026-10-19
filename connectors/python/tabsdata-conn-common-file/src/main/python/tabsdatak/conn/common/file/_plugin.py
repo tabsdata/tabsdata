@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, cast
 
+from tabsdatak._api import path_timestamp
 from tabsdatak.common._fileformat.taxonomy import (
     EXCEL_SHEET_KEY,
     DestFileFormat,
@@ -79,15 +80,6 @@ def sheet_in(format_cfg: dict | None) -> int | None:
     back for provenance -- the reader gets the number from the same place.
     """
     return ((format_cfg or {}).get(SrcFileFormat.EXCEL) or {}).get(EXCEL_SHEET_KEY)
-
-
-def path_timestamp(value: datetime) -> str:
-    """``value`` as a basic-format ISO 8601 UTC timestamp with
-    milliseconds (``20260604T083428.376Z``): fixed length, so it sorts
-    chronologically as text, and free of the ``:`` / ``+`` that some
-    filesystems and object stores reject or mangle in a path."""
-    value = value.astimezone(timezone.utc)
-    return f"{value:%Y%m%dT%H%M%S}.{value.microsecond // 1000:03d}Z"
 
 
 def resolve_dest_tokens(target_path: str, ctx: DestContext) -> str:

@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -252,27 +252,6 @@ def test_resolve_dest_tokens_timestamp_has_a_fixed_length():
     assert fraction == "20260101T000000.376Z"
     assert len(whole_second) == len(fraction)
     assert whole_second < fraction
-
-
-def test_path_timestamp_uses_only_path_safe_characters():
-    stamp = _plugin.path_timestamp(
-        datetime(2026, 6, 4, 8, 34, 28, 376000, tzinfo=timezone.utc)
-    )
-    assert stamp == "20260604T083428.376Z"
-    assert set(stamp) <= set("0123456789T.Z")
-
-
-def test_path_timestamp_converts_to_utc():
-    offset = timezone(timedelta(hours=2))
-    stamp = _plugin.path_timestamp(datetime(2026, 6, 4, 10, 34, 28, tzinfo=offset))
-    assert stamp == "20260604T083428.000Z"
-
-
-def test_path_timestamp_truncates_to_milliseconds():
-    stamp = _plugin.path_timestamp(
-        datetime(2026, 6, 4, 8, 34, 28, 376999, tzinfo=timezone.utc)
-    )
-    assert stamp == "20260604T083428.376Z"
 
 
 def test_resolve_dest_tokens_leaves_unknown_tokens():

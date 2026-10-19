@@ -49,7 +49,9 @@ def deprecated_category(
     # noinspection DuplicatedCode
     def __str__(self) -> str:
         message = []
-        msg = getattr(self, "_unstable_message", None)
+        msg = getattr(self, "_unstable_message", None) or (
+            self.args[0] if self.args else None
+        )
         if msg:
             message.append(f"\n{str(msg)}")
         if reason:
@@ -87,7 +89,9 @@ def unstable_category(
     # noinspection DuplicatedCode
     def __str__(self) -> str:
         message = []
-        msg = getattr(self, "_unstable_message", None)
+        msg = getattr(self, "_unstable_message", None) or (
+            self.args[0] if self.args else None
+        )
         if msg:
             message.append(f"\n{str(msg)}")
         if reason:

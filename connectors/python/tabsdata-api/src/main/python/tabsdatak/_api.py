@@ -49,7 +49,7 @@ import os
 import re
 import sys
 import typing
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable, ClassVar, TypeVar, Union, dataclass_transform
 
 from croniter import croniter
@@ -820,6 +820,15 @@ def check_tz_aware_datetime(obj: Any) -> Any:
                 f"timezone-aware (got naive {v.isoformat()})"
             )
     return obj
+
+
+def path_timestamp(value: datetime) -> str:
+    """``value`` as a basic-format ISO 8601 UTC timestamp with
+    milliseconds (``20260604T083428.376Z``): fixed length, so it sorts
+    chronologically as text, and free of the ``:`` / ``+`` that some
+    filesystems and object stores reject or mangle in a path."""
+    value = value.astimezone(timezone.utc)
+    return f"{value:%Y%m%dT%H%M%S}.{value.microsecond // 1000:03d}Z"
 
 
 # ---------------------------------------------------------------------------
