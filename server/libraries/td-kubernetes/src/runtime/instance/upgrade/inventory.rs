@@ -118,10 +118,23 @@ impl Inventory {
     }
 }
 
+const MAJOR_POSITION: usize = 0;
+const MINOR_POSITION: usize = 1;
+const MICRO_POSITION: usize = 2;
+const INITIAL_MICRO: u64 = 0;
+
+pub fn is_micro(version: &str) -> Result<bool, UpgradeError> {
+    Ok(parse(version)?
+        .release()
+        .get(MICRO_POSITION)
+        .is_some_and(|micro| *micro > INITIAL_MICRO))
+}
+
 fn same_minor(left: &Version, right: &Version) -> bool {
     let left = left.release();
     let right = right.release();
-    left.first() == right.first() && left.get(1) == right.get(1)
+    left.get(MAJOR_POSITION) == right.get(MAJOR_POSITION)
+        && left.get(MINOR_POSITION) == right.get(MINOR_POSITION)
 }
 
 fn parse(version: &str) -> Result<Version, UpgradeError> {

@@ -12,6 +12,7 @@ from tabsdatax.cmake.kupgrader.common.emission import header_of, render
 from tabsdatax.cmake.kupgrader.common.errors import KupgraderError
 
 INVENTORY_SCHEMA = 1
+INITIAL_MICRO = 0
 
 
 class VersionError(KupgraderError):
@@ -73,6 +74,10 @@ def resolve(current: str, entries: list[Entry]) -> Resolution:
     else:
         previous = newest.version
     return Resolution(current=current, previous=previous, entries=entries)
+
+
+def is_micro(version: str) -> bool:
+    return Version(version).micro > INITIAL_MICRO
 
 
 def declares_upgrader(resolution: Resolution) -> bool:

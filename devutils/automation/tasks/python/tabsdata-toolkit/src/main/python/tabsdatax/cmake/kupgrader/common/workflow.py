@@ -20,6 +20,7 @@ RENAMES_FILE = Path("variant") / "config" / "kupgrade" / "renames.yaml"
 
 UPGRADES_FILE = KUPGRADE_FOLDER / "upgrades.yaml"
 UPGRADES_FOLDER = KUPGRADE_FOLDER / "upgrades"
+RULES_FOLDER = KUPGRADE_FOLDER / "rules"
 
 VERSION_FILE = (
     Path("connectors")
@@ -63,6 +64,10 @@ class Context:
     @property
     def upgrades_folder(self) -> Path:
         return self.root_folder / UPGRADES_FOLDER
+
+    @property
+    def rules_folder(self) -> Path:
+        return self.root_folder / RULES_FOLDER
 
     @property
     def version_file(self) -> Path:

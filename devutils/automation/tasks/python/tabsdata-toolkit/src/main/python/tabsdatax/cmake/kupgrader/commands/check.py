@@ -19,9 +19,10 @@ from tabsdatax.cmake.kupgrader.common.rendering import (
     display_template_mismatches,
     display_verification,
 )
+from tabsdatax.cmake.kupgrader.common.rules import rules_problems
 from tabsdatax.cmake.kupgrader.common.templates import digests, replay
 from tabsdatax.cmake.kupgrader.common.verification import locate_binary, verify
-from tabsdatax.cmake.kupgrader.common.versions import declares_upgrader
+from tabsdatax.cmake.kupgrader.common.versions import declares_upgrader, is_micro
 from tabsdatax.cmake.kupgrader.common.workflow import context_of, display_context
 
 log = logging.getLogger(__name__)
@@ -34,6 +35,14 @@ def perform_check(root_folder: Path) -> None:
     generation = generate(context)
     if generation is None:
         return
+
+    if is_micro(generation.version) and not generation.noop:
+        log.error(
+            f"Version '{generation.version}' is a micro version, so its upgrader must "
+            "change nothing, but the kprofile changed since the previous version. "
+            "Move those changes to the next minor version."
+        )
+        raise SystemExit(1)
 
     comparison = compare(
         generation.emission,
@@ -90,6 +99,16 @@ def perform_check(root_folder: Path) -> None:
             "Released templates no longer resolve as their recorded digests say, or "
             "the shipped upgraders do not reproduce every version's templates; "
             f"diverging outcomes are kept in {context.diverged_folder}."
+        )
+        raise SystemExit(1)
+
+    problems = rules_problems(binary, context.kupgrade_folder)
+    for problem in problems:
+        log.error(problem)
+    if problems:
+        log.error(
+            f"The upgrade rules in {context.rules_folder} do not match the upgrades "
+            "inventory."
         )
         raise SystemExit(1)
 

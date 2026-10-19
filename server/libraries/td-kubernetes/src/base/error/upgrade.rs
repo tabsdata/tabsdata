@@ -298,4 +298,9 @@ pub enum UpgradeError {
          rules exist at '{path}'."
     )]
     RulesUnexpected { version: String, path: String } = 5370,
+    #[error(
+        "Version '{version}' is a micro version, so its upgrade rules must be empty, but \
+         they list: {rules}."
+    )]
+    RulesNotEmptyForMicro { version: String, rules: String } = 5371,
 }

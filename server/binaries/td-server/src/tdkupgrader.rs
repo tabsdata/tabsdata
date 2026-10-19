@@ -8,11 +8,13 @@ use std::process::ExitCode;
 use clap::{Args, Parser, Subcommand};
 use serde::Serialize;
 
+use td_kubernetes::runtime::instance::upgrade::catalog::read_inventory;
 use td_kubernetes::runtime::instance::upgrade::offline::upgrade_kprofile;
 use td_kubernetes::runtime::instance::upgrade::replay::{
     Mismatch, Sources, drifted_digests, materialize, materialize_scratch, record_digests,
     replay_all,
 };
+use td_kubernetes::runtime::instance::upgrade::rules::verify_rules;
 
 #[derive(Debug, Parser)]
 #[command(
@@ -79,6 +81,12 @@ enum Command {
         #[arg(long)]
         record: bool,
     },
+    /// Check the upgrade rules of every version against the upgrades inventory.
+    Rules {
+        /// Upgrade tree holding the inventory and the rules folder.
+        #[arg(long, required = true)]
+        kupgrade: PathBuf,
+    },
     /// Write the templates of every version to a folder.
     Templates {
         #[command(flatten)]
@@ -99,6 +107,11 @@ struct Mismatches {
 struct Recorded {
     recorded: usize,
     mismatches: Vec<Mismatch>,
+}
+
+#[derive(Serialize)]
+struct Problems {
+    problems: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -149,6 +162,17 @@ async fn run(command: Command) -> Result<String, String> {
             serde_json::to_string(&Recorded {
                 recorded,
                 mismatches,
+            })
+        }
+        Command::Rules { kupgrade } => {
+            let inventory = read_inventory(&kupgrade).map_err(|error| {
+                error
+                    .source()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| format!("{:?}", error.status()))
+            })?;
+            serde_json::to_string(&Problems {
+                problems: verify_rules(&kupgrade, &inventory),
             })
         }
         Command::Templates { repository, output } => {

@@ -6,6 +6,8 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 from tabsdatax.cmake.kupgrader.common.actions import Plan, plan_bundles
 from tabsdatax.cmake.kupgrader.common.changes import (
     Change,
@@ -32,6 +34,8 @@ from tabsdatax.cmake.kupgrader.common.workflow import Context
 
 log = logging.getLogger(__name__)
 
+NOOP_SPEC_KEYS = frozenset({"schema"})
+
 
 @dataclass
 class Generation:
@@ -54,6 +58,11 @@ class Generation:
                 f"The generation of version '{self.version}' holds no previous version"
             )
         return previous
+
+    @property
+    def noop(self) -> bool:
+        spec = yaml.safe_load(self.emission.spec_file.read_text()) or {}
+        return not self.emission.payloads and set(spec) <= NOOP_SPEC_KEYS
 
 
 def shipped_spec_file(context: Context, version: str) -> Path:

@@ -17,13 +17,18 @@ from tabsdatax.cmake.kupgrader.common.rendering import (
     display_template_mismatches,
     display_verification,
 )
+from tabsdatax.cmake.kupgrader.common.rules import ensure_default_rules
 from tabsdatax.cmake.kupgrader.common.templates import (
     digests,
     replay,
     stage_kupgrade,
 )
 from tabsdatax.cmake.kupgrader.common.verification import locate_binary, verify
-from tabsdatax.cmake.kupgrader.common.versions import with_upgrader, write_inventory
+from tabsdatax.cmake.kupgrader.common.versions import (
+    is_micro,
+    with_upgrader,
+    write_inventory,
+)
 from tabsdatax.cmake.kupgrader.common.workflow import context_of, display_context
 
 log = logging.getLogger(__name__)
@@ -84,6 +89,15 @@ def perform_build(root_folder: Path) -> None:
     write_inventory(
         context.upgrades_file, with_upgrader(generation.preparation.resolution)
     )
+    created_rules = ensure_default_rules(context, generation.version)
+    if created_rules is not None:
+        log.info(f"Wrote the default upgrade rules to {created_rules}.")
+    if is_micro(generation.version) and not generation.noop:
+        log.warning(
+            f"Version '{generation.version}' is a micro version, so its upgrader must "
+            "change nothing, but this one does; 'cargo make upgrader check' will "
+            "refuse it."
+        )
 
     log.info(
         f"Wrote the upgrader of version '{generation.version}' to {spec_file} and "

@@ -25,16 +25,20 @@ pub fn resolve_kupgrade_path(verbose: bool) -> CommandResult<PathBuf> {
 }
 
 pub fn load_inventory(root: &Path) -> CommandResult<Inventory> {
+    let inventory = read_inventory(root)?;
+    ensure_specs(root, &inventory)?;
+    ensure_rules(root, &inventory)?;
+    Ok(inventory)
+}
+
+pub fn read_inventory(root: &Path) -> CommandResult<Inventory> {
     let path = root.join(INVENTORY_FILE);
     let yaml =
         std::fs::read_to_string(&path).map_err(|error| UpgradeError::InventoryReadFailed {
             path: path.display().to_string(),
             cause: error.to_string(),
         })?;
-    let inventory = deserialize_inventory(&yaml)?;
-    ensure_specs(root, &inventory)?;
-    ensure_rules(root, &inventory)?;
-    Ok(inventory)
+    Ok(deserialize_inventory(&yaml)?)
 }
 
 pub fn spec_path(root: &Path, version: &str) -> PathBuf {
