@@ -101,10 +101,10 @@ Required identifiers (`--name`, `--plan`, ...) are shown without brackets; `[...
 ## `tdk project` *(system-scoped — no `--proj`)*
 
 ```
-project create  --name NAME [--description D] [--groups g1,g2,...] [--secrets-file FILE]
+project create  --name NAME [--description D] [--secrets-file FILE]
 project update  --name NAME [--new-name N] [--description D] [--secrets-file FILE]
                 # --secrets-file replaces all the project's secrets
-project delete  --name NAME [-y]
+project delete  --name NAME [--confirm delete]
 project get     --name NAME
 project list
 project secrets --name NAME [-o]   # secret names and keys, never values
@@ -132,7 +132,7 @@ collection create --name NAME [--proj PROJECT] [--description D] [--group G]
 collection update --name NAME [--proj PROJECT] [--new-name N] [--description D]
                               [--group G] [--storage-path PATH|-] [--conn-file FILE]
                               # '-' = inherit project storage path; --conn-file updates the connection
-collection delete --name NAME [--proj PROJECT] [-y]
+collection delete --name NAME [--proj PROJECT] [--confirm delete]
 collection get    --name NAME [--proj PROJECT] [-o]
 collection list               [--proj PROJECT] [-o]
 ```
@@ -142,7 +142,7 @@ collection list               [--proj PROJECT] [-o]
 ```
 group create --name NAME [--proj PROJECT] [--description D]
 group update --name NAME [--proj PROJECT] [--new-name N] [--description D]
-group delete --name NAME [--proj PROJECT] [-y]
+group delete --name NAME [--proj PROJECT] [--confirm delete]
 group get    --name NAME [--proj PROJECT] [-o]
 group list               [--proj PROJECT] [-o]
 ```
@@ -157,7 +157,7 @@ function register --path PATH [--proj PROJECT] [--col COLLECTION] [--description
 function update   --name NAME [--proj PROJECT] [--col COLLECTION] [--description D] [--path PATH]
                               [--dir-to-bundle DIR] [--reuse-tables]
                               [--enabled|--disabled] [--storage-path PATH] [--reset-state] [--reset-stage]
-function delete   --name NAME [--proj PROJECT] [--col COLLECTION] [-y]
+function delete   --name NAME [--proj PROJECT] [--col COLLECTION] [--confirm delete]
 function get      --name NAME [--proj PROJECT] [--col COLLECTION] [--version V] [--history] [-o]
                               #   --version: details of a specific version (default: current)
 function bundle   --fn-version FVID [--proj PROJECT] --file FILE
@@ -230,7 +230,7 @@ table data     --name NAME  [--proj PROJECT] [--col COLLECTION] [--sql SQL] [--l
                             #   --wide: with --print, every column in full; the
                             #          terminal wraps rows wider than itself
 table download --name NAME  [--proj PROJECT] [--col COLLECTION] --file FILE [--at TS|--at-trx TRX|--version V]
-table delete   --name NAME  [--proj PROJECT] [--col COLLECTION] [-y]
+table delete   --name NAME  [--proj PROJECT] [--col COLLECTION] [--confirm delete]
 ```
 
 ---
