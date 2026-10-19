@@ -46,6 +46,7 @@ fn create(name: &str) -> Result<ProjectCreate, TdError> {
         name: ProjectName::try_from(name)?,
         description: "d".try_into()?,
         base_path: BasePath::default(),
+        secrets: Vec::new(),
     })
 }
 
@@ -53,6 +54,7 @@ fn rename(to: &str) -> Result<ProjectUpdate, TdError> {
     Ok(ProjectUpdate {
         name: Some(ProjectName::try_from(to)?),
         description: None,
+        secrets: None,
     })
 }
 

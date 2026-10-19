@@ -7,6 +7,7 @@
 //! row-level security and are themselves a global registry (not RLS-scoped).
 
 use crate::dxo::crudl::RequestContext;
+use crate::dxo::secret::SecretUpsert;
 use crate::types::basic::{
     AtTime, BasePath, Created, Description, Modified, ProjectId, ProjectIdName, ProjectName,
     ProjectWhenDeleted, UserId, UserLabel, WhenDeleted,
@@ -102,6 +103,8 @@ pub struct ProjectCreate {
     // Create-only for now: not mutable via `ProjectUpdate` (project "move" deferred).
     #[serde(default)]
     pub base_path: BasePath,
+    #[serde(default)]
+    pub secrets: Vec<SecretUpsert>,
 }
 
 impl ProjectCreate {
@@ -124,6 +127,8 @@ impl ProjectCreate {
 pub struct ProjectUpdate {
     pub name: Option<ProjectName>,
     pub description: Option<Description>,
+    #[serde(default)]
+    pub secrets: Option<Vec<SecretUpsert>>,
 }
 
 #[ta_objects::Dao]

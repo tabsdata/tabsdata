@@ -47,6 +47,7 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
         name: initial_name.clone(),
         description: initial_desc.clone(),
         base_path: base_path.clone(),
+        secrets: Vec::new(),
     };
     let created = Services::with_defaults(db.clone())
         .create_project(admin_ctx().create((), create))
@@ -69,6 +70,7 @@ async fn test_create_read_update_delete_project(db: TdPool) -> Result<(), TdErro
     let upd = ProjectUpdate {
         name: Some(updated_name.clone()),
         description: Some(updated_desc.clone()),
+        secrets: None,
     };
     let updated = Services::with_defaults(db.clone())
         .update_project(admin_ctx().update(project_param("payments"), upd))
@@ -161,6 +163,7 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
         name: name.clone(),
         description: Description::try_from("Billing").unwrap(),
         base_path: BasePath::default(),
+        secrets: Vec::new(),
     };
 
     Services::with_defaults(db.clone())
@@ -207,6 +210,7 @@ async fn test_rename_to_existing_name_rejected(db: TdPool) -> Result<(), TdError
                 name: ProjectName::try_from("billing")?,
                 description: Description::try_from("Billing")?,
                 base_path: BasePath::default(),
+                secrets: Vec::new(),
             },
         ))
         .await?;
@@ -215,6 +219,7 @@ async fn test_rename_to_existing_name_rejected(db: TdPool) -> Result<(), TdError
     let upd = ProjectUpdate {
         name: Some(ProjectName::try_from("billing")?),
         description: None,
+        secrets: None,
     };
     let res = Services::with_defaults(db.clone())
         .update_project(admin_ctx().update(project_param("test"), upd))
@@ -248,6 +253,7 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
         name,
         description: Description::try_from("Rocket project")?,
         base_path: BasePath::default(),
+        secrets: Vec::new(),
     };
     let created = Services::with_defaults(db.clone())
         .create_project(admin_ctx().create((), create))
@@ -334,6 +340,7 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
         name,
         description: Description::try_from("Comet project")?,
         base_path: BasePath::default(),
+        secrets: Vec::new(),
     };
     let created = Services::with_defaults(db.clone())
         .create_project(admin_ctx().create((), create))
@@ -369,6 +376,7 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
         name: ProjectName::try_from("comet")?,
         description: Description::try_from("Comet again")?,
         base_path: BasePath::default(),
+        secrets: Vec::new(),
     };
     let recreated = Services::with_defaults(db.clone())
         .create_project(admin_ctx().create((), create))
@@ -388,6 +396,7 @@ async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError
         name: ProjectName::try_from("orbit")?,
         description: Description::try_from("Orbit project")?,
         base_path: BasePath::default(),
+        secrets: Vec::new(),
     };
     let created = Services::with_defaults(db.clone())
         .create_project(admin_ctx().create((), create))
@@ -404,6 +413,7 @@ async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError
     let upd = ProjectUpdate {
         name: Some(ProjectName::try_from("galaxy")?),
         description: None,
+        secrets: None,
     };
     Services::with_defaults(db.clone())
         .update_project(admin_ctx().update(project_param("orbit"), upd))
@@ -470,6 +480,7 @@ async fn test_rename_then_recreate_old_name(db: TdPool) -> Result<(), TdError> {
         name: ProjectName::try_from("foo").unwrap(),
         description: Description::try_from("Foo").unwrap(),
         base_path: BasePath::default(),
+        secrets: Vec::new(),
     };
 
     Services::with_defaults(db.clone())
@@ -479,6 +490,7 @@ async fn test_rename_then_recreate_old_name(db: TdPool) -> Result<(), TdError> {
     let upd = ProjectUpdate {
         name: Some(ProjectName::try_from("bar")?),
         description: None,
+        secrets: None,
     };
     Services::with_defaults(db.clone())
         .update_project(admin_ctx().update(project_param("foo"), upd))
@@ -537,6 +549,7 @@ mod delete_guards {
             name: ProjectName::try_from("warehouse")?,
             description: Description::try_from("WH")?,
             base_path: BasePath::default(),
+            secrets: Vec::new(),
         };
         let project = Services::with_defaults(db.clone())
             .create_project(admin_ctx().create((), create))

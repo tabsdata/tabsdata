@@ -36,6 +36,7 @@ where
         name,
         description: Description::default(),
         base_path: BasePath::default(),
+        secrets: Vec::new(),
     };
     let project_db = ProjectInsertDB {
         id: ProjectId::default(),

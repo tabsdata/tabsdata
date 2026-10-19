@@ -64,6 +64,7 @@ mod tests {
             name: ProjectName::try_from(name)?,
             description: Description::try_from("d")?,
             base_path: BasePath::default(),
+            secrets: Vec::new(),
         };
         Services::with_defaults(db.clone())
             .create_project(

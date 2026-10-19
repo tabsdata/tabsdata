@@ -51,6 +51,7 @@ fn create(name: &str) -> Result<ProjectCreate, TdError> {
         name: ProjectName::try_from(name)?,
         description: "d".try_into()?,
         base_path: BasePath::default(),
+        secrets: Vec::new(),
     })
 }
 
@@ -261,6 +262,7 @@ async fn test_a_simple_grant_lands_in_the_resolved_projects_role(
     let rename = ProjectUpdate {
         name: Some(ProjectName::try_from("b")?),
         description: None,
+        secrets: None,
     };
     rename_project_roles(conn, &ctx, &current.id, &rename, &current).await?;
     let current_id = current.id;

@@ -7,6 +7,7 @@
 //! nests under, so the project is named in the URL and resolved by the project
 //! resolver layer before any project-scoped table is touched.
 
+use crate::extractors::Project;
 use axum::Extension;
 use axum::extract::{Path, State};
 use axum_extra::extract::Query;
@@ -16,8 +17,10 @@ use ta_apiserver::status::ok_status::{
     CreateStatus, DeleteStatus, GetStatus, ListStatus, NoContent, UpdateStatus,
 };
 use td_apiforge::apiserver_path;
+use td_database::pool::scoped::ScopedExt;
 use td_objects::dxo::crudl::{ListParams, RequestContext};
 use td_objects::dxo::project::{ProjectCreate, ProjectParam, ProjectRead, ProjectUpdate};
+use td_objects::dxo::secret::SecretsRead;
 use td_services::Services;
 
 const PROJECTS_TAG: &str = "Projects";
@@ -55,6 +58,25 @@ pub async fn get_project(
 ) -> Result<GetStatus<ProjectRead>, ErrorStatus> {
     let request = context.read(project);
     let response = state.read_project(request).await?;
+    Ok(GetStatus::OK(response))
+}
+
+#[apiserver_path(
+    version(v1),
+    scope(project),
+    auth(session, service_token),
+    method(get),
+    path = "/projects/{project}/secrets",
+    tag(PROJECTS_TAG),
+    doc = "List the secrets of a project (names and keys only, no values)"
+)]
+pub async fn get_project_secrets(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+) -> Result<GetStatus<SecretsRead>, ErrorStatus> {
+    let request = context.read(()).in_project(project_id);
+    let response = state.read_project_secrets(request).await?;
     Ok(GetStatus::OK(response))
 }
 

@@ -214,3 +214,32 @@ async fn the_file_store_accepts_everything_and_keeps_nothing() {
     assert!(store.fetch_hydrated(&owner).await.unwrap().is_empty());
     assert!(store.delete(&owner).await.is_ok());
 }
+
+#[tokio::test]
+async fn renaming_a_project_keeps_its_secret_values() {
+    let store = InMemorySecretStore::default();
+    let project_id = ProjectId::default();
+    let secrets = ProjectSecrets::new(&store);
+    secrets
+        .upsert(
+            &project_id,
+            &ProjectName::try_from("finance").unwrap(),
+            &[secret(
+                "warehouse",
+                vec![entry("user", Some("admin")), entry("password", Some("p"))],
+            )],
+        )
+        .await
+        .unwrap();
+    secrets
+        .rename(&project_id, &ProjectName::try_from("treasury").unwrap())
+        .await
+        .unwrap();
+    assert_eq!(
+        values(&secrets.fetch_hydrated(&project_id).await.unwrap()),
+        vec![
+            ("warehouse".into(), "user".into(), Some("admin".into())),
+            ("warehouse".into(), "password".into(), Some("p".into())),
+        ]
+    );
+}

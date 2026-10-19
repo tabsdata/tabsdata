@@ -31,6 +31,7 @@ fn project(name: &str) -> Result<ProjectCreate, TdError> {
         name: ProjectName::try_from(name)?,
         description: "d".try_into()?,
         base_path: BasePath::default(),
+        secrets: Vec::new(),
     })
 }
 

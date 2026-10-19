@@ -10,6 +10,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project};
+use td_bridge::BridgeProviderHandle;
 use td_database::access::DbScope;
 use td_database::access::{AccessMode, DbPool, Global, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
@@ -27,10 +28,34 @@ use td_queries::Queries;
 #[service_factory]
 async fn update_project(
     authz: Ctx<AuthzContext>,
+    bridge: Ctx<BridgeProviderHandle>,
     db: DbPool<Global>,
     request: UpdateRequest<ProjectUpdate, ProjectParam>,
 ) -> Result<ProjectRead, TdError> {
     let (ctx, param, update) = request.into_parts();
+    let current = {
+        let mut connection = db.read().await?;
+        let connection = connection.get(authz.none());
+        let current: ActiveProjectDB = connection.fetch_one(&param.project).await?;
+        let _grant = authz
+            .require::<Project, ManageProject>(connection, &ctx, &current.id)
+            .await?;
+        update_project_validate(&update)?;
+        assert_project_rename_available(connection, &update, &current).await?;
+        assert_project_roles_rename_available(connection, &update, &current).await?;
+        current
+    };
+    let project = update.name.as_ref().unwrap_or(&current.name);
+    let secrets = bridge.project_secrets();
+    match &update.secrets {
+        Some(desired) => {
+            secrets.upsert(&current.id, project, desired).await?;
+        }
+        None if project != &current.name => {
+            secrets.rename(&current.id, project).await?;
+        }
+        None => {}
+    }
     retrying(|attempt| async {
         let mut gated_trx = db.begin(attempt).await?;
         let conn = gated_trx.get(authz.none());
@@ -71,7 +96,7 @@ async fn update_project(
 /// Validate that an update request actually changes at least one field —
 /// otherwise the call is a no-op and we surface it loudly.
 pub fn update_project_validate(update: &ProjectUpdate) -> Result<(), TdError> {
-    if update.name.is_none() && update.description.is_none() {
+    if update.name.is_none() && update.description.is_none() && update.secrets.is_none() {
         Err(ProjectError::UpdateRequestHasNothingToUpdate)?;
     }
     Ok(())

@@ -54,6 +54,7 @@ async fn test_description_update_racing_delete_keeps_the_project_deleted(
             name: ProjectName::try_from("p_race")?,
             description: Description::try_from(description)?,
             base_path: BasePath::default(),
+            secrets: Vec::new(),
         })
     };
     let p = Services::with_defaults(db.clone())
@@ -77,6 +78,7 @@ async fn test_description_update_racing_delete_keeps_the_project_deleted(
         ProjectUpdate {
             name: None,
             description: Some(Description::try_from("described while deleted")?),
+            secrets: None,
         },
     );
     let services = Services::with_defaults(db.clone());
@@ -112,6 +114,7 @@ async fn test_description_update_racing_rename_keeps_the_new_name(
                 name: ProjectName::try_from("p_before")?,
                 description: Description::try_from("created")?,
                 base_path: BasePath::default(),
+                secrets: Vec::new(),
             },
         ))
         .await?
@@ -125,6 +128,7 @@ async fn test_description_update_racing_rename_keeps_the_new_name(
     let rename = ProjectUpdate {
         name: Some(ProjectName::try_from("p_after")?),
         description: None,
+        secrets: None,
     };
     rename_project_roles(conn, &admin(), &p.id, &rename, &current).await?;
     let renamed = ProjectUpdateDB {
@@ -142,6 +146,7 @@ async fn test_description_update_racing_rename_keeps_the_new_name(
         ProjectUpdate {
             name: None,
             description: Some(Description::try_from("described while renamed")?),
+            secrets: None,
         },
     );
     let services = Services::with_defaults(db.clone());

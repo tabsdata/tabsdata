@@ -142,6 +142,7 @@ mod tests {
                     name: ProjectName::try_from("p2")?,
                     description: Description::try_from("p2")?,
                     base_path: BasePath::default(),
+                    secrets: Vec::new(),
                 },
             ))
             .await?

@@ -8,6 +8,7 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{CreateProjects, System, SystemEntity};
+use td_bridge::BridgeProviderHandle;
 use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::FromDao;
@@ -16,23 +17,42 @@ use td_objects::dxo::project::{
     ActiveProjectDB, ActiveProjectDBWithNames, ProjectCreate, ProjectRead,
 };
 use td_objects::errors::SqlError;
+use td_objects::types::basic::ProjectId;
 use td_queries::Queries;
+use tracing::warn;
 
 #[service_factory]
 async fn create_project(
     authz: Ctx<AuthzContext>,
+    bridge: Ctx<BridgeProviderHandle>,
     db: DbPool<Global>,
     request: CreateRequest<ProjectCreate>,
 ) -> Result<ProjectRead, TdError> {
     let (ctx, _, create) = request.into_parts();
-    retrying(|attempt| async {
+    let project_id = ProjectId::default();
+    {
+        let mut connection = db.read().await?;
+        let grant = authz
+            .require::<System, CreateProjects>(&mut connection, &ctx, &SystemEntity)
+            .await?;
+        connection
+            .get(grant)
+            .assert_not_exists::<ActiveProjectDB>(&create.name)
+            .await?;
+    }
+    let secrets = bridge.project_secrets();
+    secrets
+        .upsert(&project_id, &create.name, &create.secrets)
+        .await?;
+    let created = retrying(|attempt| async {
         let mut trx = db.begin(attempt).await?;
         let grant = authz
             .require::<System, CreateProjects>(&mut trx, &ctx, &SystemEntity)
             .await?;
         let conn = trx.get(grant);
 
-        let project = create.clone().to_dao(&ctx);
+        let mut project = create.clone().to_dao(&ctx);
+        project.id = project_id;
         // A duplicate project name reports a clean "already exists" error
         // instead of the raw unique-constraint violation from the insert.
         conn.assert_not_exists::<ActiveProjectDB>(&project.name)
@@ -56,5 +76,11 @@ async fn create_project(
         trx.commit().await?;
         Ok(read)
     })
-    .await
+    .await;
+    if created.is_err()
+        && let Err(error) = secrets.delete(&project_id).await
+    {
+        warn!(project_id = %project_id, "Could not delete the secret of a project not created: {error}");
+    }
+    created
 }

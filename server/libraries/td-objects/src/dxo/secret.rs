@@ -55,6 +55,11 @@ pub struct SecretRead {
 }
 
 #[ta_objects::Dto]
+pub struct SecretsRead {
+    pub secrets: Vec<SecretRead>,
+}
+
+#[ta_objects::Dto]
 pub struct SecretHydrated {
     pub name: SecretName,
     pub entries: Vec<SecretEntry>,

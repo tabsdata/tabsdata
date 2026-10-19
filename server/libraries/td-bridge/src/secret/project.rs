@@ -4,7 +4,7 @@
 
 use super::SecretStore;
 use td_error::TdError;
-use td_objects::dxo::secret::{SecretHydrated, SecretOwner, SecretRead, SecretUpsert};
+use td_objects::dxo::secret::{SecretEntry, SecretHydrated, SecretOwner, SecretRead, SecretUpsert};
 use td_objects::types::basic::{EntityName, ProjectId, ProjectName};
 
 pub struct ProjectSecrets<'a> {
@@ -26,6 +26,27 @@ impl<'a> ProjectSecrets<'a> {
         self.store
             .upsert(&SecretOwner::project(project_id)?, &entity, secrets)
             .await
+    }
+
+    pub async fn rename(
+        &self,
+        project_id: &ProjectId,
+        project: &ProjectName,
+    ) -> Result<Vec<SecretRead>, TdError> {
+        let kept: Vec<SecretUpsert> = self
+            .fetch(project_id)
+            .await?
+            .into_iter()
+            .map(|secret| SecretUpsert {
+                name: secret.name,
+                entries: secret
+                    .keys
+                    .into_iter()
+                    .map(|key| SecretEntry { key, value: None })
+                    .collect(),
+            })
+            .collect();
+        self.upsert(project_id, project, &kept).await
     }
 
     pub async fn fetch(&self, project_id: &ProjectId) -> Result<Vec<SecretRead>, TdError> {
