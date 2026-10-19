@@ -310,7 +310,7 @@ version = "60.0.0"
 features = ["async"]
 
 [workspace.dependencies.async-compression]
-version = "0.4.50"
+version = "0.4.51"
 features = ["tokio", "all-algorithms"]
 
 [workspace.dependencies.async-stream]
@@ -344,7 +344,7 @@ version = "0.23.1"
 version = "1.12.1"
 
 [workspace.dependencies.calamine]
-version = "0.36.1"
+version = "0.37.0"
 
 [workspace.dependencies.chrono]
 version = "0.4.45"
@@ -497,7 +497,7 @@ default-features = false
 features = ["client", "config", "runtime", "rustls-tls"]
 
 [workspace.dependencies.libc]
-version = "0.2.190"
+version = "0.2.191"
 
 [workspace.dependencies.libflate]
 version = "2.3.2"
@@ -704,7 +704,7 @@ version = "1.13.3"
 features = ["std"]
 
 [workspace.dependencies.tokio]
-version = "1.53.3"
+version = "1.54.0"
 features = ["full"]
 
 [workspace.dependencies.tokio-cron-scheduler]
@@ -793,7 +793,7 @@ features = ["Win32", "Win32_System_Threading", "Win32_System_Console"]
 version = "0.6.5"
 
 [workspace.dependencies.zstd]
-version = "0.14.2"
+version = "0.14.3"
 features = ["zstdmt"]
 
 [build-dependencies]

@@ -121,9 +121,8 @@ def check_module(module_folder: str, licenses: list[str], modules: list[str]) ->
     if result.returncode != 0:
         logger.error(f"❌ Disallowed go module licenses found in {module_folder}")
         for line in (result.stderr or "").splitlines():
-            stripped = line.strip()
-            if stripped.startswith(("E", "F")) or "not allowed" in stripped:
-                logger.error(f"   {stripped}")
+            if line.strip():
+                logger.error(f"   {line.rstrip()}")
         return False
     logger.info(f"🍏 All go module licenses are allowed in {module_folder}")
     return True

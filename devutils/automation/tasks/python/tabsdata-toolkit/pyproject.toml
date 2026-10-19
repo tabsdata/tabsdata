@@ -4,7 +4,7 @@
 
 [build-system]
 requires = [
-    "setuptools==84.0.0",
+    "setuptools==84.2.0",
     "wheel==0.48.0"
 ]
 build-backend = "setuptools.build_meta"
@@ -42,10 +42,10 @@ dependencies = [
     "colorama==0.4.6",
     "colorlog==6.12.0",
     "cryptography==50.0.2",
-    "distlib==0.4.3",
-    "filelock==4.2.0",
+    "distlib==0.4.4",
+    "filelock==4.2.4",
     "gitpython==3.2.1",
-    "griffe==2.3.2",
+    "griffe==2.4.0",
     "mypy==2.4.0",
     "mypy-extensions==1.1.0",
     "packaging==26.3",
@@ -57,7 +57,7 @@ dependencies = [
     "pyyaml==6.0.3",
     "rich==15.0.0",
     "rich-click==1.9.9",
-    "setuptools==84.0.0",
+    "setuptools==84.2.0",
     "tenacity==9.2.1",
     "textual==8.2.8",
     "textual-plotext==1.0.1",

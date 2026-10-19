@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-sqlalchemy==2.0.54
+sqlalchemy==2.0.55
 polars==2.0.0
 pyarrow==26.0.0
 pandas==3.0.6

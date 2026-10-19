@@ -2,4 +2,4 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-sqlalchemy==2.0.54
+sqlalchemy==2.0.55
