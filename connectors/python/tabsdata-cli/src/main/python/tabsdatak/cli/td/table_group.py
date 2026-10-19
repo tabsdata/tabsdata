@@ -185,7 +185,7 @@ def download(
         raise click.ClickException(f"Failed to download table: {e}")
 
 
-@table.command()
+@table.command(name="list")
 @proj_option
 @click.option(
     "--coll",
@@ -230,7 +230,7 @@ def download(
 @format_option
 @max_result_option
 @click.pass_context
-def list(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
+def list_tables(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
     """List all tables in a collection"""
     verify_login_or_prompt(ctx)
     coll = (

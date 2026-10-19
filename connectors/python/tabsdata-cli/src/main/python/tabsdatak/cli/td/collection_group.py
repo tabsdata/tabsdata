@@ -342,13 +342,13 @@ def connection(ctx: click.Context, fmt: str, name: str):
         raise click.ClickException(f"Failed to display connection: {e}")
 
 
-@collection.command()
+@collection.command(name="list")
 @proj_option
 @all_projects_option
 @format_option
 @max_result_option
 @click.pass_context
-def list(ctx: click.Context, all_projects: bool):
+def list_collections(ctx: click.Context, all_projects: bool):
     """List all collections"""
     verify_login_or_prompt(ctx)
     try:

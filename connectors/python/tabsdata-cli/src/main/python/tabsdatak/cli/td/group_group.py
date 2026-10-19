@@ -121,12 +121,12 @@ def get(ctx: click.Context, name: str):
         raise click.ClickException(f"Failed to display group: {e}")
 
 
-@group.command()
+@group.command(name="list")
 @proj_option
 @format_option
 @max_result_option
 @click.pass_context
-def list(ctx: click.Context):
+def list_groups(ctx: click.Context):
     """List all groups"""
     verify_login_or_prompt(ctx)
     try:

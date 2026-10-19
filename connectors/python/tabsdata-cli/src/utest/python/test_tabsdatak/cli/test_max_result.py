@@ -182,7 +182,7 @@ def test_every_list_command_offers_the_option(argv, tmp_path):
     assert "--max-result" in result.output
 
 
-@pytest.mark.parametrize("command", ["list", "list_perm", "list_user"])
+@pytest.mark.parametrize("command", ["list_roles", "list_perm", "list_user"])
 def test_role_list_commands_offer_the_option(command):
     from tabsdatak.cli.td import role_group
 

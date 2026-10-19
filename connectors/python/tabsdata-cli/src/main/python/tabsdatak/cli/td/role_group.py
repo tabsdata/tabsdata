@@ -432,10 +432,10 @@ def info(ctx: click.Context, name: str):
         raise click.ClickException(f"Failed to display role: {e}")
 
 
-@role.command()
+@role.command(name="list")
 @max_result_option
 @click.pass_context
-def list(ctx: click.Context):
+def list_roles(ctx: click.Context):
     """List all roles"""
     verify_login_or_prompt(ctx)
     try:

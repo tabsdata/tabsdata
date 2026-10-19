@@ -190,11 +190,11 @@ def get(ctx: click.Context, name: str):
         raise click.ClickException(f"Failed to display project: {e}")
 
 
-@project.command()
+@project.command(name="list")
 @format_option
 @max_result_option
 @click.pass_context
-def list(ctx: click.Context):
+def list_projects(ctx: click.Context):
     """List all projects"""
     verify_login_or_prompt(ctx)
     try:

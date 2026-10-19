@@ -129,11 +129,11 @@ def get(ctx: click.Context, name: str):
         raise click.ClickException(f"Failed to display user: {e}")
 
 
-@user.command()
+@user.command(name="list")
 @format_option
 @max_result_option
 @click.pass_context
-def list(ctx: click.Context):
+def list_users(ctx: click.Context):
     """List all users"""
     verify_login_or_prompt(ctx)
     try:
