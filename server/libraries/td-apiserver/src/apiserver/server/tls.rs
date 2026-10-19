@@ -9,7 +9,6 @@ use axum_server::Handle;
 use axum_server::tls_rustls::RustlsConfig;
 use http::uri::Scheme;
 use std::net::SocketAddr;
-use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -49,20 +48,20 @@ impl Server for TlsServer {
                     .map_err(|e| ServerError::Server(dbg_listener.clone(), e))?
                     .handle(handle.clone())
                     .serve(router.into_make_service_with_connect_info::<SocketAddr>());
+                tokio::pin!(server);
 
-                tokio::select! {
-                    res = server => {
-                        res.map_err(|e| {
-                            error!("Failed to run server listener: {dbg_listener}");
-                            ServerError::Server(dbg_listener.clone(), e)
-                        })
-                    }
+                let served = tokio::select! {
+                    served = &mut server => served,
                     _ = shutdown.cancelled() => {
-                        debug!("Shutdown signal received, stopping listener {dbg_listener}");
-                        handle.graceful_shutdown(Some(Duration::from_secs(10)));
-                        Ok(())
+                        debug!("Stopping server listening on {dbg_listener}");
+                        handle.graceful_shutdown(None);
+                        server.await
                     }
-                }
+                };
+                served.map_err(|e| {
+                    error!("Failed to run server listener: {dbg_listener}");
+                    ServerError::Server(dbg_listener, e)
+                })
             });
 
             handles.push(handle_task);
