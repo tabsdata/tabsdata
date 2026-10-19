@@ -71,17 +71,47 @@ fn a_missing_value_keeps_the_stored_one() {
 }
 
 #[test]
-fn a_missing_value_without_a_stored_one_is_refused() {
+fn an_empty_value_replaces_the_stored_one() {
+    let stored = [hydrated("warehouse", vec![entry("password", Some("old"))])];
+    let desired = [secret("warehouse", vec![entry("password", Some(""))])];
+    let merged = merge_kept(&desired, &stored).unwrap();
+    assert_eq!(
+        values(&merged),
+        vec![("warehouse".into(), "password".into(), Some("".into()))]
+    );
+}
+
+#[test]
+fn keeping_a_value_ignores_the_case_of_names_and_keys() {
+    let stored = [hydrated("warehouse", vec![entry("password", Some("old"))])];
+    let desired = [secret("Warehouse", vec![entry("PASSWORD", None)])];
+    let merged = merge_kept(&desired, &stored).unwrap();
+    assert_eq!(
+        values(&merged),
+        vec![("Warehouse".into(), "PASSWORD".into(), Some("old".into()))]
+    );
+}
+
+#[test]
+fn a_missing_value_without_a_stored_one_becomes_empty() {
     let stored = [hydrated("warehouse", vec![entry("user", Some("admin"))])];
     let desired = [secret("warehouse", vec![entry("password", None)])];
-    assert!(merge_kept(&desired, &stored).is_err());
+    let merged = merge_kept(&desired, &stored).unwrap();
+    assert_eq!(
+        values(&merged),
+        vec![("warehouse".into(), "password".into(), Some("".into()))]
+    );
 }
 
 #[test]
 fn a_missing_value_does_not_borrow_from_another_secret() {
     let stored = [hydrated("api", vec![entry("password", Some("old"))])];
     let desired = [secret("warehouse", vec![entry("password", None)])];
-    assert!(merge_kept(&desired, &stored).is_err());
+    let merged = merge_kept(&desired, &stored).unwrap();
+    assert_eq!(
+        values(&merged),
+        vec![("warehouse".into(), "password".into(), Some("".into()))]
+    );
 }
 
 #[test]

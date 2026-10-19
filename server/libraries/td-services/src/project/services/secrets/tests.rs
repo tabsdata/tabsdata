@@ -135,20 +135,23 @@ async fn test_create_project_without_secrets_has_none(db: TdPool) -> Result<(), 
 }
 
 #[td_test::test(db)]
-async fn test_create_project_cannot_keep_values_it_never_had(db: TdPool) -> Result<(), TdError> {
+async fn test_create_project_stores_keys_without_values_empty(db: TdPool) -> Result<(), TdError> {
     let services = Services::with_defaults(db);
-    let refused = create(
+    let project = create(
         &services,
         "payments",
-        vec![secret("warehouse", &[("password", None)])],
+        vec![secret(
+            "warehouse",
+            &[("password", None), ("user", Some(""))],
+        )],
     )
-    .await;
-    assert!(refused.is_err());
-    assert!(
-        services
-            .read_project(admin_ctx().read(project_param("payments")))
-            .await
-            .is_err()
+    .await?;
+    assert_eq!(
+        values(&services, &project).await?,
+        [
+            ("warehouse.password".to_owned(), Some(String::new())),
+            ("warehouse.user".to_owned(), Some(String::new())),
+        ]
     );
     Ok(())
 }

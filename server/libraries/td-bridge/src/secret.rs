@@ -3,7 +3,7 @@
 //
 
 use async_trait::async_trait;
-use td_error::{ApiError, TdError, api_error};
+use td_error::TdError;
 use td_objects::dxo::secret::{
     SecretEntry, SecretHydrated, SecretOwner, SecretRead, SecretUpsert, validate_secrets,
 };
@@ -50,45 +50,38 @@ pub fn merge_kept(
     stored: &[SecretHydrated],
 ) -> Result<Vec<SecretHydrated>, TdError> {
     validate_secrets(desired)?;
-    desired
+    Ok(desired
         .iter()
         .map(|secret| {
-            let previous = stored.iter().find(|stored| stored.name == secret.name);
+            let previous = stored
+                .iter()
+                .find(|stored| stored.name.eq_ignore_ascii_case(&secret.name));
             let entries = secret
                 .entries
                 .iter()
                 .map(|entry| {
-                    if entry.value.is_some() {
-                        return Ok(entry.clone());
+                    let value = entry.value.clone().or_else(|| {
+                        previous
+                            .and_then(|previous| {
+                                previous
+                                    .entries
+                                    .iter()
+                                    .find(|stored| stored.key.eq_ignore_ascii_case(&entry.key))
+                            })
+                            .and_then(|stored| stored.value.clone())
+                    });
+                    SecretEntry {
+                        key: entry.key.clone(),
+                        value: Some(value.unwrap_or_default()),
                     }
-                    previous
-                        .and_then(|previous| {
-                            previous
-                                .entries
-                                .iter()
-                                .find(|stored| stored.key == entry.key)
-                        })
-                        .and_then(|stored| stored.value.clone())
-                        .map(|value| SecretEntry {
-                            key: entry.key.clone(),
-                            value: Some(value),
-                        })
-                        .ok_or_else(|| {
-                            api_error!(
-                                ApiError::InputError,
-                                "cannot keep the value of the key '{}' in the secret '{}': none is stored",
-                                entry.key,
-                                secret.name
-                            )
-                        })
                 })
-                .collect::<Result<Vec<_>, TdError>>()?;
-            Ok(SecretHydrated {
+                .collect();
+            SecretHydrated {
                 name: secret.name.clone(),
                 entries,
-            })
+            }
         })
-        .collect()
+        .collect())
 }
 
 #[cfg(test)]
