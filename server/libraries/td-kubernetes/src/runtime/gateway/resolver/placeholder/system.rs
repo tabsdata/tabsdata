@@ -78,6 +78,8 @@ pub enum SystemKey {
     DatabaseSslRootCert,
     #[strum(serialize = "tdk_kminus_api_port")]
     KminusApiPort,
+    #[strum(serialize = "tdk_project_secret_name")]
+    ProjectSecretName,
     #[strum(serialize = "tdk_connection_configmap_name")]
     ConnectionConfigmapName,
     #[strum(serialize = "tdk_connection_secret_name")]
@@ -108,6 +110,7 @@ impl SystemKey {
 #[derive(Debug, Clone, Default)]
 pub struct WorkerSettings {
     pub cron_schedule: Option<String>,
+    pub project_secret_name: Option<String>,
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
 }
@@ -141,6 +144,7 @@ pub struct SystemValues {
     pub database_ssl_mode: Option<String>,
     pub database_ssl_root_cert: Option<String>,
     pub kminus_api_port: Option<String>,
+    pub project_secret_name: Option<String>,
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
     pub cron_schedule: Option<String>,
@@ -181,6 +185,7 @@ impl SystemValues {
             SystemKey::DatabaseSslMode => self.database_ssl_mode.as_deref(),
             SystemKey::DatabaseSslRootCert => self.database_ssl_root_cert.as_deref(),
             SystemKey::KminusApiPort => self.kminus_api_port.as_deref(),
+            SystemKey::ProjectSecretName => self.project_secret_name.as_deref(),
             SystemKey::ConnectionConfigmapName => self.connection_configmap_name.as_deref(),
             SystemKey::ConnectionSecretName => self.connection_secret_name.as_deref(),
             SystemKey::CronSchedule => self.cron_schedule.as_deref(),
@@ -206,6 +211,7 @@ impl SystemValues {
 
     pub fn apply_worker_settings(&mut self, settings: &WorkerSettings) {
         self.cron_schedule = settings.cron_schedule.clone();
+        self.project_secret_name = settings.project_secret_name.clone();
         self.connection_configmap_name = settings.connection_configmap_name.clone();
         self.connection_secret_name = settings.connection_secret_name.clone();
     }

@@ -299,6 +299,7 @@ impl WorkloadFactory {
 fn worker_settings(kit: Option<&FunctionRunKit>) -> WorkerSettings {
     WorkerSettings {
         cron_schedule: kit.and_then(|kit| kit.cron_schedule.clone()),
+        project_secret_name: kit.and_then(|kit| kit.project_secret_name.clone()),
         connection_configmap_name: kit.and_then(|kit| kit.connection_configmap_name.clone()),
         connection_secret_name: kit.and_then(|kit| kit.connection_secret_name.clone()),
     }

@@ -25,4 +25,8 @@ pub enum KubeMessagingError {
         connection_id: String,
         cause: String,
     } = 5003,
+    #[error(
+        "Could not derive the kubernetes name for the secret of project '{project_id}': {cause}."
+    )]
+    ProjectSecretNameDerivationFailed { project_id: String, cause: String } = 5004,
 }

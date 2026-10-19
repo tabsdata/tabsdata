@@ -765,6 +765,10 @@ spec:
               value: "$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
+          envFrom:
+            - secretRef:
+                name: ${{system:tdk_project_secret_name}}
+              prefix: SECRET_PRJ__
           volumeMounts:
             - name: config-run-function
               mountPath: /tabsdata/config

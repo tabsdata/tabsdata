@@ -115,6 +115,45 @@ configs:
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
 pods:
+  function-publisher.yaml:
+    function-publisher_aks.yaml:
+      action: replace
+    function-publisher_docker.yaml:
+      action: replace
+    function-publisher_eks.yaml:
+      action: replace
+    function-publisher_fargate.yaml:
+      action: replace
+    function-publisher_gke.yaml:
+      action: replace
+    function-publisher_kminus.yaml:
+      action: replace
+  function-subscriber.yaml:
+    function-subscriber_aks.yaml:
+      action: replace
+    function-subscriber_docker.yaml:
+      action: replace
+    function-subscriber_eks.yaml:
+      action: replace
+    function-subscriber_fargate.yaml:
+      action: replace
+    function-subscriber_gke.yaml:
+      action: replace
+    function-subscriber_kminus.yaml:
+      action: replace
+  function-transformer.yaml:
+    function-transformer_aks.yaml:
+      action: replace
+    function-transformer_docker.yaml:
+      action: replace
+    function-transformer_eks.yaml:
+      action: replace
+    function-transformer_fargate.yaml:
+      action: replace
+    function-transformer_gke.yaml:
+      action: replace
+    function-transformer_kminus.yaml:
+      action: replace
   tdmanager.yaml:
     tdmanager_aks.yaml:
       action: create

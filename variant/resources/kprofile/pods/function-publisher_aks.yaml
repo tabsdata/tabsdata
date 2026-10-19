@@ -914,6 +914,10 @@ spec:
               value: "${{system:tdk_pyenv_fn_root}}/${{system:tdk_pyenv_scripts_folder}}"
             - name: TD_AFTER_PATH
               value: ""
+          envFrom:
+            - secretRef:
+                name: ${{system:tdk_project_secret_name}}
+              prefix: SECRET_PRJ__
           volumeMounts:
             - name: certs
               mountPath: /tabsdata/certs

@@ -13,9 +13,10 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use td_bridge::messaging::{CronStartRequest, FunctionStartRequest, StageTriggerStartRequest};
 use td_common::worker::{Callback, HttpCallback};
 
+use crate::base::constants::Scope;
 use crate::base::error::kubernetes::messaging::KubeMessagingError;
 use crate::base::labels::LABEL_WORKER_ID;
-use crate::base::naming::to_connection_object_name;
+use crate::base::naming::{to_connection_object_name, to_secrets_object_name};
 use crate::runtime::gateway::messaging::messenger::request::WorkerStartRequest;
 
 const ENV_TD_WORKER: &str = "TD_WORKER";
@@ -47,6 +48,7 @@ pub struct FunctionRunKit {
     pub main_secret: Secret,
     pub latch_configmap: ConfigMap,
     pub common_envfrom: Vec<EnvFromSource>,
+    pub project_secret_name: Option<String>,
     pub connection_configmap_name: Option<String>,
     pub connection_secret_name: Option<String>,
     pub connection_envfrom: Option<EnvFromSource>,
@@ -99,6 +101,14 @@ pub(crate) fn build_worker_run_kit(
         envfrom_secret(&main_name, SECRET_ENV_PREFIX),
         envfrom_configmap(&latch_name),
     ];
+    let project_id = request.project_id();
+    let project_secret_name =
+        to_secrets_object_name(Scope::Project, &project_id).map_err(|error| {
+            KubeMessagingError::ProjectSecretNameDerivationFailed {
+                project_id,
+                cause: error.to_string(),
+            }
+        })?;
     let (connection_configmap_name, connection_secret_name, connection_envfrom) =
         match request.connection_id() {
             Some(connection_id) => {
@@ -122,6 +132,7 @@ pub(crate) fn build_worker_run_kit(
         main_secret: build_secret(&main_name, namespace, &labels, &annotations, secret_data),
         latch_configmap: build_configmap(&latch_name, namespace, &labels, &annotations, latch_data),
         common_envfrom,
+        project_secret_name: Some(project_secret_name),
         connection_configmap_name,
         connection_secret_name,
         connection_envfrom,

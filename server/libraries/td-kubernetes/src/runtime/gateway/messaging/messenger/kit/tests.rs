@@ -99,3 +99,16 @@ fn companions_keep_their_names_and_namespace() {
         Some("tabsdata")
     );
 }
+
+#[test]
+fn every_worker_carries_the_secret_of_its_project() {
+    let request = cron_request();
+    let kit = build_worker_run_kit("crn-wkr20260101-1", "tabsdata", &request).unwrap();
+    assert_eq!(
+        kit.project_secret_name,
+        Some(format!(
+            "td-prj-secret-{}",
+            request.project_id.to_string().to_lowercase()
+        ))
+    );
+}

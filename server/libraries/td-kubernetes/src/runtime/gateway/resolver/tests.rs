@@ -178,6 +178,30 @@ envFrom:
 }
 
 #[tokio::test]
+async fn project_secret_envfrom_materializes_with_its_prefix() {
+    let resolver = resolver_with_system(SystemValues {
+        project_secret_name: Some("td-prj-secret-abc123".to_string()),
+        ..SystemValues::default()
+    });
+    let yaml = "\
+envFrom:
+  - secretRef:
+      name: ${{system:tdk_project_secret_name}}
+    prefix: SECRET_PRJ__
+";
+    let resolved = resolver.materialize(yaml).await.expect("materialize");
+    let parsed: serde_yaml::Value = serde_yaml::from_str(&resolved).expect("yaml");
+    assert_eq!(
+        parsed["envFrom"][0]["secretRef"]["name"].as_str(),
+        Some("td-prj-secret-abc123")
+    );
+    assert_eq!(
+        parsed["envFrom"][0]["prefix"].as_str(),
+        Some("SECRET_PRJ__")
+    );
+}
+
+#[tokio::test]
 async fn resolve_secret_errors_when_env_var_missing() {
     unsafe { std::env::remove_var("TD_RESOLVE_TEST_MISSING__SECRET") };
 
