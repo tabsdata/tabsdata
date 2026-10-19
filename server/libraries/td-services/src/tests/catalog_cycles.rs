@@ -67,9 +67,10 @@ async fn test_table_delete_and_update_of_a_dependant_do_not_deadlock(
 
     let (mut gate, at) = function_service_gate(&db, p.id).await?;
     let conn = gate.get(Grant::asserted("update held open"));
+    let topology_at = conn.topology().bump(&p.id, at).await?;
     let current: FunctionDB = conn.scd2().fetch_one(&reader).await?;
     conn.scd2()
-        .open(&current.re_registered(&admin(), Enabled::TRUE), at)
+        .open(&current.re_registered(&admin(), Enabled::TRUE), topology_at)
         .await?;
     let deleting = delete_t_gone(&db, p.id);
     wait_for_the_delete(&mut gate).await;
@@ -163,8 +164,9 @@ async fn test_table_delete_and_delete_of_a_dependant_do_not_deadlock(
 
     let (mut gate, at) = function_service_gate(&db, p.id).await?;
     let conn = gate.get(Grant::asserted("function delete held open"));
+    let topology_at = conn.topology().bump(&p.id, at).await?;
     let state = FunctionState::load(conn, &reader).await?;
-    apply(conn, &Changes::for_delete(&state, &admin()), at).await?;
+    apply(conn, &Changes::for_delete(&state, &admin()), topology_at).await?;
 
     let deleting = delete_t_gone(&db, p.id);
     wait_for_the_delete(&mut gate).await;
@@ -172,7 +174,7 @@ async fn test_table_delete_and_delete_of_a_dependant_do_not_deadlock(
     let closed = gate
         .get(Grant::asserted("function delete held open"))
         .scd2()
-        .close::<FunctionDB>(&reader, at)
+        .close::<FunctionDB>(&reader, topology_at)
         .await
         .map(|_| ())
         .map_err(TdError::from);
@@ -199,9 +201,10 @@ async fn test_collection_delete_and_update_of_a_dependant_do_not_deadlock(
 
     let (mut gate, at) = function_service_gate(&db, p.id).await?;
     let conn = gate.get(Grant::asserted("update held open"));
+    let topology_at = conn.topology().bump(&p.id, at).await?;
     let current: FunctionDB = conn.scd2().fetch_one(&reader).await?;
     conn.scd2()
-        .open(&current.re_registered(&admin(), Enabled::TRUE), at)
+        .open(&current.re_registered(&admin(), Enabled::TRUE), topology_at)
         .await?;
     let services = Services::with_defaults(db.clone());
     let project = p.id;

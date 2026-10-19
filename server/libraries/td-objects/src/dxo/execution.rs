@@ -10,8 +10,8 @@ use crate::types::basic::{
     Ended, ExecutionId, ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName,
     FunctionOnly, FunctionVersionId, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
     OverrideDisabledTrigger, ProjectId, ProjectName, SkipIfRunning, Started, StatusCount, System,
-    TableName, TableVersionId, TransactionId, TriggerOutcome, TriggerType, TriggeredOn, UserId,
-    UserLabel,
+    TableName, TableVersionId, TopologyVersionId, TransactionId, TriggerOutcome, TriggerType,
+    TriggeredOn, UserId, UserLabel,
 };
 use crate::types::composed::TableVersions;
 use crate::types::json::Json;
@@ -77,6 +77,9 @@ pub struct ExecutionInsertDB {
     pub external_uid: Option<ExternalUid>,
 
     pub recursion_options: Option<Json<RecursionOptions>>,
+
+    /// The project topology version the plan read.
+    pub topology_version_id: TopologyVersionId,
 }
 
 /// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.
@@ -150,6 +153,8 @@ pub struct Execution {
     #[dto(list(filter, order_by))]
     pub trigger_type: TriggerType,
     pub external_uid: Option<ExternalUid>,
+    #[dto(list(filter))]
+    pub topology_version_id: TopologyVersionId,
 
     #[dto(list(filter, filter_like, order_by))]
     pub collection: CollectionName,
@@ -186,6 +191,7 @@ impl FromDao for Execution {
             triggered_by_id: dao.base.base.triggered_by_id,
             trigger_type: dao.base.base.trigger_type,
             external_uid: dao.base.base.external_uid,
+            topology_version_id: dao.base.base.topology_version_id,
             collection: dao.collection,
             collection_deleted: dao.collection_deleted,
             function: dao.function,

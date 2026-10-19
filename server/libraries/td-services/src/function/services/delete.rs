@@ -34,6 +34,7 @@ async fn delete_function(
             .await?;
         let at = gated_trx.locked_at();
         let conn = gated_trx.get(grant);
+        let topology_at = conn.topology().bump(&project, at).await?;
 
         let collection_id_name = &collection_param.collection;
         let _: ActiveCollectionDB = conn.fetch_one(collection_id_name).await?;
@@ -50,9 +51,9 @@ async fn delete_function(
             .fetch_all(FunctionDB::children_of(&current.base.base.function_id))
             .await?;
         for child in &children {
-            delete_one(conn, &ctx, &child.base, at).await?;
+            delete_one(conn, &ctx, &child.base, topology_at).await?;
         }
-        delete_one(conn, &ctx, &current.base.base, at).await?;
+        delete_one(conn, &ctx, &current.base.base, topology_at).await?;
         gated_trx.commit().await
     })
     .await?;

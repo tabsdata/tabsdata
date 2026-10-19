@@ -6,13 +6,14 @@ use crate::function::lifecycle::{ChildOf, delete_one, register_one, update_one};
 use crate::function::workers::register_workers;
 use std::collections::{HashMap, HashSet};
 use td_bridge::BridgeProviderHandle;
-use td_database::access::{InProject, LockInstant, WriteMode};
+use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::and;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{ChildFunction, FunctionDB, FunctionDBWithNames, FunctionInsertDB};
+use td_objects::dxo::topology::TopologyInstant;
 use td_objects::types::basic::{
     Enabled, FunctionId, FunctionName, Parent, ReuseFrozen, TableNameDto, WorkerConfig,
     WorkerTypeDto,
@@ -53,10 +54,10 @@ pub async fn reconcile_children(
     desired: &Option<Vec<ChildFunction>>,
     parent_tables: Option<&HashMap<TableNameDto, TableNameDto>>,
     reuse_frozen_tables: ReuseFrozen,
-    at: LockInstant,
+    topology_at: TopologyInstant,
 ) -> Result<(), TdError> {
     let Some(desired) = desired else {
-        return cascade_enabled(conn, ctx, &parent.function_id, parent.enabled, at).await;
+        return cascade_enabled(conn, ctx, &parent.function_id, parent.enabled, topology_at).await;
     };
 
     let parent_id = Some(Parent::from(parent.function_id));
@@ -68,7 +69,7 @@ pub async fn reconcile_children(
     let declared: HashSet<&FunctionName> = desired.iter().map(|child| &child.name).collect();
     for child in &existing {
         if !declared.contains(&child.base.base.name) {
-            delete_one(conn, ctx, &child.base.base, at).await?;
+            delete_one(conn, ctx, &child.base.base, topology_at).await?;
         }
     }
 
@@ -99,13 +100,22 @@ pub async fn reconcile_children(
                     current,
                     &update,
                     Some(child_of),
-                    at,
+                    topology_at,
                 )
                 .await?;
             }
             None => {
                 let register = child.to_register(reuse_frozen_tables, parent.enabled)?;
-                register_one(conn, ctx, bridge, collection, &register, Some(child_of), at).await?;
+                register_one(
+                    conn,
+                    ctx,
+                    bridge,
+                    collection,
+                    &register,
+                    Some(child_of),
+                    topology_at,
+                )
+                .await?;
             }
         }
     }
@@ -117,7 +127,7 @@ pub async fn cascade_enabled(
     ctx: &RequestContext,
     parent: &FunctionId,
     enabled: Enabled,
-    at: LockInstant,
+    topology_at: TopologyInstant,
 ) -> Result<(), TdError> {
     let children: Vec<FunctionDB> = conn
         .scd2()
@@ -130,8 +140,15 @@ pub async fn cascade_enabled(
         }
         let previous_version_id = Some(child.base.id.clone());
         let updated = child.re_registered(ctx, enabled);
-        conn.scd2().open(&updated, at).await?;
-        register_workers(conn, &updated, &previous_version_id, &no_workers, at).await?;
+        conn.scd2().open(&updated, topology_at).await?;
+        register_workers(
+            conn,
+            &updated,
+            &previous_version_id,
+            &no_workers,
+            topology_at.into(),
+        )
+        .await?;
     }
     Ok(())
 }

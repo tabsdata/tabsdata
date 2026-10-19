@@ -6,6 +6,7 @@ use crate::dxo::crudl::RequestContext;
 use crate::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
 use crate::dxo::graph::GraphEdge;
 use crate::dxo::scd2_interval::Scd2Interval;
+use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionName,
     FunctionVersionId, Parent, Partitioned, Private, ProjectId, SampleLen, SampleOffset,
@@ -20,7 +21,7 @@ use ta_objects::{FromDao, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx, and, o
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(table = "tables", ops(insert), scd2, project_scoped)]
+#[dao(table = "tables", ops(insert), scd2(at = TopologyInstant), project_scoped)]
 pub struct TableInsertDB {
     #[dao(pk)]
     pub id: TableVersionId,
@@ -40,7 +41,7 @@ pub struct TableInsertDB {
 }
 
 #[ta_objects::Dao]
-#[dao(table = "tables", ops(select), scd2, project_scoped)]
+#[dao(table = "tables", ops(select), scd2(at = TopologyInstant), project_scoped)]
 pub struct TableDB {
     #[dao(flatten)]
     pub base: TableInsertDB,
@@ -70,7 +71,7 @@ impl TableDB {
 #[ta_objects::Dao]
 #[dao(
     view = "tables__with_names",
-    scd2,
+    scd2(at = TopologyInstant),
     project_scoped(
         unique_at(CollectionIdName, TableIdName),
         unique_at(CollectionId, TableIdName)

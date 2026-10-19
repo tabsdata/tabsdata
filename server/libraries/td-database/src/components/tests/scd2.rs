@@ -258,11 +258,15 @@ async fn seed_run_prelude(db: &TdPool) {
     seed_prelude(db).await;
     let (fv, ep, tx, fr) = (at_rest(1), at_rest(1), at_rest(1), at_rest(1));
     for stmt in [
+        "INSERT INTO project_topologies (id, project_id, valid_from) \
+         VALUES ('v0', 'p0', '2026-01-01T00:00:00Z')"
+            .to_string(),
         insert_function_version(1, "f-a", "2026-01-01T00:00:00Z"),
         format!(
             "INSERT INTO executions (id, project_id, name, collection_id, function_version_id, \
-               triggered_on, triggered_by_id, function_id) \
-             VALUES ({ep}, 'p0', 'e0', 'c0', {fv}, '2026-01-01T00:00:00Z', 'u0', 'f-a')"
+               triggered_on, triggered_by_id, function_id, topology_version_id) \
+             SELECT {ep}, 'p0', 'e0', 'c0', {fv}, '2026-01-01T00:00:00Z', 'u0', 'f-a', id \
+             FROM project_topologies WHERE project_id = 'p0' AND valid_to = 'infinity'"
         ),
         format!(
             "INSERT INTO transactions (id, project_id, collection_id, execution_id, transaction_by, \

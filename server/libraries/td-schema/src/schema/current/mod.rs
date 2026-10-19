@@ -18,6 +18,7 @@ mod metrics_facts;
 mod permissions;
 mod physical_function_runs;
 mod physical_table_data_versions;
+mod project_topologies;
 mod projects;
 mod roles;
 mod service_tokens;
@@ -41,10 +42,11 @@ use sea_query::{DynIden, IntoIden};
 /// Schema revision within the current major; resets to 1 at each major bump
 /// (cross-major upgrade is refused via `tabsdata_version`). To evolve the
 /// schema, follow the README runbook; `test_schema_ddl_snapshot` gates the DDL.
-pub const VERSION: usize = 15;
+pub const VERSION: usize = 16;
 
 pub use crate::schema::sql::{Changed, Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
 pub use executions::rollup as execution_rollup;
+pub use project_topologies::ProjectTopologies;
 pub use transactions::rollup as transaction_rollup;
 
 /// FK-safe ordering of every entity in the current schema.
@@ -60,6 +62,7 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &service_tokens::Defs,
     &groups::Defs,
     &projects::Defs,
+    &project_topologies::Defs,
     &connections::Defs,
     &collections::Defs,
     &roles::Defs,
@@ -97,6 +100,7 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
 pub(crate) fn project_scoped_tables() -> Vec<DynIden> {
     vec![
         groups::Groups::Table.into_iden(),
+        project_topologies::ProjectTopologies::Table.into_iden(),
         connections::Connections::Table.into_iden(),
         collections::Collections::Table.into_iden(),
         bundles::Bundles::Table.into_iden(),

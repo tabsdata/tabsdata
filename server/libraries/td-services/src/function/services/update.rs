@@ -40,6 +40,7 @@ async fn update_function(
             .await?;
         let at = gated_trx.locked_at();
         let conn = gated_trx.get(grant);
+        let topology_at = conn.topology().bump(&project, at).await?;
 
         let collection_id_name = &collection_param.collection;
         let collection: ActiveCollectionDB = conn.fetch_one(collection_id_name).await?;
@@ -60,7 +61,7 @@ async fn update_function(
             &current,
             &update,
             None,
-            at,
+            topology_at,
         )
         .await?;
         reconcile_children(
@@ -72,7 +73,7 @@ async fn update_function(
             &update.child_functions,
             update.parent_tables.as_ref(),
             update.reuse_frozen_tables,
-            at,
+            topology_at,
         )
         .await?;
 

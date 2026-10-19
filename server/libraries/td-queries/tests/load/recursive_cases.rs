@@ -12,11 +12,12 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::FunctionDB;
-use td_objects::types::basic::{AtTime, Depth};
+use td_objects::types::basic::Depth;
 use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
 
 use crate::harness::{record, seed};
+use td_objects::dxo::topology::ProjectTopologyDB;
 
 /// Both directions, generous depth.
 fn options() -> Result<RecursionOptions, TdError> {
@@ -42,12 +43,15 @@ async fn load_recursive_current(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_recursive_find_at(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let at = AtTime::now();
+    let version = db
+        .scd2()
+        .fetch_one::<ProjectTopologyDB>(&h.project_id)
+        .await?;
     let opts = options()?;
     let t = Instant::now();
     let rows = db
         .scd2()
-        .as_of(&at)
+        .as_of(&version.interval.valid_from)
         .recursive::<DependencyDBWithNames, FunctionDB>(opts)
         .start_at(&h.consumer_function_id)
         .fetch_all()

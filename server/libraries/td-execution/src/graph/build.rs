@@ -12,11 +12,10 @@ use td_error::TdError;
 use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
+use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::dxo::trigger::TriggerDBWithNames;
-use td_objects::sql_condition::SqlCondition;
-use td_objects::types::basic::{AtTime, FunctionId, Scd2ValidFrom, TableId, TriggerVersionId};
+use td_objects::types::basic::{FunctionId, TableId, TriggerVersionId};
 use td_objects::types::recursion::RecursionOptions;
-use td_objects::{ReachableFrom, Scd2Dao, SelectDao, TimelineDao};
 use td_queries::Queries;
 
 pub struct GraphBuilder {
@@ -24,91 +23,38 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    async fn chunked_at<S, D, M: AccessMode>(
-        &self,
-        conn: &mut DomainConnection<Apiserver, S, M>,
-        at: Option<&AtTime>,
-        values: &[impl SqlCondition<D>],
-        extra: impl SqlCondition<D>,
-    ) -> Result<Vec<D>, TdError>
-    where
-        S: SeesProjectRows,
-        D: SelectDao
-            + Scd2Dao<Db = Apiserver>
-            + TimelineDao<VersionOrder = Scd2ValidFrom>
-            + ReachableFrom<S>,
-    {
-        let rows = match at {
-            Some(at) => {
-                conn.scd2()
-                    .as_of(at)
-                    .chunked()
-                    .fetch_all(values, extra)
-                    .await?
-            }
-            None => conn.scd2().chunked().fetch_all(values, extra).await?,
-        };
-        Ok(rows)
-    }
-
     pub async fn find_recursive_trigger_graph<S: SeesProjectRows, M: AccessMode>(
         &self,
         conn: &mut DomainConnection<Apiserver, S, M>,
-        at_time: Option<&AtTime>,
+        topology: &ProjectTopologyDB,
         function_or_table: &FunctionOrTable,
         recursion_options: &RecursionOptions,
     ) -> Result<Vec<TriggerDBWithNames>, TdError> {
         let trigger_graph: Vec<TriggerDBWithNames> = match function_or_table {
-            FunctionOrTable::Function(function_id) => match at_time {
-                Some(at) => {
-                    let walk = conn
-                        .scd2()
-                        .as_of(at)
-                        .recursive(*recursion_options)
-                        .start_at(function_id)
-                        .where_edges(&self.config.trigger_state)
-                        .where_nodes(&self.config.function_state);
-                    let walk = if recursion_options.override_disabled_trigger() {
-                        walk.where_start(FunctionDB::active())
-                    } else {
-                        walk
-                    };
-                    walk.fetch_all().await?
-                }
-                None => {
-                    let walk = conn
-                        .scd2()
-                        .recursive(*recursion_options)
-                        .start_at(function_id)
-                        .where_edges(&self.config.trigger_state)
-                        .where_nodes(&self.config.function_state);
-                    let walk = if recursion_options.override_disabled_trigger() {
-                        walk.where_start(FunctionDB::active())
-                    } else {
-                        walk
-                    };
-                    walk.fetch_all().await?
-                }
-            },
-            FunctionOrTable::Table(table_id) => match at_time {
-                Some(at) => {
-                    conn.scd2()
-                        .as_of(at)
-                        .recursive::<_, TableDB>(*recursion_options)
-                        .start_at(table_id)
-                        .where_edges(&self.config.trigger_state)
-                        .fetch_all()
-                        .await?
-                }
-                None => {
-                    conn.scd2()
-                        .recursive::<_, TableDB>(*recursion_options)
-                        .start_at(table_id)
-                        .where_edges(&self.config.trigger_state)
-                        .fetch_all()
-                        .await?
-                }
-            },
+            FunctionOrTable::Function(function_id) => {
+                let walk = conn
+                    .scd2()
+                    .as_of(&topology.interval.valid_from)
+                    .recursive(*recursion_options)
+                    .start_at(function_id)
+                    .where_edges(&self.config.trigger_state)
+                    .where_nodes(&self.config.function_state);
+                let walk = if recursion_options.override_disabled_trigger() {
+                    walk.where_start(FunctionDB::active())
+                } else {
+                    walk
+                };
+                walk.fetch_all().await?
+            }
+            FunctionOrTable::Table(table_id) => {
+                conn.scd2()
+                    .as_of(&topology.interval.valid_from)
+                    .recursive::<_, TableDB>(*recursion_options)
+                    .start_at(table_id)
+                    .where_edges(&self.config.trigger_state)
+                    .fetch_all()
+                    .await?
+            }
         };
 
         Ok(trigger_graph)
@@ -119,7 +65,7 @@ impl GraphBuilder {
     pub async fn find_children_triggers<S: SeesProjectRows, M: AccessMode>(
         &self,
         conn: &mut DomainConnection<Apiserver, S, M>,
-        at_time: Option<&AtTime>,
+        topology: &ProjectTopologyDB,
         function_id: &FunctionId,
         trigger_graph: &[TriggerDBWithNames],
         recursion_options: &RecursionOptions,
@@ -130,13 +76,19 @@ impl GraphBuilder {
             .chain(std::iter::once(*function_id))
             .collect();
         let parents: Vec<_> = in_graph.iter().map(FunctionDB::children_of).collect();
-        let mut children: Vec<FunctionDB> = self
-            .chunked_at(conn, at_time, &parents, &self.config.function_state)
+        let mut children: Vec<FunctionDB> = conn
+            .scd2()
+            .as_of(&topology.interval.valid_from)
+            .chunked()
+            .fetch_all(&parents, &self.config.function_state)
             .await?;
         if recursion_options.override_disabled_trigger() {
             let start = [FunctionDB::children_of(function_id)];
-            let overridden: Vec<FunctionDB> = self
-                .chunked_at(conn, at_time, &start, FunctionDB::active())
+            let overridden: Vec<FunctionDB> = conn
+                .scd2()
+                .as_of(&topology.interval.valid_from)
+                .chunked()
+                .fetch_all(&start, FunctionDB::active())
                 .await?;
             children.extend(overridden);
         }
@@ -149,8 +101,11 @@ impl GraphBuilder {
             .map(|c| c.base.function_id)
             .unique()
             .collect();
-        let triggers: Vec<TriggerDBWithNames> = self
-            .chunked_at(conn, at_time, &child_ids, &self.config.trigger_state)
+        let triggers: Vec<TriggerDBWithNames> = conn
+            .scd2()
+            .as_of(&topology.interval.valid_from)
+            .chunked()
+            .fetch_all(&child_ids, &self.config.trigger_state)
             .await?;
         let known: HashSet<&TriggerVersionId> =
             trigger_graph.iter().map(|t| &t.base.base.id).collect();
@@ -164,47 +119,28 @@ impl GraphBuilder {
     pub async fn find_recursive_dependency_graph<S: SeesProjectRows, M: AccessMode>(
         &self,
         conn: &mut DomainConnection<Apiserver, S, M>,
-        at_time: Option<&AtTime>,
+        topology: &ProjectTopologyDB,
         function_or_table: &FunctionOrTable,
         recursion_options: &RecursionOptions,
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
         let dep_graph: Vec<DependencyDBWithNames> = match function_or_table {
-            FunctionOrTable::Function(function_id) => match at_time {
-                Some(at) => {
-                    conn.scd2()
-                        .as_of(at)
-                        .recursive(*recursion_options)
-                        .start_at(function_id)
-                        .where_nodes(&self.config.function_state)
-                        .fetch_all()
-                        .await?
-                }
-                None => {
-                    conn.scd2()
-                        .recursive(*recursion_options)
-                        .start_at(function_id)
-                        .where_nodes(&self.config.function_state)
-                        .fetch_all()
-                        .await?
-                }
-            },
-            FunctionOrTable::Table(table_id) => match at_time {
-                Some(at) => {
-                    conn.scd2()
-                        .as_of(at)
-                        .recursive::<_, TableDB>(*recursion_options)
-                        .start_at(table_id)
-                        .fetch_all()
-                        .await?
-                }
-                None => {
-                    conn.scd2()
-                        .recursive::<_, TableDB>(*recursion_options)
-                        .start_at(table_id)
-                        .fetch_all()
-                        .await?
-                }
-            },
+            FunctionOrTable::Function(function_id) => {
+                conn.scd2()
+                    .as_of(&topology.interval.valid_from)
+                    .recursive(*recursion_options)
+                    .start_at(function_id)
+                    .where_nodes(&self.config.function_state)
+                    .fetch_all()
+                    .await?
+            }
+            FunctionOrTable::Table(table_id) => {
+                conn.scd2()
+                    .as_of(&topology.interval.valid_from)
+                    .recursive::<_, TableDB>(*recursion_options)
+                    .start_at(table_id)
+                    .fetch_all()
+                    .await?
+            }
         };
 
         Ok(dep_graph)
@@ -213,16 +149,17 @@ impl GraphBuilder {
     pub async fn main_function_id<S: SeesProjectRows, M: AccessMode>(
         &self,
         conn: &mut DomainConnection<Apiserver, S, M>,
-        at_time: Option<&AtTime>,
+        topology: &ProjectTopologyDB,
         function_or_table: &FunctionOrTable,
     ) -> Result<FunctionId, TdError> {
         let function_id = match function_or_table {
             FunctionOrTable::Function(function_id) => *function_id,
             FunctionOrTable::Table(table_id) => {
-                let table: TableDB = match at_time {
-                    Some(at) => conn.scd2().as_of(at).fetch_one(table_id).await?,
-                    None => conn.scd2().fetch_one(table_id).await?,
-                };
+                let table: TableDB = conn
+                    .scd2()
+                    .as_of(&topology.interval.valid_from)
+                    .fetch_one(table_id)
+                    .await?;
                 table.base.function_id
             }
         };
@@ -271,27 +208,35 @@ impl GraphBuilder {
     pub async fn find_triggered_functions_dependency_graph<S: SeesProjectRows, M: AccessMode>(
         &self,
         conn: &mut DomainConnection<Apiserver, S, M>,
-        at_time: Option<&AtTime>,
+        topology: &ProjectTopologyDB,
         triggered_functions: &[FunctionId],
     ) -> Result<Vec<DependencyDBWithNames>, TdError> {
-        self.chunked_at(conn, at_time, triggered_functions, ())
-            .await
+        Ok(conn
+            .scd2()
+            .as_of(&topology.interval.valid_from)
+            .chunked()
+            .fetch_all(triggered_functions, ())
+            .await?)
     }
 
     pub async fn find_functions_output_tables<S: SeesProjectRows, M: AccessMode>(
         &self,
         conn: &mut DomainConnection<Apiserver, S, M>,
-        at_time: Option<&AtTime>,
+        topology: &ProjectTopologyDB,
         functions: &[FunctionId],
     ) -> Result<Vec<TableDBWithNames>, TdError> {
-        self.chunked_at(conn, at_time, functions, TableDBWithNames::active())
-            .await
+        Ok(conn
+            .scd2()
+            .as_of(&topology.interval.valid_from)
+            .chunked()
+            .fetch_all(functions, TableDBWithNames::active())
+            .await?)
     }
 
     pub async fn find_all_tables_map<S: SeesProjectRows, M: AccessMode>(
         &self,
         conn: &mut DomainConnection<Apiserver, S, M>,
-        at_time: Option<&AtTime>,
+        topology: &ProjectTopologyDB,
         trigger_graph: &[TriggerDBWithNames],
         dep_graph: &[DependencyDBWithNames],
         output_tables: &[TableDBWithNames],
@@ -308,8 +253,12 @@ impl GraphBuilder {
             .unique()
             .collect::<Vec<_>>();
 
-        let all_tables: Vec<TableDBWithNames> =
-            self.chunked_at(conn, at_time, &all_table_ids, ()).await?;
+        let all_tables: Vec<TableDBWithNames> = conn
+            .scd2()
+            .as_of(&topology.interval.valid_from)
+            .chunked()
+            .fetch_all(&all_table_ids, ())
+            .await?;
 
         let all_tables = all_tables
             .into_iter()
@@ -322,7 +271,7 @@ impl GraphBuilder {
     pub async fn find_all_functions_map<S: SeesProjectRows, M: AccessMode>(
         &self,
         conn: &mut DomainConnection<Apiserver, S, M>,
-        at_time: Option<&AtTime>,
+        topology: &ProjectTopologyDB,
         trigger_graph: &[TriggerDBWithNames],
         dep_graph: &[DependencyDBWithNames],
         output_tables: &[TableDBWithNames],
@@ -341,8 +290,11 @@ impl GraphBuilder {
             .unique()
             .collect::<Vec<_>>();
 
-        let all_functions: Vec<FunctionDBWithNames> = self
-            .chunked_at(conn, at_time, &all_function_ids, ())
+        let all_functions: Vec<FunctionDBWithNames> = conn
+            .scd2()
+            .as_of(&topology.interval.valid_from)
+            .chunked()
+            .fetch_all(&all_function_ids, ())
             .await?;
 
         let all_functions = all_functions

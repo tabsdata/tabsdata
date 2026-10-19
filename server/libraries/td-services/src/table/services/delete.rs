@@ -49,6 +49,7 @@ async fn table_delete(
             .await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
+        let topology_at = conn.topology().bump(&project, at).await?;
 
         let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
         let table: TableDBWithNames = conn
@@ -80,12 +81,16 @@ async fn table_delete(
 
         let functions = dependants_of_tables(conn, &table_ids).await?;
         ensure_freezes_on_top(conn, &functions, at).await?;
-        freeze_functions(conn, &functions, &ctx, at).await?;
+        freeze_functions(conn, &functions, &ctx, topology_at).await?;
 
         for table_id in &table_ids {
-            conn.scd2().close::<TriggerDB>(table_id, at).await?;
-            conn.scd2().close::<DependencyDB>(table_id, at).await?;
-            conn.scd2().close::<TableDB>(table_id, at).await?;
+            conn.scd2()
+                .close::<TriggerDB>(table_id, topology_at)
+                .await?;
+            conn.scd2()
+                .close::<DependencyDB>(table_id, topology_at)
+                .await?;
+            conn.scd2().close::<TableDB>(table_id, topology_at).await?;
         }
         trx.commit().await
     })

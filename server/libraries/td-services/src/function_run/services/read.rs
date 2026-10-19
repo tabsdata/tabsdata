@@ -15,7 +15,7 @@ use td_objects::dxo::execution::{ExecutionDB, ExecutionParam};
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRun;
-use td_objects::types::basic::AtTime;
+use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::{FromDao, and};
 use td_queries::Queries;
 
@@ -35,14 +35,17 @@ async fn function_run_read(
     let collection_id_name = collection_param.collection;
     let execution_id = execution_param.execution;
     let execution: ExecutionDB = conn.fetch_one(&execution_id).await?;
-    // No state filter, and at the plan's instant: a run that already happened
+    // No state filter, and as the plan read it: a run that already happened
     // stays readable once its function is frozen, disabled or its collection gone.
-    let at = AtTime::from(execution.base.triggered_on);
+    let topology: ProjectTopologyDB = conn
+        .timeline()
+        .fetch_one(&execution.base.topology_version_id)
+        .await?;
 
     let function_id_name = function_param.function;
     let function: FunctionDBWithNames = conn
         .scd2()
-        .as_of(&at)
+        .as_of(&topology.interval.valid_from)
         .fetch_one(and!(&collection_id_name, &function_id_name))
         .await?;
 

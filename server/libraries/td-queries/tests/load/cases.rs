@@ -583,7 +583,7 @@ pub const LOAD_CASES: &[LoadCase] = &[
     },
     LoadCase {
         name: "scd2::open",
-        covers: &["Scd2::open"],
+        covers: &["Scd2::open", "Topology::bump"],
         family: Family::Latest,
         status: Status::Implemented,
     },

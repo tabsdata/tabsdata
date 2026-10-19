@@ -38,6 +38,7 @@ use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunc
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
 use td_objects::dxo::table::{Table, TableDB};
+use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{
     AtTime, DependencyPos, Depth, EpochMs, FactSide, IncludePrivate, IncludeReplaced, InputIdx,
@@ -46,7 +47,7 @@ use td_objects::types::basic::{
 use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::visible_projects::VisibleProjects;
 use td_queries::Queries;
-use td_queries::test_utils::derive_metrics_facts;
+use td_queries::test_utils::{derive_metrics_facts, topology_write};
 
 type Ptdv = PhysicalTableDataVersionDB;
 
@@ -145,6 +146,10 @@ async fn time_chain_queries(
     let now = AtTime::now();
     let at = now;
     let triggered_at = now;
+    let version = db
+        .scd2()
+        .fetch_one::<ProjectTopologyDB>(&h.project_id)
+        .await?;
     let exec_params = ListQueryParams::<Execution>::try_from(&ListParams::default())?;
 
     let _ = timed!(
@@ -517,7 +522,7 @@ async fn time_chain_queries(
         out,
         "recursive::find_at",
         (db).scd2()
-            .as_of(&at)
+            .as_of(&version.interval.valid_from)
             .recursive::<DependencyDBWithNames, FunctionDB>(opts)
             .start_at(&h.consumer_function_id)
             .fetch_all()
@@ -537,7 +542,7 @@ async fn time_chain_queries(
         out,
         "as_of::list",
         (db).scd2()
-            .as_of(&now)
+            .as_of(&version.interval.valid_from)
             .list::<Function>((), &fn_params)
             .await?
     );
@@ -629,19 +634,19 @@ async fn time_chain_queries(
     // Closes go last: they end the seeded table's open interval, which every
     // read above still expects to find.
     let table_ids = [h.table_id];
-    let locked_now = LockInstant::asserted(Timestamp::default());
+    let (mut conn, version) = topology_write(db, &h.project_id).await?;
     timed_once!(
         out,
         "chunked::close",
-        (db).scd2()
+        conn.scd2()
             .chunked()
-            .close::<TableDB>(&table_ids, (), locked_now)
+            .close::<TableDB>(&table_ids, (), version)
             .await?
     );
     timed_once!(
         out,
         "default::close",
-        db.scd2().close::<TableDB>(&h.table_id, locked_now).await?
+        conn.scd2().close::<TableDB>(&h.table_id, version).await?
     );
 
     Ok(out)

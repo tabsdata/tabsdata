@@ -13,7 +13,6 @@ use ta_services::service::Ctx;
 use td_bridge::messaging::memory::InMemoryOrchestratorMessageQueue;
 use td_bridge::test::TestBridgeProvider;
 use td_bridge::{BridgeProviderHandle, Orchestrator};
-use td_database::access::LockInstant;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt as _;
 use td_error::{ApiError, TdError};
@@ -24,7 +23,7 @@ use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionRegister};
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::worker::{WorkerDB, WorkerParam};
 use td_objects::types::basic::{
-    AccessTokenId, AtTime, BundleId, CollectionIdName, CollectionName, Decorator, FunctionId,
+    AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, FunctionId,
     FunctionIdName, FunctionOnly, FunctionRuntimeValues, LogicalFunctionRunStatus,
     OverrideDisabledTrigger, ProjectId, ReuseFrozen, SkipIfRunning, TableNameDto, UserId,
     WorkerType,
@@ -32,6 +31,7 @@ use td_objects::types::basic::{
 use td_objects::types::composed::TableDependencyDto;
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::{commit_topology_write, topology_write};
 
 const COLLECTION: &str = "c_deleted";
 const FUNCTION: &str = "f_deleted";
@@ -196,10 +196,11 @@ async fn test_resolve_refuses_a_run_whose_function_is_gone(db: TdPool) -> Result
     let workers = function_runners(&db).await?;
     assert_eq!(workers.len(), 1);
 
-    db.scoped(project)
-        .scd2()
-        .close::<FunctionDB>(&function_id, LockInstant::asserted(*AtTime::now()))
+    let (mut conn, version) = topology_write(&db, &project).await?;
+    conn.scd2()
+        .close::<FunctionDB>(&function_id, version)
         .await?;
+    commit_topology_write(conn).await?;
 
     let error = resolve(&db, &workers[0]).await.unwrap_err();
     assert_eq!(error.api_error(), ApiError::NotFound);

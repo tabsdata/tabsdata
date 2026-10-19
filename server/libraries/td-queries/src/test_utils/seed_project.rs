@@ -5,6 +5,7 @@
 use crate::Queries;
 use crate::Writes;
 use td_database::access::InProject;
+use td_database::access::LockInstant;
 use td_database::domain::Apiserver;
 use td_database::pool::scoped::{Scoped, ScopedExt};
 use td_error::TdError;
@@ -12,6 +13,8 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupInsertDB, SYSTEM_GROUPS};
 use td_objects::dxo::project::ProjectInsertDB;
 use td_objects::dxo::project::{ActiveProjectDB, ProjectCreate};
+use td_objects::dxo::topology::ProjectTopologyInsertDB;
+use td_objects::types::basic::TopologyVersionId;
 use td_objects::types::basic::{
     AccessTokenId, BasePath, Description, GroupId, GroupName, ProjectId, ProjectName, System,
     UserId,
@@ -71,6 +74,15 @@ where
         };
         scoped.insert(&group).await?;
     }
+
+    let topology = ProjectTopologyInsertDB {
+        id: TopologyVersionId::default(),
+        project_id: project_db.id,
+    };
+    scoped
+        .scd2()
+        .open(&topology, LockInstant::asserted(*request_context.time))
+        .await?;
 
     Ok(ActiveProjectDB::from(project_db))
 }

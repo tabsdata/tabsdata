@@ -18,12 +18,14 @@ use td_database::access::LockInstant;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
+use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunInsertDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionInsertDB;
 use td_objects::dxo::table::TableDB;
+use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::types::basic::{
-    AtTime, BasePath, FunctionVersionId, LogicalFunctionRunId, LogicalTableDataVersionId,
+    BasePath, FunctionVersionId, LogicalFunctionRunId, LogicalTableDataVersionId,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId,
     TableFunctionParamPos, TableId,
 };
@@ -174,11 +176,15 @@ pub async fn mint_output_table_data_versions(
     fr: &PhysicalFunctionRunInsertDB,
     at: LockInstant,
 ) -> Result<Vec<PhysicalTableDataVersionInsertDB>, TdError> {
-    let planned_at = AtTime::from(lfr.base.triggered_on);
+    let execution: ExecutionDB = conn.fetch_one(&lfr.base.execution_id).await?;
+    let topology: ProjectTopologyDB = conn
+        .timeline()
+        .fetch_one(&execution.base.topology_version_id)
+        .await?;
     let tables: Vec<TableDB> = conn
         .scd2()
-        .as_of(&planned_at)
-        .fetch_all::<TableDB>(&lfr.base.function_id)
+        .as_of(&topology.interval.valid_from)
+        .fetch_all(&lfr.base.function_id)
         .await?;
     let base_path = resolve_output_base_path(conn, &runnable.function_version_id).await?;
     let logical_by_table = logical_versions_by_table(conn, &lfr.base.id).await?;
@@ -203,6 +209,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::table::TableInsertDB;
+    use td_queries::test_utils::{commit_topology_write, topology_write};
 
     /// A logical version per output table — what the plan would have minted.
     /// These are pure-builder tests, so the ids need not exist as rows.
@@ -303,10 +310,9 @@ mod tests {
             table_type: TableType::default(),
             parent_table_id: None,
         };
-        db.scoped(p.id)
-            .scd2()
-            .open(&private, LockInstant::asserted(*AtTime::now()))
-            .await?;
+        let (mut conn, version) = topology_write(&db, &p.id).await?;
+        conn.scd2().open(&private, version).await?;
+        commit_topology_write(conn).await?;
 
         let tables: Vec<TableDB> = db.timeline().fetch_all::<TableDB>(&func.base.id).await?;
         let exec = db.scoped(p.id).seed().execution(&func).await?;

@@ -79,6 +79,7 @@ mod tests {
             triggered_on: TriggeredOn::asserted(Timestamp::default()),
             triggered_by_id: Default::default(),
             recursion_options: Default::default(),
+            topology_version_id: Default::default(),
             trigger_type: TriggerType::Manual,
             external_uid: None,
         }

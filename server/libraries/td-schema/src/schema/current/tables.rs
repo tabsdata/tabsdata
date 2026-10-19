@@ -14,7 +14,7 @@ use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
 use crate::schema::sql::scd2::open_interval;
-use crate::schema::sql::{Scd2TriggerDef, ViewDef};
+use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
@@ -96,17 +96,16 @@ impl Entity for Defs {
                 .and_where(open_interval(Tables::ValidTo))
                 .unique()
                 .to_owned(),
-            // The graph recursion's reference set: every open row of the
-            // tenant filtered on status, with nothing else to lead on.
-            Index::create()
-                .name("tables___project_id__status___current_idx")
-                .table(Tables::Table)
-                .col(Tables::ProjectId)
-                .col(Tables::Status)
-                .and_where(open_interval(Tables::ValidTo))
-                .to_owned(),
             // Keyset pagination: `ORDER BY id` under the tenant predicate.
             Index::create().name("tables___project_id__id___idx").table(Tables::Table).col(Tables::ProjectId).col(Tables::Id).to_owned(),
+            // As-of reads of the project's topology: the rows still open at the
+            // instant, without walking its closed history.
+            Index::create()
+                .name("tables___project_id__valid_to___idx")
+                .table(Tables::Table)
+                .col(Tables::ProjectId)
+                .col(Tables::ValidTo)
+                .to_owned(),
             // At-time `(collection, name)` resolution on every table read and register;
             // an interval predicate cannot use the open-row partial index.
             Index::create()
@@ -174,6 +173,12 @@ impl Entity for Defs {
 
     fn create_db_triggers(&self) -> Vec<Derived> {
         vec![
+            ImmutableColumnsTriggerDef {
+                name: format!("{}__immutable", Tables::Table.to_string()),
+                source_table: Tables::Table.into_iden(),
+                columns: cols_of_except(Tables::ValidTo),
+            }
+            .derived(),
             Scd2TriggerDef {
                 name: format!("{}__scd2_close", Tables::Table.to_string()),
                 source_table: Tables::Table.into_iden(),

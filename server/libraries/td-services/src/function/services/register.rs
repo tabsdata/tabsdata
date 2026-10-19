@@ -36,10 +36,20 @@ async fn register_function(
             .await?;
         let at = gated_trx.locked_at();
         let conn = gated_trx.get(grant);
+        let topology_at = conn.topology().bump(&project, at).await?;
 
         let collection: ActiveCollectionDB = conn.fetch_one(&param.collection).await?;
 
-        let function = register_one(conn, &ctx, &bridge, &collection, &register, None, at).await?;
+        let function = register_one(
+            conn,
+            &ctx,
+            &bridge,
+            &collection,
+            &register,
+            None,
+            topology_at,
+        )
+        .await?;
         reconcile_children(
             conn,
             &ctx,
@@ -49,7 +59,7 @@ async fn register_function(
             &register.child_functions,
             register.parent_tables.as_ref(),
             register.reuse_frozen_tables,
-            at,
+            topology_at,
         )
         .await?;
 

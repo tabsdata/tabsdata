@@ -7,8 +7,6 @@
 //! database keeps them from disturbing the other reads.
 
 use std::time::Instant;
-use td_common::datetime::Timestamp;
-use td_database::access::LockInstant;
 
 use td_database::pool::TdPool;
 use td_error::TdError;
@@ -19,6 +17,7 @@ use td_objects::dxo::table::TableDB;
 use td_objects::types::basic::LogicalFunctionRunStatus;
 use td_objects::types::basic::PhysicalFunctionRunStatus;
 use td_queries::Queries;
+use td_queries::test_utils::topology_write;
 
 use crate::default_write_cases::build_lfri;
 use crate::harness::{record, seed};
@@ -100,10 +99,14 @@ async fn load_scd2_update_chunked(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_chunked_close(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let now = LockInstant::asserted(Timestamp::default());
+    let (mut conn, version) = topology_write(&db, &h.project_id).await?;
     let ids = [h.table_id];
     let t = Instant::now();
-    let r = db.scd2().chunked().close::<TableDB>(&ids, (), now).await?;
+    let r = conn
+        .scd2()
+        .chunked()
+        .close::<TableDB>(&ids, (), version)
+        .await?;
     record(
         "chunked::close",
         profile,
@@ -118,9 +121,9 @@ async fn load_chunked_close(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_default_close(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
-    let now = LockInstant::asserted(Timestamp::default());
+    let (mut conn, version) = topology_write(&db, &h.project_id).await?;
     let t = Instant::now();
-    let r = db.scd2().close::<TableDB>(&h.table_id, now).await?;
+    let r = conn.scd2().close::<TableDB>(&h.table_id, version).await?;
     record(
         "default::close",
         profile,

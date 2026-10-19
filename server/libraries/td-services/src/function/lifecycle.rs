@@ -11,7 +11,7 @@ use crate::function::services::update::assert_function_name_not_exists;
 use crate::function::workers::register_workers;
 use std::collections::HashMap;
 use td_bridge::BridgeProviderHandle;
-use td_database::access::{InProject, LockInstant, WriteMode};
+use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
@@ -21,6 +21,7 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{
     FunctionDB, FunctionDBWithNames, FunctionInsertDB, FunctionRegister, FunctionUpdate,
 };
+use td_objects::dxo::topology::TopologyInstant;
 use td_objects::types::basic::{
     FunctionId, FunctionType, Parent, TableNameDto, WorkerConfig, WorkerTypeDto,
 };
@@ -52,7 +53,7 @@ pub async fn register_one(
     collection: &ActiveCollectionDB,
     register: &FunctionRegister,
     child_of: Option<ChildOf<'_>>,
-    at: LockInstant,
+    topology_at: TopologyInstant,
 ) -> Result<FunctionInsertDB, TdError> {
     conn.scd2()
         .assert_not_exists::<FunctionDBWithNames>(and!(&collection.id, &register.name))
@@ -64,7 +65,7 @@ pub async fn register_one(
         register.to_dao(ctx, collection.id, collection.effective_base_path.clone())?;
     let parent_tables = child_of.map(|child_of| child_of.stamp(&mut function));
     ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
-    conn.scd2().open(&function, at).await?;
+    conn.scd2().open(&function, topology_at).await?;
     claim_bundle(conn, &function).await?;
 
     let state = FunctionState::empty();
@@ -81,7 +82,7 @@ pub async fn register_one(
     register_version(
         conn,
         ctx,
-        at,
+        topology_at,
         collection,
         &function,
         &state,
@@ -102,7 +103,7 @@ pub async fn update_one(
     current: &FunctionDBWithNames,
     update: &FunctionUpdate,
     child_of: Option<ChildOf<'_>>,
-    at: LockInstant,
+    topology_at: TopologyInstant,
 ) -> Result<FunctionInsertDB, TdError> {
     assert_function_name_not_exists(conn, &collection.id, current, update).await?;
 
@@ -110,7 +111,7 @@ pub async fn update_one(
     let mut function = update.to_dao(&previous, ctx)?;
     let parent_tables = child_of.map(|child_of| child_of.stamp(&mut function));
     ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
-    conn.scd2().open(&function, at).await?;
+    conn.scd2().open(&function, topology_at).await?;
     claim_bundle(conn, &function).await?;
 
     let previous_version_id = Some(current.base.base.id.clone());
@@ -128,7 +129,7 @@ pub async fn update_one(
     register_version(
         conn,
         ctx,
-        at,
+        topology_at,
         collection,
         &function,
         &state,
@@ -146,17 +147,24 @@ pub async fn delete_one(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ctx: &RequestContext,
     function: &FunctionInsertDB,
-    at: LockInstant,
+    topology_at: TopologyInstant,
 ) -> Result<(), TdError> {
     let previous_version_id = Some(function.id.clone());
     let state = FunctionState::load(conn, &function.function_id).await?;
     let changes = Changes::for_delete(&state, ctx);
-    apply(conn, &changes, at).await?;
+    apply(conn, &changes, topology_at).await?;
     // An empty workers map so all the previous workers get deleted.
     let empty_workers = Some(HashMap::<WorkerTypeDto, WorkerConfig>::default());
-    register_workers(conn, function, &previous_version_id, &empty_workers, at).await?;
+    register_workers(
+        conn,
+        function,
+        &previous_version_id,
+        &empty_workers,
+        topology_at.into(),
+    )
+    .await?;
     conn.scd2()
-        .close::<FunctionDB>(&function.function_id, at)
+        .close::<FunctionDB>(&function.function_id, topology_at)
         .await?;
     Ok(())
 }

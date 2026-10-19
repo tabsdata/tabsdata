@@ -5,7 +5,7 @@
 use crate::Queries;
 use crate::Writes;
 use ta_objects::and;
-use td_database::access::{InProject, LockInstant};
+use td_database::access::InProject;
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
@@ -14,6 +14,7 @@ use td_objects::dxo::dependency::DependencyInsertDB;
 use td_objects::dxo::function::{FunctionDB, FunctionInsertDB, FunctionRegister};
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::table::TableInsertDB;
+use td_objects::dxo::topology::TopologyInstant;
 use td_objects::dxo::trigger::TriggerInsertDB;
 use td_objects::dxo::worker::WorkerInsertDB;
 use td_objects::types::basic::{
@@ -29,10 +30,11 @@ use td_objects::types::basic::{
 /// triggers) default their `project_id` from that scope.
 pub(crate) async fn seed_function(
     executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    topology_at: TopologyInstant,
     collection: &ActiveCollectionDB,
     function_create: &FunctionRegister,
 ) -> Result<FunctionDB, TdError> {
-    seed_function_with_parent(executor, collection, function_create, None).await
+    seed_function_with_parent(executor, topology_at, collection, function_create, None).await
 }
 
 /// A child function row. A request cannot express a parent, so a test needing
@@ -40,12 +42,14 @@ pub(crate) async fn seed_function(
 /// reconcile that would normally create one.
 pub(crate) async fn seed_child_function(
     executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    topology_at: TopologyInstant,
     collection: &ActiveCollectionDB,
     function_create: &FunctionRegister,
     parent: &FunctionId,
 ) -> Result<FunctionDB, TdError> {
     seed_function_with_parent(
         executor,
+        topology_at,
         collection,
         function_create,
         Some(Parent::from(*parent)),
@@ -55,12 +59,12 @@ pub(crate) async fn seed_child_function(
 
 async fn seed_function_with_parent(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    topology_at: TopologyInstant,
     collection: &ActiveCollectionDB,
     function_create: &FunctionRegister,
     parent_function_id: Option<Parent<FunctionId>>,
 ) -> Result<FunctionDB, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
-    let at = LockInstant::asserted(*request_context.time);
 
     let function_db = FunctionInsertDB {
         id: FunctionVersionId::new(),
@@ -85,7 +89,11 @@ async fn seed_function_with_parent(
         enabled: function_create.enabled.unwrap_or_default(),
     };
 
-    executor.reuse().scd2().open(&function_db, at).await?;
+    executor
+        .reuse()
+        .scd2()
+        .open(&function_db, topology_at)
+        .await?;
 
     if let Some(tables) = &function_create.tables {
         for (pos, table_name) in tables.iter().enumerate() {
@@ -106,7 +114,7 @@ async fn seed_function_with_parent(
                 parent_table_id: None,
             };
 
-            executor.reuse().scd2().open(&table, at).await?;
+            executor.reuse().scd2().open(&table, topology_at).await?;
         }
     }
 
@@ -144,7 +152,11 @@ async fn seed_function_with_parent(
                 system: System::FALSE,
             };
 
-            executor.reuse().scd2().open(&dependency, at).await?;
+            executor
+                .reuse()
+                .scd2()
+                .open(&dependency, topology_at)
+                .await?;
         }
     }
 
@@ -181,7 +193,7 @@ async fn seed_function_with_parent(
                 system: System::FALSE,
             };
 
-            executor.reuse().scd2().open(&trigger, at).await?;
+            executor.reuse().scd2().open(&trigger, topology_at).await?;
         }
     }
 

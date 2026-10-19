@@ -36,6 +36,7 @@ async fn enable_function(
             .await?;
         let at = gated_trx.locked_at();
         let conn = gated_trx.get(grant);
+        let topology_at = conn.topology().bump(&project, at).await?;
 
         let _: ActiveCollectionDB = conn.fetch_one(&collection_param.collection).await?;
 
@@ -50,7 +51,7 @@ async fn enable_function(
 
         let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
         let function = previous.re_registered(&ctx, enable.enabled);
-        conn.scd2().open(&function, at).await?;
+        conn.scd2().open(&function, topology_at).await?;
 
         let previous_version_id = Some(current.base.base.id);
         let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
@@ -61,7 +62,7 @@ async fn enable_function(
             &ctx,
             &current.base.base.function_id,
             enable.enabled,
-            at,
+            topology_at,
         )
         .await?;
 

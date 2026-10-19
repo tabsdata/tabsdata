@@ -103,25 +103,19 @@ const INDEX_CASES: &[IndexCase] = &[
     },
     IndexCase {
         index: "dependencies___function_id___current_idx",
-        served_by: Path("open dependencies of a function: register, graph build"),
-    },
-    IndexCase {
-        index: "dependencies___project_id___current_idx",
-        served_by: Path("graph recursion edge set: every open row of the tenant"),
+        served_by: Path("open dependencies of a function: register"),
     },
     IndexCase {
         index: "dependencies___project_id__id___idx",
         served_by: Path(KEYSET),
     },
     IndexCase {
-        index: "dependencies___table_id___idx",
-        served_by: Path("register and collection delete resolve dependencies on a set of tables"),
+        index: "dependencies___project_id__valid_to___idx",
+        served_by: Path("as-of topology load: the project's rows open at an instant"),
     },
     IndexCase {
         index: "dependencies___table_id___current_idx",
-        served_by: Path(
-            "collection delete and the table-rooted graph build read open dependencies of a set of tables",
-        ),
+        served_by: Path("register and collection delete read open dependencies of a set of tables"),
     },
     IndexCase {
         index: "executions___collection_id__triggered_on__id___idx",
@@ -192,8 +186,8 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path(KEYSET),
     },
     IndexCase {
-        index: "functions___project_id__status___current_idx",
-        served_by: Path("graph recursion reference set: open rows of the tenant by status"),
+        index: "functions___project_id__valid_to___idx",
+        served_by: Path("as-of topology load: the project's rows open at an instant"),
     },
     IndexCase {
         index: "groups___name___idx",
@@ -395,6 +389,14 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Constraint,
     },
     IndexCase {
+        index: "project_topologies___project_id___current_uidx",
+        served_by: Constraint,
+    },
+    IndexCase {
+        index: "project_topologies___project_id__valid_from___uidx",
+        served_by: Constraint,
+    },
+    IndexCase {
         index: "projects___name___live_uidx",
         served_by: Constraint,
     },
@@ -451,8 +453,8 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path(KEYSET),
     },
     IndexCase {
-        index: "tables___project_id__status___current_idx",
-        served_by: Path("graph recursion reference set: open rows of the tenant by status"),
+        index: "tables___project_id__valid_to___idx",
+        served_by: Path("as-of topology load: the project's rows open at an instant"),
     },
     IndexCase {
         index: "tables___table_id___current_uidx",
@@ -507,12 +509,8 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path(KEYSET),
     },
     IndexCase {
-        index: "triggers___project_id__status___current_idx",
-        served_by: Path("graph recursion reference set: open rows of the tenant by status"),
-    },
-    IndexCase {
-        index: "triggers___trigger_by_table_id___idx",
-        served_by: Path("triggers fired by a table at an instant"),
+        index: "triggers___project_id__valid_to___idx",
+        served_by: Path("as-of topology load: the project's rows open at an instant"),
     },
     IndexCase {
         index: "triggers___trigger_by_table_id___current_idx",

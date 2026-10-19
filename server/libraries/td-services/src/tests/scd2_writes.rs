@@ -51,9 +51,11 @@ async fn test_close_racing_an_open_closes_the_new_version(db: TdPool) -> Result<
         &RequestContext::with(AccessTokenId::default(), UserId::admin()),
         Enabled::FALSE,
     );
-    conn.scd2()
-        .open(&next, LockInstant::asserted(*AtTime::now()))
+    let topology_at = conn
+        .topology()
+        .bump(&p.id, LockInstant::asserted(*AtTime::now()))
         .await?;
+    conn.scd2().open(&next, topology_at).await?;
 
     let closing_pools = pools.clone();
     let project = p.id;
@@ -62,10 +64,10 @@ async fn test_close_racing_an_open_closes_the_new_version(db: TdPool) -> Result<
         retrying(|attempt| async {
             let mut closing = closing_pools.begin(attempt).await?;
             let at = closing.locked_at();
-            closing
-                .get(Grant::asserted("close racing the open"))
-                .scd2()
-                .close::<FunctionDB>(&function_id, at)
+            let conn = closing.get(Grant::asserted("close racing the open"));
+            let topology_at = conn.topology().bump(&project, at).await?;
+            conn.scd2()
+                .close::<FunctionDB>(&function_id, topology_at)
                 .await?;
             closing.commit().await
         })
@@ -85,7 +87,7 @@ async fn test_close_racing_an_open_closes_the_new_version(db: TdPool) -> Result<
     let open: Option<FunctionDB> = db.scd2().fetch_optional(&function_id).await?;
     assert!(
         open.is_none(),
-        "F was closed after it was opened, yet a version is still open"
+        "F was closed after it was opened, yet a topology_at is still open"
     );
     Ok(())
 }

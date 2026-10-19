@@ -26,6 +26,7 @@ use crate::daos::metrics::Metrics;
 use crate::daos::projects::Projects;
 use crate::daos::session::Sessions;
 use crate::daos::table_data_versions::TableDataVersions;
+use crate::daos::topology::Topology;
 use crate::generic::chunked::Chunked;
 use crate::generic::for_update::ForUpdate;
 use crate::generic::scd2::Scd2;
@@ -364,6 +365,10 @@ pub trait Queries: QueryExecutor {
 
     fn projects(self) -> Projects<Self> {
         Projects { executor: self }
+    }
+
+    fn topology(self) -> Topology<Self> {
+        Topology { executor: self }
     }
 }
 

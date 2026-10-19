@@ -65,11 +65,13 @@ async fn create_project(
         // default `project_id` from the GUC instead of stamping it by hand, and
         // the connection is typed for it.
         let mut trx = trx.enter_project(&project.id).await?;
+        let at = trx.locked_at();
         let conn = trx.get(grant);
         // A collection resolves its group within its own project, so seed the
         // system groups (default/source/destination) into the new project.
         seed_default_groups(conn, &ctx).await?;
         seed_project_roles(conn, &ctx, &project.id, &project).await?;
+        conn.topology().bump(&project.id, at).await?;
 
         let with_names: ActiveProjectDBWithNames = conn.fetch_one(&project.id).await?;
         let read = ProjectRead::from_dao(with_names)?;

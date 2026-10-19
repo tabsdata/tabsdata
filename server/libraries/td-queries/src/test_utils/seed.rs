@@ -33,9 +33,14 @@ use crate::test_utils::seed_transaction::seed_transaction;
 use crate::test_utils::seed_user::{seed_system_user, seed_user};
 use crate::test_utils::seed_user_role::seed_user_role;
 use crate::test_utils::seed_worker::{seed_function_runner_worker, seed_worker};
+use crate::test_utils::topology::topology_write;
 use crate::{QueryExecutor, Writes};
-use td_database::access::{InProject, SeesProjectRows};
+use std::borrow::Borrow;
+use ta_objects::errors::SqlError;
+use td_database::access::{InProject, RW, SeesProjectRows};
+use td_database::domain::DomainConnection;
 use td_database::domain::{Apiserver, Domained};
+use td_database::pool::TdPool;
 use td_database::pool::scoped::Scoped;
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
@@ -49,6 +54,7 @@ use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::project::ActiveProjectDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::table::TableDB;
+use td_objects::dxo::topology::TopologyInstant;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::UserRoleDB;
@@ -134,29 +140,6 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
         E: Domained<Scope = InProject>,
     {
         seed_cron_execution(self.executor, function_version).await
-    }
-
-    pub async fn function(
-        self,
-        collection: &ActiveCollectionDB,
-        function_create: &FunctionRegister,
-    ) -> Result<FunctionDB, TdError>
-    where
-        E: Domained<Scope = InProject>,
-    {
-        seed_function(self.executor, collection, function_create).await
-    }
-
-    pub async fn child_function(
-        self,
-        collection: &ActiveCollectionDB,
-        function_create: &FunctionRegister,
-        parent: &FunctionId,
-    ) -> Result<FunctionDB, TdError>
-    where
-        E: Domained<Scope = InProject>,
-    {
-        seed_child_function(self.executor, collection, function_create, parent).await
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -286,13 +269,6 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
         seed_group(self.executor, name, description).await
     }
 
-    pub async fn system_tables(self, function: &FunctionDB) -> Result<Vec<TableDB>, TdError>
-    where
-        E: Domained<Scope = InProject>,
-    {
-        seed_system_tables(self.executor, function).await
-    }
-
     pub async fn physical_table_data_version(
         self,
         collection: &ActiveCollectionDB,
@@ -392,4 +368,51 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
         seed_function_runner_worker(self.executor, execution, transaction, physical_function_run)
             .await
     }
+}
+
+/// Topology seeds write as one transaction, as the services do: each is one
+/// topology version.
+impl<P: Borrow<ProjectId> + Clone + Sync> Seed<&Scoped<&TdPool, P>> {
+    async fn topology_write(
+        &self,
+    ) -> Result<(DomainConnection<Apiserver, InProject, RW>, TopologyInstant), TdError> {
+        let (project, pool) = self.executor.clone().into_parts();
+        topology_write(pool, project.borrow()).await
+    }
+
+    pub async fn function(
+        self,
+        collection: &ActiveCollectionDB,
+        function_create: &FunctionRegister,
+    ) -> Result<FunctionDB, TdError> {
+        let (mut conn, topology_at) = self.topology_write().await?;
+        let function = seed_function(&mut conn, topology_at, collection, function_create).await?;
+        conn.commit().await.map_err(failed)?;
+        Ok(function)
+    }
+
+    pub async fn child_function(
+        self,
+        collection: &ActiveCollectionDB,
+        function_create: &FunctionRegister,
+        parent: &FunctionId,
+    ) -> Result<FunctionDB, TdError> {
+        let (mut conn, topology_at) = self.topology_write().await?;
+        let function =
+            seed_child_function(&mut conn, topology_at, collection, function_create, parent)
+                .await?;
+        conn.commit().await.map_err(failed)?;
+        Ok(function)
+    }
+
+    pub async fn system_tables(self, function: &FunctionDB) -> Result<Vec<TableDB>, TdError> {
+        let (mut conn, topology_at) = self.topology_write().await?;
+        let tables = seed_system_tables(&mut conn, topology_at, function).await?;
+        conn.commit().await.map_err(failed)?;
+        Ok(tables)
+    }
+}
+
+fn failed(e: sqlx::Error) -> TdError {
+    SqlError::AnySqlxError("seed".to_string(), e).into()
 }

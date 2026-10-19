@@ -3,6 +3,7 @@
 //
 
 use crate::dxo::scd2_interval::Scd2Interval;
+use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
     CollectionId, CollectionName, FunctionId, ProjectId, System, TableId, TriggerBy, TriggerId,
     TriggerStatus, TriggerVersionId, UserId,
@@ -10,7 +11,7 @@ use crate::types::basic::{
 use ta_objects::sql_condition::SqlCondition;
 
 #[ta_objects::Dao]
-#[dao(table = "triggers", ops(insert), scd2, recursive, project_scoped)]
+#[dao(table = "triggers", ops(insert), scd2(at = TopologyInstant), recursive, project_scoped)]
 pub struct TriggerInsertDB {
     #[dao(pk)]
     pub id: TriggerVersionId,
@@ -29,7 +30,7 @@ pub struct TriggerInsertDB {
 }
 
 #[ta_objects::Dao]
-#[dao(table = "triggers", ops(select), scd2, recursive, project_scoped)]
+#[dao(table = "triggers", ops(select), scd2(at = TopologyInstant), recursive, project_scoped)]
 pub struct TriggerDB {
     #[dao(flatten)]
     pub base: TriggerInsertDB,
@@ -46,7 +47,7 @@ impl TriggerDB {
 }
 
 #[ta_objects::Dao]
-#[dao(view = "triggers__with_names", scd2, recursive, project_scoped)]
+#[dao(view = "triggers__with_names", scd2(at = TopologyInstant), recursive, project_scoped)]
 pub struct TriggerDBWithNames {
     #[dao(flatten)]
     pub base: TriggerDB,

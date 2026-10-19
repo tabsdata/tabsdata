@@ -4,6 +4,7 @@
 
 use crate::dxo::crudl::RequestContext;
 use crate::dxo::scd2_interval::Scd2Interval;
+use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionIdName, CollectionName, ConnectionKind,
@@ -274,7 +275,7 @@ impl FunctionPatch {
 
 #[ta_objects::Dao]
 #[derive(Eq, PartialEq)]
-#[dao(table = "functions", ops(insert), scd2, project_scoped)]
+#[dao(table = "functions", ops(insert), scd2(at = TopologyInstant), project_scoped)]
 pub struct FunctionInsertDB {
     #[dao(pk)]
     pub id: FunctionVersionId,
@@ -308,7 +309,7 @@ pub struct FunctionInsertDB {
 
 #[ta_objects::Dao]
 #[derive(Eq, PartialEq)]
-#[dao(table = "functions", ops(select), scd2, project_scoped)]
+#[dao(table = "functions", ops(select), scd2(at = TopologyInstant), project_scoped)]
 pub struct FunctionDB {
     #[dao(flatten)]
     pub base: FunctionInsertDB,
@@ -446,7 +447,7 @@ impl FromDao for FunctionPatchRecord {
 #[ta_objects::Dao]
 #[dao(
     view = "functions__with_names",
-    scd2,
+    scd2(at = TopologyInstant),
     project_scoped(
         unique_at(CollectionIdName, FunctionIdName),
         unique_at(CollectionId, FunctionIdName)

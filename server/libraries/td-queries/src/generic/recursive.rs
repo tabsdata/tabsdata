@@ -248,17 +248,20 @@ mod tests {
     use crate::primitives::recursive::{
         Direction, direction_versions_cte, recursive_versions_cte, versioned_visible_cte,
     };
+    use crate::test_utils::SeedEntry;
     use chrono::{DateTime, Utc};
     use sea_query::{Asterisk, Query, WithClause};
     use std::sync::LazyLock;
-    use ta_objects::Dao;
+    use ta_objects::{Dao, ReachableFrom};
     use ta_objects::{IntervalColumns, Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
     use td_common::datetime::Timestamp;
-    use td_database::access::LockInstant;
+    use td_database::access::{InProject, LockInstant};
+    use td_database::domain::Apiserver;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::dependency::{DependencyDB, DependencyDBWithNames};
     use td_objects::dxo::function::FunctionDB;
+    use td_objects::dxo::topology::ProjectTopologyDB;
     use td_objects::dxo::trigger::{TriggerDB, TriggerDBWithNames};
     use td_objects::types::basic::{
         AtTime, CollectionId, Depth, FunctionId, Scd2ValidFrom, Scd2ValidTo,
@@ -1153,11 +1156,9 @@ mod tests {
 
     #[td_test::test(db)]
     async fn test_select_active_versions_at_types(db: TdPool) -> Result<(), TdError> {
-        use ta_objects::ReachableFrom;
-        use td_database::access::InProject;
-        use td_database::domain::Apiserver;
         async fn test_query<D, R, V>(
             db: &TdPool,
+            version: &ProjectTopologyDB,
             filter: impl SqlCondition<D>,
             nodes: impl SqlCondition<R>,
             recursion_ref: &V,
@@ -1180,7 +1181,7 @@ mod tests {
         {
             let _result: Vec<D> = db
                 .scd2()
-                .as_of(&*LATER)
+                .as_of(&version.interval.valid_from)
                 .recursive::<D, R>(RecursionOptions::new(Some(Depth::ZERO), None))
                 .start_at(recursion_ref)
                 .where_edges(filter)
@@ -1190,15 +1191,32 @@ mod tests {
             Ok(())
         }
 
-        test_query::<DependencyDB, FunctionDB, _>(&db, (), (), &FunctionId::default()).await?;
-        test_query::<DependencyDB, FunctionDB, _>(&db, (), (), &CollectionId::default()).await?;
-        test_query::<DependencyDBWithNames, FunctionDB, _>(&db, (), (), &FunctionId::default())
+        let p = db.seed().test_project().await?;
+        let version = db.scd2().fetch_one::<ProjectTopologyDB>(&p.id).await?;
+        test_query::<DependencyDB, FunctionDB, _>(&db, &version, (), (), &FunctionId::default())
             .await?;
-        test_query::<DependencyDBWithNames, FunctionDB, _>(&db, (), (), &CollectionId::default())
+        test_query::<DependencyDB, FunctionDB, _>(&db, &version, (), (), &CollectionId::default())
             .await?;
+        test_query::<DependencyDBWithNames, FunctionDB, _>(
+            &db,
+            &version,
+            (),
+            (),
+            &FunctionId::default(),
+        )
+        .await?;
+        test_query::<DependencyDBWithNames, FunctionDB, _>(
+            &db,
+            &version,
+            (),
+            (),
+            &CollectionId::default(),
+        )
+        .await?;
 
         test_query::<TriggerDB, FunctionDB, _>(
             &db,
+            &version,
             TriggerDB::active(),
             (),
             &FunctionId::default(),
@@ -1206,6 +1224,7 @@ mod tests {
         .await?;
         test_query::<TriggerDB, FunctionDB, _>(
             &db,
+            &version,
             TriggerDB::active(),
             (),
             &CollectionId::default(),
@@ -1213,6 +1232,7 @@ mod tests {
         .await?;
         test_query::<TriggerDBWithNames, FunctionDB, _>(
             &db,
+            &version,
             TriggerDBWithNames::active(),
             (),
             &FunctionId::default(),
@@ -1220,6 +1240,7 @@ mod tests {
         .await?;
         test_query::<TriggerDBWithNames, FunctionDB, _>(
             &db,
+            &version,
             TriggerDBWithNames::active(),
             (),
             &CollectionId::default(),

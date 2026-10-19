@@ -108,7 +108,6 @@ mod tests {
     use crate::Services;
     use crate::function::children::ChildFunctionError;
     use std::str::FromStr;
-    use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::TdError;
@@ -120,10 +119,11 @@ mod tests {
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, ProjectId,
         TableNameDto, UserId,
     };
-    use td_objects::types::basic::{AtTime, FunctionVersionId, ReuseFrozen};
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
+    use td_objects::types::basic::{FunctionVersionId, ReuseFrozen};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
+    use td_queries::test_utils::{commit_topology_write, topology_write};
 
     async fn seed_collection_helper(
         db: &TdPool,
@@ -328,10 +328,11 @@ mod tests {
     async fn test_patch_of_deleted_function_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let v0 = seed_function(&db, p.id, "c0", "f0").await;
-        db.scoped(p.id)
-            .scd2()
-            .close::<FunctionDB>(&v0.base.function_id, LockInstant::asserted(*AtTime::now()))
+        let (mut conn, version) = topology_write(&db, &p.id).await?;
+        conn.scd2()
+            .close::<FunctionDB>(&v0.base.function_id, version)
             .await?;
+        commit_topology_write(conn).await?;
 
         let response = Services::with_defaults(db.clone())
             .create_function_patch(patch_request(

@@ -66,6 +66,7 @@ async fn delete_collection(
         let mut trx = db.begin(attempt).await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
+        let topology_at = conn.topology().bump(&project, at).await?;
         // A raced delete loses with not-found instead of silently re-renaming
         // the already-deleted row.
         let collection: ActiveCollectionDB = conn.fetch_one(&collection.id).await?;
@@ -83,21 +84,27 @@ async fn delete_collection(
             .filter(|f| f.base.collection_id != collection.id)
             .collect();
         ensure_freezes_on_top(conn, &dependants, at).await?;
-        freeze_functions(conn, &dependants, &ctx, at).await?;
+        freeze_functions(conn, &dependants, &ctx, topology_at).await?;
         conn.scd2()
             .chunked()
-            .close::<TriggerDB>(&table_ids, (), at)
+            .close::<TriggerDB>(&table_ids, (), topology_at)
             .await?;
-        conn.scd2().close::<TriggerDB>(&collection.id, at).await?;
+        conn.scd2()
+            .close::<TriggerDB>(&collection.id, topology_at)
+            .await?;
         conn.scd2()
             .chunked()
-            .close::<DependencyDB>(&table_ids, (), at)
+            .close::<DependencyDB>(&table_ids, (), topology_at)
             .await?;
         conn.scd2()
-            .close::<DependencyDB>(&collection.id, at)
+            .close::<DependencyDB>(&collection.id, topology_at)
             .await?;
-        conn.scd2().close::<TableDB>(&collection.id, at).await?;
-        conn.scd2().close::<FunctionDB>(&collection.id, at).await?;
+        conn.scd2()
+            .close::<TableDB>(&collection.id, topology_at)
+            .await?;
+        conn.scd2()
+            .close::<FunctionDB>(&collection.id, topology_at)
+            .await?;
         update_deleted_workers(conn, &collection.id, at).await?;
         trx.commit().await?;
         Ok(collection.connection_id)

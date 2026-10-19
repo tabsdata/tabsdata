@@ -13,7 +13,7 @@ use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
 use crate::schema::sql::scd2::open_interval;
-use crate::schema::sql::{Scd2TriggerDef, ViewDef};
+use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
@@ -116,21 +116,20 @@ impl Entity for Defs {
                 .and_where(open_interval(Functions::ValidTo))
                 .unique()
                 .to_owned(),
-            // The graph recursion's reference set: every open row of the
-            // tenant filtered on status, with nothing else to lead on.
-            Index::create()
-                .name("functions___project_id__status___current_idx")
-                .table(Functions::Table)
-                .col(Functions::ProjectId)
-                .col(Functions::Status)
-                .and_where(open_interval(Functions::ValidTo))
-                .to_owned(),
             // Keyset pagination: `ORDER BY id` under the tenant predicate.
             Index::create()
                 .name("functions___project_id__id___idx")
                 .table(Functions::Table)
                 .col(Functions::ProjectId)
                 .col(Functions::Id)
+                .to_owned(),
+            // As-of reads of the project's topology: the rows still open at the
+            // instant, without walking its closed history.
+            Index::create()
+                .name("functions___project_id__valid_to___idx")
+                .table(Functions::Table)
+                .col(Functions::ProjectId)
+                .col(Functions::ValidTo)
                 .to_owned(),
             Index::create()
                 .name("functions___function_id__valid_from__id___idx")
@@ -186,6 +185,12 @@ impl Entity for Defs {
 
     fn create_db_triggers(&self) -> Vec<Derived> {
         vec![
+            ImmutableColumnsTriggerDef {
+                name: format!("{}__immutable", Functions::Table.to_string()),
+                source_table: Functions::Table.into_iden(),
+                columns: cols_of_except(Functions::ValidTo),
+            }
+            .derived(),
             Scd2TriggerDef {
                 name: format!("{}__scd2_close", Functions::Table.to_string()),
                 source_table: Functions::Table.into_iden(),

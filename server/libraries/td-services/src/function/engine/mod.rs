@@ -22,13 +22,13 @@ pub use state::FunctionState;
 
 use crate::function::workers::register_workers;
 use std::collections::HashMap;
-use td_database::access::LockInstant;
 use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::collection::ActiveCollectionDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::FunctionInsertDB;
+use td_objects::dxo::topology::TopologyInstant;
 use td_objects::types::basic::{FunctionVersionId, WorkerConfig, WorkerTypeDto};
 
 /// Bring a function's relations and workers in line with `spec` for the
@@ -38,7 +38,7 @@ use td_objects::types::basic::{FunctionVersionId, WorkerConfig, WorkerTypeDto};
 pub async fn register_version(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ctx: &RequestContext,
-    at: LockInstant,
+    topology_at: TopologyInstant,
     collection: &ActiveCollectionDB,
     function: &FunctionInsertDB,
     state: &FunctionState,
@@ -46,8 +46,22 @@ pub async fn register_version(
     previous_version_id: &Option<FunctionVersionId>,
     workers: &Option<HashMap<WorkerTypeDto, WorkerConfig>>,
 ) -> Result<(), TdError> {
-    let resolved = resolve(conn, collection, &function.function_id, spec, at).await?;
+    let resolved = resolve(
+        conn,
+        collection,
+        &function.function_id,
+        spec,
+        topology_at.into(),
+    )
+    .await?;
     let changes = Changes::for_spec(state, &resolved, function, ctx)?;
-    apply(conn, &changes, at).await?;
-    register_workers(conn, function, previous_version_id, workers, at).await
+    apply(conn, &changes, topology_at).await?;
+    register_workers(
+        conn,
+        function,
+        previous_version_id,
+        workers,
+        topology_at.into(),
+    )
+    .await
 }

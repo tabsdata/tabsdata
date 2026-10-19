@@ -149,6 +149,7 @@ mod tests {
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
+    use td_queries::test_utils::{commit_topology_write, topology_write};
 
     #[td_test::test(db)]
     async fn test_download_bundle(db: TdPool) -> Result<(), TdError> {
@@ -206,10 +207,9 @@ mod tests {
             bundle_id: bundle_b_id,
             ..v1.base.clone()
         };
-        db.scoped(p.id)
-            .scd2()
-            .open(&v2, LockInstant::asserted(*AtTime::now()))
-            .await?;
+        let (mut conn, version) = topology_write(&db, &p.id).await?;
+        conn.scd2().open(&v2, version).await?;
+        commit_topology_write(conn).await?;
 
         let service = context.clone();
 
@@ -284,10 +284,11 @@ mod tests {
 
         // Deleting the function closes its interval, so a prior version of
         // it (v1) — still readable in its own row — is no longer downloadable.
-        db.scoped(p.id)
-            .scd2()
-            .close::<FunctionDB>(&v2.function_id, LockInstant::asserted(*AtTime::now()))
+        let (mut conn, version) = topology_write(&db, &p.id).await?;
+        conn.scd2()
+            .close::<FunctionDB>(&v2.function_id, version)
             .await?;
+        commit_topology_write(conn).await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             FunctionVersionParam {

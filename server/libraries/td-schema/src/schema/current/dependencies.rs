@@ -13,7 +13,7 @@ use crate::schema::Entity;
 use crate::schema::source::Derived;
 use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
-use crate::schema::sql::{Scd2TriggerDef, ViewDef};
+use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "dependencies__with_names"]
@@ -72,15 +72,6 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            // The graph recursion's edge set: every open row of the tenant,
-            // materialized as a CTE, so the traversal's own joins land on it
-            // and not on the table.
-            Index::create()
-                .name("dependencies___project_id___current_idx")
-                .table(Dependencies::Table)
-                .col(Dependencies::ProjectId)
-                .and_where(open_interval(Dependencies::ValidTo))
-                .to_owned(),
             // Keyset pagination: `ORDER BY id` under the tenant predicate.
             Index::create()
                 .name("dependencies___project_id__id___idx")
@@ -88,16 +79,22 @@ impl Entity for Defs {
                 .col(Dependencies::ProjectId)
                 .col(Dependencies::Id)
                 .to_owned(),
-            // Collection delete and the table-rooted graph build read the
-            // open dependencies of a set of tables.
+            // As-of reads of the project's topology: the rows still open at the
+            // instant, without walking its closed history.
+            Index::create()
+                .name("dependencies___project_id__valid_to___idx")
+                .table(Dependencies::Table)
+                .col(Dependencies::ProjectId)
+                .col(Dependencies::ValidTo)
+                .to_owned(),
+            // Register and collection delete read the open dependencies of a
+            // set of tables.
             Index::create()
                 .name("dependencies___table_id___current_idx")
                 .table(Dependencies::Table)
                 .col(Dependencies::TableId)
                 .and_where(open_interval(Dependencies::ValidTo))
                 .to_owned(),
-            // Register and collection delete resolve the dependencies on a set of tables.
-            Index::create().name("dependencies___table_id___idx").table(Dependencies::Table).col(Dependencies::TableId).to_owned(),
             Index::create()
                 .name("dependencies___dependency_id__valid_from__id___idx")
                 .table(Dependencies::Table)
@@ -105,7 +102,7 @@ impl Entity for Defs {
                 .col(Dependencies::ValidFrom)
                 .col(Dependencies::Id)
                 .to_owned(),
-            // For recursive downstream graph traversal (recurse_down column)
+            // A function's dependencies at an instant.
             Index::create().name("dependencies___function_id___idx").table(Dependencies::Table).col(Dependencies::FunctionId).to_owned(),
             Index::create()
                 .name("dependencies___dependency_id___current_uidx")
@@ -155,6 +152,12 @@ impl Entity for Defs {
 
     fn create_db_triggers(&self) -> Vec<Derived> {
         vec![
+            ImmutableColumnsTriggerDef {
+                name: format!("{}__immutable", Dependencies::Table.to_string()),
+                source_table: Dependencies::Table.into_iden(),
+                columns: cols_of_except(Dependencies::ValidTo),
+            }
+            .derived(),
             Scd2TriggerDef {
                 name: format!("{}__scd2_close", Dependencies::Table.to_string()),
                 source_table: Dependencies::Table.into_iden(),

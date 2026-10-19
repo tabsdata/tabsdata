@@ -15,10 +15,15 @@ use crate::logical::mint::{build_function_run, build_output_table_data_versions}
 use std::collections::{HashMap, HashSet};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
+use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalTableDataVersionDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunInsertDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionInsertDB;
 use td_objects::dxo::table::TableDB;
+use td_objects::dxo::topology::ProjectTopologyDB;
+use td_objects::errors::SqlError;
+use td_objects::types::basic::ExecutionId;
+use td_objects::types::basic::TopologyVersionId;
 use td_objects::types::basic::{AtTime, FunctionId, FunctionVersionId, LogicalFunctionRunId};
 use td_queries::Queries;
 use td_queries::metrics_facts::runs_reattempted;
@@ -76,25 +81,62 @@ pub async fn mint_function_runs_on_dispatch(
         .into_iter()
         .collect();
     // As of the plan: a table dropped since planning still gets the version its LTDV promises.
-    let mut function_ids_by_planned_at: HashMap<AtTime, HashSet<FunctionId>> = HashMap::new();
+    let runs: Vec<&LogicalFunctionRunDB> = ready_lfrs.iter().collect();
+    // Each run's tables as its plan read them: its execution's topology version.
+    let execution_ids: Vec<ExecutionId> = runs
+        .iter()
+        .map(|r| r.base.execution_id.clone())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let executions: Vec<ExecutionDB> = conn.chunked().fetch_all(&execution_ids, ()).await?;
+    let versions: Vec<TopologyVersionId> = executions
+        .iter()
+        .map(|e| e.base.topology_version_id.clone())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let topologies: HashMap<TopologyVersionId, ProjectTopologyDB> = conn
+        .timeline()
+        .chunked()
+        .fetch_all::<ProjectTopologyDB>(&versions, ())
+        .await?
+        .into_iter()
+        .map(|v| (v.base.id.clone(), v))
+        .collect();
+    let planned_by_execution: HashMap<ExecutionId, &ProjectTopologyDB> = executions
+        .iter()
+        .map(|e| {
+            topologies
+                .get(&e.base.topology_version_id)
+                .map(|t| (e.base.id.clone(), t))
+                .ok_or_else(SqlError::not_found::<ProjectTopologyDB>)
+        })
+        .collect::<Result<_, _>>()?;
+    let mut function_ids_by_version: HashMap<
+        TopologyVersionId,
+        (&ProjectTopologyDB, HashSet<FunctionId>),
+    > = HashMap::new();
     for lfr in ready_lfrs {
-        function_ids_by_planned_at
-            .entry(AtTime::from(lfr.base.triggered_on))
-            .or_default()
+        let topology = planned_by_execution[&lfr.base.execution_id];
+        function_ids_by_version
+            .entry(topology.base.id.clone())
+            .or_insert_with(|| (topology, HashSet::new()))
+            .1
             .insert(lfr.base.function_id);
     }
-    let mut tables_by_run: HashMap<(AtTime, FunctionId), Vec<TableDB>> = HashMap::new();
-    for (planned_at, function_ids) in &function_ids_by_planned_at {
+    let mut tables_by_run: HashMap<(TopologyVersionId, FunctionId), Vec<TableDB>> = HashMap::new();
+    for (version, (topology, function_ids)) in &function_ids_by_version {
         let function_ids: Vec<FunctionId> = function_ids.iter().copied().collect();
         let tables: Vec<TableDB> = conn
             .scd2()
-            .as_of(planned_at)
+            .as_of(&topology.interval.valid_from)
             .chunked()
-            .fetch_all::<TableDB>(&function_ids, ())
+            .fetch_all(&function_ids, ())
             .await?;
         for t in tables {
             tables_by_run
-                .entry((*planned_at, t.base.function_id))
+                .entry((version.clone(), t.base.function_id))
                 .or_default()
                 .push(t);
         }
@@ -137,7 +179,10 @@ pub async fn mint_function_runs_on_dispatch(
         let fr = build_function_run(lfr, runnable, at, &base_path)?;
         let empty = Vec::new();
         let tables = tables_by_run
-            .get(&(AtTime::from(lfr.base.triggered_on), lfr.base.function_id))
+            .get(&(
+                planned_by_execution[&lfr.base.execution_id].base.id.clone(),
+                lfr.base.function_id,
+            ))
             .unwrap_or(&empty);
         let logical_by_table: HashMap<_, _> = ltdvs_all
             .iter()

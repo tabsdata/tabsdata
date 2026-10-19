@@ -11,6 +11,7 @@ use td_error::TdError;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::execution::ExecutionInsertDB;
 use td_objects::dxo::function::FunctionDB;
+use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::types::basic::{ExecutionId, ExecutionName, TriggerType, TriggeredOn, UserId};
 
 pub(crate) async fn seed_execution(
@@ -32,6 +33,11 @@ async fn _seed_execution(
     function_version: &FunctionDB,
     trigger_type: TriggerType,
 ) -> Result<ExecutionDB, TdError> {
+    let topology: ProjectTopologyDB = executor
+        .reuse()
+        .scd2()
+        .fetch_one(&function_version.project_id)
+        .await?;
     let execution_db = ExecutionInsertDB {
         id: ExecutionId::new(),
         name: Some(ExecutionName::try_from("test_execution")?),
@@ -43,6 +49,7 @@ async fn _seed_execution(
         trigger_type,
         external_uid: None,
         recursion_options: None,
+        topology_version_id: topology.base.id,
     };
 
     // Field-less row; runs on a project-scoped connection so `project_id`

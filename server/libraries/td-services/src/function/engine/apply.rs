@@ -6,13 +6,14 @@ use crate::function::engine::diff::{Changes, TableTransition};
 use crate::function::on_top::ensure_flips_on_top;
 use itertools::Itertools;
 use std::collections::HashMap;
-use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::TableDB;
+use td_objects::dxo::topology::TopologyInstant;
 use td_objects::dxo::trigger::{TriggerDB, TriggerInsertDB};
 use td_objects::types::basic::{FunctionId, TableId, TableStatus, TriggerStatus, TriggerVersionId};
 use td_queries::Queries;
@@ -23,29 +24,35 @@ use td_queries::Queries;
 pub async fn apply(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     changes: &Changes,
-    at: LockInstant,
+    topology_at: TopologyInstant,
 ) -> Result<(), TdError> {
     // Closed first: a table that gets a new id keeps its name, and live names
     // are unique.
     conn.scd2()
         .chunked()
-        .close::<TableDB>(&changes.close_tables, (), at)
-        .await?;
-    conn.scd2().chunked().open(&changes.tables, at).await?;
-    let flips = trigger_flips(conn, &changes.table_transitions, at).await?;
-    conn.scd2().chunked().open(&flips, at).await?;
-    conn.scd2()
-        .chunked()
-        .open(&changes.dependencies, at)
+        .close::<TableDB>(&changes.close_tables, (), topology_at)
         .await?;
     conn.scd2()
         .chunked()
-        .close::<DependencyDB>(&changes.close_dependencies, (), at)
+        .open(&changes.tables, topology_at)
         .await?;
-    conn.scd2().chunked().open(&changes.triggers, at).await?;
+    let flips = trigger_flips(conn, &changes.table_transitions, topology_at).await?;
+    conn.scd2().chunked().open(&flips, topology_at).await?;
     conn.scd2()
         .chunked()
-        .close::<TriggerDB>(&changes.close_triggers, (), at)
+        .open(&changes.dependencies, topology_at)
+        .await?;
+    conn.scd2()
+        .chunked()
+        .close::<DependencyDB>(&changes.close_dependencies, (), topology_at)
+        .await?;
+    conn.scd2()
+        .chunked()
+        .open(&changes.triggers, topology_at)
+        .await?;
+    conn.scd2()
+        .chunked()
+        .close::<TriggerDB>(&changes.close_triggers, (), topology_at)
         .await?;
     Ok(())
 }
@@ -53,7 +60,7 @@ pub async fn apply(
 async fn trigger_flips(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     transitions: &[TableTransition],
-    at: LockInstant,
+    topology_at: TopologyInstant,
 ) -> Result<Vec<TriggerInsertDB>, TdError> {
     if transitions.is_empty() {
         return Ok(Vec::new());
@@ -84,7 +91,7 @@ async fn trigger_flips(
         }
         flipped.push(trigger);
     }
-    ensure_flips_on_top(conn, &flipped, at).await?;
+    ensure_flips_on_top(conn, &flipped, topology_at.into()).await?;
     Ok(flips)
 }
 

@@ -25,6 +25,7 @@ use td_objects::dxo::execution::{
     ExecutionDB, ExecutionInsertDB, ExecutionRequest, ExecutionResponse, TriggerResponse,
 };
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
+use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::types::basic::TriggerOutcome;
 use td_objects::types::basic::{ExecutionId, TriggerType, TriggeredOn};
 use td_objects::types::json::Json;
@@ -89,7 +90,9 @@ pub(crate) async fn execute(
     let recursion_options =
         ExecutionScope::execution_recursion_options(function_only, override_disabled_trigger);
     let config = GraphConfig::defaults(FunctionDB::executable());
-    let graph = generate_plan_graph(conn, config, None, &function_id, &recursion_options).await?;
+    let topology: ProjectTopologyDB = conn.scd2().fetch_one(&function.base.project_id).await?;
+    let graph =
+        generate_plan_graph(conn, config, &topology, &function_id, &recursion_options).await?;
 
     let execution_plan = build_execution_plan(&graph, &function)?;
     validate_execution_plan(transaction_by, &execution_plan)?;
@@ -105,6 +108,7 @@ pub(crate) async fn execute(
         trigger_type,
         external_uid: request.external_uid,
         recursion_options: Some(Json(recursion_options)),
+        topology_version_id: topology.base.id,
     };
     conn.insert(&execution).await?;
 

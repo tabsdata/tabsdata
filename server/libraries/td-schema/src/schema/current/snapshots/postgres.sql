@@ -9,6 +9,8 @@ CREATE TABLE "groups" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id"
 
 CREATE TABLE "projects" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "name" text NOT NULL, "description" text NOT NULL, "base_path" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C", "name_when_deleted" text NULL )
 
+CREATE TABLE "project_topologies" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "valid_from" timestamp with time zone NOT NULL, "valid_to" timestamp with time zone NOT NULL )
+
 CREATE TABLE "connections" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "kind" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C" )
 
 CREATE TABLE "collections" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "name" text NOT NULL, "description" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C", "name_when_deleted" text NULL, "group_id" text NOT NULL COLLATE "C", "base_path" text NULL, "collection_type" text NOT NULL, "connection_id" text NULL COLLATE "C", FOREIGN KEY ("group_id") REFERENCES "groups" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("connection_id") REFERENCES "connections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
@@ -33,7 +35,7 @@ CREATE TABLE "dependencies" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "proje
 
 CREATE TABLE "triggers" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "trigger_id" text NOT NULL COLLATE "C", "function_id" text NOT NULL COLLATE "C", "trigger_by_collection_id" text NOT NULL COLLATE "C", "trigger_by_function_id" text NOT NULL COLLATE "C", "trigger_by_table_id" text NOT NULL COLLATE "C", "status" text NOT NULL, "valid_from" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "system" bool NOT NULL, "valid_to" timestamp with time zone NOT NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
-CREATE TABLE "executions" ( "id" bigint NOT NULL PRIMARY KEY, "project_id" text NOT NULL COLLATE "C", "name" text NULL, "collection_id" text NOT NULL COLLATE "C", "function_version_id" bigint NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL COLLATE "C", "recursion_options" jsonb NULL, "function_id" text NOT NULL DEFAULT '' COLLATE "C", "trigger_type" text NOT NULL DEFAULT 'M', "external_uid" text NULL, "status" text NOT NULL DEFAULT 'S', "started_on" timestamp with time zone NULL, "ended_on" timestamp with time zone NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
+CREATE TABLE "executions" ( "id" bigint NOT NULL PRIMARY KEY, "project_id" text NOT NULL COLLATE "C", "name" text NULL, "collection_id" text NOT NULL COLLATE "C", "function_version_id" bigint NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL COLLATE "C", "recursion_options" jsonb NULL, "function_id" text NOT NULL DEFAULT '' COLLATE "C", "trigger_type" text NOT NULL DEFAULT 'M', "external_uid" text NULL, "status" text NOT NULL DEFAULT 'S', "started_on" timestamp with time zone NULL, "ended_on" timestamp with time zone NULL, "topology_version_id" text NOT NULL COLLATE "C", FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("topology_version_id") REFERENCES "project_topologies" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("function_version_id") REFERENCES "functions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "transactions" ( "id" bigint NOT NULL PRIMARY KEY, "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "execution_id" bigint NOT NULL, "transaction_by" text NOT NULL, "transaction_key" text NOT NULL, "triggered_on" timestamp with time zone NOT NULL, "triggered_by_id" text NOT NULL COLLATE "C", "group_id" text NOT NULL COLLATE "C", "status" text NOT NULL DEFAULT 'S', "started_on" timestamp with time zone NULL, "ended_on" timestamp with time zone NULL, FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("group_id") REFERENCES "groups" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
@@ -52,6 +54,36 @@ CREATE TABLE "workers" ( "id" bigint NOT NULL PRIMARY KEY, "project_id" text NOT
 CREATE TABLE "logical_function_run_inputs" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "execution_id" bigint NOT NULL, "transaction_id" bigint NOT NULL, "logical_function_run_id" bigint NOT NULL, "requirement_logical_table_data_version_id" bigint NULL, "requirement_input_idx" integer NULL, "requirement_dependency_pos" integer NULL, "requirement_version_pos" integer NOT NULL, "requirement_table_version_id" text NULL COLLATE "C", FOREIGN KEY ("collection_id") REFERENCES "collections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("execution_id") REFERENCES "executions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("transaction_id") REFERENCES "transactions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("logical_function_run_id") REFERENCES "logical_function_runs" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT, FOREIGN KEY ("requirement_logical_table_data_version_id") REFERENCES "logical_table_data_versions" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
 
 CREATE TABLE "metrics_facts" ( "ts" timestamp with time zone NOT NULL, "ts_hour_ms" bigint NOT NULL, "ts_day_ms" bigint NOT NULL, "ts_week_ms" bigint NOT NULL, "ts_month_ms" bigint NOT NULL, "project_id" text NOT NULL COLLATE "C", "from_group_id" text NULL COLLATE "C", "from_collection_id" text NULL COLLATE "C", "group_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "execution_id" bigint NOT NULL, "transaction_id" bigint NOT NULL, "function_id" text NOT NULL COLLATE "C", "function_run_id" bigint NOT NULL, "attempt_id" bigint NOT NULL, "attempt_outcome" text NOT NULL, "run_status" text NOT NULL, "replay" bigint NOT NULL, "current" bool NOT NULL, "run_has_inputs" bool NOT NULL, "run_has_outputs" bool NOT NULL, "side" text NOT NULL, "table_id" text NULL COLLATE "C", "table_version_id" bigint NULL, "private" bool NOT NULL, "has_data" bool NOT NULL, "row_count" bigint NOT NULL, "data_bytes" bigint NOT NULL, "first_consumed_on" timestamp with time zone NULL, "edge_kind" text NULL, "edge_first" bool NOT NULL, "edge_first_group" bool NOT NULL, "id" text NOT NULL PRIMARY KEY COLLATE "C" )
+
+CREATE OR REPLACE FUNCTION project_topologies__scd2_close_fn() RETURNS TRIGGER AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('project_topologies:' || NEW.project_id, 0));
+  SELECT COALESCE(MIN(valid_from), 'infinity') INTO NEW.valid_to
+  FROM project_topologies
+  WHERE project_id = NEW.project_id
+    AND (valid_from, id) > (NEW.valid_from, NEW.id);
+  UPDATE project_topologies SET valid_to = NEW.valid_from
+  WHERE project_id = NEW.project_id
+    AND (valid_from, id) < (NEW.valid_from, NEW.id)
+    AND valid_to > NEW.valid_from;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+
+CREATE TRIGGER project_topologies__scd2_close BEFORE INSERT ON project_topologies
+FOR EACH ROW EXECUTE FUNCTION project_topologies__scd2_close_fn()
+
+CREATE OR REPLACE FUNCTION functions__immutable_fn() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'functions is insert-only';
+END;
+$$ LANGUAGE plpgsql
+
+CREATE TRIGGER functions__immutable_no_update BEFORE UPDATE OF id, project_id, collection_id, name, description, decorator, runtime_values, function_id, base_path, stage_id, stage_base_path, storage_version, bundle_id, snippet, valid_from, defined_by_id, status, connector, connection, enabled, function_type, parent_function_id ON functions
+FOR EACH ROW EXECUTE FUNCTION functions__immutable_fn()
+
+CREATE TRIGGER functions__immutable_no_delete BEFORE DELETE ON functions
+FOR EACH ROW EXECUTE FUNCTION functions__immutable_fn()
 
 CREATE OR REPLACE FUNCTION functions__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
@@ -101,6 +133,18 @@ FOR EACH ROW EXECUTE FUNCTION function_patches__immutable_fn()
 CREATE TRIGGER function_patches__immutable_no_delete BEFORE DELETE ON function_patches
 FOR EACH ROW EXECUTE FUNCTION function_patches__immutable_fn()
 
+CREATE OR REPLACE FUNCTION tables__immutable_fn() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'tables is insert-only';
+END;
+$$ LANGUAGE plpgsql
+
+CREATE TRIGGER tables__immutable_no_update BEFORE UPDATE OF id, project_id, collection_id, table_id, name, function_id, function_version_id, function_param_pos, private, partitioned, valid_from, defined_by_id, status, table_type, parent_table_id ON tables
+FOR EACH ROW EXECUTE FUNCTION tables__immutable_fn()
+
+CREATE TRIGGER tables__immutable_no_delete BEFORE DELETE ON tables
+FOR EACH ROW EXECUTE FUNCTION tables__immutable_fn()
+
 CREATE OR REPLACE FUNCTION tables__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('tables:' || NEW.table_id, 0));
@@ -119,6 +163,18 @@ $$ LANGUAGE plpgsql
 CREATE TRIGGER tables__scd2_close BEFORE INSERT ON tables
 FOR EACH ROW EXECUTE FUNCTION tables__scd2_close_fn()
 
+CREATE OR REPLACE FUNCTION dependencies__immutable_fn() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'dependencies is insert-only';
+END;
+$$ LANGUAGE plpgsql
+
+CREATE TRIGGER dependencies__immutable_no_update BEFORE UPDATE OF id, project_id, collection_id, dependency_id, function_id, table_collection_id, table_function_id, table_id, table_versions, dep_pos, valid_from, defined_by_id, system ON dependencies
+FOR EACH ROW EXECUTE FUNCTION dependencies__immutable_fn()
+
+CREATE TRIGGER dependencies__immutable_no_delete BEFORE DELETE ON dependencies
+FOR EACH ROW EXECUTE FUNCTION dependencies__immutable_fn()
+
 CREATE OR REPLACE FUNCTION dependencies__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtextextended('dependencies:' || NEW.dependency_id, 0));
@@ -136,6 +192,18 @@ $$ LANGUAGE plpgsql
 
 CREATE TRIGGER dependencies__scd2_close BEFORE INSERT ON dependencies
 FOR EACH ROW EXECUTE FUNCTION dependencies__scd2_close_fn()
+
+CREATE OR REPLACE FUNCTION triggers__immutable_fn() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'triggers is insert-only';
+END;
+$$ LANGUAGE plpgsql
+
+CREATE TRIGGER triggers__immutable_no_update BEFORE UPDATE OF id, project_id, collection_id, trigger_id, function_id, trigger_by_collection_id, trigger_by_function_id, trigger_by_table_id, status, valid_from, defined_by_id, system ON triggers
+FOR EACH ROW EXECUTE FUNCTION triggers__immutable_fn()
+
+CREATE TRIGGER triggers__immutable_no_delete BEFORE DELETE ON triggers
+FOR EACH ROW EXECUTE FUNCTION triggers__immutable_fn()
 
 CREATE OR REPLACE FUNCTION triggers__scd2_close_fn() RETURNS TRIGGER AS $$
 BEGIN
@@ -312,6 +380,10 @@ CREATE UNIQUE INDEX "projects___name___live_uidx" ON "projects" ("name") WHERE "
 
 CREATE INDEX "projects___resolved_name___idx" ON "projects" ((COALESCE("name_when_deleted", "name")))
 
+CREATE UNIQUE INDEX "project_topologies___project_id__valid_from___uidx" ON "project_topologies" ("project_id", "valid_from")
+
+CREATE UNIQUE INDEX "project_topologies___project_id___current_uidx" ON "project_topologies" ("project_id") WHERE "valid_to" = ('infinity'::timestamptz)
+
 CREATE INDEX "collections___project_id__resolved_name___idx" ON "collections" ("project_id", (COALESCE("name_when_deleted", "name")))
 
 CREATE INDEX "collections___group_id__project_id___idx" ON "collections" ("group_id", "project_id")
@@ -338,9 +410,9 @@ CREATE INDEX "functions___collection_id__name___idx" ON "functions" ("collection
 
 CREATE UNIQUE INDEX "functions___collection_id__name___current_uidx" ON "functions" ("collection_id", "name") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "functions___project_id__status___current_idx" ON "functions" ("project_id", "status") WHERE "valid_to" = ('infinity'::timestamptz)
-
 CREATE INDEX "functions___project_id__id___idx" ON "functions" ("project_id", "id")
+
+CREATE INDEX "functions___project_id__valid_to___idx" ON "functions" ("project_id", "valid_to")
 
 CREATE INDEX "functions___function_id__valid_from__id___idx" ON "functions" ("function_id", "valid_from", "id")
 
@@ -356,9 +428,9 @@ CREATE UNIQUE INDEX "function_patches___parent_function_version_id___current_uid
 
 CREATE UNIQUE INDEX "tables___collection_id__name___current_uidx" ON "tables" ("collection_id", "name") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "tables___project_id__status___current_idx" ON "tables" ("project_id", "status") WHERE "valid_to" = ('infinity'::timestamptz)
-
 CREATE INDEX "tables___project_id__id___idx" ON "tables" ("project_id", "id")
+
+CREATE INDEX "tables___project_id__valid_to___idx" ON "tables" ("project_id", "valid_to")
 
 CREATE INDEX "tables___collection_id__name___idx" ON "tables" ("collection_id", "name")
 
@@ -372,13 +444,11 @@ CREATE UNIQUE INDEX "tables___table_id___current_uidx" ON "tables" ("table_id") 
 
 CREATE INDEX "tables___function_id___current_idx" ON "tables" ("function_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "dependencies___project_id___current_idx" ON "dependencies" ("project_id") WHERE "valid_to" = ('infinity'::timestamptz)
-
 CREATE INDEX "dependencies___project_id__id___idx" ON "dependencies" ("project_id", "id")
 
-CREATE INDEX "dependencies___table_id___current_idx" ON "dependencies" ("table_id") WHERE "valid_to" = ('infinity'::timestamptz)
+CREATE INDEX "dependencies___project_id__valid_to___idx" ON "dependencies" ("project_id", "valid_to")
 
-CREATE INDEX "dependencies___table_id___idx" ON "dependencies" ("table_id")
+CREATE INDEX "dependencies___table_id___current_idx" ON "dependencies" ("table_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
 CREATE INDEX "dependencies___dependency_id__valid_from__id___idx" ON "dependencies" ("dependency_id", "valid_from", "id")
 
@@ -388,13 +458,11 @@ CREATE UNIQUE INDEX "dependencies___dependency_id___current_uidx" ON "dependenci
 
 CREATE INDEX "dependencies___function_id___current_idx" ON "dependencies" ("function_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "triggers___project_id__status___current_idx" ON "triggers" ("project_id", "status") WHERE "valid_to" = ('infinity'::timestamptz)
-
 CREATE INDEX "triggers___project_id__id___idx" ON "triggers" ("project_id", "id")
 
-CREATE INDEX "triggers___trigger_by_table_id___current_idx" ON "triggers" ("trigger_by_table_id") WHERE "valid_to" = ('infinity'::timestamptz)
+CREATE INDEX "triggers___project_id__valid_to___idx" ON "triggers" ("project_id", "valid_to")
 
-CREATE INDEX "triggers___trigger_by_table_id___idx" ON "triggers" ("trigger_by_table_id")
+CREATE INDEX "triggers___trigger_by_table_id___current_idx" ON "triggers" ("trigger_by_table_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
 CREATE INDEX "triggers___function_id___idx" ON "triggers" ("function_id")
 
@@ -569,6 +637,16 @@ ALTER TABLE groups FORCE ROW LEVEL SECURITY
 CREATE POLICY project_isolation ON groups USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
 
 CREATE POLICY across_projects ON groups TO td_across_projects USING (true) WITH CHECK (true)
+
+ALTER TABLE project_topologies ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
+
+ALTER TABLE project_topologies ENABLE ROW LEVEL SECURITY
+
+ALTER TABLE project_topologies FORCE ROW LEVEL SECURITY
+
+CREATE POLICY project_isolation ON project_topologies USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON project_topologies TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE connections ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 

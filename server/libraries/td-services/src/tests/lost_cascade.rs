@@ -101,6 +101,7 @@ async fn test_a_registration_racing_a_table_delete_does_not_stay_active(
         .await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("table delete held open"));
+    let topology_at = conn.topology().bump(&p.id, at).await?;
     let table: TableDBWithNames = conn
         .scd2()
         .fetch_one(and!(
@@ -114,9 +115,11 @@ async fn test_a_registration_racing_a_table_delete_does_not_stay_active(
         .iter()
         .map(|f| f.frozen_version(&admin()))
         .collect();
-    conn.scd2().chunked().open(&frozen, at).await?;
-    conn.scd2().close::<TriggerDB>(&table_id, at).await?;
-    conn.scd2().close::<TableDB>(&table_id, at).await?;
+    conn.scd2().chunked().open(&frozen, topology_at).await?;
+    conn.scd2()
+        .close::<TriggerDB>(&table_id, topology_at)
+        .await?;
+    conn.scd2().close::<TableDB>(&table_id, topology_at).await?;
 
     let services = Services::with_defaults(db.clone());
     let project = p.id;

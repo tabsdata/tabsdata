@@ -70,8 +70,9 @@ async fn test_execute_after_waiting_on_a_delete_sees_the_function_gone(
         .await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("function delete"));
+    let topology_at = conn.topology().bump(&p.id, at).await?;
     conn.scd2()
-        .close::<FunctionDB>(&function.base.function_id, at)
+        .close::<FunctionDB>(&function.base.function_id, topology_at)
         .await?;
 
     gate.commit().await?;
@@ -133,12 +134,13 @@ async fn test_execute_after_waiting_on_a_disable_sees_the_function_disabled(
         .await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("function disable"));
+    let topology_at = conn.topology().bump(&p.id, at).await?;
     let current: FunctionDB = conn.timeline().fetch_one(&function.base.id).await?;
     let disabled = current.re_registered(
         &RequestContext::with(AccessTokenId::default(), UserId::admin()),
         Enabled::FALSE,
     );
-    conn.scd2().open(&disabled, at).await?;
+    conn.scd2().open(&disabled, topology_at).await?;
 
     gate.commit().await?;
 

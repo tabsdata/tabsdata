@@ -5,13 +5,14 @@
 use crate::Queries;
 use crate::Writes;
 use ta_objects::and;
-use td_database::access::{InProject, LockInstant};
+use td_database::access::InProject;
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::dependency::DependencyInsertDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::{TableDB, TableDBWithNames, TableInsertDB};
+use td_objects::dxo::topology::TopologyInstant;
 use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
 };
@@ -28,10 +29,10 @@ use td_objects::types::table_ref::Versions;
 // scope.
 pub(crate) async fn seed_system_tables(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    topology_at: TopologyInstant,
     function: &FunctionDB,
 ) -> Result<Vec<TableDB>, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
-    let at = LockInstant::asserted(*request_context.time);
 
     // System tables
     let mut system_tables = vec![];
@@ -52,7 +53,7 @@ pub(crate) async fn seed_system_tables(
             parent_table_id: None,
         };
 
-        executor.reuse().scd2().open(&table, at).await?;
+        executor.reuse().scd2().open(&table, topology_at).await?;
         system_tables.push(table);
     }
 
@@ -84,7 +85,11 @@ pub(crate) async fn seed_system_tables(
             system: System::TRUE,
         };
 
-        executor.reuse().scd2().open(&dependency, at).await?;
+        executor
+            .reuse()
+            .scd2()
+            .open(&dependency, topology_at)
+            .await?;
     }
 
     let ids: Vec<_> = system_tables.iter().map(|t| t.id).collect();

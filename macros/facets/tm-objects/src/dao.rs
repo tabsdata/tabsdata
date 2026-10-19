@@ -371,9 +371,14 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             "an `scd2` row DAO projects its interval: declare `pub interval: Scd2Interval`",
         ));
     }
+    // A timeline of the project itself is partitioned by it, so its payload
+    // names the project; any other `ProjectId` is the policy's to default.
+    let partition = marks.marked_once("partition_by")?.and_then(|f| f.ident.as_ref());
     if parsed.project_scoped.is_some()
         && ops.insert.is_present()
-        && let Some(c) = columns.iter().find(|c| type_names(c.ty, "ProjectId"))
+        && let Some(c) = columns
+            .iter()
+            .find(|c| type_names(c.ty, "ProjectId") && Some(c.name) != partition)
     {
         return Err(syn::Error::new_spanned(
             c.name,

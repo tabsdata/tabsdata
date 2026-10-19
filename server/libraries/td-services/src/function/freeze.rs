@@ -8,11 +8,12 @@
 //! version; a thaw carries them forward again.
 
 use crate::function::workers::stop_triggers;
-use td_database::access::{InProject, LockInstant, WriteMode};
+use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{FunctionDB, FunctionInsertDB};
+use td_objects::dxo::topology::TopologyInstant;
 use td_objects::dxo::worker::{WorkerDB, WorkerFreezeUpdateDB};
 use td_objects::types::basic::WorkerType;
 use td_objects::{and, or};
@@ -22,10 +23,10 @@ pub async fn freeze_functions(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     functions: &[FunctionDB],
     ctx: &RequestContext,
-    at: LockInstant,
+    topology_at: TopologyInstant,
 ) -> Result<(), TdError> {
     let frozen: Vec<FunctionInsertDB> = functions.iter().map(|f| f.frozen_version(ctx)).collect();
-    conn.scd2().chunked().open(&frozen, at).await?;
+    conn.scd2().chunked().open(&frozen, topology_at).await?;
     for (function, frozen) in functions.iter().zip(&frozen) {
         let triggers: Vec<WorkerDB> = conn
             .fetch_all(and!(
@@ -39,7 +40,7 @@ pub async fn freeze_functions(
             };
             conn.update(&update, &worker.base.id).await?;
         }
-        stop_triggers(conn, &triggers, at).await?;
+        stop_triggers(conn, &triggers, topology_at.into()).await?;
     }
     Ok(())
 }

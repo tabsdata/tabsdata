@@ -3,6 +3,7 @@
 //
 
 use crate::dxo::scd2_interval::Scd2Interval;
+use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
     CollectionId, CollectionName, DependencyId, DependencyPos, DependencyVersionId, FunctionId,
     OfTable, ProjectId, System, TableId, UserId,
@@ -11,7 +12,7 @@ use crate::types::composed::TableVersions;
 use ta_objects::sql_condition::SqlCondition;
 
 #[ta_objects::Dao]
-#[dao(table = "dependencies", ops(insert), scd2, recursive, project_scoped)]
+#[dao(table = "dependencies", ops(insert), scd2(at = TopologyInstant), recursive, project_scoped)]
 pub struct DependencyInsertDB {
     #[dao(pk)]
     pub id: DependencyVersionId,
@@ -32,7 +33,7 @@ pub struct DependencyInsertDB {
 }
 
 #[ta_objects::Dao]
-#[dao(table = "dependencies", ops(select), scd2, recursive, project_scoped)]
+#[dao(table = "dependencies", ops(select), scd2(at = TopologyInstant), recursive, project_scoped)]
 pub struct DependencyDB {
     #[dao(flatten)]
     pub base: DependencyInsertDB,
@@ -42,7 +43,7 @@ pub struct DependencyDB {
 }
 
 #[ta_objects::Dao]
-#[dao(view = "dependencies__with_names", scd2, recursive, project_scoped)]
+#[dao(view = "dependencies__with_names", scd2(at = TopologyInstant), recursive, project_scoped)]
 pub struct DependencyDBWithNames {
     #[dao(flatten)]
     pub base: DependencyDB,

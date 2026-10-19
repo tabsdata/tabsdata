@@ -211,7 +211,6 @@ mod tests {
         CronRequest, FunctionRequest, OrchestratorMessagePayload, StageTriggerRequest,
     };
     use td_bridge::test::{StaticWorkloadObserver, TestBridgeProvider};
-    use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_execution::{DispatchGrace, StuckRequestedTimeout};
@@ -235,6 +234,7 @@ mod tests {
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
+    use td_queries::test_utils::{commit_topology_write, topology_write};
 
     /// A recovery tick over an empty cluster observation, so every in-flight
     /// workload reads as missing.
@@ -564,10 +564,9 @@ mod tests {
             defined_by_id: UserId::admin(),
             ..function.base.clone()
         };
-        db.scoped(project_id)
-            .scd2()
-            .open(&newer, LockInstant::asserted(*AtTime::now()))
-            .await?;
+        let (mut conn, version) = topology_write(&db, &project_id).await?;
+        conn.scd2().open(&newer, version).await?;
+        commit_topology_write(conn).await?;
         Ok(())
     }
 

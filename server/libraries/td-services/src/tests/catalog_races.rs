@@ -172,9 +172,13 @@ async fn test_freeze_keeps_a_concurrent_disable(db: TdPool) -> Result<(), TdErro
 
     let (mut gate, at) = function_service_gate(&db, p.id).await?;
     let conn = gate.get(Grant::asserted("disable held open"));
+    let topology_at = conn.topology().bump(&p.id, at).await?;
     let current: FunctionDB = conn.scd2().fetch_one(&reader).await?;
     conn.scd2()
-        .open(&current.re_registered(&admin(), Enabled::FALSE), at)
+        .open(
+            &current.re_registered(&admin(), Enabled::FALSE),
+            topology_at,
+        )
         .await?;
 
     let deleting = delete_t_gone(&db, p.id);
@@ -198,9 +202,10 @@ async fn test_freeze_does_not_resurrect_a_concurrently_deleted_function(
     let reader = setup(&db, p.id).await?;
 
     let (mut gate, at) = function_service_gate(&db, p.id).await?;
-    gate.get(Grant::asserted("delete held open"))
-        .scd2()
-        .close::<FunctionDB>(&reader, at)
+    let conn = gate.get(Grant::asserted("delete held open"));
+    let topology_at = conn.topology().bump(&p.id, at).await?;
+    conn.scd2()
+        .close::<FunctionDB>(&reader, topology_at)
         .await?;
 
     let deleting = delete_t_gone(&db, p.id);
@@ -228,9 +233,10 @@ async fn test_freeze_with_an_older_instant_is_not_lost(db: TdPool) -> Result<(),
     let (mut gate, _) = function_service_gate(&db, p.id).await?;
     let later = LockInstant::asserted(Timestamp::from(**AtTime::now() + TimeDelta::seconds(5)));
     let conn = gate.get(Grant::asserted("update held open"));
+    let topology_at = conn.topology().bump(&p.id, later).await?;
     let current: FunctionDB = conn.scd2().fetch_one(&reader).await?;
     conn.scd2()
-        .open(&current.re_registered(&admin(), Enabled::TRUE), later)
+        .open(&current.re_registered(&admin(), Enabled::TRUE), topology_at)
         .await?;
 
     let deleting = delete_t_gone(&db, p.id);

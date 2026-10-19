@@ -136,6 +136,9 @@ impl RoleId {
 pub struct TableId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct TopologyVersionId(Id);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct TableVersionId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]

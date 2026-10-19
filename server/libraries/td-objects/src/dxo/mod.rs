@@ -53,6 +53,7 @@ pub mod simple_permission;
 pub mod synchrotron;
 pub mod system;
 pub mod table;
+pub mod topology;
 pub mod transaction;
 pub mod trigger;
 pub mod user;

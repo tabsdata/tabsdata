@@ -45,7 +45,8 @@ async fn table_state_download(
     }
     let collection: ResolvedCollectionDB =
         conn.fetch_one(&function.base.base.collection_id).await?;
-    let mut trx = trx.enter_project(&collection.base.project_id).await?;
+    let project = collection.base.project_id;
+    let mut trx = trx.enter_project(&project).await?;
     let conn = trx.get(authz.none());
 
     let system_tables: Vec<TableDBWithNames> = conn

@@ -11,6 +11,7 @@ use super::collections::{Collections, CollectionsResolved};
 use super::functions::Functions;
 use super::logical_function_runs::{LogicalFunctionRuns, run_status_count};
 use super::physical_function_runs::PhysicalFunctionRuns;
+use super::project_topologies::ProjectTopologies;
 use super::projects::{Projects, ProjectsResolved};
 use super::transactions::{TRANSACTION_TERMINALS, Transactions};
 use super::users::Users;
@@ -40,6 +41,7 @@ pub enum Executions {
     Status,
     StartedOn,
     EndedOn,
+    TopologyVersionId,
 }
 
 /// The execution status ladder, over its transactions' statuses: an
@@ -79,10 +81,18 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Executions::Status).text().not_null().default("S"))
                 .col(ColumnDef::new(Executions::StartedOn).timestamp_with_time_zone().null())
                 .col(ColumnDef::new(Executions::EndedOn).timestamp_with_time_zone().null())
+                .col(id_column(Executions::TopologyVersionId).not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Executions::Table, Executions::CollectionId)
                         .to(Collections::Table, Collections::Id)
+                        .on_delete(ForeignKeyAction::Restrict)
+                        .on_update(ForeignKeyAction::Restrict),
+                )
+                .foreign_key(
+                    ForeignKey::create()
+                        .from(Executions::Table, Executions::TopologyVersionId)
+                        .to(ProjectTopologies::Table, ProjectTopologies::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )

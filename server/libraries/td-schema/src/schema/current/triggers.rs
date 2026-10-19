@@ -18,7 +18,7 @@ use crate::schema::Entity;
 use crate::schema::source::Derived;
 use crate::schema::sql::id_column;
 use crate::schema::sql::scd2::open_interval;
-use crate::schema::sql::{Scd2TriggerDef, ViewDef};
+use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except};
 
 /// `triggers__with_names` view name. Re-used inside this file by
 /// `triggers__read` and exposed to consumers.
@@ -81,16 +81,6 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            // The graph recursion's edge set: every open row of the tenant
-            // filtered on status, materialized as a CTE, so the traversal's
-            // own joins land on it and not on the table.
-            Index::create()
-                .name("triggers___project_id__status___current_idx")
-                .table(Triggers::Table)
-                .col(Triggers::ProjectId)
-                .col(Triggers::Status)
-                .and_where(open_interval(Triggers::ValidTo))
-                .to_owned(),
             // Keyset pagination: `ORDER BY id` under the tenant predicate.
             Index::create()
                 .name("triggers___project_id__id___idx")
@@ -98,16 +88,22 @@ impl Entity for Defs {
                 .col(Triggers::ProjectId)
                 .col(Triggers::Id)
                 .to_owned(),
-            // The at-now twin of `trigger_by_table_id`, read per plan build
-            // and on collection delete.
+            // As-of reads of the project's topology: the rows still open at the
+            // instant, without walking its closed history.
+            Index::create()
+                .name("triggers___project_id__valid_to___idx")
+                .table(Triggers::Table)
+                .col(Triggers::ProjectId)
+                .col(Triggers::ValidTo)
+                .to_owned(),
+            // Register and collection delete read the open triggers fired by a
+            // set of tables.
             Index::create()
                 .name("triggers___trigger_by_table_id___current_idx")
                 .table(Triggers::Table)
                 .col(Triggers::TriggerByTableId)
                 .and_where(open_interval(Triggers::ValidTo))
                 .to_owned(),
-            // Register and collection delete resolve the triggers fed by a set of tables.
-            Index::create().name("triggers___trigger_by_table_id___idx").table(Triggers::Table).col(Triggers::TriggerByTableId).to_owned(),
             Index::create().name("triggers___function_id___idx").table(Triggers::Table).col(Triggers::FunctionId).to_owned(),
             Index::create()
                 .name("triggers___trigger_id__valid_from__id___idx")
@@ -148,6 +144,12 @@ impl Entity for Defs {
 
     fn create_db_triggers(&self) -> Vec<Derived> {
         vec![
+            ImmutableColumnsTriggerDef {
+                name: format!("{}__immutable", Triggers::Table.to_string()),
+                source_table: Triggers::Table.into_iden(),
+                columns: cols_of_except(Triggers::ValidTo),
+            }
+            .derived(),
             Scd2TriggerDef {
                 name: format!("{}__scd2_close", Triggers::Table.to_string()),
                 source_table: Triggers::Table.into_iden(),

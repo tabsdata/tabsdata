@@ -13,9 +13,9 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::sql_condition::SqlCondition;
-use td_objects::types::basic::AtTime;
 use td_objects::types::basic::{FunctionId, TableId};
 use td_objects::types::recursion::RecursionOptions;
 
@@ -65,28 +65,28 @@ impl From<&TableId> for FunctionOrTable {
 }
 
 /// Generate the trigger/dependency graph around `function_or_table`, per the
-/// [`GraphConfig`] knobs, live (`None`) or as it existed at `at_time`. The
+/// [`GraphConfig`] knobs, as topology version `topology` holds it. The
 /// children of every function in it are always included, whatever the depth.
 /// Authorization is owned by the calling service (see [`GraphConfig`]).
 pub async fn generate_td_graph<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     config: GraphConfig,
-    at_time: Option<&AtTime>,
+    topology: &ProjectTopologyDB,
     function_or_table: &FunctionOrTable,
     recursion_options: &RecursionOptions,
 ) -> Result<TdGraph, TdError> {
     let builder = GraphBuilder { config };
     let mut trigger_graph = builder
-        .find_recursive_trigger_graph(conn, at_time, function_or_table, recursion_options)
+        .find_recursive_trigger_graph(conn, topology, function_or_table, recursion_options)
         .await?;
     // The main function is always shown, even in a table-centered graph.
     let function_id = builder
-        .main_function_id(conn, at_time, function_or_table)
+        .main_function_id(conn, topology, function_or_table)
         .await?;
     let children_triggers = builder
         .find_children_triggers(
             conn,
-            at_time,
+            topology,
             &function_id,
             &trigger_graph,
             recursion_options,
@@ -96,7 +96,7 @@ pub async fn generate_td_graph<S: SeesProjectRows, M: AccessMode>(
     complete_graph(
         conn,
         &builder,
-        at_time,
+        topology,
         function_or_table,
         recursion_options,
         &function_id,
@@ -105,12 +105,12 @@ pub async fn generate_td_graph<S: SeesProjectRows, M: AccessMode>(
     .await
 }
 
-/// The execution plan graph of `start`: the triggers this edition plans,
-/// plus everything they need to run.
+/// The execution plan graph of `start` at topology version `topology`: the
+/// triggers this edition plans, plus everything they need to run.
 pub async fn generate_plan_graph<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     config: GraphConfig,
-    at_time: Option<&AtTime>,
+    topology: &ProjectTopologyDB,
     start: &FunctionId,
     recursion_options: &RecursionOptions,
 ) -> Result<TdGraph, TdError> {
@@ -119,14 +119,14 @@ pub async fn generate_plan_graph<S: SeesProjectRows, M: AccessMode>(
         let mut source = ConnGraphSource {
             conn: &mut *conn,
             builder: &builder,
-            at_time,
+            topology,
         };
         ExecutionScope::plan_triggers(&mut source, start, recursion_options).await?
     };
     complete_graph(
         conn,
         &builder,
-        at_time,
+        topology,
         &FunctionOrTable::from(start),
         recursion_options,
         start,
@@ -139,7 +139,7 @@ pub async fn generate_plan_graph<S: SeesProjectRows, M: AccessMode>(
 async fn complete_graph<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     builder: &GraphBuilder,
-    at_time: Option<&AtTime>,
+    topology: &ProjectTopologyDB,
     function_or_table: &FunctionOrTable,
     recursion_options: &RecursionOptions,
     function_id: &FunctionId,
@@ -147,25 +147,25 @@ async fn complete_graph<S: SeesProjectRows, M: AccessMode>(
 ) -> Result<TdGraph, TdError> {
     let (dep_graph, function_ids) = if builder.config.include_dependency_functions {
         let dep_graph = builder
-            .find_recursive_dependency_graph(conn, at_time, function_or_table, recursion_options)
+            .find_recursive_dependency_graph(conn, topology, function_or_table, recursion_options)
             .await?;
         let ids = builder.unique_function_ids(function_id, trigger_graph, &dep_graph)?;
         (dep_graph, ids)
     } else {
         let ids = builder.unique_triggered_function_ids(function_id, trigger_graph)?;
         let dep_graph = builder
-            .find_triggered_functions_dependency_graph(conn, at_time, &ids)
+            .find_triggered_functions_dependency_graph(conn, topology, &ids)
             .await?;
         (dep_graph, ids)
     };
     let output_tables = builder
-        .find_functions_output_tables(conn, at_time, &function_ids)
+        .find_functions_output_tables(conn, topology, &function_ids)
         .await?;
     let all_tables_map: HashMap<TableId, _> = builder
-        .find_all_tables_map(conn, at_time, trigger_graph, &dep_graph, &output_tables)
+        .find_all_tables_map(conn, topology, trigger_graph, &dep_graph, &output_tables)
         .await?;
     let all_functions_map: HashMap<FunctionId, FunctionDBWithNames> = builder
-        .find_all_functions_map(conn, at_time, trigger_graph, &dep_graph, &output_tables)
+        .find_all_functions_map(conn, topology, trigger_graph, &dep_graph, &output_tables)
         .await?;
     builder.build_td_graph(
         trigger_graph,

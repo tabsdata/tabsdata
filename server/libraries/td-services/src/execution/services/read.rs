@@ -26,10 +26,11 @@ use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunInputInsertDB,
     LogicalFunctionRunInsertDB,
 };
+use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::dxo::transaction::TransactionValue;
 use td_objects::dxo::transaction::{TransactionDB, TransactionInsertDB};
 use td_objects::sql_condition::SqlCondition;
-use td_objects::types::basic::{AllowDisabled, AtTime, FunctionOnly, OverrideDisabledTrigger};
+use td_objects::types::basic::{AllowDisabled, FunctionOnly, OverrideDisabledTrigger};
 use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
 
@@ -53,7 +54,10 @@ async fn execution_read(
         .require::<Project, ViewProject>(&mut trx, &ctx, &project)
         .await?;
     let conn = trx.get(grant);
-    let at = AtTime::from(execution.base.triggered_on);
+    let topology: ProjectTopologyDB = conn
+        .timeline()
+        .fetch_one(&execution.base.topology_version_id)
+        .await?;
 
     let function: FunctionDBWithNames = conn
         .timeline()
@@ -68,7 +72,7 @@ async fn execution_read(
     };
     let config = GraphConfig::defaults(function_state);
     let graph =
-        generate_plan_graph(conn, config, Some(&at), &function_id, &recursion_options).await?;
+        generate_plan_graph(conn, config, &topology, &function_id, &recursion_options).await?;
 
     let execution_plan = build_execution_plan(&graph, &function)?;
     let transactions: Vec<TransactionInsertDB> = conn
