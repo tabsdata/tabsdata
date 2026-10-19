@@ -6,6 +6,7 @@ use const_format::concatcp;
 
 use crate::base::constants::TABSDATA_LABEL_NAMESPACE;
 
+pub(crate) const LABEL_SCOPE: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "scope");
 pub(crate) const LABEL_PROJECT_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "project-id");
 pub(crate) const LABEL_COLLECTION_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "collection-id");
 pub(crate) const LABEL_CONNECTION_ID: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "connection-id");

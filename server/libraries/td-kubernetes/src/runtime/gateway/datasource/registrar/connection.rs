@@ -11,8 +11,11 @@ use td_objects::dxo::connection::{ConnectionHydrated, ConnectionRead, Connection
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId, ProjectId};
 
 use crate::base::annotations::ANNOTATION_COLLECTION;
+use crate::base::constants::Scope;
 use crate::base::error::connection::KubeConnectionError;
-use crate::base::labels::{LABEL_COLLECTION_ID, LABEL_CONNECTION_ID, LABEL_PROJECT_ID};
+use crate::base::labels::{
+    LABEL_COLLECTION_ID, LABEL_CONNECTION_ID, LABEL_PROJECT_ID, LABEL_SCOPE,
+};
 use crate::base::naming::to_connection_object_name;
 use crate::kube::api::entity::configmap;
 use crate::kube::api::entity::secret;
@@ -168,6 +171,10 @@ fn connection_labels(
     collection_id: &CollectionId,
 ) -> BTreeMap<String, String> {
     BTreeMap::from([
+        (
+            LABEL_SCOPE.to_owned(),
+            Scope::Connection.as_str().to_owned(),
+        ),
         (LABEL_PROJECT_ID.to_owned(), project_id.to_string()),
         (LABEL_COLLECTION_ID.to_owned(), collection_id.to_string()),
         (LABEL_CONNECTION_ID.to_owned(), connection_id.to_string()),

@@ -13,6 +13,24 @@ fn kv(key: &str, value: Option<&str>) -> KeyValue {
 }
 
 #[test]
+fn connection_labels_carry_the_connection_scope_and_ids() {
+    let project_id = ProjectId::default();
+    let collection_id = CollectionId::default();
+    let connection_id = ConnectionId::default();
+    let labels = connection_labels(&project_id, &connection_id, &collection_id);
+    assert_eq!(labels.get(LABEL_SCOPE).map(String::as_str), Some("conn"));
+    assert_eq!(labels.get(LABEL_PROJECT_ID), Some(&project_id.to_string()));
+    assert_eq!(
+        labels.get(LABEL_COLLECTION_ID),
+        Some(&collection_id.to_string())
+    );
+    assert_eq!(
+        labels.get(LABEL_CONNECTION_ID),
+        Some(&connection_id.to_string())
+    );
+}
+
+#[test]
 fn entries_to_map_keeps_valued_entries_only() {
     assert!(entries_to_map(None).is_empty());
     let entries = vec![kv("A", Some("1")), kv("B", None), kv("C", Some("3"))];
