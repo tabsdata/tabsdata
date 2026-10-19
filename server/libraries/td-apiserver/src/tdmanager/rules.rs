@@ -2,11 +2,15 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use crate::tdmanager::commons::active_projects;
 use async_trait::async_trait;
 use std::collections::HashSet;
 use td_database::access::{DbPool, Global};
 use td_error::{TdError, td_error};
 use td_kubernetes::kube::context::KubeContext;
+use td_kubernetes::runtime::gateway::datasource::KubernetesSecretStore;
+use td_objects::dxo::secret::SecretOwner;
+use td_objects::types::basic::EntityName;
 use tracing::info;
 
 pub struct RuleContext {
@@ -77,6 +81,33 @@ pub async fn apply(
         info!(rule = rule.id(), "Upgrade rule applied");
     }
     Ok(())
+}
+
+pub struct EnsureProjectSecret;
+
+inventory::submit!(RuleRegistration(&EnsureProjectSecret));
+
+#[async_trait]
+impl UpgradeRule for EnsureProjectSecret {
+    fn id(&self) -> &'static str {
+        "ensure-project-secret"
+    }
+
+    async fn apply(&self, context: &RuleContext) -> Result<(), TdError> {
+        let projects = active_projects(&context.database).await?;
+        let store = KubernetesSecretStore::new(context.kubernetes.clone());
+        let mut created = 0;
+        for project in &projects {
+            let owner = SecretOwner::project(&project.id)?;
+            let entity = EntityName::try_from(project.name.to_string())?;
+            if store.ensure(&owner, &entity).await? {
+                info!(project_id = %project.id, project = %project.name, "Created the project secret");
+                created += 1;
+            }
+        }
+        info!(projects = projects.len(), created, "Project secret ensured");
+        Ok(())
+    }
 }
 
 #[cfg(test)]

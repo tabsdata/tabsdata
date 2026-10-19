@@ -32,6 +32,25 @@ impl KubernetesSecretStore {
         Self { context }
     }
 
+    pub async fn ensure(&self, owner: &SecretOwner, entity: &EntityName) -> Result<bool, TdError> {
+        let name = object_name(owner)?;
+        if secret::get_secret(&self.context, &name).await?.is_some() {
+            return Ok(false);
+        }
+        secret::create_secret(
+            &self.context,
+            &name,
+            BTreeMap::new(),
+            labels(owner),
+            annotations(owner, entity),
+            None,
+            None,
+            None,
+        )
+        .await?;
+        Ok(true)
+    }
+
     async fn read_object(&self, owner: &SecretOwner) -> Result<Vec<SecretHydrated>, TdError> {
         match secret::get_secret(&self.context, &object_name(owner)?).await? {
             Some(data) => decode(data),

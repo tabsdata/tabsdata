@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+pub mod commons;
 pub mod rules;
 
 use crate::CONFIG_NAME;
