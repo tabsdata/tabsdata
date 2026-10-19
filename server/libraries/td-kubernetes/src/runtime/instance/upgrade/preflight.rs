@@ -10,6 +10,7 @@ use crate::runtime::instance::manifest::{EntryState, Manifest};
 use crate::runtime::instance::upgrade::catalog::{load_inventory, resolve_kupgrade_path};
 use crate::runtime::instance::upgrade::inventory::Hop;
 use crate::runtime::instance::upgrade::lock::{LOCK_ENTRY, UpgradeLock, deserialize_lock};
+use crate::runtime::instance::upgrade::rules::rules_to_apply;
 use crate::runtime::instance::version::{product_version, require_manifest};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,6 +35,7 @@ pub struct Preflight {
     pub manifest: Manifest,
     pub lock: Option<UpgradeLock>,
     pub hops: Vec<Hop>,
+    pub rules: Vec<String>,
 }
 
 impl Preflight {
@@ -84,6 +86,7 @@ pub async fn inspect(
     let root = resolve_kupgrade_path(verbose)?;
     let inventory = load_inventory(&root)?;
     let hops = inventory.hops(&instance_version, &product_version)?;
+    let rules = rules_to_apply(&root, &inventory, &hops, &product_version, lock.is_some())?;
 
     Ok(Preflight {
         instance: instance.to_owned(),
@@ -93,6 +96,7 @@ pub async fn inspect(
         manifest,
         lock,
         hops,
+        rules,
     })
 }
 

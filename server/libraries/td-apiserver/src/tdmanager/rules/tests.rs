@@ -3,6 +3,10 @@
 //
 
 use super::*;
+use std::path::PathBuf;
+use td_kubernetes::runtime::instance::upgrade::catalog::load_inventory;
+use td_kubernetes::runtime::instance::upgrade::replay::Sources;
+use td_kubernetes::runtime::instance::upgrade::rules::load_rules;
 
 struct Rule(&'static str);
 
@@ -68,4 +72,23 @@ fn a_rule_requested_twice_is_refused() {
 fn a_rule_registered_twice_is_refused() {
     let message = refusal(&[&SECOND, &SECOND_AGAIN], &["second"]);
     assert!(message.contains("registered more than once"), "{message}");
+}
+
+#[test]
+fn every_shipped_rule_is_registered() {
+    let mut repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    for _ in 0..3 {
+        repository.pop();
+    }
+    let kupgrade = Sources::of(&repository).kupgrade;
+    let inventory = load_inventory(&kupgrade).expect("the shipped inventory loads");
+    for entry in inventory.versions.iter().filter(|entry| entry.upgrader) {
+        let ids = load_rules(&kupgrade, &entry.version).expect("the shipped rules load");
+        if let Err(error) = resolve(&ids) {
+            panic!(
+                "the rules of version '{}' are not all registered: {error}",
+                entry.version
+            );
+        }
+    }
 }

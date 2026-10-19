@@ -7,6 +7,7 @@ use std::fs;
 use indoc::{formatdoc, indoc};
 
 use super::*;
+use crate::runtime::instance::upgrade::rules::RULES_FOLDER;
 
 fn lay_out(entries: &[(&str, bool)], specs: &[&str]) -> tempfile::TempDir {
     let root = tempfile::tempdir().expect("temp dir");
@@ -26,8 +27,11 @@ fn lay_out(entries: &[(&str, bool)], specs: &[&str]) -> tempfile::TempDir {
     .expect("inventory");
     let folder = root.path().join(UPGRADES_FOLDER);
     fs::create_dir_all(&folder).expect("specs folder");
+    let rules = root.path().join(RULES_FOLDER);
+    fs::create_dir_all(&rules).expect("rules folder");
     for spec in specs {
         fs::write(folder.join(format!("{spec}.yaml")), "schema: 1\n").expect("spec");
+        fs::write(rules.join(format!("{spec}.yaml")), "schema: 1\nrules: []\n").expect("rules");
     }
     root
 }

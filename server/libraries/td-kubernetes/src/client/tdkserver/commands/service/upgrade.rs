@@ -532,6 +532,12 @@ async fn instance_upgrade_phase(
     info!("The instance resources will be brought to each version in turn.");
     info!("The python virtual environments will be rebuilt.");
     info!("The database will be brought up to date.");
+    if !preflight.rules.is_empty() {
+        info!(
+            "The upgrade rules will be applied: {}.",
+            preflight.rules.join(", ")
+        );
+    }
     for folder in editable_folders(instance)? {
         info!("The editable folder '{folder}' will be deleted.");
     }
@@ -566,7 +572,7 @@ async fn instance_upgrade_phase(
     }
     provider.upgrade_runtimes(reporter).await?;
     provider.upgrade_database(reporter).await?;
-    provider.upgrade_system(reporter, &[]).await?;
+    provider.upgrade_system(reporter, &preflight.rules).await?;
 
     latch::finalise(context, instance, lock, &preflight.product_version).await?;
 

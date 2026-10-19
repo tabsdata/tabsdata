@@ -13,5 +13,6 @@ pub mod offline;
 pub mod plan;
 pub mod preflight;
 pub mod replay;
+pub mod rules;
 pub mod spec;
 pub mod store;

@@ -70,6 +70,11 @@ impl Inventory {
         })
     }
 
+    pub fn entries_up_to(&self, product: &str) -> Result<Vec<&InventoryEntry>, UpgradeError> {
+        let end = self.locate(product)?;
+        Ok(self.versions[end..].iter().rev().collect())
+    }
+
     /// The hops to walk from `instance` up to `product`, oldest hop first.
     pub fn hops(&self, instance: &str, product: &str) -> Result<Vec<Hop>, UpgradeError> {
         let start = self.locate(instance)?;

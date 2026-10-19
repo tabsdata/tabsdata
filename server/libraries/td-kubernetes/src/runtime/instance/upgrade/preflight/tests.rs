@@ -192,6 +192,7 @@ fn preflight(version: &str, product: &str, lock: Option<UpgradeLock>, hops: Vec<
         manifest: manifest(version, &[]),
         lock,
         hops,
+        rules: Vec::new(),
     }
 }
 

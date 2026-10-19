@@ -264,4 +264,38 @@ pub enum UpgradeError {
         entry: String,
         action: String,
     } = 5363,
+    #[error("Could not read the upgrade rules of version '{version}' at '{path}': {cause}.")]
+    RulesReadFailed {
+        version: String,
+        path: String,
+        cause: String,
+    } = 5364,
+    #[error("Could not parse the upgrade rules of version '{version}': {cause}.")]
+    RulesParseFailed { version: String, cause: String } = 5365,
+    #[error(
+        "The upgrade rules of version '{version}' declare schema {found}; this tabsdata \
+         supports {supported}."
+    )]
+    RulesSchemaUnsupported {
+        version: String,
+        found: u32,
+        supported: u32,
+    } = 5366,
+    #[error(
+        "The upgrade rules at '{path}' are for version '{version}', which is not in the \
+         upgrade inventory."
+    )]
+    RulesOrphan { version: String, path: String } = 5367,
+    #[error("Could not list the upgrade rules at '{path}': {cause}.")]
+    RulesFolderReadFailed { path: String, cause: String } = 5368,
+    #[error(
+        "The upgrade inventory declares an upgrader for version '{version}', but its upgrade \
+         rules are missing at '{path}'."
+    )]
+    RulesMissing { version: String, path: String } = 5369,
+    #[error(
+        "The upgrade inventory declares no upgrader for version '{version}', but upgrade \
+         rules exist at '{path}'."
+    )]
+    RulesUnexpected { version: String, path: String } = 5370,
 }

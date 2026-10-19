@@ -13,6 +13,7 @@ use crate::runtime::instance::profile::resolve_resource_path;
 use crate::runtime::instance::upgrade::inventory::{
     INVENTORY_FILE, Inventory, UPGRADES_FOLDER, deserialize_inventory,
 };
+use crate::runtime::instance::upgrade::rules::ensure_rules;
 use crate::runtime::instance::upgrade::spec::{Spec, deserialize_spec};
 
 pub fn resolve_kupgrade_path(verbose: bool) -> CommandResult<PathBuf> {
@@ -32,6 +33,7 @@ pub fn load_inventory(root: &Path) -> CommandResult<Inventory> {
         })?;
     let inventory = deserialize_inventory(&yaml)?;
     ensure_specs(root, &inventory)?;
+    ensure_rules(root, &inventory)?;
     Ok(inventory)
 }
 
