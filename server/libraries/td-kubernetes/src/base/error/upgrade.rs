@@ -303,4 +303,13 @@ pub enum UpgradeError {
          they list: {rules}."
     )]
     RulesNotEmptyForMicro { version: String, rules: String } = 5371,
+    #[error(
+        "Version '{version}' is older than '{newest}', the newest version this tabsdata knows, \
+         but it knows no '{minor}' version to upgrade it from."
+    )]
+    VersionMinorNotInInventory {
+        version: String,
+        minor: String,
+        newest: String,
+    } = 5372,
 }

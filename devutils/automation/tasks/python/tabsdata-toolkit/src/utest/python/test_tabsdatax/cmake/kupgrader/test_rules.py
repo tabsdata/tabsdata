@@ -16,7 +16,11 @@ from tabsdatax.cmake.kupgrader.common.rules import (
     rules_file,
     rules_problems,
 )
-from tabsdatax.cmake.kupgrader.common.versions import is_micro
+from tabsdatax.cmake.kupgrader.common.versions import (
+    Entry,
+    is_micro,
+    unreachable_releases,
+)
 from tabsdatax.cmake.kupgrader.common.workflow import Context
 
 
@@ -125,3 +129,24 @@ def test_the_rules_problems_come_from_the_upgrader_binary(tmp_path, monkeypatch)
         "Version '2.3.1' is a micro version"
     ]
     assert calls == [(binary, ["rules", "--kupgrade", str(tmp_path / "kupgrade")])]
+
+
+def entries(*versions: str) -> list[Entry]:
+    return [Entry(version=version, upgrader=True) for version in versions]
+
+
+def test_every_release_with_a_listed_minor_is_reachable():
+    listed = entries("2.3.0", "2.2.0", "2.1.0", "2.0.0")
+    releases = ["1.9.1", "2.0.0", "2.1.0", "2.2.0", "2.2.1", "2.3.0", "2.4.0"]
+    assert unreachable_releases(releases, listed, "2.3.0") == []
+
+
+def test_a_release_whose_minor_is_not_listed_is_unreachable():
+    listed = entries("2.3.0", "2.1.0", "2.0.0")
+    releases = ["2.1.0", "2.2.0", "2.2.1", "2.3.0"]
+    assert unreachable_releases(releases, listed, "2.3.0") == ["2.2.0", "2.2.1"]
+
+
+def test_a_release_older_than_its_minor_listed_version_is_unreachable():
+    listed = entries("2.3.0", "2.2.1", "2.0.0")
+    assert unreachable_releases(["2.2.0", "2.2.1"], listed, "2.3.0") == ["2.2.0"]

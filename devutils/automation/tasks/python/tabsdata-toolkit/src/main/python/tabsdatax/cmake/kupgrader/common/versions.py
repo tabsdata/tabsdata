@@ -76,6 +76,27 @@ def resolve(current: str, entries: list[Entry]) -> Resolution:
     return Resolution(current=current, previous=previous, entries=entries)
 
 
+def unreachable_releases(
+    releases: list[str], entries: list[Entry], current: str
+) -> list[str]:
+    listed = [Version(entry.version) for entry in entries]
+    if not listed:
+        return []
+    floor = min(listed)
+    unreachable = []
+    for release in sorted(releases, key=Version):
+        version = Version(release)
+        if not floor <= version <= Version(current):
+            continue
+        if not any(
+            (entry.major, entry.minor) == (version.major, version.minor)
+            and entry <= version
+            for entry in listed
+        ):
+            unreachable.append(release)
+    return unreachable
+
+
 def is_micro(version: str) -> bool:
     return Version(version).micro > INITIAL_MICRO
 

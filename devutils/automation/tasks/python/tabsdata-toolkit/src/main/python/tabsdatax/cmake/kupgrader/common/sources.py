@@ -2,6 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,6 +13,7 @@ from tabsdatax.cmake.kupgrader.common.errors import KupgraderError
 
 KPROFILE_SUBPATH = Path("variant") / "resources" / "kprofile"
 PATCHES_SUBPATH = Path("variant") / "config" / "kupgrade" / "patches"
+RELEASE_TAG_PATTERN = re.compile(r"\d+\.\d+\.\d+")
 
 
 class SourceError(KupgraderError):
@@ -31,6 +33,14 @@ def open_repository(root_folder: Path) -> Repo:
         raise SourceError(
             f"The folder '{root_folder}' is not a git repository."
         ) from error
+
+
+def release_tags(root_folder: Path) -> list[str]:
+    return [
+        tag.name
+        for tag in open_repository(root_folder).tags
+        if RELEASE_TAG_PATTERN.fullmatch(tag.name)
+    ]
 
 
 def commit_of(root_folder: Path, tag: str):

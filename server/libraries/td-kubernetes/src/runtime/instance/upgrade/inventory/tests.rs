@@ -156,13 +156,18 @@ fn an_unlisted_patch_newer_than_the_product_is_rejected() {
 }
 
 #[test]
-fn an_unlisted_patch_of_an_unlisted_minor_is_unknown() {
+fn an_unlisted_patch_of_an_unlisted_minor_names_the_missing_minor() {
     let inventory = inventory(&[("2.6.0", true), ("2.4.0", true), ("2.0.0", false)]);
     let outcome = inventory.hops("2.5.1", "2.6.0");
     assert!(matches!(
-        outcome,
-        Err(UpgradeError::VersionNotInInventory { .. })
+        &outcome,
+        Err(UpgradeError::VersionMinorNotInInventory { minor, .. }) if minor == "2.5.x"
     ));
+    let message = outcome.unwrap_err().to_string();
+    assert!(
+        message.contains("2.5.x") && message.contains("2.6.0"),
+        "{message}"
+    );
 }
 
 #[test]

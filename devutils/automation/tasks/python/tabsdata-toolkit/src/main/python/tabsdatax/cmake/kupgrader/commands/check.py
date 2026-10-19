@@ -20,9 +20,15 @@ from tabsdatax.cmake.kupgrader.common.rendering import (
     display_verification,
 )
 from tabsdatax.cmake.kupgrader.common.rules import rules_problems
+from tabsdatax.cmake.kupgrader.common.sources import release_tags
 from tabsdatax.cmake.kupgrader.common.templates import digests, replay
 from tabsdatax.cmake.kupgrader.common.verification import locate_binary, verify
-from tabsdatax.cmake.kupgrader.common.versions import declares_upgrader, is_micro
+from tabsdatax.cmake.kupgrader.common.versions import (
+    declares_upgrader,
+    is_micro,
+    read_inventory,
+    unreachable_releases,
+)
 from tabsdatax.cmake.kupgrader.common.workflow import context_of, display_context
 
 log = logging.getLogger(__name__)
@@ -110,6 +116,20 @@ def perform_check(root_folder: Path) -> None:
             f"The upgrade rules in {context.rules_folder} do not match the upgrades "
             "inventory."
         )
+        raise SystemExit(1)
+
+    unreachable = unreachable_releases(
+        release_tags(context.root_folder),
+        read_inventory(context.upgrades_file),
+        generation.version,
+    )
+    for release in unreachable:
+        log.error(
+            f"Released version '{release}' has no version of its minor in "
+            f"{context.upgrades_file}, so an instance at '{release}' could not be "
+            "upgraded. List the minor's first release there."
+        )
+    if unreachable:
         raise SystemExit(1)
 
     log.info(f"The upgrader shipped for version '{generation.version}' is correct.")

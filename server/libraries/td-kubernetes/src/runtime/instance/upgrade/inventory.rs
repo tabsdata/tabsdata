@@ -64,6 +64,13 @@ impl Inventory {
                 floor: self.floor().to_owned(),
             });
         }
+        if requested < parse(self.newest())? {
+            return Err(UpgradeError::VersionMinorNotInInventory {
+                version: version.to_owned(),
+                minor: minor_of(&requested),
+                newest: self.newest().to_owned(),
+            });
+        }
         Err(UpgradeError::VersionNotInInventory {
             version: version.to_owned(),
             newest: self.newest().to_owned(),
@@ -135,6 +142,17 @@ fn same_minor(left: &Version, right: &Version) -> bool {
     let right = right.release();
     left.get(MAJOR_POSITION) == right.get(MAJOR_POSITION)
         && left.get(MINOR_POSITION) == right.get(MINOR_POSITION)
+}
+
+fn minor_of(version: &Version) -> String {
+    let release = version.release();
+    let part = |position: usize| {
+        release
+            .get(position)
+            .map(ToString::to_string)
+            .unwrap_or_default()
+    };
+    format!("{}.{}.x", part(MAJOR_POSITION), part(MINOR_POSITION))
 }
 
 fn parse(version: &str) -> Result<Version, UpgradeError> {
