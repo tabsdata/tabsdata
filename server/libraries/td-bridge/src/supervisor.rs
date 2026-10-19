@@ -12,6 +12,8 @@ use crate::connection::ConnectionStore;
 use crate::connection::file::FileConnectionStore;
 use crate::messaging::OrchestratorMessageQueue;
 use crate::messaging::file_queue::FileSupervisorMessageQueue;
+use crate::secret::SecretStore;
+use crate::secret::file::FileSecretStore;
 use crate::worker::WorkerHandler;
 use crate::worker::workspace::WorkspaceWorkerHandler;
 use crate::{BridgeProvider, Orchestrator};
@@ -21,6 +23,7 @@ pub struct SupervisorBridgeProvider {
     server_catalog: EtcFolderStore,
     worker_handler: WorkspaceWorkerHandler,
     connection_store: FileConnectionStore,
+    secret_store: FileSecretStore,
     message_queue: FileSupervisorMessageQueue,
 }
 
@@ -30,6 +33,7 @@ impl SupervisorBridgeProvider {
             server_catalog: EtcFolderStore::new().await?,
             worker_handler: WorkspaceWorkerHandler,
             connection_store: FileConnectionStore::new(),
+            secret_store: FileSecretStore,
             message_queue: FileSupervisorMessageQueue::new().await?,
         })
     }
@@ -50,6 +54,10 @@ impl BridgeProvider for SupervisorBridgeProvider {
 
     fn connection_store(&self) -> &dyn ConnectionStore {
         &self.connection_store
+    }
+
+    fn secret_store(&self) -> &dyn SecretStore {
+        &self.secret_store
     }
 
     fn message_queue(&self) -> &dyn OrchestratorMessageQueue {

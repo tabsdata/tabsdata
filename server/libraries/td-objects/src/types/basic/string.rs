@@ -4,7 +4,8 @@
 
 use crate::dxo::table::TableDBWithNames;
 use crate::parse::{
-    DATA_LOCATION_REGEX, NAME_PATTERN, UNDERSCORE_NAME_PATTERN, USER_LABEL_PATTERN, parse_email,
+    DATA_LOCATION_REGEX, NAME_PATTERN, SECRET_NAME_PATTERN, UNDERSCORE_NAME_PATTERN,
+    USER_LABEL_PATTERN, parse_email,
 };
 use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_error::{ApiError, api_error};
@@ -213,6 +214,22 @@ pub struct SchemaFieldType(String);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 pub struct SchemaHash(String);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typed(
+    regex = SECRET_NAME_PATTERN,
+    max_len = 63,
+    expected = "letters and digits starting with a letter, with single underscores between words, of up to 63 characters"
+)]
+pub struct SecretKey(String);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[typed(
+    regex = SECRET_NAME_PATTERN,
+    max_len = 63,
+    expected = "letters and digits starting with a letter, with single underscores between words, of up to 63 characters"
+)]
+pub struct SecretName(String);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct Sql(String);

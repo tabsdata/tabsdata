@@ -14,6 +14,8 @@ use crate::connection::memory::InMemoryConnectionStore;
 use crate::messaging::OrchestratorMessageQueue;
 use crate::messaging::memory::InMemoryOrchestratorMessageQueue;
 use crate::observer::{ObserverError, WorkloadObservation, WorkloadObserver};
+use crate::secret::SecretStore;
+use crate::secret::memory::InMemorySecretStore;
 use crate::worker::{LogBridgeError, WorkerHandler, WorkerLogStream, WorkerLogTarget};
 use crate::{BridgeProvider, BridgeProviderHandle, Orchestrator};
 use async_trait::async_trait;
@@ -24,6 +26,7 @@ pub struct TestBridgeProvider {
     server_catalog: EmptyServerCatalog,
     worker_handler: Box<dyn WorkerHandler>,
     connection_store: Box<dyn ConnectionStore>,
+    secret_store: Box<dyn SecretStore>,
     message_queue: Box<dyn OrchestratorMessageQueue>,
     workload_observer: Option<Box<dyn WorkloadObserver>>,
 }
@@ -31,6 +34,11 @@ pub struct TestBridgeProvider {
 impl TestBridgeProvider {
     pub fn with_connection_store(mut self, store: impl ConnectionStore + 'static) -> Self {
         self.connection_store = Box::new(store);
+        self
+    }
+
+    pub fn with_secret_store(mut self, store: impl SecretStore + 'static) -> Self {
+        self.secret_store = Box::new(store);
         self
     }
 
@@ -73,6 +81,7 @@ impl Default for TestBridgeProvider {
             server_catalog: EmptyServerCatalog,
             worker_handler: Box::new(NoopWorkerHandler),
             connection_store: Box::new(InMemoryConnectionStore::default()),
+            secret_store: Box::new(InMemorySecretStore::default()),
             message_queue: Box::new(InMemoryOrchestratorMessageQueue::default()),
             workload_observer: None,
         }
@@ -94,6 +103,10 @@ impl BridgeProvider for TestBridgeProvider {
 
     fn connection_store(&self) -> &dyn ConnectionStore {
         self.connection_store.as_ref()
+    }
+
+    fn secret_store(&self) -> &dyn SecretStore {
+        self.secret_store.as_ref()
     }
 
     fn message_queue(&self) -> &dyn OrchestratorMessageQueue {

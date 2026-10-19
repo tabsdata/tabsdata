@@ -235,6 +235,8 @@ pub const USER_LABEL_PATTERN: &str = concat!("^(", IDENTIFIER_PATTERN, "|\\[[0-9
 
 pub const UNDERSCORE_NAME_PATTERN: &str = concat!("^", UNDERSCORE_IDENTIFIER_PATTERN, "$");
 
+pub const SECRET_NAME_PATTERN: &str = "^[A-Za-z][A-Za-z0-9]*(_[A-Za-z0-9]+)*$";
+
 pub fn parse_email(s: impl Into<String>) -> Result<String, TdError> {
     const EMAIL_PATTERN: &str = "[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}";
 

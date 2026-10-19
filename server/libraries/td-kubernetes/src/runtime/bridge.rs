@@ -8,6 +8,8 @@ use td_bridge::catalog::ServerCatalog;
 use td_bridge::connection::ConnectionStore;
 use td_bridge::messaging::OrchestratorMessageQueue;
 use td_bridge::observer::WorkloadObserver;
+use td_bridge::secret::SecretStore;
+use td_bridge::secret::noop::NoopSecretStore;
 use td_bridge::worker::WorkerHandler;
 use td_bridge::{BridgeProvider, Orchestrator};
 use td_common::crypto::install_crypto_provider;
@@ -32,6 +34,7 @@ pub struct KubernetesBridgeProvider {
     server_catalog: KubernetesServerCatalog,
     worker_handler: KubernetesWorkerHandler,
     connection_store: KubernetesConnectionStore,
+    secret_store: NoopSecretStore,
     message_queue: KubernetesOrchestratorMessageQueue,
     workload_observer: KubernetesWorkloadObserver,
     reconciliation: JoinHandle<()>,
@@ -60,6 +63,7 @@ impl KubernetesBridgeProvider {
             server_catalog,
             worker_handler,
             connection_store,
+            secret_store: NoopSecretStore,
             message_queue,
             workload_observer,
             reconciliation,
@@ -99,6 +103,10 @@ impl BridgeProvider for KubernetesBridgeProvider {
 
     fn connection_store(&self) -> &dyn ConnectionStore {
         &self.connection_store
+    }
+
+    fn secret_store(&self) -> &dyn SecretStore {
+        &self.secret_store
     }
 
     fn message_queue(&self) -> &dyn OrchestratorMessageQueue {

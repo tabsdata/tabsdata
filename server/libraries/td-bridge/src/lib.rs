@@ -12,6 +12,7 @@ pub mod catalog;
 pub mod connection;
 pub mod messaging;
 pub mod observer;
+pub mod secret;
 #[cfg(feature = "test-utils")]
 pub mod test;
 pub mod worker;
@@ -24,6 +25,8 @@ use crate::catalog::ServerCatalog;
 use crate::connection::ConnectionStore;
 use crate::messaging::OrchestratorMessageQueue;
 use crate::observer::WorkloadObserver;
+use crate::secret::SecretStore;
+use crate::secret::project::ProjectSecrets;
 use crate::worker::WorkerHandler;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -64,6 +67,12 @@ pub trait BridgeProvider: Send + Sync {
     /// through. An unconfigured store (every call answers 503) is the
     /// "no backend" choice.
     fn connection_store(&self) -> &dyn ConnectionStore;
+
+    fn secret_store(&self) -> &dyn SecretStore;
+
+    fn project_secrets(&self) -> ProjectSecrets<'_> {
+        ProjectSecrets::new(self.secret_store())
+    }
 
     /// Queue the scheduler puts worker requests on for the orchestrator to
     /// execute.
