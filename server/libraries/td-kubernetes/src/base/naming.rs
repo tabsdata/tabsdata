@@ -8,7 +8,7 @@ use td_common::logic_id::{IdL, KeyId};
 use td_common::worker::{Decorator, WorkerName};
 use td_objects::types::basic::WorkerId;
 
-use crate::base::constants::{KUBE_NAME_SEPARATOR, Scope, TABSDATA_NAME_PREFIX};
+use crate::base::constants::{KIND_SECRET, KUBE_NAME_SEPARATOR, Scope, TABSDATA_NAME_PREFIX};
 use crate::base::error::naming::{NameSegment, NamingError};
 
 pub fn worker_pod_stem(worker: &WorkerName) -> &'static str {
@@ -90,6 +90,26 @@ pub fn to_connection_object_name(connection_id: &str) -> Result<String, NamingEr
     );
     if !DNS_SUBDOMAIN_PATTERN.is_match(&assembled) {
         return Err(NamingError::InvalidConfigmapName { name: assembled });
+    }
+    if assembled.len() > KUBE_IDENTIFIER_MAX_LENGTH {
+        return Err(NamingError::AssembledIdentifierTooLong {
+            identifier: assembled,
+            limit: KUBE_IDENTIFIER_MAX_LENGTH,
+        });
+    }
+    Ok(assembled)
+}
+
+pub fn to_secrets_object_name(scope: Scope, entity_id: &str) -> Result<String, NamingError> {
+    let assembled = format!(
+        "{TABSDATA_NAME_PREFIX}{}{KUBE_NAME_SEPARATOR}{KIND_SECRET}{KUBE_NAME_SEPARATOR}{}",
+        scope.as_str(),
+        normalize_segment(NameSegment::Component, entity_id)?,
+    );
+    if !DNS_SUBDOMAIN_PATTERN.is_match(&assembled) {
+        return Err(NamingError::AssembledIdentifierInvalid {
+            identifier: assembled,
+        });
     }
     if assembled.len() > KUBE_IDENTIFIER_MAX_LENGTH {
         return Err(NamingError::AssembledIdentifierTooLong {

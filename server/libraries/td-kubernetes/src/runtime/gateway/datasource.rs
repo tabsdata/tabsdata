@@ -5,3 +5,4 @@
 pub(crate) mod registrar;
 
 pub use registrar::connection::KubernetesConnectionStore;
+pub use registrar::secret::KubernetesSecretStore;

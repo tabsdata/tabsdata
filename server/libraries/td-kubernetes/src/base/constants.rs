@@ -224,8 +224,9 @@ pub const RESOURCE_KUPGRADE: &str = "resources/kupgrade";
 pub enum Scope {
     System,
     Application,
-    Function,
+    Project,
     Connection,
+    Function,
 }
 
 impl Scope {
@@ -233,8 +234,9 @@ impl Scope {
         match self {
             Scope::System => "sys",
             Scope::Application => "app",
-            Scope::Function => "fn",
+            Scope::Project => "prj",
             Scope::Connection => "conn",
+            Scope::Function => "fn",
         }
     }
 }

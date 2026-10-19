@@ -70,6 +70,13 @@ pub fn validate_secrets(secrets: &[SecretUpsert]) -> Result<(), TdError> {
                 secret.name
             ));
         }
+        if secret.entries.is_empty() {
+            return Err(api_error!(
+                ApiError::InputError,
+                "the secret '{}' has no keys",
+                secret.name
+            ));
+        }
         let mut keys = HashSet::new();
         for entry in &secret.entries {
             if !keys.insert(entry.key.to_lowercase()) {

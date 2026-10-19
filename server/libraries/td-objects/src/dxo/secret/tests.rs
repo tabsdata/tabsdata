@@ -71,6 +71,12 @@ fn a_key_repeated_ignoring_case_is_refused() {
 }
 
 #[test]
+fn a_secret_without_keys_is_refused() {
+    let secrets = [secret("warehouse", &[])];
+    assert!(validate_secrets(&secrets).is_err());
+}
+
+#[test]
 fn a_value_never_appears_in_debug_output() {
     let shown = format!("{:?}", secret("warehouse", &["password"]));
     assert!(!shown.contains("value\": Some(\"value\")"), "{shown}");

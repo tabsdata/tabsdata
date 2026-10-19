@@ -86,6 +86,8 @@ pub enum SecretError {
         path: String,
         item_index: usize,
     } = 10,
+    #[error("The entity secrets take {size} bytes, above the limit of {limit} bytes.")]
+    EntitySecretsTooLarge { size: usize, limit: usize } = 11,
     #[error("Could not serialize Secret manifest to YAML: {0}.")]
     ManifestSerializeFailed(String) = 5000,
     #[error("Could not read staged file '{path}': {cause}.")]
@@ -153,6 +155,14 @@ pub enum SecretError {
          A generated secret must have a single value across the instance."
     )]
     GeneratorValueDivergent { generator: String } = 5019,
+    #[error("Could not derive the kubernetes name for the entity secrets: {cause}.")]
+    EntitySecretsNameDerivationFailed { cause: String } = 5020,
+    #[error("Stored entity secret key '{key}' is not valid UTF-8: {cause}.")]
+    EntitySecretValueNotUtf8 { key: String, cause: String } = 5021,
+    #[error("Stored entity secret key '{key}' is not of the form <secret>__<key>.")]
+    EntitySecretKeyMalformed { key: String } = 5022,
+    #[error("Stored entity secret key '{key}' is not valid: {cause}.")]
+    EntitySecretKeyInvalid { key: String, cause: String } = 5023,
     #[error(transparent)]
     Profile(#[from] ProfileError) = 5004,
     #[error(transparent)]

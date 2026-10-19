@@ -3,3 +3,4 @@
 //
 
 pub mod connection;
+pub mod secret;

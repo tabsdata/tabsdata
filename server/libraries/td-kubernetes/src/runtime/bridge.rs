@@ -9,7 +9,6 @@ use td_bridge::connection::ConnectionStore;
 use td_bridge::messaging::OrchestratorMessageQueue;
 use td_bridge::observer::WorkloadObserver;
 use td_bridge::secret::SecretStore;
-use td_bridge::secret::noop::NoopSecretStore;
 use td_bridge::worker::WorkerHandler;
 use td_bridge::{BridgeProvider, Orchestrator};
 use td_common::crypto::install_crypto_provider;
@@ -19,7 +18,7 @@ use crate::base::error::kubernetes::KubernetesError;
 use crate::client::session::pod::PodContext;
 use crate::kube::context::KubeContext;
 use crate::runtime::gateway::catalog::KubernetesServerCatalog;
-use crate::runtime::gateway::datasource::KubernetesConnectionStore;
+use crate::runtime::gateway::datasource::{KubernetesConnectionStore, KubernetesSecretStore};
 use crate::runtime::gateway::messaging::KubernetesOrchestratorMessageQueue;
 use crate::runtime::gateway::messaging::messenger::factory::WorkloadFactory;
 use crate::runtime::gateway::messaging::messenger::template::PodTemplateIndex;
@@ -34,7 +33,7 @@ pub struct KubernetesBridgeProvider {
     server_catalog: KubernetesServerCatalog,
     worker_handler: KubernetesWorkerHandler,
     connection_store: KubernetesConnectionStore,
-    secret_store: NoopSecretStore,
+    secret_store: KubernetesSecretStore,
     message_queue: KubernetesOrchestratorMessageQueue,
     workload_observer: KubernetesWorkloadObserver,
     reconciliation: JoinHandle<()>,
@@ -45,6 +44,7 @@ impl KubernetesBridgeProvider {
         let server_catalog = KubernetesServerCatalog::new();
         let worker_handler = KubernetesWorkerHandler::new(context.clone());
         let connection_store = KubernetesConnectionStore::new(context.clone());
+        let secret_store = KubernetesSecretStore::new(context.clone());
         let pod_templates = PodTemplateIndex::load(&context).await?;
         let factory = Arc::new(WorkloadFactory::new(context.clone(), pod_templates));
         let reconciler = Arc::new(Reconciler::default());
@@ -63,7 +63,7 @@ impl KubernetesBridgeProvider {
             server_catalog,
             worker_handler,
             connection_store,
-            secret_store: NoopSecretStore,
+            secret_store,
             message_queue,
             workload_observer,
             reconciliation,
