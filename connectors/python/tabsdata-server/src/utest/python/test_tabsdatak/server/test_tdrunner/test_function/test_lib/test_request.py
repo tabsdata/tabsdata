@@ -571,10 +571,10 @@ def test_output_table_is_frozen():
 # ``Info.triggered_on`` is epoch milliseconds on the wire. The derived
 # helper converts that to a tz-aware UTC datetime, consumed by
 # ``stamp-inputs`` to populate ``$td.ver.timestamp`` and by
-# ``FromRequestCtx.triggered_on``; file destinations substitute its
-# ``isoformat()`` for the ``${EXEC_PLAN_TS}`` path token. These tests
-# pin the conversion shape so a future change to the wire format (e.g.
-# epoch seconds instead of milliseconds) breaks loudly here rather than
+# ``FromRequestCtx.triggered_on`` (and, through it, the file
+# destinations' ``${EXEC_PLAN_TS}`` path token). These tests pin the
+# conversion shape so a future change to the wire format (e.g. epoch
+# seconds instead of milliseconds) breaks loudly here rather than
 # silently corrupting downstream column values or paths.
 
 
@@ -616,12 +616,13 @@ def test_info_triggered_on_datetime_handles_zero_millis():
     assert info.triggered_on_datetime == datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
-def test_info_triggered_on_datetime_isoformat_is_pinned():
+def test_info_triggered_on_datetime_is_pinned():
     info = _build_info(triggered_on=1780562068376)
-    # Pinned exactly so a wire-format change (e.g. seconds vs millis,
-    # or losing the tz suffix) fails loudly: it is the string the
-    # ``${EXEC_PLAN_TS}`` path token resolves to.
-    assert info.triggered_on_datetime.isoformat() == "2026-06-04T08:34:28.376000+00:00"
+    # Pinned exactly so a wire-format change (e.g. seconds vs millis)
+    # fails loudly.
+    assert info.triggered_on_datetime == datetime(
+        2026, 6, 4, 8, 34, 28, 376000, tzinfo=timezone.utc
+    )
 
 
 # --- load_request_or_raise --------------------------------------------

@@ -81,11 +81,20 @@ def sheet_in(format_cfg: dict | None) -> int | None:
     return ((format_cfg or {}).get(SrcFileFormat.EXCEL) or {}).get(EXCEL_SHEET_KEY)
 
 
+def path_timestamp(value: datetime) -> str:
+    """``value`` as a basic-format ISO 8601 UTC timestamp with
+    milliseconds (``20260604T083428.376Z``): fixed length, so it sorts
+    chronologically as text, and free of the ``:`` / ``+`` that some
+    filesystems and object stores reject or mangle in a path."""
+    value = value.astimezone(timezone.utc)
+    return f"{value:%Y%m%dT%H%M%S}.{value.microsecond // 1000:03d}Z"
+
+
 def resolve_dest_tokens(target_path: str, ctx: DestContext) -> str:
     tokens = {
         EXEC_PLAN_ID: ctx.execution_id,
         TRX_ID: ctx.transaction_id,
-        EXEC_PLAN_TS: ctx.triggered_on.isoformat(),
+        EXEC_PLAN_TS: path_timestamp(ctx.triggered_on),
     }
     resolved = target_path
     for token, value in tokens.items():

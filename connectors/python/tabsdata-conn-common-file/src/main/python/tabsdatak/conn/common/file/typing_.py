@@ -169,14 +169,17 @@ construction.
 # path validator consults.
 
 EXEC_PLAN_ID: str = "${EXEC_PLAN_ID}"
-"""Destination-path token replaced with the execution-plan id at write
+"""Destination-path token replaced with the execution id at write
 time."""
 TRX_ID: str = "${TRX_ID}"
 """Destination-path token replaced with the transaction id at write
 time."""
 EXEC_PLAN_TS: str = "${EXEC_PLAN_TS}"
-"""Destination-path token replaced with the execution-plan timestamp at
-write time."""
+"""Destination-path token replaced at write time with when the function
+run was triggered, as a basic-format ISO 8601 UTC timestamp with
+milliseconds (e.g. `20260604T083428.376Z`): fixed length, so paths
+built from it sort chronologically, and free of characters (`:`, `+`)
+that filesystems or object stores reject or mangle."""
 
 DEST_PATH_TOKENS: frozenset[str] = frozenset({
     EXEC_PLAN_ID,

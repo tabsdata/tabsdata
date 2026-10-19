@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -239,9 +239,40 @@ def test_resolve_dest_tokens_substitutes():
     resolved = _plugin.resolve_dest_tokens(
         "out/${EXEC_PLAN_ID}/${TRX_ID}/x.${EXEC_PLAN_TS}.csv", ctx
     )
-    assert resolved == (
-        "out/test-exec-plan-id/test-trx-id/x.2026-01-01T00:00:00+00:00.csv"
+    assert resolved == "out/test-exec-plan-id/test-trx-id/x.20260101T000000.000Z.csv"
+
+
+def test_resolve_dest_tokens_timestamp_has_a_fixed_length():
+    whole_second = _plugin.resolve_dest_tokens("${EXEC_PLAN_TS}", _DestCtx(Path(".")))
+    fraction = _plugin.resolve_dest_tokens(
+        "${EXEC_PLAN_TS}",
+        _TriggeredOnDestCtx(datetime(2026, 1, 1, 0, 0, 0, 376000, tzinfo=timezone.utc)),
     )
+    assert whole_second == "20260101T000000.000Z"
+    assert fraction == "20260101T000000.376Z"
+    assert len(whole_second) == len(fraction)
+    assert whole_second < fraction
+
+
+def test_path_timestamp_uses_only_path_safe_characters():
+    stamp = _plugin.path_timestamp(
+        datetime(2026, 6, 4, 8, 34, 28, 376000, tzinfo=timezone.utc)
+    )
+    assert stamp == "20260604T083428.376Z"
+    assert set(stamp) <= set("0123456789T.Z")
+
+
+def test_path_timestamp_converts_to_utc():
+    offset = timezone(timedelta(hours=2))
+    stamp = _plugin.path_timestamp(datetime(2026, 6, 4, 10, 34, 28, tzinfo=offset))
+    assert stamp == "20260604T083428.000Z"
+
+
+def test_path_timestamp_truncates_to_milliseconds():
+    stamp = _plugin.path_timestamp(
+        datetime(2026, 6, 4, 8, 34, 28, 376999, tzinfo=timezone.utc)
+    )
+    assert stamp == "20260604T083428.376Z"
 
 
 def test_resolve_dest_tokens_leaves_unknown_tokens():
@@ -346,6 +377,16 @@ class _DestCtx(DestContext):
 
     def add_metadata(self, attr, val):
         pass
+
+
+class _TriggeredOnDestCtx(_DestCtx):
+    def __init__(self, triggered_on: datetime) -> None:
+        super().__init__(Path("."))
+        self._triggered_on = triggered_on
+
+    @property
+    def triggered_on(self) -> datetime:
+        return self._triggered_on
 
 
 def _stub_build_location(_conn, _entry, _handler):  # pragma: no cover - never reached
