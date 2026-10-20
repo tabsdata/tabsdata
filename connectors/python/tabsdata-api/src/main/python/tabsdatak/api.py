@@ -18,7 +18,7 @@ Each decorator wraps the user function in an `*Info` descriptor
 (`PublisherInfo` / `StreamPublisherInfo` / `TransformerInfo`
 / `SubscriberInfo`) and the framework picks the descriptor up
 during flow registration. Triggers (`CronTrigger` /
-`TablesTrigger` / `AllTablesTrigger` / `ManualTrigger`) declare
+`TablesTrigger` / `AllTablesTrigger`) declare
 *when* a function fires; the `source` / `destination` declares the
 *where*. The *connection* (and its credentials) is not declared on
 the function -- it is the connection registered on the function's
@@ -103,7 +103,7 @@ class Trigger(ABC, _api.DescriptorBase):
     :categories: trigger
 
     Concrete triggers (`CronTrigger`, `TablesTrigger`,
-    `AllTablesTrigger`, `ManualTrigger`) live on a function's
+    `AllTablesTrigger`) live on a function's
     `trigger_by` argument and control *when* the runtime fires it.
     Any function can also be run manually, whatever its trigger.
     """
@@ -132,8 +132,8 @@ class TablesTrigger(Trigger):
 
     Args:
         tables: `[collection/]table` references to watch; they need not
-            be inputs of the function. An empty list never fires, the
-            same as `ManualTrigger`.
+            be inputs of the function. An empty list never fires: the
+            function runs only when run manually.
     """
 
     tables: CollTableNamesSpec
@@ -150,30 +150,18 @@ class AllTablesTrigger(Trigger):
     pass
 
 
-@_api.dataclass(ApiErrorCode.API_31)
-class ManualTrigger(Trigger):
-    """Never fire: the function runs only when run manually.
-
-    :categories: trigger
-    """
-
-    pass
-
-
 # `@publisher` cannot use `AllTablesTrigger` (publishers
 # have no upstream tables to watch); the other two decorators do.
-PublisherTriggerBySpec: TypeAlias = Union[CronTrigger, TablesTrigger, ManualTrigger]
+PublisherTriggerBySpec: TypeAlias = Union[CronTrigger, TablesTrigger]
 TransformerTriggerBySpec: TypeAlias = Union[
     CronTrigger,
     TablesTrigger,
     AllTablesTrigger,
-    ManualTrigger,
 ]
 SubscriberTriggerBySpec: TypeAlias = Union[
     CronTrigger,
     TablesTrigger,
     AllTablesTrigger,
-    ManualTrigger,
 ]
 
 # Deprecated: the stream-publisher rollover window in whole minutes, now
@@ -435,8 +423,8 @@ def publisher(
             only letters, digits and underscores (max 64 chars).
         trigger_by: When the function runs on its own:
 
-            * `None` (default) or `ManualTrigger()`: never; only when
-              run manually.
+            * `None` (default) or `TablesTrigger(tables=[])`: never;
+              only when run manually.
             * `TablesTrigger(tables=[...])`: on a new version of any of
               those tables.
             * `CronTrigger(mask=...)`: on the schedule.
@@ -615,7 +603,7 @@ def transformer(
             * `TablesTrigger(tables=[...])`: on a new version of any of
               those tables only, inputs or not.
             * `CronTrigger(mask=...)`: on the schedule only.
-            * `ManualTrigger()`: never; only when run manually.
+            * `TablesTrigger(tables=[])`: never; only when run manually.
         on_tables: Optional list of `OnTablesAction` side-effects.
 
     Returns:

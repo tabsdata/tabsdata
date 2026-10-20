@@ -281,7 +281,7 @@ trigger_by = td.AllTablesTrigger()  # the same, spelled out
 trigger_by = td.TablesTrigger(tables=["table1", "collection/table2"])
 
 # Manual runs only
-trigger_by = td.ManualTrigger()
+trigger_by = td.TablesTrigger(tables=[])
 
 # Cron schedule only
 trigger_by = td.CronTrigger(mask="0 */6 * * *")  # every 6 hours

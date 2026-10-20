@@ -166,10 +166,6 @@ def test_tables_trigger_rejects_invalid_name_with_api_11():
     assert excinfo.value.api_error is ApiErrorCode.API_3
 
 
-def test_manual_trigger_constructs_with_no_args():
-    assert isinstance(m.ManualTrigger(), m.Trigger)
-
-
 def test_all_tables_trigger_constructs_with_no_args():
     t = m.AllTablesTrigger()
     assert isinstance(t, m.Trigger)
@@ -355,8 +351,8 @@ def test_transformer_decorator_allows_default_none_trigger_and_on_tables():
     assert my_xf.on_tables is None
 
 
-def test_transformer_decorator_accepts_manual_trigger():
-    trig = m.ManualTrigger()
+def test_transformer_decorator_accepts_an_empty_tables_trigger():
+    trig = m.TablesTrigger(tables=[])
 
     @m.transformer(input_tables=["in1"], output_tables=["out1"], trigger_by=trig)
     def my_xf(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
@@ -441,8 +437,8 @@ def test_subscriber_decorator_allows_default_none_trigger():
     assert my_sub.trigger_by is None
 
 
-def test_subscriber_decorator_accepts_manual_trigger():
-    trig = m.ManualTrigger()
+def test_subscriber_decorator_accepts_an_empty_tables_trigger():
+    trig = m.TablesTrigger(tables=[])
 
     @m.subscriber(destination=_dest(), input_tables=["in1"], trigger_by=trig)
     def my_sub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:

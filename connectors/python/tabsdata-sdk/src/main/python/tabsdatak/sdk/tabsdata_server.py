@@ -5833,8 +5833,8 @@ def _trigger_string_list(info: FunctionInfo) -> list[str] | None:
     ``None`` for ``trigger_by=None`` or :class:`AllTablesTrigger`, which
     leaves the server to derive the triggers from the function's input
     tables; the explicit table list, possibly empty, for
-    :class:`TablesTrigger`; and no tables for :class:`ManualTrigger` or a
-    :class:`CronTrigger`, whose schedule travels in the workers map."""
+    :class:`TablesTrigger`; and no tables for a :class:`CronTrigger`,
+    whose schedule travels in the workers map."""
     trigger_by = getattr(info, "trigger_by", None)
     if trigger_by is None or isinstance(trigger_by, AllTablesTrigger):
         return None

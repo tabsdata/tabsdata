@@ -23,7 +23,6 @@ from tabsdatak._api import qualified_class
 from tabsdatak.api import (
     AllTablesTrigger,
     CronTrigger,
-    ManualTrigger,
     TablesTrigger,
 )
 
@@ -312,9 +311,9 @@ def test_trigger_string_list_leaves_no_trigger_to_the_server():
     assert ts._trigger_string_list(_publisher_info(trigger_by=None)) is None
 
 
-@pytest.mark.parametrize("trigger", [ManualTrigger(), TablesTrigger(tables=[])])
-def test_trigger_string_list_has_no_tables_for_a_manual_function(trigger):
-    assert ts._trigger_string_list(_transformer_info(trigger_by=trigger)) == []
+def test_trigger_string_list_has_no_tables_for_a_manual_function():
+    info = _transformer_info(trigger_by=TablesTrigger(tables=[]))
+    assert ts._trigger_string_list(info) == []
 
 
 # ---------------------------------------------------------------------------

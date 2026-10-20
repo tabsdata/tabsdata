@@ -372,8 +372,6 @@ class ApiErrorCode(ErrorCode):
     # TablesTrigger (fire on any of a named set of upstream tables)
     API_4 = ErrorDef(ApiInternalException, "Cannot create AllTablesTrigger")
     # AllTablesTrigger (fire on any upstream table change)
-    API_31 = ErrorDef(ApiInternalException, "Cannot create ManualTrigger")
-    # ManualTrigger (fire only on a manual run)
 
     # --- Value references (tabsdatak.api) ---------------------------
     # The `Secret` value reference maps to three codes. (API_7-10 / API_12
