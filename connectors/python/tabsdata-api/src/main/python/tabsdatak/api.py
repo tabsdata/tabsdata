@@ -18,11 +18,12 @@ Each decorator wraps the user function in an `*Info` descriptor
 (`PublisherInfo` / `StreamPublisherInfo` / `TransformerInfo`
 / `SubscriberInfo`) and the framework picks the descriptor up
 during flow registration. Triggers (`CronTrigger` /
-`TablesTrigger` / `AllTablesTrigger`) declare *when* a function
-fires; the `source` / `destination` declares the *where*. The
-*connection* (and its credentials) is not declared on the function
--- it is the connection registered on the function's collection,
-which the runtime resolves and hands to the connector at run time.
+`TablesTrigger` / `AllTablesTrigger` / `ManualTrigger`) declare
+*when* a function fires; the `source` / `destination` declares the
+*where*. The *connection* (and its credentials) is not declared on
+the function -- it is the connection registered on the function's
+collection, which the runtime resolves and hands to the connector at
+run time.
 
 The `FunctionCtx` interface (`TransactionCtx` + `FlowCtx`) is what the
 runtime hands to every decorated function so it can read trx and
@@ -78,9 +79,7 @@ TableNamesSpec: TypeAlias = Annotated[list[TableNameSpec], _api.NON_EMPTY_LIST_F
 # `TablesTrigger.tables` uses this form so a function can fire on
 # tables that live in a different collection.
 CollTableNameSpec: TypeAlias = Annotated[str, _api.COLL_TABLE_NAME_VALIDATION]
-CollTableNamesSpec: TypeAlias = Annotated[
-    list[CollTableNameSpec], _api.NON_EMPTY_LIST_FIELD
-]
+CollTableNamesSpec: TypeAlias = list[CollTableNameSpec]
 
 # Cross-collection table reference with an optional version suffix, of
 # shape `"[collection/]table[@versions]"` (e.g. `people@HEAD~1..HEAD`).
@@ -104,8 +103,9 @@ class Trigger(ABC, _api.DescriptorBase):
     :categories: trigger
 
     Concrete triggers (`CronTrigger`, `TablesTrigger`,
-    `AllTablesTrigger`) live on a function's `trigger_by` argument
-    and control *when* the runtime fires it.
+    `AllTablesTrigger`, `ManualTrigger`) live on a function's
+    `trigger_by` argument and control *when* the runtime fires it.
+    Any function can also be run manually, whatever its trigger.
     """
 
     __kind__ = "trigger"
@@ -126,13 +126,14 @@ class CronTrigger(Trigger):
 
 @_api.dataclass(ApiErrorCode.API_3)
 class TablesTrigger(Trigger):
-    """Fire when one of a named set of upstream tables produces a new
-    batch.
+    """Fire on a new version of any of the named tables.
 
     :categories: trigger
 
     Args:
-        tables: `collection/table` references to watch.
+        tables: `[collection/]table` references to watch; they need not
+            be inputs of the function. An empty list never fires, the
+            same as `ManualTrigger`.
     """
 
     tables: CollTableNamesSpec
@@ -140,8 +141,18 @@ class TablesTrigger(Trigger):
 
 @_api.dataclass(ApiErrorCode.API_4)
 class AllTablesTrigger(Trigger):
-    """Fire when *any* upstream table the function reads from produces
-    a new batch.
+    """Fire on a new version of any table the function reads, other
+    than the ones it writes. The default: the same as `trigger_by=None`.
+
+    :categories: trigger
+    """
+
+    pass
+
+
+@_api.dataclass(ApiErrorCode.API_31)
+class ManualTrigger(Trigger):
+    """Never fire: the function runs only when run manually.
 
     :categories: trigger
     """
@@ -151,16 +162,18 @@ class AllTablesTrigger(Trigger):
 
 # `@publisher` cannot use `AllTablesTrigger` (publishers
 # have no upstream tables to watch); the other two decorators do.
-PublisherTriggerBySpec: TypeAlias = Union[CronTrigger, TablesTrigger]
+PublisherTriggerBySpec: TypeAlias = Union[CronTrigger, TablesTrigger, ManualTrigger]
 TransformerTriggerBySpec: TypeAlias = Union[
     CronTrigger,
     TablesTrigger,
     AllTablesTrigger,
+    ManualTrigger,
 ]
 SubscriberTriggerBySpec: TypeAlias = Union[
     CronTrigger,
     TablesTrigger,
     AllTablesTrigger,
+    ManualTrigger,
 ]
 
 # Deprecated: the stream-publisher rollover window in whole minutes, now
@@ -420,8 +433,13 @@ def publisher(
         output_tables: Non-empty list of local table names to emit, one
             per return slot. Each name must start with a letter and use
             only letters, digits and underscores (max 64 chars).
-        trigger_by: Optional `CronTrigger` / `TablesTrigger`; if
-            omitted the function fires only on a manual run.
+        trigger_by: When the function runs on its own:
+
+            * `None` (default) or `ManualTrigger()`: never; only when
+              run manually.
+            * `TablesTrigger(tables=[...])`: on a new version of any of
+              those tables.
+            * `CronTrigger(mask=...)`: on the schedule.
         on_tables: Optional list of `OnTablesAction` side-effects.
 
     Returns:
@@ -590,9 +608,14 @@ def transformer(
             `v..v` range, a comma-separated list, or `NEW`).
         output_tables: Non-empty list of local table names to emit, one
             per return slot (valid table names, see `publisher`).
-        trigger_by: Optional `CronTrigger` / `TablesTrigger` /
-            `AllTablesTrigger`; if omitted the function fires only on
-            a manual run.
+        trigger_by: When the function runs on its own:
+
+            * `None` (default) or `AllTablesTrigger()`: on a new version
+              of any input table, other than the ones it writes.
+            * `TablesTrigger(tables=[...])`: on a new version of any of
+              those tables only, inputs or not.
+            * `CronTrigger(mask=...)`: on the schedule only.
+            * `ManualTrigger()`: never; only when run manually.
         on_tables: Optional list of `OnTablesAction` side-effects.
 
     Returns:
@@ -633,9 +656,9 @@ def subscriber(
             fixes the number of return slots.
         input_tables: Non-empty list of `[collection/]table[@versions]`
             references to ship (same form as `transformer`).
-        trigger_by: Optional `CronTrigger` / `TablesTrigger` /
-            `AllTablesTrigger`; if omitted the function fires only on
-            a manual run.
+        trigger_by: When the function runs on its own; the same options
+            as `transformer`, by default on a new version of any input
+            table.
 
     Returns:
         The decorator that wraps the function as a subscriber

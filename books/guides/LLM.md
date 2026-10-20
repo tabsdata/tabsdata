@@ -853,7 +853,8 @@ revision, so the typed wrappers were sugar an LLM *could* prefer.
 **Second mitigation (typed-only, current state).** The bare-list
 and bare-``"*"`` shortcuts have been **removed**. ``trigger_by``
 now accepts only `Trigger` subclasses
-(`CronTrigger` / `TablesTrigger` / `AllTablesTrigger`). The
+(`CronTrigger` / `TablesTrigger` / `AllTablesTrigger` /
+`ManualTrigger`). The
 ``AllSpec = Literal["*"]`` alias and the bare-``TableNamesSpec``
 / ``CollTableNamesSpec`` branches were dropped from
 ``PublisherTriggerBySpec`` / ``TransformerTriggerBySpec`` /
@@ -863,7 +864,7 @@ Why typed-only is the right shape for LLM authoring:
 
 * **Symbol discovery beats magic strings.** An LLM enumerating
   ``tabsdatak.api.__all__`` finds the closed set
-  ``{CronTrigger, TablesTrigger, AllTablesTrigger}`` with full
+  ``{CronTrigger, TablesTrigger, AllTablesTrigger, ManualTrigger}`` with full
   docstrings. A bare ``"*"`` is undiscoverable from the symbol
   table and easy to confuse with glob / regex / SQL ``*`` --
   the LLM is more likely to invent ``"all"`` / ``"any"`` /

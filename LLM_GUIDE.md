@@ -272,21 +272,19 @@ written into the staged data itself, so the key does not affect them.
 
 Control when functions execute:
 ```python
-# Trigger on all input table changes (default for transformer/subscriber)
-trigger_by = td.ALL_DEPS
-
-# Manual trigger only (default for publisher)
+# Default: a transformer or subscriber runs on a new version of any table it
+# reads (its own excluded); a publisher, which reads none, only manually
 trigger_by = None
-
-# Cron schedule
-trigger_by = td.CronTrigger(mask="0 */6 * * *")  # every 6 hours
-
-# Trigger on file staging events
-trigger_by = td.StageTrigger(...)
+trigger_by = td.AllTablesTrigger()  # the same, spelled out
 
 # Specific table changes
-trigger_by = "collection/table_name"
-trigger_by = ["collection/table1", "collection/table2"]
+trigger_by = td.TablesTrigger(tables=["table1", "collection/table2"])
+
+# Manual runs only
+trigger_by = td.ManualTrigger()
+
+# Cron schedule only
+trigger_by = td.CronTrigger(mask="0 */6 * * *")  # every 6 hours
 ```
 
 ## TableFrame

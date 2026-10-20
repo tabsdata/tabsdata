@@ -49,7 +49,7 @@ from tabsdatak._info import (
     SubscriberInfo,
     TransformerInfo,
 )
-from tabsdatak.api import CronTrigger, TablesTrigger
+from tabsdatak.api import AllTablesTrigger, CronTrigger, TablesTrigger
 from tabsdatak.common._archive.bundle import build_bundle, capture_source_snippet
 
 if TYPE_CHECKING:
@@ -5830,15 +5830,17 @@ def _trigger_string_list(info: FunctionInfo) -> list[str] | None:
     """Extract the ``trigger_string_list`` field the legacy
     ``function_register`` payload expects.
 
-    For :class:`TablesTrigger` we forward the explicit table list;
-    for :class:`CronTrigger` (worker-style) and :class:`AllTablesTrigger`
-    the list is ``None`` -- the server resolves the trigger semantics
-    from the workers map (for cron) or the function's own input-table
-    list (for all-tables)."""
+    ``None`` for ``trigger_by=None`` or :class:`AllTablesTrigger`, which
+    leaves the server to derive the triggers from the function's input
+    tables; the explicit table list, possibly empty, for
+    :class:`TablesTrigger`; and no tables for :class:`ManualTrigger` or a
+    :class:`CronTrigger`, whose schedule travels in the workers map."""
     trigger_by = getattr(info, "trigger_by", None)
+    if trigger_by is None or isinstance(trigger_by, AllTablesTrigger):
+        return None
     if isinstance(trigger_by, TablesTrigger):
         return list(trigger_by.tables)
-    return None
+    return []
 
 
 def _connector(info: FunctionInfo) -> str | None:

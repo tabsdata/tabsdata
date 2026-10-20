@@ -156,16 +156,18 @@ def test_tables_trigger_accepts_collection_qualified_names():
     assert t.tables == ["users", "src/orders"]
 
 
-def test_tables_trigger_rejects_empty_list_with_api_11():
-    with pytest.raises(ApiException) as excinfo:
-        m.TablesTrigger(tables=[])
-    assert excinfo.value.api_error is ApiErrorCode.API_3
+def test_tables_trigger_accepts_no_tables():
+    assert m.TablesTrigger(tables=[]).tables == []
 
 
 def test_tables_trigger_rejects_invalid_name_with_api_11():
     with pytest.raises(ApiException) as excinfo:
         m.TablesTrigger(tables=["1bad"])
     assert excinfo.value.api_error is ApiErrorCode.API_3
+
+
+def test_manual_trigger_constructs_with_no_args():
+    assert isinstance(m.ManualTrigger(), m.Trigger)
 
 
 def test_all_tables_trigger_constructs_with_no_args():
@@ -353,6 +355,26 @@ def test_transformer_decorator_allows_default_none_trigger_and_on_tables():
     assert my_xf.on_tables is None
 
 
+def test_transformer_decorator_accepts_manual_trigger():
+    trig = m.ManualTrigger()
+
+    @m.transformer(input_tables=["in1"], output_tables=["out1"], trigger_by=trig)
+    def my_xf(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
+
+    assert my_xf.trigger_by is trig
+
+
+def test_transformer_decorator_rejects_an_empty_list():
+    with pytest.raises(ApiException) as excinfo:
+
+        @m.transformer(input_tables=["in1"], output_tables=["out1"], trigger_by=[])
+        def _f(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+            return t1
+
+    assert excinfo.value.api_error is ApiErrorCode.API_19
+
+
 def test_transformer_decorator_accepts_all_tables_trigger():
     # Typed wrapper around the bare-"*" shortcut.
     trig = m.AllTablesTrigger()
@@ -417,6 +439,16 @@ def test_subscriber_decorator_allows_default_none_trigger():
 
     assert isinstance(my_sub, _info.SubscriberInfo)
     assert my_sub.trigger_by is None
+
+
+def test_subscriber_decorator_accepts_manual_trigger():
+    trig = m.ManualTrigger()
+
+    @m.subscriber(destination=_dest(), input_tables=["in1"], trigger_by=trig)
+    def my_sub(t1: tableframe.TableFrame | None) -> tableframe.TableFrame | None:
+        return t1
+
+    assert my_sub.trigger_by is trig
 
 
 def test_subscriber_decorator_accepts_all_tables_trigger():

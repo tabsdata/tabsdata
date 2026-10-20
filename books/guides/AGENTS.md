@@ -48,7 +48,7 @@ and must not be imported.
 | Kind        | Symbols |
 | ----------- | ------- |
 | Decorators  | `publisher`, `stream_publisher`, `transformer`, `subscriber` |
-| Triggers    | `Trigger` (abstract), `CronTrigger`, `TablesTrigger`, `AllTablesTrigger` |
+| Triggers    | `Trigger` (abstract), `CronTrigger`, `TablesTrigger`, `AllTablesTrigger`, `ManualTrigger` |
 | Value refs  | `Secret` |
 | Bases       | `Src` (abstract), `StreamSrc` (abstract), `Dest` (abstract), `OnTablesAction` (abstract), `TableFrame` |
 | Specs (validated string types) | `TableNameSpec`, `TableNamesSpec`, `CollTableNameSpec`, `CollTableNamesSpec`, `CronMaskSpec`, `SecretRefSpec` |

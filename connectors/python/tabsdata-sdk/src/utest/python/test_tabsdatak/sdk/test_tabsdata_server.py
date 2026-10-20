@@ -23,6 +23,7 @@ from tabsdatak._api import qualified_class
 from tabsdatak.api import (
     AllTablesTrigger,
     CronTrigger,
+    ManualTrigger,
     TablesTrigger,
 )
 
@@ -296,18 +297,24 @@ def test_trigger_string_list_returns_table_list_for_tables_trigger():
     assert ts._trigger_string_list(info) == ["c/a", "c/b"]
 
 
-def test_trigger_string_list_returns_none_for_cron_trigger():
-    info = _publisher_info(trigger_by=CronTrigger(mask="0 * * * *"))
-    assert ts._trigger_string_list(info) is None
+def test_trigger_string_list_has_no_tables_for_cron_trigger():
+    info = _transformer_info(trigger_by=CronTrigger(mask="0 * * * *"))
+    assert ts._trigger_string_list(info) == []
 
 
-def test_trigger_string_list_returns_none_for_all_tables_trigger():
+def test_trigger_string_list_leaves_all_tables_trigger_to_the_server():
     info = _transformer_info(trigger_by=AllTablesTrigger())
     assert ts._trigger_string_list(info) is None
 
 
-def test_trigger_string_list_returns_none_when_no_trigger():
+def test_trigger_string_list_leaves_no_trigger_to_the_server():
+    assert ts._trigger_string_list(_transformer_info(trigger_by=None)) is None
     assert ts._trigger_string_list(_publisher_info(trigger_by=None)) is None
+
+
+@pytest.mark.parametrize("trigger", [ManualTrigger(), TablesTrigger(tables=[])])
+def test_trigger_string_list_has_no_tables_for_a_manual_function(trigger):
+    assert ts._trigger_string_list(_transformer_info(trigger_by=trigger)) == []
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +380,7 @@ def test_create_archive_publisher_cron_extracts_metadata(project_root, _no_op_bu
     assert archive.function_type == "P"
     assert archive.tables == ["t1", "t2"]
     assert archive.string_dependencies == []
-    assert archive.trigger_string_list is None  # cron -> workers
+    assert archive.trigger_string_list == []  # cron -> workers
     assert archive.workers is not None and "CT" in archive.workers
     assert archive.connector == qualified_class(_FakeSrc)
     assert archive.connection == qualified_class(_FakeSrcConn)
