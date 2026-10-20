@@ -34,7 +34,6 @@ pub enum Executions {
     FunctionVersionId,
     TriggeredOn,
     TriggeredById,
-    RecursionOptions,
     FunctionId,
     TriggerType,
     ExternalUid,
@@ -70,10 +69,6 @@ impl Entity for Defs {
                 .col(logical_id_column(Executions::FunctionVersionId).not_null())
                 .col(ColumnDef::new(Executions::TriggeredOn).timestamp_with_time_zone().not_null())
                 .col(id_column(Executions::TriggeredById).not_null())
-                // `Option<Json<RecursionOptions>>` in the DAO; sqlx encodes
-                // `Json<T>` as JSONB in Postgres, so the column must be JSONB
-                // decode time with a "mismatched types" error.
-                .col(ColumnDef::new(Executions::RecursionOptions).json_binary().null())
                 .col(id_column(Executions::FunctionId).not_null().default(""))
                 .col(ColumnDef::new(Executions::TriggerType).text().not_null().default("M"))
                 .col(ColumnDef::new(Executions::ExternalUid).text().null())

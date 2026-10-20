@@ -48,7 +48,6 @@ async fn _seed_execution(
         triggered_by_id: UserId::admin(),
         trigger_type,
         external_uid: None,
-        recursion_options: None,
         topology_version_id: topology.base.id,
     };
 

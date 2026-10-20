@@ -15,7 +15,6 @@ use crate::types::basic::{
 };
 use crate::types::composed::TableVersions;
 use crate::types::json::Json;
-use crate::types::recursion::RecursionOptions;
 use crate::types::status_count::FunctionRunStatusCount;
 use std::collections::{HashMap, HashSet};
 use ta_objects::FromDao;
@@ -75,8 +74,6 @@ pub struct ExecutionInsertDB {
     /// Caller-supplied idempotency key. Unique per `function_id` when set;
     /// NULL allows multiple executions for the same function.
     pub external_uid: Option<ExternalUid>,
-
-    pub recursion_options: Option<Json<RecursionOptions>>,
 
     /// The project topology version the plan read.
     pub topology_version_id: TopologyVersionId,
