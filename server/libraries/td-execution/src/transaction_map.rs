@@ -56,7 +56,7 @@ impl<T: TransactionMapper> TransactionMap<T> {
     pub fn get(&self, key: &TransactionKey) -> Result<&TransactionValue, TdError> {
         self.map
             .get(key)
-            .ok_or(TransactionMapperError::MissingTransactionKey(key.clone()).into())
+            .ok_or_else(|| TransactionMapperError::MissingTransactionKey(key.clone()).into())
     }
 }
 
