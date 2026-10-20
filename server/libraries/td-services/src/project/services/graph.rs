@@ -32,8 +32,8 @@ async fn project_graph(
     let version = read_version(conn, &project, &topology_param).await?;
     let topology = ProjectTopology::of(conn, version).await?;
     Ok(ProjectGraphResponse {
-        version: topology.version.base.id.clone(),
-        at: AtTime::from(topology.version.interval.valid_from.clone()),
+        version: topology.version.base.id,
+        at: AtTime::from(topology.version.interval.valid_from),
         graph: graph_response(&topology.graph()?).await?,
     })
 }
@@ -191,7 +191,7 @@ mod tests {
         assert_ne!(after.version, before.version);
         assert_ne!(shape(&after), shape(&before));
 
-        let replayed = graph(&db, p.id, Some(before.version.clone())).await?;
+        let replayed = graph(&db, p.id, Some(before.version)).await?;
         assert_eq!(replayed.version, before.version);
         assert_eq!(replayed.at, before.at);
         assert_eq!(shape(&replayed), shape(&before));
@@ -210,7 +210,7 @@ mod tests {
             .await?
             .data;
         let mut versions = versions.data;
-        versions.sort_by(|a, b| a.valid_from.cmp(&b.valid_from));
+        versions.sort_by_key(|a| a.valid_from);
         assert!(versions.len() > 1, "creation and setup each open a version");
         for pair in versions.windows(2) {
             assert!(!pair[0].valid_to.is_infinity());

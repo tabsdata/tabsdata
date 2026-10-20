@@ -368,12 +368,12 @@ mod tests {
             .await?;
         for topology in [
             TopologyReadParam {
-                topology_version: Some(registered.base.id.clone()),
+                topology_version: Some(registered.base.id),
                 at: None,
             },
             TopologyReadParam {
                 topology_version: None,
-                at: Some(registered_at.clone()),
+                at: Some(registered_at),
             },
         ] {
             let read = service.read_function(request(topology)).await?.data;
@@ -401,7 +401,7 @@ mod tests {
 
         let read = service
             .read_function(request(TopologyReadParam {
-                topology_version: Some(registered.base.id.clone()),
+                topology_version: Some(registered.base.id),
                 at: None,
             }))
             .await?

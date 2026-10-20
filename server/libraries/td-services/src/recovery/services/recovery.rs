@@ -564,7 +564,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             ..function.base.clone()
         };
-        let (mut conn, version) = topology_write(&db, &project_id).await?;
+        let (mut conn, version) = topology_write(db, &project_id).await?;
         conn.scd2().open(&newer, version).await?;
         commit_topology_write(conn).await?;
         Ok(())

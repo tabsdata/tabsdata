@@ -92,7 +92,7 @@ pub async fn mint_function_runs_on_dispatch(
     let executions: Vec<ExecutionDB> = conn.chunked().fetch_all(&execution_ids, ()).await?;
     let versions: Vec<TopologyVersionId> = executions
         .iter()
-        .map(|e| e.base.topology_version_id.clone())
+        .map(|e| e.base.topology_version_id)
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
@@ -102,7 +102,7 @@ pub async fn mint_function_runs_on_dispatch(
         .fetch_all::<ProjectTopologyDB>(&versions, ())
         .await?
         .into_iter()
-        .map(|v| (v.base.id.clone(), v))
+        .map(|v| (v.base.id, v))
         .collect();
     let planned_by_execution: HashMap<ExecutionId, &ProjectTopologyDB> = executions
         .iter()
@@ -120,7 +120,7 @@ pub async fn mint_function_runs_on_dispatch(
     for lfr in ready_lfrs {
         let topology = planned_by_execution[&lfr.base.execution_id];
         function_ids_by_version
-            .entry(topology.base.id.clone())
+            .entry(topology.base.id)
             .or_insert_with(|| (topology, HashSet::new()))
             .1
             .insert(lfr.base.function_id);
@@ -136,7 +136,7 @@ pub async fn mint_function_runs_on_dispatch(
             .await?;
         for t in tables {
             tables_by_run
-                .entry((version.clone(), t.base.function_id))
+                .entry((*version, t.base.function_id))
                 .or_default()
                 .push(t);
         }
@@ -180,7 +180,7 @@ pub async fn mint_function_runs_on_dispatch(
         let empty = Vec::new();
         let tables = tables_by_run
             .get(&(
-                planned_by_execution[&lfr.base.execution_id].base.id.clone(),
+                planned_by_execution[&lfr.base.execution_id].base.id,
                 lfr.base.function_id,
             ))
             .unwrap_or(&empty);

@@ -310,7 +310,7 @@ mod tests {
             table_type: TableType::default(),
             parent_table_id: None,
         };
-        let (mut conn, version) = topology_write(&db, &p.id).await?;
+        let (mut conn, version) = topology_write(db, &p.id).await?;
         conn.scd2().open(&private, version).await?;
         commit_topology_write(conn).await?;
 
