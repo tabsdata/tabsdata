@@ -100,7 +100,7 @@ pub(crate) mod tests {
         ExecutionDB, ExecutionDBWithNames, ExecutionResponse, ResolvedVersionResponse,
     };
     use td_objects::dxo::function::{
-        ChildFunction, FunctionDB, FunctionDBWithNames, FunctionRegister,
+        ChildFunction, FunctionDB, FunctionDBWithNames, FunctionRegister, FunctionUpdate,
     };
     use td_objects::dxo::graph::GraphEdge;
     use td_objects::dxo::group::GroupDB;
@@ -374,7 +374,15 @@ pub(crate) mod tests {
             workers: None,
         };
         let _ = db.scoped(p).seed().function(collection, &create).await?;
+        execute_named(db, p, collection, "consumer").await
+    }
 
+    async fn execute_named(
+        db: &TdPool,
+        p: ProjectId,
+        collection: &ActiveCollectionDB,
+        function: &str,
+    ) -> Result<ExecutionResponse, TdError> {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 (
@@ -382,7 +390,7 @@ pub(crate) mod tests {
                         collection: CollectionIdName::from_str(&collection.name.to_string())?,
                     },
                     FunctionParam {
-                        function: FunctionIdName::from_str("consumer")?,
+                        function: FunctionIdName::from_str(function)?,
                     },
                 ),
                 ExecutionRequest {
@@ -398,6 +406,100 @@ pub(crate) mod tests {
             .execute_function(request)
             .await
             .map(|response| response.data)
+    }
+
+    /// `consumer` reads table_w, which `writer` writes once `consumer`'s
+    /// table_c triggers it: a plan running both writes table_w after its reader
+    /// runs, so the reader gets what was committed before, not a version it
+    /// would wait on forever.
+    #[td_test::test(db)]
+    async fn test_a_table_written_later_in_the_plan_reads_its_committed_version(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?.id;
+        let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 1).await?;
+        let writer = FunctionRegister {
+            name: FunctionName::try_from("writer")?,
+            tables: Some(vec![TableNameDto::try_from("table_w")?]),
+            triggers: Some(vec![TableTriggerDto::try_from("table_p")?]),
+            ..register_named("writer")?
+        };
+        db.scoped(p).seed().function(&collection, &writer).await?;
+        let consumer = FunctionRegister {
+            dependencies: Some(vec![
+                TableDependencyDto::try_from("table_p")?,
+                TableDependencyDto::try_from("table_w")?,
+            ]),
+            triggers: Some(vec![TableTriggerDto::try_from("table_p")?]),
+            tables: Some(vec![TableNameDto::try_from("table_c")?]),
+            ..register_named("consumer")?
+        };
+        db.scoped(p).seed().function(&collection, &consumer).await?;
+        update_named(
+            &db,
+            p,
+            &collection,
+            "writer",
+            FunctionUpdate {
+                tables: Some(vec![TableNameDto::try_from("table_w")?]),
+                triggers: Some(vec![TableTriggerDto::try_from("table_c")?]),
+                ..Default::default()
+            },
+        )
+        .await?;
+
+        let response = execute_named(&db, p, &collection, "consumer").await?;
+        assert_eq!(dep_edge(&response, 1).inner, vec![None]);
+        Ok(())
+    }
+
+    async fn update_named(
+        db: &TdPool,
+        p: ProjectId,
+        collection: &ActiveCollectionDB,
+        function: &str,
+        update: FunctionUpdate,
+    ) -> Result<(), TdError> {
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .update(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str(function)?,
+                    },
+                ),
+                update,
+            )
+            .in_project(p);
+        Services::with_defaults(db.clone())
+            .update_function(request)
+            .await?;
+        Ok(())
+    }
+
+    fn register_named(name: &str) -> Result<FunctionRegister, TdError> {
+        Ok(FunctionRegister {
+            child_functions: None,
+            name: FunctionName::try_from(name)?,
+            description: name.try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "snippet".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            parent_tables: None,
+            runtime_values: FunctionRuntimeValues::try_from("rt")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        })
     }
 
     fn lfri_slot(

@@ -4,9 +4,9 @@
 
 use crate::graph::{Projection, TopologyGraph};
 use petgraph::algo::toposort;
-use petgraph::prelude::{Direction, EdgeRef, NodeIndex};
-use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
-use std::collections::HashSet;
+use petgraph::prelude::{Dfs, Direction, EdgeIndex, EdgeRef, NodeIndex};
+use petgraph::visit::{EdgeFiltered, IntoNodeReferences, VisitMap, Visitable, Walker};
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::ops::{Deref, DerefMut};
@@ -236,6 +236,43 @@ where
 }
 
 impl<F, T, V> ExecutionPlan<F, T, V> {
+    /// Dependencies on tables this plan writes, but not before their reader
+    /// runs: written by the reader itself, after it, or alongside it. Only
+    /// triggers order runs, and only that order is validated acyclic, so a
+    /// reader must not wait for such a write.
+    pub fn dependencies_read_before_written(&self) -> HashSet<EdgeIndex> {
+        let run_order = EdgeFiltered::from_fn(&self.inner, |edge| {
+            !matches!(edge.weight(), GraphEdge::Dependency { .. })
+        });
+        let mut downstream_of: HashMap<NodeIndex, HashSet<NodeIndex>> = HashMap::new();
+        let mut read_before_written = HashSet::new();
+        for edge in self.inner.edge_references() {
+            if !matches!(edge.weight(), GraphEdge::Dependency { .. }) {
+                continue;
+            }
+            let (table, reader) = (edge.source(), edge.target());
+            let Some(writer) = self.writer_in_plan(table) else {
+                continue;
+            };
+            let downstream = downstream_of
+                .entry(writer)
+                .or_insert_with(|| Dfs::new(&run_order, writer).iter(&run_order).collect());
+            let written_before = writer != reader && downstream.contains(&reader);
+            if !written_before {
+                read_before_written.insert(edge.id());
+            }
+        }
+        read_before_written
+    }
+
+    fn writer_in_plan(&self, table: NodeIndex) -> Option<NodeIndex> {
+        self.inner
+            .edges_directed(table, Direction::Incoming)
+            .find(|edge| matches!(edge.weight(), GraphEdge::Output { .. }))
+            .map(|edge| edge.source())
+            .filter(|writer| self.nodes_in_trigger_path.contains(writer))
+    }
+
     pub async fn map<'a, CN, RN, CE, RE, FF, TT, VV>(
         &'a self,
         transform_nodes: CN,
@@ -263,8 +300,13 @@ impl<F, T, V> ExecutionPlan<F, T, V> {
 mod tests {
     use super::*;
     use crate::test_utils::{TestTransactionBy, test_graph};
+    use crate::topology::ProjectTopology;
+    use std::collections::BTreeSet;
     use td_error::TdError;
-    use td_objects::test_utils::graph::{FUNCTION_NAMES, TABLE_NAMES, function_node, table_node};
+    use td_objects::test_utils::graph::{
+        FUNCTION_NAMES, TABLE_NAMES, collection, dependency, function, function_node, table,
+        table_node, trigger, version,
+    };
 
     #[tokio::test]
     async fn test_execution_plan_map_async() {
@@ -377,6 +419,59 @@ mod tests {
         let output_versions = graph.outputs();
         assert!(!input_versions.is_empty());
         assert!(!output_versions.is_empty());
+    }
+
+    /// function_0 writes and reads table_0, which triggers function_1 and,
+    /// through function_1's table_1 or directly, function_2. function_1 reads
+    /// table_0 and function_2's table_3.
+    #[test]
+    fn test_dependencies_read_before_written() -> Result<(), TdError> {
+        let [f0, f1, f2] = [0, 1, 2].map(|i| &FUNCTION_NAMES[i]);
+        let [t0, t1, t3] = [0, 1, 3].map(|i| &TABLE_NAMES[i]);
+        let plan = |f2_trigger: &TableName, start: &FunctionName| {
+            let graph = ProjectTopology::new(
+                version(),
+                vec![collection()],
+                vec![function(f0), function(f1), function(f2)],
+                vec![table(f0, t0), table(f1, t1), table(f2, t3)],
+                vec![trigger(t0, f1), trigger(f2_trigger, f2)],
+                vec![dependency(t0, f0), dependency(t0, f1), dependency(t3, f1)],
+            )
+            .graph()?;
+            let plan = ExecutionPlan::new(graph, &function_node(start))?;
+            let read_before_written: BTreeSet<_> = plan
+                .dependencies_read_before_written()
+                .into_iter()
+                .map(|edge| {
+                    let (table, function) = plan.inner.edge_endpoints(edge).unwrap();
+                    match (&plan.inner[table], &plan.inner[function]) {
+                        (GraphNode::Table(t), GraphNode::Function(f)) => {
+                            format!("{}→{}", t.name, f.name)
+                        }
+                        _ => unreachable!(),
+                    }
+                })
+                .collect();
+            Ok::<_, TdError>(read_before_written)
+        };
+        let edges = |edges: &[&str]| edges.iter().map(|e| e.to_string()).collect();
+
+        assert_eq!(
+            plan(t1, f0)?,
+            edges(&["table_0→function_0", "table_3→function_1"]),
+            "its own table, and one written after it; not one written before"
+        );
+        assert_eq!(
+            plan(t0, f0)?,
+            edges(&["table_0→function_0", "table_3→function_1"]),
+            "one written alongside it"
+        );
+        assert_eq!(
+            plan(t1, f1)?,
+            edges(&["table_3→function_1"]),
+            "not a table the plan does not write"
+        );
+        Ok(())
     }
 
     #[tokio::test]

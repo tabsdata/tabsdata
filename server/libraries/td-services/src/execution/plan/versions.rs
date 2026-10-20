@@ -36,18 +36,24 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
     let mut ltdv_cache: HashMap<ResolveKey, Vec<Option<LogicalTableDataVersionId>>> =
         HashMap::new();
 
+    // A table read before this plan writes it is pinned at the version before
+    // the one the plan writes: no run or transaction then waits on a write
+    // that triggers do not order before it.
+    let read_before_written = execution_plan.dependencies_read_before_written();
     for edge in execution_plan.graph.inner.edge_references() {
         let source = &execution_plan.graph.inner[edge.source()];
         let target = &execution_plan.graph.inner[edge.target()];
         let versions = edge.weight();
 
-        let (versions_inner, function, table, self_dependency) = match versions {
+        let (versions_inner, function, table, unwritten_when_read) = match versions {
             GraphEdge::Output { versions, .. } => (versions, source, target, false),
             GraphEdge::Trigger { versions } => (versions, target, source, false),
-            GraphEdge::Dependency {
+            GraphEdge::Dependency { versions, .. } => (
                 versions,
-                dependency,
-            } => (versions, target, source, *dependency.self_dependency),
+                target,
+                source,
+                read_before_written.contains(&edge.id()),
+            ),
         };
         let function = match function {
             GraphNode::Function(function) => function,
@@ -58,8 +64,8 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
             _ => unreachable!(),
         };
 
-        let lookup_versions = if self_dependency {
-            // Self references shift by -1: HEAD means the previous version.
+        let lookup_versions = if unwritten_when_read {
+            // The newest version is the one this plan writes: step back past it.
             Cow::Owned(versions_inner.shift(-1))
         } else {
             Cow::Borrowed(versions_inner)
