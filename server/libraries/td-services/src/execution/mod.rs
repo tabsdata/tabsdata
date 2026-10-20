@@ -13,15 +13,14 @@ use crate::execution::plan::rows::{
     update_initial_function_run_status,
 };
 use crate::execution::plan::versions::resolve_execution_plan_versions;
-use ta_execution::PlanScope;
 use ta_services::ctx_service::ReqCtx;
 use td_database::access::LockInstant;
 use td_database::access::{InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
+use td_execution::TransactionBy;
 use td_execution::topology::FunctionState;
 use td_execution::topology::ProjectTopology;
-use td_execution::{ExecutionScope, TransactionBy};
 use td_objects::and;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{
@@ -30,7 +29,7 @@ use td_objects::dxo::execution::{
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::types::basic::TriggerOutcome;
 use td_objects::types::basic::{ExecutionId, TriggerType, TriggeredOn};
-use td_objects::types::json::Json;
+use td_objects::types::plan::PlanOptions;
 use td_queries::Queries;
 
 pub(crate) mod cancellation;
@@ -89,12 +88,12 @@ pub(crate) async fn execute(
     assert_function_status(msgs, &function, &override_disabled_trigger)?;
 
     let function_id = function.base.base.function_id;
-    let function_only = request.function_only;
-    let recursion_options =
-        ExecutionScope::execution_recursion_options(function_only, override_disabled_trigger);
+    let options = PlanOptions {
+        function_only: request.function_only,
+        override_disabled_trigger,
+    };
     let topology = ProjectTopology::current(conn, &function.base.project_id).await?;
-    let execution_plan =
-        topology.plan(FunctionState::Executable, &function_id, &recursion_options)?;
+    let execution_plan = topology.plan(FunctionState::Executable, &function_id, &options)?;
     execution_plan.validate(transaction_by)?;
 
     let execution = ExecutionInsertDB {
@@ -107,7 +106,6 @@ pub(crate) async fn execute(
         triggered_by_id: request_context.user_id,
         trigger_type,
         external_uid: request.external_uid,
-        recursion_options: Some(Json(recursion_options)),
         topology_version_id: topology.version.base.id,
     };
     conn.insert(&execution).await?;

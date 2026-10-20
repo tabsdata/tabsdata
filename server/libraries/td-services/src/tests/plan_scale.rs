@@ -12,14 +12,13 @@ use crate::execution::plan::versions::resolve_execution_plan_versions;
 use crate::tests::fixtures::register;
 use std::str::FromStr;
 use std::time::Instant;
-use ta_execution::PlanScope;
 use td_database::access::{AcrossProjects, DbPool, Grant};
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt as _;
 use td_error::TdError;
+use td_execution::TransactionBy;
 use td_execution::topology::{FunctionState, ProjectTopology};
-use td_execution::{ExecutionScope, TransactionBy};
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionParam, ExecutionRequest};
@@ -29,6 +28,7 @@ use td_objects::types::basic::{
     OverrideDisabledTrigger, UserId,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+use td_objects::types::plan::PlanOptions;
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
@@ -97,10 +97,10 @@ async fn test_plan_scale(db: TdPool) -> Result<(), TdError> {
     let topology = ProjectTopology::current(conn, &p.id).await?;
     let load = started.elapsed();
 
-    let options = ExecutionScope::execution_recursion_options(
-        FunctionOnly::FALSE,
-        OverrideDisabledTrigger::FALSE,
-    );
+    let options = PlanOptions {
+        function_only: FunctionOnly::FALSE,
+        override_disabled_trigger: OverrideDisabledTrigger::FALSE,
+    };
     let started = Instant::now();
     let plan = topology.plan(
         FunctionState::Executable,

@@ -7,7 +7,7 @@ pub mod basic;
 pub mod addresses;
 pub mod composed;
 pub mod json;
-pub mod recursion;
+pub mod plan;
 pub mod status_count;
 pub mod stream;
 pub mod table_ref;

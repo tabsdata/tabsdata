@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use td_database::access::{AccessMode, InProject};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
@@ -36,21 +36,19 @@ pub struct ProjectTopology {
 
 /// The functions a walk goes through.
 #[derive(Clone, Copy, Debug)]
-pub enum FunctionState<'a> {
+pub enum FunctionState {
     Any,
     /// Active and enabled.
     Executable,
-    Ran(&'a HashSet<FunctionId>),
 }
 
-impl FunctionState<'_> {
+impl FunctionState {
     pub(crate) fn matches(&self, function: &TopologyFunction) -> bool {
         match self {
             FunctionState::Any => true,
             FunctionState::Executable => {
                 function.status == FunctionStatus::Active && *function.enabled
             }
-            FunctionState::Ran(functions) => functions.contains(&function.function_id),
         }
     }
 }

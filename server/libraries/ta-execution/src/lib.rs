@@ -6,39 +6,31 @@ use std::fmt::Display;
 use std::str::FromStr;
 use td_error::{TdError, td_error};
 use td_objects::dxo::graph::FunctionNode;
-use td_objects::types::basic::{
-    FunctionId, FunctionOnly, OverrideDisabledTrigger, TransactionByStr, TransactionKey,
-};
-use td_objects::types::recursion::RecursionOptions;
+use td_objects::types::basic::{FunctionId, TransactionByStr, TransactionKey};
+use td_objects::types::plan::PlanOptions;
 
-/// The trigger lookups an edition composes into its execution plans.
-pub trait TriggerSource {
+/// A topology version's triggers between the functions a plan may run.
+pub trait PlanGraph {
     type Trigger;
 
-    fn walk(&self, start: &FunctionId, options: &RecursionOptions) -> Vec<&Self::Trigger>;
+    /// The active triggers from `function`'s tables into functions the plan
+    /// may run; none when `function` itself may not.
+    fn triggers_from(&self, function: &FunctionId) -> Vec<&Self::Trigger>;
 
-    /// The triggers tying `start` and the functions in `triggers` to their
-    /// children, minus the ones already in `triggers`.
-    fn children_triggers<'a>(
-        &'a self,
-        start: &FunctionId,
-        triggers: &[&'a Self::Trigger],
-        options: &RecursionOptions,
-    ) -> Vec<&'a Self::Trigger>;
+    fn triggered(&self, trigger: &Self::Trigger) -> FunctionId;
+
+    /// The active triggers tying the start and the functions `triggers` reach
+    /// to their children, minus the ones already in `triggers`.
+    fn children_triggers<'a>(&'a self, triggers: &[&'a Self::Trigger]) -> Vec<&'a Self::Trigger>;
 }
 
-/// Which functions an execution runs: each edition provides one.
+/// What an execution runs: each edition provides one.
 pub trait PlanScope {
-    fn execution_recursion_options(
-        function_only: FunctionOnly,
-        override_disabled_trigger: OverrideDisabledTrigger,
-    ) -> RecursionOptions;
-
-    fn plan_triggers<'a, S: TriggerSource>(
-        source: &'a S,
+    fn plan_triggers<'a, G: PlanGraph>(
+        graph: &'a G,
         start: &FunctionId,
-        options: &RecursionOptions,
-    ) -> Vec<&'a S::Trigger>;
+        options: &PlanOptions,
+    ) -> Vec<&'a G::Trigger>;
 }
 
 #[td_error]
@@ -49,9 +41,6 @@ pub enum TransactionMapperError {
     InvalidTransactionBy(#[from] strum::ParseError) = 5001,
 }
 
-/// TransactionMapper trait is used to map a function version node to a transaction key.
-/// Depending on the mapper, the key can have different forms. This will mark to which
-/// transaction the function version node belongs.
 pub trait TransactionMapper:
     Default + FromStr + for<'a> TryFrom<&'a str> + Display + Sized
 {

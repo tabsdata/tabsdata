@@ -4,11 +4,9 @@
 
 //! The walks over one seeded topology, edge by edge.
 
-use crate::topology::plan::TopologyTriggers;
 use crate::topology::walk::Admitted;
 use crate::topology::{FunctionState, ProjectTopology};
 use std::collections::{BTreeSet, HashMap};
-use ta_execution::TriggerSource;
 use td_database::access::{AcrossProjects, DbPool, Grant};
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
@@ -18,11 +16,11 @@ use td_objects::dxo::graph::GraphNode;
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::topology::{TopologyDependency, TopologyTrigger};
 use td_objects::types::basic::{
-    BundleId, CollectionName, Decorator, Depth, Enabled, FunctionId, FunctionName,
+    BundleId, CollectionName, Decorator, Enabled, FunctionId, FunctionName, FunctionOnly,
     FunctionRuntimeValues, OverrideDisabledTrigger, ReuseFrozen, TableNameDto, UserId,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-use td_objects::types::recursion::RecursionOptions;
+use td_objects::types::plan::PlanOptions;
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
@@ -122,14 +120,11 @@ async fn seed(db: &TdPool) -> Result<(ProjectTopology, HashMap<String, FunctionI
     Ok((topology, ids))
 }
 
-fn depths(up: Option<i32>, down: Option<i32>) -> RecursionOptions {
-    let depth = |d: Option<i32>| d.map(|d| Depth::try_from(d).unwrap());
-    RecursionOptions::new(depth(up), depth(down))
-}
-
-fn overriding(mut options: RecursionOptions) -> RecursionOptions {
-    options.with_override_disabled_trigger(OverrideDisabledTrigger::TRUE);
-    options
+fn options(override_disabled_trigger: bool) -> PlanOptions {
+    PlanOptions {
+        function_only: FunctionOnly::FALSE,
+        override_disabled_trigger: OverrideDisabledTrigger::from(override_disabled_trigger),
+    }
 }
 
 fn named(
@@ -167,61 +162,37 @@ fn edges(expected: &[&str]) -> BTreeSet<String> {
     expected.iter().map(|e| e.to_string()).collect()
 }
 
+/// The triggers out of one function, as a plan sees them: active, into
+/// functions the plan may run, and none out of a function it may not.
 #[td_test::test(db)]
-async fn test_trigger_walks(db: TdPool) -> Result<(), TdError> {
+async fn test_triggers_from(db: TdPool) -> Result<(), TdError> {
     let (topology, ids) = seed(&db).await?;
-    let walk = |state, start: &str, options: RecursionOptions| {
-        let source = TopologyTriggers {
-            topology: &topology,
-            state,
-        };
-        triggers(&ids, source.walk(&ids[start], &options))
+    let from = |state, start: &str, overriding: bool, function: &str| {
+        let admitted = Admitted::plan(&topology, state, ids[start], &options(overriding));
+        triggers(&ids, topology.triggers_from(&admitted, &ids[function]))
     };
-    let all = [
-        "a→b", "a→c", "b→d", "c→d", "d→e", "e→f", "d→g", "b→h", "h→i",
-    ];
-
     assert_eq!(
-        walk(FunctionState::Any, "a", depths(Some(0), None)),
-        edges(&all)
-    );
-    assert_eq!(
-        walk(FunctionState::Executable, "a", depths(Some(0), None)),
-        edges(&["a→b", "a→c", "b→d", "c→d", "d→g", "b→h", "h→i"]),
-        "a disabled function stops the walk"
-    );
-    assert_eq!(
-        walk(FunctionState::Any, "a", depths(Some(0), Some(1))),
+        from(FunctionState::Any, "a", false, "a"),
         edges(&["a→b", "a→c"])
     );
     assert_eq!(
-        walk(FunctionState::Any, "a", depths(Some(0), Some(2))),
-        edges(&["a→b", "a→c", "b→d", "c→d", "b→h"])
+        from(FunctionState::Any, "a", false, "d"),
+        edges(&["d→e", "d→g"])
     );
     assert_eq!(
-        walk(FunctionState::Any, "d", depths(None, Some(0))),
-        edges(&["a→b", "a→c", "b→d", "c→d"])
+        from(FunctionState::Executable, "a", false, "d"),
+        edges(&["d→g"]),
+        "a disabled function is not triggered"
     );
     assert_eq!(
-        walk(FunctionState::Any, "d", depths(Some(1), Some(1))),
-        edges(&["b→d", "c→d", "d→e", "d→g"])
+        from(FunctionState::Executable, "e", false, "e"),
+        edges(&[]),
+        "a disabled start triggers nothing"
     );
     assert_eq!(
-        walk(FunctionState::Any, "a", depths(Some(0), Some(0))),
-        edges(&[])
-    );
-    assert_eq!(
-        walk(FunctionState::Executable, "e", depths(Some(0), None)),
-        edges(&[])
-    );
-    assert_eq!(
-        walk(
-            FunctionState::Executable,
-            "e",
-            overriding(depths(Some(0), None))
-        ),
+        from(FunctionState::Executable, "e", true, "e"),
         edges(&["e→f"]),
-        "an overridden disabled start walks while active"
+        "an overridden disabled start triggers while active"
     );
     Ok(())
 }
@@ -229,34 +200,47 @@ async fn test_trigger_walks(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_children_run_with_their_parent(db: TdPool) -> Result<(), TdError> {
     let (topology, ids) = seed(&db).await?;
-    let source = TopologyTriggers {
-        topology: &topology,
-        state: FunctionState::Any,
-    };
-    let options = depths(Some(0), Some(0));
+    let from_b = Admitted::plan(&topology, FunctionState::Any, ids["b"], &options(false));
     assert_eq!(
-        triggers(&ids, source.children_triggers(&ids["b"], &[], &options)),
+        triggers(&ids, topology.children_triggers(&from_b, &[])),
         edges(&["b→h"])
     );
-    let walked = source.walk(&ids["a"], &depths(Some(0), None));
+    let from_a = Admitted::plan(&topology, FunctionState::Any, ids["a"], &options(false));
+    let walked = topology.trigger_walk(&from_a);
     assert!(
-        source
-            .children_triggers(&ids["a"], &walked, &options)
-            .is_empty(),
+        topology.children_triggers(&from_a, &walked).is_empty(),
         "children the walk reached are not repeated"
     );
     Ok(())
 }
 
+/// A walk goes both ways over the functions it admits.
 #[td_test::test(db)]
-async fn test_dependency_walks(db: TdPool) -> Result<(), TdError> {
+async fn test_walks(db: TdPool) -> Result<(), TdError> {
     let (topology, ids) = seed(&db).await?;
+    let all = [
+        "a→b", "a→c", "b→d", "c→d", "d→e", "e→f", "d→g", "b→h", "h→i",
+    ];
+    let walk = |state, start: &str| {
+        let admitted = Admitted::new(&topology, state, ids[start]);
+        triggers(&ids, topology.trigger_walk(&admitted))
+    };
+    assert_eq!(walk(FunctionState::Any, "a"), edges(&all));
+    assert_eq!(
+        walk(FunctionState::Any, "g"),
+        edges(&["a→b", "a→c", "b→d", "c→d", "d→g"]),
+        "upstream, a walk follows triggers into what it reached, not out of it"
+    );
+    assert_eq!(
+        walk(FunctionState::Executable, "a"),
+        edges(&["a→b", "a→c", "b→d", "c→d", "d→g", "b→h", "h→i"]),
+        "a disabled function stops the walk"
+    );
+    assert_eq!(walk(FunctionState::Executable, "e"), edges(&[]));
+
     let admitted = Admitted::new(&topology, FunctionState::Any, ids["a"]);
     assert_eq!(
-        dependencies(
-            &ids,
-            topology.dependency_walk(&admitted, &depths(Some(0), None))
-        ),
+        dependencies(&ids, topology.dependency_walk(&admitted)),
         edges(&["a→b", "b→d", "d→g"])
     );
     Ok(())
@@ -268,13 +252,12 @@ async fn test_dependency_walks(db: TdPool) -> Result<(), TdError> {
 async fn test_table_flow_walks(db: TdPool) -> Result<(), TdError> {
     let (topology, ids) = seed(&db).await?;
     let admitted = Admitted::flow(&topology, ids["d"]);
-    let unbounded = depths(None, None);
     assert_eq!(
-        triggers(&ids, topology.trigger_walk(&admitted, &unbounded)),
+        triggers(&ids, topology.trigger_walk(&admitted)),
         edges(&["a→b", "a→c", "b→d", "c→d", "d→e", "e→f", "d→g"])
     );
     assert_eq!(
-        dependencies(&ids, topology.dependency_walk(&admitted, &unbounded)),
+        dependencies(&ids, topology.dependency_walk(&admitted)),
         edges(&["a→b", "b→d", "c→d", "d→g"])
     );
     Ok(())

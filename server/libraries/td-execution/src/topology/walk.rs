@@ -8,14 +8,14 @@ use td_objects::dxo::topology::{
     TopologyDependency, TopologyFunction, TopologyTable, TopologyTrigger,
 };
 use td_objects::types::basic::{
-    Depth, FunctionId, FunctionStatus, TableStatus, TriggerStatus, TriggerVersionId,
+    FunctionId, FunctionStatus, TableStatus, TriggerStatus, TriggerVersionId,
 };
-use td_objects::types::recursion::RecursionOptions;
+use td_objects::types::plan::PlanOptions;
 
 /// The functions a walk from `start` may visit.
 pub(crate) struct Admitted<'t> {
     functions: &'t HashMap<FunctionId, TopologyFunction>,
-    state: FunctionState<'t>,
+    state: FunctionState,
     start: FunctionId,
     start_passes: bool,
     overriding: bool,
@@ -26,16 +26,16 @@ impl<'t> Admitted<'t> {
     /// its children through while active.
     pub(crate) fn plan(
         topology: &'t ProjectTopology,
-        state: FunctionState<'t>,
+        state: FunctionState,
         start: FunctionId,
-        options: &RecursionOptions,
+        options: &PlanOptions,
     ) -> Self {
         let mut admitted = Self {
             functions: &topology.functions,
             state,
             start,
             start_passes: false,
-            overriding: options.override_disabled_trigger(),
+            overriding: *options.override_disabled_trigger,
         };
         admitted.start_passes = topology
             .functions
@@ -60,7 +60,7 @@ impl<'t> Admitted<'t> {
     #[cfg(test)]
     pub(crate) fn new(
         topology: &'t ProjectTopology,
-        state: FunctionState<'t>,
+        state: FunctionState,
         start: FunctionId,
     ) -> Self {
         Self {
@@ -86,12 +86,28 @@ impl<'t> Admitted<'t> {
 }
 
 impl ProjectTopology {
-    /// The active triggers reachable from the start through `admitted`.
-    pub(crate) fn trigger_walk(
+    /// The active triggers from `function`'s tables into functions `admitted`
+    /// lets through; none when `function` itself is not.
+    pub(crate) fn triggers_from(
         &self,
         admitted: &Admitted,
-        options: &RecursionOptions,
+        function: &FunctionId,
     ) -> Vec<&TopologyTrigger> {
+        if !admitted.admit(function) {
+            return Vec::new();
+        }
+        self.triggers_from
+            .get(function)
+            .into_iter()
+            .flatten()
+            .map(|&i| &self.triggers[i])
+            .filter(|t| t.status == TriggerStatus::Active && admitted.admit(&t.function_id))
+            .collect()
+    }
+
+    /// The active triggers reachable from the start either way through
+    /// `admitted`.
+    pub(crate) fn trigger_walk(&self, admitted: &Admitted) -> Vec<&TopologyTrigger> {
         if !admitted.admit(&admitted.start) {
             return Vec::new();
         }
@@ -102,7 +118,6 @@ impl ProjectTopology {
             &self.triggers,
             &self.triggers_from,
             &admitted.start,
-            options.max_downstream_depth(),
             |t| t.function_id,
             keep,
         );
@@ -110,18 +125,15 @@ impl ProjectTopology {
             &self.triggers,
             &self.triggers_into,
             &admitted.start,
-            options.max_upstream_depth(),
             |t| *t.trigger_by_function_id,
             keep,
         ));
         kept.into_iter().map(|i| &self.triggers[i]).collect()
     }
 
-    pub(crate) fn dependency_walk(
-        &self,
-        admitted: &Admitted,
-        options: &RecursionOptions,
-    ) -> Vec<&TopologyDependency> {
+    /// The dependencies reachable from the start either way through
+    /// `admitted`.
+    pub(crate) fn dependency_walk(&self, admitted: &Admitted) -> Vec<&TopologyDependency> {
         if !admitted.admit(&admitted.start) {
             return Vec::new();
         }
@@ -130,7 +142,6 @@ impl ProjectTopology {
             &self.dependencies,
             &self.dependencies_from,
             &admitted.start,
-            options.max_downstream_depth(),
             |d| d.function_id,
             keep,
         );
@@ -138,7 +149,6 @@ impl ProjectTopology {
             &self.dependencies,
             &self.dependencies_into,
             &admitted.start,
-            options.max_upstream_depth(),
             |d| *d.table_function_id,
             keep,
         ));
@@ -147,7 +157,7 @@ impl ProjectTopology {
 
     /// The active triggers tying the start and the functions in `triggers`
     /// to their children, minus the ones already in `triggers`. Children run
-    /// with their parent whatever the walk depth.
+    /// with their parent whatever the plan reaches.
     pub(crate) fn children_triggers<'t>(
         &'t self,
         admitted: &Admitted,
@@ -198,35 +208,28 @@ impl ProjectTopology {
     }
 }
 
-/// The edges reachable from `start` in at most `max_depth` hops (`None`
-/// unbounded, zero none), each kept by `keep` with its far end, in load order.
+/// The edges reachable from `start`, each kept by `keep` with its far end,
+/// in load order.
 fn reach<E>(
     edges: &[E],
     adjacent: &HashMap<FunctionId, Vec<usize>>,
     start: &FunctionId,
-    max_depth: Option<Depth>,
     far: impl Fn(&E) -> FunctionId,
     keep: impl Fn(&E, &FunctionId) -> bool,
 ) -> BTreeSet<usize> {
     let mut kept = BTreeSet::new();
     let mut seen = HashSet::from([*start]);
     let mut frontier = vec![*start];
-    let mut depth = 0;
-    while !frontier.is_empty() && max_depth.is_none_or(|max| depth < *max) {
-        let mut next = Vec::new();
-        for node in frontier {
-            for &i in adjacent.get(&node).into_iter().flatten() {
-                let end = far(&edges[i]);
-                if keep(&edges[i], &end) {
-                    kept.insert(i);
-                    if seen.insert(end) {
-                        next.push(end);
-                    }
+    while let Some(node) = frontier.pop() {
+        for &i in adjacent.get(&node).into_iter().flatten() {
+            let end = far(&edges[i]);
+            if keep(&edges[i], &end) {
+                kept.insert(i);
+                if seen.insert(end) {
+                    frontier.push(end);
                 }
             }
         }
-        frontier = next;
-        depth += 1;
     }
     kept
 }

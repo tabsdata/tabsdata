@@ -89,12 +89,10 @@ pub(crate) mod tests {
     use std::error::Error;
     use std::str::FromStr;
     use std::sync::LazyLock;
-    use ta_execution::PlanScope;
     use td_database::access::LockInstant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_error::{ApiError, TdError};
-    use td_execution::ExecutionScope;
     use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionParam;
@@ -123,12 +121,12 @@ pub(crate) mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionName, Decorator, Depth, Description, Enabled,
-        ExecutionName, ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues,
-        GroupName, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
-        OverrideDisabledTrigger, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId,
-        ProjectName, SkipIfRunning, TableName, TableNameDto, TransactionKey, TransactionStatus,
-        TriggeredOn, UserId, VersionPos,
+        AccessTokenId, BundleId, CollectionName, Decorator, Description, Enabled, ExecutionName,
+        ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues, GroupName, InputIdx,
+        LogicalFunctionRunStatus, LogicalTableDataVersionId, OverrideDisabledTrigger,
+        PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId, ProjectName, SkipIfRunning,
+        TableName, TableNameDto, TransactionKey, TransactionStatus, TriggeredOn, UserId,
+        VersionPos,
     };
     use td_objects::types::basic::{CollectionIdName, ExternalUid, FunctionIdName, TableIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
@@ -804,16 +802,6 @@ pub(crate) mod tests {
             .collection(&COLLECTION_NAMES[2], &UserId::admin())
             .await?;
 
-        let graph_depth = if single_function {
-            Some(Depth::ZERO)
-        } else {
-            ExecutionScope::execution_recursion_options(
-                FunctionOnly::FALSE,
-                OverrideDisabledTrigger::FALSE,
-            )
-            .max_downstream_depth()
-        };
-
         // collection_0/function_0 triggers function_1 and function_2, which
         // may trigger function_3 depending on the test.
         let create = FunctionRegister {
@@ -986,14 +974,6 @@ pub(crate) mod tests {
         let service = Services::with_defaults(db.clone());
         let response = service.execute_function(request).await;
 
-        let expected_all_functions = match graph_depth {
-            Some(depth) => FUNCTION_NAMES
-                .iter()
-                .take(*depth as usize + 1)
-                .collect::<Vec<_>>(),
-            None => FUNCTION_NAMES.iter().collect::<Vec<_>>(),
-        };
-
         {
             let response = response?.data;
 
@@ -1003,71 +983,36 @@ pub(crate) mod tests {
             );
             assert!(response.triggered_on < TriggeredOn::asserted(*AtTime::now()));
 
-            let mut all_functions: Vec<_> =
-                response.all_functions.values().map(|t| &t.name).collect();
-            all_functions.sort();
-            assert_eq!(expected_all_functions, all_functions);
-
-            let expected_triggered_functions = match graph_depth {
-                Some(depth) => FUNCTION_NAMES
-                    .iter()
-                    .take(*depth as usize + 1)
-                    .collect::<Vec<_>>(),
-                None => FUNCTION_NAMES.iter().collect::<Vec<_>>(),
-            };
-            let mut triggered_functions: Vec<_> = response
-                .triggered_functions
-                .iter()
-                .map(|t| &response.all_functions[t].name)
-                .collect();
-            triggered_functions.sort();
-            assert_eq!(expected_triggered_functions, triggered_functions);
-
+            // The plan's shape is the edition's business, asserted in its
+            // te-execution tests; here, what every edition guarantees.
             let manual_trigger = &response.all_functions[&response.manual_trigger];
             assert_eq!(manual_trigger.name, FUNCTION_NAMES[0]);
+            assert!(
+                response
+                    .triggered_functions
+                    .contains(&response.manual_trigger)
+            );
+            let triggered: HashSet<_> = response.triggered_functions.iter().collect();
+            let all: HashSet<_> = response.all_functions.keys().collect();
+            assert!(triggered.is_subset(&all));
 
-            let all_tables_with_collection = vec![
-                TableName::try_from("collection_0/table_0")?,
-                TableName::try_from("collection_1/table_1")?,
-                TableName::try_from("collection_1/table_2")?,
-                TableName::try_from("collection_2/table_1")?,
-                TableName::try_from("collection_2/table_2")?,
-                TableName::try_from("collection_2/table_3")?,
-                TableName::try_from("collection_2/table_4")?,
-            ];
-            let expected_all_tables = match graph_depth {
-                Some(depth) => all_tables_with_collection
-                    .into_iter()
-                    .take(*depth as usize + 1)
-                    .collect::<Vec<_>>(),
-                None => all_tables_with_collection.into_iter().collect::<Vec<_>>(),
-            };
-
-            let mut all_tables: Vec<_> = response
-                .all_tables
-                .values()
-                .map(|t| TableName::try_from(format!("{}/{}", t.collection, t.name)).unwrap())
-                .collect();
-            all_tables.sort();
-            assert_eq!(expected_all_tables, all_tables);
-
-            assert_eq!(response.user_tables.len(), all_tables.len());
+            let created: HashSet<_> = response.created_tables.iter().collect();
+            let tables: HashSet<_> = response.all_tables.keys().collect();
+            assert!(created.is_subset(&tables));
+            assert!(
+                response
+                    .all_tables
+                    .values()
+                    .filter(|t| t.collection == COLLECTION_NAMES[0])
+                    .any(|t| t.name.to_string() == "table_0"),
+                "the trigger's own table is in the plan"
+            );
+            assert_eq!(response.user_tables.len(), tables.len());
             assert_eq!(response.system_tables.len(), 0);
-
-            let expected_created_tables = expected_all_tables;
-            let mut created_tables: Vec<_> = response
-                .created_tables
-                .iter()
-                .map(|t| {
-                    TableName::try_from(format!(
-                        "{}/{}",
-                        response.all_tables[t].collection, response.all_tables[t].name
-                    ))
-                    .unwrap()
-                })
-                .collect();
-            created_tables.sort();
-            assert_eq!(expected_created_tables, created_tables);
+            for (function, table, _) in &response.relations {
+                assert!(response.all_functions.contains_key(function));
+                assert!(response.all_tables.contains_key(table));
+            }
 
             let executions: Vec<ExecutionDBWithNames> =
                 db.fetch_all::<ExecutionDBWithNames>(()).await?;
@@ -1141,7 +1086,7 @@ pub(crate) mod tests {
                 .timeline()
                 .fetch_all::<LogicalTableDataVersionDB>(())
                 .await?;
-            assert_eq!(ltdvs.len(), expected_created_tables.len());
+            assert_eq!(ltdvs.len(), response.created_tables.len());
             for ltdv in ltdvs {
                 assert_eq!(&ltdv.base.execution_id, &response.id);
             }
@@ -1430,13 +1375,6 @@ pub(crate) mod tests {
             test_execute_disabled_trigger(db, p.id, OverrideDisabledTrigger::TRUE).await?;
         let response = response?;
 
-        // test_execute_disabled_trigger only creates functions 0 and 1.
-        let graph_depth = ExecutionScope::execution_recursion_options(
-            FunctionOnly::FALSE,
-            OverrideDisabledTrigger::FALSE,
-        )
-        .max_downstream_depth();
-
         assert_eq!(
             response.name,
             Some(ExecutionName::try_from("test_execution")?)
@@ -1445,42 +1383,19 @@ pub(crate) mod tests {
 
         let manual_trigger = &response.all_functions[&response.manual_trigger];
         assert_eq!(manual_trigger.name, FUNCTION_NAMES[0]);
-
-        let expected_all_functions = match graph_depth {
-            Some(depth) => FUNCTION_NAMES[0..2]
+        assert!(
+            response
+                .triggered_functions
+                .contains(&response.manual_trigger),
+            "the overridden disabled trigger runs"
+        );
+        assert!(
+            response
+                .created_tables
                 .iter()
-                .take(*depth as usize + 1)
-                .collect::<Vec<_>>(),
-            None => FUNCTION_NAMES[0..2].iter().collect::<Vec<_>>(),
-        };
-        let mut all_functions: Vec<_> = response.all_functions.values().map(|t| &t.name).collect();
-        all_functions.sort();
-        assert_eq!(expected_all_functions, all_functions);
-
-        let all_tables_with_collection = vec![
-            TableName::try_from("collection_0/table_0")?,
-            TableName::try_from("collection_0/table_1")?,
-        ];
-        let expected_all_tables = match graph_depth {
-            Some(depth) => all_tables_with_collection
-                .into_iter()
-                .take(*depth as usize + 1)
-                .collect::<Vec<_>>(),
-            None => all_tables_with_collection.into_iter().collect::<Vec<_>>(),
-        };
-        let mut created_tables: Vec<_> = response
-            .created_tables
-            .iter()
-            .map(|t| {
-                TableName::try_from(format!(
-                    "{}/{}",
-                    response.all_tables[t].collection, response.all_tables[t].name
-                ))
-                .unwrap()
-            })
-            .collect();
-        created_tables.sort();
-        assert_eq!(expected_all_tables, created_tables);
+                .any(|t| response.all_tables[t].name.to_string() == "table_0"),
+            "and writes its table"
+        );
         Ok(())
     }
 

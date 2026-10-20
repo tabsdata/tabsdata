@@ -16,7 +16,6 @@ use td_objects::dxo::graph::{
 };
 use td_objects::dxo::topology::{TopologyDependency, TopologyTable, TopologyTrigger};
 use td_objects::types::basic::{CollectionId, FunctionId, SelfDependency, TableId};
-use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::table_ref::Versions;
 
 #[td_error]
@@ -43,11 +42,10 @@ impl ProjectTopology {
     pub fn flow_graph(&self, table: &TableId) -> Result<TopologyGraph, TdError> {
         let start = self.table(table)?.function_id;
         let admitted = Admitted::flow(self, start);
-        let unbounded = RecursionOptions::new(None, None);
-        let mut triggers = self.trigger_walk(&admitted, &unbounded);
+        let mut triggers = self.trigger_walk(&admitted);
         let children = self.children_triggers(&admitted, &triggers);
         triggers.extend(children);
-        let dependencies = self.dependency_walk(&admitted, &unbounded);
+        let dependencies = self.dependency_walk(&admitted);
         let functions: HashSet<FunctionId> = triggers
             .iter()
             .flat_map(|t| [*t.trigger_by_function_id, t.function_id])
@@ -58,21 +56,21 @@ impl ProjectTopology {
             )
             .chain([start])
             .collect();
-        self.subgraph(&triggers, dependencies, &functions)
+        self.subgraph(triggers, dependencies, &functions)
     }
 
     /// `triggers` and `dependencies`, plus the active tables `functions` write.
+    /// Rows go in by id whatever order they were found in, so the graph's
+    /// node numbering, and `dot`, depend on the rows alone.
     pub(crate) fn subgraph(
         &self,
-        triggers: &[&TopologyTrigger],
-        dependencies: Vec<&TopologyDependency>,
+        mut triggers: Vec<&TopologyTrigger>,
+        mut dependencies: Vec<&TopologyDependency>,
         functions: &HashSet<FunctionId>,
     ) -> Result<TopologyGraph, TdError> {
-        self.assemble(
-            triggers.iter().copied(),
-            dependencies,
-            self.outputs_of(functions),
-        )
+        triggers.sort_by_key(|t| t.id);
+        dependencies.sort_by_key(|d| d.id);
+        self.assemble(triggers, dependencies, self.outputs_of(functions))
     }
 
     pub(crate) fn function_node(&self, function: &FunctionId) -> Result<FunctionNode, TdError> {
