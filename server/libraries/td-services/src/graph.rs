@@ -5,7 +5,7 @@
 use itertools::{Either, Itertools};
 use std::collections::HashSet;
 use td_error::TdError;
-use td_execution::graph::{MapGraph, TdGraph};
+use td_execution::graph::TdGraph;
 use td_objects::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
 use td_objects::dxo::graph::{GraphNode, GraphResponse};
 use td_objects::types::composed::TableVersions;

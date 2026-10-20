@@ -11,7 +11,6 @@ use ta_services::ctx_service::ReqCtx;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_execution::graph::MapGraph;
 use td_execution::transaction_map::TransactionMap;
 use td_execution::{ExecutionPlan, ResolvedExecutionPlan, TransactionBy, VersionResolver};
 use td_objects::FromDao;

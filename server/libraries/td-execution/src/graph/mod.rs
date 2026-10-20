@@ -3,7 +3,6 @@
 //
 
 pub use generate::FunctionState;
-pub use map_graph::MapGraph;
 pub use td_graph::{PartialGraph, TdGraph, TdGraphBuilder};
 
 mod generate;

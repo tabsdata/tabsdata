@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-pub use execution::{ExecutionPlan, ExecutionPlanner, ResolvedExecutionPlan};
+pub use execution::{ExecutionPlan, ResolvedExecutionPlan};
 pub use recovery_config::{
     DispatchGrace, MaxCompletionTime, MaxPreRunningTime, MaxRecoveriesPerTick, MaxRunningTime,
     RecoveryConfig, RecoveryTickTimeout, StuckRequestedTimeout,

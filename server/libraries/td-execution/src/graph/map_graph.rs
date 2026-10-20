@@ -9,32 +9,13 @@ use std::collections::HashMap;
 use td_error::TdError;
 use td_objects::dxo::graph::{GraphEdge, GraphNode};
 
-pub trait MapGraph<F, T, V> {
-    type Output<FF, TT, VV>: MapGraph<FF, TT, VV>;
-
-    fn map<'a, CN, RN, CE, RE, FF, TT, VV>(
-        &'a self,
-        transform_nodes: CN,
-        transform_edges: CE,
-    ) -> impl Future<Output = Result<Self::Output<FF, TT, VV>, TdError>>
-    where
-        CN: FnMut(&'a GraphNode<F, T>) -> RN,
-        RN: Future<Output = Result<GraphNode<FF, TT>, TdError>>,
-        CE: FnMut(&'a GraphEdge<V>, &'a GraphNode<F, T>, &'a GraphNode<F, T>) -> RE,
-        RE: Future<Output = Result<VV, TdError>>,
-        F: 'a,
-        T: 'a,
-        V: 'a;
-}
-
-impl<F, T, V> MapGraph<F, T, V> for TdGraph<F, T, V> {
-    type Output<FF, TT, VV> = TdGraph<FF, TT, VV>;
-
-    async fn map<'a, CN, RN, CE, RE, FF, TT, VV>(
+impl<F, T, V> TdGraph<F, T, V> {
+    /// The same graph with its nodes and edge versions transformed.
+    pub async fn map<'a, CN, RN, CE, RE, FF, TT, VV>(
         &'a self,
         mut transform_nodes: CN,
         mut transform_edges: CE,
-    ) -> Result<Self::Output<FF, TT, VV>, TdError>
+    ) -> Result<TdGraph<FF, TT, VV>, TdError>
     where
         CN: FnMut(&'a GraphNode<F, T>) -> RN,
         RN: Future<Output = Result<GraphNode<FF, TT>, TdError>>,

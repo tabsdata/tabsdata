@@ -373,16 +373,6 @@ impl<F> PartialGraph<F> {
 
         Ok(PartialGraph { inner: new_graph })
     }
-
-    #[allow(dead_code)]
-    pub fn dot(&self) -> Dot<'_, &Graph<F, ()>> {
-        Dot::with_attr_getters(
-            &self.inner,
-            &[Config::EdgeNoLabel],
-            &|_, _| String::new(),
-            &|_, _| String::new(),
-        )
-    }
 }
 
 impl PartialGraph<FunctionNode> {
@@ -423,7 +413,6 @@ impl PartialGraph<FunctionNode> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::MapGraph;
     use crate::test_utils::{TestTransactionBy, test_graph};
     use itertools::Itertools;
     use std::collections::HashSet;

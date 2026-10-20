@@ -17,7 +17,7 @@ use td_database::access::LockInstant;
 use td_database::access::{InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_execution::ExecutionPlanner;
+use td_execution::ExecutionPlan;
 use td_execution::graph::FunctionState;
 use td_execution::topology::ProjectTopology;
 use td_execution::{ExecutionScope, TransactionBy};
@@ -94,7 +94,7 @@ pub(crate) async fn execute(
     let topology = ProjectTopology::current(conn, &function.base.project_id).await?;
     let graph = topology.plan_graph(FunctionState::Executable, &function_id, &recursion_options)?;
 
-    let execution_plan = graph.with_trigger(&FunctionNode::from(&function))?;
+    let execution_plan = ExecutionPlan::new(graph, &FunctionNode::from(&function))?;
     validate_execution_plan(transaction_by, &execution_plan)?;
 
     let execution = ExecutionInsertDB {

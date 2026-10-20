@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::graph::{MapGraph, PartialGraph, TdGraph};
+use crate::graph::{PartialGraph, TdGraph};
 use petgraph::algo::toposort;
 use petgraph::prelude::{Direction, EdgeRef, NodeIndex};
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
@@ -17,7 +17,7 @@ use td_objects::types::basic::{FunctionName, TableName, TransactionByStr, Transa
 use td_objects::types::table_ref::Versions;
 
 #[td_error]
-enum ExecutionPlannerError {
+enum ExecutionPlanError {
     #[error("Graph is not a Directed Acyclic Graph trigger wise. Cycle found in function: {0}")]
     CyclicTrigger(FunctionName) = 0,
     #[error(
@@ -32,20 +32,23 @@ enum ExecutionPlannerError {
     InvalidTrigger(String) = 5000,
 }
 
-/// The `ExecutionPlanner` trait is used to define the execution plan for the type implementing it.
-pub trait ExecutionPlanner<F, T, V> {
-    fn with_trigger(&self, trigger: &F) -> Result<ExecutionPlan<F, T, V>, TdError>;
+#[derive(Debug)]
+pub struct ExecutionPlan<F = FunctionNode, T = TableNode, V = Versions> {
+    pub graph: TdGraph<F, T, V>,
+    pub trigger_index: NodeIndex,
+    pub nodes_in_trigger_path: HashSet<NodeIndex>,
 }
 
-impl<F, T, V> ExecutionPlanner<F, T, V> for TdGraph<F, T, V>
+pub type ResolvedExecutionPlan = ExecutionPlan<FunctionNode, TableNode, ResolvedVersion>;
+
+impl<F, T, V> ExecutionPlan<F, T, V>
 where
-    F: Clone + Eq + Display,
-    T: Clone,
-    V: Clone,
+    F: Eq + Display,
 {
-    fn with_trigger(&self, trigger: &F) -> Result<ExecutionPlan<F, T, V>, TdError> {
+    /// The plan of running `trigger` over `graph`.
+    pub fn new(graph: TdGraph<F, T, V>, trigger: &F) -> Result<Self, TdError> {
         // Find trigger index in the graph
-        let trigger_index = self
+        let trigger_index = graph
             .inner
             .node_references()
             .find_map(|(index, node)| {
@@ -57,10 +60,10 @@ where
                     None
                 }
             })
-            .ok_or_else(|| ExecutionPlannerError::InvalidTrigger(trigger.to_string()))?;
+            .ok_or_else(|| ExecutionPlanError::InvalidTrigger(trigger.to_string()))?;
 
         // Find all nodes in the trigger graph
-        let mut visited = self.inner.visit_map();
+        let mut visited = graph.inner.visit_map();
         let mut nodes_in_trigger_path = HashSet::new();
 
         let mut stack = vec![trigger_index];
@@ -71,7 +74,7 @@ where
 
             visited.visit(node);
             nodes_in_trigger_path.insert(node);
-            for edge in self.inner.edges(node) {
+            for edge in graph.inner.edges(node) {
                 if let GraphEdge::Output { .. } | GraphEdge::Trigger { .. } = edge.weight() {
                     stack.push(edge.target());
                 }
@@ -79,21 +82,12 @@ where
         }
 
         Ok(ExecutionPlan {
-            graph: self.clone(),
+            graph,
             trigger_index,
             nodes_in_trigger_path,
         })
     }
 }
-
-#[derive(Debug)]
-pub struct ExecutionPlan<F = FunctionNode, T = TableNode, V = Versions> {
-    pub graph: TdGraph<F, T, V>,
-    pub trigger_index: NodeIndex,
-    pub nodes_in_trigger_path: HashSet<NodeIndex>,
-}
-
-pub type ResolvedExecutionPlan = ExecutionPlan<FunctionNode, TableNode, ResolvedVersion>;
 
 impl<F, T, V> Deref for ExecutionPlan<F, T, V> {
     type Target = TdGraph<F, T, V>;
@@ -113,7 +107,7 @@ impl<T, V> ExecutionPlan<FunctionNode, T, V> {
         let partial = PartialGraph::trigger_graph(self)?;
         toposort(&partial.inner, None).map_err(|err| {
             let function = &partial.inner[err.node_id()];
-            ExecutionPlannerError::CyclicTrigger(function.name.clone())
+            ExecutionPlanError::CyclicTrigger(function.name.clone())
         })?;
         Ok(())
     }
@@ -127,7 +121,7 @@ impl<T, V> ExecutionPlan<FunctionNode, T, V> {
             let key = &partial.inner[err.node_id()];
             match transaction_mapper.transaction_by() {
                 Ok(transaction_by) => {
-                    ExecutionPlannerError::CyclicTransaction(transaction_by, key.clone()).into()
+                    ExecutionPlanError::CyclicTransaction(transaction_by, key.clone()).into()
                 }
                 Err(err) => err,
             }
@@ -142,7 +136,7 @@ impl<F, V> ExecutionPlan<F, TableNode, V> {
         let partial = PartialGraph::dependency_graph(self, true)?;
         toposort(&partial.inner, None).map_err(|err| {
             let table = &partial.inner[err.node_id()];
-            ExecutionPlannerError::CyclicDependency(table.name.clone())
+            ExecutionPlanError::CyclicDependency(table.name.clone())
         })?;
         Ok(())
     }
@@ -235,14 +229,13 @@ where
     }
 }
 
-impl<F, T, V> MapGraph<F, T, V> for ExecutionPlan<F, T, V> {
-    type Output<FF, TT, VV> = ExecutionPlan<FF, TT, VV>;
-
-    async fn map<'a, CN, RN, CE, RE, FF, TT, VV>(
+impl<F, T, V> ExecutionPlan<F, T, V> {
+    /// The same plan with its nodes and edge versions transformed.
+    pub async fn map<'a, CN, RN, CE, RE, FF, TT, VV>(
         &'a self,
         transform_nodes: CN,
         transform_edges: CE,
-    ) -> Result<Self::Output<FF, TT, VV>, TdError>
+    ) -> Result<ExecutionPlan<FF, TT, VV>, TdError>
     where
         CN: FnMut(&'a GraphNode<F, T>) -> RN,
         RN: Future<Output = Result<GraphNode<FF, TT>, TdError>>,
@@ -271,9 +264,7 @@ mod tests {
     #[tokio::test]
     async fn test_execution_plan_map_async() {
         let graph = test_graph();
-        let graph = graph
-            .with_trigger(&function_node(&FUNCTION_NAMES[0]))
-            .unwrap();
+        let graph = ExecutionPlan::new(graph, &function_node(&FUNCTION_NAMES[0])).unwrap();
 
         let mapped = graph
             .map(
@@ -343,27 +334,21 @@ mod tests {
     #[tokio::test]
     async fn test_graph_validate_dag_trigger_ok() {
         let graph = test_graph();
-        let graph = graph
-            .with_trigger(&function_node(&FUNCTION_NAMES[0]))
-            .unwrap();
+        let graph = ExecutionPlan::new(graph, &function_node(&FUNCTION_NAMES[0])).unwrap();
         assert!(graph.validate_dag_trigger().is_ok());
     }
 
     #[tokio::test]
     async fn test_graph_validate_dag_dependency_ok() {
         let graph = test_graph();
-        let graph = graph
-            .with_trigger(&function_node(&FUNCTION_NAMES[0]))
-            .unwrap();
+        let graph = ExecutionPlan::new(graph, &function_node(&FUNCTION_NAMES[0])).unwrap();
         assert!(graph.validate_dag_dependency().is_ok());
     }
 
     #[tokio::test]
     async fn test_graph_validate_dag_transaction_ok() {
         let graph = test_graph();
-        let graph = graph
-            .with_trigger(&function_node(&FUNCTION_NAMES[0]))
-            .unwrap();
+        let graph = ExecutionPlan::new(graph, &function_node(&FUNCTION_NAMES[0])).unwrap();
         assert!(
             graph
                 .validate_dag_transaction(&TestTransactionBy::Name)
@@ -380,7 +365,7 @@ mod tests {
     async fn test_manual_trigger_function_matches() -> Result<(), TdError> {
         let graph = test_graph();
         let expected_trigger_fn = function_node(&FUNCTION_NAMES[0]);
-        let graph = graph.with_trigger(&expected_trigger_fn)?;
+        let graph = ExecutionPlan::new(graph, &expected_trigger_fn)?;
         assert_eq!(graph.main_trigger().name, expected_trigger_fn.name);
         Ok(())
     }
@@ -388,9 +373,7 @@ mod tests {
     #[tokio::test]
     async fn test_function_table_input_versions_and_table_function_output_versions() {
         let graph = test_graph();
-        let graph = graph
-            .with_trigger(&function_node(&FUNCTION_NAMES[0]))
-            .unwrap();
+        let graph = ExecutionPlan::new(graph, &function_node(&FUNCTION_NAMES[0])).unwrap();
         let input_versions = graph.function_table_input_versions();
         let output_versions = graph.table_function_output_versions();
         // Just check that these return non-empty sets for a non-trivial graph

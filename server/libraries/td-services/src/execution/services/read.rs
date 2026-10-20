@@ -13,7 +13,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
-use td_execution::ExecutionPlanner;
+use td_execution::ExecutionPlan;
 use td_execution::ExecutionScope;
 use td_execution::TransactionBy;
 use td_execution::graph::FunctionState;
@@ -78,7 +78,7 @@ async fn execution_read(
         &recursion_options,
     )?;
 
-    let execution_plan = graph.with_trigger(&FunctionNode::from(&function))?;
+    let execution_plan = ExecutionPlan::new(graph, &FunctionNode::from(&function))?;
     let transactions: Vec<TransactionInsertDB> = conn
         .fetch_all::<TransactionDB>(&execution_id)
         .await?
