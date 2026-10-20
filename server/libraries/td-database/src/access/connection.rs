@@ -77,7 +77,7 @@ impl<M: AccessMode, S: DbScope, D: ScopedBy<S>> GatedConnection<M, S, D> {
                 succeeded(pass.unit, pass.number, pass.started);
                 Ok(Finished::Done)
             }
-            Some(error) => match retry_after(pass.unit, pass.number, error) {
+            Some(error) => match retry_after(pass.unit, pass.number, pass.started, error) {
                 Some(wait) => {
                     tokio::time::sleep(wait).await;
                     Ok(Finished::Retry)

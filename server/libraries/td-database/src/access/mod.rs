@@ -50,7 +50,7 @@ use std::marker::PhantomData;
 use std::time::Duration;
 use td_error::{TdError, td_error};
 use tokio::time::Instant;
-use tracing::warn;
+use tracing::{debug, warn};
 
 /// The first and the longest pause between attempts to open a unit whose
 /// mode waits on a lock someone else holds.
@@ -227,16 +227,30 @@ impl<S: DbScope, D: ScopedBy<S>> DbPool<S, D> {
         D: Supports<M>,
     {
         let pool = self.pools.get::<M, D>()?;
-        let deadline = Instant::now() + pool.acquire_timeout();
+        let started = Instant::now();
+        let deadline = started + pool.acquire_timeout();
         let mut backoff = OPEN_BACKOFF_MIN;
+        let mut polls: u32 = 0;
         loop {
             if let Some(conn) = M::begin(pool, &self.scope).await? {
+                if polls > 0 {
+                    debug!(
+                        polls,
+                        waited_ms = started.elapsed().as_millis() as u64,
+                        "db.tx: got the lock after waiting"
+                    );
+                }
                 let mut conn = DomainConnection::<D, S, M>::new(conn);
                 self.scope.apply(&mut conn).await?;
                 return Ok(GatedConnection::new(conn, M::opened()));
             }
+            polls += 1;
             if Instant::now() + backoff > deadline {
-                warn!("db.tx: gave up waiting for the lock");
+                warn!(
+                    polls,
+                    waited_ms = started.elapsed().as_millis() as u64,
+                    "db.tx: gave up waiting for the lock"
+                );
                 return Err(ServiceDbError::LockBusy.into());
             }
             tokio::time::sleep(backoff).await;

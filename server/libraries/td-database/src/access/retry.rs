@@ -60,7 +60,7 @@ where
                     succeeded(unit, attempt, started);
                     return Ok(value);
                 }
-                Err(error) => match retry_after(unit, attempt, &error) {
+                Err(error) => match retry_after(unit, attempt, started, &error) {
                     Some(wait) => {
                         tokio::time::sleep(wait).await;
                         attempt += 1;
@@ -73,7 +73,12 @@ where
 }
 
 /// How long to wait before running `unit` again, if at all.
-pub(crate) fn retry_after(unit: impl Display, attempt: u32, error: &TdError) -> Option<Duration> {
+pub(crate) fn retry_after(
+    unit: impl Display,
+    attempt: u32,
+    started: Instant,
+    error: &TdError,
+) -> Option<Duration> {
     let sql = database_error(error)?;
     let code = sql
         .as_database_error()
@@ -113,6 +118,7 @@ pub(crate) fn retry_after(unit: impl Display, attempt: u32, error: &TdError) -> 
                 unit,
                 sqlstate = code,
                 attempts = attempt,
+                elapsed_ms = started.elapsed().as_millis() as u64,
                 error = %error,
                 "db.retry: still conflicting after every attempt, giving up"
             );
@@ -124,6 +130,7 @@ pub(crate) fn retry_after(unit: impl Display, attempt: u32, error: &TdError) -> 
                 unit,
                 sqlstate = code,
                 attempt,
+                elapsed_ms = started.elapsed().as_millis() as u64,
                 error = %error,
                 "db.retry: timed out, not run again"
             );
