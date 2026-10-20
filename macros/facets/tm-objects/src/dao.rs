@@ -852,10 +852,16 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             }
         }
     });
-    if is_table && !is_update && pk.is_none() {
+    // if is_table && !is_update && pk.is_none() {
+    //     return Err(syn::Error::new_spanned(
+    //         ident,
+    //         "a table DAO marks its primary key column with #[dao(pk)]",
+    //     ));
+    // }
+    if is_versioned && pk.is_none() {
         return Err(syn::Error::new_spanned(
             ident,
-            "a table DAO marks its primary key column with #[dao(pk)]",
+            "scd2/timeline: mark the pk column with #[dao(pk)]",
         ));
     }
 
