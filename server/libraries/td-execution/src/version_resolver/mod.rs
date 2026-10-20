@@ -235,20 +235,26 @@ impl<'a> VersionResolver<'a> {
                 let mut found: Vec<ActiveLogicalTableDataVersionDB> = conn
                     .timeline()
                     .at(triggered_on, table_id)
-                    .fetch_all::<ActiveLogicalTableDataVersionDB>(&Versions::Range(min, max))
+                    .fetch_all::<ActiveLogicalTableDataVersionDB>(&Versions::Range(
+                        min.clone(),
+                        max.clone(),
+                    ))
                     .await?;
                 if reverse {
                     found.reverse();
                 }
+                // `found` starts at the newest head or the oldest initial asked for.
                 let map: HashMap<_, _> = versions
                     .iter()
                     .map(|(i, v)| {
-                        let v = match v {
-                            Version::Head(back) => found.get(-back as usize).cloned(),
-                            Version::Initial(forward) => found.get(*forward as usize).cloned(),
+                        let pos = match (v, &min, &max) {
+                            (Version::Head(back), _, Version::Head(newest)) => newest - back,
+                            (Version::Initial(forward), Version::Initial(oldest), _) => {
+                                forward - oldest
+                            }
                             _ => unreachable!(),
                         };
-                        (*i, v)
+                        (*i, found.get(pos as usize).cloned())
                     })
                     .collect();
                 map

@@ -228,6 +228,37 @@ async fn test_resolve_logical_list_relative(db: TdPool) -> Result<(), TdError> {
 }
 
 #[td_test::test(db)]
+async fn test_resolve_logical_list_without_head_or_initial(db: TdPool) -> Result<(), TdError> {
+    let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
+    let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
+
+    let versions = Versions::List(vec![
+        Version::Head(-1),
+        Version::Head(-2),
+        Version::Head(-3),
+        Version::Initial(2),
+        Version::Initial(1),
+        Version::Initial(3),
+    ]);
+    let found = VersionResolver::builder()
+        .function_id(&FunctionId::default())
+        .table_id(&table_id)
+        .versions(&versions)
+        .triggered_on(&AtTime::now())
+        .build()?
+        .resolve(&mut conn)
+        .await?;
+    assert_eq!(found.len(), 6);
+    assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdvs[1].id);
+    assert_eq!(found[1].as_ref().unwrap().base.base.id, ltdvs[0].id);
+    assert!(found[2].is_none());
+    assert_eq!(found[3].as_ref().unwrap().base.base.id, ltdvs[2].id);
+    assert_eq!(found[4].as_ref().unwrap().base.base.id, ltdvs[1].id);
+    assert!(found[5].is_none());
+    Ok(())
+}
+
+#[td_test::test(db)]
 async fn test_resolve_logical_range_head(db: TdPool) -> Result<(), TdError> {
     let (_collection, _function, table_id, ltdvs) = seed_ftdv_timeline(&db, 3).await;
     let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
