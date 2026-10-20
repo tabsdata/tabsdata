@@ -3,9 +3,6 @@
 //
 
 use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-#[typed(default = false)]
-pub struct AllowDisabled(bool);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub struct DataChanged(bool);

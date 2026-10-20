@@ -19,8 +19,9 @@ use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::execution::{ExecutionParam, ExecutionRequest};
 use td_objects::dxo::function::{FunctionParam, FunctionRegister, FunctionUpdate};
 use td_objects::types::basic::{
-    AllowDisabled, CollectionIdName, CollectionName, FunctionIdName, TableNameDto, UserId,
+    CollectionIdName, CollectionName, FunctionIdName, TableNameDto, UserId,
 };
+use td_objects::types::composed::TableDependencyDto;
 use td_queries::test_utils::SeedEntry;
 
 fn keys<K: Clone + Eq + Hash, V>(map: &HashMap<K, V>) -> HashSet<K> {
@@ -97,15 +98,105 @@ async fn test_an_execution_reads_back_the_topology_it_planned_on(
         .await?;
 
     let read = services
-        .execution_read(admin().read((
-            ExecutionParam {
-                execution: planned.id.clone(),
-            },
-            AllowDisabled::FALSE,
-        )))
+        .execution_read(admin().read(ExecutionParam {
+            execution: planned.id.clone(),
+        }))
         .await?
         .data;
     assert_eq!(keys(&read.all_functions), keys(&planned.all_functions));
     assert_eq!(keys(&read.all_tables), keys(&planned.all_tables));
+    Ok(())
+}
+
+/// A read shows the versions the plan pinned, even once their producer is
+/// cancelled and they no longer resolve.
+#[td_test::test(db)]
+async fn test_an_execution_reads_back_the_versions_it_pinned(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    db.scoped(p.id)
+        .seed()
+        .collection(&CollectionName::try_from("c")?, &UserId::admin())
+        .await?;
+    let collection = || -> Result<CollectionParam, TdError> {
+        Ok(CollectionParam {
+            collection: CollectionIdName::from_str("c")?,
+        })
+    };
+    let function = |name: &str| -> Result<FunctionParam, TdError> {
+        Ok(FunctionParam {
+            function: FunctionIdName::from_str(name)?,
+        })
+    };
+    let services = Services::with_defaults(db.clone());
+    for register in [
+        FunctionRegister {
+            tables: Some(vec![TableNameDto::try_from("t_a")?]),
+            ..register("producer", None)
+        },
+        FunctionRegister {
+            dependencies: Some(vec![TableDependencyDto::try_from("t_a")?]),
+            tables: Some(vec![TableNameDto::try_from("t_c")?]),
+            ..register("consumer", None)
+        },
+    ] {
+        services
+            .register_function(admin().create(collection()?, register).in_project(p.id))
+            .await?;
+    }
+    let execute = |name: &'static str| {
+        let services = dispatch_services(&db);
+        async move {
+            Ok::<_, TdError>(
+                services
+                    .execute_function(
+                        admin()
+                            .create(
+                                (collection()?, function(name)?),
+                                ExecutionRequest {
+                                    name: None,
+                                    function_only: Default::default(),
+                                    override_disabled_trigger: Default::default(),
+                                    skip_if_running: Default::default(),
+                                    external_uid: None,
+                                },
+                            )
+                            .in_project(p.id),
+                    )
+                    .await?
+                    .data,
+            )
+        }
+    };
+    let produced = execute("producer").await?;
+    let planned = execute("consumer").await?;
+    let pinned: Vec<_> = planned
+        .relations_info
+        .keys()
+        .cloned()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    assert!(
+        !pinned.is_empty(),
+        "the consumer pinned the producer's version"
+    );
+
+    services
+        .execution_cancel(admin().update(
+            ExecutionParam {
+                execution: produced.id.clone(),
+            },
+            (),
+        ))
+        .await?;
+
+    let read = services
+        .execution_read(admin().read(ExecutionParam {
+            execution: planned.id.clone(),
+        }))
+        .await?
+        .data;
+    assert_eq!(read.relations, planned.relations);
+    assert_eq!(keys(&read.relations_info), keys(&planned.relations_info));
     Ok(())
 }

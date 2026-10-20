@@ -29,11 +29,7 @@ use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
-const STATES: [FunctionState; 3] = [
-    FunctionState::Any,
-    FunctionState::Active,
-    FunctionState::Executable,
-];
+const STATES: [FunctionState; 2] = [FunctionState::Any, FunctionState::Executable];
 
 fn some<T>(v: Vec<T>) -> Option<Vec<T>> {
     (!v.is_empty()).then_some(v)
@@ -108,7 +104,7 @@ fn options() -> Vec<RecursionOptions> {
 fn condition(state: FunctionState) -> Box<dyn SqlCondition<FunctionDB>> {
     match state {
         FunctionState::Any => Box::new(()),
-        FunctionState::Active => Box::new(FunctionDB::active()),
+        FunctionState::Ran(_) => unreachable!(),
         FunctionState::Executable => Box::new(FunctionDB::executable()),
     }
 }

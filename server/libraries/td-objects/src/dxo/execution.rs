@@ -6,9 +6,9 @@ use crate::dxo::function::{Function, FunctionDBWithNames};
 use crate::dxo::graph::{FunctionNode, GraphEdge, TableNode};
 use crate::dxo::logical::TableDataVersion;
 use crate::types::basic::{
-    AllowDisabled, AtTime, CollectionId, CollectionName, CollectionWhenDeleted, Dot, Enabled,
-    Ended, ExecutionId, ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName,
-    FunctionOnly, FunctionVersionId, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
+    AtTime, CollectionId, CollectionName, CollectionWhenDeleted, Dot, Enabled, Ended, ExecutionId,
+    ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName, FunctionOnly,
+    FunctionVersionId, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
     OverrideDisabledTrigger, ProjectId, ProjectName, SkipIfRunning, Started, StatusCount, System,
     TableName, TableVersionId, TopologyVersionId, TransactionId, TriggerOutcome, TriggerType,
     TriggeredOn, UserId, UserLabel,
@@ -318,13 +318,6 @@ impl From<&FunctionDBWithNames> for FunctionNode {
 #[ta_objects::UrlParam]
 pub struct ExecutionParam {
     pub execution: ExecutionId,
-}
-
-/// `?with_disabled=` — include executions of disabled functions in the listing.
-#[ta_objects::QueryParam]
-pub struct AllowDisabledParam {
-    #[serde(default)]
-    pub with_disabled: AllowDisabled,
 }
 
 #[cfg(test)]

@@ -18,22 +18,23 @@ use td_objects::types::recursion::RecursionOptions;
 
 /// The functions a walk goes through.
 #[derive(Clone, Copy, Debug)]
-pub enum FunctionState {
+pub enum FunctionState<'a> {
     Any,
-    Active,
     /// Active and enabled.
     Executable,
+    /// The ones an execution ran.
+    Ran(&'a HashSet<FunctionId>),
 }
 
-impl FunctionState {
+impl FunctionState<'_> {
     pub fn matches(&self, function: &FunctionDBWithNames) -> bool {
         let function = &function.base.base;
         match self {
             FunctionState::Any => true,
-            FunctionState::Active => function.status == FunctionStatus::Active,
             FunctionState::Executable => {
                 function.status == FunctionStatus::Active && *function.enabled
             }
+            FunctionState::Ran(functions) => functions.contains(&function.function_id),
         }
     }
 }

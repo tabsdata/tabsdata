@@ -2,10 +2,9 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::plan::{
-    build_response, fetch_relations_info, resolve_execution_plan_versions,
-};
-use std::collections::HashMap;
+use crate::execution::pinned::pinned_execution_plan_versions;
+use crate::execution::plan::{build_response, fetch_relations_info};
+use std::collections::{HashMap, HashSet};
 use ta_execution::PlanScope;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -32,7 +31,7 @@ use td_objects::dxo::logical::{
 use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::dxo::transaction::TransactionValue;
 use td_objects::dxo::transaction::{TransactionDB, TransactionInsertDB};
-use td_objects::types::basic::{AllowDisabled, FunctionOnly, OverrideDisabledTrigger};
+use td_objects::types::basic::{FunctionId, FunctionOnly, OverrideDisabledTrigger};
 use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
 
@@ -41,9 +40,9 @@ async fn execution_read(
     authz: Ctx<AuthzContext>,
     transaction_by: Ctx<TransactionBy>,
     db: DbPool<AcrossProjects>,
-    request: ReadRequest<(ExecutionParam, AllowDisabled)>,
+    request: ReadRequest<ExecutionParam>,
 ) -> Result<ExecutionResponse, TdError> {
-    let (ctx, (param, allow_disabled)) = request.into_parts();
+    let (ctx, param) = request.into_parts();
     let execution_id = param.execution;
 
     let mut trx = db.read().await?;
@@ -67,30 +66,6 @@ async fn execution_read(
         .await?;
     let function_id = function.base.base.function_id;
     let recursion_options = with_existing_recursion_options(&execution)?;
-    let state = if *allow_disabled {
-        FunctionState::Active
-    } else {
-        FunctionState::Executable
-    };
-    let graph = ProjectTopology::of(conn, topology).await?.plan_graph(
-        state,
-        &function_id,
-        &recursion_options,
-    )?;
-
-    let execution_plan = ExecutionPlan::new(graph, &FunctionNode::from(&function))?;
-    let transactions: Vec<TransactionInsertDB> = conn
-        .fetch_all::<TransactionDB>(&execution_id)
-        .await?
-        .into_iter()
-        .map(|transaction| transaction.base)
-        .collect();
-    let transaction_map = build_existing_transaction_map(&transaction_by, &transactions)?;
-    let resolved_plan =
-        resolve_execution_plan_versions(conn, &execution.base, &execution_plan).await?;
-
-    // Persisted logical rows — the response renders `input_idx` from
-    // them, so reads reproduce the plan-build assignment exactly.
     let lfrs: Vec<LogicalFunctionRunInsertDB> = conn
         .fetch_all::<LogicalFunctionRunDB>(&execution_id)
         .await?
@@ -103,13 +78,29 @@ async fn execution_read(
         .into_iter()
         .map(|input| input.base)
         .collect();
-    let relations_info = fetch_relations_info(conn, &resolved_plan).await?;
+    let ran: HashSet<FunctionId> = lfrs.iter().map(|lfr| lfr.function_id).collect();
+    let graph = ProjectTopology::of(conn, topology).await?.plan_graph(
+        FunctionState::Ran(&ran),
+        &function_id,
+        &recursion_options,
+    )?;
+
+    let execution_plan = ExecutionPlan::new(graph, &FunctionNode::from(&function))?;
+    let transactions: Vec<TransactionInsertDB> = conn
+        .fetch_all::<TransactionDB>(&execution_id)
+        .await?
+        .into_iter()
+        .map(|transaction| transaction.base)
+        .collect();
+    let transaction_map = build_existing_transaction_map(&transaction_by, &transactions)?;
+    let pinned_plan = pinned_execution_plan_versions(conn, &execution_plan, &lfrs, &inputs).await?;
+    let relations_info = fetch_relations_info(conn, &pinned_plan).await?;
 
     build_response(
         &transaction_by,
         &transaction_map,
         &execution.base,
-        &resolved_plan,
+        &pinned_plan,
         &lfrs,
         &inputs,
         relations_info,
@@ -183,12 +174,9 @@ mod tests {
         let execution = test_execute(db.clone(), alpha.id, false, false, false).await?;
         let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
         let request = |ctx: &RequestContext| {
-            ctx.read((
-                ExecutionParam {
-                    execution: execution.id.clone(),
-                },
-                AllowDisabled::FALSE,
-            ))
+            ctx.read(ExecutionParam {
+                execution: execution.id.clone(),
+            })
         };
 
         let service = Services::with_defaults(db.clone());
@@ -207,12 +195,10 @@ mod tests {
         let execution = test_execute(db.clone(), p.id, false, false, false).await?;
 
         let service = Services::with_defaults(db.clone());
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
-            ExecutionParam {
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin()).read(ExecutionParam {
                 execution: execution.id.clone(),
-            },
-            AllowDisabled::FALSE,
-        ));
+            });
 
         let response = service.execution_read(request).await?.data;
         assert_eq!(execution.id, response.id);

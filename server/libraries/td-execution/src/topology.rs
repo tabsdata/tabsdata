@@ -37,7 +37,7 @@ pub struct ProjectTopology {
 /// start when `start_passes`.
 struct Nodes<'t> {
     functions: &'t HashMap<FunctionId, FunctionDBWithNames>,
-    state: FunctionState,
+    state: FunctionState<'t>,
     start: FunctionId,
     start_passes: bool,
 }
@@ -73,9 +73,9 @@ impl ProjectTopology {
             conn.scd2().as_of(at).fetch_all(()).await?;
         let mut triggers: Vec<TriggerDBWithNames> = conn.scd2().as_of(at).fetch_all(()).await?;
         // Graphs insert nodes in this order, and `dot` numbers them by it.
-        tables.sort_by(|a, b| a.base.base.table_id.cmp(&b.base.base.table_id));
-        dependencies.sort_by(|a, b| a.base.base.id.cmp(&b.base.base.id));
-        triggers.sort_by(|a, b| a.base.base.id.cmp(&b.base.base.id));
+        tables.sort_by_key(|t| t.base.base.table_id);
+        dependencies.sort_by_key(|d| d.base.base.id);
+        triggers.sort_by_key(|t| t.base.base.id);
 
         Ok(Self {
             triggers_from: index(triggers.iter().map(|t| *t.base.base.trigger_by_function_id)),

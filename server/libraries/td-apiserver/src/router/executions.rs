@@ -15,9 +15,7 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use ta_apiserver::status::ok_status::{GetStatus, ListStatus, NoContent, UpdateStatus};
 use td_apiforge::apiserver_path;
 use td_objects::dxo::crudl::{ListParams, RequestContext};
-use td_objects::dxo::execution::{
-    AllowDisabledParam, Execution, ExecutionDetails, ExecutionParam, ExecutionResponse,
-};
+use td_objects::dxo::execution::{Execution, ExecutionDetails, ExecutionParam, ExecutionResponse};
 use td_objects::dxo::function::FunctionVersionParam;
 use td_objects::dxo::logical::TableDataVersionParam;
 use td_services::Services;
@@ -128,9 +126,8 @@ pub async fn read_execution(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
     Path(execution): Path<ExecutionParam>,
-    Query(with_disabled): Query<AllowDisabledParam>,
 ) -> Result<GetStatus<ExecutionResponse>, ErrorStatus> {
-    let request = context.read((execution, with_disabled.with_disabled));
+    let request = context.read(execution);
     let response = state.execution_read(request).await?;
     Ok(GetStatus::OK(response))
 }

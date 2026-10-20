@@ -123,8 +123,8 @@ pub(crate) mod tests {
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
-        AccessTokenId, AllowDisabled, BundleId, CollectionName, Decorator, Depth, Description,
-        Enabled, ExecutionName, ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues,
+        AccessTokenId, BundleId, CollectionName, Decorator, Depth, Description, Enabled,
+        ExecutionName, ExecutionStatus, FunctionName, FunctionOnly, FunctionRuntimeValues,
         GroupName, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
         OverrideDisabledTrigger, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId,
         ProjectName, SkipIfRunning, TableName, TableNameDto, TransactionKey, TransactionStatus,
@@ -508,12 +508,9 @@ pub(crate) mod tests {
 
         let read_service = Services::with_defaults(db.clone());
         let read_request = || {
-            RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
-                ExecutionParam {
-                    execution: response.id.clone(),
-                },
-                AllowDisabled::FALSE,
-            ))
+            RequestContext::with(AccessTokenId::default(), UserId::admin()).read(ExecutionParam {
+                execution: response.id.clone(),
+            })
         };
         let read_response = read_service
             .clone()
@@ -749,12 +746,11 @@ pub(crate) mod tests {
 
         let read = Services::with_defaults(db.clone())
             .execution_read(
-                RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
+                RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
                     ExecutionParam {
                         execution: response.id.clone(),
                     },
-                    AllowDisabled::FALSE,
-                )),
+                ),
             )
             .await?
             .data;
@@ -1789,12 +1785,10 @@ pub(crate) mod tests {
         )
         .await?;
 
-        let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read((
-            ExecutionParam {
+        let request =
+            RequestContext::with(AccessTokenId::default(), UserId::admin()).read(ExecutionParam {
                 execution: executed.id.clone(),
-            },
-            AllowDisabled::FALSE,
-        ));
+            });
         let read = Services::with_defaults(db.clone())
             .execution_read(request)
             .await?

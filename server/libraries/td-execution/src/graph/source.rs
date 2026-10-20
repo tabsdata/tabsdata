@@ -12,7 +12,7 @@ use td_objects::types::recursion::RecursionOptions;
 /// A topology version seen through the functions a plan may run.
 pub struct PlanSource<'t> {
     pub topology: &'t ProjectTopology,
-    pub state: FunctionState,
+    pub state: FunctionState<'t>,
 }
 
 impl GraphSource for PlanSource<'_> {
