@@ -5,11 +5,11 @@
 """Monkey runs on a cluster instance: a fleet of publishers, cron and stream
 publishers, transformers and subscribers put through quasi-random operations
 from several lanes at once (register, update, enable, disable, delete, trigger,
-cancel and recover, plus lost jobs, lost streamers and orphans behind the
-server's back), then checked for overlapping workloads, server errors and a
-settled state that matches what the server accepted. It sits with the other
-worker workload tests; Kafka (a Redpanda domain) is only the source its stream
-publishers read.
+cancel and recover, plus lost jobs, lost streamers, orphans and lost
+apiservers behind the server's back), then checked for overlapping workloads,
+server errors and a settled state that matches what the server accepted. It
+sits with the other worker workload tests; Kafka (a Redpanda domain) is only
+the source its stream publishers read.
 
 A new random plan runs, and if it fails its descriptor is written under
 ``monkey/descriptors`` to be committed. With ``TD_MONKEY_SCENARIOS=1`` every

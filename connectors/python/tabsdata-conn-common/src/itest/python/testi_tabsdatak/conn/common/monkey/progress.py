@@ -167,7 +167,7 @@ class Progress:
             max(len(row[column]) for row in [header, *rows])
             for column in range(len(header))
         ]
-        colors = [TEAL, None, DIM]
+        colors = [TEAL, *[None] * (len(header) - 2), DIM]
 
         def border(left: str, middle: str, right: str) -> str:
             line = middle.join("─" * (width + 2) for width in widths)

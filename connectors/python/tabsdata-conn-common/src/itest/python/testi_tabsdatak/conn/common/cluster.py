@@ -8,10 +8,12 @@ import re
 import threading
 import time
 from collections import defaultdict
-from typing import Callable, TypeVar
+from typing import TYPE_CHECKING, Callable, TypeVar
 
 from kubernetes import client, config
-from tabsdatax.itest.fixture.instances.tabsdata import Instance
+
+if TYPE_CHECKING:
+    from tabsdatax.itest.fixture.instances.tabsdata import Instance
 
 WORKER_ID = "tabsdata.com/worker-id"
 FUNCTION_ID = "tabsdata.com/function-id"
@@ -203,11 +205,16 @@ class Cluster:
         ]
         return jobs + self.cronjobs(selector)
 
+    def apiserver_pods(self) -> list:
+        return [
+            pod
+            for pod in self.core.list_namespaced_pod(self.namespace).items
+            if pod.metadata.name.startswith(APISERVER_POD_PREFIX)
+        ]
+
     def server_errors(self, since_seconds: int) -> list[tuple[str, str, str]]:
         errors = []
-        for pod in self.core.list_namespaced_pod(self.namespace).items:
-            if not pod.metadata.name.startswith(APISERVER_POD_PREFIX):
-                continue
+        for pod in self.apiserver_pods():
             response = self.core.read_namespaced_pod_log(
                 pod.metadata.name,
                 self.namespace,

@@ -18,6 +18,11 @@ parts (see ``rollups``). Any unexpected error from an operation, any 5xx in the
 apiserver log other than a 503 (which tells a client to retry), and any
 operation accepted on a function that should not exist, is a problem too.
 
+Losing the apiserver deletes its pods and holds every lane until a new one
+answers; an operation that fails while the apiserver is down may or may not
+have happened, so it counts as unknown rather than as an error. A run can
+adopt a project an earlier run left unsettled (see ``MonkeyRun``).
+
 From generator 5, cancels and recoveries aim at a random recent execution and
 transaction; older plans replay as recorded."""
 
@@ -59,6 +64,7 @@ from testi_tabsdatak.conn.common.cluster import (
     PROJECT_ID,
     WORKER_ID,
     Cluster,
+    eventually,
     finished,
     label_value,
     orphan_spec,
@@ -69,6 +75,7 @@ from testi_tabsdatak.conn.common.monkey.model import (
     OK,
     REJECTED,
     SKIPPED,
+    UNKNOWN,
     Model,
 )
 from testi_tabsdatak.conn.common.monkey.naming import collection_name
@@ -79,6 +86,7 @@ from testi_tabsdatak.conn.common.monkey.plan import (
     DELETE,
     DISABLE,
     ENABLE,
+    LOSE_APISERVER,
     LOSE_JOB,
     LOSE_STREAMER,
     ORPHAN,
@@ -101,6 +109,7 @@ from testi_tabsdatak.conn.common.monkey.progress import (
     PASSED,
     PROBLEM,
     SETTLE,
+    SETUP,
     WAITING,
     Progress,
     counted,
@@ -121,6 +130,7 @@ FUNCTION_RUN = "F"
 
 EXECUTIONS_TIMEOUT = 14400
 SETTLE_TIMEOUT = 900
+APISERVER_TIMEOUT = 300
 POLL_SECONDS = 5
 STALL_SECONDS = 600
 NO_CHANGE_REPORT_SECONDS = 30
@@ -302,7 +312,12 @@ class MonkeyRun:
         module: ModuleType,
         progress: Progress | None = None,
         deadline: float | None = None,
+        adopt: bool = False,
+        settle: bool = True,
     ):
+        """``adopt`` takes the project's functions and executions as the server
+        lists them before the lanes start; ``settle`` False returns once the
+        lanes end, leaving the project as it is, unchecked."""
         self.plan = plan
         self.namespace = namespace
         self.connect = connect
@@ -314,6 +329,11 @@ class MonkeyRun:
         self.model = Model(plan.fleet)
         self.progress = progress or Progress()
         self.deadline = deadline
+        self.adopt = adopt
+        self.settle = settle
+        self._serving = threading.Event()
+        self._serving.set()
+        self._outages = 0
         self._done = 0
         self._lock = threading.Lock()
         self._outcomes: list[Outcome] = []
@@ -332,6 +352,8 @@ class MonkeyRun:
             f"{counted(len(self.plan.fleet.functions), 'function')} in "
             f"{counted(self.plan.lanes, 'lane')} (namespace {self.namespace})"
         )
+        if self.adopt:
+            self._adopt()
         with ProjectMonitor(
             self.cluster, self.project_id, self._orphans, self.progress
         ) as monitor:
@@ -343,6 +365,21 @@ class MonkeyRun:
                 lane.start()
             for lane in lanes:
                 lane.join()
+            unknown = sum(outcome.result == UNKNOWN for outcome in self._outcomes)
+            if unknown:
+                self.progress(
+                    f"{counted(unknown, 'operation')} cut off by a lost apiserver "
+                    "may or may not have happened",
+                    SETTLE,
+                )
+            if not self.settle:
+                return Report(
+                    outcomes=sorted(self._outcomes, key=lambda outcome: outcome.index),
+                    problems=list(self._problems),
+                    expected=self.model.expected(),
+                    observed={},
+                    duration=round(time.monotonic() - started, 1),
+                )
             self.progress(
                 "All lanes finished; waiting for the system to settle", SETTLE
             )
@@ -446,6 +483,7 @@ class MonkeyRun:
                     )
                     return
                 time.sleep(op.delay)
+                self._serving.wait()
                 outcome = self._perform(lane, op)
                 with self._lock:
                     self._outcomes.append(outcome)
@@ -471,12 +509,19 @@ class MonkeyRun:
         started = time.monotonic()
         status = None
         acted_on: list[str] = []
+        outages = self._outages
         try:
             skipped = self._act(lane, op, acted_on)
             result, detail = (SKIPPED, skipped) if skipped else (OK, "")
         except Exception as error:
             result, status = classify(error)
             detail = f"{type(error).__name__}: {error}"[:DETAIL_LENGTH]
+        if (
+            result == ERROR
+            and op.action != LOSE_APISERVER
+            and self._lost_since(outages)
+        ):
+            result = UNKNOWN
         if acted_on:
             detail = "; ".join([*acted_on, detail]) if detail else "; ".join(acted_on)
         self.model.apply(op, result)
@@ -502,6 +547,8 @@ class MonkeyRun:
             return None
         if op.action == ORPHAN:
             return self._orphan(acted_on)
+        if op.action == LOSE_APISERVER:
+            return self._lose_apiserver(acted_on)
         spec = self.plan.fleet.function(op.function)
         info = getattr(self.module, spec.name)
         if op.action == REGISTER:
@@ -622,6 +669,78 @@ class MonkeyRun:
             return "Already orphaned"
         self._orphans.add(name)
         return None
+
+    def _lost_since(self, outages: int) -> bool:
+        with self._lock:
+            return self._outages != outages or not self._serving.is_set()
+
+    def _lose_apiserver(self, acted_on: list[str]) -> str | None:
+        lost = sorted(pod.metadata.name for pod in self.cluster.apiserver_pods())
+        if not lost:
+            return "No apiserver pod"
+        started = time.monotonic()
+        with self._lock:
+            self._outages += 1
+            self._serving.clear()
+        try:
+            for name in lost:
+                self.cluster.delete_pod(name)
+            acted_on.append(f"Pod {joined(lost)}")
+            eventually(
+                lambda: self._serving_again(set(lost)),
+                min(APISERVER_TIMEOUT, self._remaining()),
+                "No new apiserver answered",
+                POLL_SECONDS,
+            )
+        finally:
+            self._serving.set()
+        acted_on.append(
+            f"A new one answered after {spoken(time.monotonic() - started)}"
+        )
+        return None
+
+    def _serving_again(self, lost: set[str]) -> bool:
+        if any(pod.metadata.name in lost for pod in self.cluster.apiserver_pods()):
+            return False
+        try:
+            self.connect()
+        except Exception:
+            return False
+        return True
+
+    def _adopt(self) -> None:
+        server = self.connect()
+        functions = self._functions(server)
+        self.model.adopt({
+            name: bool(function.enabled) for name, function in functions.items()
+        })
+        names = {spec.name for spec in self.plan.fleet.functions}
+        collections = {
+            collection_name(self.namespace, spec.name)
+            for spec in self.plan.fleet.collections
+        }
+        executions = sorted(
+            (
+                execution
+                for execution in server.list_executions()
+                if getattr(execution.collection, "name", execution.collection)
+                in collections
+                and getattr(execution.function, "name", execution.function) in names
+            ),
+            key=lambda execution: execution.triggered_on or 0,
+        )
+        with self._lock:
+            for execution in executions:
+                name = getattr(execution.function, "name", execution.function)
+                self._executions[name].append(execution)
+        unfinished = sum(
+            execution.status not in EXECUTION_FINAL_STATUSES for execution in executions
+        )
+        self.progress(
+            f"Adopted {counted(len(functions), 'function')} and "
+            f"{counted(len(executions), 'execution')}, {unfinished} unfinished",
+            SETUP,
+        )
 
     def _settle(self) -> dict:
         server = self.connect()
@@ -1008,6 +1127,8 @@ class MonkeyRun:
     def _compare_functions(self, functions: dict[str, Function]) -> None:
         for name, expected in self.model.expected().items():
             function = functions.get(name)
+            if expected["exists"] is None:
+                continue
             if not expected["exists"]:
                 if function is not None:
                     self._problem(
@@ -1018,7 +1139,10 @@ class MonkeyRun:
                 self._problem(
                     f"Function {name} should exist, but the server does not list it"
                 )
-            elif bool(function.enabled) != expected["enabled"]:
+            elif (
+                expected["enabled"] is not None
+                and bool(function.enabled) != expected["enabled"]
+            ):
                 wanted = "enabled" if expected["enabled"] else "disabled"
                 self._problem(
                     f"Function {name} should be {wanted}, "

@@ -28,7 +28,14 @@ from testi_tabsdatak.conn.common.cluster import (
 )
 from testi_tabsdatak.conn.common.monkey import runner
 from testi_tabsdatak.conn.common.monkey.descriptor import load_plan, write_plan
-from testi_tabsdatak.conn.common.monkey.model import ANY, ERROR, OK, REJECTED, Model
+from testi_tabsdatak.conn.common.monkey.model import (
+    ANY,
+    ERROR,
+    OK,
+    REJECTED,
+    UNKNOWN,
+    Model,
+)
 from testi_tabsdatak.conn.common.monkey.naming import collection_name
 from testi_tabsdatak.conn.common.monkey.plan import (
     CRON_PUBLISHER,
@@ -36,6 +43,7 @@ from testi_tabsdatak.conn.common.monkey.plan import (
     DISABLE,
     ENABLE,
     FAULTS,
+    LOSE_APISERVER,
     RECOVER_EXECUTION,
     REGISTER,
     STREAM_PUBLISHER,
@@ -75,9 +83,14 @@ def rejected(status: int):
 class FakeExecution:
     ids = itertools.count()
 
-    def __init__(self, function: str = "pub00", status: str = FINAL):
+    def __init__(
+        self, function: str = "pub00", status: str = FINAL, collection: str = ""
+    ):
         self.id = f"exe{next(self.ids)}"
         self.status = status
+        self.function = function
+        self.collection = collection
+        self.triggered_on = next(self.ids)
         self.workers = [
             SimpleNamespace(
                 id="wkr20261005-1", type="F", status="Done", function=function
@@ -206,6 +219,7 @@ class FakeCluster:
         self.stale = stale
         self.left: dict[str, SimpleNamespace] = {}
         self.errors: list[tuple[str, str, str]] = []
+        self.apiservers = 0
 
     def unfinished_in_project(self, project_id: str) -> list:
         items = []
@@ -253,6 +267,13 @@ class FakeCluster:
     def unfinished_job_of_worker(self, worker_id: str):
         return None
 
+    def apiserver_pods(self) -> list:
+        name = f"srv-apiserver-{self.apiservers}"
+        return [SimpleNamespace(metadata=SimpleNamespace(name=name))]
+
+    def delete_pod(self, name: str) -> None:
+        self.apiservers += 1
+
 
 def quick_plan(seed: int, operations: int = 300) -> Plan:
     plan = generate(seed, operations, lanes=4, faults=True, scale=0.5)
@@ -261,7 +282,7 @@ def quick_plan(seed: int, operations: int = 300) -> Plan:
     )
 
 
-def run_against(plan: Plan, server: FakeServer, cluster: FakeCluster):
+def run_against(plan: Plan, server: FakeServer, cluster: FakeCluster, **kwargs):
     module = SimpleNamespace(**{spec.name: object() for spec in plan.fleet.functions})
     return runner.MonkeyRun(
         plan=plan,
@@ -272,6 +293,7 @@ def run_against(plan: Plan, server: FakeServer, cluster: FakeCluster):
         project=PROJECT,
         project_root=Path("."),
         module=module,
+        **kwargs,
     ).execute()
 
 
@@ -327,6 +349,104 @@ def test_the_model_rejects_operations_on_deleted_functions_and_follows_outcomes(
     model.apply(Op(3, 0, 0.0, DISABLE, name), OK)
     assert model.expected()[name] == {"exists": True, "enabled": False}
     assert model.predict(Op(4, 0, 0.0, TRIGGER, name)) == REJECTED
+
+
+def test_an_operation_cut_off_by_a_restart_leaves_what_it_touched_unknown():
+    plan = generate(19, 10, lanes=1, faults=False)
+    model = Model(plan.fleet)
+    name = plan.fleet.functions[0].name
+    model.apply(Op(0, 0, 0.0, DELETE, name), UNKNOWN)
+    assert model.predict(Op(1, 0, 0.0, REGISTER, name)) == ANY
+    assert model.predict(Op(2, 0, 0.0, TRIGGER, name)) == ANY
+    assert model.expected()[name] == {"exists": None, "enabled": True}
+    model.apply(Op(3, 0, 0.0, DISABLE, name), OK)
+    assert model.expected()[name] == {"exists": True, "enabled": False}
+    model.apply(Op(4, 0, 0.0, ENABLE, name), UNKNOWN)
+    assert model.enabled(name)
+    assert model.expected()[name] == {"exists": True, "enabled": None}
+
+
+def test_the_model_adopts_the_functions_a_server_lists():
+    plan = generate(19, 10, lanes=1, faults=False)
+    model = Model(plan.fleet)
+    first, second, third = (spec.name for spec in plan.fleet.functions[:3])
+    model.adopt({first: True, second: False})
+    assert model.expected()[first] == {"exists": True, "enabled": True}
+    assert model.expected()[second] == {"exists": True, "enabled": False}
+    assert model.expected()[third] == {"exists": False}
+    assert model.predict(Op(0, 0, 0.0, ENABLE, third)) == REJECTED
+
+
+def lost_apiserver_plan(seed: int) -> Plan:
+    plan = quick_plan(seed, 120)
+    ops = list(plan.ops)
+    ops[40] = Op(40, ops[40].lane, 0.0, LOSE_APISERVER)
+    return dataclasses.replace(plan, ops=tuple(ops))
+
+
+def test_losing_the_apiserver_waits_for_a_new_one():
+    plan = lost_apiserver_plan(47)
+    server = FakeServer(plan)
+    cluster = FakeCluster(server, plan)
+    report = run_against(plan, server, cluster)
+    assert report.problems == []
+    assert cluster.apiservers == sum(op.action == LOSE_APISERVER for op in plan.ops)
+    lost = next(outcome for outcome in report.outcomes if outcome.index == 40)
+    assert lost.result == OK
+    assert "A new one answered after" in lost.detail
+
+
+def test_an_operation_failing_while_the_apiserver_is_down_is_unknown(monkeypatch):
+    plan = lost_apiserver_plan(53)
+    server = FakeServer(plan)
+    cluster = FakeCluster(server, plan)
+    module = SimpleNamespace(**{spec.name: object() for spec in plan.fleet.functions})
+    run = runner.MonkeyRun(
+        plan=plan,
+        namespace=NAMESPACE,
+        connect=lambda: server,
+        cluster=cluster,
+        project=PROJECT,
+        project_id=PROJECT_ID,
+        project_root=Path("."),
+        module=module,
+    )
+    name = plan.fleet.functions[0].name
+
+    def cut_off(*_):
+        run._outages += 1
+        raise ConnectionError("connection reset")
+
+    monkeypatch.setattr(run, "_act", cut_off)
+    outcome = run._perform(None, Op(0, 0, 0.0, DELETE, name))
+    assert outcome.result == UNKNOWN
+    assert run._problems == []
+    assert run.model.expected()[name]["exists"] is None
+    outcome = run._perform(None, Op(1, 0, 0.0, DELETE, name))
+    assert outcome.result == UNKNOWN
+    monkeypatch.setattr(
+        run, "_act", lambda *_: (_ for _ in ()).throw(ConnectionError())
+    )
+    assert run._perform(None, Op(2, 0, 0.0, DELETE, name)).result == ERROR
+
+
+def test_a_run_adopts_the_project_an_unsettled_run_left(monkeypatch):
+    monkeypatch.setattr(runner, "execution_problems", lambda *_: [])
+    monkeypatch.setattr(runner, "worker_problems", lambda *_: [])
+    plan = quick_plan(59, 200)
+    server = FakeServer(plan)
+    cluster = FakeCluster(server, plan)
+    first = dataclasses.replace(plan, ops=plan.ops[:100])
+    second = dataclasses.replace(plan, ops=plan.ops[100:])
+    left = run_against(first, server, cluster, settle=False)
+    assert left.observed == {}
+    collection = collection_name(NAMESPACE, plan.fleet.functions[0].collection)
+    earlier = FakeExecution(plan.fleet.functions[0].name, "Running", collection)
+    server.executions.append(earlier)
+    report = run_against(second, server, cluster, adopt=True)
+    assert report.problems == [
+        f"Execution {earlier.id} of pub00 never finished (last status 'Running')"
+    ]
 
 
 def test_rejections_are_told_apart_from_server_errors():
