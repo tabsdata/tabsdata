@@ -453,6 +453,79 @@ pub(crate) mod tests {
         Ok(())
     }
 
+    /// Reading an execution returns the plan it ran, whatever its project
+    /// became afterwards: version selectors, triggers, enablement and new
+    /// functions that would plan it differently today leave it unchanged.
+    #[td_test::test(db)]
+    async fn test_reading_an_execution_ignores_later_topology(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?.id;
+        let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 2).await?;
+        let executed = execute_consumer(
+            &db,
+            p,
+            &collection,
+            &["table_p@HEAD^", "table_p"],
+            Some("table_p"),
+        )
+        .await?;
+        let read = || async {
+            let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
+                ExecutionParam {
+                    execution: executed.id.clone(),
+                },
+            );
+            Services::with_defaults(db.clone())
+                .execution_read(request)
+                .await
+                .map(|response| response.data)
+        };
+        let before = read().await?;
+        assert!(before == executed, "the read shows the plan as executed");
+
+        update_named(
+            &db,
+            p,
+            &collection,
+            "consumer",
+            FunctionUpdate {
+                dependencies: Some(vec![TableDependencyDto::try_from("table_p@HEAD~1..HEAD")?]),
+                triggers: Some(vec![]),
+                tables: Some(vec![TableNameDto::try_from("table_c")?]),
+                ..Default::default()
+            },
+        )
+        .await?;
+        update_named(
+            &db,
+            p,
+            &collection,
+            "producer",
+            FunctionUpdate {
+                enabled: Some(Enabled::FALSE),
+                ..Default::default()
+            },
+        )
+        .await?;
+        let downstream = FunctionRegister {
+            dependencies: Some(vec![TableDependencyDto::try_from("table_c")?]),
+            tables: Some(vec![TableNameDto::try_from("table_d")?]),
+            ..register_named("downstream")?
+        };
+        db.scoped(p)
+            .seed()
+            .function(&collection, &downstream)
+            .await?;
+
+        assert!(read().await? == before, "the read is unchanged");
+        let replanned = execute_named(&db, p, &collection, "consumer").await?;
+        assert_ne!(
+            dep_edge(&replanned, 0).original,
+            dep_edge(&before, 0).original,
+            "planning now would differ"
+        );
+        Ok(())
+    }
+
     async fn update_named(
         db: &TdPool,
         p: ProjectId,
