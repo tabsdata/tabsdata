@@ -82,13 +82,13 @@ pub async fn build_response(
             .collect();
     let idx_by_slot = &idx_by_slot;
 
+    let roots = execution_plan.transaction_roots();
     let transactions = execution_plan
         .triggered_functions()
         .into_iter()
         .chain(std::iter::once(execution_plan.main_trigger()))
         .try_fold(HashMap::new(), |mut acc, f| {
-            let transaction =
-                transaction_map.get(&execution_plan.transaction_key(transaction_by, f)?)?;
+            let transaction = transaction_map.get(&roots.key(transaction_by, f)?)?;
             let entry: &mut HashSet<_> = acc.entry(transaction.id.clone()).or_default();
             entry.insert(f.function_version_id.clone());
             Ok::<_, TdError>(acc)

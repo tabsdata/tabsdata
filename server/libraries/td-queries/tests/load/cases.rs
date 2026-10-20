@@ -276,6 +276,12 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
+        name: "data_version::heads",
+        covers: &["Heads::fetch_all"],
+        family: Family::DataVersion,
+        status: Status::Implemented,
+    },
+    LoadCase {
         name: "recursive::current",
         covers: &["Scd2Recursive::fetch_all"],
         family: Family::Recursive,

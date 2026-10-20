@@ -4,7 +4,7 @@
 
 use petgraph::prelude::EdgeRef;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
@@ -17,7 +17,7 @@ use td_objects::dxo::logical::{
 use td_objects::types::basic::{
     AtTime, FunctionId, LogicalFunctionRunId, LogicalTableDataVersionId, TableId, VersionPos,
 };
-use td_objects::types::table_ref::Versions;
+use td_objects::types::table_ref::{Version, Versions};
 use td_queries::Queries;
 
 pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
@@ -32,6 +32,7 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
     // versions depend on the function reading them.
     type ResolveKey = (TableId, Versions, Option<FunctionId>);
     let mut edge_meta: Vec<(Versions, ResolveKey)> = Vec::new();
+    let mut readers: HashMap<ResolveKey, FunctionId> = HashMap::new();
     let mut ltdv_cache: HashMap<ResolveKey, Vec<Option<LogicalTableDataVersionId>>> =
         HashMap::new();
 
@@ -65,23 +66,40 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
         };
 
         let reader = matches!(*lookup_versions, Versions::New).then_some(function.function_id);
-        let cache_key = (table.table_id, lookup_versions.clone().into_owned(), reader);
-        if !ltdv_cache.contains_key(&cache_key) {
-            let ltdvs = VersionResolver::builder()
-                .function_id(&function.function_id)
-                .table_id(&table.table_id)
-                .versions(&lookup_versions)
+        let cache_key = (table.table_id, lookup_versions.into_owned(), reader);
+        readers
+            .entry(cache_key.clone())
+            .or_insert(function.function_id);
+        edge_meta.push((versions_inner.clone(), cache_key));
+    }
+
+    // Most edges read a table's newest version: those go in one batch.
+    let heads: Vec<TableId> = readers
+        .keys()
+        .filter(|(_, versions, _)| is_head(versions))
+        .map(|(table, _, _)| *table)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let newest = VersionResolver::resolve_heads(&mut *conn, &heads, &at_time).await?;
+    for (key, reader) in &readers {
+        let (table, versions, _) = key;
+        let ltdvs = if is_head(versions) {
+            vec![newest.get(table).map(|ltdv| ltdv.base.base.id.clone())]
+        } else {
+            VersionResolver::builder()
+                .function_id(reader)
+                .table_id(table)
+                .versions(versions)
                 .triggered_on(&at_time)
                 .build()?
                 .resolve(&mut *conn)
                 .await?
                 .into_iter()
                 .map(|ltdv| ltdv.map(|ltdv| ltdv.base.base.id))
-                .collect();
-            ltdv_cache.insert(cache_key.clone(), ltdvs);
-        }
-
-        edge_meta.push((versions_inner.clone(), cache_key));
+                .collect()
+        };
+        ltdv_cache.insert(key.clone(), ltdvs);
     }
 
     let edge_results: Vec<ResolvedVersion> = edge_meta
@@ -111,6 +129,13 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
         .await?;
 
     Ok(execution_plan)
+}
+
+fn is_head(versions: &Versions) -> bool {
+    matches!(
+        versions,
+        Versions::None | Versions::Single(Version::Head(0))
+    )
 }
 
 /// The versions an execution's plan pinned on each edge, read back from what

@@ -2,10 +2,11 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use crate::primitives::chunked::MAX_QUERY_CONDITIONS;
 use crate::{QueryExecutor, Serves};
 use sea_query::{
-    Alias, Asterisk, Condition, Expr, ExprTrait, Func, Order, Query, SelectStatement,
-    SubQueryStatement,
+    Alias, Asterisk, Condition, Expr, ExprTrait, Func, Iden, JoinType, Order, Query,
+    SelectStatement, SubQueryStatement, UnionType,
 };
 use ta_objects::errors::SqlError;
 use ta_objects::{HasColumn, SelectDao, TimelineDao, single_row};
@@ -14,6 +15,57 @@ use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::types::basic::LogicalTableDataVersionId;
 use td_objects::types::table_ref::{Version, Versions};
+
+/// The newest row of each of `partitions` at `on`: the `HEAD` probe of
+/// [`DataVersion`], for every partition, in one round trip per chunk.
+pub struct Heads<'a, E, V, P> {
+    pub(crate) on: &'a V,
+    pub(crate) partitions: &'a [P],
+    pub(crate) executor: E,
+}
+
+/// `SELECT head.* FROM (SELECT p1 UNION ALL ..) AS wanted JOIN LATERAL
+/// (top-1 of the partition at `on`) AS head`: one plan for the whole chunk.
+fn heads_select<D, V>(partitions: &[D::Partition], on: &V) -> Option<SelectStatement>
+where
+    D: SelectDao + TimelineDao,
+    V: SameInner<D::VersionOrder>,
+{
+    let mut rows = partitions.iter().map(|partition| {
+        Query::select()
+            .expr_as(partition.as_sea_expr(), WantedPartition)
+            .take()
+    });
+    let mut wanted = rows.next()?;
+    for row in rows {
+        wanted.union(UnionType::All, row);
+    }
+    let head = Query::select()
+        .columns(D::columns())
+        .from(D::TABLE)
+        .and_where(Expr::col((D::TABLE, D::PARTITION)).equals((Wanted, WantedPartition)))
+        .and_where(Expr::col((D::TABLE, D::VERSION_ORDER)).lte(on.as_sea_expr()))
+        .order_by((D::TABLE, D::VERSION_ORDER), Order::Desc)
+        .order_by((D::TABLE, D::PK), Order::Desc)
+        .limit(1)
+        .take();
+    Some(
+        Query::select()
+            .column((Head, Asterisk))
+            .from_subquery(wanted, Wanted)
+            .join_lateral(JoinType::InnerJoin, head, Head, Expr::val(true))
+            .take(),
+    )
+}
+
+#[derive(Iden)]
+struct Wanted;
+
+#[derive(Iden)]
+struct WantedPartition;
+
+#[derive(Iden)]
+struct Head;
 
 /// Resolves [`Versions`] selectors against a [`TimelineDao`]'s timeline in
 /// `partition` at `on` through top-k scans and key probes on the
@@ -466,6 +518,36 @@ impl<E, V, P> DataVersion<'_, E, V, P> {
         )
         .await?;
         Ok((rn > 0).then_some(rn))
+    }
+}
+
+impl<E, V, P> Heads<'_, E, V, P> {
+    /// At most one row per partition; a partition without a row at `on`
+    /// has none.
+    pub async fn fetch_all<D>(self) -> Result<Vec<D>, SqlError>
+    where
+        E: Serves<D>,
+        D: SelectDao + TimelineDao<Partition = P> + HasColumn<LogicalTableDataVersionId>,
+        V: SameInner<D::VersionOrder>,
+    {
+        let Self {
+            on,
+            partitions,
+            mut executor,
+        } = self;
+        let mut rows = Vec::new();
+        for chunk in partitions.chunks(MAX_QUERY_CONDITIONS) {
+            let Some(mut query) = heads_select::<D, V>(chunk, on) else {
+                continue;
+            };
+            let found: Vec<D> = query
+                .build_query_as()
+                .fetch_all(executor.reuse())
+                .await
+                .map_err(SqlError::on_read::<D>)?;
+            rows.extend(found);
+        }
+        Ok(rows)
     }
 }
 

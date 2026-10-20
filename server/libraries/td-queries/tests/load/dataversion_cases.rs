@@ -287,6 +287,24 @@ async fn load_data_version_fetch_relative_offset(db: TdPool) -> Result<(), TdErr
     Ok(())
 }
 
+#[td_test::test(db(crate::dataversion_cases::LoadDvFixture))]
+async fn load_data_version_heads(db: TdPool) -> Result<(), TdError> {
+    let on = after_all();
+    let (partitions, _versions) = dims();
+    let partitions: Vec<DvPartition> = (0..partitions)
+        .map(|p| DvPartition::try_from(format!("p{p}")))
+        .collect::<Result<_, _>>()?;
+    let t = Instant::now();
+    let rows = db
+        .timeline()
+        .heads_at(&on, &partitions)
+        .fetch_all::<LoadDvDao>()
+        .await?;
+    record("data_version::heads", t, rows.len());
+    assert_eq!(rows.len(), partitions.len());
+    Ok(())
+}
+
 /// Keyed to the first seeded id, so `upsert` replaces it and
 /// `insert_or_ignore` hits the conflict path.
 fn keyed_row() -> Result<LoadDvKeyedDao, TdError> {

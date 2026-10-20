@@ -7,7 +7,7 @@
 //! point-in-time reads of an `scd2` one are [`scd2`](crate::Queries::scd2).
 
 use crate::generic::chunked::TimelineChunked;
-use crate::generic::data_version::DataVersion;
+use crate::generic::data_version::{DataVersion, Heads};
 use crate::primitives::scd2::select_until;
 use crate::primitives::table::{select, select_last, select_unordered};
 use crate::{QueryExecutor, Serves};
@@ -29,6 +29,15 @@ impl<E> Timeline<E> {
         DataVersion {
             on,
             partition,
+            executor: self.executor,
+        }
+    }
+
+    /// The newest row of each of `partitions` at `on`.
+    pub fn heads_at<'a, V, P>(self, on: &'a V, partitions: &'a [P]) -> Heads<'a, E, V, P> {
+        Heads {
+            on,
+            partitions,
             executor: self.executor,
         }
     }

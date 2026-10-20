@@ -130,12 +130,13 @@ impl PartialGraph<FunctionNode> {
         transaction_mapper: &impl TransactionMapper,
     ) -> Result<PartialGraph<TransactionKey>, TdError> {
         let trigger_graph = PartialGraph::trigger_graph(dgraph)?;
+        let roots = dgraph.transaction_roots();
 
         let mut new_graph = DiGraph::new();
 
         let mut node_map = HashMap::new();
         for node in trigger_graph.inner.node_indices() {
-            let key = dgraph.transaction_key(transaction_mapper, trigger_graph.inner[node])?;
+            let key = roots.key(transaction_mapper, trigger_graph.inner[node])?;
             node_map
                 .entry(key.clone())
                 .or_insert_with(|| new_graph.add_node(key));
@@ -143,10 +144,8 @@ impl PartialGraph<FunctionNode> {
 
         let mut edge_map = HashMap::new();
         for edge in trigger_graph.inner.edge_references() {
-            let source_key =
-                dgraph.transaction_key(transaction_mapper, trigger_graph.inner[edge.source()])?;
-            let target_key =
-                dgraph.transaction_key(transaction_mapper, trigger_graph.inner[edge.target()])?;
+            let source_key = roots.key(transaction_mapper, trigger_graph.inner[edge.source()])?;
+            let target_key = roots.key(transaction_mapper, trigger_graph.inner[edge.target()])?;
             let source = node_map[&source_key];
             let target = node_map[&target_key];
             if source != target && !edge_map.contains_key(&(source, target)) {

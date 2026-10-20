@@ -28,8 +28,9 @@ pub fn build_transaction_map(
 ) -> Result<TransactionMap<TransactionBy>, TdError> {
     let mut transaction_map = TransactionMap::empty(transaction_by.clone());
 
+    let roots = execution_plan.transaction_roots();
     for function in execution_plan.triggered_functions() {
-        transaction_map.add(execution, execution_plan.transaction_root(function))?;
+        transaction_map.add(execution, roots.root(function))?;
     }
 
     Ok(transaction_map)
@@ -67,12 +68,12 @@ pub fn build_logical_function_runs(
     execution: &ExecutionInsertDB,
 ) -> Result<Vec<LogicalFunctionRunInsertDB>, TdError> {
     let main_trigger = execution_plan.main_trigger();
+    let roots = execution_plan.transaction_roots();
     execution_plan
         .triggered_functions()
         .into_iter()
         .map(|f| {
-            let transaction =
-                transaction_map.get(&execution_plan.transaction_key(transaction_by, f)?)?;
+            let transaction = transaction_map.get(&roots.key(transaction_by, f)?)?;
             let trigger = if f == main_trigger {
                 Trigger::Manual
             } else {
@@ -105,6 +106,7 @@ pub fn build_logical_table_data_versions(
     execution: &ExecutionInsertDB,
     logical_function_runs: &[LogicalFunctionRunInsertDB],
 ) -> Result<Vec<LogicalTableDataVersionInsertDB>, TdError> {
+    let roots = execution_plan.transaction_roots();
     // Keyed by function_id (logical identity); carries group_id so the LTDV
     // snapshot stays equal-by-construction to the LFR's.
     let ffr_by_function: HashMap<_, _> = logical_function_runs
@@ -116,8 +118,7 @@ pub fn build_logical_table_data_versions(
         .table_function_output_versions()
         .iter()
         .map(|(t, f, edge)| {
-            let transaction =
-                transaction_map.get(&execution_plan.transaction_key(transaction_by, f)?)?;
+            let transaction = transaction_map.get(&roots.key(transaction_by, f)?)?;
             let (producer, group_id) = ffr_by_function.get(&f.function_id).ok_or_else(|| {
                 api_error!(
                     ApiError::InternalError,
@@ -161,6 +162,7 @@ pub fn build_logical_function_run_inputs(
         .iter()
         .map(|lfr| (lfr.function_id, lfr.id.clone()))
         .collect();
+    let roots = resolved_plan.transaction_roots();
 
     let mut edges: Vec<_> = resolved_plan
         .function_table_input_versions()
@@ -178,8 +180,7 @@ pub fn build_logical_function_run_inputs(
                 function.function_id
             ));
         };
-        let transaction =
-            transaction_map.get(&resolved_plan.transaction_key(transaction_by, function)?)?;
+        let transaction = transaction_map.get(&roots.key(transaction_by, function)?)?;
 
         let dependency_pos = edge.dependency_pos().cloned();
         let resolved = &edge.versions().inner;

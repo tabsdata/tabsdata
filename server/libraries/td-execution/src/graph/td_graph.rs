@@ -13,7 +13,7 @@ use std::hash::Hash;
 use ta_execution::TransactionMapper;
 use td_error::TdError;
 use td_objects::dxo::graph::{FunctionNode, GraphEdge, GraphNode, TableNode};
-use td_objects::types::basic::TransactionKey;
+use td_objects::types::basic::{FunctionId, TransactionKey};
 use td_objects::types::table_ref::Versions;
 
 /// Tabsdata Graph representation, consisting in nodes and edges.
@@ -80,26 +80,41 @@ where
 }
 
 impl<T, V> TdGraph<FunctionNode, T, V> {
-    /// Linear scan per call: planning is quadratic in graph size.
-    pub fn transaction_root<'a>(&'a self, node: &'a FunctionNode) -> &'a FunctionNode {
-        let Some(parent) = &node.parent_function_id else {
-            return node;
-        };
-        self.inner
-            .node_weights()
-            .find_map(|n| match n {
-                GraphNode::Function(f) if f.function_id == **parent => Some(f),
-                _ => None,
-            })
+    /// Each function's transaction root, looked up once for the graph.
+    pub fn transaction_roots(&self) -> TransactionRoots<'_> {
+        TransactionRoots {
+            functions: self
+                .inner
+                .node_weights()
+                .filter_map(|n| match n {
+                    GraphNode::Function(f) => Some((f.function_id, f)),
+                    _ => None,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// A function runs in its parent's transaction when the parent is in the
+/// graph, and in its own otherwise.
+pub struct TransactionRoots<'a> {
+    functions: HashMap<FunctionId, &'a FunctionNode>,
+}
+
+impl TransactionRoots<'_> {
+    pub fn root<'b>(&'b self, node: &'b FunctionNode) -> &'b FunctionNode {
+        node.parent_function_id
+            .as_ref()
+            .and_then(|parent| self.functions.get(&**parent).copied())
             .unwrap_or(node)
     }
 
-    pub fn transaction_key(
+    pub fn key(
         &self,
         mapper: &impl TransactionMapper,
         node: &FunctionNode,
     ) -> Result<TransactionKey, TdError> {
-        mapper.key(self.transaction_root(node))
+        mapper.key(self.root(node))
     }
 }
 
@@ -363,7 +378,7 @@ mod tests {
         let mut child = function_node(&FUNCTION_NAMES[1]);
         child.parent_function_id = Some(Parent::from(parent.function_id));
 
-        assert_eq!(graph.transaction_root(&child), &parent);
+        assert_eq!(graph.transaction_roots().root(&child), &parent);
     }
 
     #[test]
@@ -371,9 +386,9 @@ mod tests {
         let graph = test_graph();
         let mut child = function_node(&FUNCTION_NAMES[1]);
         child.parent_function_id = Some(Parent::from(FunctionId::default()));
-        assert_eq!(graph.transaction_root(&child), &child);
+        assert_eq!(graph.transaction_roots().root(&child), &child);
 
         let orphan = function_node(&FUNCTION_NAMES[1]);
-        assert_eq!(graph.transaction_root(&orphan), &orphan);
+        assert_eq!(graph.transaction_roots().root(&orphan), &orphan);
     }
 }
