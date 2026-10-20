@@ -103,7 +103,22 @@ pub trait InsertDao: Insertable {}
     note = "`db.scd2().open(.., at)` takes an `ops(insert)` DAO declaring `scd2`; an \
             unversioned row inserts through the wordless `db.insert(..)`"
 )]
-pub trait Scd2OpenDao: Insertable + Scd2Dao {}
+pub trait Scd2OpenDao: Insertable + Scd2Dao {
+    /// The instant `open(.., at)` takes: the unit of work's lock instant, or a
+    /// narrower type only some writes can hold.
+    type At: Into<LockInstant>;
+}
+
+/// Close capability: `close(.., at)` ends the matching open intervals at `at`,
+/// the SCD2 deletion.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot close versions",
+    note = "declare `ops(close)` on the relation's `scd2` row DAO"
+)]
+pub trait Scd2CloseDao: TableDao + Scd2Dao {
+    /// The instant `close(.., at)` takes, as [`Scd2OpenDao::At`] for `open`.
+    type At: Into<LockInstant>;
+}
 
 /// One row per entity, so a condition selects entities rather than versions.
 /// The open reads bind on it.
@@ -145,9 +160,6 @@ pub trait Partitioned: PkDao {
     note = "declare `scd2` and mark `#[dao(partition_by)]`"
 )]
 pub trait Scd2Dao: Partitioned {
-    /// The instant `open(.., at)` and `close(.., at)` take: the unit of work's
-    /// lock instant, or a narrower type only some writes can hold.
-    type At: Into<LockInstant>;
     const VALID_FROM: Self::Iden;
     const VALID_TO: Self::Iden;
 }

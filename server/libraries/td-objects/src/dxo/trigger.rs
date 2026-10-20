@@ -30,7 +30,7 @@ pub struct TriggerInsertDB {
 }
 
 #[ta_objects::Dao]
-#[dao(table = "triggers", ops(select), scd2(at = TopologyInstant), recursive, project_scoped)]
+#[dao(table = "triggers", ops(select, close), scd2(at = TopologyInstant), recursive, project_scoped)]
 pub struct TriggerDB {
     #[dao(flatten)]
     pub base: TriggerInsertDB,
@@ -47,7 +47,7 @@ impl TriggerDB {
 }
 
 #[ta_objects::Dao]
-#[dao(view = "triggers__with_names", scd2(at = TopologyInstant), recursive, project_scoped)]
+#[dao(view = "triggers__with_names", scd2, recursive, project_scoped)]
 pub struct TriggerDBWithNames {
     #[dao(flatten)]
     pub base: TriggerDB,

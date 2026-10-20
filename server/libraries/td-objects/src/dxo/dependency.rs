@@ -33,7 +33,7 @@ pub struct DependencyInsertDB {
 }
 
 #[ta_objects::Dao]
-#[dao(table = "dependencies", ops(select), scd2(at = TopologyInstant), recursive, project_scoped)]
+#[dao(table = "dependencies", ops(select, close), scd2(at = TopologyInstant), recursive, project_scoped)]
 pub struct DependencyDB {
     #[dao(flatten)]
     pub base: DependencyInsertDB,
@@ -43,7 +43,7 @@ pub struct DependencyDB {
 }
 
 #[ta_objects::Dao]
-#[dao(view = "dependencies__with_names", scd2(at = TopologyInstant), recursive, project_scoped)]
+#[dao(view = "dependencies__with_names", scd2, recursive, project_scoped)]
 pub struct DependencyDBWithNames {
     #[dao(flatten)]
     pub base: DependencyDB,

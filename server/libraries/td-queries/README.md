@@ -173,7 +173,7 @@ The `#[ta_objects::Dao]` attribute macro (defined in `tm-objects`) generates:
    attribute and the field marks call for — and the **capabilities**
    `ops(...)` declares: **`SelectDao`**, **`InsertDao`** (or
    **`Scd2OpenDao`** on an `scd2` relation), **`UpdateDao`**,
-   **`UpsertDao`**, **`DeleteDao`**.
+   **`UpsertDao`**, **`DeleteDao`**, **`Scd2CloseDao`**.
 4. **`HasColumn<T>`** per field — the compile-time column resolution behind
    [conditions](#conditions) — and the addressing impls, in every argument
    order: **`AddressesOneRow`** for the pk and, on an unversioned DAO, every
@@ -224,6 +224,7 @@ Insertable    (ops(insert))         — insert_values(), over a TableDao; the pa
 └── Scd2OpenDao                     — a new version: db.scd2().open(.., at); Insertable + Scd2Dao
 UpdateDao     (ops(update(RowDao))) — FilterBy, update_values(), over a TableDao
 DeleteDao     (ops(delete))         — marker, over an unversioned TableDao
+Scd2CloseDao  (ops(close))          — At: db.scd2().close(.., at), over an scd2 TableDao
 UpsertDao     (ops(upsert(A, B)))   — key_columns(), value_columns(); an unversioned Insertable
 ```
 
@@ -310,6 +311,8 @@ a literal relation name uses `name = "..."`. Everything else is a bare flag.
 | `ops(update)` / `ops(update(RowDao))` | Update payload: the only op it may declare, its condition typed over the named DAO (default `Self`) |
 | `ops(upsert(A, B))` | An `insert` whose `ON CONFLICT` target is the named unique set; needs `insert` too |
 | `scd2` | `Scd2Dao` + `TimelineDao`; `delete` and `upsert` are rejected (a version is closed or superseded, never removed) |
+| `ops(close)` | `scd2` only: the row DAO `close(.., at)` ends intervals through |
+| `scd2(at = T)` | On an `insert` or `close` DAO: the instant type `open` / `close` take (default `LockInstant`) |
 | `timeline` | `TimelineDao` only — a positional history, no interval chain; same write bans |
 | `recursive` | `RecursiveDao`, for CTE traversal |
 | `project_scoped` | The relation is governed by `project_isolation`; needs a project-seeing scope |
@@ -650,13 +653,16 @@ let function: FunctionDBWithNames = conn
 // The write unit's instant, taken before the grant unlocks the connection.
 let at = trx.locked_at();
 
-// A new version open from `at`: the trigger closes the previous open row of
-// the partition at that same instant.
-conn.scd2().open(&function_version, at).await?;
+// Topology relations take the instant of the project's new topology version.
+let topology_at = conn.topology().bump(&project_id, at).await?;
+
+// A new version open from `topology_at`: the trigger closes the previous open
+// row of the partition at that same instant.
+conn.scd2().open(&function_version, topology_at).await?;
 
 // Deletion is the closed interval with no successor: after this the entity
-// is gone from `scd2()` and from `scd2().as_of(&t)` for any `t >= at`.
-conn.scd2().close::<FunctionDB>(&function_id, at).await?;
+// is gone from `scd2()` and from `scd2().as_of(&t)` for any `t >= topology_at`.
+conn.scd2().close::<FunctionDB>(&function_id, topology_at).await?;
 
 // Visible at a time, by condition — cost follows the condition.
 let in_collection: Vec<FunctionDB> = conn.scd2().as_of(&at).fetch_all(&collection_id).await?;

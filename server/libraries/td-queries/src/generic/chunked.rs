@@ -17,8 +17,8 @@ use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    InsertDao, InsertableFrom, SameInner, Scd2Dao, Scd2OpenDao, SelectDao, TableDao, TimelineDao,
-    UnversionedDao, UpdateDao,
+    InsertDao, InsertableFrom, SameInner, Scd2CloseDao, Scd2Dao, Scd2OpenDao, SelectDao,
+    TimelineDao, UnversionedDao, UpdateDao,
 };
 use td_database::sea_query::builder::SeaQueryExt;
 
@@ -98,7 +98,7 @@ pub struct Scd2Chunked<E> {
 
 impl<E> Scd2Chunked<E> {
     /// Ends the matching open intervals at `at`, chunk by chunk.
-    pub async fn close<D: TableDao + Scd2Dao>(
+    pub async fn close<D: Scd2CloseDao>(
         self,
         values: &[impl SqlCondition<D>],
         extra: impl SqlCondition<D>,

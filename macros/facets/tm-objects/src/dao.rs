@@ -20,7 +20,7 @@ use quote::{format_ident, quote};
 use std::collections::HashMap;
 use syn::{DeriveInput, Field, Fields, ItemStruct, Type, parse_macro_input};
 
-/// `#[dao(table = "..", ops(select, insert, update(RowDao), delete, upsert(A, B)))]`
+/// `#[dao(table = "..", ops(select, insert, update(RowDao), delete, close, upsert(A, B)))]`
 /// or `#[dao(view = "..")]`, plus `db(Domain)`, `unique(A, B)` (repeatable;
 /// unique across the whole relation, index-backed), `unique_at(A, B)`
 /// (repeatable, `scd2` only; unique among the versions visible at one instant,
@@ -47,8 +47,8 @@ pub struct DaoArguments {
     project_scoped: Option<ProjectScopedArguments>,
 }
 
-/// `scd2(at = T)`: the instant type the interval opens and closes at, the lock
-/// instant by default.
+/// `scd2(at = T)`, on a DAO that opens (`ops(insert)`) or closes (`ops(close)`)
+/// versions: the instant type it writes them at, the lock instant by default.
 #[derive(Debug, Default, FromMeta)]
 struct Scd2Arguments {
     at: Option<syn::Path>,
@@ -59,13 +59,17 @@ struct OpsArguments {
     select: Flag,
     insert: Flag,
     delete: Flag,
+    close: Flag,
     update: Option<UpdateArguments>,
     upsert: Option<PathList>,
 }
 
 impl OpsArguments {
     fn writes(&self) -> bool {
-        self.insert.is_present() || self.delete.is_present() || self.upsert.is_some()
+        self.insert.is_present()
+            || self.delete.is_present()
+            || self.close.is_present()
+            || self.upsert.is_some()
     }
 
     fn any(&self) -> bool {
@@ -269,7 +273,16 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
     };
     let is_scd2 = parsed.scd2.is_some();
     let at = match &parsed.scd2 {
-        Some(Override::Explicit(Scd2Arguments { at: Some(at) })) => quote! { #at },
+        Some(Override::Explicit(Scd2Arguments { at: Some(at) })) => {
+            if !ops.insert.is_present() && !ops.close.is_present() {
+                return Err(syn::Error::new_spanned(
+                    at,
+                    "`at` is the instant versions are opened or closed at; only an \
+                     `ops(insert)` or `ops(close)` DAO writes them",
+                ));
+            }
+            quote! { #at }
+        }
         _ => quote! { td_database::access::LockInstant },
     };
     let is_timeline = parsed.timeline.is_present();
@@ -307,6 +320,12 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             ident,
             "a versioned row is superseded, never conflict-replaced: `upsert` needs an \
              unversioned relation",
+        ));
+    }
+    if !is_scd2 && ops.close.is_present() {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "`close` ends open intervals, so it needs an `scd2` relation",
         ));
     }
     if is_versioned && ops.delete.is_present() {
@@ -739,7 +758,11 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         .then(|| quote! { impl ta_objects::SelectDao for #ident {} });
     let insert_impl = ops.insert.is_present().then(|| {
         let capability = if is_scd2 {
-            quote! { impl ta_objects::Scd2OpenDao for #ident {} }
+            quote! {
+                impl ta_objects::Scd2OpenDao for #ident {
+                    type At = #at;
+                }
+            }
         } else {
             quote! { impl ta_objects::InsertDao for #ident {} }
         };
@@ -758,6 +781,13 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         .delete
         .is_present()
         .then(|| quote! { impl ta_objects::DeleteDao for #ident {} });
+    let close_impl = ops.close.is_present().then(|| {
+        quote! {
+            impl ta_objects::Scd2CloseDao for #ident {
+                type At = #at;
+            }
+        }
+    });
     let unversioned_impl = (!is_versioned).then(|| {
         let base_agrees = base_ty.map(|b| {
             quote! {
@@ -869,7 +899,6 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             let scd2_impl = is_scd2.then(|| {
                 quote! {
                     impl ta_objects::Scd2Dao for #ident {
-                        type At = #at;
                         const VALID_FROM: Self::Iden = #valid_from_col;
                         const VALID_TO: Self::Iden = #valid_to_col;
                     }
@@ -1039,6 +1068,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         #insert_impl
         #unversioned_impl
         #delete_impl
+        #close_impl
         #upsert_impl
         #update_impl
         #timeline_impl

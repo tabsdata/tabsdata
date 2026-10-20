@@ -309,7 +309,7 @@ pub struct FunctionInsertDB {
 
 #[ta_objects::Dao]
 #[derive(Eq, PartialEq)]
-#[dao(table = "functions", ops(select), scd2(at = TopologyInstant), project_scoped)]
+#[dao(table = "functions", ops(select, close), scd2(at = TopologyInstant), project_scoped)]
 pub struct FunctionDB {
     #[dao(flatten)]
     pub base: FunctionInsertDB,
@@ -447,7 +447,7 @@ impl FromDao for FunctionPatchRecord {
 #[ta_objects::Dao]
 #[dao(
     view = "functions__with_names",
-    scd2(at = TopologyInstant),
+    scd2,
     project_scoped(
         unique_at(CollectionIdName, FunctionIdName),
         unique_at(CollectionId, FunctionIdName)

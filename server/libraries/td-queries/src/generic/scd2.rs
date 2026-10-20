@@ -11,8 +11,8 @@ use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    AddressesOneVersion, Dao, InsertableFrom, ListDto, Scd2Dao, Scd2OpenDao, SelectDao, TableDao,
-    UpdateDao, single_row,
+    AddressesOneVersion, Dao, InsertableFrom, ListDto, Scd2CloseDao, Scd2Dao, Scd2OpenDao,
+    SelectDao, UpdateDao, single_row,
 };
 use td_database::domain::Domained;
 use td_database::sea_query::builder::SeaQueryExt;
@@ -78,7 +78,7 @@ impl<E> Scd2<E> {
 
     /// Ends the matching open intervals at `at` with no successor: the SCD2
     /// deletion. A later insert into the partition reopens it.
-    pub async fn close<D: TableDao + Scd2Dao>(
+    pub async fn close<D: Scd2CloseDao>(
         self,
         condition: impl SqlCondition<D>,
         at: D::At,

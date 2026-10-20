@@ -37,7 +37,7 @@ pub struct TableInsertDB {
 }
 
 #[ta_objects::Dao]
-#[dao(table = "tables", ops(select), scd2(at = TopologyInstant), project_scoped)]
+#[dao(table = "tables", ops(select, close), scd2(at = TopologyInstant), project_scoped)]
 pub struct TableDB {
     #[dao(flatten)]
     pub base: TableInsertDB,
@@ -67,7 +67,7 @@ impl TableDB {
 #[ta_objects::Dao]
 #[dao(
     view = "tables__with_names",
-    scd2(at = TopologyInstant),
+    scd2,
     project_scoped(
         unique_at(CollectionIdName, TableIdName),
         unique_at(CollectionId, TableIdName)
