@@ -187,18 +187,6 @@ pub trait TimelineDao: Partitioned {
     const VERSION_ORDER: Self::Iden;
 }
 
-/// Hierarchical traversal through recursive CTEs.
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` cannot be traversed",
-    note = "declare `recursive` and mark `#[dao(recursive(up))]` / `#[dao(recursive(down))]`"
-)]
-pub trait RecursiveDao: Dao {
-    /// The reference into the traversal's reference DAO.
-    type Key: SeaValue + 'static;
-    const UP: Self::Iden;
-    const DOWN: Self::Iden;
-}
-
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a DLO",
     note = "declare it with `#[ta_objects::Dlo]`"

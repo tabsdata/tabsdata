@@ -12,7 +12,6 @@ const MARKS: &[&str] = &[
     "partition_by",
     "scd2",
     "timeline",
-    "recursive",
     "order_by",
     "immutable",
     "flatten",
@@ -24,10 +23,6 @@ const MARKS: &[&str] = &[
 const GRAINS: &[(&str, &[(&str, &str)])] = &[
     ("scd2", &[]),
     ("timeline", &[("version_by", "version_by")]),
-    (
-        "recursive",
-        &[("up", "recurse_up"), ("down", "recurse_down")],
-    ),
 ];
 
 pub struct Mark {

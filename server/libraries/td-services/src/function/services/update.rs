@@ -129,17 +129,17 @@ mod tests {
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::system::TD_FN_STATE_PREFIX;
     use td_objects::types::basic::{
-        AccessTokenId, BasePath, Decorator, Depth, FunctionName, FunctionRuntimeValues,
-        FunctionStatus, ResetStage, SNIPPET_MAX_LEN, TableId, TableName, TableStatus, UserId,
-        WorkerStatus, WorkerType,
+        AccessTokenId, BasePath, Decorator, FunctionName, FunctionRuntimeValues, FunctionStatus,
+        ResetStage, SNIPPET_MAX_LEN, TableId, TableName, TableStatus, UserId, WorkerStatus,
+        WorkerType,
     };
     use td_objects::types::basic::{
-        AtTime, BundleId, CollectionName, ResetState, ReuseFrozen, TableNameDto, WorkerConfig,
+        BundleId, CollectionName, ResetState, ReuseFrozen, TableNameDto, WorkerConfig,
         WorkerTypeDto,
     };
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
-    use td_objects::types::recursion::RecursionOptions;
+
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
@@ -2223,18 +2223,16 @@ mod tests {
         )
         .await?;
 
-        let recursive_downstream_trigger: Vec<TriggerDB> = db
+        let downstream_triggers: Vec<TriggerDB> = db
+            .scoped(p.id)
             .scd2()
-            .as_of(&AtTime::now())
-            .recursive::<TriggerDB, FunctionDB>(RecursionOptions::new(Some(Depth::ZERO), None))
-            .start_at(&response.function_id)
-            .where_edges(TriggerDB::active())
-            .where_nodes(FunctionDB::executable())
-            .fetch_all()
-            .await
-            .unwrap();
-        assert_eq!(recursive_downstream_trigger.len(), 1);
-        let triggered_function_id = &recursive_downstream_trigger[0].base.function_id;
+            .fetch_all::<TriggerDB>(TriggerDB::active())
+            .await?
+            .into_iter()
+            .filter(|t| *t.base.trigger_by_function_id == response.function_id)
+            .collect();
+        assert_eq!(downstream_triggers.len(), 1);
+        let triggered_function_id = &downstream_triggers[0].base.function_id;
         let triggered_function: FunctionDBWithNames = db
             .scd2()
             .fetch_one::<FunctionDBWithNames>(&(triggered_function_id))
@@ -2245,7 +2243,7 @@ mod tests {
         let downstream_dependencies: Vec<DependencyDB> =
             db.scd2().fetch_all(&triggered_function_id).await.unwrap();
         assert_eq!(downstream_dependencies.len(), 1);
-        let dependency_function_id = &recursive_downstream_trigger[0].base.function_id;
+        let dependency_function_id = &downstream_triggers[0].base.function_id;
         let dependency_function: FunctionDBWithNames = db
             .scd2()
             .fetch_one::<FunctionDBWithNames>(&dependency_function_id)
@@ -2355,17 +2353,15 @@ mod tests {
         )
         .await?;
 
-        let recursive_downstream_trigger: Vec<TriggerDB> = db
+        let downstream_triggers: Vec<TriggerDB> = db
+            .scoped(p.id)
             .scd2()
-            .as_of(&AtTime::now())
-            .recursive::<TriggerDB, FunctionDB>(RecursionOptions::new(Some(Depth::ZERO), None))
-            .start_at(&response.function_id)
-            .where_edges(TriggerDB::active())
-            .where_nodes(FunctionDB::executable())
-            .fetch_all()
-            .await
-            .unwrap();
-        assert!(recursive_downstream_trigger.is_empty());
+            .fetch_all::<TriggerDB>(TriggerDB::active())
+            .await?
+            .into_iter()
+            .filter(|t| *t.base.trigger_by_function_id == response.function_id)
+            .collect();
+        assert!(downstream_triggers.is_empty());
 
         let dependency_function: Vec<FunctionDBWithNames> = db
             .scd2()

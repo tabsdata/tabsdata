@@ -83,16 +83,6 @@ pub struct TableDBWithNames {
 }
 
 impl TableDBWithNames {
-    /// Tables that can be generated and consumed.
-    pub fn active() -> impl SqlCondition<Self> {
-        TableStatus::Active
-    }
-
-    /// Tables that cannot be generated but can still be consumed.
-    pub fn frozen() -> impl SqlCondition<Self> {
-        TableStatus::Frozen
-    }
-
     pub fn user() -> impl SqlCondition<Self> {
         and!(or!(TableStatus::Active, TableStatus::Frozen), System::FALSE)
     }

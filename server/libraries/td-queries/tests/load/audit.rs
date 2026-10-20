@@ -246,7 +246,6 @@ fn family_name(f: Family) -> &'static str {
         Family::At => "At",
         Family::AsOf => "FindAt",
         Family::DataVersion => "DataVersion",
-        Family::Recursive => "Recursive",
         Family::Chain => "Chain",
         Family::Attempts => "Attempts",
         Family::History => "Versions",

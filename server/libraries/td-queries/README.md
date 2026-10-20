@@ -123,8 +123,7 @@ unversioned default grain is on the trait itself — `insert(&dao)`,
 picked. A word appears only where there is a choice: an interval table
 (`scd2()`, and `scd2().as_of(&t)` for an instant other than now), the
 version log (`timeline()`, and `timeline().at(&on, &partition)` for a
-position in it), row locks (`for_update()`), batching (`chunked()`), a
-traversal (`scd2().recursive::<D, R>(opts)`), or a per-DAO
+position in it), row locks (`for_update()`), batching (`chunked()`), or a per-DAO
 handle (`logical_runs()`, `physical_runs()`, `table_data_versions()`,
 `executions()`, `dependencies()`, `sessions()`, `metrics()`).
 
@@ -168,7 +167,7 @@ The `#[ta_objects::Dao]` attribute macro (defined in `tm-objects`) generates:
    `Option` fields mean "leave the column alone" rather than "nullable".
 3. The **structure** every DAO has — **`Dao`**, **`HasColumn<T>`**, plus
    whichever of **`PkDao`**, **`TimelineDao`**, **`Scd2Dao`**,
-   **`RecursiveDao`**, **`UnversionedDao`**, **`TableDao`**,
+   **`UnversionedDao`**, **`TableDao`**,
    **`ProjectScoped`**, **`ReachableFrom`** and **`InsertableFrom`** the
    attribute and the field marks call for — and the **capabilities**
    `ops(...)` declares: **`SelectDao`**, **`InsertDao`** (or
@@ -215,7 +214,6 @@ Dao                — Iden, Db, RELATION, TABLE, columns(), order_by(), display
   │         ├── Scd2Dao     — VALID_FROM/VALID_TO: the [valid_from, valid_to) chain
   │         └── TimelineDao — VersionOrder/VERSION_ORDER: a readable version log
   ├── UnversionedDao — marker: one row per entity, no version log
-  ├── RecursiveDao   — Key, UP, DOWN: the traversal edge
   └── TableDao       — marker: a base table, so writes are legal
 
 SelectDao     (ops(select))         — marker: decodes a row; requires FromRow
@@ -314,7 +312,6 @@ a literal relation name uses `name = "..."`. Everything else is a bare flag.
 | `ops(close)` | `scd2` only: the row DAO `close(.., at)` ends intervals through |
 | `scd2(at = T)` | On an `insert` or `close` DAO: the instant type `open` / `close` take (default `LockInstant`) |
 | `timeline` | `TimelineDao` only — a positional history, no interval chain; same write bans |
-| `recursive` | `RecursiveDao`, for CTE traversal |
 | `project_scoped` | The relation is governed by `project_isolation`; needs a project-seeing scope |
 | `unique(A)` / `unique(A, B)` | A unique set, named by column type, repeatable |
 | `project_scoped(unique(A))` | A unique set that holds only within the project partition |
@@ -347,10 +344,9 @@ Which single column plays which role is a **field mark**:
 | `#[dao(pk)]` | The primary key, the row's addressing column |
 | `#[dao(partition_by)]` | The partition of any versioned relation (`Partitioned::PARTITION`) |
 | `#[dao(timeline(version_by))]` | Timeline version order (non-SCD2) |
-| `#[dao(recursive(up))]`, `#[dao(recursive(down))]` | Traversal edge |
 
-A mark that only means something under one struct-level grain (`timeline`,
-`recursive`) nests under that grain's word, and the struct must declare the
+A mark that only means something under one struct-level grain (`timeline`)
+nests under that grain's word, and the struct must declare the
 grain: `#[dao(timeline(version_by))]` on an `scd2` DAO is an error at the
 mark. `scd2` owns no field mark: its interval columns are always `valid_from`
 and `valid_to`, written by the doors, never by a payload. `partition_by`
@@ -398,15 +394,13 @@ readable by construction and declares no `ops`.
 
 ```rust
 #[ta_objects::Dao]
-#[dao(table = "dependencies", ops(insert), scd2, recursive, project_scoped)]
+#[dao(table = "dependencies", ops(insert), scd2, project_scoped)]
 pub struct DependencyInsertDB {
     #[dao(pk)]
     pub id: DependencyVersionId,
     #[dao(partition_by)]
     pub dependency_id: DependencyId,
-    #[dao(recursive(down))]
     pub function_id: FunctionId,
-    #[dao(recursive(up))]
     pub table_function_id: OfTable<FunctionId>,
     #[dao(order_by)]
     pub dep_pos: DependencyPos,
@@ -415,7 +409,7 @@ pub struct DependencyInsertDB {
 ```
 
 This implements `TableDao` / `Insertable` (it is a table and declares
-`insert`), `Scd2Dao` and `RecursiveDao`. Being `scd2`, it does **not**
+`insert`) and `Scd2Dao`. Being `scd2`, it does **not**
 implement `UnversionedDao`, and its insert capability is `Scd2OpenDao`, not
 `InsertDao`: `db.insert(&dep)` does not compile, `db.scd2().open(&dep, at)`
 does, `at` being the unit of work's `LockInstant`. The payload carries no
@@ -427,7 +421,7 @@ one that is read; it alone implements `TimelineDao`:
 
 ```rust
 #[ta_objects::Dao]
-#[dao(table = "dependencies", ops(select), scd2, recursive, project_scoped)]
+#[dao(table = "dependencies", ops(select), scd2, project_scoped)]
 pub struct DependencyDB {
     #[dao(flatten)]
     pub base: DependencyInsertDB,
@@ -437,7 +431,7 @@ pub struct DependencyDB {
 ```
 
 `SelectDao` is what enables `scd2()` / `scd2().as_of()` / `timeline()` /
-`timeline().at()` / `recursive()` — the kind traits are structure, and say
+`timeline().at()` / `timeline().heads_at()` — the kind traits are structure, and say
 only how the relation is versioned.
 
 ## Query Surfaces
@@ -485,8 +479,8 @@ Two grains hang off the same level:
 The only door to an interval table. Wordless, it is at-now: reads over the
 open SCD2 intervals (`valid_to = 'infinity'`, served by the partial
 indexes) — `fetch_one`, `fetch_optional` (`AddressesOneVersion`),
-`fetch_first`, `fetch_all`, `assert_not_exists`, `list`,
-`recursive::<D, R>(opts)` — and the interval writes: `insert(&dao)`
+`fetch_first`, `fetch_all`, `assert_not_exists`, `list` — and the
+interval writes: `insert(&dao)`
 (the trigger closes the partition's previous open row),
 `update(&dao, condition)` (an in-place payload change of the matching
 **open** rows — closed versions are history), `close::<D>(condition, at)`
@@ -525,16 +519,12 @@ The version log read by position: a `Versions` selector (`Single`, `List` or
 key probes on the `(partition, version_order, pk)` index, no window
 functions.
 
-### `Scd2Recursive` / `AsOfRecursive` — `db.scd2().recursive::<D, R>(opts)`
+### `Heads<'a, E, V, P>` — `db.timeline().heads_at(&on, &partitions)`
 
-Graph traversal with `WITH RECURSIVE`, for upstream/downstream dependency
-resolution. `D` is the `RecursiveDao` walked — the edges — and `R` the
-reference DAO its `Key` points into — the nodes. `start_at(&key)` /
-`start_at_any(keys)` anchor the walk, `where_edges(cond on D)`,
-`where_nodes(cond on R)` and `where_start(cond on R)` narrow it, `fetch_all`
-runs it. `scd2().recursive(..)` walks the open intervals,
-`scd2().as_of(&t).recursive(..)` the versions visible at `t`. Every
-`recursive` relation is versioned, so there is no wordless traversal.
+The newest version of each of many partitions at `on`, the `Head~0` of
+`DataVersion` for all of them: `fetch_all`, at most one row per partition.
+One top-1 `LATERAL` probe per partition on the same index, planned once per
+chunk of partitions.
 
 ### Per-DAO Surfaces
 

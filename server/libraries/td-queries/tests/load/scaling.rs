@@ -27,7 +27,6 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionRead};
 use td_objects::dxo::crudl::ListParams;
-use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::execution::Execution;
 use td_objects::dxo::function::{Function, FunctionDB};
 use td_objects::dxo::logical::{
@@ -41,10 +40,9 @@ use td_objects::dxo::table::{Table, TableDB};
 use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{
-    AtTime, DependencyPos, Depth, EpochMs, FactSide, IncludePrivate, IncludeReplaced, InputIdx,
+    AtTime, DependencyPos, EpochMs, FactSide, IncludePrivate, IncludeReplaced, InputIdx,
     LogicalFunctionRunInputId, LogicalFunctionRunStatus, PhysicalFunctionRunStatus, VersionPos,
 };
-use td_objects::types::recursion::RecursionOptions;
 use td_objects::types::visible_projects::VisibleProjects;
 use td_queries::Queries;
 use td_queries::test_utils::{derive_metrics_facts, topology_write};
@@ -505,28 +503,6 @@ async fn time_chain_queries(
         out,
         "default::fetch_latest_before",
         (db).fetch_nth_last::<ActiveCollectionDB>((), 0).await?
-    );
-
-    let depth = Depth::try_from(16)?;
-    let opts = RecursionOptions::new(Some(depth), Some(depth));
-    let _ = timed!(
-        out,
-        "recursive::current",
-        (db).scd2()
-            .recursive::<DependencyDBWithNames, FunctionDB>(opts)
-            .start_at(&h.consumer_function_id)
-            .fetch_all()
-            .await?
-    );
-    let _ = timed!(
-        out,
-        "recursive::find_at",
-        (db).scd2()
-            .as_of(&version.interval.valid_from)
-            .recursive::<DependencyDBWithNames, FunctionDB>(opts)
-            .start_at(&h.consumer_function_id)
-            .fetch_all()
-            .await?
     );
 
     let coll_params = ListQueryParams::<CollectionRead>::try_from(&ListParams::default())?;

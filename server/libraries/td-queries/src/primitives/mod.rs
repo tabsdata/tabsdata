@@ -8,6 +8,5 @@
 //! reach in and bypass the safe trait surface.
 
 pub(crate) mod chunked;
-pub(crate) mod recursive;
 pub(crate) mod scd2;
 pub(crate) mod table;

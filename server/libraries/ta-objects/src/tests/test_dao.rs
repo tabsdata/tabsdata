@@ -9,8 +9,7 @@ mod tests {
 
     use crate::and;
     use crate::dxo::{
-        Dao, HasColumn, Insertable, Partitioned, PkDao, RecursiveDao, Scd2Dao, TimelineDao,
-        UpdateDao,
+        Dao, HasColumn, Insertable, Partitioned, PkDao, Scd2Dao, TimelineDao, UpdateDao,
     };
     use crate::or;
     use crate::sql_condition::SqlCondition;
@@ -45,12 +44,6 @@ mod tests {
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct ItemId(String);
-
-    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
-    struct RecursionKey(String);
-
-    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
-    struct ParentKey(String);
 
     #[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     enum ItemStatus {
@@ -366,34 +359,6 @@ mod tests {
         assert!(q.contains(r#""status" = 'A'"#), "{q}");
         assert!(q.contains("AND"), "Executable should be AND: {q}");
         assert!(!q.contains("OR"), "Executable should not have OR: {q}");
-    }
-
-    #[ta_objects::Dao]
-    #[dao(table = "tree", ops(select), scd2, recursive)]
-    struct TreeDao {
-        #[dao(pk)]
-        pub id: ItemId,
-        #[dao(partition_by)]
-        pub item_id: Name,
-        #[dao(recursive(up))]
-        pub parent: ParentKey,
-        #[dao(recursive(down))]
-        pub child: RecursionKey,
-        pub status: ItemStatus,
-        #[dao(flatten)]
-        pub interval: Scd2Interval,
-    }
-
-    #[test]
-    fn test_recursive_up() {
-        let col = TreeDao::UP;
-        assert_eq!(col.quoted(), "parent");
-    }
-
-    #[test]
-    fn test_recursive_down() {
-        let col = TreeDao::DOWN;
-        assert_eq!(col.quoted(), "child");
     }
 
     #[test]

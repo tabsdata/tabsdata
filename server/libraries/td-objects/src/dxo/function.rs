@@ -15,8 +15,8 @@ use crate::types::basic::{
 };
 use crate::types::composed::{TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto};
 use std::collections::HashMap;
+use ta_objects::FromDao;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{FromDao, and};
 use td_error::TdError;
 
 #[ta_objects::Dto]
@@ -344,10 +344,6 @@ impl FunctionDB {
             ..self.base.clone()
         }
     }
-
-    pub fn executable() -> impl SqlCondition<Self> {
-        and!(FunctionStatus::Active, Enabled::TRUE)
-    }
 }
 
 /// Lives in its own `function_patches` table so every "find latest version"
@@ -462,12 +458,6 @@ pub struct FunctionDBWithNames {
     /// No default: the group is project-scoped and must be set explicitly.
     pub group_id: GroupId,
     pub defined_by: UserLabel,
-}
-
-impl FunctionDBWithNames {
-    pub fn executable() -> impl SqlCondition<Self> {
-        and!(FunctionStatus::Active, Enabled::TRUE)
-    }
 }
 
 /// Head versions and patches unified — the only patch-aware query surface;

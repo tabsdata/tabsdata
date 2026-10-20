@@ -26,7 +26,7 @@ use syn::{DeriveInput, Field, Fields, ItemStruct, Type, parse_macro_input};
 /// (repeatable, `scd2` only; unique among the versions visible at one instant,
 /// so it addresses one version but not one row of the history), `scd2` /
 /// `scd2(at = T)` |
-/// `timeline`, `recursive`, and `project_scoped` /
+/// `timeline`, and `project_scoped` /
 /// `project_scoped(unique(A, B), unique_at(A, B))`. A table DAO other than an
 /// update marks its primary key column with `#[dao(pk)]`, or flattens a base
 /// that does.
@@ -43,7 +43,6 @@ pub struct DaoArguments {
     unique_at_types: Vec<PathList>,
     scd2: Option<Override<Scd2Arguments>>,
     timeline: Flag,
-    recursive: Flag,
     project_scoped: Option<ProjectScopedArguments>,
 }
 
@@ -338,7 +337,6 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
     let declared: Vec<&str> = [
         is_scd2.then_some("scd2"),
         is_timeline.then_some("timeline"),
-        parsed.recursive.is_present().then_some("recursive"),
     ]
     .into_iter()
     .flatten()
@@ -1022,28 +1020,6 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         quote! { #row #project_row #version }
     };
 
-    let recursive_impl = parsed
-        .recursive
-        .is_present()
-        .then(|| {
-            let up = role("recurse_up", "UP", "Key", "RecursiveDao")?;
-            let down = role("recurse_down", "DOWN", "Key", "RecursiveDao")?;
-            let ((up_col, _), (down_col, key_ty)) = up.zip(down).ok_or_else(|| {
-                syn::Error::new_spanned(
-                    ident,
-                    "recursive: mark both #[dao(recursive(up))] and #[dao(recursive(down))]",
-                )
-            })?;
-            Ok::<_, syn::Error>(quote! {
-                impl ta_objects::RecursiveDao for #ident {
-                    type Key = #key_ty;
-                    const UP: Self::Iden = #up_col;
-                    const DOWN: Self::Iden = #down_col;
-                }
-            })
-        })
-        .transpose()?;
-
     // `cfg(not(test))` keeps a crate's own test fixtures out of the registry
     // while dependency crates still register.
     let registration = ops.select.is_present().then(|| {
@@ -1078,7 +1054,6 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         #upsert_impl
         #update_impl
         #timeline_impl
-        #recursive_impl
         #registration
     })
 }

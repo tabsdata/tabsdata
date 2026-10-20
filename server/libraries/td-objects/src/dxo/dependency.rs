@@ -12,17 +12,15 @@ use crate::types::composed::TableVersions;
 use ta_objects::sql_condition::SqlCondition;
 
 #[ta_objects::Dao]
-#[dao(table = "dependencies", ops(insert), scd2(at = TopologyInstant), recursive, project_scoped)]
+#[dao(table = "dependencies", ops(insert), scd2(at = TopologyInstant), project_scoped)]
 pub struct DependencyInsertDB {
     #[dao(pk)]
     pub id: DependencyVersionId,
     pub collection_id: CollectionId,
     #[dao(partition_by)]
     pub dependency_id: DependencyId,
-    #[dao(recursive(down))]
     pub function_id: FunctionId,
     pub table_collection_id: OfTable<CollectionId>,
-    #[dao(recursive(up))]
     pub table_function_id: OfTable<FunctionId>,
     pub table_id: TableId,
     pub table_versions: TableVersions,
@@ -33,7 +31,7 @@ pub struct DependencyInsertDB {
 }
 
 #[ta_objects::Dao]
-#[dao(table = "dependencies", ops(select, close), scd2(at = TopologyInstant), recursive, project_scoped)]
+#[dao(table = "dependencies", ops(select, close), scd2(at = TopologyInstant), project_scoped)]
 pub struct DependencyDB {
     #[dao(flatten)]
     pub base: DependencyInsertDB,
@@ -43,7 +41,7 @@ pub struct DependencyDB {
 }
 
 #[ta_objects::Dao]
-#[dao(view = "dependencies__with_names", scd2, recursive, project_scoped)]
+#[dao(view = "dependencies__with_names", scd2, project_scoped)]
 pub struct DependencyDBWithNames {
     #[dao(flatten)]
     pub base: DependencyDB,

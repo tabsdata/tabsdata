@@ -8,8 +8,7 @@ mod tests {
     use tm_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 
     use crate::dxo::{
-        Dao, Insertable, Partitioned, PkDao, RecursiveDao, Scd2Dao, SelectDao, TimelineDao,
-        UpdateDao, UpsertDao,
+        Dao, Insertable, Partitioned, PkDao, Scd2Dao, SelectDao, TimelineDao, UpdateDao, UpsertDao,
     };
     use crate::unique::AddressesOneRow;
     use sea_query::{Iden, Order};
@@ -208,17 +207,17 @@ mod tests {
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(table = "scd2_widgets", ops(insert), scd2, recursive)]
+    #[dao(table = "scd2_widgets", ops(insert), scd2)]
     struct Scd2WidgetInsertDao {
-        #[dao(pk, recursive(down))]
+        #[dao(pk)]
         pub id: WidgetVersionId,
-        #[dao(partition_by, recursive(up))]
+        #[dao(partition_by)]
         pub widget_id: WidgetId,
     }
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(table = "scd2_widgets", ops(select), scd2, recursive)]
+    #[dao(table = "scd2_widgets", ops(select), scd2)]
     struct Scd2WidgetDao {
         #[dao(flatten)]
         pub base: Scd2WidgetInsertDao,
@@ -228,7 +227,7 @@ mod tests {
 
     #[ta_objects::Dao]
     #[derive(Eq, PartialEq)]
-    #[dao(view = "scd2_widgets__with_names", scd2, recursive)]
+    #[dao(view = "scd2_widgets__with_names", scd2)]
     struct Scd2WidgetDaoWithNames {
         #[dao(flatten)]
         pub base: Scd2WidgetDao,
@@ -250,12 +249,6 @@ mod tests {
             Iden::to_string(&Scd2WidgetDaoWithNames::VALID_TO),
             "valid_to"
         );
-    }
-
-    #[test]
-    fn test_recursive_cols_resolve_into_base() {
-        assert_eq!(Iden::to_string(&Scd2WidgetDaoWithNames::UP), "widget_id");
-        assert_eq!(Iden::to_string(&Scd2WidgetDaoWithNames::DOWN), "id");
     }
 
     #[ta_objects::Dao]

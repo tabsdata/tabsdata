@@ -22,9 +22,6 @@ pub enum Family {
     /// `Versions`-selector reads over the purpose-built `LoadDvDao` fixture,
     /// sized on versions-per-partition.
     DataVersion,
-    /// Recursive walk over the producer→consumer dependency edges. Recursion
-    /// depth stays 1 and fan-out 1: that axis is an open coverage gap.
-    Recursive,
     /// Logical-chain walk: `LFR ⨝ LFRI ⨝ LTDV ⨝ bound attempt ⨝ producer`.
     Chain,
     /// The current attempt of a logical row.
@@ -279,18 +276,6 @@ pub const LOAD_CASES: &[LoadCase] = &[
         name: "data_version::heads",
         covers: &["Heads::fetch_all"],
         family: Family::DataVersion,
-        status: Status::Implemented,
-    },
-    LoadCase {
-        name: "recursive::current",
-        covers: &["Scd2Recursive::fetch_all"],
-        family: Family::Recursive,
-        status: Status::Implemented,
-    },
-    LoadCase {
-        name: "recursive::find_at",
-        covers: &["AsOfRecursive::fetch_all"],
-        family: Family::Recursive,
         status: Status::Implemented,
     },
     // daos/function_runs.rs — logical-chain readiness/commit/dispatch.

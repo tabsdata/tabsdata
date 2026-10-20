@@ -27,7 +27,6 @@ mod metric;
 mod metrics_cases;
 mod profile;
 mod raw;
-mod recursive_cases;
 mod report;
 mod scaling;
 mod scd2_cases;

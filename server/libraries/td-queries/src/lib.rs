@@ -29,7 +29,6 @@ pub use generic::data_version::DataVersion;
 pub use generic::for_update::ForUpdate;
 pub use generic::timeline::Timeline;
 
-pub use generic::recursive::{AsOfRecursive, Scd2Recursive};
 pub use generic::scd2::Scd2;
 
 pub use logic_id::initialize_logical_ids;

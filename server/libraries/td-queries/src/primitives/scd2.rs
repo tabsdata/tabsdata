@@ -46,23 +46,6 @@ pub(crate) fn visible_at_cond<D: Scd2Dao + TimelineDao, V: SameInner<D::VersionO
     visible_at(D::VALID_FROM, D::VALID_TO, on)
 }
 
-/// An instant already rendered to its bound value: what a builder keeps once
-/// the caller's newtype has been checked against the column.
-#[derive(Debug, Clone)]
-pub(crate) struct Instant(Expr);
-
-impl Instant {
-    pub(crate) fn of<V: SeaValue>(on: &V) -> Self {
-        Self(on.as_sea_expr())
-    }
-}
-
-impl SeaValue for Instant {
-    fn as_sea_expr(&self) -> Expr {
-        self.0.clone()
-    }
-}
-
 /// The lock instant as the bound value of `valid_from` / `valid_to`.
 pub(crate) fn stamp(at: LockInstant) -> Expr {
     <Timestamp as TypedInner>::sea_expr(&at.timestamp())
