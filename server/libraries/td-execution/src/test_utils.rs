@@ -3,12 +3,13 @@
 //
 
 use crate::graph::{TdGraph, TdGraphBuilder};
+use std::collections::HashSet;
 use strum::{Display, EnumString};
 use ta_execution::TransactionMapper;
 use td_error::TdError;
-use td_objects::dxo::graph::FunctionNode;
+use td_objects::dxo::graph::{FunctionNode, TableNode};
 use td_objects::test_utils::graph::{
-    FUNCTION_NAMES, TABLE_NAMES, dependency, function, table, trigger,
+    FUNCTION_NAMES, TABLE_NAMES, dependency, function, function_node, table, table_node, trigger,
 };
 use td_objects::types::basic::TransactionKey;
 
@@ -80,4 +81,12 @@ pub fn test_graph() -> TdGraph {
     );
 
     graph
+}
+
+pub fn expected_function_nodes() -> HashSet<FunctionNode> {
+    FUNCTION_NAMES.iter().map(function_node).collect()
+}
+
+pub fn expected_table_nodes() -> HashSet<TableNode> {
+    TABLE_NAMES.iter().map(table_node).collect()
 }

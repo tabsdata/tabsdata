@@ -2,20 +2,116 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use petgraph::prelude::EdgeRef;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_execution::{ExecutionPlan, ResolvedExecutionPlan};
+use td_execution::{ExecutionPlan, ResolvedExecutionPlan, VersionResolver};
+use td_objects::dxo::execution::ExecutionInsertDB;
 use td_objects::dxo::graph::{FunctionNode, GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::dxo::logical::{
     LogicalFunctionRunInputInsertDB, LogicalFunctionRunInsertDB, LogicalTableDataVersionDB,
 };
 use td_objects::types::basic::{
-    FunctionId, LogicalFunctionRunId, LogicalTableDataVersionId, TableId, VersionPos,
+    AtTime, FunctionId, LogicalFunctionRunId, LogicalTableDataVersionId, TableId, VersionPos,
 };
 use td_objects::types::table_ref::Versions;
 use td_queries::Queries;
+
+pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
+    execution: &ExecutionInsertDB,
+    execution_plan: &ExecutionPlan,
+) -> Result<ResolvedExecutionPlan, TdError> {
+    let at_time = AtTime::from(execution.triggered_on);
+
+    // Per-edge cache keys, in plan-iteration order; resolves are shared
+    // across edges asking for the same versions of a table, and only new
+    // versions depend on the function reading them.
+    type ResolveKey = (TableId, Versions, Option<FunctionId>);
+    let mut edge_meta: Vec<(Versions, ResolveKey)> = Vec::new();
+    let mut ltdv_cache: HashMap<ResolveKey, Vec<Option<LogicalTableDataVersionId>>> =
+        HashMap::new();
+
+    for edge in execution_plan.graph.inner.edge_references() {
+        let source = &execution_plan.graph.inner[edge.source()];
+        let target = &execution_plan.graph.inner[edge.target()];
+        let versions = edge.weight();
+
+        let (versions_inner, function, table, self_dependency) = match versions {
+            GraphEdge::Output { versions, .. } => (versions, source, target, false),
+            GraphEdge::Trigger { versions } => (versions, target, source, false),
+            GraphEdge::Dependency {
+                versions,
+                dependency,
+            } => (versions, target, source, *dependency.self_dependency),
+        };
+        let function = match function {
+            GraphNode::Function(function) => function,
+            _ => unreachable!(),
+        };
+        let table = match table {
+            GraphNode::Table(table) => table,
+            _ => unreachable!(),
+        };
+
+        let lookup_versions = if self_dependency {
+            // Self references shift by -1: HEAD means the previous version.
+            Cow::Owned(versions_inner.shift(-1))
+        } else {
+            Cow::Borrowed(versions_inner)
+        };
+
+        let reader = matches!(*lookup_versions, Versions::New).then_some(function.function_id);
+        let cache_key = (table.table_id, lookup_versions.clone().into_owned(), reader);
+        if !ltdv_cache.contains_key(&cache_key) {
+            let ltdvs = VersionResolver::builder()
+                .function_id(&function.function_id)
+                .table_id(&table.table_id)
+                .versions(&lookup_versions)
+                .triggered_on(&at_time)
+                .build()?
+                .resolve(&mut *conn)
+                .await?
+                .into_iter()
+                .map(|ltdv| ltdv.map(|ltdv| ltdv.base.base.id))
+                .collect();
+            ltdv_cache.insert(cache_key.clone(), ltdvs);
+        }
+
+        edge_meta.push((versions_inner.clone(), cache_key));
+    }
+
+    let edge_results: Vec<ResolvedVersion> = edge_meta
+        .into_iter()
+        .map(|(original, cache_key)| ResolvedVersion {
+            inner: ltdv_cache[&cache_key].clone(),
+            original: original.into(),
+        })
+        .collect();
+
+    let mut edge_iter = edge_results.into_iter();
+    let execution_plan = execution_plan
+        .map(
+            |node| async move { Ok::<_, TdError>(node.clone()) },
+            |_versions, _source, _target| {
+                let resolved = edge_iter.next();
+                async move {
+                    resolved.ok_or_else(|| {
+                        api_error!(
+                            ApiError::InternalError,
+                            "Pre-computed edge results exhausted during execution plan resolution"
+                        )
+                    })
+                }
+            },
+        )
+        .await?;
+
+    Ok(execution_plan)
+}
 
 /// The versions an execution's plan pinned on each edge, read back from what
 /// the plan persisted: its runs' inputs, and the versions its runs produce.

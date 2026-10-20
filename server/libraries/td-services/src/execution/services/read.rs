@@ -2,10 +2,11 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::pinned::pinned_execution_plan_versions;
-use crate::execution::plan::{build_response, fetch_relations_info};
-use std::collections::{HashMap, HashSet};
-use ta_execution::PlanScope;
+use crate::execution::plan::response::{build_response, fetch_relations_info};
+use crate::execution::plan::rows::build_existing_transaction_map;
+use crate::execution::plan::versions::pinned_execution_plan_versions;
+use crate::execution::plan::with_existing_recursion_options;
+use std::collections::HashSet;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -13,11 +14,9 @@ use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_execution::ExecutionPlan;
-use td_execution::ExecutionScope;
 use td_execution::TransactionBy;
-use td_execution::graph::FunctionState;
+use td_execution::topology::FunctionState;
 use td_execution::topology::ProjectTopology;
-use td_execution::transaction_map::TransactionMap;
 use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::ExecutionParam;
@@ -29,10 +28,8 @@ use td_objects::dxo::logical::{
     LogicalFunctionRunInsertDB,
 };
 use td_objects::dxo::topology::ProjectTopologyDB;
-use td_objects::dxo::transaction::TransactionValue;
 use td_objects::dxo::transaction::{TransactionDB, TransactionInsertDB};
-use td_objects::types::basic::{FunctionId, FunctionOnly, OverrideDisabledTrigger};
-use td_objects::types::recursion::RecursionOptions;
+use td_objects::types::basic::FunctionId;
 use td_queries::Queries;
 
 #[service_factory]
@@ -106,51 +103,6 @@ async fn execution_read(
         relations_info,
     )
     .await
-}
-
-pub fn with_existing_recursion_options(
-    execution: &ExecutionDB,
-) -> Result<RecursionOptions, TdError> {
-    let options = execution
-        .base
-        .recursion_options
-        .as_deref()
-        .cloned()
-        .unwrap_or_else(|| {
-            ExecutionScope::execution_recursion_options(
-                FunctionOnly::FALSE,
-                OverrideDisabledTrigger::FALSE,
-            )
-        });
-    Ok(options)
-}
-
-// Similar to build_transaction_map, but using already existing transactions instead of creating new ones.
-pub fn build_existing_transaction_map(
-    transaction_by: &TransactionBy,
-    transactions: &[TransactionInsertDB],
-) -> Result<TransactionMap<TransactionBy>, TdError> {
-    let mut mapped_transactions = HashMap::new();
-    for transaction in transactions.iter() {
-        if !mapped_transactions.contains_key(&transaction.transaction_key) {
-            mapped_transactions.insert(
-                transaction.transaction_key.clone(),
-                TransactionValue::from(transaction),
-            );
-        }
-    }
-
-    // We should always have at least one transaction, and all transactions should have the same transaction_by.
-    // In case it differs with the one configured in the system, we prioritize the one from the transaction.
-    // This can happen when loading transactions from previous executions.
-    let transaction_by_str = transactions.first().map(|t| t.transaction_by.clone());
-    let transaction_by = if let Some(transaction_by_str) = transaction_by_str {
-        transaction_by_str.parse().unwrap_or(transaction_by.clone())
-    } else {
-        transaction_by.clone()
-    };
-    let transaction_map = TransactionMap::from_map(mapped_transactions, transaction_by);
-    Ok(transaction_map)
 }
 
 #[cfg(test)]

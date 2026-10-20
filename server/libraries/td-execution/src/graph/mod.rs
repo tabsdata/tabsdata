@@ -2,10 +2,10 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-pub use generate::FunctionState;
-pub use td_graph::{PartialGraph, TdGraph, TdGraphBuilder};
+pub use builder::TdGraphBuilder;
+pub use partial::PartialGraph;
+pub use td_graph::TdGraph;
 
-mod generate;
-mod map_graph;
-pub mod source;
+mod builder;
+mod partial;
 mod td_graph;

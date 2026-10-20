@@ -1,46 +1,46 @@
 //
-// Copyright 2025 Tabsdata Inc.
+// Copyright 2026 Tabsdata Inc.
 //
 
+//! Authorization is owned by the calling service: projects are silos, so the
+//! caller gates access with its own project-scoped check.
+
 use crate::ExecutionScope;
-use crate::graph::source::PlanSource;
 use crate::graph::{TdGraph, TdGraphBuilder};
-use crate::topology::ProjectTopology;
+use crate::topology::walk::Nodes;
+use crate::topology::{FunctionState, ProjectTopology};
 use std::collections::HashSet;
-use ta_execution::PlanScope;
+use ta_execution::{GraphSource, PlanScope};
 use td_error::TdError;
 use td_objects::dxo::dependency::DependencyDBWithNames;
-use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::trigger::TriggerDBWithNames;
-use td_objects::types::basic::{FunctionId, FunctionStatus};
+use td_objects::types::basic::FunctionId;
 use td_objects::types::recursion::RecursionOptions;
 
-/// The functions a walk goes through.
-#[derive(Clone, Copy, Debug)]
-pub enum FunctionState<'a> {
-    Any,
-    /// Active and enabled.
-    Executable,
-    /// The ones an execution ran.
-    Ran(&'a HashSet<FunctionId>),
+/// A topology version seen through the functions a plan may run.
+pub(crate) struct PlanSource<'t> {
+    pub topology: &'t ProjectTopology,
+    pub state: FunctionState<'t>,
 }
 
-impl FunctionState<'_> {
-    pub fn matches(&self, function: &FunctionDBWithNames) -> bool {
-        let function = &function.base.base;
-        match self {
-            FunctionState::Any => true,
-            FunctionState::Executable => {
-                function.status == FunctionStatus::Active && *function.enabled
-            }
-            FunctionState::Ran(functions) => functions.contains(&function.function_id),
-        }
+impl GraphSource for PlanSource<'_> {
+    fn walk(&self, start: &FunctionId, options: &RecursionOptions) -> Vec<&TriggerDBWithNames> {
+        let nodes = Nodes::plan(self.topology, self.state, *start, options);
+        self.topology.trigger_walk(&nodes, options)
+    }
+
+    fn children_triggers<'a>(
+        &'a self,
+        start: &FunctionId,
+        triggers: &[&'a TriggerDBWithNames],
+        options: &RecursionOptions,
+    ) -> Vec<&'a TriggerDBWithNames> {
+        let nodes = Nodes::plan(self.topology, self.state, *start, options);
+        self.topology.children_triggers(&nodes, triggers)
     }
 }
 
-/// Authorization is owned by the calling service: projects are silos, so the
-/// caller gates access with its own project-scoped check.
 impl ProjectTopology {
     /// The execution plan graph of `start`: the triggers this edition plans
     /// over functions in `state`, plus everything they need to run.
@@ -65,15 +65,15 @@ impl ProjectTopology {
     }
 
     /// Everything flowing into and out of `table`, whatever the state of the
-    /// functions on the way: the walks start at its writer, even when a
-    /// frozen table outlives it.
+    /// functions on the way.
     pub fn flow_graph(&self, table: &TableDBWithNames) -> Result<TdGraph, TdError> {
         let start = table.base.base.function_id;
+        let nodes = Nodes::flow(self, start);
         let unbounded = RecursionOptions::new(None, None);
-        let mut triggers = self.trigger_walk(&start, true, FunctionState::Any, &unbounded);
-        let children = self.children_triggers(&start, &triggers, FunctionState::Any, &unbounded);
+        let mut triggers = self.trigger_walk(&nodes, &unbounded);
+        let children = self.children_triggers(&nodes, &triggers);
         triggers.extend(children);
-        let dependencies = self.dependency_walk(&start, true, FunctionState::Any, &unbounded);
+        let dependencies = self.dependency_walk(&nodes, &unbounded);
         let functions: HashSet<FunctionId> = triggers
             .iter()
             .flat_map(|t| [*t.base.base.trigger_by_function_id, t.base.base.function_id])

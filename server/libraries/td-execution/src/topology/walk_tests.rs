@@ -5,9 +5,9 @@
 //! The in-memory walks visit what the recursive SQL walks did, except that a
 //! table-centered walk also reaches functions without tables.
 
-use crate::graph::FunctionState;
-use crate::graph::source::PlanSource;
-use crate::topology::ProjectTopology;
+use crate::topology::plan::PlanSource;
+use crate::topology::walk::Nodes;
+use crate::topology::{FunctionState, ProjectTopology};
 use std::collections::{HashMap, HashSet};
 use ta_execution::GraphSource;
 use td_database::access::{AcrossProjects, DbPool, Grant};
@@ -164,7 +164,8 @@ async fn seed(db: &TdPool) -> Result<(ProjectTopology, HashMap<String, FunctionI
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut conn = pools.read().await?.enter_project(&p.id).await?;
-    let topology = ProjectTopology::current(conn.get(Grant::asserted("walk tests")), &p.id).await?;
+    let conn = conn.get(Grant::asserted("walk tests"));
+    let topology = ProjectTopology::current(conn, &p.id).await?;
     Ok((topology, ids))
 }
 
@@ -214,7 +215,8 @@ async fn test_function_walks_match_the_sql_walks(db: TdPool) -> Result<(), TdErr
                     .where_nodes(&cond)
                     .fetch_all()
                     .await?;
-                let memory = topology.dependency_walk(function, false, state, &options);
+                let memory =
+                    topology.dependency_walk(&Nodes::new(&topology, state, *function), &options);
                 assert_eq!(
                     dependency_ids(memory),
                     dependency_ids(&sql),
@@ -264,7 +266,7 @@ async fn test_table_walks_also_reach_functions_without_tables(db: TdPool) -> Res
                 .where_edges(TriggerDBWithNames::active())
                 .fetch_all()
                 .await?;
-            let memory = topology.trigger_walk(&function, true, FunctionState::Any, &options);
+            let memory = topology.trigger_walk(&Nodes::flow(&topology, function), &options);
             let sql_ids = trigger_ids(&sql);
             for t in &memory {
                 if !sql_ids.contains(&t.base.base.id) {
@@ -292,7 +294,7 @@ async fn test_table_walks_also_reach_functions_without_tables(db: TdPool) -> Res
                 .start_at(&table_id)
                 .fetch_all()
                 .await?;
-            let memory = topology.dependency_walk(&function, true, FunctionState::Any, &options);
+            let memory = topology.dependency_walk(&Nodes::flow(&topology, function), &options);
             assert_eq!(
                 dependency_ids(memory.iter().copied().filter(|d| !touches_tableless(
                     *d.base.base.table_function_id,

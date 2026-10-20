@@ -5,12 +5,14 @@
 pub mod services;
 
 use crate::execution::execution_version::{external_uid_holder, running_execution};
-use crate::execution::plan::{
-    assert_function_status, build_logical_function_run_inputs, build_logical_function_runs,
-    build_logical_table_data_versions, build_response, build_transaction_map, build_transactions,
-    fetch_relations_info, resolve_execution_plan_versions, update_initial_function_run_status,
-    validate_execution_plan,
+use crate::execution::plan::response::{build_response, fetch_relations_info};
+use crate::execution::plan::rows::{
+    build_logical_function_run_inputs, build_logical_function_runs,
+    build_logical_table_data_versions, build_transaction_map, build_transactions,
+    update_initial_function_run_status,
 };
+use crate::execution::plan::versions::resolve_execution_plan_versions;
+use crate::execution::plan::{assert_function_status, validate_execution_plan};
 use ta_execution::PlanScope;
 use ta_services::ctx_service::ReqCtx;
 use td_database::access::LockInstant;
@@ -18,7 +20,7 @@ use td_database::access::{InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::ExecutionPlan;
-use td_execution::graph::FunctionState;
+use td_execution::topology::FunctionState;
 use td_execution::topology::ProjectTopology;
 use td_execution::{ExecutionScope, TransactionBy};
 use td_objects::and;
@@ -36,7 +38,6 @@ use td_queries::Queries;
 pub(crate) mod cancellation;
 pub(crate) mod execution_version;
 pub(crate) mod list;
-pub(crate) mod pinned;
 pub(crate) mod plan;
 pub(crate) mod release;
 pub(crate) mod settlement;

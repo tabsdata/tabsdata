@@ -6,7 +6,7 @@
 //! versions are those since that function's own previous run.
 
 use crate::Services;
-use crate::execution::plan::resolve_execution_plan_versions;
+use crate::execution::plan::versions::resolve_execution_plan_versions;
 use crate::tests::fixtures::register;
 use petgraph::Graph;
 use std::str::FromStr;
