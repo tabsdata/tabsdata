@@ -2,11 +2,10 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::plan::recursion_options_of;
+use crate::execution::plan::recorded::recorded_execution_plan;
 use crate::execution::plan::response::{build_response, fetch_relations_info};
 use crate::execution::plan::rows::build_existing_transaction_map;
 use crate::execution::plan::versions::pinned_execution_plan_versions;
-use std::collections::HashSet;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -14,7 +13,6 @@ use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_execution::TransactionBy;
-use td_execution::topology::FunctionState;
 use td_execution::topology::ProjectTopology;
 use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
@@ -26,7 +24,6 @@ use td_objects::dxo::logical::{
 };
 use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionInsertDB};
-use td_objects::types::basic::FunctionId;
 use td_queries::Queries;
 
 #[service_factory]
@@ -54,7 +51,6 @@ async fn execution_read(
         .fetch_one(&execution.base.topology_version_id)
         .await?;
 
-    let recursion_options = recursion_options_of(&execution)?;
     let lfrs: Vec<LogicalFunctionRunInsertDB> = conn
         .fetch_all::<LogicalFunctionRunDB>(&execution_id)
         .await?
@@ -67,12 +63,9 @@ async fn execution_read(
         .into_iter()
         .map(|input| input.base)
         .collect();
-    let ran: HashSet<FunctionId> = lfrs.iter().map(|lfr| lfr.function_id).collect();
-    let execution_plan = ProjectTopology::of(conn, topology).await?.plan(
-        FunctionState::Ran(&ran),
-        &execution.base.function_id,
-        &recursion_options,
-    )?;
+    let topology = ProjectTopology::of(conn, topology).await?;
+    let execution_plan =
+        recorded_execution_plan(conn, &execution, &topology, &lfrs, &inputs).await?;
     let transactions: Vec<TransactionInsertDB> = conn
         .fetch_all::<TransactionDB>(&execution_id)
         .await?

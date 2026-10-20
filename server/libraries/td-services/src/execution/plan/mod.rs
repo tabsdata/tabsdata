@@ -2,16 +2,13 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use ta_execution::PlanScope;
 use ta_services::api_message;
 use ta_services::ctx_service::ReqCtx;
 use td_error::{ApiError, TdError, api_error};
-use td_execution::ExecutionScope;
-use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::types::basic::{FunctionOnly, FunctionStatus, OverrideDisabledTrigger};
-use td_objects::types::recursion::RecursionOptions;
+use td_objects::types::basic::{FunctionStatus, OverrideDisabledTrigger};
 
+pub(crate) mod recorded;
 pub(crate) mod response;
 pub(crate) mod rows;
 pub(crate) mod versions;
@@ -44,19 +41,4 @@ pub fn assert_function_status(
         }
     }
     Ok(())
-}
-
-pub fn recursion_options_of(execution: &ExecutionDB) -> Result<RecursionOptions, TdError> {
-    let options = execution
-        .base
-        .recursion_options
-        .as_deref()
-        .cloned()
-        .unwrap_or_else(|| {
-            ExecutionScope::execution_recursion_options(
-                FunctionOnly::FALSE,
-                OverrideDisabledTrigger::FALSE,
-            )
-        });
-    Ok(options)
 }
