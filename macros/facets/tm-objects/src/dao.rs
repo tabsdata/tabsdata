@@ -334,14 +334,12 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
              unversioned relation",
         ));
     }
-    let declared: Vec<&str> = [
-        is_scd2.then_some("scd2"),
-        is_timeline.then_some("timeline"),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    marks.check_grains(&declared)?;
+    if !is_timeline && marks.marked_once("version_by")?.is_some() {
+        return Err(syn::Error::new_spanned(
+            ident,
+            "#[dao(timeline(version_by))] requires the struct to declare `timeline`",
+        ));
+    }
     if !is_versioned && marks.marked_once("partition_by")?.is_some() {
         return Err(syn::Error::new_spanned(
             ident,
@@ -390,7 +388,9 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
     }
     // A timeline of the project itself is partitioned by it, so its payload
     // names the project; any other `ProjectId` is the policy's to default.
-    let partition = marks.marked_once("partition_by")?.and_then(|f| f.ident.as_ref());
+    let partition = marks
+        .marked_once("partition_by")?
+        .and_then(|f| f.ident.as_ref());
     if parsed.project_scoped.is_some()
         && ops.insert.is_present()
         && let Some(c) = columns

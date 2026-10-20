@@ -10,82 +10,47 @@ use syn::{Field, Fields, Token, Type, parenthesized};
 const MARKS: &[&str] = &[
     "pk",
     "partition_by",
-    "scd2",
     "timeline",
     "order_by",
     "immutable",
     "flatten",
 ];
 
-/// Grain-owned marks nest under their grain's word; `timeline(version_by)`
-/// is flattened to the role `version_by`, the grain kept for the cross-check.
-/// `scd2` owns no field role: its interval is the `Scd2Interval` projection.
-const GRAINS: &[(&str, &[(&str, &str)])] = &[
-    ("scd2", &[]),
-    ("timeline", &[("version_by", "version_by")]),
-];
+/// `timeline(version_by)` is read as the mark `version_by`; the struct-level
+/// `timeline` it needs is checked where the struct's grain is known.
+const VERSION_BY: &str = "#[dao(timeline(version_by))]";
 
 pub struct Mark {
     pub name: Ident,
     pub arg: Option<Ident>,
-    pub grain: Option<Ident>,
-}
-
-fn grain_roles(grain: &str) -> Option<&'static [(&'static str, &'static str)]> {
-    GRAINS.iter().find(|(g, _)| *g == grain).map(|(_, r)| *r)
-}
-
-fn nested_form_of(role: &str) -> Vec<String> {
-    GRAINS
-        .iter()
-        .flat_map(|(g, roles)| {
-            roles
-                .iter()
-                .filter(move |(_, r)| *r == role)
-                .map(move |(a, _)| format!("#[dao({g}({a}))]"))
-        })
-        .collect()
 }
 
 impl Mark {
     fn normalise(self) -> syn::Result<Self> {
-        let name = self.name.to_string();
-        let Some(roles) = grain_roles(&name) else {
-            let bare = nested_form_of(&name);
-            if !bare.is_empty() {
-                return Err(syn::Error::new_spanned(
-                    &self.name,
-                    format!("`{name}` nests under its grain: {}", bare.join(" or ")),
-                ));
-            }
-            return Ok(self);
-        };
-        let Some(arg) = self.arg else {
+        if self.name == "version_by" {
             return Err(syn::Error::new_spanned(
                 &self.name,
-                format!("`{name}` takes one of {}", expected(roles)),
+                format!("`version_by` nests under its grain: {VERSION_BY}"),
             ));
-        };
-        let Some((_, role)) = roles.iter().find(|(a, _)| arg == a) else {
-            return Err(syn::Error::new_spanned(
+        }
+        if self.name != "timeline" {
+            return Ok(self);
+        }
+        match self.arg {
+            Some(arg) if arg == "version_by" => Ok(Mark {
+                name: Ident::new("version_by", arg.span()),
+                arg: None,
+            }),
+            Some(arg) => Err(syn::Error::new_spanned(
                 &arg,
-                format!("`{name}` takes one of {}, not `{arg}`", expected(roles)),
-            ));
-        };
-        Ok(Mark {
-            name: Ident::new(role, arg.span()),
-            arg: None,
-            grain: Some(self.name),
-        })
+                format!("`timeline` takes `version_by`, not `{arg}`"),
+            )),
+            None => Err(syn::Error::new_spanned(
+                &self.name,
+                "`timeline` takes `version_by`",
+            )),
+        }
     }
-}
-
-fn expected(roles: &[(&str, &str)]) -> String {
-    roles
-        .iter()
-        .map(|(a, _)| format!("`{a}`"))
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 impl Parse for Mark {
@@ -98,11 +63,7 @@ impl Parse for Mark {
         } else {
             None
         };
-        Ok(Mark {
-            name,
-            arg,
-            grain: None,
-        })
+        Ok(Mark { name, arg })
     }
 }
 
@@ -129,8 +90,7 @@ impl<'a> FieldMarks<'a> {
                             ),
                         ));
                     }
-                    let mark = mark.normalise()?;
-                    if !MARKS.contains(&name.as_str()) && mark.grain.is_none() {
+                    if !MARKS.contains(&name.as_str()) && name != "version_by" {
                         return Err(syn::Error::new_spanned(
                             &mark.name,
                             format!(
@@ -139,28 +99,12 @@ impl<'a> FieldMarks<'a> {
                             ),
                         ));
                     }
-                    marks.push(mark);
+                    marks.push(mark.normalise()?);
                 }
             }
             entries.push((field, marks));
         }
         Ok(Self { entries })
-    }
-
-    pub fn check_grains(&self, declared: &[&str]) -> syn::Result<()> {
-        for (_, marks) in &self.entries {
-            for mark in marks {
-                if let Some(grain) = &mark.grain
-                    && !declared.iter().any(|d| grain == d)
-                {
-                    return Err(syn::Error::new_spanned(
-                        grain,
-                        format!("#[dao({grain}(..))] requires the struct to declare `{grain}`"),
-                    ));
-                }
-            }
-        }
-        Ok(())
     }
 
     pub fn has(&self, field: &Field, name: &str) -> bool {
@@ -181,11 +125,10 @@ impl<'a> FieldMarks<'a> {
         let mut marked = self.fields_marked(name);
         let first = marked.next();
         if let Some(second) = marked.next() {
-            let nested = nested_form_of(name);
-            let spelled = if nested.is_empty() {
-                format!("#[dao({name})]")
+            let spelled = if name == "version_by" {
+                VERSION_BY.to_string()
             } else {
-                nested.join(" / ")
+                format!("#[dao({name})]")
             };
             return Err(syn::Error::new_spanned(
                 second,
