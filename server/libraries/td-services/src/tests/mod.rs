@@ -29,6 +29,7 @@ mod lost_cascade;
 mod lost_updates;
 mod memberships;
 mod plan_replay;
+mod plan_versions;
 mod project_races;
 mod read_snapshots;
 mod recover_blocked;

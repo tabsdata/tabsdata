@@ -21,8 +21,8 @@ use td_objects::dxo::execution::{
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::dxo::graph::{GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::dxo::logical::{
-    ActiveLogicalTableDataVersionDB, LogicalFunctionRunInputInsertDB, LogicalFunctionRunInsertDB,
-    LogicalTableDataVersionInsertDB, TableDataVersion, TableDataVersionDBWithNames,
+    LogicalFunctionRunInputInsertDB, LogicalFunctionRunInsertDB, LogicalTableDataVersionInsertDB,
+    TableDataVersion, TableDataVersionDBWithNames,
 };
 use td_objects::dxo::transaction::TransactionInsertDB;
 use td_objects::types::basic::{
@@ -203,9 +203,11 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
     let at_time = AtTime::from(execution.triggered_on);
 
     // Per-edge cache keys, in plan-iteration order; resolves are shared
-    // across edges asking for the same (table, versions).
-    let mut edge_meta: Vec<(Versions, (TableId, Versions))> = Vec::new();
-    let mut ltdv_cache: HashMap<(TableId, Versions), Vec<Option<LogicalTableDataVersionId>>> =
+    // across edges asking for the same versions of a table, and only new
+    // versions depend on the function reading them.
+    type ResolveKey = (TableId, Versions, Option<FunctionId>);
+    let mut edge_meta: Vec<(Versions, ResolveKey)> = Vec::new();
+    let mut ltdv_cache: HashMap<ResolveKey, Vec<Option<LogicalTableDataVersionId>>> =
         HashMap::new();
 
     for edge in execution_plan.graph.inner.edge_references() {
@@ -237,7 +239,8 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
             Cow::Borrowed(versions_inner)
         };
 
-        let cache_key = (table.table_id, lookup_versions.clone().into_owned());
+        let reader = matches!(*lookup_versions, Versions::New).then_some(function.function_id);
+        let cache_key = (table.table_id, lookup_versions.clone().into_owned(), reader);
         if !ltdv_cache.contains_key(&cache_key) {
             let ltdvs = VersionResolver::builder()
                 .function_id(&function.function_id)
@@ -323,29 +326,18 @@ pub async fn fetch_relations_info<S: SeesProjectRows, M: AccessMode>(
 /// versions. Edges are walked in `(function_id, dep_pos)` order so the
 /// assignment is reproducible whenever the plan is rebuilt. Rows without a
 /// bound version carry `InputIdx::NO_DATA`; trigger rows carry NULL.
-pub async fn build_logical_function_run_inputs<S: SeesProjectRows, M: AccessMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+pub fn build_logical_function_run_inputs(
     transaction_by: &TransactionBy,
     transaction_map: &TransactionMap<TransactionBy>,
-    execution_plan: &ExecutionPlan,
-    execution: &ExecutionInsertDB,
+    resolved_plan: &ResolvedExecutionPlan,
     logical_function_runs: &[LogicalFunctionRunInsertDB],
 ) -> Result<Vec<LogicalFunctionRunInputInsertDB>, TdError> {
-    let triggered_on = execution.triggered_on;
-
     let lfr_id_by_function: HashMap<_, _> = logical_function_runs
         .iter()
         .map(|lfr| (lfr.function_id, lfr.id.clone()))
         .collect();
 
-    // Resolves are deterministic per (function_id, table_id, versions) at
-    // this triggered_on, so dedupe across edges.
-    let mut resolve_cache: HashMap<
-        (FunctionId, TableId, Versions),
-        Vec<Option<ActiveLogicalTableDataVersionDB>>,
-    > = HashMap::new();
-
-    let mut edges: Vec<_> = execution_plan
+    let mut edges: Vec<_> = resolved_plan
         .function_table_input_versions()
         .into_iter()
         .collect();
@@ -362,36 +354,10 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows, M: AccessMode
             ));
         };
         let transaction =
-            transaction_map.get(&execution_plan.transaction_key(transaction_by, function)?)?;
+            transaction_map.get(&resolved_plan.transaction_key(transaction_by, function)?)?;
 
         let dependency_pos = edge.dependency_pos().cloned();
-
-        // Self references shift by -1: HEAD means the previous version.
-        let lookup_versions = if edge.is_self_dependency() {
-            Cow::Owned(edge.versions().shift(-1))
-        } else {
-            Cow::Borrowed(edge.versions())
-        };
-
-        let cache_key = (
-            function.function_id,
-            table.table_id,
-            lookup_versions.clone().into_owned(),
-        );
-        let resolved = if let Some(cached) = resolve_cache.get(&cache_key) {
-            cached.clone()
-        } else {
-            let r = VersionResolver::builder()
-                .function_id(&function.function_id)
-                .table_id(&table.table_id)
-                .versions(&lookup_versions)
-                .triggered_on(&AtTime::from(triggered_on))
-                .build()?
-                .resolve(&mut *conn)
-                .await?;
-            resolve_cache.insert(cache_key, r.clone());
-            r
-        };
+        let resolved = &edge.versions().inner;
 
         // Unresolved slots still emit rows (NULL requirement LTDV): the
         // worker yaml at dispatch falls back to `DependencyDB` for those.
@@ -413,8 +379,9 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows, M: AccessMode
             continue;
         }
 
-        let multiple = lookup_versions.is_multiple();
-        for (slot, ftdv_opt) in resolved.iter().enumerate() {
+        // A self dependency's shift keeps the requested multiplicity.
+        let multiple = edge.versions().original.is_multiple();
+        for (slot, ltdv) in resolved.iter().enumerate() {
             let version_pos = if multiple {
                 VersionPos::try_from(slot as i32)?
             } else {
@@ -422,7 +389,7 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows, M: AccessMode
             };
             let requirement_input_idx = if dependency_pos.is_none() {
                 None
-            } else if ftdv_opt.is_some() {
+            } else if ltdv.is_some() {
                 let idx = InputIdx::try_from(next_input_idx)?;
                 next_input_idx += 1;
                 Some(idx)
@@ -435,9 +402,7 @@ pub async fn build_logical_function_run_inputs<S: SeesProjectRows, M: AccessMode
                 execution_id: transaction.execution_id.clone(),
                 transaction_id: transaction.id.clone(),
                 logical_function_run_id: consumer_lfr_id.clone(),
-                requirement_logical_table_data_version_id: ftdv_opt
-                    .as_ref()
-                    .map(|f| f.base.base.id.clone()),
+                requirement_logical_table_data_version_id: ltdv.clone(),
                 requirement_input_idx,
                 requirement_dependency_pos: dependency_pos,
                 requirement_version_pos: version_pos,

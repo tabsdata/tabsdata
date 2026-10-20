@@ -135,14 +135,11 @@ pub(crate) async fn execute(
 
     let resolved_plan = resolve_execution_plan_versions(conn, &execution, &execution_plan).await?;
     let inputs = build_logical_function_run_inputs(
-        conn,
         transaction_by,
         &transaction_map,
-        &execution_plan,
-        &execution,
+        &resolved_plan,
         &logical_function_runs,
-    )
-    .await?;
+    )?;
     conn.chunked().insert(&inputs).await?;
     // Initial-OnHold: walks the logical chain (LFR_input -> LTDV ->
     // current TDV -> upstream FR.status) to flip consumers OnHold
