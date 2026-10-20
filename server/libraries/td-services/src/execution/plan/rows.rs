@@ -287,7 +287,9 @@ pub fn build_existing_transaction_map(
     // This can happen when loading transactions from previous executions.
     let transaction_by_str = transactions.first().map(|t| t.transaction_by.clone());
     let transaction_by = if let Some(transaction_by_str) = transaction_by_str {
-        transaction_by_str.parse().unwrap_or(transaction_by.clone())
+        transaction_by_str
+            .parse()
+            .unwrap_or_else(|_| transaction_by.clone())
     } else {
         transaction_by.clone()
     };

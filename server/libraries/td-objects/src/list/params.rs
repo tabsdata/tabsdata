@@ -54,7 +54,7 @@ fn parse_val<D: ListDto>(
 ) -> Result<Box<dyn SeaValue>, ListError> {
     D::parse_filter_value(field, value)
         .map_err(ListError::InvalidFieldValue)?
-        .ok_or(ListError::UndefinedField(field.to_string()))
+        .ok_or_else(|| ListError::UndefinedField(field.to_string()))
 }
 
 /// Parse a filter-condition value, rejecting the empty NULL marker — in a

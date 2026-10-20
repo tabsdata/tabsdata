@@ -89,7 +89,7 @@ mod tests {
         assert_eq!(response.permission_type, found.permission_type);
         assert_eq!(response.entity_type, found.entity_type);
         assert_eq!(
-            response.entity_id.unwrap_or(EntityId::all_entities()),
+            response.entity_id.unwrap_or_else(EntityId::all_entities),
             found.entity_id
         );
         assert_eq!(response.granted_by_id, found.granted_by_id);
@@ -140,7 +140,7 @@ mod tests {
         assert_eq!(response.permission_type, found.permission_type);
         assert_eq!(response.entity_type, found.entity_type);
         assert_eq!(
-            response.entity_id.unwrap_or(EntityId::all_entities()),
+            response.entity_id.unwrap_or_else(EntityId::all_entities),
             found.entity_id
         );
         assert_eq!(response.granted_by_id, found.granted_by_id);

@@ -63,7 +63,7 @@ fn existing_file(s: &str) -> Result<PathBuf, TransporterError> {
     let path = full_path(s);
     path.exists()
         .then_some(&path)
-        .ok_or(TransporterError::RequestFileNotFound(s.to_string()))?;
+        .ok_or_else(|| TransporterError::RequestFileNotFound(s.to_string()))?;
     Ok(path)
 }
 

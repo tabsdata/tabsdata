@@ -165,7 +165,7 @@ pub fn get_home_dir() -> PathBuf {
 /// In test mode, it returns a fixed test username.
 #[cfg(not(any(test, feature = "mock-env")))]
 pub fn get_user_name() -> String {
-    whoami::username().unwrap_or("unknown".to_string())
+    whoami::username().unwrap_or_else(|_| "unknown".to_string())
 }
 
 #[cfg(any(test, feature = "mock-env"))]

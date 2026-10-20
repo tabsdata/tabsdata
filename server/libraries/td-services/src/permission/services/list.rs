@@ -79,7 +79,7 @@ mod tests {
         assert_eq!(permission.permission_type, seeded.permission_type);
         assert_eq!(permission.entity_type, seeded.entity_type);
         assert_eq!(
-            permission.entity_id.unwrap_or(EntityId::all_entities()),
+            permission.entity_id.unwrap_or_else(EntityId::all_entities),
             seeded.entity_id
         );
         assert_eq!(permission.granted_by_id, seeded.granted_by_id);

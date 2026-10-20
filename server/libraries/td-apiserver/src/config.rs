@@ -325,7 +325,7 @@ impl Params {
                 .storage_url
                 .as_ref()
                 .map(|url| url.to_string())
-                .or(self.storage_url.clone());
+                .or_else(|| self.storage_url.clone());
             resolved_storage.url = resolved_storage_url;
             resolved_storage.mounts = None;
         }
@@ -338,14 +338,14 @@ impl Params {
                 .map(NonEmptyAddresses::from_vec)
                 .transpose()?
                 .map(ApiServerAddresses)
-                .unwrap_or(config.addresses.clone()),
+                .unwrap_or_else(|| config.addresses.clone()),
             internal_addresses: self
                 .internal_address
                 .clone()
                 .map(NonEmptyAddresses::from_vec)
                 .transpose()?
                 .map(InternalServerAddresses)
-                .unwrap_or(config.internal_addresses.clone()),
+                .unwrap_or_else(|| config.internal_addresses.clone()),
             advertised_internal_host: config.advertised_internal_host.clone(),
             password: config.password.clone(),
             service_tokens: config.service_tokens.clone(),

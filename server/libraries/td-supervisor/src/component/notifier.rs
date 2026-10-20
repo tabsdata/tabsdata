@@ -90,10 +90,13 @@ impl WorkerNotifier for Callback {
             },
             serde_yaml::to_string(&request_message)?,
             start,
-            end.map(|v| v.to_string()).unwrap_or("-1".to_string()),
+            end.map(|v| v.to_string())
+                .unwrap_or_else(|| "-1".to_string()),
             status,
             execution,
-            limit.map(|v| v.to_string()).unwrap_or("-1".to_string()),
+            limit
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "-1".to_string()),
             error
         );
         match self {

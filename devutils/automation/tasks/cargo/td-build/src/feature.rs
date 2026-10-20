@@ -112,7 +112,7 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
     let descriptor_features = workspace_descriptor_content
         .get(TAG_FEATURES)
         .and_then(|f| f.as_table())
-        .ok_or(format!("⛔️ No [{TAG_FEATURES}] section in Manifest.toml"))
+        .ok_or_else(|| format!("⛔️ No [{TAG_FEATURES}] section in Manifest.toml"))
         .expect("⛔️ Failed to extract metadata from Manifest.toml");
     let descriptor_features_map: HashMap<String, (Vec<String>, bool)> = descriptor_features
         .iter()
@@ -160,9 +160,7 @@ pub fn check_cargo_features() -> Result<(), Box<dyn Error>> {
         let member_features = member_toml
             .get(TAG_FEATURES)
             .and_then(|f| f.as_table())
-            .ok_or(format!(
-                "⛔️ No [{TAG_FEATURES}] section in {member_cargo_file:?}"
-            ))
+            .ok_or_else(|| format!("⛔️ No [{TAG_FEATURES}] section in {member_cargo_file:?}"))
             .expect("⛔️ Failed to extract metadata from member Cargo.toml");
 
         for (descriptor_feature, (descriptor_subfeatures, allow_extra)) in &descriptor_features_map

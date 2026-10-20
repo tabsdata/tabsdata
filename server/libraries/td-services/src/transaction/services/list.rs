@@ -231,7 +231,7 @@ mod tests {
             let desc = order_by
                 .clone()
                 .map(|o| format!("{o}-"))
-                .or(Some("id-".to_string()));
+                .or_else(|| Some("id-".to_string()));
             let walked = walk(desc, 5).await?;
             let reversed: Vec<_> = full_ids.iter().rev().cloned().collect();
             assert_eq!(walked, reversed, "descending walk of order_by={order_by:?}");

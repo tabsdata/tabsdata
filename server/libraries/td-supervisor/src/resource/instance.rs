@@ -10,7 +10,7 @@ use crate::resource::instance::InstanceError::{
 use crate::resource::settings::extract_profile;
 use std::fs::{canonicalize, copy, create_dir_all};
 use std::io;
-use std::path::{PathBuf, StripPrefixError};
+use std::path::{Path, PathBuf, StripPrefixError};
 use std::string::ToString;
 use td_common::env::{EnvironmentError, TABSDATA_HOME_DIR, get_current_exe_dir};
 use td_common::files::ROOT;
@@ -65,8 +65,8 @@ pub fn get_workspace_path_for_program(
     program: &str,
 ) -> PathBuf {
     parent_workspace
-        .as_ref()
-        .unwrap_or(&PathBuf::from(WORKSPACE_FOLDER))
+        .as_deref()
+        .unwrap_or_else(|| Path::new(WORKSPACE_FOLDER))
         .join(program)
 }
 

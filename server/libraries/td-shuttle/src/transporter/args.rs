@@ -400,10 +400,7 @@ impl Params {
         self.augment_object_store_config(
             &self.location,
             LOCATION_PREFIX,
-            self.location_configs
-                .as_ref()
-                .unwrap_or(&HashMap::new())
-                .clone(),
+            self.location_configs.clone().unwrap_or_default(),
         )
         .await
     }
@@ -420,7 +417,7 @@ impl Params {
         self.augment_object_store_config(
             &self.to,
             TO_PREFIX,
-            self.to_configs.as_ref().unwrap_or(&HashMap::new()).clone(),
+            self.to_configs.clone().unwrap_or_default(),
         )
         .await
     }

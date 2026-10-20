@@ -297,7 +297,7 @@ impl Display for TabsDataWorkerDescriber {
             self.config,
             match &self.message {
                 Some(message) => serde_yaml::to_string(&message)
-                    .unwrap_or("<non serializable message>".to_string()),
+                    .unwrap_or_else(|_| "<non serializable message>".to_string()),
                 None => "No message...".to_string(),
             },
             self.work,

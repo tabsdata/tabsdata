@@ -321,7 +321,7 @@ pub fn parse_extra_arguments(
                 program = Some(next_argument);
                 arguments_map
                     .entry(program.clone().unwrap())
-                    .or_insert(HashMap::new());
+                    .or_insert_with(HashMap::new);
             } else {
                 return Err("Expected a program name after `--`".to_string());
             }

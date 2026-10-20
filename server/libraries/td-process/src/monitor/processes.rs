@@ -155,12 +155,15 @@ fn process_tree(
         attempt = parent_td_attempt.clone();
     }
 
-    let executable = process.map_or(String::from("?"), |p| {
-        p.exe().map_or_else(
-            || String::from("!"),
-            |exe| exe.to_str().unwrap().to_string(),
-        )
-    });
+    let executable = process.map_or_else(
+        || String::from("?"),
+        |p| {
+            p.exe().map_or_else(
+                || String::from("!"),
+                |exe| exe.to_str().unwrap().to_string(),
+            )
+        },
+    );
 
     let cwd = process.map_or_else(
         || String::from("?"),
@@ -176,7 +179,9 @@ fn process_tree(
 
     let mut subprocesses = vec![(
         pid,
-        process.and_then(|p| p.parent()).unwrap_or(Pid::from(0)),
+        process
+            .and_then(|p| p.parent())
+            .unwrap_or_else(|| Pid::from(0)),
         name,
         executable,
         cwd,

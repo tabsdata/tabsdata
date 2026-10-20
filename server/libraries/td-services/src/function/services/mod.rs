@@ -129,7 +129,7 @@ pub(crate) mod tests {
                         dependency
                             .collection
                             .clone()
-                            .unwrap_or(collection.name.clone())
+                            .unwrap_or_else(|| collection.name.clone())
                     ),
                     &TableIdName::Name(dependency.table.clone())
                 ))
@@ -163,7 +163,7 @@ pub(crate) mod tests {
                         trigger
                             .collection
                             .clone()
-                            .unwrap_or(collection.name.clone())
+                            .unwrap_or_else(|| collection.name.clone())
                     ),
                     &TableIdName::Name(trigger.table.clone())
                 ))
@@ -259,7 +259,7 @@ pub(crate) mod tests {
                         dependency
                             .collection
                             .clone()
-                            .unwrap_or(collection.name.clone())
+                            .unwrap_or_else(|| collection.name.clone())
                     ),
                     &TableIdName::Name(dependency.table.clone())
                 ))
@@ -281,7 +281,7 @@ pub(crate) mod tests {
                         dependency
                             .collection
                             .clone()
-                            .unwrap_or(collection.name.clone())
+                            .unwrap_or_else(|| collection.name.clone())
                     ),
                     &TableIdName::Name(dependency.table.clone())
                 ))
@@ -318,7 +318,7 @@ pub(crate) mod tests {
                         trigger
                             .collection
                             .clone()
-                            .unwrap_or(collection.name.clone())
+                            .unwrap_or_else(|| collection.name.clone())
                     ),
                     &TableIdName::Name(trigger.table.clone())
                 ))
@@ -470,7 +470,7 @@ pub(crate) mod tests {
                         dependency
                             .collection
                             .clone()
-                            .unwrap_or(collection.name.clone())
+                            .unwrap_or_else(|| collection.name.clone())
                     ),
                     &TableIdName::Name(dependency.table.clone())
                 ))
@@ -496,7 +496,7 @@ pub(crate) mod tests {
                         trigger
                             .collection
                             .clone()
-                            .unwrap_or(collection.name.clone())
+                            .unwrap_or_else(|| collection.name.clone())
                     ),
                     &TableIdName::Name(trigger.table.clone())
                 ))

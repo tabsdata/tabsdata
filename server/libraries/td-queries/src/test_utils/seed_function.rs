@@ -124,7 +124,7 @@ async fn seed_function_with_parent(
                 let collection = dependency_table
                     .collection
                     .clone()
-                    .unwrap_or(collection.name.clone());
+                    .unwrap_or_else(|| collection.name.clone());
                 (
                     collection,
                     TableName::try_from(dependency_table.table.clone())?,
@@ -166,7 +166,7 @@ async fn seed_function_with_parent(
                 let collection = trigger_table
                     .collection
                     .clone()
-                    .unwrap_or(collection.name.clone());
+                    .unwrap_or_else(|| collection.name.clone());
                 (
                     collection,
                     TableName::try_from(trigger_table.table.clone())?,

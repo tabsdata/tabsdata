@@ -46,7 +46,7 @@ fn bearer(request: &Request) -> Result<String, TdError> {
     let auth_header = request
         .headers()
         .get(http::header::AUTHORIZATION)
-        .ok_or(TdError::from(AuthError::MissingAuthorizationHeader))?;
+        .ok_or_else(|| TdError::from(AuthError::MissingAuthorizationHeader))?;
     let auth_header = auth_header.to_str().map_err(|e| {
         warn!("Invalid authorization header: {e:#?}");
         TdError::from(AuthError::InvalidAuthorizationHeaderValue(

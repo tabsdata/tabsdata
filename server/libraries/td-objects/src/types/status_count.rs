@@ -15,7 +15,7 @@ impl FunctionRunStatusCount {
         // Enforce all statuses to be present in the map with count 0.
         for status in LogicalFunctionRunStatus::iter() {
             map.entry(status)
-                .or_insert(StatusCount::try_from(0).unwrap());
+                .or_insert_with(|| StatusCount::try_from(0).unwrap());
         }
         Self(map)
     }
