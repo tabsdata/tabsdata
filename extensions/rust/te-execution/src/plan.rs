@@ -3,7 +3,6 @@
 //
 
 use ta_execution::{GraphSource, PlanScope};
-use td_error::TdError;
 use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::types::basic::{Depth, FunctionId, FunctionOnly, OverrideDisabledTrigger};
 use td_objects::types::recursion::RecursionOptions;
@@ -21,11 +20,11 @@ impl PlanScope for ExecutionScope {
     }
 
     /// An execution runs its start function and the start's children.
-    async fn plan_triggers(
-        source: &mut impl GraphSource,
+    fn plan_triggers<'a>(
+        source: &'a impl GraphSource,
         start: &FunctionId,
         options: &RecursionOptions,
-    ) -> Result<Vec<TriggerDBWithNames>, TdError> {
-        source.children_triggers(start, &[], options).await
+    ) -> Vec<&'a TriggerDBWithNames> {
+        source.children_triggers(start, &[], options)
     }
 }

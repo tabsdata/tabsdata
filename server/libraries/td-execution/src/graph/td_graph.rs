@@ -60,7 +60,10 @@ impl<'a> TdGraphBuilder<'a> {
             .or_insert_with(|| self.graph.add_node(node))
     }
 
-    pub fn with_triggers(mut self, triggers: &[TriggerDBWithNames]) -> Result<Self, TdError> {
+    pub fn with_triggers<'b>(
+        mut self,
+        triggers: impl IntoIterator<Item = &'b TriggerDBWithNames>,
+    ) -> Result<Self, TdError> {
         for trigger in triggers {
             let table = self
                 .all_tables_map
@@ -84,7 +87,10 @@ impl<'a> TdGraphBuilder<'a> {
         Ok(self)
     }
 
-    pub fn with_outputs(mut self, outputs: &[TableDBWithNames]) -> Result<Self, TdError> {
+    pub fn with_outputs<'b>(
+        mut self,
+        outputs: impl IntoIterator<Item = &'b TableDBWithNames>,
+    ) -> Result<Self, TdError> {
         for table in outputs {
             let function = self
                 .all_functions_map
@@ -109,7 +115,10 @@ impl<'a> TdGraphBuilder<'a> {
         Ok(self)
     }
 
-    pub fn with_dependencies(mut self, deps: &[DependencyDBWithNames]) -> Result<Self, TdError> {
+    pub fn with_dependencies<'b>(
+        mut self,
+        deps: impl IntoIterator<Item = &'b DependencyDBWithNames>,
+    ) -> Result<Self, TdError> {
         for dep in deps {
             let table = self
                 .all_tables_map

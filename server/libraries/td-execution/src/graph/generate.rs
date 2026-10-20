@@ -3,175 +3,100 @@
 //
 
 use crate::ExecutionScope;
-use crate::graph::TdGraph;
-use crate::graph::build::GraphBuilder;
-use crate::graph::source::ConnGraphSource;
-use std::collections::HashMap;
+use crate::graph::source::PlanSource;
+use crate::graph::{TdGraph, TdGraphBuilder};
+use crate::topology::ProjectTopology;
+use std::collections::HashSet;
 use ta_execution::PlanScope;
-use td_database::access::{AccessMode, SeesProjectRows};
-use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::function::FunctionDB;
+use td_objects::dxo::dependency::DependencyDBWithNames;
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::topology::ProjectTopologyDB;
+use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::trigger::TriggerDBWithNames;
-use td_objects::sql_condition::SqlCondition;
-use td_objects::types::basic::{FunctionId, TableId};
+use td_objects::types::basic::{FunctionId, FunctionStatus};
 use td_objects::types::recursion::RecursionOptions;
 
-/// Knobs for [`GraphBuilder`] / [`generate_td_graph`]. Build one with
-/// [`GraphConfig::defaults`] and override what differs via struct update:
-///
-/// ```ignore
-/// GraphConfig { include_dependency_functions: true, ..GraphConfig::defaults(FunctionDB::active()) }
-/// ```
-///
-/// Authorization is owned by the calling service: projects are silos, so
-/// the caller gates access with its own project-scoped check and the graph
-/// module carries no authz.
-///
-pub struct GraphConfig {
-    pub trigger_state: Box<dyn SqlCondition<TriggerDBWithNames>>,
-    pub function_state: Box<dyn SqlCondition<FunctionDB>>,
-    pub include_dependency_functions: bool,
+/// The functions a walk goes through.
+#[derive(Clone, Copy, Debug)]
+pub enum FunctionState {
+    Any,
+    Active,
+    /// Active and enabled.
+    Executable,
 }
 
-impl GraphConfig {
-    pub fn defaults(function_state: impl SqlCondition<FunctionDB> + 'static) -> Self {
-        Self {
-            trigger_state: Box::new(TriggerDBWithNames::active()),
-            function_state: Box::new(function_state),
-            include_dependency_functions: false,
+impl FunctionState {
+    pub fn matches(&self, function: &FunctionDBWithNames) -> bool {
+        let function = &function.base.base;
+        match self {
+            FunctionState::Any => true,
+            FunctionState::Active => function.status == FunctionStatus::Active,
+            FunctionState::Executable => {
+                function.status == FunctionStatus::Active && *function.enabled
+            }
         }
     }
 }
 
-#[derive(Debug)]
-pub enum FunctionOrTable {
-    Function(FunctionId),
-    Table(TableId),
-}
-
-impl From<&FunctionId> for FunctionOrTable {
-    fn from(function_id: &FunctionId) -> Self {
-        Self::Function(*function_id)
-    }
-}
-
-impl From<&TableId> for FunctionOrTable {
-    fn from(table_id: &TableId) -> Self {
-        Self::Table(*table_id)
-    }
-}
-
-/// Generate the trigger/dependency graph around `function_or_table`, per the
-/// [`GraphConfig`] knobs, as topology version `topology` holds it. The
-/// children of every function in it are always included, whatever the depth.
-/// Authorization is owned by the calling service (see [`GraphConfig`]).
-pub async fn generate_td_graph<S: SeesProjectRows, M: AccessMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
-    config: GraphConfig,
-    topology: &ProjectTopologyDB,
-    function_or_table: &FunctionOrTable,
-    recursion_options: &RecursionOptions,
-) -> Result<TdGraph, TdError> {
-    let builder = GraphBuilder { config };
-    let mut trigger_graph = builder
-        .find_recursive_trigger_graph(conn, topology, function_or_table, recursion_options)
-        .await?;
-    // The main function is always shown, even in a table-centered graph.
-    let function_id = builder
-        .main_function_id(conn, topology, function_or_table)
-        .await?;
-    let children_triggers = builder
-        .find_children_triggers(
-            conn,
-            topology,
-            &function_id,
-            &trigger_graph,
-            recursion_options,
-        )
-        .await?;
-    trigger_graph.extend(children_triggers);
-    complete_graph(
-        conn,
-        &builder,
-        topology,
-        function_or_table,
-        recursion_options,
-        &function_id,
-        &trigger_graph,
-    )
-    .await
-}
-
-/// The execution plan graph of `start` at topology version `topology`: the
-/// triggers this edition plans, plus everything they need to run.
-pub async fn generate_plan_graph<S: SeesProjectRows, M: AccessMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
-    config: GraphConfig,
-    topology: &ProjectTopologyDB,
-    start: &FunctionId,
-    recursion_options: &RecursionOptions,
-) -> Result<TdGraph, TdError> {
-    let builder = GraphBuilder { config };
-    let trigger_graph = {
-        let mut source = ConnGraphSource {
-            conn: &mut *conn,
-            builder: &builder,
-            topology,
+/// Authorization is owned by the calling service: projects are silos, so the
+/// caller gates access with its own project-scoped check.
+impl ProjectTopology {
+    /// The execution plan graph of `start`: the triggers this edition plans
+    /// over functions in `state`, plus everything they need to run.
+    pub fn plan_graph(
+        &self,
+        state: FunctionState,
+        start: &FunctionId,
+        options: &RecursionOptions,
+    ) -> Result<TdGraph, TdError> {
+        let source = PlanSource {
+            topology: self,
+            state,
         };
-        ExecutionScope::plan_triggers(&mut source, start, recursion_options).await?
-    };
-    complete_graph(
-        conn,
-        &builder,
-        topology,
-        &FunctionOrTable::from(start),
-        recursion_options,
-        start,
-        &trigger_graph,
-    )
-    .await
-}
+        let triggers = ExecutionScope::plan_triggers(&source, start, options);
+        let functions: HashSet<FunctionId> = triggers
+            .iter()
+            .map(|t| t.base.base.function_id)
+            .chain([*start])
+            .collect();
+        let dependencies = self.dependencies_of(&functions);
+        self.subgraph(&triggers, dependencies, &functions)
+    }
 
-#[allow(clippy::too_many_arguments)]
-async fn complete_graph<S: SeesProjectRows, M: AccessMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
-    builder: &GraphBuilder,
-    topology: &ProjectTopologyDB,
-    function_or_table: &FunctionOrTable,
-    recursion_options: &RecursionOptions,
-    function_id: &FunctionId,
-    trigger_graph: &[TriggerDBWithNames],
-) -> Result<TdGraph, TdError> {
-    let (dep_graph, function_ids) = if builder.config.include_dependency_functions {
-        let dep_graph = builder
-            .find_recursive_dependency_graph(conn, topology, function_or_table, recursion_options)
-            .await?;
-        let ids = builder.unique_function_ids(function_id, trigger_graph, &dep_graph)?;
-        (dep_graph, ids)
-    } else {
-        let ids = builder.unique_triggered_function_ids(function_id, trigger_graph)?;
-        let dep_graph = builder
-            .find_triggered_functions_dependency_graph(conn, topology, &ids)
-            .await?;
-        (dep_graph, ids)
-    };
-    let output_tables = builder
-        .find_functions_output_tables(conn, topology, &function_ids)
-        .await?;
-    let all_tables_map: HashMap<TableId, _> = builder
-        .find_all_tables_map(conn, topology, trigger_graph, &dep_graph, &output_tables)
-        .await?;
-    let all_functions_map: HashMap<FunctionId, FunctionDBWithNames> = builder
-        .find_all_functions_map(conn, topology, trigger_graph, &dep_graph, &output_tables)
-        .await?;
-    builder.build_td_graph(
-        trigger_graph,
-        &dep_graph,
-        &output_tables,
-        &all_tables_map,
-        &all_functions_map,
-    )
+    /// Everything flowing into and out of `table`, whatever the state of the
+    /// functions on the way: the walks start at its writer, even when a
+    /// frozen table outlives it.
+    pub fn flow_graph(&self, table: &TableDBWithNames) -> Result<TdGraph, TdError> {
+        let start = table.base.base.function_id;
+        let unbounded = RecursionOptions::new(None, None);
+        let mut triggers = self.trigger_walk(&start, true, FunctionState::Any, &unbounded);
+        let children = self.children_triggers(&start, &triggers, FunctionState::Any, &unbounded);
+        triggers.extend(children);
+        let dependencies = self.dependency_walk(&start, true, FunctionState::Any, &unbounded);
+        let functions: HashSet<FunctionId> = triggers
+            .iter()
+            .flat_map(|t| [*t.base.base.trigger_by_function_id, t.base.base.function_id])
+            .chain(
+                dependencies
+                    .iter()
+                    .flat_map(|d| [*d.base.base.table_function_id, d.base.base.function_id]),
+            )
+            .chain([start])
+            .collect();
+        self.subgraph(&triggers, dependencies, &functions)
+    }
+
+    /// `triggers` and `dependencies`, plus the active tables `functions` write.
+    fn subgraph(
+        &self,
+        triggers: &[&TriggerDBWithNames],
+        dependencies: Vec<&DependencyDBWithNames>,
+        functions: &HashSet<FunctionId>,
+    ) -> Result<TdGraph, TdError> {
+        Ok(TdGraphBuilder::new(&self.tables, &self.functions)
+            .with_triggers(triggers.iter().copied())?
+            .with_dependencies(dependencies)?
+            .with_outputs(self.outputs_of(functions))?
+            .build())
+    }
 }

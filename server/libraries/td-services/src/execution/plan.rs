@@ -11,18 +11,15 @@ use ta_services::ctx_service::ReqCtx;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_execution::graph::{MapGraph, TdGraph};
+use td_execution::graph::MapGraph;
 use td_execution::transaction_map::TransactionMap;
-use td_execution::{
-    ExecutionPlan, ExecutionPlanner, ResolvedExecutionPlan, TransactionBy, VersionResolver,
-};
+use td_execution::{ExecutionPlan, ResolvedExecutionPlan, TransactionBy, VersionResolver};
 use td_objects::FromDao;
 use td_objects::dxo::execution::{
     ExecutionInsertDB, ExecutionResponse, FunctionNodeResponse, ResolvedVersionResponse,
     TableNodeResponse,
 };
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::graph::FunctionNode;
 use td_objects::dxo::graph::{GraphEdge, GraphNode, ResolvedVersion};
 use td_objects::dxo::logical::{
     ActiveLogicalTableDataVersionDB, LogicalFunctionRunInputInsertDB, LogicalFunctionRunInsertDB,
@@ -66,15 +63,6 @@ pub fn assert_function_status(
         }
     }
     Ok(())
-}
-
-pub fn build_execution_plan(
-    td_graph: &TdGraph,
-    trigger_function: &FunctionDBWithNames,
-) -> Result<ExecutionPlan, TdError> {
-    let trigger = FunctionNode::from(trigger_function);
-    let execution_plan = td_graph.with_trigger(&trigger)?;
-    Ok(execution_plan)
 }
 
 pub fn validate_execution_plan(

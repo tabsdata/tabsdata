@@ -10,14 +10,13 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
-use td_execution::graph::{FunctionOrTable, GraphConfig, generate_td_graph};
+use td_execution::topology::ProjectTopology;
 use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_objects::dxo::graph::TableFlowGraphResponse;
 use td_objects::dxo::table::{TableDBWithNames, TableParam};
 use td_objects::dxo::topology::TopologyReadParam;
-use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
 
 #[service_factory]
@@ -42,14 +41,9 @@ async fn table_flow_graph(
         .fetch_one(and!(&collection_id_name, &table_id_name))
         .await?;
 
-    let table_id = table.base.base.table_id;
-    let entrypoint = FunctionOrTable::from(&table_id);
-    let recursion = RecursionOptions::new(None, None);
-    let config = GraphConfig {
-        include_dependency_functions: true,
-        ..GraphConfig::defaults(())
-    };
-    let graph = generate_td_graph(conn, config, &topology, &entrypoint, &recursion).await?;
+    let graph = ProjectTopology::of(conn, topology)
+        .await?
+        .flow_graph(&table)?;
 
     build_response(&table, &graph).await
 }

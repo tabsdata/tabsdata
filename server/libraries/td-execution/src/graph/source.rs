@@ -2,47 +2,39 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::graph::FunctionOrTable;
-use crate::graph::build::GraphBuilder;
+use crate::graph::FunctionState;
+use crate::topology::ProjectTopology;
 use ta_execution::GraphSource;
-use td_database::access::{AccessMode, SeesProjectRows};
-use td_database::domain::{Apiserver, DomainConnection};
-use td_error::TdError;
-use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::dxo::trigger::TriggerDBWithNames;
-use td_objects::types::basic::FunctionId;
+use td_objects::types::basic::{FunctionId, FunctionStatus};
 use td_objects::types::recursion::RecursionOptions;
 
-pub struct ConnGraphSource<'a, S: SeesProjectRows, M: AccessMode> {
-    pub conn: &'a mut DomainConnection<Apiserver, S, M>,
-    pub builder: &'a GraphBuilder,
-    pub topology: &'a ProjectTopologyDB,
+/// A topology version seen through the functions a plan may run.
+pub struct PlanSource<'t> {
+    pub topology: &'t ProjectTopology,
+    pub state: FunctionState,
 }
 
-impl<S: SeesProjectRows, M: AccessMode> GraphSource for ConnGraphSource<'_, S, M> {
-    async fn walk(
-        &mut self,
-        start: &FunctionId,
-        options: &RecursionOptions,
-    ) -> Result<Vec<TriggerDBWithNames>, TdError> {
-        self.builder
-            .find_recursive_trigger_graph(
-                self.conn,
-                self.topology,
-                &FunctionOrTable::from(start),
-                options,
-            )
-            .await
+impl GraphSource for PlanSource<'_> {
+    /// An overridden start passes while active, even when disabled.
+    fn walk(&self, start: &FunctionId, options: &RecursionOptions) -> Vec<&TriggerDBWithNames> {
+        let start_passes = options.override_disabled_trigger()
+            && self
+                .topology
+                .functions
+                .get(start)
+                .is_some_and(|f| f.base.base.status == FunctionStatus::Active);
+        self.topology
+            .trigger_walk(start, start_passes, self.state, options)
     }
 
-    async fn children_triggers(
-        &mut self,
+    fn children_triggers<'a>(
+        &'a self,
         start: &FunctionId,
-        triggers: &[TriggerDBWithNames],
+        triggers: &[&'a TriggerDBWithNames],
         options: &RecursionOptions,
-    ) -> Result<Vec<TriggerDBWithNames>, TdError> {
-        self.builder
-            .find_children_triggers(self.conn, self.topology, start, triggers, options)
-            .await
+    ) -> Vec<&'a TriggerDBWithNames> {
+        self.topology
+            .children_triggers(start, triggers, self.state, options)
     }
 }

@@ -34,7 +34,7 @@ async fn project_graph(
     Ok(ProjectGraphResponse {
         version: topology.version.base.id.clone(),
         at: AtTime::from(topology.version.interval.valid_from.clone()),
-        graph: graph_response(&topology.graph).await?,
+        graph: graph_response(&topology.graph()?).await?,
     })
 }
 

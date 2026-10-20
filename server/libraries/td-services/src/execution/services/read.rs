@@ -3,7 +3,7 @@
 //
 
 use crate::execution::plan::{
-    build_execution_plan, build_response, fetch_relations_info, resolve_execution_plan_versions,
+    build_response, fetch_relations_info, resolve_execution_plan_versions,
 };
 use std::collections::HashMap;
 use ta_execution::PlanScope;
@@ -13,15 +13,18 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
+use td_execution::ExecutionPlanner;
 use td_execution::ExecutionScope;
 use td_execution::TransactionBy;
-use td_execution::graph::{GraphConfig, generate_plan_graph};
+use td_execution::graph::FunctionState;
+use td_execution::topology::ProjectTopology;
 use td_execution::transaction_map::TransactionMap;
 use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::ExecutionParam;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
-use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
+use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::graph::FunctionNode;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunInputInsertDB,
     LogicalFunctionRunInsertDB,
@@ -29,7 +32,6 @@ use td_objects::dxo::logical::{
 use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::dxo::transaction::TransactionValue;
 use td_objects::dxo::transaction::{TransactionDB, TransactionInsertDB};
-use td_objects::sql_condition::SqlCondition;
 use td_objects::types::basic::{AllowDisabled, FunctionOnly, OverrideDisabledTrigger};
 use td_objects::types::recursion::RecursionOptions;
 use td_queries::Queries;
@@ -65,16 +67,18 @@ async fn execution_read(
         .await?;
     let function_id = function.base.base.function_id;
     let recursion_options = with_existing_recursion_options(&execution)?;
-    let function_state: Box<dyn SqlCondition<FunctionDB>> = if *allow_disabled {
-        Box::new(FunctionDB::active())
+    let state = if *allow_disabled {
+        FunctionState::Active
     } else {
-        Box::new(FunctionDB::executable())
+        FunctionState::Executable
     };
-    let config = GraphConfig::defaults(function_state);
-    let graph =
-        generate_plan_graph(conn, config, &topology, &function_id, &recursion_options).await?;
+    let graph = ProjectTopology::of(conn, topology).await?.plan_graph(
+        state,
+        &function_id,
+        &recursion_options,
+    )?;
 
-    let execution_plan = build_execution_plan(&graph, &function)?;
+    let execution_plan = graph.with_trigger(&FunctionNode::from(&function))?;
     let transactions: Vec<TransactionInsertDB> = conn
         .fetch_all::<TransactionDB>(&execution_id)
         .await?
@@ -225,61 +229,9 @@ mod tests {
         assert_eq!(execution.user_tables, response.user_tables);
         assert_eq!(execution.relations_info, response.relations_info);
 
-        // `relations` is order-sensitive but ordered by graph walk, which
-        // varies with HashMap iteration; compare as a multiset.
-        use std::collections::HashSet;
-        let lhs: HashSet<_> = execution.relations.iter().collect();
-        let rhs: HashSet<_> = response.relations.iter().collect();
-        assert_eq!(lhs, rhs);
-
-        // `dot` uses petgraph node indices assigned in graph-walk order, so
-        // equivalent graphs can label differently; compare the edge set.
-        assert_eq!(
-            dot_edge_set(execution.dot.as_str()),
-            dot_edge_set(response.dot.as_str()),
-        );
+        assert_eq!(execution.relations, response.relations);
+        assert_eq!(execution.dot, response.dot);
 
         Ok(())
-    }
-
-    /// Parse a petgraph-emitted dot string into the set of labeled edges:
-    /// `{(source_label, target_label, attrs)}`. Two dots describing the
-    /// same graph compare equal regardless of node-index ordering.
-    fn dot_edge_set(dot: &str) -> std::collections::HashSet<(String, String, String)> {
-        let mut labels: std::collections::HashMap<String, String> =
-            std::collections::HashMap::new();
-        let mut edges = std::collections::HashSet::new();
-
-        for raw in dot.lines() {
-            let line = raw.trim();
-            if line.is_empty() || line == "digraph {" || line == "}" {
-                continue;
-            }
-            // Node line: `N [ label = "X" ... ]`
-            if let Some((idx, rest)) = line.split_once(" [")
-                && !rest.contains("->")
-                && let Some(label_start) = rest.find("label = \"")
-                && let Some(label_end) = rest[label_start + 9..].find('"')
-            {
-                let label = &rest[label_start + 9..label_start + 9 + label_end];
-                labels.insert(idx.trim().to_string(), label.to_string());
-                continue;
-            }
-            // Edge line: `N -> M [ attrs ]`
-            if let Some((endpoints, attrs)) = line.split_once(" [")
-                && let Some((src, tgt)) = endpoints.split_once(" -> ")
-            {
-                let src_l = labels
-                    .get(src.trim())
-                    .cloned()
-                    .unwrap_or_else(|| src.trim().to_string());
-                let tgt_l = labels
-                    .get(tgt.trim())
-                    .cloned()
-                    .unwrap_or_else(|| tgt.trim().to_string());
-                edges.insert((src_l, tgt_l, attrs.trim_end_matches(']').trim().to_string()));
-            }
-        }
-        edges
     }
 }

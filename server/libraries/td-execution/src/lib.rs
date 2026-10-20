@@ -26,3 +26,5 @@ mod test_utils;
 pub mod topology;
 pub mod transaction_map;
 mod version_resolver;
+#[cfg(test)]
+mod walk_tests;

@@ -6,10 +6,10 @@ pub mod services;
 
 use crate::execution::execution_version::{external_uid_holder, running_execution};
 use crate::execution::plan::{
-    assert_function_status, build_execution_plan, build_logical_function_run_inputs,
-    build_logical_function_runs, build_logical_table_data_versions, build_response,
-    build_transaction_map, build_transactions, fetch_relations_info,
-    resolve_execution_plan_versions, update_initial_function_run_status, validate_execution_plan,
+    assert_function_status, build_logical_function_run_inputs, build_logical_function_runs,
+    build_logical_table_data_versions, build_response, build_transaction_map, build_transactions,
+    fetch_relations_info, resolve_execution_plan_versions, update_initial_function_run_status,
+    validate_execution_plan,
 };
 use ta_execution::PlanScope;
 use ta_services::ctx_service::ReqCtx;
@@ -17,15 +17,17 @@ use td_database::access::LockInstant;
 use td_database::access::{InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_execution::graph::{GraphConfig, generate_plan_graph};
+use td_execution::ExecutionPlanner;
+use td_execution::graph::FunctionState;
+use td_execution::topology::ProjectTopology;
 use td_execution::{ExecutionScope, TransactionBy};
 use td_objects::and;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{
     ExecutionDB, ExecutionInsertDB, ExecutionRequest, ExecutionResponse, TriggerResponse,
 };
-use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
-use td_objects::dxo::topology::ProjectTopologyDB;
+use td_objects::dxo::function::FunctionDBWithNames;
+use td_objects::dxo::graph::FunctionNode;
 use td_objects::types::basic::TriggerOutcome;
 use td_objects::types::basic::{ExecutionId, TriggerType, TriggeredOn};
 use td_objects::types::json::Json;
@@ -89,12 +91,10 @@ pub(crate) async fn execute(
     let function_only = request.function_only;
     let recursion_options =
         ExecutionScope::execution_recursion_options(function_only, override_disabled_trigger);
-    let config = GraphConfig::defaults(FunctionDB::executable());
-    let topology: ProjectTopologyDB = conn.scd2().fetch_one(&function.base.project_id).await?;
-    let graph =
-        generate_plan_graph(conn, config, &topology, &function_id, &recursion_options).await?;
+    let topology = ProjectTopology::current(conn, &function.base.project_id).await?;
+    let graph = topology.plan_graph(FunctionState::Executable, &function_id, &recursion_options)?;
 
-    let execution_plan = build_execution_plan(&graph, &function)?;
+    let execution_plan = graph.with_trigger(&FunctionNode::from(&function))?;
     validate_execution_plan(transaction_by, &execution_plan)?;
 
     let execution = ExecutionInsertDB {
@@ -108,7 +108,7 @@ pub(crate) async fn execute(
         trigger_type,
         external_uid: request.external_uid,
         recursion_options: Some(Json(recursion_options)),
-        topology_version_id: topology.base.id,
+        topology_version_id: topology.version.base.id,
     };
     conn.insert(&execution).await?;
 
