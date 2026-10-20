@@ -7026,7 +7026,6 @@ dependencies = [
 name = "td-common"
 version = "2.3.0"
 dependencies = [
- "async-trait",
  "bytes",
  "chrono",
  "colored",
@@ -7064,6 +7063,7 @@ dependencies = [
  "thiserror",
  "tm-workspace",
  "tokio",
+ "tokio-util",
  "toml",
  "tracing",
  "tracing-indicatif",

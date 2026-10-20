@@ -31,7 +31,7 @@ botocore==1.43.115
 botocore-stubs==1.43.115
 build==1.6.1
 cachetools==7.2.4
-certifi==2026.10.18
+certifi==2026.10.19
 cffi==2.1.1 ; platform_python_implementation != 'PyPy'
 charset-normalizer==3.5.2
 click==8.5.0
@@ -171,7 +171,7 @@ thrift==0.24.0
 tomlkit==0.15.2
 truststore==0.10.5 ; sys_platform != 'emscripten'
 types-pyyaml==6.0.12.20260906
-types-s3transfer==0.19.2
+types-s3transfer==0.19.3
 typing-extensions==4.16.0
 typing-inspection==0.4.4
 tzdata==2026.5 ; sys_platform == 'emscripten' or sys_platform == 'win32'
