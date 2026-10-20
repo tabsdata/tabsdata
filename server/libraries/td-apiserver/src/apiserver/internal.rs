@@ -5,13 +5,10 @@
 use crate::apiserver::server::{self, Server, ServerBuilder, ServerError};
 use crate::apiserver::{ApiServerCtx, BASE_API_URL, V1};
 use crate::config::Config;
-use crate::layers::cors::CorsService;
 use crate::layers::internal_token::internal_token_layer;
-use crate::layers::tracing::TraceService;
+use crate::layers::{catch_panic, timeout, trace};
 use axum::middleware::from_fn_with_state;
-use http::StatusCode;
 use std::error::Error;
-use std::time::Duration;
 use ta_apiserver::router::{
     AuthClass, Position, RouterStates, Scope, Server as Listener, Version, mount_router,
     require_registered,
@@ -24,7 +21,7 @@ use td_objects::types::addresses::{
 };
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
-use tower_http::timeout::TimeoutLayer;
+use tower::ServiceBuilder;
 
 pub struct InternalServer {
     inner: Box<dyn Server>,
@@ -113,13 +110,12 @@ impl InternalServer {
                 ));
             }
 
-            let router = router
-                .layer(TimeoutLayer::with_status_code(
-                    StatusCode::REQUEST_TIMEOUT,
-                    Duration::from_secs(context.config.request_timeout as u64),
-                ))
-                .layer(CorsService::layer())
-                .layer(TraceService::layer());
+            let router = router.layer(
+                ServiceBuilder::new()
+                    .layer(trace::layer())
+                    .layer(catch_panic::layer())
+                    .layer(timeout::layer(&context.config)),
+            );
 
             ServerBuilder::bound(listeners, router).build().await
         }?;

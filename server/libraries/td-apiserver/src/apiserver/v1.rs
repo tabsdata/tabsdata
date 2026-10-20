@@ -2,52 +2,37 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-//! API Server generator. Any number of routers might be added, with any number of layer per
-//! router. Specifics of each router are defined in their respective modules.
+//! The public API server: the routes the registry mounts for the public
+//! listener, wrapped in layers that run outermost first:
 //!
-//! Layers go from general to specific. Following axum middleware documentation, for the layer
-//! we use in [`users`]:
-//! ```json
-//!                    requests
-//!                       |
-//!                       v
-//!         --------- TraceService ---------
-//!          -------- CorsService ---------
-//!           ------- ............ -------
-//!            ---- JwtDecoderService ----   <--- RequestContext
-//!                  users.router()
-//!              ----- AdminOnly -----
-//!
-//!                   list_users
-//!
-//!              ----- AdminOnly -----
-//!                 users.router()
-//!            ---- JwtDecoderService ----
-//!           ------- ............ -------
-//!          -------- CorsService ---------
-//!         --------- TraceService ---------
-//!                       |
-//!                       v
-//!                    responses
+//! ```text
+//!   trace                 the request's id, its span, `x-request-id`
+//!   catch_panic           a panicking handler answers 500
+//!   compression           responses the client accepts compressed
+//!   timeout               504 past the request timeout
+//!   ── /api/v1 ──────────────────────────────────────────────
+//!   authorization         Bearer routes: the caller's RequestContext
+//!   project resolution    project-scoped routes: the {project} id
+//!   handler
 //! ```
+//!
+//! Open routes take no authorization; a Bearer handler reads the
+//! `RequestContext` authorization inserts, so one mounted without it fails
+//! rather than running unauthenticated.
 
 use crate::apiserver::server::{Server, ServerBuilder, ServerError};
 use crate::apiserver::{ApiServerCtx, BASE_API_URL, V1};
 use crate::layers::authorization::authorization_layer;
-use crate::layers::compression::CompressionService;
-use crate::layers::cors::CorsService;
 use crate::layers::project_resolver::project_resolver_layer;
-use crate::layers::tracing::TraceService;
+use crate::layers::{catch_panic, compression, timeout, trace};
 use axum::middleware::from_fn_with_state;
-use http::StatusCode;
-use std::time::Duration;
 use ta_apiserver::router::{
     AuthClass, Position, RouterStates, Scope, Server as Listener, Version, mount_router,
     require_registered,
 };
 use ta_apiserver::status::error_status::ErrorStatus;
 use td_error::{ApiError, api_error};
-use tower_http::timeout::TimeoutLayer;
+use tower::ServiceBuilder;
 
 pub struct ApiServerV1 {
     pub inner: Box<dyn Server>,
@@ -143,14 +128,13 @@ impl ApiServerV1 {
                 ));
             }
 
-            let router = router
-                .layer(TimeoutLayer::with_status_code(
-                    StatusCode::REQUEST_TIMEOUT,
-                    Duration::from_secs(context.config.request_timeout as u64),
-                ))
-                .layer(CorsService::layer())
-                .layer(TraceService::layer())
-                .layer(CompressionService::layer());
+            let router = router.layer(
+                ServiceBuilder::new()
+                    .layer(trace::layer())
+                    .layer(catch_panic::layer())
+                    .layer(compression::layer())
+                    .layer(timeout::layer(&context.config)),
+            );
 
             ServerBuilder::new(context.config.addresses.clone(), router)
                 .tls(&context.config.ssl_folder)
