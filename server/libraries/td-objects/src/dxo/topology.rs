@@ -5,7 +5,13 @@
 //! A project's topology versions.
 
 use crate::dxo::scd2_interval::Scd2Interval;
-use crate::types::basic::{AtTime, ProjectId, Scd2ValidFrom, Scd2ValidTo, TopologyVersionId};
+use crate::types::basic::{
+    AtTime, CollectionId, DependencyId, DependencyPos, DependencyVersionId, Enabled, FunctionId,
+    FunctionName, FunctionStatus, FunctionVersionId, OfTable, Parent, Private, ProjectId,
+    Scd2ValidFrom, Scd2ValidTo, System, TableFunctionParamPos, TableId, TableName, TableStatus,
+    TableVersionId, TopologyVersionId, TriggerBy, TriggerId, TriggerStatus, TriggerVersionId,
+};
+use crate::types::composed::TableVersions;
 use ta_objects::FromDao;
 use td_database::access::LockInstant;
 use td_error::TdError;
@@ -27,6 +33,82 @@ pub struct ProjectTopologyInsertDB {
 pub struct ProjectTopologyDB {
     #[dao(flatten)]
     pub base: ProjectTopologyInsertDB,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
+}
+
+/// The columns of a `functions` row a topology version is planned on.
+#[ta_objects::Dao]
+#[dao(table = "functions", ops(select), scd2, project_scoped)]
+pub struct TopologyFunction {
+    #[dao(pk)]
+    pub id: FunctionVersionId,
+    #[dao(partition_by)]
+    pub function_id: FunctionId,
+    pub collection_id: CollectionId,
+    pub name: FunctionName,
+    pub parent_function_id: Option<Parent<FunctionId>>,
+    pub status: FunctionStatus,
+    pub enabled: Enabled,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
+}
+
+/// The columns of a `tables` row a topology version is planned on.
+#[ta_objects::Dao]
+#[dao(table = "tables", ops(select), scd2, project_scoped)]
+pub struct TopologyTable {
+    #[dao(pk)]
+    pub id: TableVersionId,
+    #[dao(partition_by)]
+    pub table_id: TableId,
+    pub collection_id: CollectionId,
+    pub name: TableName,
+    pub function_id: FunctionId,
+    pub function_version_id: FunctionVersionId,
+    pub function_param_pos: Option<TableFunctionParamPos>,
+    pub private: Private,
+    pub status: TableStatus,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
+}
+
+impl TopologyTable {
+    /// Written by the system rather than at a function's output position.
+    pub fn system(&self) -> System {
+        System::from(self.function_param_pos.is_some_and(|pos| *pos < 0))
+    }
+}
+
+/// The columns of a `triggers` row a topology version is planned on.
+#[ta_objects::Dao]
+#[dao(table = "triggers", ops(select), scd2, project_scoped)]
+pub struct TopologyTrigger {
+    #[dao(pk)]
+    pub id: TriggerVersionId,
+    #[dao(partition_by)]
+    pub trigger_id: TriggerId,
+    pub function_id: FunctionId,
+    pub trigger_by_function_id: TriggerBy<FunctionId>,
+    pub trigger_by_table_id: TableId,
+    pub status: TriggerStatus,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
+}
+
+/// The columns of a `dependencies` row a topology version is planned on.
+#[ta_objects::Dao]
+#[dao(table = "dependencies", ops(select), scd2, project_scoped)]
+pub struct TopologyDependency {
+    #[dao(pk)]
+    pub id: DependencyVersionId,
+    #[dao(partition_by)]
+    pub dependency_id: DependencyId,
+    pub function_id: FunctionId,
+    pub table_id: TableId,
+    pub table_function_id: OfTable<FunctionId>,
+    pub table_versions: TableVersions,
+    pub dep_pos: DependencyPos,
     #[dao(flatten)]
     pub interval: Scd2Interval,
 }

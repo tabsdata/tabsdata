@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::function::{Function, FunctionDBWithNames};
+use crate::dxo::function::Function;
 use crate::dxo::graph::{FunctionNode, GraphEdge, TableNode};
 use crate::dxo::logical::TableDataVersion;
 use crate::types::basic::{
@@ -297,20 +297,6 @@ impl From<&TableNode> for TableNodeResponse {
             table_version_id: src.table_version_id,
             name: src.name.clone(),
             system: src.system,
-        }
-    }
-}
-impl From<&FunctionDBWithNames> for FunctionNode {
-    fn from(src: &FunctionDBWithNames) -> Self {
-        FunctionNode {
-            collection_id: src.base.base.collection_id,
-            collection: src.collection.clone(),
-            function_id: src.base.base.function_id,
-            function_version_id: src.base.base.id.clone(),
-            name: src.base.base.name.clone(),
-            enabled: src.base.base.enabled,
-            group_id: src.group_id,
-            parent_function_id: src.base.base.parent_function_id,
         }
     }
 }

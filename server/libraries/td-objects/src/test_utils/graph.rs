@@ -2,19 +2,21 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::dxo::dependency::{DependencyDB, DependencyDBWithNames, DependencyInsertDB};
-use crate::dxo::function::{FunctionDB, FunctionDBWithNames, FunctionInsertDB};
+use crate::dxo::collection::{ActiveCollectionDB, ResolvedCollectionDB};
 use crate::dxo::graph::{FunctionNode, TableNode};
 use crate::dxo::scd2_interval::Scd2Interval;
-use crate::dxo::table::{TableDB, TableDBWithNames, TableInsertDB};
-use crate::dxo::trigger::{TriggerDB, TriggerDBWithNames, TriggerInsertDB};
-use crate::types::basic::Scd2ValidFrom;
+use crate::dxo::topology::{
+    ProjectTopologyDB, ProjectTopologyInsertDB, TopologyDependency, TopologyFunction,
+    TopologyTable, TopologyTrigger,
+};
 use crate::types::basic::{
-    BasePath, BundleId, CollectionId, CollectionName, Decorator, DependencyId, DependencyPos,
-    DependencyVersionId, Description, Enabled, FunctionId, FunctionName, FunctionRuntimeValues,
-    FunctionStatus, FunctionType, FunctionVersionId, GroupId, Partitioned, Private, ProjectId,
-    RawSnippet, Snippet, StageId, StorageVersion, System, TableId, TableName, TableStatus,
-    TableType, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, UserName,
+    AtTime, CollectionType, CollectionWhenDeleted, Scd2ValidFrom, TopologyVersionId,
+};
+use crate::types::basic::{
+    BasePath, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyVersionId,
+    Description, Enabled, FunctionId, FunctionName, FunctionStatus, FunctionVersionId, GroupId,
+    Private, ProjectId, System, TableId, TableName, TableStatus, TableVersionId, TriggerId,
+    TriggerStatus, TriggerVersionId, UserId,
 };
 use crate::types::composed::TableVersions;
 use std::collections::HashMap;
@@ -108,11 +110,7 @@ pub fn function_node(function: &FunctionName) -> FunctionNode {
 }
 
 pub fn table_node(table: &TableName) -> TableNode {
-    let function = FUNCTIONS
-        .iter()
-        .find(|(_, tables)| tables.contains(table))
-        .map(|(function, _)| function)
-        .unwrap();
+    let function = writer(table);
     TableNode {
         collection_id: *COLLECTION_ID,
         collection: COLLECTION_NAME.clone(),
@@ -125,121 +123,98 @@ pub fn table_node(table: &TableName) -> TableNode {
     }
 }
 
-pub fn table(function: &FunctionName, table: &TableName) -> TableDBWithNames {
-    TableDBWithNames {
-        base: TableDB {
-            base: TableInsertDB {
-                id: *TABLE_VERSION_IDS.get(table).unwrap(),
-                collection_id: *COLLECTION_ID,
-                table_id: *TABLE_IDS.get(table).unwrap(),
-                name: table.clone(),
-                function_id: *FUNCTION_IDS.get(function).unwrap(),
-                function_version_id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
-                function_param_pos: None,
-                private: Private::FALSE,
-                partitioned: Partitioned::FALSE,
-                defined_by_id: UserId::default(),
-                status: TableStatus::Active,
-                table_type: TableType::Regular,
-                parent_table_id: None,
-            },
-            project_id: *PROJECT_ID,
-            interval: Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default())),
-        },
-        system: System::FALSE,
-        defined_by: UserName::try_from("joaquin").unwrap().into(),
-        collection: COLLECTION_NAME.clone(),
-        function: function.clone(),
-    }
+fn interval() -> Scd2Interval {
+    Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default()))
 }
 
-pub fn function(function: &FunctionName) -> FunctionDBWithNames {
-    FunctionDBWithNames {
-        base: FunctionDB {
-            base: FunctionInsertDB {
-                id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
-                parent_function_id: None,
-                collection_id: *COLLECTION_ID,
-                name: function.clone(),
-                description: Description::default(),
-                decorator: Decorator::Publisher,
-                function_type: FunctionType::default(),
-                connector: None,
-                connection: None,
-                runtime_values: FunctionRuntimeValues::default(),
-                function_id: *FUNCTION_IDS.get(function).unwrap(),
-                base_path: None,
-                stage_id: StageId::default(),
-                stage_base_path: BasePath::default(),
-                storage_version: StorageVersion::default(),
-                bundle_id: BundleId::default(),
-                snippet: Snippet::try_from(RawSnippet::try_from("test").unwrap()).unwrap(),
-                defined_by_id: UserId::default(),
-                status: FunctionStatus::Active,
-                enabled: Enabled::TRUE,
-            },
-            project_id: *PROJECT_ID,
-            interval: Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default())),
-        },
-        collection: COLLECTION_NAME.clone(),
-        group_id: *GROUP_ID,
-        defined_by: UserName::try_from("joaquin").unwrap().into(),
-    }
-}
-
-pub fn dependency(table: &TableName, function: &FunctionName) -> DependencyDBWithNames {
-    let table_function = FUNCTIONS
+fn writer(table: &TableName) -> &'static FunctionName {
+    FUNCTIONS
         .iter()
         .find(|(_, tables)| tables.contains(table))
         .map(|(function, _)| function)
-        .unwrap();
-    DependencyDBWithNames {
-        base: DependencyDB {
-            base: DependencyInsertDB {
-                id: DependencyVersionId::default(),
-                collection_id: *COLLECTION_ID,
-                dependency_id: DependencyId::default(),
-                function_id: *FUNCTION_IDS.get(function).unwrap(),
-                table_collection_id: (*COLLECTION_ID).into(),
-                table_function_id: (*FUNCTION_IDS.get(table_function).unwrap()).into(),
-                table_id: *TABLE_IDS.get(table).unwrap(),
-                table_versions: TableVersions::try_from("HEAD").unwrap(),
-                dep_pos: DependencyPos::default(),
-                defined_by_id: UserId::default(),
-                system: System::FALSE,
-            },
+        .unwrap()
+}
+
+pub fn version() -> ProjectTopologyDB {
+    ProjectTopologyDB {
+        base: ProjectTopologyInsertDB {
+            id: TopologyVersionId::default(),
             project_id: *PROJECT_ID,
-            interval: Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default())),
         },
-        collection: COLLECTION_NAME.clone(),
-        table_collection: COLLECTION_NAME.clone().into(),
+        interval: interval(),
     }
 }
 
-pub fn trigger(table: &TableName, function: &FunctionName) -> TriggerDBWithNames {
-    let table_function = FUNCTIONS
-        .iter()
-        .find(|(_, tables)| tables.contains(table))
-        .map(|(function, _)| function)
-        .unwrap();
-    TriggerDBWithNames {
-        base: TriggerDB {
-            base: TriggerInsertDB {
-                id: TriggerVersionId::default(),
-                collection_id: *COLLECTION_ID,
-                trigger_id: TriggerId::default(),
-                function_id: *FUNCTION_IDS.get(function).unwrap(),
-                trigger_by_collection_id: (*COLLECTION_ID).into(),
-                trigger_by_function_id: (*FUNCTION_IDS.get(table_function).unwrap()).into(),
-                trigger_by_table_id: *TABLE_IDS.get(table).unwrap(),
-                status: TriggerStatus::Active,
-                defined_by_id: UserId::default(),
-                system: System::FALSE,
-            },
+pub fn collection() -> ResolvedCollectionDB {
+    ResolvedCollectionDB {
+        base: ActiveCollectionDB {
+            id: *COLLECTION_ID,
             project_id: *PROJECT_ID,
-            interval: Scd2Interval::open(Scd2ValidFrom::asserted(Timestamp::default())),
+            name: COLLECTION_NAME.clone(),
+            description: Description::default(),
+            created_on: AtTime::default().into(),
+            created_by_id: UserId::default().into(),
+            modified_on: AtTime::default().into(),
+            modified_by_id: UserId::default().into(),
+            group_id: *GROUP_ID,
+            base_path: None,
+            effective_base_path: BasePath::default(),
+            collection_type: CollectionType::DataFactory,
+            connection_id: None,
         },
-        collection: COLLECTION_NAME.clone(),
-        trigger_by_collection: COLLECTION_NAME.clone().into(),
+        deleted: CollectionWhenDeleted::FALSE,
+    }
+}
+
+pub fn table(function: &FunctionName, table: &TableName) -> TopologyTable {
+    TopologyTable {
+        id: *TABLE_VERSION_IDS.get(table).unwrap(),
+        table_id: *TABLE_IDS.get(table).unwrap(),
+        collection_id: *COLLECTION_ID,
+        name: table.clone(),
+        function_id: *FUNCTION_IDS.get(function).unwrap(),
+        function_version_id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
+        function_param_pos: None,
+        private: Private::FALSE,
+        status: TableStatus::Active,
+        interval: interval(),
+    }
+}
+
+pub fn function(function: &FunctionName) -> TopologyFunction {
+    TopologyFunction {
+        id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
+        function_id: *FUNCTION_IDS.get(function).unwrap(),
+        collection_id: *COLLECTION_ID,
+        name: function.clone(),
+        parent_function_id: None,
+        status: FunctionStatus::Active,
+        enabled: Enabled::TRUE,
+        interval: interval(),
+    }
+}
+
+pub fn dependency(table: &TableName, function: &FunctionName) -> TopologyDependency {
+    TopologyDependency {
+        id: DependencyVersionId::default(),
+        dependency_id: DependencyId::default(),
+        function_id: *FUNCTION_IDS.get(function).unwrap(),
+        table_id: *TABLE_IDS.get(table).unwrap(),
+        table_function_id: (*FUNCTION_IDS.get(writer(table)).unwrap()).into(),
+        table_versions: TableVersions::try_from("HEAD").unwrap(),
+        dep_pos: DependencyPos::default(),
+        interval: interval(),
+    }
+}
+
+pub fn trigger(table: &TableName, function: &FunctionName) -> TopologyTrigger {
+    TopologyTrigger {
+        id: TriggerVersionId::default(),
+        trigger_id: TriggerId::default(),
+        function_id: *FUNCTION_IDS.get(function).unwrap(),
+        trigger_by_function_id: (*FUNCTION_IDS.get(writer(table)).unwrap()).into(),
+        trigger_by_table_id: *TABLE_IDS.get(table).unwrap(),
+        status: TriggerStatus::Active,
+        interval: interval(),
     }
 }

@@ -4,25 +4,24 @@
 
 use crate::topology::{FunctionState, ProjectTopology};
 use std::collections::{BTreeSet, HashMap, HashSet};
-use td_objects::dxo::dependency::DependencyDBWithNames;
-use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::table::TableDBWithNames;
-use td_objects::dxo::trigger::TriggerDBWithNames;
+use td_objects::dxo::topology::{
+    TopologyDependency, TopologyFunction, TopologyTable, TopologyTrigger,
+};
 use td_objects::types::basic::{
     Depth, FunctionId, FunctionStatus, TableStatus, TriggerStatus, TriggerVersionId,
 };
 use td_objects::types::recursion::RecursionOptions;
 
 /// The functions a walk from `start` may visit.
-pub(crate) struct Nodes<'t> {
-    functions: &'t HashMap<FunctionId, FunctionDBWithNames>,
+pub(crate) struct Admitted<'t> {
+    functions: &'t HashMap<FunctionId, TopologyFunction>,
     state: FunctionState<'t>,
     start: FunctionId,
     start_passes: bool,
     overriding: bool,
 }
 
-impl<'t> Nodes<'t> {
+impl<'t> Admitted<'t> {
     /// A plan's: those in `state`. Overriding a disabled start lets it and
     /// its children through while active.
     pub(crate) fn plan(
@@ -31,18 +30,18 @@ impl<'t> Nodes<'t> {
         start: FunctionId,
         options: &RecursionOptions,
     ) -> Self {
-        let mut nodes = Self {
+        let mut admitted = Self {
             functions: &topology.functions,
             state,
             start,
             start_passes: false,
             overriding: options.override_disabled_trigger(),
         };
-        nodes.start_passes = topology
+        admitted.start_passes = topology
             .functions
             .get(&start)
-            .is_some_and(|f| nodes.overrides(f));
-        nodes
+            .is_some_and(|f| admitted.overrides(f));
+        admitted
     }
 
     /// A table flow's: every function, from the table's writer even once a
@@ -73,8 +72,8 @@ impl<'t> Nodes<'t> {
         }
     }
 
-    fn overrides(&self, function: &FunctionDBWithNames) -> bool {
-        self.overriding && function.base.base.status == FunctionStatus::Active
+    fn overrides(&self, function: &TopologyFunction) -> bool {
+        self.overriding && function.status == FunctionStatus::Active
     }
 
     fn admit(&self, function: &FunctionId) -> bool {
@@ -87,61 +86,60 @@ impl<'t> Nodes<'t> {
 }
 
 impl ProjectTopology {
-    /// The active triggers reachable from the start through `nodes`.
+    /// The active triggers reachable from the start through `admitted`.
     pub(crate) fn trigger_walk(
         &self,
-        nodes: &Nodes,
+        admitted: &Admitted,
         options: &RecursionOptions,
-    ) -> Vec<&TriggerDBWithNames> {
-        if !nodes.admit(&nodes.start) {
+    ) -> Vec<&TopologyTrigger> {
+        if !admitted.admit(&admitted.start) {
             return Vec::new();
         }
-        let keep = |t: &TriggerDBWithNames, far: &FunctionId| {
-            t.base.base.status == TriggerStatus::Active && nodes.admit(far)
+        let keep = |t: &TopologyTrigger, far: &FunctionId| {
+            t.status == TriggerStatus::Active && admitted.admit(far)
         };
         let mut kept = reach(
             &self.triggers,
             &self.triggers_from,
-            &nodes.start,
+            &admitted.start,
             options.max_downstream_depth(),
-            |t| t.base.base.function_id,
+            |t| t.function_id,
             keep,
         );
         kept.extend(reach(
             &self.triggers,
             &self.triggers_into,
-            &nodes.start,
+            &admitted.start,
             options.max_upstream_depth(),
-            |t| *t.base.base.trigger_by_function_id,
+            |t| *t.trigger_by_function_id,
             keep,
         ));
         kept.into_iter().map(|i| &self.triggers[i]).collect()
     }
 
-    /// The dependencies reachable from the start through `nodes`.
     pub(crate) fn dependency_walk(
         &self,
-        nodes: &Nodes,
+        admitted: &Admitted,
         options: &RecursionOptions,
-    ) -> Vec<&DependencyDBWithNames> {
-        if !nodes.admit(&nodes.start) {
+    ) -> Vec<&TopologyDependency> {
+        if !admitted.admit(&admitted.start) {
             return Vec::new();
         }
-        let keep = |_: &DependencyDBWithNames, far: &FunctionId| nodes.admit(far);
+        let keep = |_: &TopologyDependency, far: &FunctionId| admitted.admit(far);
         let mut kept = reach(
             &self.dependencies,
             &self.dependencies_from,
-            &nodes.start,
+            &admitted.start,
             options.max_downstream_depth(),
-            |d| d.base.base.function_id,
+            |d| d.function_id,
             keep,
         );
         kept.extend(reach(
             &self.dependencies,
             &self.dependencies_into,
-            &nodes.start,
+            &admitted.start,
             options.max_upstream_depth(),
-            |d| *d.base.base.table_function_id,
+            |d| *d.table_function_id,
             keep,
         ));
         kept.into_iter().map(|i| &self.dependencies[i]).collect()
@@ -152,55 +150,50 @@ impl ProjectTopology {
     /// with their parent whatever the walk depth.
     pub(crate) fn children_triggers<'t>(
         &'t self,
-        nodes: &Nodes,
-        triggers: &[&TriggerDBWithNames],
-    ) -> Vec<&'t TriggerDBWithNames> {
+        admitted: &Admitted,
+        triggers: &[&TopologyTrigger],
+    ) -> Vec<&'t TopologyTrigger> {
         let in_graph: HashSet<FunctionId> = triggers
             .iter()
-            .flat_map(|t| [*t.base.base.trigger_by_function_id, t.base.base.function_id])
-            .chain([nodes.start])
+            .flat_map(|t| [*t.trigger_by_function_id, t.function_id])
+            .chain([admitted.start])
             .collect();
         let children: HashSet<FunctionId> = self
             .functions
             .values()
             .filter(|f| {
-                f.base
-                    .base
-                    .parent_function_id
-                    .as_ref()
-                    .is_some_and(|parent| {
-                        (in_graph.contains(&**parent) && nodes.state.matches(f))
-                            || (**parent == nodes.start && nodes.overrides(f))
-                    })
+                f.parent_function_id.as_ref().is_some_and(|parent| {
+                    (in_graph.contains(&**parent) && admitted.state.matches(f))
+                        || (**parent == admitted.start && admitted.overrides(f))
+                })
             })
-            .map(|f| f.base.base.function_id)
+            .map(|f| f.function_id)
             .collect();
-        let known: HashSet<&TriggerVersionId> = triggers.iter().map(|t| &t.base.base.id).collect();
+        let known: HashSet<&TriggerVersionId> = triggers.iter().map(|t| &t.id).collect();
         self.triggers
             .iter()
-            .filter(|t| t.base.base.status == TriggerStatus::Active)
-            .filter(|t| children.contains(&t.base.base.function_id))
-            .filter(|t| in_graph.contains(&*t.base.base.trigger_by_function_id))
-            .filter(|t| !known.contains(&t.base.base.id))
+            .filter(|t| t.status == TriggerStatus::Active)
+            .filter(|t| children.contains(&t.function_id))
+            .filter(|t| in_graph.contains(&*t.trigger_by_function_id))
+            .filter(|t| !known.contains(&t.id))
             .collect()
     }
 
-    /// The dependencies of `functions`.
     pub(crate) fn dependencies_of(
         &self,
         functions: &HashSet<FunctionId>,
-    ) -> Vec<&DependencyDBWithNames> {
+    ) -> Vec<&TopologyDependency> {
         self.dependencies
             .iter()
-            .filter(|d| functions.contains(&d.base.base.function_id))
+            .filter(|d| functions.contains(&d.function_id))
             .collect()
     }
 
     /// The active tables `functions` write.
-    pub(crate) fn outputs_of(&self, functions: &HashSet<FunctionId>) -> Vec<&TableDBWithNames> {
+    pub(crate) fn outputs_of(&self, functions: &HashSet<FunctionId>) -> Vec<&TopologyTable> {
         self.ordered_tables()
-            .filter(|t| t.base.base.status == TableStatus::Active)
-            .filter(|t| functions.contains(&t.base.base.function_id))
+            .filter(|t| t.status == TableStatus::Active)
+            .filter(|t| functions.contains(&t.function_id))
             .collect()
     }
 }

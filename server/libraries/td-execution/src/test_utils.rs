@@ -2,14 +2,16 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::graph::{TdGraph, TdGraphBuilder};
+use crate::graph::TopologyGraph;
+use crate::topology::ProjectTopology;
 use std::collections::HashSet;
 use strum::{Display, EnumString};
 use ta_execution::TransactionMapper;
 use td_error::TdError;
 use td_objects::dxo::graph::{FunctionNode, TableNode};
 use td_objects::test_utils::graph::{
-    FUNCTION_NAMES, TABLE_NAMES, dependency, function, function_node, table, table_node, trigger,
+    FUNCTION_NAMES, TABLE_NAMES, collection, dependency, function, function_node, table,
+    table_node, trigger, version,
 };
 use td_objects::types::basic::TransactionKey;
 
@@ -31,55 +33,42 @@ impl TransactionMapper for TestTransactionBy {
     }
 }
 
-pub fn test_graph() -> TdGraph {
-    let all_tables = vec![
+pub fn test_graph() -> TopologyGraph {
+    let tables = vec![
         table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]),
         table(&FUNCTION_NAMES[1], &TABLE_NAMES[1]),
         table(&FUNCTION_NAMES[1], &TABLE_NAMES[2]),
         table(&FUNCTION_NAMES[2], &TABLE_NAMES[3]),
     ];
-    let all_functions = [
+    let functions = vec![
         function(&FUNCTION_NAMES[0]),
         function(&FUNCTION_NAMES[1]),
         function(&FUNCTION_NAMES[2]),
     ];
-
-    let all_tables_map = all_tables
-        .iter()
-        .map(|t| (t.base.base.table_id, t.clone()))
-        .collect();
-    let all_functions_map = all_functions
-        .iter()
-        .map(|f| (f.base.base.function_id, f.clone()))
-        .collect();
-
-    let output_tables = all_tables;
     let dependencies = vec![
         dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]),
         dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[1]),
         dependency(&TABLE_NAMES[1], &FUNCTION_NAMES[2]),
     ];
     let triggers = vec![trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[1])];
+    let edges = triggers.len() + dependencies.len() + tables.len();
 
-    let graph = TdGraphBuilder::new(&all_tables_map, &all_functions_map)
-        .with_triggers(&triggers)
-        .unwrap()
-        .with_dependencies(&dependencies)
-        .unwrap()
-        .with_outputs(&output_tables)
-        .unwrap()
-        .build();
+    let graph = ProjectTopology::new(
+        version(),
+        vec![collection()],
+        functions,
+        tables,
+        triggers,
+        dependencies,
+    )
+    .graph()
+    .unwrap();
 
     assert_eq!(
         graph.inner.node_count(),
         FUNCTION_NAMES.len() + TABLE_NAMES.len()
     );
-
-    assert_eq!(
-        graph.inner.edge_count(),
-        triggers.len() + dependencies.len() + output_tables.len()
-    );
-
+    assert_eq!(graph.inner.edge_count(), edges);
     graph
 }
 

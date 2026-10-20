@@ -6,24 +6,25 @@ use std::fmt::Display;
 use std::str::FromStr;
 use td_error::{TdError, td_error};
 use td_objects::dxo::graph::FunctionNode;
-use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::types::basic::{
     FunctionId, FunctionOnly, OverrideDisabledTrigger, TransactionByStr, TransactionKey,
 };
 use td_objects::types::recursion::RecursionOptions;
 
 /// The trigger lookups an edition composes into its execution plans.
-pub trait GraphSource {
-    fn walk(&self, start: &FunctionId, options: &RecursionOptions) -> Vec<&TriggerDBWithNames>;
+pub trait TriggerSource {
+    type Trigger;
+
+    fn walk(&self, start: &FunctionId, options: &RecursionOptions) -> Vec<&Self::Trigger>;
 
     /// The triggers tying `start` and the functions in `triggers` to their
     /// children, minus the ones already in `triggers`.
     fn children_triggers<'a>(
         &'a self,
         start: &FunctionId,
-        triggers: &[&'a TriggerDBWithNames],
+        triggers: &[&'a Self::Trigger],
         options: &RecursionOptions,
-    ) -> Vec<&'a TriggerDBWithNames>;
+    ) -> Vec<&'a Self::Trigger>;
 }
 
 /// Which functions an execution runs: each edition provides one.
@@ -33,11 +34,11 @@ pub trait PlanScope {
         override_disabled_trigger: OverrideDisabledTrigger,
     ) -> RecursionOptions;
 
-    fn plan_triggers<'a>(
-        source: &'a impl GraphSource,
+    fn plan_triggers<'a, S: TriggerSource>(
+        source: &'a S,
         start: &FunctionId,
         options: &RecursionOptions,
-    ) -> Vec<&'a TriggerDBWithNames>;
+    ) -> Vec<&'a S::Trigger>;
 }
 
 #[td_error]

@@ -5,6 +5,7 @@
 pub mod services;
 
 use crate::execution::execution_version::{external_uid_holder, running_execution};
+use crate::execution::plan::assert_function_status;
 use crate::execution::plan::response::{build_response, fetch_relations_info};
 use crate::execution::plan::rows::{
     build_logical_function_run_inputs, build_logical_function_runs,
@@ -12,14 +13,12 @@ use crate::execution::plan::rows::{
     update_initial_function_run_status,
 };
 use crate::execution::plan::versions::resolve_execution_plan_versions;
-use crate::execution::plan::{assert_function_status, validate_execution_plan};
 use ta_execution::PlanScope;
 use ta_services::ctx_service::ReqCtx;
 use td_database::access::LockInstant;
 use td_database::access::{InProject, SeesProjectRows, XW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_execution::ExecutionPlan;
 use td_execution::topology::FunctionState;
 use td_execution::topology::ProjectTopology;
 use td_execution::{ExecutionScope, TransactionBy};
@@ -29,7 +28,6 @@ use td_objects::dxo::execution::{
     ExecutionDB, ExecutionInsertDB, ExecutionRequest, ExecutionResponse, TriggerResponse,
 };
 use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::graph::FunctionNode;
 use td_objects::types::basic::TriggerOutcome;
 use td_objects::types::basic::{ExecutionId, TriggerType, TriggeredOn};
 use td_objects::types::json::Json;
@@ -72,10 +70,11 @@ pub(crate) async fn trigger_gate<S: SeesProjectRows>(
 /// its transactions and (logical) function runs. Yields the
 /// `ExecutionResponse`; the caller commits and then notifies the scheduler of
 /// the new runs.
-#[allow(clippy::too_many_arguments)]
+///
 /// The caller has already authorized `DevelopProject` on the request's project,
 /// before reading anything: an unauthorized request must not observe the
 /// trigger gates.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn execute(
     conn: &mut DomainConnection<Apiserver, InProject, XW>,
     msgs: &mut ReqCtx,
@@ -94,10 +93,9 @@ pub(crate) async fn execute(
     let recursion_options =
         ExecutionScope::execution_recursion_options(function_only, override_disabled_trigger);
     let topology = ProjectTopology::current(conn, &function.base.project_id).await?;
-    let graph = topology.plan_graph(FunctionState::Executable, &function_id, &recursion_options)?;
-
-    let execution_plan = ExecutionPlan::new(graph, &FunctionNode::from(&function))?;
-    validate_execution_plan(transaction_by, &execution_plan)?;
+    let execution_plan =
+        topology.plan(FunctionState::Executable, &function_id, &recursion_options)?;
+    execution_plan.validate(transaction_by)?;
 
     let execution = ExecutionInsertDB {
         id: ExecutionId::new(),
@@ -143,9 +141,6 @@ pub(crate) async fn execute(
         &logical_function_runs,
     )?;
     conn.chunked().insert(&inputs).await?;
-    // Initial-OnHold: walks the logical chain (LFR_input -> LTDV ->
-    // current TDV -> upstream FR.status) to flip consumers OnHold
-    // when upstream is Failed/OnHold.
     update_initial_function_run_status(conn, &execution).await?;
     let relations_info = fetch_relations_info(conn, &resolved_plan).await?;
 

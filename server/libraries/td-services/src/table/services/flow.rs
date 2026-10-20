@@ -43,7 +43,7 @@ async fn table_flow_graph(
 
     let graph = ProjectTopology::of(conn, topology)
         .await?
-        .flow_graph(&table)?;
+        .flow_graph(&table.base.base.table_id)?;
 
     build_response(&table, &graph).await
 }

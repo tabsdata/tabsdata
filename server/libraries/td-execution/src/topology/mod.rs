@@ -2,19 +2,18 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::graph::{TdGraph, TdGraphBuilder};
 use std::collections::{HashMap, HashSet};
 use td_database::access::{AccessMode, InProject};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::dependency::DependencyDBWithNames;
-use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::table::TableDBWithNames;
-use td_objects::dxo::topology::ProjectTopologyDB;
-use td_objects::dxo::trigger::TriggerDBWithNames;
-use td_objects::types::basic::{FunctionId, FunctionStatus, ProjectId, TableId};
+use td_objects::dxo::collection::ResolvedCollectionDB;
+use td_objects::dxo::topology::{
+    ProjectTopologyDB, TopologyDependency, TopologyFunction, TopologyTable, TopologyTrigger,
+};
+use td_objects::types::basic::{CollectionId, FunctionId, FunctionStatus, ProjectId, TableId};
 use td_queries::Queries;
 
+mod graph;
 mod plan;
 mod walk;
 #[cfg(test)]
@@ -23,11 +22,12 @@ mod walk_tests;
 /// A project's whole catalog at one topology version, indexed for walks.
 pub struct ProjectTopology {
     pub version: ProjectTopologyDB,
-    functions: HashMap<FunctionId, FunctionDBWithNames>,
-    tables: HashMap<TableId, TableDBWithNames>,
+    collections: HashMap<CollectionId, ResolvedCollectionDB>,
+    functions: HashMap<FunctionId, TopologyFunction>,
+    tables: HashMap<TableId, TopologyTable>,
     table_order: Vec<TableId>,
-    triggers: Vec<TriggerDBWithNames>,
-    dependencies: Vec<DependencyDBWithNames>,
+    triggers: Vec<TopologyTrigger>,
+    dependencies: Vec<TopologyDependency>,
     triggers_from: HashMap<FunctionId, Vec<usize>>,
     triggers_into: HashMap<FunctionId, Vec<usize>>,
     dependencies_from: HashMap<FunctionId, Vec<usize>>,
@@ -40,13 +40,11 @@ pub enum FunctionState<'a> {
     Any,
     /// Active and enabled.
     Executable,
-    /// The ones an execution ran.
     Ran(&'a HashSet<FunctionId>),
 }
 
 impl FunctionState<'_> {
-    pub fn matches(&self, function: &FunctionDBWithNames) -> bool {
-        let function = &function.base.base;
+    pub(crate) fn matches(&self, function: &TopologyFunction) -> bool {
         match self {
             FunctionState::Any => true,
             FunctionState::Executable => {
@@ -58,7 +56,6 @@ impl FunctionState<'_> {
 }
 
 impl ProjectTopology {
-    /// The project's open version.
     pub async fn current<M: AccessMode>(
         conn: &mut DomainConnection<Apiserver, InProject, M>,
         project: &ProjectId,
@@ -72,50 +69,50 @@ impl ProjectTopology {
         version: ProjectTopologyDB,
     ) -> Result<Self, TdError> {
         let at = &version.interval.valid_from;
-        let functions: Vec<FunctionDBWithNames> = conn.scd2().as_of(at).fetch_all(()).await?;
-        let mut tables: Vec<TableDBWithNames> = conn.scd2().as_of(at).fetch_all(()).await?;
-        let mut dependencies: Vec<DependencyDBWithNames> =
-            conn.scd2().as_of(at).fetch_all(()).await?;
-        let mut triggers: Vec<TriggerDBWithNames> = conn.scd2().as_of(at).fetch_all(()).await?;
-        // Graphs insert nodes in this order, and `dot` numbers them by it.
-        tables.sort_by_key(|t| t.base.base.table_id);
-        dependencies.sort_by_key(|d| d.base.base.id);
-        triggers.sort_by_key(|t| t.base.base.id);
+        let collections: Vec<ResolvedCollectionDB> = conn.fetch_all(()).await?;
+        let functions: Vec<TopologyFunction> = conn.scd2().as_of(at).fetch_all(()).await?;
+        let tables: Vec<TopologyTable> = conn.scd2().as_of(at).fetch_all(()).await?;
+        let triggers: Vec<TopologyTrigger> = conn.scd2().as_of(at).fetch_all(()).await?;
+        let dependencies: Vec<TopologyDependency> = conn.scd2().as_of(at).fetch_all(()).await?;
+        Ok(Self::new(
+            version,
+            collections,
+            functions,
+            tables,
+            triggers,
+            dependencies,
+        ))
+    }
 
-        Ok(Self {
-            triggers_from: index(triggers.iter().map(|t| *t.base.base.trigger_by_function_id)),
-            triggers_into: index(triggers.iter().map(|t| t.base.base.function_id)),
-            dependencies_from: index(dependencies.iter().map(|d| *d.base.base.table_function_id)),
-            dependencies_into: index(dependencies.iter().map(|d| d.base.base.function_id)),
-            table_order: tables.iter().map(|t| t.base.base.table_id).collect(),
-            tables: tables
-                .into_iter()
-                .map(|t| (t.base.base.table_id, t))
-                .collect(),
-            functions: functions
-                .into_iter()
-                .map(|f| (f.base.base.function_id, f))
-                .collect(),
+    pub(crate) fn new(
+        version: ProjectTopologyDB,
+        collections: Vec<ResolvedCollectionDB>,
+        functions: Vec<TopologyFunction>,
+        mut tables: Vec<TopologyTable>,
+        mut triggers: Vec<TopologyTrigger>,
+        mut dependencies: Vec<TopologyDependency>,
+    ) -> Self {
+        // Graphs insert nodes in this order, and `dot` numbers them by it.
+        tables.sort_by_key(|t| t.table_id);
+        dependencies.sort_by_key(|d| d.id);
+        triggers.sort_by_key(|t| t.id);
+
+        Self {
+            triggers_from: index(triggers.iter().map(|t| *t.trigger_by_function_id)),
+            triggers_into: index(triggers.iter().map(|t| t.function_id)),
+            dependencies_from: index(dependencies.iter().map(|d| *d.table_function_id)),
+            dependencies_into: index(dependencies.iter().map(|d| d.function_id)),
+            table_order: tables.iter().map(|t| t.table_id).collect(),
+            collections: collections.into_iter().map(|c| (c.base.id, c)).collect(),
+            tables: tables.into_iter().map(|t| (t.table_id, t)).collect(),
+            functions: functions.into_iter().map(|f| (f.function_id, f)).collect(),
             triggers,
             dependencies,
             version,
-        })
+        }
     }
 
-    /// The whole project graph.
-    pub fn graph(&self) -> Result<TdGraph, TdError> {
-        // A frozen table outlives the function that wrote it: no output edge.
-        let outputs = self
-            .ordered_tables()
-            .filter(|t| self.functions.contains_key(&t.base.base.function_id));
-        Ok(TdGraphBuilder::new(&self.tables, &self.functions)
-            .with_triggers(&self.triggers)?
-            .with_dependencies(&self.dependencies)?
-            .with_outputs(outputs)?
-            .build())
-    }
-
-    fn ordered_tables(&self) -> impl Iterator<Item = &TableDBWithNames> {
+    fn ordered_tables(&self) -> impl Iterator<Item = &TopologyTable> {
         self.table_order.iter().map(|id| &self.tables[id])
     }
 }

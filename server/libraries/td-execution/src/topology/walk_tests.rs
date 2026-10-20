@@ -4,24 +4,26 @@
 
 //! The walks over one seeded topology, edge by edge.
 
-use crate::topology::plan::PlanSource;
-use crate::topology::walk::Nodes;
+use crate::topology::plan::TopologyTriggers;
+use crate::topology::walk::Admitted;
 use crate::topology::{FunctionState, ProjectTopology};
 use std::collections::{BTreeSet, HashMap};
-use ta_execution::GraphSource;
+use ta_execution::TriggerSource;
 use td_database::access::{AcrossProjects, DbPool, Grant};
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::dependency::DependencyDBWithNames;
-use td_objects::dxo::function::FunctionRegister;
-use td_objects::dxo::trigger::TriggerDBWithNames;
+use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
+use td_objects::dxo::graph::GraphNode;
+use td_objects::dxo::table::TableDBWithNames;
+use td_objects::dxo::topology::{TopologyDependency, TopologyTrigger};
 use td_objects::types::basic::{
     BundleId, CollectionName, Decorator, Depth, Enabled, FunctionId, FunctionName,
     FunctionRuntimeValues, OverrideDisabledTrigger, ReuseFrozen, TableNameDto, UserId,
 };
 use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
 use td_objects::types::recursion::RecursionOptions;
+use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
 fn some<T>(v: Vec<T>) -> Option<Vec<T>> {
@@ -130,7 +132,6 @@ fn overriding(mut options: RecursionOptions) -> RecursionOptions {
     options
 }
 
-/// `from→to` by function name, for each edge's two ends.
 fn named(
     ids: &HashMap<String, FunctionId>,
     ends: impl IntoIterator<Item = (FunctionId, FunctionId)>,
@@ -143,23 +144,22 @@ fn named(
 
 fn triggers<'a>(
     ids: &HashMap<String, FunctionId>,
-    t: impl IntoIterator<Item = &'a TriggerDBWithNames>,
+    t: impl IntoIterator<Item = &'a TopologyTrigger>,
 ) -> BTreeSet<String> {
     named(
         ids,
         t.into_iter()
-            .map(|t| (*t.base.base.trigger_by_function_id, t.base.base.function_id)),
+            .map(|t| (*t.trigger_by_function_id, t.function_id)),
     )
 }
 
 fn dependencies<'a>(
     ids: &HashMap<String, FunctionId>,
-    d: impl IntoIterator<Item = &'a DependencyDBWithNames>,
+    d: impl IntoIterator<Item = &'a TopologyDependency>,
 ) -> BTreeSet<String> {
     named(
         ids,
-        d.into_iter()
-            .map(|d| (*d.base.base.table_function_id, d.base.base.function_id)),
+        d.into_iter().map(|d| (*d.table_function_id, d.function_id)),
     )
 }
 
@@ -171,7 +171,7 @@ fn edges(expected: &[&str]) -> BTreeSet<String> {
 async fn test_trigger_walks(db: TdPool) -> Result<(), TdError> {
     let (topology, ids) = seed(&db).await?;
     let walk = |state, start: &str, options: RecursionOptions| {
-        let source = PlanSource {
+        let source = TopologyTriggers {
             topology: &topology,
             state,
         };
@@ -229,7 +229,7 @@ async fn test_trigger_walks(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_children_run_with_their_parent(db: TdPool) -> Result<(), TdError> {
     let (topology, ids) = seed(&db).await?;
-    let source = PlanSource {
+    let source = TopologyTriggers {
         topology: &topology,
         state: FunctionState::Any,
     };
@@ -251,11 +251,11 @@ async fn test_children_run_with_their_parent(db: TdPool) -> Result<(), TdError> 
 #[td_test::test(db)]
 async fn test_dependency_walks(db: TdPool) -> Result<(), TdError> {
     let (topology, ids) = seed(&db).await?;
-    let nodes = Nodes::new(&topology, FunctionState::Any, ids["a"]);
+    let admitted = Admitted::new(&topology, FunctionState::Any, ids["a"]);
     assert_eq!(
         dependencies(
             &ids,
-            topology.dependency_walk(&nodes, &depths(Some(0), None))
+            topology.dependency_walk(&admitted, &depths(Some(0), None))
         ),
         edges(&["a→b", "b→d", "d→g"])
     );
@@ -267,15 +267,57 @@ async fn test_dependency_walks(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_table_flow_walks(db: TdPool) -> Result<(), TdError> {
     let (topology, ids) = seed(&db).await?;
-    let nodes = Nodes::flow(&topology, ids["d"]);
+    let admitted = Admitted::flow(&topology, ids["d"]);
     let unbounded = depths(None, None);
     assert_eq!(
-        triggers(&ids, topology.trigger_walk(&nodes, &unbounded)),
+        triggers(&ids, topology.trigger_walk(&admitted, &unbounded)),
         edges(&["a→b", "a→c", "b→d", "c→d", "d→e", "e→f", "d→g"])
     );
     assert_eq!(
-        dependencies(&ids, topology.dependency_walk(&nodes, &unbounded)),
+        dependencies(&ids, topology.dependency_walk(&admitted, &unbounded)),
         edges(&["a→b", "b→d", "c→d", "d→g"])
     );
+    Ok(())
+}
+
+/// Nodes name and group their functions and tables as the catalog views do.
+#[td_test::test(db)]
+async fn test_nodes_match_the_catalog_views(db: TdPool) -> Result<(), TdError> {
+    let (topology, _) = seed(&db).await?;
+    let pools =
+        DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
+    let project = topology.version.base.project_id;
+    let mut conn = pools.read().await?.enter_project(&project).await?;
+    let conn = conn.get(Grant::asserted("walk tests"));
+    let at = &topology.version.interval.valid_from;
+    let functions: Vec<FunctionDBWithNames> = conn.scd2().as_of(at).fetch_all(()).await?;
+    let tables: Vec<TableDBWithNames> = conn.scd2().as_of(at).fetch_all(()).await?;
+
+    let graph = topology.graph()?;
+    let mut seen = 0;
+    for node in graph.inner.node_weights() {
+        match node {
+            GraphNode::Function(node) => {
+                let row = functions
+                    .iter()
+                    .find(|f| f.base.base.function_id == node.function_id)
+                    .unwrap();
+                assert_eq!(node.collection, row.collection);
+                assert_eq!(node.group_id, row.group_id);
+                assert_eq!(node.function_version_id, row.base.base.id);
+            }
+            GraphNode::Table(node) => {
+                let row = tables
+                    .iter()
+                    .find(|t| t.base.base.table_id == node.table_id)
+                    .unwrap();
+                assert_eq!(node.collection, row.collection);
+                assert_eq!(node.system, row.system);
+                assert_eq!(node.table_version_id, row.base.base.id);
+            }
+        }
+        seen += 1;
+    }
+    assert_eq!(seen, functions.len() + tables.len());
     Ok(())
 }

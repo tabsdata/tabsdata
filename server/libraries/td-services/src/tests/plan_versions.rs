@@ -17,14 +17,14 @@ use td_database::pool::scoped::ScopedExt as _;
 use td_error::TdError;
 use td_execution::ExecutionPlan;
 use td_execution::VersionResolver;
-use td_execution::graph::TdGraph;
+use td_execution::graph::TopologyGraph;
+use td_execution::topology::ProjectTopology;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionRequest};
-use td_objects::dxo::function::{FunctionDBWithNames, FunctionParam};
-use td_objects::dxo::graph::{GraphDependency, GraphEdge, GraphNode};
+use td_objects::dxo::function::FunctionParam;
+use td_objects::dxo::graph::{GraphDependency, GraphEdge, GraphNode, TableNode};
 use td_objects::dxo::logical::LogicalFunctionRunInsertDB;
-use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
     AccessTokenId, AtTime, CollectionIdName, CollectionName, DependencyPos, ExecutionId,
@@ -113,19 +113,26 @@ async fn test_new_versions_resolve_per_reading_function(db: TdPool) -> Result<()
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut trx = pools.read().await?.enter_project(&p.id).await?;
     let conn = trx.get(Grant::asserted("plan versions test"));
-    let table: TableDBWithNames = conn
-        .scd2()
-        .fetch_all::<TableDBWithNames>(())
-        .await?
-        .into_iter()
-        .find(|t| t.base.base.name.to_string() == "producer_t0")
-        .expect("producer table");
-    let first: FunctionDBWithNames = conn.scd2().fetch_one(&first.base.function_id).await?;
-    let second: FunctionDBWithNames = conn.scd2().fetch_one(&second.base.function_id).await?;
+    let project = ProjectTopology::current(conn, &p.id).await?.graph()?;
+    let node = |found: &dyn Fn(&GraphNode) -> bool| {
+        project
+            .inner
+            .node_weights()
+            .find(|n| found(n))
+            .cloned()
+            .expect("node")
+    };
+    let first_node =
+        node(&|n| matches!(n, GraphNode::Function(f) if f.function_id == first.base.function_id));
+    let second_node =
+        node(&|n| matches!(n, GraphNode::Function(f) if f.function_id == second.base.function_id));
+    let table_node =
+        node(&|n| matches!(n, GraphNode::Table(t) if t.name.to_string() == "producer_t0"));
 
+    let GraphNode::Table(TableNode { table_id, .. }) = table_node else {
+        unreachable!()
+    };
     let mut graph = Graph::new();
-    let (first_node, table_node) = GraphNode::pair(&first, &table)?;
-    let (second_node, _) = GraphNode::pair(&second, &table)?;
     let first_idx = graph.add_node(first_node.clone());
     let second_idx = graph.add_node(second_node);
     let table_idx = graph.add_node(table_node);
@@ -143,7 +150,7 @@ async fn test_new_versions_resolve_per_reading_function(db: TdPool) -> Result<()
     let GraphNode::Function(trigger) = first_node else {
         unreachable!()
     };
-    let plan = ExecutionPlan::new(TdGraph { inner: graph }, &trigger)?;
+    let plan = ExecutionPlan::new(TopologyGraph { inner: graph }, &trigger)?;
 
     let execution: ExecutionDB = conn.fetch_one(&run_2).await?;
     let resolved = resolve_execution_plan_versions(conn, &execution.base, &plan).await?;
@@ -156,7 +163,7 @@ async fn test_new_versions_resolve_per_reading_function(db: TdPool) -> Result<()
         };
         let own: Vec<_> = VersionResolver::builder()
             .function_id(&function.function_id)
-            .table_id(&table.base.base.table_id)
+            .table_id(&table_id)
             .versions(&Versions::New)
             .triggered_on(&AtTime::from(execution.base.triggered_on))
             .build()?

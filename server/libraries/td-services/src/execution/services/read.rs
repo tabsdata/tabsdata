@@ -2,10 +2,10 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::execution::plan::recursion_options_of;
 use crate::execution::plan::response::{build_response, fetch_relations_info};
 use crate::execution::plan::rows::build_existing_transaction_map;
 use crate::execution::plan::versions::pinned_execution_plan_versions;
-use crate::execution::plan::with_existing_recursion_options;
 use std::collections::HashSet;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -13,7 +13,6 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
-use td_execution::ExecutionPlan;
 use td_execution::TransactionBy;
 use td_execution::topology::FunctionState;
 use td_execution::topology::ProjectTopology;
@@ -21,8 +20,6 @@ use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::ExecutionParam;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
-use td_objects::dxo::function::FunctionDBWithNames;
-use td_objects::dxo::graph::FunctionNode;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunInputInsertDB,
     LogicalFunctionRunInsertDB,
@@ -57,12 +54,7 @@ async fn execution_read(
         .fetch_one(&execution.base.topology_version_id)
         .await?;
 
-    let function: FunctionDBWithNames = conn
-        .timeline()
-        .fetch_one(&execution.base.function_version_id)
-        .await?;
-    let function_id = function.base.base.function_id;
-    let recursion_options = with_existing_recursion_options(&execution)?;
+    let recursion_options = recursion_options_of(&execution)?;
     let lfrs: Vec<LogicalFunctionRunInsertDB> = conn
         .fetch_all::<LogicalFunctionRunDB>(&execution_id)
         .await?
@@ -76,13 +68,11 @@ async fn execution_read(
         .map(|input| input.base)
         .collect();
     let ran: HashSet<FunctionId> = lfrs.iter().map(|lfr| lfr.function_id).collect();
-    let graph = ProjectTopology::of(conn, topology).await?.plan_graph(
+    let execution_plan = ProjectTopology::of(conn, topology).await?.plan(
         FunctionState::Ran(&ran),
-        &function_id,
+        &execution.base.function_id,
         &recursion_options,
     )?;
-
-    let execution_plan = ExecutionPlan::new(graph, &FunctionNode::from(&function))?;
     let transactions: Vec<TransactionInsertDB> = conn
         .fetch_all::<TransactionDB>(&execution_id)
         .await?

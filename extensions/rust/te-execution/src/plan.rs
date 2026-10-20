@@ -2,8 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use ta_execution::{GraphSource, PlanScope};
-use td_objects::dxo::trigger::TriggerDBWithNames;
+use ta_execution::{PlanScope, TriggerSource};
 use td_objects::types::basic::{Depth, FunctionId, FunctionOnly, OverrideDisabledTrigger};
 use td_objects::types::recursion::RecursionOptions;
 
@@ -20,11 +19,11 @@ impl PlanScope for ExecutionScope {
     }
 
     /// An execution runs its start function and the start's children.
-    fn plan_triggers<'a>(
-        source: &'a impl GraphSource,
+    fn plan_triggers<'a, S: TriggerSource>(
+        source: &'a S,
         start: &FunctionId,
         options: &RecursionOptions,
-    ) -> Vec<&'a TriggerDBWithNames> {
+    ) -> Vec<&'a S::Trigger> {
         source.children_triggers(start, &[], options)
     }
 }

@@ -3,8 +3,6 @@
 //
 
 use crate::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
-use crate::dxo::function::FunctionDBWithNames;
-use crate::dxo::table::TableDBWithNames;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
     FunctionVersionId, GroupId, LogicalTableDataVersionId, Parent, Private, SelfDependency, System,
@@ -15,7 +13,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
-use td_error::TdError;
 use utoipa::ToSchema;
 
 #[ta_objects::Dto]
@@ -69,36 +66,6 @@ impl<F: Display, T: Display> Display for GraphNode<F, T> {
             GraphNode::Function(node) => write!(f, "{}", node),
             GraphNode::Table(node) => write!(f, "{}", node),
         }
-    }
-}
-
-impl GraphNode<FunctionNode, TableNode> {
-    pub fn pair(
-        function: &FunctionDBWithNames,
-        table: &TableDBWithNames,
-    ) -> Result<(Self, Self), TdError> {
-        Ok((
-            GraphNode::Function(FunctionNode {
-                collection_id: function.base.base.collection_id,
-                collection: function.collection.clone(),
-                function_id: function.base.base.function_id,
-                function_version_id: function.base.base.id.clone(),
-                name: function.base.base.name.clone(),
-                enabled: function.base.base.enabled,
-                group_id: function.group_id,
-                parent_function_id: function.base.base.parent_function_id,
-            }),
-            GraphNode::Table(TableNode {
-                collection_id: table.base.base.collection_id,
-                collection: table.collection.clone(),
-                function_version_id: table.base.base.function_version_id.clone(),
-                table_id: table.base.base.table_id,
-                table_version_id: table.base.base.id,
-                name: table.base.base.name.clone(),
-                system: table.system,
-                private: table.base.base.private,
-            }),
-        ))
     }
 }
 
@@ -226,115 +193,6 @@ pub struct ResolvedVersion {
 impl Display for ResolvedVersion {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.original)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_utils::graph::{
-        FUNCTION_NAMES, TABLE_NAMES, dependency, function, table, trigger,
-    };
-
-    #[tokio::test]
-    async fn test_graph_node_from_table() -> Result<(), TdError> {
-        let function = function(&FUNCTION_NAMES[0]);
-        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]);
-        let (function_node, table_node) = GraphNode::pair(&function, &table)?;
-
-        if let GraphNode::Function(function) = function_node {
-            assert_eq!(function.collection_id, table.base.base.collection_id);
-            assert_eq!(function.collection, table.collection);
-            assert_eq!(
-                function.function_version_id,
-                table.base.base.function_version_id
-            );
-            assert_eq!(function.name, table.function);
-        } else {
-            panic!("Expected GraphNode::Function");
-        }
-
-        if let GraphNode::Table(table_node) = table_node {
-            assert_eq!(table_node.collection_id, table.base.base.collection_id);
-            assert_eq!(table_node.collection, table.collection);
-            assert_eq!(
-                table_node.function_version_id,
-                table.base.base.function_version_id
-            );
-            assert_eq!(table_node.table_version_id, table.base.base.id);
-            assert_eq!(table_node.name, table.base.base.name);
-        } else {
-            panic!("Expected GraphNode::Table");
-        }
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_graph_node_from_dependency() -> Result<(), TdError> {
-        let dependency = dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0]);
-        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]);
-        let function = function(&FUNCTION_NAMES[0]);
-        let (function_node, table_node) = GraphNode::pair(&function, &table)?;
-
-        if let GraphNode::Table(node) = table_node {
-            assert_eq!(
-                node.collection_id,
-                *dependency.base.base.table_collection_id
-            );
-            assert_eq!(node.collection, *dependency.table_collection);
-            assert_eq!(
-                node.function_version_id,
-                table.base.base.function_version_id
-            );
-            assert_eq!(node.table_version_id, table.base.base.id);
-            assert_eq!(node.name, table.base.base.name);
-        } else {
-            panic!("Expected GraphNode::Table");
-        }
-
-        if let GraphNode::Function(node) = function_node {
-            assert_eq!(node.collection_id, dependency.base.base.collection_id);
-            assert_eq!(node.collection, dependency.collection);
-            assert_eq!(node.function_version_id, function.base.base.id);
-            assert_eq!(node.name, function.base.base.name);
-        } else {
-            panic!("Expected GraphNode::Function");
-        }
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_graph_node_from_trigger() -> Result<(), TdError> {
-        let trigger = trigger(&TABLE_NAMES[0], &FUNCTION_NAMES[0]);
-        let table = table(&FUNCTION_NAMES[0], &TABLE_NAMES[0]);
-        let function = function(&FUNCTION_NAMES[0]);
-        let (function_node, table_node) = GraphNode::pair(&function, &table)?;
-
-        if let GraphNode::Table(node) = table_node {
-            assert_eq!(
-                node.collection_id,
-                *trigger.base.base.trigger_by_collection_id
-            );
-            assert_eq!(node.collection, *trigger.trigger_by_collection);
-            assert_eq!(
-                node.function_version_id,
-                table.base.base.function_version_id
-            );
-            assert_eq!(node.table_version_id, table.base.base.id);
-            assert_eq!(node.name, table.base.base.name);
-        } else {
-            panic!("Expected GraphNode::Table");
-        }
-
-        if let GraphNode::Function(node) = function_node {
-            assert_eq!(node.collection_id, trigger.base.base.collection_id);
-            assert_eq!(node.collection, trigger.collection);
-            assert_eq!(node.function_version_id, function.base.base.id);
-            assert_eq!(node.name, node.name);
-        } else {
-            panic!("Expected GraphNode::Function");
-        }
-        Ok(())
     }
 }
 

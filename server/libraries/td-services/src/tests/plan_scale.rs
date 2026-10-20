@@ -8,7 +8,6 @@
 //! `TD_PLAN_SCALE=1000 cargo test -p td-services plan_scale -- --ignored --nocapture`
 
 use crate::Services;
-use crate::execution::plan::validate_execution_plan;
 use crate::execution::plan::versions::resolve_execution_plan_versions;
 use crate::tests::fixtures::register;
 use std::str::FromStr;
@@ -20,12 +19,11 @@ use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt as _;
 use td_error::TdError;
 use td_execution::topology::{FunctionState, ProjectTopology};
-use td_execution::{ExecutionPlan, ExecutionScope, TransactionBy};
+use td_execution::{ExecutionScope, TransactionBy};
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionParam, ExecutionRequest};
-use td_objects::dxo::function::{FunctionDBWithNames, FunctionParam, FunctionRegister};
-use td_objects::dxo::graph::FunctionNode;
+use td_objects::dxo::function::{FunctionParam, FunctionRegister};
 use td_objects::types::basic::{
     AccessTokenId, CollectionIdName, CollectionName, FunctionIdName, FunctionOnly,
     OverrideDisabledTrigger, UserId,
@@ -104,17 +102,15 @@ async fn test_plan_scale(db: TdPool) -> Result<(), TdError> {
         OverrideDisabledTrigger::FALSE,
     );
     let started = Instant::now();
-    let graph = topology.plan_graph(
+    let plan = topology.plan(
         FunctionState::Executable,
         &parent.base.function_id,
         &options,
     )?;
-    let walk = started.elapsed();
+    let planned = started.elapsed();
 
-    let function: FunctionDBWithNames = conn.scd2().fetch_one(&parent.base.function_id).await?;
     let started = Instant::now();
-    let plan = ExecutionPlan::new(graph, &FunctionNode::from(&function))?;
-    validate_execution_plan(&TransactionBy::default(), &plan)?;
+    plan.validate(&TransactionBy::default())?;
     let validate = started.elapsed();
 
     let execution: ExecutionDB = conn.fetch_one(&executed.id).await?;
@@ -135,8 +131,8 @@ async fn test_plan_scale(db: TdPool) -> Result<(), TdError> {
     let read = started.elapsed();
 
     eprintln!(
-        "plan of {} functions, {edges} edges: execute {execute:?} | load {load:?}, walk {walk:?}, \
-         new+validate {validate:?}, resolve {resolve:?} | read {read:?}",
+        "plan of {} functions, {edges} edges: execute {execute:?} | load {load:?}, plan {planned:?}, \
+         validate {validate:?}, resolve {resolve:?} | read {read:?}",
         children + 1
     );
     Ok(())
