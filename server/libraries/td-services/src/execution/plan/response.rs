@@ -86,7 +86,7 @@ pub async fn build_response(
     let transactions = execution_plan
         .triggered_functions()
         .into_iter()
-        .chain(std::iter::once(execution_plan.main_trigger()))
+        .chain(std::iter::once(execution_plan.trigger()))
         .try_fold(HashMap::new(), |mut acc, f| {
             let transaction = transaction_map.get(&roots.key(transaction_by, f)?)?;
             let entry: &mut HashSet<_> = acc.entry(transaction.id.clone()).or_default();

@@ -4,13 +4,13 @@
 
 use crate::graph::graph_response;
 use td_error::TdError;
-use td_execution::graph::TdGraph;
+use td_execution::graph::TopologyGraph;
 use td_objects::dxo::graph::TableFlowGraphResponse;
 use td_objects::dxo::table::TableDBWithNames;
 
 pub async fn build_response(
     table: &TableDBWithNames,
-    graph: &TdGraph,
+    graph: &TopologyGraph,
 ) -> Result<TableFlowGraphResponse, TdError> {
     Ok(TableFlowGraphResponse {
         table: table.base.base.id,

@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use futures::future::try_join_all;
 use petgraph::Graph;
 use petgraph::dot::{Config, Dot};
 use petgraph::prelude::EdgeRef;
@@ -16,8 +17,8 @@ use td_objects::dxo::graph::{FunctionNode, GraphEdge, GraphNode, TableNode};
 use td_objects::types::basic::{FunctionId, TransactionKey};
 use td_objects::types::table_ref::Versions;
 
-/// Tabsdata Graph representation, consisting in nodes and edges.
-/// There are two types of nodes: functions and tables.
+/// Catalog rows of a topology version as a graph, the whole project or a part
+/// of it. There are two types of nodes: functions and tables.
 /// The edges are of three types:
 /// 1. Output: from function to table, which marks the tables created.
 /// 2. Trigger: from table to function, which marks the functions triggered.
@@ -25,17 +26,16 @@ use td_objects::types::table_ref::Versions;
 ///
 /// For 1, 2 and 3, it contains the versions of the table going in or out.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TdGraph<F = FunctionNode, T = TableNode, V = Versions> {
+pub struct TopologyGraph<F = FunctionNode, T = TableNode, V = Versions> {
     #[serde(flatten)]
     pub inner: Graph<GraphNode<F, T>, GraphEdge<V>>,
 }
 
-impl<F, T, V> TdGraph<F, T, V>
+impl<F, T, V> TopologyGraph<F, T, V>
 where
     F: Eq + Hash,
     T: Eq + Hash,
 {
-    /// Returns all the nodes(functions) present (including the main function).
     pub fn functions(&self) -> HashSet<&F> {
         self.inner
             .node_references()
@@ -46,7 +46,6 @@ where
             .collect()
     }
 
-    /// Returns all the edges(tables) present.
     pub fn tables(&self) -> HashSet<&T> {
         self.inner
             .node_references()
@@ -57,7 +56,6 @@ where
             .collect()
     }
 
-    /// Returns all the edges and the nodes connecting them.
     pub fn relations(&self) -> HashSet<(&F, &T, &GraphEdge<V>)>
     where
         V: Eq + Hash,
@@ -79,8 +77,7 @@ where
     }
 }
 
-impl<T, V> TdGraph<FunctionNode, T, V> {
-    /// Each function's transaction root, looked up once for the graph.
+impl<T, V> TopologyGraph<FunctionNode, T, V> {
     pub fn transaction_roots(&self) -> TransactionRoots<'_> {
         TransactionRoots {
             functions: self
@@ -118,7 +115,7 @@ impl TransactionRoots<'_> {
     }
 }
 
-impl<F: Display, T: Display, V: Display> TdGraph<F, T, V> {
+impl<F: Display, T: Display, V: Display> TopologyGraph<F, T, V> {
     pub fn dot(&self) -> Dot<'_, &Graph<GraphNode<F, T>, GraphEdge<V>>> {
         Dot::with_attr_getters(
             &self.inner,
@@ -138,13 +135,12 @@ impl<F: Display, T: Display, V: Display> TdGraph<F, T, V> {
     }
 }
 
-impl<F, T, V> TdGraph<F, T, V> {
-    /// The same graph with its nodes and edge versions transformed.
+impl<F, T, V> TopologyGraph<F, T, V> {
     pub async fn map<'a, CN, RN, CE, RE, FF, TT, VV>(
         &'a self,
         mut transform_nodes: CN,
         mut transform_edges: CE,
-    ) -> Result<TdGraph<FF, TT, VV>, TdError>
+    ) -> Result<TopologyGraph<FF, TT, VV>, TdError>
     where
         CN: FnMut(&'a GraphNode<F, T>) -> RN,
         RN: Future<Output = Result<GraphNode<FF, TT>, TdError>>,
@@ -159,13 +155,11 @@ impl<F, T, V> TdGraph<F, T, V> {
                 Ok::<_, TdError>((idx, new_node))
             });
         }
-        let mut updated_nodes = futures::future::try_join_all(node_futures)
+        let mut updated_nodes = try_join_all(node_futures)
             .await?
             .into_iter()
             .collect::<HashMap<_, _>>();
 
-        // TODO this does a query per edge, we can optimize if table + version is the same (adding a transform cache)
-        // TODO we could probably also skip non triggered nodes, setting just None
         let mut edge_futures = Vec::new();
         for edge in self.inner.edge_references() {
             let source = &self.inner[edge.source()];
@@ -176,7 +170,7 @@ impl<F, T, V> TdGraph<F, T, V> {
                 Ok::<_, TdError>((edge.id(), new_version))
             });
         }
-        let mut updated_versions = futures::future::try_join_all(edge_futures)
+        let mut updated_versions = try_join_all(edge_futures)
             .await?
             .into_iter()
             .collect::<HashMap<_, _>>();
@@ -189,7 +183,7 @@ impl<F, T, V> TdGraph<F, T, V> {
             },
         );
 
-        Ok(TdGraph { inner: new_graph })
+        Ok(TopologyGraph { inner: new_graph })
     }
 }
 

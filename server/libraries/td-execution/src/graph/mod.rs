@@ -2,10 +2,8 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-pub use builder::TdGraphBuilder;
-pub use partial::PartialGraph;
-pub use td_graph::{TdGraph, TransactionRoots};
+pub use projection::Projection;
+pub use topology_graph::{TopologyGraph, TransactionRoots};
 
-mod builder;
-mod partial;
-mod td_graph;
+mod projection;
+mod topology_graph;

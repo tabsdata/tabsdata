@@ -6,7 +6,7 @@ use ta_execution::PlanScope;
 use ta_services::api_message;
 use ta_services::ctx_service::ReqCtx;
 use td_error::{ApiError, TdError, api_error};
-use td_execution::{ExecutionPlan, ExecutionScope, TransactionBy};
+use td_execution::ExecutionScope;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDBWithNames;
 use td_objects::types::basic::{FunctionOnly, FunctionStatus, OverrideDisabledTrigger};
@@ -46,19 +46,7 @@ pub fn assert_function_status(
     Ok(())
 }
 
-pub fn validate_execution_plan(
-    transaction_by: &TransactionBy,
-    execution_plan: &ExecutionPlan,
-) -> Result<(), TdError> {
-    execution_plan.validate_dag_trigger()?;
-    execution_plan.validate_dag_dependency()?;
-    execution_plan.validate_dag_transaction(transaction_by)?;
-    Ok(())
-}
-
-pub fn with_existing_recursion_options(
-    execution: &ExecutionDB,
-) -> Result<RecursionOptions, TdError> {
+pub fn recursion_options_of(execution: &ExecutionDB) -> Result<RecursionOptions, TdError> {
     let options = execution
         .base
         .recursion_options

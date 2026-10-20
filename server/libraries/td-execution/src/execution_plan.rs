@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::graph::{PartialGraph, TdGraph};
+use crate::graph::{Projection, TopologyGraph};
 use petgraph::algo::toposort;
 use petgraph::prelude::{Direction, EdgeRef, NodeIndex};
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
@@ -34,7 +34,7 @@ enum ExecutionPlanError {
 
 #[derive(Debug)]
 pub struct ExecutionPlan<F = FunctionNode, T = TableNode, V = Versions> {
-    pub graph: TdGraph<F, T, V>,
+    pub graph: TopologyGraph<F, T, V>,
     pub trigger_index: NodeIndex,
     pub nodes_in_trigger_path: HashSet<NodeIndex>,
 }
@@ -45,9 +45,7 @@ impl<F, T, V> ExecutionPlan<F, T, V>
 where
     F: Eq + Display,
 {
-    /// The plan of running `trigger` over `graph`.
-    pub fn new(graph: TdGraph<F, T, V>, trigger: &F) -> Result<Self, TdError> {
-        // Find trigger index in the graph
+    pub fn new(graph: TopologyGraph<F, T, V>, trigger: &F) -> Result<Self, TdError> {
         let trigger_index = graph
             .inner
             .node_references()
@@ -62,7 +60,6 @@ where
             })
             .ok_or_else(|| ExecutionPlanError::InvalidTrigger(trigger.to_string()))?;
 
-        // Find all nodes in the trigger graph
         let mut visited = graph.inner.visit_map();
         let mut nodes_in_trigger_path = HashSet::new();
 
@@ -90,7 +87,7 @@ where
 }
 
 impl<F, T, V> Deref for ExecutionPlan<F, T, V> {
-    type Target = TdGraph<F, T, V>;
+    type Target = TopologyGraph<F, T, V>;
     fn deref(&self) -> &Self::Target {
         &self.graph
     }
@@ -102,23 +99,32 @@ impl<F, T, V> DerefMut for ExecutionPlan<F, T, V> {
     }
 }
 
+impl<V> ExecutionPlan<FunctionNode, TableNode, V> {
+    pub fn validate(&self, transaction_mapper: &impl TransactionMapper) -> Result<(), TdError> {
+        self.validate_dag_trigger()?;
+        self.validate_dag_dependency()?;
+        self.validate_dag_transaction(transaction_mapper)?;
+        Ok(())
+    }
+}
+
 impl<T, V> ExecutionPlan<FunctionNode, T, V> {
-    pub fn validate_dag_trigger(&self) -> Result<(), TdError> {
-        let partial = PartialGraph::trigger_graph(self)?;
-        toposort(&partial.inner, None).map_err(|err| {
-            let function = &partial.inner[err.node_id()];
+    fn validate_dag_trigger(&self) -> Result<(), TdError> {
+        let projection = Projection::triggers(self)?;
+        toposort(&projection.inner, None).map_err(|err| {
+            let function = &projection.inner[err.node_id()];
             ExecutionPlanError::CyclicTrigger(function.name.clone())
         })?;
         Ok(())
     }
 
-    pub fn validate_dag_transaction(
+    fn validate_dag_transaction(
         &self,
         transaction_mapper: &impl TransactionMapper,
     ) -> Result<(), TdError> {
-        let partial = PartialGraph::transaction_graph(self, transaction_mapper)?;
-        toposort(&partial.inner, None).map_err(|err| {
-            let key = &partial.inner[err.node_id()];
+        let projection = Projection::transactions(self, transaction_mapper)?;
+        toposort(&projection.inner, None).map_err(|err| {
+            let key = &projection.inner[err.node_id()];
             match transaction_mapper.transaction_by() {
                 Ok(transaction_by) => {
                     ExecutionPlanError::CyclicTransaction(transaction_by, key.clone()).into()
@@ -131,11 +137,11 @@ impl<T, V> ExecutionPlan<FunctionNode, T, V> {
 }
 
 impl<F, V> ExecutionPlan<F, TableNode, V> {
-    pub fn validate_dag_dependency(&self) -> Result<(), TdError> {
+    fn validate_dag_dependency(&self) -> Result<(), TdError> {
         // drop self dependencies as those cycles are allowed, and toposort errors if present
-        let partial = PartialGraph::dependency_graph(self, true)?;
-        toposort(&partial.inner, None).map_err(|err| {
-            let table = &partial.inner[err.node_id()];
+        let projection = Projection::dependencies(self, true)?;
+        toposort(&projection.inner, None).map_err(|err| {
+            let table = &projection.inner[err.node_id()];
             ExecutionPlanError::CyclicDependency(table.name.clone())
         })?;
         Ok(())
@@ -147,7 +153,7 @@ where
     F: Eq + Hash,
     T: Eq + Hash,
 {
-    pub fn main_trigger(&self) -> &F {
+    pub fn trigger(&self) -> &F {
         match &self.graph.inner[self.trigger_index] {
             GraphNode::Function(f) => f,
             GraphNode::Table(_) => unreachable!("trigger_index must point to a Function node"),
@@ -182,7 +188,7 @@ where
             .collect()
     }
 
-    pub fn function_table_input_versions(&self) -> HashSet<(&F, &T, &GraphEdge<V>)>
+    pub fn inputs(&self) -> HashSet<(&F, &T, &GraphEdge<V>)>
     where
         V: Eq + Hash,
     {
@@ -205,7 +211,7 @@ where
             .collect()
     }
 
-    pub fn table_function_output_versions(&self) -> HashSet<(&T, &F, &GraphEdge<V>)>
+    pub fn outputs(&self) -> HashSet<(&T, &F, &GraphEdge<V>)>
     where
         V: Eq + Hash,
     {
@@ -230,7 +236,6 @@ where
 }
 
 impl<F, T, V> ExecutionPlan<F, T, V> {
-    /// The same plan with its nodes and edge versions transformed.
     pub async fn map<'a, CN, RN, CE, RE, FF, TT, VV>(
         &'a self,
         transform_nodes: CN,
@@ -279,11 +284,9 @@ mod tests {
             .await
             .expect("map should succeed");
 
-        // Check that the structure is preserved
         assert_eq!(mapped.trigger_index, graph.trigger_index);
         assert_eq!(mapped.nodes_in_trigger_path, graph.nodes_in_trigger_path);
 
-        // Check that all nodes are present and have the same names
         for (idx, node) in mapped.inner.node_references() {
             let orig_node = &graph.inner[idx];
             match (orig_node, node) {
@@ -292,7 +295,6 @@ mod tests {
                 _ => panic!("Node type mismatch"),
             }
         }
-        // Check that all edges are present and have the same weights (multigraph-safe)
         let mut mapped_edges: Vec<_> = mapped
             .inner
             .edge_references()
@@ -309,19 +311,16 @@ mod tests {
             mapped_edges, orig_edges,
             "Edge sets (with weights) do not match"
         );
-        // Assert that the number of edges is the same
         assert_eq!(
             mapped.inner.edge_count(),
             graph.inner.edge_count(),
             "Edge count mismatch"
         );
-        // Assert that the number of nodes is the same
         assert_eq!(
             mapped.inner.node_count(),
             graph.inner.node_count(),
             "Node count mismatch"
         );
-        // Assert that all node indices in the mapped graph exist in the original graph
         for idx in mapped.inner.node_indices() {
             assert!(
                 graph.inner.node_indices().any(|i| i == idx),
@@ -366,7 +365,7 @@ mod tests {
         let graph = test_graph();
         let expected_trigger_fn = function_node(&FUNCTION_NAMES[0]);
         let graph = ExecutionPlan::new(graph, &expected_trigger_fn)?;
-        assert_eq!(graph.main_trigger().name, expected_trigger_fn.name);
+        assert_eq!(graph.trigger().name, expected_trigger_fn.name);
         Ok(())
     }
 
@@ -374,22 +373,19 @@ mod tests {
     async fn test_function_table_input_versions_and_table_function_output_versions() {
         let graph = test_graph();
         let graph = ExecutionPlan::new(graph, &function_node(&FUNCTION_NAMES[0])).unwrap();
-        let input_versions = graph.function_table_input_versions();
-        let output_versions = graph.table_function_output_versions();
-        // Just check that these return non-empty sets for a non-trivial graph
+        let input_versions = graph.inputs();
+        let output_versions = graph.outputs();
         assert!(!input_versions.is_empty());
         assert!(!output_versions.is_empty());
     }
 
     #[tokio::test]
     async fn test_disconnected_nodes() {
-        // Create a graph with a function and a table, but no edges
         let f = function_node(&FUNCTION_NAMES[0]);
         let t = table_node(&TABLE_NAMES[0]);
-        let mut graph = TdGraph::<FunctionNode, TableNode, Versions> {
+        let mut graph = TopologyGraph::<FunctionNode, TableNode, Versions> {
             inner: petgraph::Graph::new(),
         };
-        // Add nodes manually
         let f_idx = graph.inner.add_node(GraphNode::Function(f.clone()));
         let _t_idx = graph.inner.add_node(GraphNode::Table(t.clone()));
         let exec_plan = ExecutionPlan {
@@ -397,7 +393,6 @@ mod tests {
             trigger_index: f_idx,
             nodes_in_trigger_path: [f_idx].iter().cloned().collect(),
         };
-        // Should only have the origin function in the trigger path
         let triggered_functions = exec_plan.triggered_functions();
         assert_eq!(triggered_functions.len(), 1);
         assert!(triggered_functions.iter().any(|fnc| fnc.name == f.name));

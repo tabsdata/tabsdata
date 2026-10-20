@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::graph::TdGraph;
+use crate::graph::TopologyGraph;
 use petgraph::Direction;
 use petgraph::Graph;
 use petgraph::prelude::{DiGraph, EdgeRef};
@@ -12,13 +12,14 @@ use td_error::TdError;
 use td_objects::dxo::graph::{FunctionNode, GraphEdge, GraphNode};
 use td_objects::types::basic::TransactionKey;
 
-/// Represents a partial graph used for validation.
-pub struct PartialGraph<F> {
+/// One kind of node of a graph, with an edge wherever the graph connects two
+/// of them through the other kind; the plan checks cycles on these.
+pub struct Projection<F> {
     pub inner: Graph<F, ()>,
 }
 
-impl<F> PartialGraph<F> {
-    pub fn trigger_graph<T, V>(original: &TdGraph<F, T, V>) -> Result<PartialGraph<&F>, TdError> {
+impl<F> Projection<F> {
+    pub fn triggers<T, V>(original: &TopologyGraph<F, T, V>) -> Result<Projection<&F>, TdError> {
         let mut new_graph = DiGraph::new();
         let mut node_map = HashMap::new();
 
@@ -60,13 +61,13 @@ impl<F> PartialGraph<F> {
             }
         }
 
-        Ok(PartialGraph { inner: new_graph })
+        Ok(Projection { inner: new_graph })
     }
 
-    pub fn dependency_graph<T, V>(
-        original: &TdGraph<F, T, V>,
+    pub fn dependencies<T, V>(
+        original: &TopologyGraph<F, T, V>,
         drop_self_dependency: bool,
-    ) -> Result<PartialGraph<&T>, TdError> {
+    ) -> Result<Projection<&T>, TdError> {
         let mut new_graph = DiGraph::new();
         let mut node_map = HashMap::new();
 
@@ -120,32 +121,32 @@ impl<F> PartialGraph<F> {
             }
         }
 
-        Ok(PartialGraph { inner: new_graph })
+        Ok(Projection { inner: new_graph })
     }
 }
 
-impl PartialGraph<FunctionNode> {
-    pub fn transaction_graph<T, V>(
-        dgraph: &TdGraph<FunctionNode, T, V>,
+impl Projection<FunctionNode> {
+    pub fn transactions<T, V>(
+        dgraph: &TopologyGraph<FunctionNode, T, V>,
         transaction_mapper: &impl TransactionMapper,
-    ) -> Result<PartialGraph<TransactionKey>, TdError> {
-        let trigger_graph = PartialGraph::trigger_graph(dgraph)?;
+    ) -> Result<Projection<TransactionKey>, TdError> {
+        let triggers = Projection::triggers(dgraph)?;
         let roots = dgraph.transaction_roots();
 
         let mut new_graph = DiGraph::new();
 
         let mut node_map = HashMap::new();
-        for node in trigger_graph.inner.node_indices() {
-            let key = roots.key(transaction_mapper, trigger_graph.inner[node])?;
+        for node in triggers.inner.node_indices() {
+            let key = roots.key(transaction_mapper, triggers.inner[node])?;
             node_map
                 .entry(key.clone())
                 .or_insert_with(|| new_graph.add_node(key));
         }
 
         let mut edge_map = HashMap::new();
-        for edge in trigger_graph.inner.edge_references() {
-            let source_key = roots.key(transaction_mapper, trigger_graph.inner[edge.source()])?;
-            let target_key = roots.key(transaction_mapper, trigger_graph.inner[edge.target()])?;
+        for edge in triggers.inner.edge_references() {
+            let source_key = roots.key(transaction_mapper, triggers.inner[edge.source()])?;
+            let target_key = roots.key(transaction_mapper, triggers.inner[edge.target()])?;
             let source = node_map[&source_key];
             let target = node_map[&target_key];
             if source != target && !edge_map.contains_key(&(source, target)) {
@@ -154,32 +155,34 @@ impl PartialGraph<FunctionNode> {
             }
         }
 
-        Ok(PartialGraph { inner: new_graph })
+        Ok(Projection { inner: new_graph })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::TdGraphBuilder;
     use crate::test_utils::{
         TestTransactionBy, expected_function_nodes, expected_table_nodes, test_graph,
     };
+    use crate::topology::ProjectTopology;
     use itertools::Itertools;
-    use td_objects::test_utils::graph::{FUNCTION_NAMES, TABLE_NAMES, dependency, function, table};
+    use td_objects::test_utils::graph::{
+        FUNCTION_NAMES, TABLE_NAMES, collection, dependency, function, table, version,
+    };
     use td_objects::types::basic::FunctionVersionId;
 
     #[tokio::test]
-    async fn test_trigger_graph() {
+    async fn test_triggers() {
         let graph = test_graph();
-        let trigger_graph = PartialGraph::trigger_graph(&graph).unwrap();
-        assert_eq!(trigger_graph.inner.node_count(), 3);
-        assert_eq!(trigger_graph.inner.edge_count(), 1);
+        let triggers = Projection::triggers(&graph).unwrap();
+        assert_eq!(triggers.inner.node_count(), 3);
+        assert_eq!(triggers.inner.edge_count(), 1);
 
-        let function_nodes = trigger_graph
+        let function_nodes = triggers
             .inner
             .node_indices()
-            .map(|node| trigger_graph.inner[node].clone())
+            .map(|node| triggers.inner[node].clone())
             .sorted_by_key(|k| k.name.clone())
             .collect::<Vec<_>>();
         let expected_function_nodes = expected_function_nodes()
@@ -188,26 +191,26 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(function_nodes, expected_function_nodes);
 
-        let edges: Vec<_> = trigger_graph.inner.edge_references().collect();
+        let edges: Vec<_> = triggers.inner.edge_references().collect();
         assert_eq!(edges.len(), 1);
         let edge = edges[0];
-        let source = trigger_graph.inner[edge.source()];
+        let source = triggers.inner[edge.source()];
         assert_eq!(source.name, FUNCTION_NAMES[0]);
-        let target = trigger_graph.inner[edge.target()];
+        let target = triggers.inner[edge.target()];
         assert_eq!(target.name, FUNCTION_NAMES[1]);
     }
 
     #[tokio::test]
-    async fn test_dependency_graph() {
+    async fn test_dependencies() {
         let graph = test_graph();
-        let dependency_graph = PartialGraph::dependency_graph(&graph, true).unwrap();
-        assert_eq!(dependency_graph.inner.node_count(), TABLE_NAMES.len());
-        assert_eq!(dependency_graph.inner.edge_count(), 3);
+        let dependencies = Projection::dependencies(&graph, true).unwrap();
+        assert_eq!(dependencies.inner.node_count(), TABLE_NAMES.len());
+        assert_eq!(dependencies.inner.edge_count(), 3);
 
-        let table_nodes = dependency_graph
+        let table_nodes = dependencies
             .inner
             .node_indices()
-            .map(|node| dependency_graph.inner[node].clone())
+            .map(|node| dependencies.inner[node].clone())
             .sorted_by_key(|k| k.name.clone())
             .collect::<Vec<_>>();
         let expected_table_nodes = expected_table_nodes()
@@ -216,25 +219,25 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(table_nodes, expected_table_nodes);
 
-        let edges: Vec<_> = dependency_graph.inner.edge_references().collect();
+        let edges: Vec<_> = dependencies.inner.edge_references().collect();
         assert_eq!(edges.len(), 3);
 
         let edge = edges[0];
-        let source = dependency_graph.inner[edge.source()];
+        let source = dependencies.inner[edge.source()];
         assert_eq!(source.name, TABLE_NAMES[0]);
-        let target = dependency_graph.inner[edge.target()];
+        let target = dependencies.inner[edge.target()];
         assert_eq!(target.name, TABLE_NAMES[2]);
 
         let edge = edges[1];
-        let source = dependency_graph.inner[edge.source()];
+        let source = dependencies.inner[edge.source()];
         assert_eq!(source.name, TABLE_NAMES[0]);
-        let target = dependency_graph.inner[edge.target()];
+        let target = dependencies.inner[edge.target()];
         assert_eq!(target.name, TABLE_NAMES[1]);
 
         let edge = edges[2];
-        let source = dependency_graph.inner[edge.source()];
+        let source = dependencies.inner[edge.source()];
         assert_eq!(source.name, TABLE_NAMES[1]);
-        let target = dependency_graph.inner[edge.target()];
+        let target = dependencies.inner[edge.target()];
         assert_eq!(target.name, TABLE_NAMES[3]);
     }
 
@@ -242,24 +245,19 @@ mod tests {
     /// version that defined them; its dependency on its own output is still a
     /// self dependency, so the dependency DAG stays acyclic.
     #[tokio::test]
-    async fn test_dependency_graph_self_dependency_across_versions() {
+    async fn test_dependencies_self_dependency_across_versions() {
         let mut updated = function(&FUNCTION_NAMES[0]);
-        updated.base.base.id = FunctionVersionId::new();
-        let all_tables = vec![table(&FUNCTION_NAMES[0], &TABLE_NAMES[0])];
-        let all_tables_map = all_tables
-            .iter()
-            .map(|t| (t.base.base.table_id, t.clone()))
-            .collect();
-        let all_functions_map = [(updated.base.base.function_id, updated.clone())]
-            .into_iter()
-            .collect();
-        let dependencies = vec![dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0])];
-        let graph = TdGraphBuilder::new(&all_tables_map, &all_functions_map)
-            .with_dependencies(&dependencies)
-            .unwrap()
-            .with_outputs(&all_tables)
-            .unwrap()
-            .build();
+        updated.id = FunctionVersionId::new();
+        let graph = ProjectTopology::new(
+            version(),
+            vec![collection()],
+            vec![updated],
+            vec![table(&FUNCTION_NAMES[0], &TABLE_NAMES[0])],
+            vec![],
+            vec![dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0])],
+        )
+        .graph()
+        .unwrap();
 
         let self_dependencies = graph
             .inner
@@ -268,54 +266,54 @@ mod tests {
             .count();
         assert_eq!(self_dependencies, 1);
 
-        let dependency_graph = PartialGraph::dependency_graph(&graph, true).unwrap();
-        assert_eq!(dependency_graph.inner.node_count(), 1);
-        assert_eq!(dependency_graph.inner.edge_count(), 0);
+        let dependencies = Projection::dependencies(&graph, true).unwrap();
+        assert_eq!(dependencies.inner.node_count(), 1);
+        assert_eq!(dependencies.inner.edge_count(), 0);
     }
 
     #[tokio::test]
-    async fn test_transaction_graph() {
+    async fn test_transactions() {
         let graph = test_graph();
 
         let transaction_by = TestTransactionBy::Name;
-        let transaction_graph = PartialGraph::transaction_graph(&graph, &transaction_by).unwrap();
-        assert_eq!(transaction_graph.inner.node_count(), 3);
-        assert_eq!(transaction_graph.inner.edge_count(), 1);
+        let transactions = Projection::transactions(&graph, &transaction_by).unwrap();
+        assert_eq!(transactions.inner.node_count(), 3);
+        assert_eq!(transactions.inner.edge_count(), 1);
 
         let expected_trx_nodes = vec![
             TransactionKey::try_from(FUNCTION_NAMES[0].to_string()).unwrap(),
             TransactionKey::try_from(FUNCTION_NAMES[1].to_string()).unwrap(),
             TransactionKey::try_from(FUNCTION_NAMES[2].to_string()).unwrap(),
         ];
-        let trx_nodes = transaction_graph
+        let trx_nodes = transactions
             .inner
             .node_indices()
-            .map(|node| transaction_graph.inner[node].clone())
+            .map(|node| transactions.inner[node].clone())
             .sorted()
             .collect::<Vec<_>>();
         assert_eq!(expected_trx_nodes, trx_nodes);
 
-        let edges: Vec<_> = transaction_graph.inner.edge_references().collect();
+        let edges: Vec<_> = transactions.inner.edge_references().collect();
         assert_eq!(edges.len(), 1);
         let edge = edges[0];
-        let source = &transaction_graph.inner[edge.source()];
+        let source = &transactions.inner[edge.source()];
         assert_eq!(
             *source,
             TransactionKey::try_from(FUNCTION_NAMES[0].to_string()).unwrap()
         );
-        let target = &transaction_graph.inner[edge.target()];
+        let target = &transactions.inner[edge.target()];
         assert_eq!(
             *target,
             TransactionKey::try_from(FUNCTION_NAMES[1].to_string()).unwrap()
         );
 
         let transaction_by = TestTransactionBy::Single;
-        let transaction_graph = PartialGraph::transaction_graph(&graph, &transaction_by).unwrap();
-        assert_eq!(transaction_graph.inner.node_count(), 1);
-        assert_eq!(transaction_graph.inner.edge_count(), 0);
+        let transactions = Projection::transactions(&graph, &transaction_by).unwrap();
+        assert_eq!(transactions.inner.node_count(), 1);
+        assert_eq!(transactions.inner.edge_count(), 0);
 
-        let node = transaction_graph.inner.node_indices().next().unwrap();
-        let node = &transaction_graph.inner[node];
+        let node = transactions.inner.node_indices().next().unwrap();
+        let node = &transactions.inner[node];
         assert_eq!(*node, TransactionKey::try_from("S").unwrap());
     }
 }

@@ -67,14 +67,14 @@ pub fn build_logical_function_runs(
     execution_plan: &ExecutionPlan,
     execution: &ExecutionInsertDB,
 ) -> Result<Vec<LogicalFunctionRunInsertDB>, TdError> {
-    let main_trigger = execution_plan.main_trigger();
+    let start = execution_plan.trigger();
     let roots = execution_plan.transaction_roots();
     execution_plan
         .triggered_functions()
         .into_iter()
         .map(|f| {
             let transaction = transaction_map.get(&roots.key(transaction_by, f)?)?;
-            let trigger = if f == main_trigger {
+            let trigger = if f == start {
                 Trigger::Manual
             } else {
                 Trigger::Dependency
@@ -115,7 +115,7 @@ pub fn build_logical_table_data_versions(
         .collect();
 
     execution_plan
-        .table_function_output_versions()
+        .outputs()
         .iter()
         .map(|(t, f, edge)| {
             let transaction = transaction_map.get(&roots.key(transaction_by, f)?)?;
@@ -164,10 +164,7 @@ pub fn build_logical_function_run_inputs(
         .collect();
     let roots = resolved_plan.transaction_roots();
 
-    let mut edges: Vec<_> = resolved_plan
-        .function_table_input_versions()
-        .into_iter()
-        .collect();
+    let mut edges: Vec<_> = resolved_plan.inputs().into_iter().collect();
     edges.sort_by_key(|(function, _, edge)| (function.function_id, edge.dependency_pos().cloned()));
 
     let mut next_input_idx: i32 = 0;

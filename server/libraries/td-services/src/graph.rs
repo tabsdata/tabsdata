@@ -5,14 +5,14 @@
 use itertools::{Either, Itertools};
 use std::collections::HashSet;
 use td_error::TdError;
-use td_execution::graph::TdGraph;
+use td_execution::graph::TopologyGraph;
 use td_objects::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
 use td_objects::dxo::graph::{GraphNode, GraphResponse};
 use td_objects::types::composed::TableVersions;
 
 /// A graph as the API serves it: nodes keyed by version, system tables told
 /// apart from user ones, and its relations in a stable order.
-pub async fn graph_response(graph: &TdGraph) -> Result<GraphResponse, TdError> {
+pub async fn graph_response(graph: &TopologyGraph) -> Result<GraphResponse, TdError> {
     let graph = graph
         .map(
             |node| async move {

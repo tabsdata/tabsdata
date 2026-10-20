@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-pub use plan::{ExecutionPlan, ResolvedExecutionPlan};
+pub use execution_plan::{ExecutionPlan, ResolvedExecutionPlan};
 pub use recovery_config::{
     DispatchGrace, MaxCompletionTime, MaxPreRunningTime, MaxRecoveriesPerTick, MaxRunningTime,
     RecoveryConfig, RecoveryTickTimeout, StuckRequestedTimeout,
@@ -15,9 +15,9 @@ pub use te_execution::plan::ExecutionScope;
 pub use te_execution::transaction::TransactionBy;
 pub use version_resolver::{VersionResolver, VersionResolverError};
 
+mod execution_plan;
 pub mod graph;
 mod knob;
-mod plan;
 mod recovery_config;
 mod scheduler_config;
 mod scheduler_notify;
