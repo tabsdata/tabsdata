@@ -4,16 +4,19 @@
 
 use std::collections::BTreeMap;
 
+use k8s_openapi::api::apps::v1::Deployment;
+use k8s_openapi::api::batch::v1::{CronJob, Job};
+use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 use kube::api::Patch;
 use kube::core::{Expression, Selector};
 
 use crate::base::constants::{
-    PART_OF_LABEL, PART_OF_TABSDATA, POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA,
-    POD_YAML_WORKER_LABEL, TD_VERSION_LABEL, TIER_LABEL,
+    PART_OF_LABEL, PART_OF_TABSDATA, POD_LOG_ID_LABEL, POD_YAML_FIELD_LABELS,
+    POD_YAML_FIELD_METADATA, POD_YAML_WORKER_LABEL, TD_VERSION_LABEL, TIER_LABEL,
 };
 use crate::base::error::kubernetes::{KubeStampError, KubernetesError};
-use crate::base::labels::LABEL_WORKER_ID;
+use crate::base::labels::{LABEL_VALUE_MAX_LENGTH, LABEL_WORKER_ID};
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::tier::Tier;
 use crate::runtime::instance::version::instance_version;
@@ -50,6 +53,51 @@ pub async fn label_tabsdata(
         add_label(metadata, label.key, label.value);
     }
     Ok(())
+}
+
+pub fn label_pod_log_id_of_pod(pod: &mut Pod) {
+    label_pod_log_id(&mut pod.metadata.labels, pod.metadata.name.as_deref());
+}
+
+pub fn label_pod_log_id_of_job(job: &mut Job) {
+    if let Some(spec) = job.spec.as_mut() {
+        let template = spec
+            .template
+            .metadata
+            .get_or_insert_with(ObjectMeta::default);
+        label_pod_log_id(&mut template.labels, job.metadata.name.as_deref());
+    }
+}
+
+pub fn label_pod_log_id_of_cronjob(cronjob: &mut CronJob) {
+    if let Some(spec) = cronjob.spec.job_template.spec.as_mut() {
+        let template = spec
+            .template
+            .metadata
+            .get_or_insert_with(ObjectMeta::default);
+        label_pod_log_id(&mut template.labels, cronjob.metadata.name.as_deref());
+    }
+}
+
+pub fn label_pod_log_id_of_deployment(deployment: &mut Deployment) {
+    if let Some(spec) = deployment.spec.as_mut() {
+        let template = spec
+            .template
+            .metadata
+            .get_or_insert_with(ObjectMeta::default);
+        label_pod_log_id(&mut template.labels, deployment.metadata.name.as_deref());
+    }
+}
+
+// A name too long for a label value is left unlabeled: the pod runner then
+// files the pod under its own name.
+fn label_pod_log_id(labels: &mut Option<BTreeMap<String, String>>, name: Option<&str>) {
+    let Some(name) = name.filter(|name| name.len() <= LABEL_VALUE_MAX_LENGTH) else {
+        return;
+    };
+    labels
+        .get_or_insert_with(BTreeMap::new)
+        .insert(POD_LOG_ID_LABEL.to_owned(), name.to_owned());
 }
 
 pub fn version_patch(version: &str) -> Patch<serde_json::Value> {

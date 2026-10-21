@@ -13,7 +13,8 @@ use crate::base::constants::{HTTP_STATUS_NOT_FOUND, KUBE_SPEC_FIELD, KUBE_SPEC_F
 use crate::base::error::kubernetes::{KubeCronJobError, KubernetesError};
 use crate::kube::api::domain::companions::{as_one_unit, attach_companions};
 use crate::kube::api::domain::labels::{
-    label_tabsdata, tabsdata_non_ephemeral_selector, tabsdata_selector, tabsdata_worker_selector,
+    label_pod_log_id_of_cronjob, label_tabsdata, tabsdata_non_ephemeral_selector,
+    tabsdata_selector, tabsdata_worker_selector,
 };
 use crate::kube::api::support::owner::owner_ref_for_cronjob;
 use crate::kube::api::support::wait::{AwaitGoal, AwaitPatience, await_condition_with_patience};
@@ -31,6 +32,7 @@ pub async fn create_cronjob(
     let api: Api<CronJob> = Api::namespaced(context.client().clone(), context.namespace());
     let mut cronjob = cronjob.clone();
     label_tabsdata(context, &mut cronjob.metadata, &[], stamp).await?;
+    label_pod_log_id_of_cronjob(&mut cronjob);
     let companions = !configmaps.is_empty() || !secrets.is_empty() || latch.is_some();
     if !companions {
         return api
