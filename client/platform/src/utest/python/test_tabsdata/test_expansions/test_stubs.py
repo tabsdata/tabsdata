@@ -18,6 +18,7 @@ NATIVE_MODULES = native_modules()
 @pytest.mark.pyo3
 def test_native_modules_are_registered():
     assert {
+        "tabsdata.expansions.foundation.graphics",
         "tabsdata.expansions.foundation.symbols",
         "tabsdata.expansions.foundation.watashi",
         "tabsdata.expansions.tableframe.features.grok.engine",

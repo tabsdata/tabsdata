@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+pub mod graphics;
 pub mod symbols;
 pub mod watashi;
 
@@ -20,6 +21,7 @@ const ROOT_MODULE_PATH: &str = "tabsdata.expansions.foundation";
 
 const WATASHI_MODULE_NAME: &str = "watashi";
 const SYMBOLS_MODULE_NAME: &str = "symbols";
+const GRAPHICS_MODULE_NAME: &str = "graphics";
 
 #[pymodule]
 fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -55,6 +57,12 @@ fn _foundation(module: &Bound<'_, PyModule>) -> PyResult<()> {
     symbols_module.add("EXCEPTION_FILE", symbols::EXCEPTION_FILE)?;
 
     symbols_module.add_class::<symbols::TableType>()?;
+
+    let graphics_module = register_py_module(GRAPHICS_MODULE_NAME, &root_module, py)?;
+
+    graphics_module.add_function(wrap_pyfunction!(graphics::render, &graphics_module)?)?;
+
+    graphics_module.add_class::<graphics::ImageProtocol>()?;
 
     Ok(())
 }

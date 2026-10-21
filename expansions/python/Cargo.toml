@@ -105,8 +105,15 @@ path = "../../server/libraries/td-error"
 
 # External dependencies
 
+[workspace.dependencies.base64]
+version = "0.23.1"
+
 [workspace.dependencies.chrono]
 version = "0.4.45"
+
+[workspace.dependencies.image]
+version = "0.25.10"
+default-features = false
 
 [workspace.dependencies.libc]
 version = "0.2.191"
@@ -123,6 +130,14 @@ version = "0.23.1"
 
 [workspace.dependencies.pyo3-stub-gen-derive]
 version = "0.23.1"
+
+[workspace.dependencies.ratatui]
+version = "0.30.2"
+default-features = false
+
+[workspace.dependencies.ratatui-image]
+version = "11.1.0"
+default-features = false
 
 [workspace.dependencies.toml]
 version = "1.1.8"
