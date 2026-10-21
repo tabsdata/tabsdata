@@ -159,6 +159,7 @@ impl AdminPool {
     /// Create a schema owned by the connected (superuser) role — the test
     /// factories' path, free of any cluster-global `CREATE ROLE` so tests
     /// provision in parallel. Idempotent.
+    #[cfg(any(test, feature = "test-utils"))]
     pub(crate) async fn create_schema(&self, schema: &str) -> Result<(), DbError> {
         execute_batch_tx(
             &self.pool,
@@ -168,6 +169,7 @@ impl AdminPool {
     }
 
     /// Drop a schema and everything in it, leaving roles untouched.
+    #[cfg(any(test, feature = "test-utils"))]
     pub(crate) async fn drop_schema_cascade(&self, schema: &str) -> Result<(), DbError> {
         execute_batch_tx(
             &self.pool,
