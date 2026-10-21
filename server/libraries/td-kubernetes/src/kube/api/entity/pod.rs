@@ -26,8 +26,8 @@ use crate::base::constants::{
 use crate::base::error::kubernetes::{KubePodError, KubernetesError};
 use crate::kube::api::domain::companions::{as_one_unit, attach_companions};
 use crate::kube::api::domain::labels::{
-    LabelFilter, label_pod_log_id_of_pod, label_tabsdata, tabsdata_ephemeral_selector,
-    tabsdata_non_ephemeral_selector, tabsdata_selector, tabsdata_worker_selector,
+    LabelFilter, label_tabsdata, tabsdata_ephemeral_selector, tabsdata_non_ephemeral_selector,
+    tabsdata_selector, tabsdata_worker_selector,
 };
 use crate::kube::api::support::owner::owner_ref_for_pod;
 use crate::kube::api::support::wait::{AwaitGoal, AwaitPatience, await_condition_with_patience};
@@ -99,8 +99,7 @@ pub async fn create_pod(
 ) -> Result<Pod, KubernetesError> {
     let api: Api<Pod> = Api::namespaced(context.client().clone(), context.namespace());
     let mut pod = pod.clone();
-    label_tabsdata(context, &mut pod.metadata, &[], stamp).await?;
-    label_pod_log_id_of_pod(&mut pod);
+    label_tabsdata(context, &mut pod, &[], stamp).await?;
     let companions = !configmaps.is_empty() || !secrets.is_empty() || latch.is_some();
     if !companions {
         return api

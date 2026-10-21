@@ -124,7 +124,7 @@ async fn prepare_configmap(
     stamp: Option<&str>,
 ) -> Result<ConfigMap, KubernetesError> {
     stamp_owner(&mut configmap.metadata, owner);
-    label_tabsdata(context, &mut configmap.metadata, &[], stamp).await?;
+    label_tabsdata(context, &mut configmap, &[], stamp).await?;
     Ok(configmap)
 }
 
@@ -135,7 +135,7 @@ async fn prepare_secret(
     stamp: Option<&str>,
 ) -> Result<Secret, KubernetesError> {
     stamp_owner(&mut secret.metadata, owner);
-    label_tabsdata(context, &mut secret.metadata, &[], stamp).await?;
+    label_tabsdata(context, &mut secret, &[], stamp).await?;
     Ok(secret)
 }
 

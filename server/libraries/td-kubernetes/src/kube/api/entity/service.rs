@@ -18,7 +18,7 @@ pub async fn upsert_service(
 ) -> Result<Service, KubernetesError> {
     let api: Api<Service> = Api::namespaced(context.client().clone(), context.namespace());
     let mut service = service.clone();
-    label_tabsdata(context, &mut service.metadata, &[], stamp).await?;
+    label_tabsdata(context, &mut service, &[], stamp).await?;
     let name = service
         .metadata
         .name

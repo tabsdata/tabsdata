@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::base::constants::{LEGACY_VERSION, TD_VERSION_LABEL};
+use crate::base::constants::{LEGACY_VERSION, VERSION_LABEL};
 use crate::base::error::upgrade::UpgradeError;
 use crate::core::system::exit::CommandResult;
 use crate::kube::context::KubeContext;
@@ -69,7 +69,7 @@ pub async fn inspect(
     };
     let product_version = product_version()?;
     let instance_version = manifest.version.clone();
-    let label = read.labels.get(TD_VERSION_LABEL).cloned();
+    let label = read.labels.get(VERSION_LABEL).cloned();
 
     let standing = stand(&manifest, lock.as_ref(), label.as_deref(), &product_version);
     if let Standing::Upgrading { target, .. } = &standing

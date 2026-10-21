@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 use td_python::tabsdata::tabsdata_version;
 
-use crate::base::constants::{CONFIGMAP_TABSDATA_MANIFEST, TD_VERSION_LABEL};
+use crate::base::constants::{CONFIGMAP_TABSDATA_MANIFEST, VERSION_LABEL};
 use crate::base::error::manifest::ManifestError;
 use crate::core::system::exit::CommandResult;
 use crate::kube::api::entity::configmap::get_versioned_configmap;
@@ -22,7 +22,7 @@ pub struct InstanceManifest {
 
 impl InstanceManifest {
     pub fn stamp(&self) -> Option<&str> {
-        self.labels.get(TD_VERSION_LABEL).map(String::as_str)
+        self.labels.get(VERSION_LABEL).map(String::as_str)
     }
 }
 

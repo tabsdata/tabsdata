@@ -454,8 +454,8 @@ pub const SECRET_GENERATOR_SERVICE_TOKEN: &str = "service_token";
 
 pub const PART_OF_LABEL: &str = concatcp!(KUBERNETES_LABEL_NAMESPACE, "part-of");
 pub const PART_OF_TABSDATA: &str = "tabsdata";
-pub const TD_VERSION_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "version");
-pub const POD_LOG_ID_LABEL: &str = "pod.log.id";
+pub const VERSION_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "version");
+pub const LOG_ID_LABEL: &str = concatcp!(TABSDATA_LABEL_NAMESPACE, "log-id");
 pub const LEGACY_VERSION: &str = "2.0.0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

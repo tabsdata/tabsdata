@@ -11,7 +11,7 @@ use kube::api::{DeleteParams, ListParams, PatchParams, PostParams};
 use tracing::debug;
 
 use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, TD_VERSION_LABEL,
+    CONFIGMAP_FAMILY_LABEL, HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, VERSION_LABEL,
 };
 use crate::base::error::kubernetes::{KubeConfigMapError, KubernetesError};
 use crate::kube::api::domain::labels::{
@@ -32,20 +32,19 @@ pub async fn create_configmap(
     stamp: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    let mut metadata = ObjectMeta {
-        name: Some(name.to_owned()),
-        namespace: Some(context.namespace().to_owned()),
-        owner_references: owner.map(|reference| vec![reference]),
-        labels: Some(labels),
-        annotations: Some(annotations),
-        ..Default::default()
-    };
-    label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
-    let configmap = ConfigMap {
-        metadata,
+    let mut configmap = ConfigMap {
+        metadata: ObjectMeta {
+            name: Some(name.to_owned()),
+            namespace: Some(context.namespace().to_owned()),
+            owner_references: owner.map(|reference| vec![reference]),
+            labels: Some(labels),
+            annotations: Some(annotations),
+            ..Default::default()
+        },
         data: Some(data),
         ..Default::default()
     };
+    label_tabsdata(context, &mut configmap, &family_labels(family), stamp).await?;
     api.create(&PostParams::default(), &configmap)
         .await
         .map(|_| ())
@@ -94,21 +93,20 @@ pub async fn replace_configmap(
             .into());
         }
     };
-    let mut metadata = ObjectMeta {
-        name: Some(name.to_owned()),
-        namespace: Some(context.namespace().to_owned()),
-        resource_version: existing.metadata.resource_version,
-        owner_references: existing.metadata.owner_references,
-        labels: Some(labels),
-        annotations: Some(annotations),
-        ..Default::default()
-    };
-    label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
-    let configmap = ConfigMap {
-        metadata,
+    let mut configmap = ConfigMap {
+        metadata: ObjectMeta {
+            name: Some(name.to_owned()),
+            namespace: Some(context.namespace().to_owned()),
+            resource_version: existing.metadata.resource_version,
+            owner_references: existing.metadata.owner_references,
+            labels: Some(labels),
+            annotations: Some(annotations),
+            ..Default::default()
+        },
         data: Some(data),
         ..Default::default()
     };
+    label_tabsdata(context, &mut configmap, &family_labels(family), stamp).await?;
     api.replace(name, &PostParams::default(), &configmap)
         .await
         .map(|_| ())
@@ -136,21 +134,20 @@ pub async fn upsert_configmap(
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
     match api.get_opt(name).await {
         Ok(Some(existing)) => {
-            let mut metadata = ObjectMeta {
-                name: Some(name.to_owned()),
-                namespace: Some(context.namespace().to_owned()),
-                resource_version: existing.metadata.resource_version,
-                owner_references: existing.metadata.owner_references,
-                labels: Some(labels),
-                annotations: Some(annotations),
-                ..Default::default()
-            };
-            label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
-            let configmap = ConfigMap {
-                metadata,
+            let mut configmap = ConfigMap {
+                metadata: ObjectMeta {
+                    name: Some(name.to_owned()),
+                    namespace: Some(context.namespace().to_owned()),
+                    resource_version: existing.metadata.resource_version,
+                    owner_references: existing.metadata.owner_references,
+                    labels: Some(labels),
+                    annotations: Some(annotations),
+                    ..Default::default()
+                },
                 data: Some(data),
                 ..Default::default()
             };
+            label_tabsdata(context, &mut configmap, &family_labels(family), stamp).await?;
             api.replace(name, &PostParams::default(), &configmap)
                 .await
                 .map(|_| ())
@@ -164,20 +161,19 @@ pub async fn upsert_configmap(
                 })
         }
         Ok(None) => {
-            let mut metadata = ObjectMeta {
-                name: Some(name.to_owned()),
-                namespace: Some(context.namespace().to_owned()),
-                owner_references: owner.map(|reference| vec![reference]),
-                labels: Some(labels),
-                annotations: Some(annotations),
-                ..Default::default()
-            };
-            label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
-            let configmap = ConfigMap {
-                metadata,
+            let mut configmap = ConfigMap {
+                metadata: ObjectMeta {
+                    name: Some(name.to_owned()),
+                    namespace: Some(context.namespace().to_owned()),
+                    owner_references: owner.map(|reference| vec![reference]),
+                    labels: Some(labels),
+                    annotations: Some(annotations),
+                    ..Default::default()
+                },
                 data: Some(data),
                 ..Default::default()
             };
+            label_tabsdata(context, &mut configmap, &family_labels(family), stamp).await?;
             api.create(&PostParams::default(), &configmap)
                 .await
                 .map(|_| ())
@@ -298,19 +294,18 @@ pub async fn replace_configmap_at_version(
     stamp: Option<&str>,
 ) -> Result<bool, KubernetesError> {
     let api: Api<ConfigMap> = Api::namespaced(context.client().clone(), context.namespace());
-    let mut metadata = ObjectMeta {
-        name: Some(name.to_owned()),
-        namespace: Some(context.namespace().to_owned()),
-        resource_version,
-        labels: Some(labels),
-        ..Default::default()
-    };
-    label_tabsdata(context, &mut metadata, &[], stamp).await?;
-    let configmap = ConfigMap {
-        metadata,
+    let mut configmap = ConfigMap {
+        metadata: ObjectMeta {
+            name: Some(name.to_owned()),
+            namespace: Some(context.namespace().to_owned()),
+            resource_version,
+            labels: Some(labels),
+            ..Default::default()
+        },
         data: Some(data),
         ..Default::default()
     };
+    label_tabsdata(context, &mut configmap, &[], stamp).await?;
     match api.replace(name, &PostParams::default(), &configmap).await {
         Ok(_) => Ok(true),
         Err(kube::Error::Api(error)) if error.code == HTTP_STATUS_CONFLICT => Ok(false),
@@ -398,7 +393,7 @@ pub async fn list_configmap_stamps(
             let stamp = configmap
                 .metadata
                 .labels
-                .and_then(|labels| labels.get(TD_VERSION_LABEL).cloned());
+                .and_then(|labels| labels.get(VERSION_LABEL).cloned());
             Some((name, stamp))
         })
         .collect();

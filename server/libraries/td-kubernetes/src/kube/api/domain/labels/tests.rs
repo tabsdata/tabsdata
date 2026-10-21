@@ -2,7 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use indoc::indoc;
+
 use super::*;
+use crate::base::constants::POD_YAML_COMPONENT_LABEL;
 
 #[test]
 fn non_ephemeral_selector_excludes_ephemeral_tier() {
@@ -36,11 +39,11 @@ fn named(name: &str) -> ObjectMeta {
     }
 }
 
-fn pod_log_id(metadata: Option<&ObjectMeta>) -> Option<&str> {
+fn log_id(metadata: Option<&ObjectMeta>) -> Option<&str> {
     metadata?
         .labels
         .as_ref()?
-        .get(POD_LOG_ID_LABEL)
+        .get(LOG_ID_LABEL)
         .map(String::as_str)
 }
 
@@ -50,78 +53,128 @@ fn a_pod_is_labeled_with_its_own_name() {
         metadata: named("srv-database"),
         ..Pod::default()
     };
-    label_pod_log_id_of_pod(&mut pod);
-    assert_eq!(pod_log_id(Some(&pod.metadata)), Some("srv-database"));
+    label_log_id(&mut pod).expect("the name fits a label value");
+    assert_eq!(log_id(Some(&pod.metadata)), Some("srv-database"));
 }
 
 #[test]
 fn a_job_labels_its_pod_template_with_the_job_name() {
-    let mut job: Job = serde_json::from_value(serde_json::json!({
-        "metadata": {"name": "td-function-transformer-abc"},
-        "spec": {"template": {"spec": {"containers": []}}},
-    }))
-    .unwrap();
-    label_pod_log_id_of_job(&mut job);
-    let template = job.spec.as_ref().unwrap().template.metadata.as_ref();
-    assert_eq!(pod_log_id(template), Some("td-function-transformer-abc"));
-    assert_eq!(pod_log_id(Some(&job.metadata)), None);
+    let mut job: Job = serde_yaml::from_str(indoc! {"
+        metadata:
+          name: td-function-transformer-abc
+        spec:
+          template:
+            spec:
+              containers: []
+    "})
+    .expect("the job parses");
+    label_log_id(&mut job).expect("the name fits a label value");
+    let template = job
+        .spec
+        .as_ref()
+        .expect("the job has a spec")
+        .template
+        .metadata
+        .as_ref();
+    assert_eq!(log_id(template), Some("td-function-transformer-abc"));
+    assert_eq!(log_id(Some(&job.metadata)), None);
 }
 
 #[test]
 fn a_cronjob_labels_the_pod_template_of_its_job_template_with_the_cronjob_name() {
-    let mut cronjob: CronJob = serde_json::from_value(serde_json::json!({
-        "metadata": {"name": "td-cron-publisher-abc"},
-        "spec": {
-            "schedule": "* * * * *",
-            "jobTemplate": {
-                "metadata": {"labels": {"app.kubernetes.io/component": "cron-publisher"}},
-                "spec": {"template": {
-                    "metadata": {"labels": {"app.kubernetes.io/component": "cron-publisher"}},
-                    "spec": {"containers": []},
-                }},
-            },
-        },
-    }))
-    .unwrap();
-    label_pod_log_id_of_cronjob(&mut cronjob);
-    let job_spec = cronjob.spec.job_template.spec.as_ref().unwrap();
+    let mut cronjob: CronJob = serde_yaml::from_str(indoc! {r#"
+        metadata:
+          name: td-cron-publisher-abc
+        spec:
+          schedule: "* * * * *"
+          jobTemplate:
+            metadata:
+              labels:
+                app.kubernetes.io/component: cron-publisher
+            spec:
+              template:
+                metadata:
+                  labels:
+                    app.kubernetes.io/component: cron-publisher
+                spec:
+                  containers: []
+    "#})
+    .expect("the cronjob parses");
+    label_log_id(&mut cronjob).expect("the name fits a label value");
+    let job_spec = cronjob
+        .spec
+        .job_template
+        .spec
+        .as_ref()
+        .expect("the job template has a spec");
     let template = job_spec.template.metadata.as_ref();
-    assert_eq!(pod_log_id(template), Some("td-cron-publisher-abc"));
-    assert_eq!(
-        template.unwrap().labels.as_ref().unwrap()["app.kubernetes.io/component"],
-        "cron-publisher"
-    );
-    assert_eq!(pod_log_id(Some(&cronjob.metadata)), None);
+    assert_eq!(log_id(template), Some("td-cron-publisher-abc"));
+    let labels = template
+        .and_then(|metadata| metadata.labels.as_ref())
+        .expect("the template has labels");
+    assert_eq!(labels[POD_YAML_COMPONENT_LABEL], "cron-publisher");
+    assert_eq!(log_id(Some(&cronjob.metadata)), None);
 }
 
 #[test]
 fn a_deployment_labels_its_pod_template_with_the_deployment_name() {
-    let mut deployment: Deployment = serde_json::from_value(serde_json::json!({
-        "metadata": {"name": "srv-apiserver"},
-        "spec": {
-            "selector": {},
-            "template": {"spec": {"containers": []}},
-        },
-    }))
-    .unwrap();
-    label_pod_log_id_of_deployment(&mut deployment);
-    let template = deployment.spec.as_ref().unwrap().template.metadata.as_ref();
-    assert_eq!(pod_log_id(template), Some("srv-apiserver"));
+    let mut deployment: Deployment = serde_yaml::from_str(indoc! {"
+        metadata:
+          name: srv-apiserver
+        spec:
+          selector: {}
+          template:
+            spec:
+              containers: []
+    "})
+    .expect("the deployment parses");
+    label_log_id(&mut deployment).expect("the name fits a label value");
+    let spec = deployment.spec.as_ref().expect("the deployment has a spec");
+    assert_eq!(
+        log_id(spec.template.metadata.as_ref()),
+        Some("srv-apiserver")
+    );
 }
 
 #[test]
-fn a_name_too_long_for_a_label_value_is_not_labeled() {
+fn a_name_as_long_as_a_label_value_allows_is_labeled() {
+    let name = "a".repeat(LABEL_VALUE_MAX_LENGTH);
+    let mut pod = Pod {
+        metadata: named(&name),
+        ..Pod::default()
+    };
+    label_log_id(&mut pod).expect("the name fits a label value");
+    assert_eq!(log_id(Some(&pod.metadata)), Some(name.as_str()));
+}
+
+#[test]
+fn a_name_too_long_for_a_label_value_is_rejected() {
     let mut pod = Pod {
         metadata: named(&"a".repeat(LABEL_VALUE_MAX_LENGTH + 1)),
         ..Pod::default()
     };
-    label_pod_log_id_of_pod(&mut pod);
-    assert_eq!(pod_log_id(Some(&pod.metadata)), None);
+    let error = label_log_id(&mut pod).expect_err("the name is too long for a label value");
+    assert!(
+        matches!(error, KubeStampError::LabelValueTooLong { length, maximum, .. }
+            if length == LABEL_VALUE_MAX_LENGTH + 1 && maximum == LABEL_VALUE_MAX_LENGTH),
+        "{error}"
+    );
+    assert_eq!(log_id(Some(&pod.metadata)), None);
 }
 
 #[test]
 fn an_unnamed_pod_is_not_labeled() {
     let mut pod = Pod::default();
-    label_pod_log_id_of_pod(&mut pod);
-    assert_eq!(pod_log_id(Some(&pod.metadata)), None);
+    label_log_id(&mut pod).expect("an unnamed pod is skipped");
+    assert_eq!(log_id(Some(&pod.metadata)), None);
+}
+
+#[test]
+fn a_resource_that_runs_no_pods_is_not_labeled() {
+    let mut configmap = ConfigMap {
+        metadata: named("td-configmap"),
+        ..ConfigMap::default()
+    };
+    label_log_id(&mut configmap).expect("a configmap is skipped");
+    assert_eq!(log_id(Some(&configmap.metadata)), None);
 }

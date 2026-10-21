@@ -14,7 +14,7 @@ use std::fmt::Debug;
 
 use crate::base::constants::HTTP_STATUS_NOT_FOUND;
 use crate::base::error::kubernetes::{KubeRbacError, KubernetesError};
-use crate::kube::api::domain::labels::{LabelFilter, label_tabsdata, tabsdata_selector};
+use crate::kube::api::domain::labels::{LabelFilter, Labeled, label_tabsdata, tabsdata_selector};
 use crate::kube::context::KubeContext;
 
 fn resource_name<K>(resource: &K) -> Result<String, KubeRbacError>
@@ -36,6 +36,7 @@ async fn upsert<K>(
 ) -> Result<K, KubernetesError>
 where
     K: Resource<DynamicType = (), Scope = NamespaceResourceScope>
+        + Labeled
         + Clone
         + Debug
         + Serialize
@@ -43,7 +44,7 @@ where
 {
     let api: Api<K> = Api::namespaced(context.client().clone(), context.namespace());
     let mut resource = resource.clone();
-    label_tabsdata(context, resource.meta_mut(), &[], stamp).await?;
+    label_tabsdata(context, &mut resource, &[], stamp).await?;
     let name = resource_name(&resource)?;
     let namespace = context.namespace().to_owned();
     match api.get_opt(&name).await {

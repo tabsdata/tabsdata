@@ -18,7 +18,7 @@ pub async fn upsert_disruption_budget(
     let api: Api<PodDisruptionBudget> =
         Api::namespaced(context.client().clone(), context.namespace());
     let mut budget = budget.clone();
-    label_tabsdata(context, &mut budget.metadata, &[], stamp).await?;
+    label_tabsdata(context, &mut budget, &[], stamp).await?;
     let name = budget
         .metadata
         .name

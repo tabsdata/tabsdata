@@ -12,7 +12,7 @@ use kube::api::{DeleteParams, ListParams, PatchParams, PostParams};
 use tracing::debug;
 
 use crate::base::constants::{
-    HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, SECRET_FAMILY_LABEL, TD_VERSION_LABEL,
+    HTTP_STATUS_CONFLICT, HTTP_STATUS_NOT_FOUND, SECRET_FAMILY_LABEL, VERSION_LABEL,
 };
 use crate::base::error::kubernetes::{KubeSecretError, KubernetesError};
 use crate::kube::api::domain::labels::{
@@ -32,20 +32,19 @@ pub async fn create_secret(
     stamp: Option<&str>,
 ) -> Result<(), KubernetesError> {
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
-    let mut metadata = ObjectMeta {
-        name: Some(name.to_owned()),
-        namespace: Some(context.namespace().to_owned()),
-        owner_references: owner.map(|reference| vec![reference]),
-        labels: Some(labels),
-        annotations: Some(annotations),
-        ..Default::default()
-    };
-    label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
-    let secret = Secret {
-        metadata,
+    let mut secret = Secret {
+        metadata: ObjectMeta {
+            name: Some(name.to_owned()),
+            namespace: Some(context.namespace().to_owned()),
+            owner_references: owner.map(|reference| vec![reference]),
+            labels: Some(labels),
+            annotations: Some(annotations),
+            ..Default::default()
+        },
         data: Some(to_byte_strings(data)),
         ..Default::default()
     };
+    label_tabsdata(context, &mut secret, &family_labels(family), stamp).await?;
     api.create(&PostParams::default(), &secret)
         .await
         .map(|_| ())
@@ -94,21 +93,20 @@ pub async fn replace_secret(
             .into());
         }
     };
-    let mut metadata = ObjectMeta {
-        name: Some(name.to_owned()),
-        namespace: Some(context.namespace().to_owned()),
-        resource_version: existing.metadata.resource_version,
-        owner_references: existing.metadata.owner_references,
-        labels: Some(labels),
-        annotations: Some(annotations),
-        ..Default::default()
-    };
-    label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
-    let secret = Secret {
-        metadata,
+    let mut secret = Secret {
+        metadata: ObjectMeta {
+            name: Some(name.to_owned()),
+            namespace: Some(context.namespace().to_owned()),
+            resource_version: existing.metadata.resource_version,
+            owner_references: existing.metadata.owner_references,
+            labels: Some(labels),
+            annotations: Some(annotations),
+            ..Default::default()
+        },
         data: Some(to_byte_strings(data)),
         ..Default::default()
     };
+    label_tabsdata(context, &mut secret, &family_labels(family), stamp).await?;
     api.replace(name, &PostParams::default(), &secret)
         .await
         .map(|_| ())
@@ -136,21 +134,20 @@ pub async fn upsert_secret(
     let api: Api<Secret> = Api::namespaced(context.client().clone(), context.namespace());
     match api.get_opt(name).await {
         Ok(Some(existing)) => {
-            let mut metadata = ObjectMeta {
-                name: Some(name.to_owned()),
-                namespace: Some(context.namespace().to_owned()),
-                resource_version: existing.metadata.resource_version,
-                owner_references: existing.metadata.owner_references,
-                labels: Some(labels),
-                annotations: Some(annotations),
-                ..Default::default()
-            };
-            label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
-            let secret = Secret {
-                metadata,
+            let mut secret = Secret {
+                metadata: ObjectMeta {
+                    name: Some(name.to_owned()),
+                    namespace: Some(context.namespace().to_owned()),
+                    resource_version: existing.metadata.resource_version,
+                    owner_references: existing.metadata.owner_references,
+                    labels: Some(labels),
+                    annotations: Some(annotations),
+                    ..Default::default()
+                },
                 data: Some(to_byte_strings(data)),
                 ..Default::default()
             };
+            label_tabsdata(context, &mut secret, &family_labels(family), stamp).await?;
             api.replace(name, &PostParams::default(), &secret)
                 .await
                 .map(|_| ())
@@ -164,20 +161,19 @@ pub async fn upsert_secret(
                 })
         }
         Ok(None) => {
-            let mut metadata = ObjectMeta {
-                name: Some(name.to_owned()),
-                namespace: Some(context.namespace().to_owned()),
-                owner_references: owner.map(|reference| vec![reference]),
-                labels: Some(labels),
-                annotations: Some(annotations),
-                ..Default::default()
-            };
-            label_tabsdata(context, &mut metadata, &family_labels(family), stamp).await?;
-            let secret = Secret {
-                metadata,
+            let mut secret = Secret {
+                metadata: ObjectMeta {
+                    name: Some(name.to_owned()),
+                    namespace: Some(context.namespace().to_owned()),
+                    owner_references: owner.map(|reference| vec![reference]),
+                    labels: Some(labels),
+                    annotations: Some(annotations),
+                    ..Default::default()
+                },
                 data: Some(to_byte_strings(data)),
                 ..Default::default()
             };
+            label_tabsdata(context, &mut secret, &family_labels(family), stamp).await?;
             api.create(&PostParams::default(), &secret)
                 .await
                 .map(|_| ())
@@ -344,7 +340,7 @@ pub async fn stamp_secrets(
         let current = secret
             .metadata
             .labels
-            .and_then(|labels| labels.get(TD_VERSION_LABEL).cloned());
+            .and_then(|labels| labels.get(VERSION_LABEL).cloned());
         if current.as_deref() == Some(version) {
             continue;
         }
