@@ -21,6 +21,7 @@ import time
 from collections import deque
 from enum import Enum, auto
 from pathlib import Path
+from typing import assert_never
 from urllib.parse import urlparse
 
 from tabsdatak.conn.stream.stage._backend import StageBackend
@@ -126,7 +127,7 @@ def _enqueue_for_deletion(
         queue.append(f"{FILES_SUBDIR}/{external_id}")
 
 
-class _TriggerOutcome(Enum):
+class _ManifestOutcome(Enum):
     """Result of triggering one manifest, used by :func:`_trigger_pending`
     to decide whether to advance to the next manifest this poll.
 
@@ -145,24 +146,34 @@ class _TriggerOutcome(Enum):
     TRANSIENT = auto()  # Busy / other answer / connection error; retry next poll
 
 
-# The apiserver's ``TriggerOutcome`` (``td-objects/src/dxo/execution.rs``).
-_SERVER_OUTCOMES = {
-    "Scheduled": _TriggerOutcome.TRIGGERED,
-    "Busy": _TriggerOutcome.TRANSIENT,
-    "Held": _TriggerOutcome.HELD,
-    "Consumed": _TriggerOutcome.DEDUP_DELETED,
-}
+class TriggerOutcome(Enum):
+    """Mirror of the apiserver's ``TriggerOutcome`` (``td-objects``
+    ``typed_enum.rs``), one member per variant. A variant added there and
+    not here makes :func:`_trigger_outcome` raise ``MT_3`` instead of
+    guessing."""
+
+    SCHEDULED = "Scheduled"
+    BUSY = "Busy"
+    HELD = "Held"
+    CONSUMED = "Consumed"
 
 
-def _server_outcome(body: bytes | None) -> _TriggerOutcome | None:
+def _trigger_outcome(body: bytes | None) -> TriggerOutcome:
+    """The ``TriggerOutcome`` a 200 answer names. A 200 is the apiserver's
+    own answer, so a body without ``data.outcome`` (``MT_4``) or naming an
+    unknown outcome (``MT_3``) is a protocol mismatch, not a glitch."""
     try:
         answer = json.loads(body or b"")
     except ValueError:
-        return None
+        answer = None
     data = answer.get("data") if isinstance(answer, dict) else None
-    if not isinstance(data, dict):
-        return None
-    return _SERVER_OUTCOMES.get(data.get("outcome"))
+    outcome = data.get("outcome") if isinstance(data, dict) else None
+    if not isinstance(outcome, str):
+        raise RunManifestTriggerErrorCode.MT_4.exception(body=(body or b"")[:256])
+    try:
+        return TriggerOutcome(outcome)
+    except ValueError:
+        raise RunManifestTriggerErrorCode.MT_3.exception(outcome=outcome) from None
 
 
 def _trigger_one(
@@ -170,10 +181,10 @@ def _trigger_one(
     backend: StageBackend,
     trigger_request: HttpRequest,
     deletion_queue: deque[str],
-) -> _TriggerOutcome:
+) -> _ManifestOutcome:
     """POST fn_trigger for one manifest; classify the response.
 
-    Outcomes (see :class:`_TriggerOutcome`):
+    Outcomes (see :class:`_ManifestOutcome`):
       * ``Scheduled`` -- ``TRIGGERED``; manifest stays in place (a later
         iteration's ``Consumed`` is the cue to delete; see module
         docstring).
@@ -186,11 +197,16 @@ def _trigger_one(
         failed or on hold. Its run still needs the files (to start, or to be
         retried or recovered), so they stay; the next iteration asks again.
       * ``Busy`` -- ``TRANSIENT``; the function's execution is still running.
-      * Any other status or answer, or a connection error -- ``TRANSIENT``;
-        anomalous (bad request shape, auth failure, server error,
-        network blip). DO NOT delete: the publisher may never have seen
-        the manifest and deleting destroys evidence + data. Leave in
-        place; the next iteration retries.
+      * Any non-200 status or a connection error -- ``TRANSIENT``;
+        anomalous (bad request shape, auth failure, server error, network
+        blip). DO NOT delete: the publisher may never have seen the
+        manifest and deleting destroys evidence + data. Leave in place;
+        the next iteration retries.
+      * A 200 without a readable ``data.outcome`` -- raises ``MT_4``; a 200
+        naming an outcome this sidecar does not know -- raises ``MT_3``.
+        Both mean the apiserver and this sidecar disagree on the answer's
+        shape, which a retry cannot mend, so the sidecar stops rather than
+        keep or delete on a guess.
       * Malformed filename -- ``SKIPPED``; can't build the external_uid.
 
     Only ``Consumed`` deletes. A delete on any 4xx would let a 403 from a
@@ -208,7 +224,7 @@ def _trigger_one(
             manifest_path.name,
             exc,
         )
-        return _TriggerOutcome.SKIPPED
+        return _ManifestOutcome.SKIPPED
 
     # InternalExecutionRequest body shape. Mirrors the cron-trigger
     # caller at td-crontrigger/src/cli.rs:81-91, which is the only
@@ -238,49 +254,53 @@ def _trigger_one(
             manifest_path.name,
             exc,
         )
-        return _TriggerOutcome.TRANSIENT
+        return _ManifestOutcome.TRANSIENT
 
-    outcome = _server_outcome(response.body) if response.ok else None
-    if outcome is _TriggerOutcome.TRIGGERED:
-        logger.info(
-            "run-manifest-trigger: triggered manifest %s; "
-            "deferring deletion until its execution commits",
+    if not response.ok:
+        # 4xx / 5xx is anomalous -- leave the manifest in place so the
+        # next iteration retries, and log loudly at warning so the
+        # operator notices.
+        body_preview = response.body[:256] if response.body else b""
+        logger.warning(
+            "run-manifest-trigger: manifest %s got unexpected response "
+            "(status=%d); leaving in place for retry. Body: %r",
             manifest_path.name,
+            response.status,
+            body_preview,
         )
-        return outcome
-    if outcome is _TriggerOutcome.DEDUP_DELETED:
-        logger.info(
-            "run-manifest-trigger: manifest %s consumed; "
-            "its execution committed, queueing for deletion",
-            manifest_path.name,
-        )
-        _enqueue_for_deletion(manifest_path, external_uid, backend, deletion_queue)
-        return outcome
-    if outcome is _TriggerOutcome.HELD:
-        logger.info(
-            "run-manifest-trigger: manifest %s held by an execution that has "
-            "not committed; keeping it, retrying next poll",
-            manifest_path.name,
-        )
-        return outcome
-    if outcome is _TriggerOutcome.TRANSIENT:
-        logger.info(
-            "run-manifest-trigger: manifest %s: function busy; retrying next poll",
-            manifest_path.name,
-        )
-        return outcome
-    # Anything else (other 4xx, 5xx, etc.) is anomalous -- leave the
-    # manifest in place so the next iteration retries, and log loudly
-    # at warning so the operator notices. Body snippet helps debug.
-    body_preview = response.body[:256] if response.body else b""
-    logger.warning(
-        "run-manifest-trigger: manifest %s got unexpected response "
-        "(status=%d); leaving in place for retry. Body: %r",
-        manifest_path.name,
-        response.status,
-        body_preview,
-    )
-    return _TriggerOutcome.TRANSIENT
+        return _ManifestOutcome.TRANSIENT
+    trigger_outcome = _trigger_outcome(response.body)
+    match trigger_outcome:
+        case TriggerOutcome.SCHEDULED:
+            logger.info(
+                "run-manifest-trigger: triggered manifest %s; "
+                "deferring deletion until its execution commits",
+                manifest_path.name,
+            )
+            return _ManifestOutcome.TRIGGERED
+        case TriggerOutcome.CONSUMED:
+            logger.info(
+                "run-manifest-trigger: manifest %s consumed; "
+                "its execution committed, queueing for deletion",
+                manifest_path.name,
+            )
+            _enqueue_for_deletion(manifest_path, external_uid, backend, deletion_queue)
+            return _ManifestOutcome.DEDUP_DELETED
+        case TriggerOutcome.HELD:
+            logger.info(
+                "run-manifest-trigger: manifest %s held by an execution that "
+                "has not committed; keeping it, retrying next poll",
+                manifest_path.name,
+            )
+            return _ManifestOutcome.HELD
+        case TriggerOutcome.BUSY:
+            logger.info(
+                "run-manifest-trigger: manifest %s: function busy; retrying next poll",
+                manifest_path.name,
+            )
+            return _ManifestOutcome.TRANSIENT
+        case _:
+            assert_never(trigger_outcome)
 
 
 def _trigger_pending(
@@ -322,10 +342,17 @@ def _trigger_pending(
             outcome = _trigger_one(
                 manifest_path, backend, trigger_request, deletion_queue
             )
-            if outcome in (_TriggerOutcome.DEDUP_DELETED, _TriggerOutcome.SKIPPED):
-                cursor = next_cursor  # consumed / unusable -> advance past it
-                continue
-            return cursor  # TRIGGERED, HELD or TRANSIENT -> park
+            match outcome:
+                case _ManifestOutcome.DEDUP_DELETED | _ManifestOutcome.SKIPPED:
+                    cursor = next_cursor  # consumed / unusable -> advance past it
+                case (
+                    _ManifestOutcome.TRIGGERED
+                    | _ManifestOutcome.HELD
+                    | _ManifestOutcome.TRANSIENT
+                ):
+                    return cursor  # still waiting on its execution -> park
+                case _:
+                    assert_never(outcome)
     return cursor
 
 

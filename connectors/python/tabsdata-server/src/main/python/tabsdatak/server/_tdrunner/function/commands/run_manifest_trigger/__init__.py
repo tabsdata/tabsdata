@@ -24,6 +24,11 @@ The internal trigger answers 200 with a ``TriggerOutcome``
   * ``Consumed``  -- the execution holding this ``external_uid`` committed
     its trigger run: the batch is durably published, the **completion**
     signal. The manifest + files are safe to delete.
+  * Any other outcome name is one the apiserver grew after this sidecar
+    was written. Its meaning for the files is undecided, so the sidecar
+    exits with ``MT_3`` instead of keeping or deleting on a guess. A 200
+    without a readable outcome at all exits with ``MT_4`` for the same
+    reason: a retry cannot mend a changed answer shape.
 
 Main loop (per poll), driven by ``next_after(cursor)``:
 
@@ -68,17 +73,19 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     command,
 )
 from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.runner import (
+    TriggerOutcome,
     _build_trigger_request,
     _drain_until,
     _enqueue_for_deletion,
+    _ManifestOutcome,
     _trigger_one,
     _trigger_pending,
-    _TriggerOutcome,
     run,
 )
 
 __all__ = [
-    "_TriggerOutcome",
+    "TriggerOutcome",
+    "_ManifestOutcome",
     "_build_trigger_request",
     "_drain_until",
     "_enqueue_for_deletion",

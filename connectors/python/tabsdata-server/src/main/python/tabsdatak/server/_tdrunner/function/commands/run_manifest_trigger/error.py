@@ -31,6 +31,21 @@ class UnsupportedStageSchemeError(CommandRuntimeException):
     exit_code = 81
 
 
+class UnknownTriggerOutcomeError(CommandRuntimeException):
+    """``fn_trigger`` answered 200 with a ``TriggerOutcome`` this sidecar
+    does not know, so whether the manifest's files may be deleted is
+    undecided. The sidecar stops instead of guessing."""
+
+    exit_code = 82
+
+
+class MalformedTriggerAnswerError(CommandRuntimeException):
+    """``fn_trigger`` answered 200 with a body that carries no
+    ``data.outcome``: the answer's shape changed, which no retry mends."""
+
+    exit_code = 83
+
+
 class RunManifestTriggerErrorCode(ErrorCode):
     MT_1 = ErrorDef(
         BadRequestError,
@@ -44,3 +59,16 @@ class RunManifestTriggerErrorCode(ErrorCode):
         "only file:// is supported today",
     )
     # Raised when ``info.function_stage.uri`` is not file://.
+
+    MT_3 = ErrorDef(
+        UnknownTriggerOutcomeError,
+        "fn_trigger answered unknown outcome {outcome!r}: the apiserver's "
+        "TriggerOutcome has a variant this sidecar does not handle",
+    )
+    # Raised when a 200 names an outcome missing from ``TriggerOutcome``.
+
+    MT_4 = ErrorDef(
+        MalformedTriggerAnswerError,
+        "fn_trigger answered 200 without a data.outcome; body starts {body!r}",
+    )
+    # Raised when a 200 body is not JSON or lacks ``data.outcome``.

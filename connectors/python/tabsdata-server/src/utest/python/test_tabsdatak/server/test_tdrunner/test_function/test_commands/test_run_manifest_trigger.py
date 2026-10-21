@@ -9,7 +9,8 @@ Covers:
   * `_enqueue_for_deletion`: queues stage-relative rels (files + manifest +,
     on a local backend, the per-batch dir); empty slots; missing/malformed
   * `_trigger_one`: each server outcome / 4xx / 5xx / connection error /
-    malformed filename, returning the right `_TriggerOutcome`
+    malformed filename, returning the right `_ManifestOutcome`; a 200
+    without a readable outcome raises MT_4, an unknown outcome name MT_3
   * `_trigger_pending`: cursor walk -- advance only on Consumed (completed)
     / SKIPPED, park on Scheduled / Held / Busy / transient; honours the
     active flag
@@ -50,12 +51,14 @@ from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger import (
     _build_trigger_request,
     _drain_until,
     _enqueue_for_deletion,
+    _ManifestOutcome,
     _trigger_one,
     _trigger_pending,
-    _TriggerOutcome,
 )
 from tabsdatak.server._tdrunner.function.commands.run_manifest_trigger.error import (
+    MalformedTriggerAnswerError,
     RunManifestTriggerErrorCode,
+    UnknownTriggerOutcomeError,
     UnsupportedStageSchemeError,
 )
 
@@ -105,9 +108,11 @@ def _silent_handler(status: int, body: bytes = b""):
     return _H
 
 
-def _request_capturing_handler(status: int, capture: list[dict]):
+def _request_capturing_handler(capture: list[dict]):
     """Captures the request path, body, and Content-Type so tests can
-    assert on the wire shape (a JSON body, no query params)."""
+    assert on the wire shape (a JSON body, no query params); answers
+    ``Scheduled``."""
+    answer = _outcome("Scheduled")
 
     class _H(http.server.BaseHTTPRequestHandler):
         def do_POST(self):
@@ -118,9 +123,10 @@ def _request_capturing_handler(status: int, capture: list[dict]):
                 "body": body,
                 "content_type": self.headers.get("Content-Type"),
             })
-            self.send_response(status)
-            self.send_header("Content-Length", "0")
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(answer)))
             self.end_headers()
+            self.wfile.write(answer)
 
         def log_message(self, *_a, **_kw):
             pass
@@ -316,7 +322,7 @@ def test_trigger_one_scheduled_does_not_enqueue(tmp_path):
     with _server(_silent_handler(200, body=_outcome("Scheduled"))) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
-    assert outcome == _TriggerOutcome.TRIGGERED
+    assert outcome == _ManifestOutcome.TRIGGERED
     assert list(queue) == []
 
 
@@ -329,7 +335,7 @@ def test_trigger_one_consumed_enqueues(tmp_path):
     with _server(_silent_handler(200, body=_outcome("Consumed"))) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
-    assert outcome == _TriggerOutcome.DEDUP_DELETED
+    assert outcome == _ManifestOutcome.DEDUP_DELETED
     assert list(queue) == [
         slot0[0],
         f"manifests/{manifest.name}",
@@ -348,7 +354,43 @@ def test_trigger_one_held_does_not_enqueue(tmp_path):
     with _server(_silent_handler(200, body=_outcome("Held"))) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
-    assert outcome == _TriggerOutcome.HELD
+    assert outcome == _ManifestOutcome.HELD
+    assert list(queue) == []
+    assert manifest.exists()
+    assert (tmp_path / slot0[0]).exists()
+
+
+def test_trigger_one_unknown_outcome_raises_mt_3(tmp_path):
+    """An outcome name the sidecar does not know is a TriggerOutcome variant
+    added on the apiserver side: neither keep nor delete is decided, so the
+    sidecar stops instead of guessing."""
+    ts = _ts(345_000)
+    slot0 = _batch_files(ts, "a.parquet")
+    manifest = _write_a_manifest(tmp_path, [slot0], ts=ts)
+    queue: deque[str] = deque()
+    with _server(_silent_handler(200, body=_outcome("Parked"))) as base_url:
+        req = HttpRequest(url=base_url + "/fn_trigger", headers={})
+        with pytest.raises(UnknownTriggerOutcomeError, match="'Parked'"):
+            _trigger_one(manifest, _local_backend(tmp_path), req, queue)
+    assert list(queue) == []
+    assert manifest.exists()
+    assert (tmp_path / slot0[0]).exists()
+
+
+@pytest.mark.parametrize(
+    "body", [b"", b"not json", b'{"data": {}}', b'{"data": {"outcome": 7}}']
+)
+def test_trigger_one_unreadable_200_raises_mt_4(tmp_path, body):
+    """A 200 is the apiserver's own answer, so a body without a readable
+    data.outcome is a protocol mismatch a retry cannot mend."""
+    ts = _ts(345_000)
+    slot0 = _batch_files(ts, "a.parquet")
+    manifest = _write_a_manifest(tmp_path, [slot0], ts=ts)
+    queue: deque[str] = deque()
+    with _server(_silent_handler(200, body=body)) as base_url:
+        req = HttpRequest(url=base_url + "/fn_trigger", headers={})
+        with pytest.raises(MalformedTriggerAnswerError):
+            _trigger_one(manifest, _local_backend(tmp_path), req, queue)
     assert list(queue) == []
     assert manifest.exists()
     assert (tmp_path / slot0[0]).exists()
@@ -361,22 +403,21 @@ def test_trigger_one_5xx_does_not_enqueue(tmp_path):
     with _server(_silent_handler(503)) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
-    assert outcome == _TriggerOutcome.TRANSIENT
+    assert outcome == _ManifestOutcome.TRANSIENT
     assert list(queue) == []
 
 
-@pytest.mark.parametrize("answer", [400, 401, 403, 404, 410, 422, 425, 200, "Busy"])
+@pytest.mark.parametrize("answer", [400, 401, 403, 404, 410, 422, 425, "Busy"])
 def test_trigger_one_not_completed_does_not_enqueue(tmp_path, answer):
-    """Only Consumed (completed) deletes. Everything else -- including
-    Busy (still running) and an unreadable 200 -- leaves the manifest in
-    place."""
+    """Only Consumed (completed) deletes. Every non-200 and Busy (still
+    running) leaves the manifest in place for the next poll."""
     ts = _ts(345_000)
     manifest = _write_a_manifest(tmp_path, [_batch_files(ts, "a.parquet")], ts=ts)
     queue: deque[str] = deque()
     with _server(_sequenced_handler([answer], [])) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
-    assert outcome == _TriggerOutcome.TRANSIENT, f"answer={answer}"
+    assert outcome == _ManifestOutcome.TRANSIENT, f"answer={answer}"
     assert list(queue) == []
 
 
@@ -390,7 +431,7 @@ def test_trigger_one_connection_failure_does_not_enqueue(tmp_path):
     sock.close()
     req = HttpRequest(url=f"http://127.0.0.1:{port}/fn_trigger", headers={})
     outcome = _trigger_one(manifest, _local_backend(tmp_path), req, queue)
-    assert outcome == _TriggerOutcome.TRANSIENT
+    assert outcome == _ManifestOutcome.TRANSIENT
     assert list(queue) == []
 
 
@@ -400,7 +441,7 @@ def test_trigger_one_sends_execution_request_internal_body(tmp_path):
     external_id = external_uid_from_filename(manifest.name)
     queue: deque[str] = deque()
     capture: list[dict] = []
-    with _server(_request_capturing_handler(200, capture)) as base_url:
+    with _server(_request_capturing_handler(capture)) as base_url:
         req = HttpRequest(url=base_url + "/fn_trigger", headers={})
         _trigger_one(manifest, _local_backend(tmp_path), req, queue)
     assert len(capture) == 1
@@ -428,7 +469,7 @@ def test_trigger_one_malformed_filename_skipped_no_invoke(monkeypatch, tmp_path)
     )
     req = HttpRequest(url="http://x/", headers={})
     outcome = _trigger_one(bogus, _local_backend(tmp_path), req, queue)
-    assert outcome == _TriggerOutcome.SKIPPED
+    assert outcome == _ManifestOutcome.SKIPPED
     assert invoked == []
     assert list(queue) == []
 
