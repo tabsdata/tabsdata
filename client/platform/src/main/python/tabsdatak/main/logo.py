@@ -24,9 +24,11 @@ class Palette:
     border: str = ""
     brand: str = ""
     bright: str = ""
+    keyword: str = ""
     letter: str = ""
     rule: str = ""
     soft: str = ""
+    url: str = ""
 
 
 @dataclass(frozen=True)

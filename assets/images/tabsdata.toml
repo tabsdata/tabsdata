@@ -38,17 +38,19 @@ accent = "#34bbff"
 border = "#82c369"
 brand = "#59b359"
 bright = "#c8f0b4"
+keyword = "#ffc9c9"
 letter = "#ebebeb"
 rule = "#3f4a3a"
 soft = "#86cc70"
+url = "#f7ce46"
 
 [styles]
 arrow = "bright"
 command = "bold accent"
 heading = "bold brand"
-link = "accent"
+link = "url"
 strong = "bright"
-term = "bold accent"
+term = "keyword"
 text = "soft"
 
 [wordmark]

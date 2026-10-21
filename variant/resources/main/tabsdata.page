@@ -2,14 +2,21 @@
 # Copyright 2026 Tabsdata Inc.
 #
 [heading]tabsdata [/][strong]$release[/] [text]Open Source Edition[/]
-[text]Apache License 2.0 — http://www.apache.org/licenses/LICENSE-2.0[/]
+[text]Apache License 2.0 — [/][link]http://www.apache.org/licenses/LICENSE-2.0[/]
 ---
 [heading]Run it locally[/]
-[command]  tdkserver quickstart [/][arrow]$arrow [/][text]Start a local instance in one step[/]
-[command]  tdk login            [/][arrow]$arrow [/][text]Connect the client to it[/]
-[command]  tdk --help           [/][arrow]$arrow [/][text]See every client command[/]
-[text]  The instance listens on [/][link]http://127.0.0.1:2457[/][text].[/]
+
+[text]  Start a local instance in one step:[/]
+
+    [command]tdkserver quickstart[/]
+
+[text]  Once it is running:[/]
+
+[text]    Connect to the instance [/][arrow]$arrow [/][command]tdk login[/]
+[text]    List every command      [/][arrow]$arrow [/][command]tdk --help[/]
+[text]    Reach the instance      [/][arrow]$arrow [/][link]http://127.0.0.1:2457[/]
 ---
 [heading]Running it on Kubernetes[/]
+
 > [text]  To learn how to run an instance on EKS, AKS or GKE, see the documentation at
 > [link]https://docs.tabsdata.com[/link].[/]
