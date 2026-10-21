@@ -10,7 +10,7 @@ from pathlib import Path
 
 from setuptools import find_namespace_packages, setup
 from tabsdatax.setup import tdabout, tdlock
-from tabsdatax.setup.common.assets import copy_variant_assets
+from tabsdatax.setup.common.assets import copy_single_asset, copy_variant_assets
 from tabsdatax.setup.common.commands import (
     create_custom_bdist_egg_class,
     create_custom_bdist_wheel_class,
@@ -82,6 +82,11 @@ python_version_spec = f">={exact_python_version},<{next_python_version}"
 python_version_tag = f"{python_implementation}{python_version.replace('.', '')}"
 python_version_abi = python_abi
 
+LOGO_ASSETS = {
+    os.path.join("assets", "images", "tabsdata.png"): "LOGO.png",
+    os.path.join("assets", "images", "tabsdata.toml"): "LOGO.toml",
+}
+
 variant_assets_folder = get_variant_assets_folder(ROOT)
 variant_manifest_folder = get_variant_manifest_folder(ROOT)
 package_assets_folder_tabsdata = os.path.join(
@@ -115,6 +120,12 @@ copy_variant_assets(
     package_assets_folder_tabsdata,
     configuration.skip_non_existing_assets,
 )
+for logo_source, logo_asset in LOGO_ASSETS.items():
+    copy_single_asset(
+        os.path.join(ROOT, logo_source),
+        os.path.join(package_assets_folder_tabsdata, "manifest", logo_asset),
+        configuration.skip_non_existing_assets,
+    )
 
 target_release_folder = get_target_release_folder()
 with open(os.path.join(ROOT, "setup.toml"), "rb") as setup_toml:
@@ -223,6 +234,7 @@ for path in yaml_root_folder_tabsdatak.rglob("*.yaml"):
     yaml_files_tabsdatak.append(str(relative_path))
 
 console_scripts: list[str] = [
+    "tabsdata = tabsdatak.main.tabsdata:main",
     "td_apiready = tabsdatak.server._tdserver.workers.apiready:main",
     "td_conn_resources_extractor = "
     "tabsdatak.server._tdserver.workers.conn_resources_extractor:main",

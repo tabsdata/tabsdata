@@ -1,0 +1,68 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+[heading]tabsdata [/][strong]$release[/] [text]Open Source Edition[/]
+[text]Apache License 2.0 — http://www.apache.org/licenses/LICENSE-2.0[/]
+---
+[strong]A publish-subscribe server for tables. [/][text]You write Python functions that declare the tables they read and write; tabsdata versions the data, tracks the dependencies between the functions and runs them when their inputs change.[/]
+
+[heading]Functions[/]
+> [text]  A [term]publisher[/term] brings data in from outside, a [term]transformer[/term]
+> derives tables from tables, and a [term]subscriber[/term] sends data out. Composed
+> together they form a flow.[/]
+---
+[heading]Run it locally[/]
+[command]  tdkserver quickstart [/][arrow]$arrow [/][text]Start a local instance in one step[/]
+[command]  tdk login            [/][arrow]$arrow [/][text]Connect the client to it[/]
+[command]  tdk --help           [/][arrow]$arrow [/][text]See every client command[/]
+[text]  The instance listens on [/][link]http://127.0.0.1:2457[/][text].[/]
+---
+[heading]Elsewhere, or step by step[/]
+> [text]  Add [term]--provider[/term] to choose where the instance runs: the default, [term]kminus[/term],
+> needs nothing installed, while [term]eks[/term], [term]aks[/term] and [term]gke[/term] target managed Kubernetes on AWS,
+> Azure and Google Cloud. Support for [term]docker[/term], on Docker Desktop, is coming soon.[/]
+
+> [text]  The cloud providers need an existing cluster, a local kubeconfig whose current
+> context points to it, and a namespace, already created, set in that context.[/]
+
+> [text]  To adjust storage, database and other settings up front, run [term]tdkserver stubs[/term],
+> fill in your provider's file in [term]~/.tabsdata/stubs[/term] and pass it to the
+> quickstart as [term]--config @FILE[/term].[/]
+
+[text]  To review the configuration before anything runs, split the quickstart:[/]
+[command]  tdkserver init       [/][arrow]$arrow [/][text]Write an editable configuration[/]
+[command]  tdkserver create     [/][arrow]$arrow [/][text]Create the instance from it[/]
+[command]  tdkserver start      [/][arrow]$arrow [/][text]Start it[/]
+
+[text]  Step by step [/][arrow]$arrow [/][link]https://docs.tabsdata.com/server-admin/kminus[/]
+[text]  EKS          [/][arrow]$arrow [/][link]https://docs.tabsdata.com/server-admin/eks-install[/]
+[text]  AKS          [/][arrow]$arrow [/][link]https://docs.tabsdata.com/server-admin/aks-install[/]
+[text]  GKE          [/][arrow]$arrow [/][link]https://docs.tabsdata.com/server-admin/gke-install[/]
+---
+[heading]Features[/]
+> [text]  Table lineage, schema change handling, medallion pipelines, data quality and
+> grok parsing.[/]
+
+[heading]Learn more[/]
+[text]  Guide   [/][arrow]$arrow [/][link]https://docs.tabsdata.com/guide[/]
+[text]  Home    [/][arrow]$arrow [/][link]https://tabsdata.com[/]
+[text]  Licence [/][arrow]$arrow [/][link]https://tabsdata.com/license[/]
+[text]  Contact [/][arrow]$arrow [/][link]https://tabsdata.com/contact[/]
+
+[text]Ask us anything, or request a guided tour. We are glad to help.[/]
+---
+[heading]Installing the whole thing[/]
+> [text]  This is not a single package but an ecosystem of components spread over many:
+> the client, the server, the connectors and the rest are distributed separately.
+> Installing tabsdata on its own gives you only a part of it.[/]
+
+[text]  Install everything with[/]
+[text]      [/][link] pip install "tabsdata\[all]"[/]
+[text]    or[/][link] uv pip install "tabsdata\[all]"[/]
+[text]  Or pin a version with[/]
+[text]      [/][link] pip install "tabsdata\[all]==$pin"[/]
+[text]    or[/][link] uv pip install "tabsdata\[all]==$pin"[/]
+
+> [text]  If [term]tdk[/term], [term]tdkserver[/term] or any other component is missing, one of
+> those packages is not installed. Under pyenv a freshly installed command can stay
+> invisible until you run [term]pyenv rehash[/term].[/]
