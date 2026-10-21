@@ -471,8 +471,8 @@ impl Provider for KminusProvider {
 
     async fn create_runtimes(&self, reporter: &dyn Reporter) -> CommandResult {
         match UvMode::from_environment().map_err(TdError::from)? {
-            UvMode::Linked => self.create_runtimes_as_proc(reporter).await,
-            UvMode::Local => self.create_runtimes_as_proc(reporter).await,
+            UvMode::Linked => self.link_runtimes_as_proc(reporter),
+            UvMode::Local => self.build_runtimes_as_proc(reporter).await,
             UvMode::Devpi => self.create_runtimes_as_pod(reporter).await,
             UvMode::Pypi => self.create_runtimes_as_pod(reporter).await,
             UvMode::Unset => self.create_runtimes_as_pod(reporter).await,
@@ -792,52 +792,62 @@ impl KminusProvider {
         provision_pyvenvs(&context, ClusterProvider::Kminus, &system, &profile, &multi).await
     }
 
-    async fn create_runtimes_as_proc(&self, reporter: &dyn Reporter) -> CommandResult {
-        let runtimes_folder = self.folder.join(FOLDER_RUNTIMES);
-        let runtimes_kenvs = runtimes_folder.join(FOLDER_UV).join(FOLDER_KENVS);
-        fs::create_dir_all(&runtimes_kenvs).map_err(|error| {
+    fn prepare_runtimes_as_proc(&self, reporter: &dyn Reporter) -> CommandResult<HostRuntimes> {
+        let folder = self.folder.join(FOLDER_RUNTIMES);
+        let kenvs = folder.join(FOLDER_UV).join(FOLDER_KENVS);
+        fs::create_dir_all(&kenvs).map_err(|error| {
             ProviderError::RuntimesFolderCreateFailed(
-                runtimes_kenvs.display().to_string(),
+                kenvs.display().to_string(),
                 error.to_string(),
             )
         })?;
-        let _guard = claim_runtimes(&runtimes_folder)?;
+        let guard = claim_runtimes(&folder)?;
         let pyvenv = resolve_python_binary(PYVENV_BINARY).map_err(|error| {
             ProviderError::BinaryNotFound(PYVENV_BINARY.to_owned(), error.to_string())
         })?;
         self.verify_host_environment(&pyvenv, reporter)?;
-        match UvMode::from_environment().map_err(TdError::from)? {
-            UvMode::Linked => self.link_runtimes(&pyvenv, &runtimes_kenvs, reporter),
-            UvMode::Local | UvMode::Devpi | UvMode::Pypi | UvMode::Unset => {
-                let context = self.kube_context().await?;
-                let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
-                let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
-                let envs = match configs.get(TABSDATA_FILE) {
-                    Some(config) => host_global_envs(config).map_err(|error| {
-                        ProviderError::GlobalEnvsParseFailed {
-                            config: TABSDATA_FILE.to_owned(),
-                            cause: error.to_string(),
-                        }
-                    })?,
-                    None => Vec::new(),
-                };
-                let folder = tempfile::tempdir().map_err(|error| {
-                    ProviderError::RuntimesFolderCreateFailed(
-                        std::env::temp_dir().display().to_string(),
-                        error.to_string(),
-                    )
-                })?;
-                let requirements = write_requirements(folder.path(), &assets)?;
-                self.build_runtimes(
-                    &pyvenv,
-                    &runtimes_folder,
-                    &runtimes_kenvs,
-                    &requirements,
-                    &envs,
-                    reporter,
-                )
+        Ok(HostRuntimes {
+            folder,
+            kenvs,
+            pyvenv,
+            _guard: guard,
+        })
+    }
+
+    fn link_runtimes_as_proc(&self, reporter: &dyn Reporter) -> CommandResult {
+        let host = self.prepare_runtimes_as_proc(reporter)?;
+        self.link_runtimes(&host.pyvenv, &host.kenvs, reporter)
+    }
+
+    async fn build_runtimes_as_proc(&self, reporter: &dyn Reporter) -> CommandResult {
+        let host = self.prepare_runtimes_as_proc(reporter)?;
+        let context = self.kube_context().await?;
+        let assets = read_family_configmaps(&context, &KPROFILE_ASSETS_FAMILY).await?;
+        let configs = read_family_configmaps(&context, &KPROFILE_CONFIGS_FAMILY).await?;
+        let envs = match configs.get(TABSDATA_FILE) {
+            Some(config) => {
+                host_global_envs(config).map_err(|error| ProviderError::GlobalEnvsParseFailed {
+                    config: TABSDATA_FILE.to_owned(),
+                    cause: error.to_string(),
+                })?
             }
-        }
+            None => Vec::new(),
+        };
+        let folder = tempfile::tempdir().map_err(|error| {
+            ProviderError::RuntimesFolderCreateFailed(
+                std::env::temp_dir().display().to_string(),
+                error.to_string(),
+            )
+        })?;
+        let requirements = write_requirements(folder.path(), &assets)?;
+        self.build_runtimes(
+            &host.pyvenv,
+            &host.folder,
+            &host.kenvs,
+            &requirements,
+            &envs,
+            reporter,
+        )
     }
 
     fn verify_host_environment(&self, pyvenv: &Path, reporter: &dyn Reporter) -> CommandResult {
@@ -1189,6 +1199,13 @@ fn write_requirements(
         requirements.push((*venv, file));
     }
     Ok(requirements)
+}
+
+struct HostRuntimes {
+    folder: PathBuf,
+    kenvs: PathBuf,
+    pyvenv: PathBuf,
+    _guard: LockFile,
 }
 
 fn claim_runtimes(runtimes_folder: &std::path::Path) -> CommandResult<LockFile> {
