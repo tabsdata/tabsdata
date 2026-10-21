@@ -67,6 +67,7 @@ tm-pyo3 = { workspace = true }
 
 # External dependencies
 
+chrono = { workspace = true }
 pyo3 = { workspace = true, features = ["abi3-py312", "anyhow", "macros", "multiple-pymethods", "num-bigint", "num-complex", "num-rational", "rust_decimal", "serde", "smallvec"] }
 pyo3-log = { workspace = true }
 pyo3-stub-gen = { workspace = true }

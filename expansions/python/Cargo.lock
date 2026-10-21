@@ -5401,6 +5401,7 @@ dependencies = [
 name = "to-foundation"
 version = "2.3.0"
 dependencies = [
+ "chrono",
  "pyo3",
  "pyo3-log",
  "pyo3-stub-gen",

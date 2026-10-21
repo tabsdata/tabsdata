@@ -7532,6 +7532,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 name = "tz-tableframe"
 version = "2.3.0"
 dependencies = [
+ "chrono",
  "polars",
  "polars-mem-engine",
  "polars-plan",

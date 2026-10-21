@@ -65,6 +65,7 @@ ta-tableframe = { workspace = true }
 
 # External dependencies
 
+chrono = { workspace = true }
 polars = { workspace = true, features = ["default", "fmt", "dtype-date", "dtype-decimal", "dtype-struct", "dtype-u8", "timezones"] }
 polars-plan = { workspace = true, features = ["python"] }
 polars-mem-engine = { workspace = true, features = ["python"] }
