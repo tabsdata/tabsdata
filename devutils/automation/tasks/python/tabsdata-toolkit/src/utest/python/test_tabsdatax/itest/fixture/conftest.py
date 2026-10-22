@@ -7,8 +7,8 @@ create`` / ``tdd domain create`` with ``--descriptor-only``: tdd writes exactly
 the descriptors a create writes and provisions nothing, so the fixtures are
 exercised against the descriptors tdd itself produces — not hand-rolled ones.
 
-The `provision` fixture points the fixtures' tdd client at a tmp store
-(``--sys-dir`` / ``--domain-dir``) with a fake key, and returns a helper whose
+The `provision` fixture points tdd at a tmp store (``$TDD_SYSTEM_DIR`` /
+``$TDD_DOMAIN_DIR``) with a fake key, and returns a helper whose
 ``.system(slug, name)`` / ``.domain(sys, dom)`` create into it. The
 env-configured backends (object stores / warehouses / services / bigquery) read
 their ``<PREFIX>__<KEY>`` settings from a fake environment set here.
@@ -95,7 +95,6 @@ class Provisioner:
             sysname,
             "--domain",
             domname,
-            *_tdd.store_args(_tdd.SYSTEM),
             "--force",
             "--descriptor-only",
         )
@@ -107,8 +106,8 @@ class Provisioner:
 
 @pytest.fixture
 def provision(tmp_path, monkeypatch):
-    monkeypatch.setitem(_tdd.store_dirs, _tdd.SYSTEM, tmp_path / "system")
-    monkeypatch.setitem(_tdd.store_dirs, _tdd.DOMAIN, tmp_path / "domain")
+    monkeypatch.setenv(_tdd.ENV_STORE_DIR[_tdd.SYSTEM], str(tmp_path / "system"))
+    monkeypatch.setenv(_tdd.ENV_STORE_DIR[_tdd.DOMAIN], str(tmp_path / "domain"))
     monkeypatch.setenv("_TDD_CRYPTO_KEY", "fixture-test-key-abcdef")
     for var in (*backend.ON_MISSING_ENV.values(), *backend.SKIP_ENV.values()):
         monkeypatch.delenv(var, raising=False)

@@ -20,7 +20,7 @@ def test_a_missing_tdd_says_how_to_install_it(tmp_path, monkeypatch):
 
 
 def test_a_store_without_its_key_fails_with_tdds_message(tmp_path, monkeypatch):
-    monkeypatch.setitem(_tdd.store_dirs, _tdd.SYSTEM, tmp_path)
+    monkeypatch.setenv(_tdd.ENV_STORE_DIR[_tdd.SYSTEM], str(tmp_path))
     monkeypatch.delenv("_TDD_CRYPTO_KEY", raising=False)
     with pytest.raises(_tdd.TddError, match="_TDD_CRYPTO_KEY"):
         _tdd.names(_tdd.SYSTEM)

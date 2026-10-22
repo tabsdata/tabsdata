@@ -176,7 +176,7 @@ def _skip_names(family: str) -> set[str]:
 
 
 # (family, store, name, cls) -> built
-_CACHE: dict[tuple[str, str, str, type], object] = {}
+_CACHE: dict[tuple[str, str | None, str, type], object] = {}
 
 
 def load(name: str, cls: type):
@@ -194,7 +194,7 @@ def load(name: str, cls: type):
             f"${SKIP_ENV[backend_type]}, so this test is skipped."
         )
 
-    key = (backend_type, str(_tdd.store_dirs[backend_type]), name, cls)
+    key = (backend_type, os.environ.get(_tdd.ENV_STORE_DIR[backend_type]), name, cls)
     if key in _CACHE:
         return _CACHE[key]
 

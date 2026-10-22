@@ -7,8 +7,8 @@ descriptor and the domain data verbs, each read from tdd's JSON events.
 
 Only tdd knows the descriptors; the fixtures never open the store. tdd-exe is
 found the way cargo make finds it (``$TDD_DIR``, else ``~/.tdd``) and reads its
-key from ``$_TDD_CRYPTO_KEY``. ``store_dirs`` points the calls at another store
-(``--sys-dir`` / ``--domain-dir``); tests set it to a tmp dir.
+key from ``$_TDD_CRYPTO_KEY``; ``$TDD_SYSTEM_DIR`` / ``$TDD_DOMAIN_DIR`` point
+tdd at another store, which is how tests use a tmp one.
 """
 
 from __future__ import annotations
@@ -24,15 +24,13 @@ DOMAIN = "domain"
 
 ENV_TDD_DIR = "TDD_DIR"
 DEFAULT_TDD_DIR = "~/.tdd"
+ENV_STORE_DIR = {SYSTEM: "TDD_SYSTEM_DIR", DOMAIN: "TDD_DOMAIN_DIR"}
 
 EVENT_OK = "ok"
 EVENT_ERROR = "error"
 
 _NAME_OPT = {SYSTEM: "--sys", DOMAIN: "--domain"}
-_STORE_OPT = {SYSTEM: "--sys-dir", DOMAIN: "--domain-dir"}
 _LISTING = {SYSTEM: "systems", DOMAIN: "domains"}
-
-store_dirs: dict[str, Path | None] = {SYSTEM: None, DOMAIN: None}
 
 
 class TddError(Exception):
@@ -48,21 +46,16 @@ def exe() -> Path:
     return Path(scripts) / ("tdd-exe" + (sysconfig.get_config_var("EXE") or ""))
 
 
-def store_args(family: str) -> list[str]:
-    store = store_dirs[family]
-    return [] if store is None else [_STORE_OPT[family], str(store)]
-
-
 def run(family: str, verb: str, *args: str) -> dict:
-    """Run ``tdd-exe <family> <verb> [args] --format json`` against the store and
-    return its ok event."""
+    """Run ``tdd-exe <family> <verb> [args] --format json`` and return its ok
+    event."""
     path = exe()
     if not path.is_file():
         raise TddError(
             f"Tool tdd is not installed at {path}; run 'cargo make permit' to "
             f"install it."
         )
-    argv = [str(path), family, verb, *args, *store_args(family), "--format", "json"]
+    argv = [str(path), family, verb, *args, "--format", "json"]
     cp = subprocess.run(argv, capture_output=True, text=True)
     events = [
         json.loads(line) for line in cp.stdout.splitlines() if line.startswith("{")
