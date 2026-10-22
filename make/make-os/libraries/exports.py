@@ -2,18 +2,17 @@
 #  Copyright 2026 Tabsdata Inc.
 #
 
-import pathlib
+import json
 import shlex
-import shutil
 import subprocess
 import sys
 
 
 def main() -> int:
-    if len(sys.argv) != 4:
-        print("Usage: exports.py <tdd-exe> <manifest> <folder>", file=sys.stderr)
+    if len(sys.argv) != 3:
+        print("Usage: exports.py <tdd-exe> <manifest>", file=sys.stderr)
         return 2
-    tool, manifest, folder = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
+    tool, manifest = sys.argv[1], sys.argv[2]
 
     rendered = subprocess.run(
         [tool, "domain", "info", "--manifest", manifest, "--format", "export"],
@@ -24,11 +23,7 @@ def main() -> int:
         sys.stderr.write(rendered.stderr)
         return rendered.returncode
 
-    if folder.exists():
-        shutil.rmtree(folder)
-    folder.mkdir(parents=True)
-
-    exported = 0
+    exported: dict[str, str] = {}
     for line in rendered.stdout.splitlines():
         line = line.strip()
         if not line.startswith("export "):
@@ -41,10 +36,7 @@ def main() -> int:
         except ValueError as error:
             print(f"Could not decode {name}: {error}", file=sys.stderr)
             return 1
-        value = parts[0] if parts else ""
-        (folder / name).write_bytes(value.encode("utf-8"))
-        print(name)
-        exported += 1
+        exported[name] = parts[0] if parts else ""
 
     if not exported:
         print(
@@ -57,6 +49,7 @@ def main() -> int:
                 print(f"--- {stream} ---\n{text}", file=sys.stderr)
         return 1
 
+    print(json.dumps(exported))
     return 0
 
 
