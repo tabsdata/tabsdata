@@ -37,6 +37,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     skip_secrets_load = get_env TD_SKIP_SECRETS_LOAD
     skip_secrets_load_true = eq ${skip_secrets_load} "true"
@@ -44,7 +45,7 @@ script = [
     on_ga_true = eq ${on_ga} "true"
     skip_load = set ${skip_secrets_load_true} or ${on_ga_true}
     if ${skip_load}
-        info "🔑 Skipping the 1Password load; assuming TD_BACKENDS_CRYPTO_KEY is already provided"
+        info "🔑 Skipping the 1Password load; assuming TD_BACKENDS_CRYPTO_KEY and _TDD_CRYPTO_KEY are already provided"
         exit 0
     end
 
@@ -77,6 +78,14 @@ script = [
     if ${crypto_key_short}
         error "🚫 TD_BACKENDS_CRYPTO_KEY must be at least 12 characters long (got ${crypto_key_size})."
         assert_fail
+    end
+
+    tdd_crypto_key = get_env _TDD_CRYPTO_KEY
+    if is_empty ${tdd_crypto_key}
+        info "🔑 Loading the tdd crypto key from 1Password..."
+        tdd_fetch --crypto
+    else
+        debug "🔑 Variable _TDD_CRYPTO_KEY is already set; keeping the current value"
     end
     ''']
 
@@ -170,6 +179,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     skip_secrets_load = get_env TD_SKIP_SECRETS_LOAD
     skip_secrets_load_true = eq ${skip_secrets_load} "true"
@@ -183,39 +193,30 @@ script = [
 
     systems_marker = get_env TD_BACKENDS_SYSTEMS
     systems_marker = trim ${systems_marker}
-    if is_empty ${systems_marker}
-        vault = get_env ONE_PASSWORD_DEV_XP_VAULT
-        vault = trim ${vault}
-        if is_empty ${vault}
-            error ""
-            error "🧨 ONE_PASSWORD_DEV_XP_VAULT is not set."
-            error ""
-            error "🛟 Set it to the 1Password vault holding the backend systems secrets."
-            error ""
-            assert false
-        end
+    tdd_systems_marker = get_env _TDD_SYSTEMS
+    tdd_systems_marker = trim ${tdd_systems_marker}
+    secrets_loaded = set false
+    if not is_empty ${systems_marker}
+        secrets_loaded = set true
+    end
+    if not is_empty ${tdd_systems_marker}
+        secrets_loaded = set true
+    end
 
-        info "🔐 Loading backend systems secrets from 1Password vault '${vault}'..."
-        debug "🚀 tdx-system secrets --set 1p:${vault} --out json"
-        secrets_json = exec tdx-system secrets --set 1p:${vault} --out json
-        if not eq ${secrets_json.code} "0"
-            error "🚫 Could not load backend systems secrets from 1Password vault '${vault}' (exit code ${secrets_json.code})."
-            error "\n${secrets_json.stderr}"
-            assert_fail
+    if ${secrets_loaded}
+        if is_empty ${systems_marker}
+            set_env TD_BACKENDS_SYSTEMS ${tdd_systems_marker}
         end
-
-        secrets = json_parse --collection ${secrets_json.stdout}
-        secrets_names = map_keys ${secrets}
-        secrets_count = set 0
-        for secret_name in ${secrets_names}
-            secret_value = map_get ${secrets} ${secret_name}
-            set_env ${secret_name} ${secret_value}
-            secrets_count = calc ${secrets_count} + 1
+        if is_empty ${tdd_systems_marker}
+            set_env _TDD_SYSTEMS ${systems_marker}
         end
-        release ${secrets}
-        info "🔐 Loaded ${secrets_count} secret environment variables"
+        info "🔐 Backend systems secrets already set (TD_BACKENDS_SYSTEMS or _TDD_SYSTEMS present); skipping the 1Password load"
     else
-        info "🔐 Backend systems secrets already set (TD_BACKENDS_SYSTEMS present); skipping the 1Password load"
+        info "🔐 Loading backend systems secrets from 1Password..."
+        secrets_count = tdd_fetch --secrets
+        tdd_systems = get_env _TDD_SYSTEMS
+        set_env TD_BACKENDS_SYSTEMS ${tdd_systems}
+        info "🔐 Loaded ${secrets_count} secret environment variables"
     end
     ''']
 

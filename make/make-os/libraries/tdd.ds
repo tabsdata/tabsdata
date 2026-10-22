@@ -7,3 +7,40 @@ fn tdd_exe
     tdd_exe_path = trim ${tdd_exe_result.stdout}
     return ${tdd_exe_path}
 end
+
+fn tdd_fetch
+    tdd_fetch_selection = set ${1}
+    tdd_fetch_exe = tdd_exe
+    if not is_file ${tdd_fetch_exe}
+        error "🚫 Tool tdd is not installed at ${tdd_fetch_exe}; run 'cargo make permit' to install it."
+        assert_fail
+    end
+    debug "🚀 ${tdd_fetch_exe} _1p fetch ${tdd_fetch_selection} --format json"
+    tdd_fetch_result = exec ${tdd_fetch_exe} _1p fetch ${tdd_fetch_selection} --format json
+    if not eq ${tdd_fetch_result.code} "0"
+        error "🚫 Tool tdd could not fetch ${tdd_fetch_selection} from 1Password (exit code ${tdd_fetch_result.code})."
+        error "\n${tdd_fetch_result.stderr}"
+        assert_fail
+    end
+    tdd_fetch_count = set 0
+    tdd_fetch_lines = split ${tdd_fetch_result.stdout} "\n"
+    for tdd_fetch_line in ${tdd_fetch_lines}
+        tdd_fetch_json = starts_with ${tdd_fetch_line} "{"
+        if ${tdd_fetch_json}
+            tdd_fetch_event = json_parse --collection ${tdd_fetch_line}
+            tdd_fetch_kind = map_get ${tdd_fetch_event} event
+            if eq ${tdd_fetch_kind} "ok"
+                tdd_fetch_values = map_get ${tdd_fetch_event} values
+                tdd_fetch_names = map_keys ${tdd_fetch_values}
+                for tdd_fetch_name in ${tdd_fetch_names}
+                    tdd_fetch_value = map_get ${tdd_fetch_values} ${tdd_fetch_name}
+                    set_env ${tdd_fetch_name} ${tdd_fetch_value}
+                    tdd_fetch_count = calc ${tdd_fetch_count} + 1
+                end
+                release ${tdd_fetch_names}
+            end
+            release --recursive ${tdd_fetch_event}
+        end
+    end
+    return ${tdd_fetch_count}
+end
