@@ -2,23 +2,21 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Provision backends for the fixture tests by running the REAL tdx-system2 /
-tdx-domain2 create path in-process (via ``tdx._dispatch``) with the live
-provisioning I/O stubbed, so the fixtures are exercised against exactly the
-descriptors tdx writes — not hand-rolled ones.
+"""Provision backends for the fixture tests by running the REAL ``tdd system
+create`` / ``tdd domain create`` with ``--descriptor-only``: tdd writes exactly
+the descriptors a create writes and provisions nothing, so the fixtures are
+exercised against the descriptors tdd itself produces — not hand-rolled ones.
 
-The `provision` fixture points ``$TD_BACKENDS_DIR`` at a tmp store and returns a
-helper whose ``.system(slug, name)`` / ``.domain(slug, sys, dom)`` drive the v2
-create commands. Every backend's live provisioning (docker, boto3, cloud
-clients, SQL, warehouses, compose) is stubbed to a no-op — the descriptor
-content (from ``plan_system`` / ``domain_meta``) is unaffected. The env-config
-backends (object stores / warehouses / services / bigquery) read their
-``<PREFIX>__<KEY>`` settings from a fake environment set here.
+The `provision` fixture points the fixtures' tdd client at a tmp store
+(``--sys-dir`` / ``--domain-dir``) with a fake key, and returns a helper whose
+``.system(slug, name)`` / ``.domain(sys, dom)`` create into it. The
+env-configured backends (object stores / warehouses / services / bigquery) read
+their ``<PREFIX>__<KEY>`` settings from a fake environment set here.
 
 In a real run the ``system_<name>`` / ``domain_<name>`` fixtures generate at
-plugin import from the pre-existing store; here no store exists at import, so the
-names the injection tests declare are fed to the same fixture factories directly,
-and each test provisions its descriptors through `provision` as usual."""
+plugin import from the store tdd lists; here the store is made per test, so the
+names the injection tests declare are fed to the same fixture factories
+directly, and a listing that failed at import is no concern of theirs."""
 
 from __future__ import annotations
 
@@ -27,8 +25,9 @@ from pathlib import Path
 
 import pytest
 
-from tabsdatax.itest.fixture import backend
-from tabsdatax.itest.tdksystems2 import constants, crypto, store, systems, tdx
+from tabsdatax.itest.fixture import _tdd, backend
+
+backend.LISTING_ERRORS.clear()
 
 for declared_system_name in ("my_fs", "alpha", "beta", "db", "store", "wh"):
     globals()[f"system_{declared_system_name}"] = backend.system_fixture(
@@ -40,8 +39,8 @@ for declared_domain_name in ("inbox", "outbox", "archive", "shop", "sales"):
     )
 
 
-# Fake <PREFIX>__<KEY> config the env-configured backends read at create; the
-# provisioning that would use it is stubbed, so the values only need to be set.
+# Fake <PREFIX>__<KEY> config the env-configured backends read at create; a
+# --descriptor-only create never uses it, so the values only need to be set.
 _FAKE_ENV = {
     "S3__BUCKET": "b",
     "S3__REGION": "r",
@@ -78,50 +77,45 @@ _FAKE_ENV = {
 }
 
 
-def _stub_provisioning(monkeypatch, cls):
-    """Skip a backend's live provisioning I/O; what create *writes* is real."""
-    monkeypatch.setattr(
-        cls, "provision_system", lambda self, meta, *, force=False: {}, raising=False
-    )
-    monkeypatch.setattr(
-        cls,
-        "provision_domain",
-        lambda self, sys_meta, entity, dmeta, *, force=False: None,
-        raising=False,
-    )
-    monkeypatch.setattr(
-        cls, "list_domain_entities", lambda self, sys_meta: [], raising=False
-    )
-
-
 class Provisioner:
-    def __init__(self, monkeypatch, sys_path):
-        self._mp = monkeypatch
+    def __init__(self, sys_path):
         self._sys_path = sys_path
 
     def system(self, slug, name):
-        _stub_provisioning(self._mp, systems.get_class(slug))
-        argv = ["create", "--type", slug, "--sys", name, "-f"]
+        argv = ["--type", slug, "--sys", name, "--force", "--descriptor-only"]
         if slug == "fs":
             argv += ["--sys-path", str(self._sys_path)]
-        assert tdx._dispatch(constants.SYS_TOOL, argv) == 0
+        _tdd.run(_tdd.SYSTEM, "create", *argv)
 
-    def domain(self, slug, sysname, domname):
-        _stub_provisioning(self._mp, systems.get_class(slug))
-        argv = ["create", "--sys", sysname, "--domain", domname, "-f"]
-        assert tdx._dispatch(constants.DOM_TOOL, argv) == 0
+    def domain(self, sysname, domname):
+        _tdd.run(
+            _tdd.DOMAIN,
+            "create",
+            "--sys",
+            sysname,
+            "--domain",
+            domname,
+            *_tdd.store_args(_tdd.SYSTEM),
+            "--force",
+            "--descriptor-only",
+        )
+
+    def external_name(self, domname):
+        """The domain's name inside its system, as tdd chose it."""
+        return _tdd.descriptor(_tdd.DOMAIN, domname)["external_name"]
 
 
 @pytest.fixture
 def provision(tmp_path, monkeypatch):
-    monkeypatch.setenv(constants.ENV_BACKENDS_DIR, str(tmp_path))
-    monkeypatch.setenv(crypto.ENV_VAR, "fixture-test-key-abcdef")
+    monkeypatch.setitem(_tdd.store_dirs, _tdd.SYSTEM, tmp_path / "system")
+    monkeypatch.setitem(_tdd.store_dirs, _tdd.DOMAIN, tmp_path / "domain")
+    monkeypatch.setenv("_TDD_CRYPTO_KEY", "fixture-test-key-abcdef")
     for var in (*backend.ON_MISSING_ENV.values(), *backend.SKIP_ENV.values()):
         monkeypatch.delenv(var, raising=False)
     for key, value in _FAKE_ENV.items():
         monkeypatch.setenv(key, value)
-    # fs validates its root lives under /tmp|/home|/Users and mkdirs it for real.
+    # fs keeps its data under a root it creates for real; keep it under /tmp.
     sys_path = Path(f"/tmp/fixture-be-{tmp_path.name}")
     shutil.rmtree(sys_path, ignore_errors=True)
-    yield Provisioner(monkeypatch, sys_path)
+    yield Provisioner(sys_path)
     shutil.rmtree(sys_path, ignore_errors=True)

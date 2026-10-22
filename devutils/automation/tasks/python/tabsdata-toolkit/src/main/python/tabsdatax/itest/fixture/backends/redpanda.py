@@ -18,7 +18,7 @@ class RedpandaSystem(System):
     system_type: ClassVar[str] = "redpanda"
     name: str
     system_kind: str
-    container: str
+    docker_container_name: str
     image: str
     host: str
     port: str

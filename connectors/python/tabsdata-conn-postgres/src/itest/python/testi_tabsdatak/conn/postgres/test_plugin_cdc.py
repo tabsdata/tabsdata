@@ -449,7 +449,7 @@ def test_cdc_plugin_publishes_every_row_of_interleaved_transactions(
     with cdc_probe(domain, "td_cdc_interleaved") as probe:
         with replication_slot(domain, "td_cdc_interleaved_slot") as slot:
             src = _stream_src([cdc_table(probe.name)], slot, "head")
-            engine = create_engine(domain.sqlalchemy_uri)
+            engine = create_engine(domain.external_sqlalchemy_uri)
             insert = (
                 f"INSERT INTO \"{probe.name}\" (id, name) VALUES (:id, 'interleaved')"
             )

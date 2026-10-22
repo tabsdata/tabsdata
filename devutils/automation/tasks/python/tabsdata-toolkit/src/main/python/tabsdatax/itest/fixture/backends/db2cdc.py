@@ -18,7 +18,7 @@ class Db2CdcSystem(System):
     system_type: ClassVar[str] = "db2cdc"
     name: str
     system_kind: str
-    container: str
+    docker_container_name: str
     image: str
     host: str
     port: str

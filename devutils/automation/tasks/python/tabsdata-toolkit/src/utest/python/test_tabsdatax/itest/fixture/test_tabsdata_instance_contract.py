@@ -30,9 +30,7 @@ def test_shorthand_fails_when_consumer_undeclared(request):
 
 def test_enforced_instance_loads_when_declared(request, monkeypatch):
     loaded = object()
-    monkeypatch.setattr(
-        tabsdata, "loaded_instance", lambda consumer, check: loaded
-    )
+    monkeypatch.setattr(tabsdata, "loaded_instance", lambda consumer, check: loaded)
     monkeypatch.setattr(
         tabsdata, "marker_consumers", lambda node: {tabsdata.CONSUMER_TDTEST: True}
     )
@@ -79,15 +77,10 @@ HARNESS_PACKAGE = "tabsdatak/itest/fixture/instances"
 
 def run_harness(pytester, name: str):
     copied = pytester.copy_example(f"{HARNESS_PACKAGE}/{name}")
-    # Load the instance plugin so its collection-time contract hook runs in the
-    # sub-pytest (that hook is what emits the "contract violated" error).
-    return pytester.runpytest(
-        "--collect-only",
-        "-q",
-        "-p",
-        "tabsdatax.itest.fixture.instances.tabsdata",
-        copied.name,
-    )
+    # The sub-pytest loads the instance plugin through its tdf-instances entry
+    # point, so its collection-time contract hook (what emits the "contract
+    # violated" error) runs there too.
+    return pytester.runpytest("--collect-only", "-q", copied.name)
 
 
 def violation_lines(result, needle: str) -> None:

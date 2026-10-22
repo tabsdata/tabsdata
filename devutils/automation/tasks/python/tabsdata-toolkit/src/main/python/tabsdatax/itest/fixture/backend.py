@@ -2,7 +2,7 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-"""Inject tdx-provisioned systems / domains into tests as typed dataclasses.
+"""Inject tdd-provisioned systems / domains into tests as typed dataclasses.
 
 A test declares the backends it needs by name with the per-type decorators
 (`fs_system`, `mysql_domain`, …) and receives each one through its own
@@ -15,36 +15,39 @@ A test declares the backends it needs by name with the per-type decorators
 
 Each decorator emits a ``tabsdata_backend(name, dataclass)`` marker; the
 ``system_<name>`` / ``domain_<name>`` fixtures are generated at plugin import
-from the store (``$TD_BACKENDS_DIR``, populated by ``tdx-system2`` /
-``tdx-domain2`` before pytest starts). Resolution decrypts the
-descriptor with ``$TD_BACKENDS_CRYPTO_KEY``, checks its role + ``system_type``
-match the dataclass, and builds it — each field pulled from the descriptor key
-of the same (upper-cased) name, pydantic coercing the type. Loads are lazy and
-cached for the session.
+from ``tdd system list`` / ``tdd domain list`` (the store ``tdd system create`` /
+``tdd domain create`` populate before pytest starts). Resolution reads the
+descriptor through ``tdd ... info`` (tdd decrypts it with ``$_TDD_CRYPTO_KEY``),
+checks its role + ``system_type`` match the dataclass, and builds it — each field
+pulled from the descriptor key of the same (upper-cased) name, pydantic coercing
+the type. Loads are lazy and cached for the session.
+
+The plugin loads in every pytest run, most of which use no backend and have no
+key, so a store tdd cannot list generates no fixtures and fails only the tests
+that declare a backend, with tdd's own message.
 
 Resolution order
 ----------------
 
 A backend is looked for in three places, in this order:
 
-1. **The session cache**, per ``(descriptor path, dataclass)``.
+1. **The session cache**, per ``(family, store, name, dataclass)``.
 2. **``<UPCASE_NAME>__<KEY>`` environment variables**, the shape
-   ``tdx-domain info --format export --prefix <NAME>`` emits. A *complete* set is
-   the whole backend: neither the descriptor nor ``$TD_BACKENDS_CRYPTO_KEY`` is
-   touched. It exists because decrypting a descriptor costs a 200k-round key
-   derivation, which a per-test process pays every time. ``__ENTITIES`` is read as
-   a JSON object (``{"city": 4079}``) so a seeded domain's row counts survive;
-   ``NAME`` is filled from the requested name.
-3. **The descriptor**, which stays the source of truth.
+   ``tdd domain info --format export --prefix <NAME>`` emits. A *complete* set is
+   the whole backend: neither tdd nor ``$_TDD_CRYPTO_KEY`` is touched, which is
+   how a run hands its backends to processes that have neither. ``__ENTITIES`` is
+   read as a JSON object (``{"city": 4079}``) so a seeded domain's row counts
+   survive; ``NAME`` is filled from the requested name.
+3. **The descriptor**, through tdd, which stays the source of truth.
 
 An *incomplete* prefix is not an error — it warns on stderr and falls through to
 the descriptor, keeping **none** of the environment's values, so the two sources
 are never mixed. Falling through rather than failing is what makes a collision
-harmless: ``<NAME>__<KEY>`` is also the shape tdx's own create-time options use,
+harmless: ``<NAME>__<KEY>`` is also the shape tdd's own create-time options use,
 so a system named ``s3`` shares a prefix with the ``S3__BUCKET`` / ``S3__REGION``
-variables ``tdx-system create`` reads.
+variables ``tdd system create`` reads.
 
-**A stale export outranks a fresh descriptor.** ``tdx-domain create`` mints a new
+**A stale export outranks a fresh descriptor.** ``tdd domain create`` mints a new
 password each time, so an environment exported before a re-provision still builds
 a complete — and wrong — backend. Re-export after provisioning.
 
@@ -61,7 +64,7 @@ disagree:
 
 Env, split per family so systems and domains are governed independently:
 ``TD_TEST_ON_MISSING_SYSTEM`` / ``TD_TEST_ON_MISSING_DOMAIN`` = ``skip`` |
-``fail`` (default) when a descriptor is absent; ``TD_TEST_SKIP_SYSTEMS`` /
+``fail`` (default) when the store has no such backend; ``TD_TEST_SKIP_SYSTEMS`` /
 ``TD_TEST_SKIP_DOMAINS`` = comma-separated backend ``name``s to skip even when
 present.
 """
@@ -77,16 +80,10 @@ from typing import ClassVar
 import pytest
 from pydantic import ValidationError
 
-from ..tdksystems2 import constants, descriptor, store
-from ..tdksystems2.descriptor import DomainInfo, SystemInfo
-from ..tdksystems2.errors import LegacyDescriptorError
-from . import operations
+from . import _tdd, operations
+from ._tdd import DOMAIN, SYSTEM, TddError
 
-SYSTEM = "system"
-DOMAIN = "domain"
-_DESCRIPTOR_ROLE = {SYSTEM: constants.ROLE_SYSTEM, DOMAIN: constants.ROLE_DOMAIN}
-
-# skip | fail (default: fail) when a descriptor is absent, per family.
+# skip | fail (default: fail) when the store has no such backend, per family.
 ON_MISSING_ENV = {
     SYSTEM: "TD_TEST_ON_MISSING_SYSTEM",
     DOMAIN: "TD_TEST_ON_MISSING_DOMAIN",
@@ -125,29 +122,30 @@ class Domain:
     """Base for a domain fixture dataclass (see :class:`System`).
 
     Every domain fixture inherits :meth:`create_model` / :meth:`create_data` /
-    :meth:`modify_data`, which drive the matching ``tdx-domain2`` subcommands
-    against this domain (by ``name``) through :mod:`.operations` — the shared
-    util all domains use, so seeding/mutating a domain is the same for every
-    backend. Each returns a :class:`.operations.ChangeReport` (the verb's
+    :meth:`modify_data`, which drive the matching ``tdd domain`` verbs against
+    this domain (by ``name``) through :mod:`.operations` — the shared util all
+    domains use, so seeding/mutating a domain is the same for every backend.
+    Each returns a :class:`.operations.ChangeReport` (the verb's
     ``{entity: {insert, update, delete}}`` output). They run against the same
-    store the fixture loaded from, decrypting with the ambient
-    ``$TD_BACKENDS_CRYPTO_KEY`` — nothing else to wire up.
+    store the fixture loaded from, tdd decrypting with the ambient
+    ``$_TDD_CRYPTO_KEY`` — nothing else to wire up; a failure raises
+    :class:`._tdd.TddError` with tdd's message.
     """
 
     system_type: ClassVar[str]
     name: str
 
     def create_model(
-        self, *, model: str, force: bool = False, check: bool = True
+        self, *, model: str, force: bool = False
     ) -> operations.ChangeReport:
-        """Install `model`'s schema via ``tdx-domain2 create-model``."""
-        return operations.create_model(self.name, model=model, force=force, check=check)
+        """Install `model`'s schema via ``tdd domain create-model``."""
+        return operations.create_model(self.name, model=model, force=force)
 
     def create_data(
-        self, *, size: int = 1, force: bool = False, check: bool = True
+        self, *, size: int = 1, force: bool = False
     ) -> operations.ChangeReport:
-        """Load deterministic initial data via ``tdx-domain2 create-data``."""
-        return operations.create_data(self.name, size=size, force=force, check=check)
+        """Load deterministic initial data via ``tdd domain create-data``."""
+        return operations.create_data(self.name, size=size, force=force)
 
     def modify_data(
         self,
@@ -156,12 +154,11 @@ class Domain:
         sets: int,
         ops: str = "Mix",
         seed: str | int | None = None,
-        check: bool = True,
     ) -> operations.ChangeReport:
-        """Apply deterministic INSERT/UPDATE/DELETE changes via ``tdx-domain2
+        """Apply deterministic INSERT/UPDATE/DELETE changes via ``tdd domain
         modify-data`` (``entity`` a name or ``ALL``; ``seed`` ``AUTO`` or int)."""
         return operations.modify_data(
-            self.name, entity=entity, sets=sets, ops=ops, seed=seed, check=check
+            self.name, entity=entity, sets=sets, ops=ops, seed=seed
         )
 
 
@@ -178,7 +175,8 @@ def _skip_names(family: str) -> set[str]:
     return {t.strip() for t in os.environ.get(env, "").split(",") if t.strip()}
 
 
-_CACHE: dict[tuple[str, type], object] = {}  # (descriptor path, cls) -> built
+# (family, store, name, cls) -> built
+_CACHE: dict[tuple[str, str, str, type], object] = {}
 
 
 def load(name: str, cls: type):
@@ -186,12 +184,7 @@ def load(name: str, cls: type):
     system_type = getattr(cls, "system_type", None)
     if not system_type:
         pytest.fail(f"{cls.__name__} must define a `system_type`")
-    if issubclass(cls, System):
-        backend_type, path = SYSTEM, store.system_path(name)
-    elif issubclass(cls, Domain):
-        backend_type, path = DOMAIN, store.domain_path(name)
-    else:
-        pytest.fail(f"{cls.__name__} must subclass System or Domain")
+    backend_type = _kind_of(cls)
 
     # A backend the developer asked to skip is skipped whether or not it is
     # reachable at all.
@@ -201,52 +194,56 @@ def load(name: str, cls: type):
             f"${SKIP_ENV[backend_type]}, so this test is skipped."
         )
 
-    key = (str(path), cls)
+    key = (backend_type, str(_tdd.store_dirs[backend_type]), name, cls)
     if key in _CACHE:
         return _CACHE[key]
 
-    # Then the environment, ahead of the descriptor and of needing it at all: a
-    # complete `<NAME>__<KEY>` set is the whole backend, where opening the
-    # descriptor costs a 200k-round key derivation.
+    # Then the environment, ahead of the descriptor and of needing tdd at all: a
+    # complete `<NAME>__<KEY>` set is the whole backend.
     from_env = _from_env(cls, name, backend_type)
     if from_env is not None:
         _CACHE[key] = from_env
         return _CACHE[key]
 
-    # The descriptor secret is always $TD_BACKENDS_CRYPTO_KEY (the v2 crypto
-    # reads it directly); missing / skip is re-checked per call.
-    if not path.exists():
-        if _on_missing(backend_type) == "skip":
-            pytest.skip(
-                f"Provisioned {backend_type} {name!r} was not found at {path}, "
-                f"so this test is skipped (${ON_MISSING_ENV[backend_type]}=skip)."
-            )
+    try:
+        info = _tdd.descriptor(backend_type, name)
+    except TddError as exc:
+        _unavailable(backend_type, name, exc)
+    if info["role"] != backend_type:
+        pytest.fail(f"{name!r} is a {info['role']!r} descriptor, not a {backend_type}")
+    if info["system"] != system_type:
         pytest.fail(
-            f"Provisioned {backend_type} {name!r} was not found at {path}. "
-            f"Set ${ON_MISSING_ENV[backend_type]}=skip to skip instead of fail."
+            f"{name!r} is a {info['system']!r} {backend_type}, but was requested "
+            f"as {cls.__name__} (system_type {system_type!r})"
         )
-
-    if key not in _CACHE:
-        try:
-            info = descriptor.load(path)
-        except LegacyDescriptorError as exc:
-            # Never skipped: the backend is there and usable, the store just has
-            # to be migrated, and that is one command away.
-            pytest.fail(f"{backend_type} {name!r}: {exc}", pytrace=False)
-        if info.role != _DESCRIPTOR_ROLE[backend_type]:
-            pytest.fail(f"{name!r} is a {info.role!r} descriptor, not a {backend_type}")
-        if info.system != system_type:
-            pytest.fail(
-                f"{name!r} is a {info.system!r} {backend_type}, but was requested "
-                f"as {cls.__name__} (system_type {system_type!r})"
-            )
-        _CACHE[key] = _construct(cls, _attributes(info), name=name)
+    _CACHE[key] = _construct(cls, _attributes(backend_type, info), name=name)
     return _CACHE[key]
+
+
+def _unavailable(backend_type: str, name: str, exc: TddError):
+    """Skip or fail a backend tdd could not read: per the missing policy when the
+    store has no such name, else with tdd's own message (never skipped, since
+    the backend is there and something else is wrong)."""
+    try:
+        missing = name not in _tdd.names(backend_type)
+    except TddError:
+        missing = False
+    if not missing:
+        pytest.fail(f"{backend_type} {name!r}: {exc}", pytrace=False)
+    if _on_missing(backend_type) == "skip":
+        pytest.skip(
+            f"Provisioned {backend_type} {name!r} is not in the tdd store, so this "
+            f"test is skipped (${ON_MISSING_ENV[backend_type]}=skip)."
+        )
+    pytest.fail(
+        f"Provisioned {backend_type} {name!r} is not in the tdd store. "
+        f"Set ${ON_MISSING_ENV[backend_type]}=skip to skip instead of fail."
+    )
 
 
 def _env_attributes(name: str) -> dict[str, object] | None:
     """The flat ``{KEY: value}`` view read from ``<UPCASE_NAME>__<KEY>`` environment
-    variables -- the shape ``tdx-domain info --format export --prefix <NAME>`` emits.
+    variables -- the shape ``tdd domain info --format export --prefix <NAME>`` emits.
 
     ``NAME`` is filled from the requested name (the env set carries the descriptor's
     ``meta``, not its identity) and ``ENTITIES`` is read as a JSON object so a seeded
@@ -320,23 +317,23 @@ def _from_env(cls, name: str, backend_type: str):
         return None
 
 
-def _attributes(info: SystemInfo | DomainInfo) -> dict[str, object]:
+def _attributes(backend_type: str, info: dict) -> dict[str, object]:
     """The flat ``{KEY: value}`` view the fixture dataclasses map their fields
     onto: the descriptor's connection ``meta`` (already upper-cased keys), plus
     the identity fields (``NAME`` and, for a domain, ``MODEL`` / ``DATA`` /
     ``ENTITIES`` / ``EXTERNAL_NAME`` / ``SYS_NAME``). Values are strings except
     ``ENTITIES`` (the ``{table: rows}`` mapping)."""
-    attrs: dict[str, object] = dict(info.meta)
-    attrs[KEY_NAME] = info.name
-    if isinstance(info, DomainInfo):
-        if info.model is not None:
-            attrs[KEY_MODEL] = info.model
-        if info.data is not None:
-            attrs[KEY_DATA] = info.data
-        if info.entities:
-            attrs[KEY_ENTITIES] = info.entities
-        attrs[KEY_EXTERNAL_NAME] = info.external_name
-        attrs[KEY_SYS_NAME] = info.sys_name
+    attrs: dict[str, object] = dict(info["meta"])
+    attrs[KEY_NAME] = info["name"]
+    if backend_type == DOMAIN:
+        if info.get("model") is not None:
+            attrs[KEY_MODEL] = info["model"]
+        if info.get("data") is not None:
+            attrs[KEY_DATA] = info["data"]
+        if info.get("entities"):
+            attrs[KEY_ENTITIES] = info["entities"]
+        attrs[KEY_EXTERNAL_NAME] = info["external_name"]
+        attrs[KEY_SYS_NAME] = info["sys_name"]
     return attrs
 
 
@@ -409,12 +406,6 @@ def resolve_declared(request, name: str, expected: type):
     return load(name, cls)
 
 
-def stored_names(folder) -> list[str]:
-    if not folder.is_dir():
-        return []
-    return sorted(entry.name for entry in folder.iterdir() if entry.is_file())
-
-
 def system_fixture(name: str):
     @pytest.fixture(name=f"system_{name}")
     def fixture(request):
@@ -431,16 +422,43 @@ def domain_fixture(name: str):
     return fixture
 
 
-for stored_system_name in stored_names(store.system_dir()):
+# Why each family's store could not be listed at import; reported to the tests
+# that declare one of its backends, and to no other.
+LISTING_ERRORS: dict[str, TddError] = {}
+
+
+def _stored_names(backend_type: str) -> list[str]:
+    try:
+        return _tdd.names(backend_type)
+    except TddError as exc:
+        LISTING_ERRORS[backend_type] = exc
+        return []
+
+
+for stored_system_name in _stored_names(SYSTEM):
     globals()[f"system_{stored_system_name}"] = system_fixture(stored_system_name)
-for stored_domain_name in stored_names(store.domain_dir()):
+for stored_domain_name in _stored_names(DOMAIN):
     globals()[f"domain_{stored_domain_name}"] = domain_fixture(stored_domain_name)
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_setup(item):
+    # Ahead of fixture setup, which would only say the fixture does not exist.
+    if not LISTING_ERRORS or not hasattr(item, "iter_markers"):
+        return
+    for kind, name in sorted(marker_backends(item)):
+        if kind in LISTING_ERRORS:
+            pytest.fail(
+                f"Test needs {kind} {name!r}, but the tdd store could not be "
+                f"listed: {LISTING_ERRORS[kind]}",
+                pytrace=False,
+            )
 
 
 def pytest_configure(config):
     config.addinivalue_line(
         "markers",
-        f"{MARKER}(name, cls): the test uses the tdx-provisioned backend `name`"
+        f"{MARKER}(name, cls): the test uses the tdd-provisioned backend `name`"
         " loaded as `cls`; read it through the `system_<name>` /"
         " `domain_<name>` fixtures. Every declared backend must appear in the"
         " test's own signature (even if only forwarded to a helper), and every"

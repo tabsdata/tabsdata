@@ -18,9 +18,9 @@ class PostgresSystem(System):
     system_type: ClassVar[str] = "postgres"
     name: str
     system_kind: str
-    container: str
+    docker_container_name: str
     image: str
-    host: str
+    external_host: str
     port: str
     user: str
     password: str
@@ -32,15 +32,17 @@ class PostgresDomain(Domain):
     name: str
     system_kind: str
     image: str
-    host: str
+    external_host: str
     port: str
     user: str
     password: str
-    db: str
-    uri: str  # credential-less; creds are supplied separately as UserPassword
-    sqlalchemy_uri: str
-    schema: str  # postgres calls the entity container a schema (== db here)
-    sys_admin_user: str  # the system superuser; the domain's own user owns only this db
+    database: str
+    external_uri: str  # credential-less; creds are supplied separately as UserPassword
+    external_sqlalchemy_uri: str
+    schema: str  # postgres calls the entity container a schema (== database here)
+    sys_admin_user: (
+        str  # the system superuser; the domain's own user owns only this database
+    )
     sys_admin_password: str
     model: str | None = None
     data: str | None = None

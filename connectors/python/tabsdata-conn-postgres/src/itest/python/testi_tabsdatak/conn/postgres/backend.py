@@ -31,23 +31,27 @@ WAL2JSON = "wal2json"
 
 
 def src_conn(domain: PostgresDomain) -> PostgresSrcConn:
-    return PostgresSrcConn(uri=domain.uri, credentials=sql_credentials(domain))
+    return PostgresSrcConn(uri=domain.external_uri, credentials=sql_credentials(domain))
 
 
 def dest_conn(domain: PostgresDomain) -> PostgresDestConn:
-    return PostgresDestConn(uri=domain.uri, credentials=sql_credentials(domain))
+    return PostgresDestConn(
+        uri=domain.external_uri, credentials=sql_credentials(domain)
+    )
 
 
 def store(domain: PostgresDomain | PostgrescdcDomain) -> SqlAlchemyStore:
     """A store to read back / drop what a test wrote, over the domain's own
     credential-bearing URI."""
-    return SqlAlchemyStore(domain.sqlalchemy_uri, delimiters=DELIMITERS)
+    return SqlAlchemyStore(domain.external_sqlalchemy_uri, delimiters=DELIMITERS)
 
 
 def cdc_src_conn(domain: PostgrescdcDomain) -> PostgresCdcStreamSrcConn:
     """The connection a CDC stream source decodes the WAL through. The domain owner
     carries the REPLICATION attribute a logical-replication connection needs."""
-    return PostgresCdcStreamSrcConn(uri=domain.uri, credentials=sql_credentials(domain))
+    return PostgresCdcStreamSrcConn(
+        uri=domain.external_uri, credentials=sql_credentials(domain)
+    )
 
 
 def cdc_table(table: str) -> str:
@@ -63,7 +67,7 @@ def replication_slot(domain: PostgrescdcDomain, name: str) -> Iterator[str]:
     after. A slot left behind pins every WAL segment after its restart position and
     would replay a previous run's changes. Slot functions cannot run inside a
     transaction block, hence AUTOCOMMIT."""
-    engine = create_engine(domain.sqlalchemy_uri, isolation_level="AUTOCOMMIT")
+    engine = create_engine(domain.external_sqlalchemy_uri, isolation_level="AUTOCOMMIT")
     try:
         _drop_replication_slot(engine, name)
         with engine.connect() as conn:
@@ -88,7 +92,7 @@ def free_replication_slot(domain: PostgrescdcDomain, name: str) -> Iterator[str]
     exist -- the source rejects one that does. The snapshot is what makes the assertion
     deterministic here, in place of the pre-created slot :func:`replication_slot` gives
     a plain capture test."""
-    engine = create_engine(domain.sqlalchemy_uri, isolation_level="AUTOCOMMIT")
+    engine = create_engine(domain.external_sqlalchemy_uri, isolation_level="AUTOCOMMIT")
     try:
         _drop_replication_slot(engine, name)
         try:
@@ -103,7 +107,7 @@ def drop_replication_slot(domain: PostgrescdcDomain, name: str) -> None:
     """Drop `name` if it exists, the way an operator does before forcing a fresh
     initial load: the load exports its snapshot at slot creation, so a second one over
     a live slot is refused."""
-    engine = create_engine(domain.sqlalchemy_uri, isolation_level="AUTOCOMMIT")
+    engine = create_engine(domain.external_sqlalchemy_uri, isolation_level="AUTOCOMMIT")
     try:
         _drop_replication_slot(engine, name)
     finally:
@@ -131,7 +135,7 @@ class CdcProbe:
     credential-bearing URI rather than through the connector."""
 
     def __init__(self, domain: PostgrescdcDomain, table: str) -> None:
-        self._engine = create_engine(domain.sqlalchemy_uri)
+        self._engine = create_engine(domain.external_sqlalchemy_uri)
         self._quoted = f'"{table}"'
         self.name = table
 

@@ -16,8 +16,6 @@ from urllib.request import urlopen
 import pytest
 import yaml
 
-from tabsdatax.itest.tdksystems2.store import instances_dir
-
 Consumer = Literal["tdtest", "aitest", "uitest"]
 MARKER = "tabsdata_instance"
 
@@ -144,6 +142,7 @@ class Instance:
             )
 
 
+INSTANCES_DIR = "~/.tabsdatax/instances"
 REGISTRY_FILE = "tdkpytest.yaml"
 REGISTRY_FILE_ENV = "ITEST_REGISTRY_FILE"
 ARENA_ENV = "TD_TEST_INSTANCES_ARENA"
@@ -160,7 +159,7 @@ def registry_file() -> Path:
     override = os.environ.get(REGISTRY_FILE_ENV)
     if override:
         return Path(override)
-    return instances_dir() / REGISTRY_FILE
+    return Path(INSTANCES_DIR).expanduser() / REGISTRY_FILE
 
 
 def registered_instance_names() -> list[str]:

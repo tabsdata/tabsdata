@@ -48,7 +48,7 @@ def test_check_connect_bad_credentials_raises(
     domain_postgres_employees_xs: PostgresDomain,
 ):
     bad = PostgresSrcConn(
-        uri=domain_postgres_employees_xs.uri,
+        uri=domain_postgres_employees_xs.external_uri,
         credentials=UserPassword(
             user=Secret(domain_postgres_employees_xs.user),
             password=Secret("definitely-wrong-password"),
@@ -82,7 +82,7 @@ def test_metadata_lists_provisioned_tables(
     # `map_entity_fields` maps the URI-path database into `database` and the
     # iterated schema name into `schema`.
     departments = _entity_by_table(entities, DEPARTMENTS)
-    assert departments.database == domain.db
+    assert departments.database == domain.database
     assert departments.schema == "public"
 
 

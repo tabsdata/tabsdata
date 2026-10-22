@@ -937,7 +937,7 @@ TYPE_ZOO_VALUES = (
 
 @contextmanager
 def _type_zoo(domain: PostgrescdcDomain, table: str) -> Iterator[str]:
-    engine = create_engine(domain.sqlalchemy_uri)
+    engine = create_engine(domain.external_sqlalchemy_uri)
     try:
         with engine.begin() as conn:
             conn.execute(text(f'DROP TABLE IF EXISTS "{table}"'))
@@ -951,7 +951,7 @@ def _type_zoo(domain: PostgrescdcDomain, table: str) -> Iterator[str]:
 
 
 def _insert_zoo_row(domain: PostgrescdcDomain, table: str, id_: int) -> None:
-    engine = create_engine(domain.sqlalchemy_uri)
+    engine = create_engine(domain.external_sqlalchemy_uri)
     try:
         with engine.begin() as conn:
             values = TYPE_ZOO_VALUES.format(id=id_)
@@ -1025,7 +1025,7 @@ def test_changes_during_a_reused_slot_load_are_applied_exactly_once(
     domain = domain_postgrescdc_employees_xs
     seeded = 2000
     with cdc_probe(domain, "td_il_exactly_once") as probe:
-        engine = create_engine(domain.sqlalchemy_uri)
+        engine = create_engine(domain.external_sqlalchemy_uri)
         try:
             with engine.begin() as conn:
                 conn.execute(
@@ -1074,7 +1074,7 @@ def test_changes_during_a_reused_slot_load_are_applied_exactly_once(
                 finally:
                     stop.set()
                     churner.join(timeout=60)
-                engine = create_engine(domain.sqlalchemy_uri)
+                engine = create_engine(domain.external_sqlalchemy_uri)
                 try:
                     with engine.connect() as conn:
                         expected = dict(
@@ -1111,7 +1111,7 @@ def test_the_server_reports_its_decoded_position_with_nothing_to_send(
     transaction committing in the database meanwhile is framed by BEGIN and
     COMMIT objects even with no change to send, so those are left out."""
     domain = domain_postgrescdc_employees_xs
-    url = make_url(domain.sqlalchemy_uri)
+    url = make_url(domain.external_sqlalchemy_uri)
     settings = {
         "host": url.host,
         "port": url.port,
@@ -1198,7 +1198,7 @@ def _state_lsn(ctx: _CdcCtx) -> int:
 
 
 def _slot_confirmed(domain: PostgrescdcDomain, slot: str) -> int:
-    engine = create_engine(domain.sqlalchemy_uri)
+    engine = create_engine(domain.external_sqlalchemy_uri)
     try:
         with engine.connect() as conn:
             return int(
@@ -1218,7 +1218,7 @@ def _write_wal_with_no_changes(domain: PostgrescdcDomain, table: str) -> None:
     """A vacuum of `table`'s dead rows writes WAL but commits no
     transaction, so logical decoding has nothing to send for it: only the
     server's keepalives report the position past it."""
-    engine = create_engine(domain.sqlalchemy_uri, isolation_level="AUTOCOMMIT")
+    engine = create_engine(domain.external_sqlalchemy_uri, isolation_level="AUTOCOMMIT")
     try:
         with engine.connect() as conn:
             conn.execute(text(f'VACUUM "{table}"'))
@@ -1283,7 +1283,7 @@ def test_the_recorded_position_keeps_up_with_the_slot_moving_by_itself(
 
 
 def _advance_slot(domain: PostgrescdcDomain, slot: str) -> int:
-    engine = create_engine(domain.sqlalchemy_uri, isolation_level="AUTOCOMMIT")
+    engine = create_engine(domain.external_sqlalchemy_uri, isolation_level="AUTOCOMMIT")
     try:
         with engine.connect() as conn:
             conn.execute(

@@ -18,9 +18,9 @@ class PostgrescdcSystem(System):
     system_type: ClassVar[str] = "postgrescdc"
     name: str
     system_kind: str
-    container: str
+    docker_container_name: str
     image: str
-    host: str
+    external_host: str
     port: str
     user: str
     password: str
@@ -32,14 +32,14 @@ class PostgrescdcDomain(Domain):
     name: str
     system_kind: str
     image: str
-    host: str
+    external_host: str
     port: str
     user: str
     password: str
-    db: str
-    uri: str  # credential-less; creds are supplied separately as UserPassword
-    sqlalchemy_uri: str
-    schema: str  # postgres calls the entity container a schema (== db here)
+    database: str
+    external_uri: str  # credential-less; creds are supplied separately as UserPassword
+    external_sqlalchemy_uri: str
+    schema: str  # postgres calls the entity container a schema (== database here)
     model: str | None = None
     data: str | None = None
     entities: dict[str, int] | None = None  # {table: record count}, once loaded
