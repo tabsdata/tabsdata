@@ -85,12 +85,14 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/domain.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     manifest = default_domains_manifest rs
     folder = set "${PROJECT_TABSDATA_ROOT_FOLDER}/target/domains.env"
 
-    debug "🚀 python ${EXPORTS_SCRIPT} ${manifest} ${folder}"
-    output = exec python ${EXPORTS_SCRIPT} ${manifest} ${folder}
+    tdd = tdd_exe
+    debug "🚀 python ${EXPORTS_SCRIPT} ${tdd} ${manifest} ${folder}"
+    output = exec python ${EXPORTS_SCRIPT} ${tdd} ${manifest} ${folder}
     if not eq ${output.code} "0"
         error "🚫 Could not read the descriptors of '${manifest}' (exit code ${output.code})."
         error "\n${output.stderr}"
@@ -124,11 +126,13 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/domain.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     manifest = default_domains_manifest rs
 
-    debug "🚀 tdx-domain info --manifest ${manifest} --format export"
-    output = exec tdx-domain info --manifest ${manifest} --format export
+    tdd = tdd_exe
+    debug "🚀 ${tdd} domain info --manifest ${manifest} --format export"
+    output = exec ${tdd} domain info --manifest ${manifest} --format export
     if not eq ${output.code} "0"
         error "🚫 Could not read the descriptors of '${manifest}' (exit code ${output.code})."
         error "\n${output.stderr}"

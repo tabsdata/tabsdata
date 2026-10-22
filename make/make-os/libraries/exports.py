@@ -10,18 +10,13 @@ import sys
 
 
 def main() -> int:
-    if len(sys.argv) != 3:
-        print("Usage: exports.py <manifest> <folder>", file=sys.stderr)
+    if len(sys.argv) != 4:
+        print("Usage: exports.py <tdd-exe> <manifest> <folder>", file=sys.stderr)
         return 2
-    manifest, folder = sys.argv[1], pathlib.Path(sys.argv[2])
-
-    tool = shutil.which("tdx-domain")
-    if tool is None:
-        print("Required tool tdx-domain not found.", file=sys.stderr)
-        return 1
+    tool, manifest, folder = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
 
     rendered = subprocess.run(
-        [tool, "info", "--manifest", manifest, "--format", "export"],
+        [tool, "domain", "info", "--manifest", manifest, "--format", "export"],
         capture_output=True,
         text=True,
     )

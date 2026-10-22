@@ -460,6 +460,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
     !include_files ./make/make-os/libraries/domain.ds
 
     with_domains = get_env TD_WITH_DOMAINS
@@ -476,8 +477,9 @@ script = [
 
     info "📄 Using domains manifest: ${manifest}"
     info "🛠️ Creating backend domains..."
-    debug "🚀 tdx-domain create --manifest ${manifest} --force"
-    exec --fail-on-error tdx-domain create --manifest ${manifest} --force
+    tdd = tdd_exe
+    debug "🚀 ${tdd} domain create --manifest ${manifest} --force"
+    exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -490,6 +492,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
     !include_files ./make/make-os/libraries/domain.ds
 
     with_domains = get_env TD_WITH_DOMAINS
@@ -505,8 +508,9 @@ script = [
 
     info "📄 Using domains manifest: ${manifest}"
     info "🛠️ Creating backend domains..."
-    debug "🚀 tdx-domain create --manifest ${manifest} --force"
-    exec --fail-on-error tdx-domain create --manifest ${manifest} --force
+    tdd = tdd_exe
+    debug "🚀 ${tdd} domain create --manifest ${manifest} --force"
+    exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force
 
     cm_run_task __os__reset_venv_env
 
@@ -522,6 +526,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
     !include_files ./make/make-os/libraries/domain.ds
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
@@ -564,8 +569,9 @@ script = [
 
     info "📄 Using domains manifest: ${manifest}"
     info "🛠️ Creating backend domains..."
-    debug "🚀 tdx-domain create --manifest ${manifest} --force"
-    exec --fail-on-error tdx-domain create --manifest ${manifest} --force
+    tdd = tdd_exe
+    debug "🚀 ${tdd} domain create --manifest ${manifest} --force"
+    exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force
 
     cm_run_task __os__reset_venv_env
 
@@ -597,6 +603,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
     !include_files ./make/make-os/libraries/domain.ds
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
@@ -639,8 +646,9 @@ script = [
 
     info "📄 Using domains manifest: ${manifest}"
     info "💥 Destroying backend domains..."
-    debug "🚀 tdx-domain destroy --manifest ${manifest}"
-    exec --fail-on-error tdx-domain destroy --manifest ${manifest}
+    tdd = tdd_exe
+    debug "🚀 ${tdd} domain destroy --manifest ${manifest}"
+    exec --fail-on-error ${tdd} domain destroy --manifest ${manifest}
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -653,6 +661,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
     !include_files ./make/make-os/libraries/domain.ds
 
     with_domains = get_env TD_WITH_DOMAINS
@@ -670,8 +679,9 @@ script = [
         manifest = default_domains_manifest ${language}
         info "📄 Using domains manifest: ${manifest}"
         info "💥 Destroying backend domains..."
-        debug "🚀 tdx-domain destroy --manifest ${manifest}"
-        exec --fail-on-error tdx-domain destroy --manifest ${manifest}
+        tdd = tdd_exe
+        debug "🚀 ${tdd} domain destroy --manifest ${manifest}"
+        exec --fail-on-error ${tdd} domain destroy --manifest ${manifest}
     end
     release ${languages}
 
@@ -687,6 +697,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
@@ -694,8 +705,10 @@ script = [
 
     exec tdx-itest banner --color green "🚥 Status for backend domains"
 
-    debug "🚀 tdx-domain status --domain ALL"
-    status_code = exec --get-exit-code tdx-domain status --domain ALL
+    tdd = tdd_exe
+
+    debug "🚀 ${tdd} domain status --domain ALL"
+    status_code = exec --get-exit-code ${tdd} domain status --domain ALL
     if not eq ${status_code} "0"
         warn "⚠️ Some backend domains reported an unhealthy status (exit code ${status_code})."
     end
@@ -712,6 +725,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
@@ -719,48 +733,9 @@ script = [
 
     exec tdx-itest banner --color cyan "📇 Info for backend domains"
 
-    domains_folder = get_env TD_BACKENDS_DIR
-    domains_folder = trim ${domains_folder}
-    if is_empty ${domains_folder}
-        home = get_env HOME
-        domains_folder = set ${home}/.tabsdatax/domains2
-    else
-        domains_folder = set ${domains_folder}/domains2
-    end
-
-    documents = array
-    domains_folder_exists = is_path_exists ${domains_folder}
-    if ${domains_folder_exists}
-        domains = glob_array ${domains_folder}/*
-        for domain in ${domains}
-            domain_is_file = is_file ${domain}
-            if ${domain_is_file}
-                domain_name = basename ${domain}
-                debug "🚀 tdx-domain info --domain ${domain_name} --format json"
-                output = exec tdx-domain info --domain ${domain_name} --format json
-                if eq ${output.code} "0"
-                    document = map
-                    content = trim ${output.stdout}
-                    map_put ${document} title ${domain_name}
-                    map_put ${document} content ${content}
-                    array_push ${documents} ${document}
-                else
-                    debug "➖ Skipping non-descriptor file: ${domain_name}"
-                end
-            end
-        end
-    end
-
-    documents_count = array_length ${documents}
-    if eq ${documents_count} "0"
-        info "🚜 No backend domains found in ${domains_folder}."
-    else
-        payload = json_encode --collection ${documents}
-        set_env TD_RENDER_PAYLOAD ${payload}
-        exec --fail-on-error tdx-json --env TD_RENDER_PAYLOAD
-        unset_env TD_RENDER_PAYLOAD
-    end
-    release --recursive ${documents}
+    tdd = tdd_exe
+    debug "🚀 ${tdd} domain info --domain ALL"
+    exec --fail-on-error ${tdd} domain info --domain ALL
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -774,14 +749,17 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
 
     exec tdx-itest banner --color magenta "📋 List of backend domains"
 
-    debug "🚀 tdx-domain list"
-    exec --fail-on-error tdx-domain list
+    tdd = tdd_exe
+
+    debug "🚀 ${tdd} domain list"
+    exec --fail-on-error ${tdd} domain list
 
     cm_run_task __os__reset_venv_env
     ''']
