@@ -189,7 +189,7 @@ def get(ctx: click.Context, plan: str):
             return [
                 RecordView(
                     title="Plan",
-                    context=[execution.id],
+                    context=[("ID", execution.id)],
                     fields=[
                         ("Name", present(execution.name)),
                         ("Project", present(execution.project)),

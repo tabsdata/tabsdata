@@ -504,7 +504,7 @@ def list_perm(ctx: click.Context, name: str):
         def _view():
             return TableView(
                 title="Permissions",
-                context=[f"role '{name}'"],
+                context=[("Role", name)],
                 columns=[
                     Column("ID", Kind.ID),
                     Column("Permission type"),
@@ -558,7 +558,7 @@ def list_user(ctx: click.Context, name: str):
         def _view():
             return TableView(
                 title="Users",
-                context=[f"role '{name}'"],
+                context=[("Role", name)],
                 columns=[
                     Column("Name", Kind.ID),
                     Column("Full name"),

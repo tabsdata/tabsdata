@@ -226,11 +226,14 @@ def status_context(
     narrowed to, for its title line."""
     context = []
     if plan:
-        context.append(f"plan {plan} {server.get_execution(plan).status}")
+        context.append(("Plan", f"{plan} ({server.get_execution(plan).status})"))
     if trx:
-        context.append(f"transaction {trx} {server.get_transaction(trx).status}")
+        context.append(("Transaction", f"{trx} ({server.get_transaction(trx).status})"))
     if fnrun:
-        context.append(f"function run {fnrun} {server.get_function_run(fnrun).status}")
+        context.append((
+            "Function run",
+            f"{fnrun} ({server.get_function_run(fnrun).status})",
+        ))
     return context
 
 
@@ -435,11 +438,11 @@ def live_monitor(
         view.notes += notes
         watched = elapsed_label(monotonic() - started)
         if done:
-            view.context.append(f"watched for {watched}")
+            view.context.append(("Watched for", watched))
         else:
             view.context += [
-                f"watching for {watched}",
-                f"refreshing every {MONITOR_REFRESH}s",
+                ("Watching for", watched),
+                ("Refresh", f"every {MONITOR_REFRESH}s"),
             ]
         return renderable(view, presentation)
 

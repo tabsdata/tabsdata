@@ -10,6 +10,7 @@ import rich_click as click
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    ancestry,
     format_option,
     hint_common_solutions,
     logical_prompt,
@@ -136,6 +137,7 @@ def list_groups(ctx: click.Context):
         def _view():
             return TableView(
                 title="Groups",
+                context=ancestry(ctx),
                 columns=[
                     Column("Name", Kind.ID),
                     Column("Description"),

@@ -150,7 +150,7 @@ def get(ctx: click.Context, fnrun: str):
             return [
                 RecordView(
                     title="Function run",
-                    context=[function_run.id],
+                    context=[("ID", function_run.id)],
                     fields=[
                         ("Project", present(function_run.project)),
                         ("Collection", collection_label(function_run)),

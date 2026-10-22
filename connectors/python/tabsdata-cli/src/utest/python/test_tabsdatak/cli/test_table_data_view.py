@@ -53,14 +53,15 @@ def terminal(monkeypatch, browsers: list, columns: int = 80) -> None:
     monkeypatch.setattr(TableBrowser, "run", lambda self: browsers.append(self))
 
 
-def test_the_view_names_the_table_collection_and_project():
+def test_the_view_names_the_project_collection_and_table():
     view = table_data_view("issue_triage", FRAME, "github_tfr", "jev")
 
-    assert view.title == "Data of table 'issue_triage'"
+    assert view.title == "Data"
     assert view.context == [
-        "collection 'github_tfr'",
-        "project 'jev'",
-        "2 rows × 24 columns",
+        ("Project", "jev"),
+        ("Collection", "github_tfr"),
+        ("Table", "issue_triage"),
+        ("Size", "2 rows × 24 columns"),
     ]
 
 
@@ -88,7 +89,7 @@ def test_not_a_terminal_prints_every_value_whole(capsys):
     show(table_data_view("issue_triage", FRAME), Display(browse=True))
 
     output = capsys.readouterr().out
-    assert "Data of table 'issue_triage'  ·  2 rows × 24 columns" in output
+    assert "Data | Table: issue_triage - Size: 2 rows × 24 columns" in output
     assert LONG_TITLE.strip() in output
     assert "### Description↵↵Currently" in output
     assert "column_19" in output
@@ -116,7 +117,7 @@ def test_print_cuts_each_line_at_the_terminal_width(monkeypatch):
 
     lines = [line for line in ANSI.sub("", stream.getvalue()).splitlines() if line]
     assert browsers == []
-    assert lines[0] == "Data of table 'issue_triage'  ·  2 rows × 24 columns"
+    assert lines[0] == "Data | Table: issue_triage - Size: 2 rows × 24 columns"
     table = [line for line in lines if line[:1] in "┏┃┡│├└"]
     assert table
     assert all(len(line) <= 60 for line in table)

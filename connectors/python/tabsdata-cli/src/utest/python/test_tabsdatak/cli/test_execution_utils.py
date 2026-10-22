@@ -99,9 +99,9 @@ def test_live_monitor_shows_how_long_it_has_been_watching(clock):
 
     fetch = _fetcher(["running"], ["running"], ["done"])
     execution_utils.live_monitor(["running"], fetch, build, lambda items: items == ["done"])
-    assert frames[0].context == ["watching for 0s", "refreshing every 1s"]
-    assert frames[2].context == ["watching for 1s", "refreshing every 1s"]
-    assert frames[-1].context == ["watched for 2s"]
+    assert frames[0].context == [("Watching for", "0s"), ("Refresh", "every 1s")]
+    assert frames[2].context == [("Watching for", "1s"), ("Refresh", "every 1s")]
+    assert frames[-1].context == [("Watched for", "2s")]
 
 
 def test_live_monitor_keeps_the_notes_of_the_listing(clock):

@@ -221,7 +221,7 @@ def _list_by_user(ctx: click.Context, server: TabsdataServer, user: str):
     def _view():
         return TableView(
             title="Permissions",
-            context=[f"user '{user}'"],
+            context=[("User", user)],
             columns=[Column("Permission", Kind.ID), Column("Project")],
             rows=[[perm.permission, present(perm.project)] for perm in permissions],
             count="permissions",
@@ -240,7 +240,7 @@ def _list_by_project(ctx: click.Context, server: TabsdataServer, project: str):
     def _view():
         return TableView(
             title="Access",
-            context=[f"project '{project}'"],
+            context=[("Project", project)],
             columns=[Column("User", Kind.ID), Column("Permission"), Column("On")],
             rows=[[entry.user, entry.permission, entry.source] for entry in access],
             count="grants",

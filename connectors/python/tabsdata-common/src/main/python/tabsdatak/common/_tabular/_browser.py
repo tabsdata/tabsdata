@@ -30,12 +30,19 @@ from tabsdatak.common._tabular._theme import (
     BACKGROUND,
     BORDER,
     CELL,
+    DELIMITER as DELIMITER_STYLE,
     KEY,
     MUTED,
     PANEL,
     SEPARATOR,
 )
-from tabsdatak.common._tabular._view import Display, RecordView, TableView
+from tabsdatak.common._tabular._view import (
+    DETAIL_DELIMITER,
+    TOPIC_DELIMITER,
+    Display,
+    RecordView,
+    TableView,
+)
 
 SCROLLBARS = f"""
         scrollbar-color: {SEPARATOR};
@@ -98,7 +105,11 @@ class TableBrowser(App):
         if isinstance(self.view, RecordView):
             name = self.view.fields[row][0]
         value = value_text(view_rows(self.view)[row][column]) or ""
-        position = "" if isinstance(self.view, RecordView) else f"  ·  row {row + 1}"
+        position = (
+            ""
+            if isinstance(self.view, RecordView)
+            else f"{TOPIC_DELIMITER}Row {row + 1}"
+        )
         self.push_screen(ValueScreen(f"{name}{position}", value))
 
 
@@ -162,7 +173,7 @@ def hints(*pairs: tuple[str, str]) -> Text:
     text = Text()
     for index, (key, action) in enumerate(pairs):
         if index:
-            text.append("  ·  ", style=SEPARATOR)
+            text.append(DETAIL_DELIMITER, style=DELIMITER_STYLE)
         text.append(key, style=KEY)
         text.append(f" {action}", style=MUTED)
     return text

@@ -13,6 +13,7 @@ import rich_click as click
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
+    ancestry,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
@@ -373,6 +374,7 @@ def list_collections(ctx: click.Context, all_projects: bool):
                 rows.append(row)
             return TableView(
                 title="Collections",
+                context=ancestry(ctx),
                 columns=columns,
                 rows=rows,
                 count="collections",

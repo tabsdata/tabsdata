@@ -193,7 +193,7 @@ def get(ctx: click.Context, trx: str):
             return [
                 RecordView(
                     title="Transaction",
-                    context=[transaction.id],
+                    context=[("ID", transaction.id)],
                     fields=[
                         ("Plan ID", transaction.execution.id),
                         ("Project", present(transaction.project)),

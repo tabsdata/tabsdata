@@ -424,6 +424,26 @@ def resolve_all_projects(ctx: click.Context, all_projects: bool) -> bool:
     return server.connection.project is None
 
 
+def ancestry(
+    ctx: click.Context,
+    collection: str | None = None,
+    function: str | None = None,
+    table: str | None = None,
+) -> list[tuple[str, str]]:
+    """The entities a project-scoped listing lives under, outermost first, for
+    its title line; a listing that spans projects says so."""
+    server = (ctx.obj or {}).get("tabsdataserver")
+    project = server.connection.project if server else None
+    parts = [("Project", project or "all")]
+    if collection:
+        parts.append(("Collection", collection))
+    if function:
+        parts.append(("Function", function))
+    if table:
+        parts.append(("Table", table))
+    return parts
+
+
 # ---------------------------------------------------------------------------
 # Output rendering: -o/--format {table,json,yaml}.
 # ---------------------------------------------------------------------------

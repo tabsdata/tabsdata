@@ -250,7 +250,7 @@ def secrets(ctx: click.Context, name: str):
         def _view():
             return TableView(
                 title="Secrets",
-                context=[f"project '{name}'"],
+                context=[("Project", name)],
                 columns=[Column("Secret", Kind.ID), Column("Keys")],
                 rows=[
                     [secret, present(", ".join(keys))]

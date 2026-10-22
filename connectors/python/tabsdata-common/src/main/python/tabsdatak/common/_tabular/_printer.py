@@ -26,16 +26,24 @@ from tabsdatak.common._tabular._cells import (
 from tabsdatak.common._tabular._theme import (
     BORDER,
     CONTEXT,
+    DELIMITER as DELIMITER_STYLE,
     DETAIL,
     HEADING,
+    LABEL,
     MUTED,
-    SEPARATOR,
     TITLE,
 )
-from tabsdatak.common._tabular._view import Column, Display, Kind, RecordView, TableView
+from tabsdatak.common._tabular._view import (
+    DETAIL_DELIMITER,
+    TOPIC_DELIMITER,
+    Column,
+    Display,
+    Kind,
+    RecordView,
+    TableView,
+)
 
 RENDER_LIMIT = 1_000_000
-CONTEXT_SEPARATOR = "  ·  "
 
 CellRenderer = Callable[[object, int, int], Text]
 
@@ -43,9 +51,15 @@ CellRenderer = Callable[[object, int, int], Text]
 def title_line(view: TableView | RecordView) -> Text:
     line = Text()
     line.append(view.title, style=TITLE)
-    for part in view.context:
-        line.append(CONTEXT_SEPARATOR, style=SEPARATOR)
-        line.append(part, style=CONTEXT)
+    for index, part in enumerate(view.context):
+        delimiter = DETAIL_DELIMITER if index else TOPIC_DELIMITER
+        line.append(delimiter, style=DELIMITER_STYLE)
+        if isinstance(part, tuple):
+            label, value = part
+            line.append(f"{label}: ", style=LABEL)
+            line.append(str(value), style=CONTEXT)
+        else:
+            line.append(part, style=CONTEXT)
     return line
 
 

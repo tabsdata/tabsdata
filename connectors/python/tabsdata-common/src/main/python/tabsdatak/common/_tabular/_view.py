@@ -9,6 +9,10 @@ from enum import Enum
 
 DEFAULT_MAX_WIDTH = 48
 PLACEHOLDER = "-"
+TOPIC_DELIMITER = " | "
+DETAIL_DELIMITER = " - "
+
+Context = list[str | tuple[str, str]]
 
 
 class Kind(Enum):
@@ -37,7 +41,7 @@ class TableView:
     title: str
     columns: list[Column]
     rows: list[list[object]] = field(default_factory=list)
-    context: list[str] = field(default_factory=list)
+    context: Context = field(default_factory=list)
     count: str | None = None
     notes: list[str] = field(default_factory=list)
     empty: str | None = None
@@ -61,7 +65,7 @@ class TableView:
 class RecordView:
     title: str
     fields: list[tuple[str, object]]
-    context: list[str] = field(default_factory=list)
+    context: Context = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     kinds: dict[str, Kind] = field(default_factory=dict)
     widths: dict[str, int] = field(default_factory=dict)

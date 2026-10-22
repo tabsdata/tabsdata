@@ -37,7 +37,7 @@ class Terminal(io.StringIO):
 def plans(**changes) -> TableView:
     view = TableView(
         title="Plans",
-        context=["project 'sales'"],
+        context=[("Project", "sales"), "2 rows"],
         columns=[
             Column("ID", Kind.ID),
             Column("Name"),
@@ -69,7 +69,7 @@ def printed(view, display=Display(), terminal=False, columns=80, monkeypatch=Non
 def test_a_pipe_gets_every_value_whole():
     output = printed(plans())
 
-    assert "Plans  ·  project 'sales'" in output
+    assert "Plans | Project: sales - 2 rows" in output
     assert LONG.strip() in output
     assert "### Description↵↵Currently" in output
     assert "Number of plans: 2" in output
@@ -265,7 +265,7 @@ def rendered(renderable) -> str:
 def test_a_renderable_holds_the_title_the_cut_table_and_the_footer():
     output = rendered(renderable(plans()))
 
-    assert output.startswith("Plans  ·  project 'sales'")
+    assert output.startswith("Plans | Project: sales - 2 rows")
     assert LONG[:48] + "…" in output
     assert "Number of plans: 2" in output
 

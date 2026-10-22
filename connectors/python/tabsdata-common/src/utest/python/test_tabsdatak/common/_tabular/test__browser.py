@@ -69,7 +69,7 @@ def test_clicking_a_mark_opens_the_whole_value():
     opened, title, value = run(TableBrowser(view), steps)
 
     assert opened
-    assert title == "body  ·  row 1"
+    assert title == "body | Row 1"
     assert value == BODY
 
 
@@ -164,10 +164,10 @@ def test_the_footers_explain_the_keys():
     key = _browser.select_key()
 
     assert _browser.footer_text().plain == (
-        f"q/esc Quit  ·  wheel Scroll  ·  … Whole value  ·  {key}+drag Select"
+        f"q/esc Quit - wheel Scroll - … Whole value - {key}+drag Select"
     )
     assert _browser.value_footer_text().plain == (
-        f"esc Close  ·  click outside Close  ·  {key}+drag Select"
+        f"esc Close - click outside Close - {key}+drag Select"
     )
 
 

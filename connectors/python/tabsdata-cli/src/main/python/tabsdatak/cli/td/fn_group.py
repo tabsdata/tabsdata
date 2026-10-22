@@ -10,6 +10,7 @@ import rich_click as click
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    ancestry,
     collection_label,
     format_option,
     get_currently_pinned_object,
@@ -142,7 +143,7 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
                     ])
                 return TableView(
                     title="History",
-                    context=[f"function '{name}'", f"collection '{coll}'"],
+                    context=ancestry(ctx, collection=coll, function=name),
                     columns=[
                         Column("ID", Kind.ID),
                         Column("Patches", Kind.ID),
@@ -275,7 +276,7 @@ def list_functions(ctx: click.Context, coll: str):
         def _view():
             return TableView(
                 title="Functions",
-                context=[f"collection '{coll}'"],
+                context=ancestry(ctx, collection=coll),
                 columns=[
                     Column("Name", Kind.ID),
                     Column("Type"),
@@ -652,7 +653,7 @@ def _monitor_execution_or_transaction(
     def build_view(function_runs):
         return TableView(
             title="Function runs",
-            context=[f"{keyword} {supervised_entity.id}"],
+            context=[(keyword.capitalize(), supervised_entity.id)],
             columns=[
                 Column("Function run ID", Kind.ID),
                 Column("Collection"),
@@ -1101,7 +1102,7 @@ def list_patches(ctx: click.Context, name: str, coll: str):
         def _view():
             return TableView(
                 title="Patches",
-                context=[f"function '{name}'", f"collection '{coll}'"],
+                context=ancestry(ctx, collection=coll, function=name),
                 columns=[
                     Column("Patch id", Kind.ID),
                     Column("Patches", Kind.ID),

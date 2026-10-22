@@ -10,6 +10,7 @@ import rich_click as click
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
+    ancestry,
     format_option,
     hint_common_solutions,
     present,
@@ -31,7 +32,7 @@ def _split(value: str | None) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
-def _summary_view(data: dict) -> TableView:
+def _summary_view(data: dict, scope: list) -> TableView:
     """Single condensed table: one row per
     `(dim_entity, group, status)`, magnitudes summed across buckets.
     """
@@ -39,7 +40,12 @@ def _summary_view(data: dict) -> TableView:
     unit = data.get("unit", "?")
     start_ms = data.get("start_ms")
     end_ms = data.get("end_ms")
-    context = [f"dim {dim or '?'}", f"unit {unit}", f"window [{start_ms}, {end_ms})"]
+    context = [
+        *scope,
+        ("Dim", dim or "?"),
+        ("Unit", unit),
+        ("Window", f"[{start_ms}, {end_ms})"),
+    ]
 
     nodes = data.get("nodes") or []
     is_collection_dim = dim == "collection"
@@ -239,7 +245,7 @@ def show(
             group_exclude=_split(group_exclude) or None,
             status=_split(status) or None,
         )
-        render(ctx, data=data, view=lambda: _summary_view(data))
+        render(ctx, data=data, view=lambda: _summary_view(data, ancestry(ctx)))
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to fetch metrics: {e}")
@@ -303,6 +309,7 @@ def inflight(
         def _view():
             return TableView(
                 title="Inflight",
+                context=ancestry(ctx),
                 columns=[
                     Column("Collection", Kind.ID),
                     Column("Group", Kind.ID),

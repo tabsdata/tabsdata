@@ -25,6 +25,7 @@ import rich_click as click
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
+    ancestry,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
@@ -269,12 +270,17 @@ def _list_plans(
             ctx, server, request_filter, last=False
         )
 
+        def _view():
+            view = plans_view(plans, title=f"Plans of the {kind.plural}")
+            view.context = ancestry(ctx, collection=coll, function=name)
+            return view
+
         # The listing already returned each row; ``_data`` would re-fetch them
         # one by one, and ``kwargs`` alone drops the id the row was built from.
         render(
             ctx,
             data=lambda: [{"id": plan.id, **plan.kwargs} for plan in plans],
-            view=lambda: plans_view(plans, title=f"Plans of the {kind.plural}"),
+            view=_view,
             truncated=truncated,
         )
     except Exception as e:
@@ -323,7 +329,11 @@ def _list_triggers(
                 ]
                 rows.append(row)
             return TableView(
-                title=kind.title, columns=columns, rows=rows, count=kind.plural
+                title=kind.title,
+                context=ancestry(ctx, collection=coll, function=name),
+                columns=columns,
+                rows=rows,
+                count=kind.plural,
             )
 
         # ``kwargs`` is the row the listing already returned; ``_data`` would

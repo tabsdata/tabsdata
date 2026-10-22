@@ -11,6 +11,7 @@ import rich_click as click
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
+    ancestry,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
@@ -52,12 +53,15 @@ def table_data_view(
 ) -> TableView:
     from tabsdatak.common._tabular import Column, TableView
 
-    context = [f"collection '{collection}'"] if collection else []
-    if project:
-        context.append(f"project '{project}'")
-    context.append(f"{frame.height} rows × {frame.width} columns")
+    context = [("Project", project)] if project else []
+    if collection:
+        context.append(("Collection", collection))
+    context.append(("Table", name))
+    rows = "row" if frame.height == 1 else "rows"
+    columns = "column" if frame.width == 1 else "columns"
+    context.append(("Size", f"{frame.height} {rows} × {frame.width} {columns}"))
     return TableView(
-        title=f"Data of table '{name}'",
+        title="Data",
         context=context,
         columns=[
             Column(column, detail=str(dtype)) for column, dtype in frame.schema.items()
@@ -299,7 +303,7 @@ def list_tables(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
                 ])
             return TableView(
                 title="Tables",
-                context=[f"collection '{coll}'"],
+                context=ancestry(ctx, collection=coll),
                 columns=[
                     Column("Name", Kind.ID),
                     Column("Function"),
@@ -564,7 +568,7 @@ def schema(
         def _view():
             return TableView(
                 title="Schema",
-                context=[f"table '{name}'", f"collection '{coll}'"],
+                context=ancestry(ctx, collection=coll, table=name),
                 columns=[Column("Column", Kind.ID), Column("Type")],
                 rows=[[column["name"], column["type"]] for column in table_schema],
                 count="columns",
@@ -633,7 +637,7 @@ def versions(ctx: click.Context, coll: str, name: str):
                 ])
             return TableView(
                 title="Data versions",
-                context=[f"table '{name}'", f"collection '{coll}'"],
+                context=ancestry(ctx, collection=coll, table=name),
                 columns=[
                     Column("Version", Kind.ID),
                     Column("Function"),
