@@ -77,8 +77,6 @@ tdkubuntu = "tabsdatax.kubernetes.docker.ubuntu.cli:main"
 tdx-gconnector = "tabsdatax.generator.connector.cli:main"
 tdx-gtableframe = "tabsdatax.generator.tableframe.cli:main"
 tdx-itest = "tabsdatax.itest.tdkinstance.cli:main"
-tdx-system = "tabsdatax.itest.tdksystems2.tdx_system2:main"
-tdx-domain = "tabsdatax.itest.tdksystems2.tdx_domain2:main"
 tdx-apidocgen = "tabsdatax.generator.apidoc.cli:main"
 tdx-json = "tabsdatax.render.json:main"
 tdx-table = "tabsdatax.render.table:main"
@@ -187,14 +185,6 @@ namespaces = true
     "resources/runner/bin/*",
     "resources/runner/functions/**/*.py",
     "resources/runner/functions/**/*.csv",
-]
-"tabsdatax.itest.tdksystems2" = [
-    "env-defs/*.requirements",
-    "models/*/*.json",
-    "models/*/*.csv",
-    "systems/*/domain/models/*/*.ddl",
-    "systems/*/domain/models/*/*.yml",
-    "systems/*/domain/models/*/*.md",
 ]
 
 [tool.tabsdata]
