@@ -103,3 +103,20 @@ def modify_data(
     if seed is not None:
         args += ["--seed", str(seed)]
     return _parse(run("modify-data", domain, *args))
+
+
+def capture_table(domain: str, *, table: str, ddl: str | None = None) -> str:
+    """Register `table` for change capture via ``tdd domain capture-table``,
+    creating it from `ddl` first when given; returns its CD table."""
+    args = ["--table", table]
+    if ddl is not None:
+        args += ["--ddl", ddl]
+    return run("capture-table", domain, *args)["cd_table"]
+
+
+def release_table(domain: str, *, table: str, drop: bool = False) -> None:
+    """Undo :func:`capture_table` via ``tdd domain release-table``."""
+    args = ["--table", table]
+    if drop:
+        args.append("--drop")
+    run("release-table", domain, *args)

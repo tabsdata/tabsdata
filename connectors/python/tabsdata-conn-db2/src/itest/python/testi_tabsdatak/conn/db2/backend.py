@@ -66,29 +66,25 @@ CDC_SOURCE_COLUMNS = "ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR(64), AGE INT
 def cdc_source_table(
     domain: Db2CdcDomain, name: str | None = None, columns: str = CDC_SOURCE_COLUMNS
 ) -> Iterator[tuple[str, str]]:
-    """A freshly registered CDC source table, yielded as ``(table, cd_table)``.
+    """A freshly captured CDC source table, yielded as ``(table, cd_table)``.
 
-    Registration is the domain's (``Db2Cdc.register_table``), so the six-step
+    Capture is the domain's (``tdd domain capture-table``), so the six-step
     ``asnclp`` sequence lives in one place. The name is unique per call unless
     one is given: a CD table keeps its rows until asncap prunes them, so two
     tests sharing one source table would see each other's events.
     """
-    from tabsdatax.itest.tdksystems2.systems.db2cdc.backend import Db2Cdc
-
-    backend = Db2Cdc()
-    meta = {"SYS_CONTAINER": domain.sys_container or "", "DB": domain.db}
     table = (name or f"TD_CDC_{uuid.uuid4().hex[:12]}").upper()
     schema = domain.schema.upper()
     ddl = f"create table {schema}.{table} ({columns})"
     if name:
         # A generated name is new every time, but a fixed one may survive a run
         # that died before its teardown.
-        backend.deregister_table(meta, table, drop=True)
-    cd_table = backend.register_table(meta, table, ddl=ddl)
+        domain.release_table(table=table, drop=True)
+    cd_table = domain.capture_table(table=table, ddl=ddl)
     try:
         yield table, cd_table
     finally:
-        backend.deregister_table(meta, table, drop=True)
+        domain.release_table(table=table, drop=True)
 
 
 def cdc_insert(domain: Db2CdcDomain, table: str, rows: list[dict]) -> None:

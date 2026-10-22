@@ -10,6 +10,7 @@ from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
+from .. import operations
 from ..backend import Domain, System, require
 
 
@@ -44,10 +45,21 @@ class Db2CdcDomain(Domain):
     # postgres' logical slots, Db2 capture is an OS process (``asncap``) reading
     # archived logs, so a test that needs to interrogate or nudge it has to reach
     # into the container.
-    sys_container: str | None = None
+    sys_docker_container_name: str
     model: str | None = None
     data: str | None = None
     entities: dict[str, int] | None = None  # {table: record count}, once loaded
+
+    def capture_table(self, *, table: str, ddl: str | None = None) -> str:
+        """Register `table` of this domain for change capture via ``tdd domain
+        capture-table``, creating it from `ddl` first when given; returns the CD
+        table capture writes its changes into."""
+        return operations.capture_table(self.name, table=table, ddl=ddl)
+
+    def release_table(self, *, table: str, drop: bool = False) -> None:
+        """Undo :meth:`capture_table` via ``tdd domain release-table``, dropping
+        the table too when `drop`."""
+        operations.release_table(self.name, table=table, drop=drop)
 
 
 def db2cdc_system(name: str):
