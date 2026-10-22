@@ -18,7 +18,7 @@ use kube::core::{Expression, Selector};
 
 use crate::base::constants::{
     LOG_ID_LABEL, PART_OF_LABEL, PART_OF_TABSDATA, POD_YAML_FIELD_LABELS, POD_YAML_FIELD_METADATA,
-    POD_YAML_WORKER_LABEL, VERSION_LABEL, TIER_LABEL,
+    POD_YAML_WORKER_LABEL, TIER_LABEL, VERSION_LABEL,
 };
 use crate::base::error::kubernetes::{KubeStampError, KubernetesError};
 use crate::base::labels::{LABEL_VALUE_MAX_LENGTH, LABEL_WORKER_ID};
