@@ -18,10 +18,16 @@ import sys
 from pathlib import Path
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
-from tabsdatak.cli.cli_utils import format_option, make_console, render, show_hint
+from tabsdatak.cli.cli_utils import (
+    format_option,
+    present,
+    render,
+    show_hint,
+    view_options,
+)
+from tabsdatak.common._tabular import Column, Kind, TableView
 
 EXAMPLES_RESOURCE = "tdresources/examples"
 META_FILE = "_meta.yaml"
@@ -73,6 +79,7 @@ def _read_meta(example_dir: Path) -> dict:
 
 @examples.command("list")
 @format_option
+@view_options()
 @click.pass_context
 def list_(ctx: click.Context):
     """List the available examples"""
@@ -85,18 +92,15 @@ def list_(ctx: click.Context):
         for name in _example_names(root)
     ]
 
-    def _table():
-        table = Table(title="Available examples")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("Description")
-        for row in rows:
-            table.add_row(row["name"], row["description"])
-        click.echo()
-        make_console().print(table)
-        click.echo(f"Number of examples: {len(rows)}")
-        click.echo()
+    def _view():
+        return TableView(
+            title="Available examples",
+            columns=[Column("Name", Kind.ID), Column("Description")],
+            rows=[[row["name"], present(row["description"])] for row in rows],
+            count="examples",
+        )
 
-    render(ctx, data=rows, table=_table)
+    render(ctx, data=rows, view=_view)
 
 
 def _skip(entry: Path) -> bool:

@@ -4,23 +4,25 @@
 
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
-    echo_more_results,
+    format_option,
     get_currently_pinned_object,
     get_pin,
     hint_common_solutions,
     logical_prompt,
-    make_console,
     max_result_option,
+    present,
+    render,
     set_pin,
     store_cli_options,
     take,
     verify_login_or_prompt,
+    view_options,
 )
+from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 from tabsdatak.sdk.tabsdata_server import (
     PERMISSION_TYPES_WITH_ENTITY,
     VALID_PERMISSION_TYPES,
@@ -394,6 +396,8 @@ def delete_user(ctx: click.Context, name: str, user: str):
 
 
 @role.command()
+@format_option
+@view_options()
 @click.option("--name", "-n", help="Name of the role to display.")
 @click.pass_context
 def info(ctx: click.Context, name: str):
@@ -408,31 +412,27 @@ def info(ctx: click.Context, name: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         role = server.get_role(name)
 
-        table = Table(title="Role")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("ID", no_wrap=True)
-        table.add_column("Description")
-        table.add_column("Created on")
-        table.add_column("Created by")
+        def _view():
+            return RecordView(
+                title="Role",
+                fields=[
+                    ("Name", role.name),
+                    ("ID", role.id),
+                    ("Description", present(role.description)),
+                    ("Created on", present(role.created_on_str)),
+                    ("Created by", present(role.created_by)),
+                ],
+            )
 
-        table.add_row(
-            role.name,
-            role.id,
-            role.description,
-            role.created_on_str,
-            role.created_by,
-        )
-
-        click.echo()
-        console = make_console()
-        console.print(table)
-        click.echo()
+        render(ctx, data=lambda: role._data, view=_view)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display role: {e}")
 
 
 @role.command(name="list")
+@format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_roles(ctx: click.Context):
@@ -442,34 +442,43 @@ def list_roles(ctx: click.Context):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_roles, truncated = take(ctx, server.list_roles_generator())
 
-        table = Table(title="Roles")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("ID", no_wrap=True)
-        table.add_column("Description")
-        table.add_column("Created on")
-        table.add_column("Created by")
-
-        for role in list_of_roles:
-            table.add_row(
-                role.name,
-                role.id,
-                role.description,
-                role.created_on_str,
-                role.created_by,
+        def _view():
+            return TableView(
+                title="Roles",
+                columns=[
+                    Column("Name", Kind.ID),
+                    Column("ID", Kind.ID),
+                    Column("Description"),
+                    Column("Created on", Kind.TIME),
+                    Column("Created by"),
+                ],
+                rows=[
+                    [
+                        role.name,
+                        role.id,
+                        present(role.description),
+                        present(role.created_on_str),
+                        present(role.created_by),
+                    ]
+                    for role in list_of_roles
+                ],
+                count="roles",
             )
 
-        click.echo()
-        console = make_console()
-        console.print(table)
-        click.echo(f"Number of roles: {len(list_of_roles)}")
-        echo_more_results(ctx, truncated)
-        click.echo()
+        render(
+            ctx,
+            data=lambda: [{**r.kwargs, "name": r.name} for r in list_of_roles],
+            view=_view,
+            truncated=truncated,
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list roles: {e}")
 
 
 @role.command()
+@format_option
+@view_options()
 @click.option("--name", "-n", help="Name of the role to which the permissions belong.")
 @max_result_option
 @click.pass_context
@@ -485,47 +494,51 @@ def list_perm(ctx: click.Context, name: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         role = server.get_role(name)
         list_of_permissions, truncated = take(ctx, role.list_permissions_generator())
+        with_entity = {item for tup in PERMISSION_TYPES_WITH_ENTITY for item in tup}
 
-        table = Table(title="Permissions")
-        table.add_column("ID", style="cyan", no_wrap=True)
-        table.add_column("Permission type")
-        table.add_column("Entity name")
-        table.add_column("Granted on")
-        table.add_column("Granted by")
+        def _entity(permission):
+            if permission.type not in with_entity:
+                return None
+            return permission.entity or ALL_ENTITIES_REPRESENTATION
 
-        for permission in list_of_permissions:
-            permission_type = permission.type
-            flattened_list = [
-                item for tup in PERMISSION_TYPES_WITH_ENTITY for item in tup
-            ]
-            if permission_type not in flattened_list:
-                entity = "-"
-            else:
-                entity = (
-                    permission.entity
-                    if permission.entity
-                    else ALL_ENTITIES_REPRESENTATION
-                )
-            table.add_row(
-                permission.id,
-                permission_type,
-                entity,
-                permission.granted_on_str,
-                permission.granted_by,
+        def _view():
+            return TableView(
+                title="Permissions",
+                context=[f"role '{name}'"],
+                columns=[
+                    Column("ID", Kind.ID),
+                    Column("Permission type"),
+                    Column("Entity name"),
+                    Column("Granted on", Kind.TIME),
+                    Column("Granted by"),
+                ],
+                rows=[
+                    [
+                        permission.id,
+                        permission.type,
+                        _entity(permission),
+                        present(permission.granted_on_str),
+                        present(permission.granted_by),
+                    ]
+                    for permission in list_of_permissions
+                ],
+                count="permissions",
             )
 
-        click.echo()
-        console = make_console()
-        console.print(table)
-        click.echo(f"Number of permissions: {len(list_of_permissions)}")
-        echo_more_results(ctx, truncated)
-        click.echo()
+        render(
+            ctx,
+            data=lambda: [{**p.kwargs, "id": p.id} for p in list_of_permissions],
+            view=_view,
+            truncated=truncated,
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list permissions: {e}")
 
 
 @role.command()
+@format_option
+@view_options()
 @click.option("--name", "-n", help="Name of the role to which the users belong.")
 @max_result_option
 @click.pass_context
@@ -542,21 +555,34 @@ def list_user(ctx: click.Context, name: str):
         role = server.get_role(name)
         list_of_users, truncated = take(ctx, role.list_users_generator())
 
-        table = Table(title="Users")
-        table.add_column("Name", style="cyan", no_wrap=True)
-        table.add_column("Full name")
-        table.add_column("Email")
-        table.add_column("Enabled")
+        def _view():
+            return TableView(
+                title="Users",
+                context=[f"role '{name}'"],
+                columns=[
+                    Column("Name", Kind.ID),
+                    Column("Full name"),
+                    Column("Email"),
+                    Column("Enabled", Kind.FLAG),
+                ],
+                rows=[
+                    [
+                        user.name,
+                        present(user.full_name),
+                        present(user.email),
+                        user.enabled,
+                    ]
+                    for user in list_of_users
+                ],
+                count="users",
+            )
 
-        for user in list_of_users:
-            table.add_row(user.name, user.full_name, user.email, str(user.enabled))
-
-        click.echo()
-        console = make_console()
-        console.print(table)
-        click.echo(f"Number of users: {len(list_of_users)}")
-        echo_more_results(ctx, truncated)
-        click.echo()
+        render(
+            ctx,
+            data=lambda: [{**u.kwargs, "name": u.name} for u in list_of_users],
+            view=_view,
+            truncated=truncated,
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list users: {e}")

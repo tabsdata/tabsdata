@@ -7,22 +7,21 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    beautify_list,
-    echo_more_results,
     format_option,
     hint_common_solutions,
     logical_prompt,
-    make_console,
     max_result_option,
+    present,
     proj_option,
     render,
     take,
     verify_login_or_prompt,
+    view_options,
 )
+from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 
 if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
@@ -86,6 +85,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @group.command()
 @proj_option
 @format_option
+@view_options()
 @click.option("--name", "-n", help="Name of the group to display.")
 @click.pass_context
 def get(ctx: click.Context, name: str):
@@ -101,21 +101,20 @@ def get(ctx: click.Context, name: str):
             if (c._data or {}).get("group") == name
         )
 
-        def _table():
-            table = Table(title="Group", show_header=False, show_lines=True)
-            table.add_column("Field", style="cyan", no_wrap=True)
-            table.add_column("Value")
-            table.add_row("Name:", grp.name)
-            table.add_row("Description:", grp.description or "")
-            table.add_row("System:", "Yes" if grp.system else "No")
-            table.add_row("Created by:", grp.created_by or "-")
-            table.add_row("Created on:", grp.created_on_str or "-")
-            table.add_row("Collections:", beautify_list(collection_names))
-            click.echo()
-            make_console(emoji=False, markup=False).print(table)
-            click.echo()
+        def _view():
+            return RecordView(
+                title="Group",
+                fields=[
+                    ("Name", grp.name),
+                    ("Description", present(grp.description)),
+                    ("System", "Yes" if grp.system else "No"),
+                    ("Created by", present(grp.created_by)),
+                    ("Created on", present(grp.created_on_str)),
+                    ("Collections", present(", ".join(collection_names))),
+                ],
+            )
 
-        render(ctx, data=lambda: grp._data, table=_table)
+        render(ctx, data=lambda: grp._data, view=_view)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display group: {e}")
@@ -124,6 +123,7 @@ def get(ctx: click.Context, name: str):
 @group.command(name="list")
 @proj_option
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_groups(ctx: click.Context):
@@ -133,26 +133,33 @@ def list_groups(ctx: click.Context):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_groups, truncated = take(ctx, server.list_groups_generator())
 
-        def _table():
-            table = Table(title="Groups")
-            table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("Description")
-            table.add_column("Created by")
-            table.add_column("Created on")
-            for grp in list_of_groups:
-                table.add_row(
-                    grp.name,
-                    grp.description,
-                    grp.created_by,
-                    grp.created_on_str,
-                )
-            click.echo()
-            make_console().print(table)
-            click.echo(f"Number of groups: {len(list_of_groups)}")
-            click.echo()
+        def _view():
+            return TableView(
+                title="Groups",
+                columns=[
+                    Column("Name", Kind.ID),
+                    Column("Description"),
+                    Column("Created by"),
+                    Column("Created on", Kind.TIME),
+                ],
+                rows=[
+                    [
+                        grp.name,
+                        present(grp.description),
+                        present(grp.created_by),
+                        present(grp.created_on_str),
+                    ]
+                    for grp in list_of_groups
+                ],
+                count="groups",
+            )
 
-        render(ctx, data=lambda: [g._data for g in list_of_groups], table=_table)
-        echo_more_results(ctx, truncated)
+        render(
+            ctx,
+            data=lambda: [g._data for g in list_of_groups],
+            view=_view,
+            truncated=truncated,
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list groups: {e}")

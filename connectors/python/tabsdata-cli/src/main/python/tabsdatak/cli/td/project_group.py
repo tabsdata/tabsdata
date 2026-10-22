@@ -10,20 +10,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    echo_more_results,
     format_option,
     hint_common_solutions,
     logical_prompt,
-    make_console,
     max_result_option,
+    present,
     render,
     take,
     verify_login_or_prompt,
+    view_options,
 )
+from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 
 if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
@@ -162,6 +162,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 @project.command()
 @format_option
+@view_options()
 @click.option("--name", "-n", help="Name of the project to display.")
 @click.pass_context
 def get(ctx: click.Context, name: str):
@@ -172,19 +173,18 @@ def get(ctx: click.Context, name: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         prj = server.get_project(name)
 
-        def _table():
-            table = Table(title="Project", show_header=False, show_lines=True)
-            table.add_column("Field", style="cyan", no_wrap=True)
-            table.add_column("Value")
-            table.add_row("Name:", prj.name)
-            table.add_row("Description:", prj.description or "")
-            table.add_row("Created by:", prj.created_by or "-")
-            table.add_row("Created on:", prj.created_on_str or "-")
-            click.echo()
-            make_console(emoji=False, markup=False).print(table)
-            click.echo()
+        def _view():
+            return RecordView(
+                title="Project",
+                fields=[
+                    ("Name", prj.name),
+                    ("Description", present(prj.description)),
+                    ("Created by", present(prj.created_by)),
+                    ("Created on", present(prj.created_on_str)),
+                ],
+            )
 
-        render(ctx, data=lambda: prj._data, table=_table)
+        render(ctx, data=lambda: prj._data, view=_view)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display project: {e}")
@@ -192,6 +192,7 @@ def get(ctx: click.Context, name: str):
 
 @project.command(name="list")
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_projects(ctx: click.Context):
@@ -201,26 +202,33 @@ def list_projects(ctx: click.Context):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_projects, truncated = take(ctx, server.list_projects_generator())
 
-        def _table():
-            table = Table(title="Projects")
-            table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("Description")
-            table.add_column("Created by")
-            table.add_column("Created on")
-            for prj in list_of_projects:
-                table.add_row(
-                    prj.name,
-                    prj.description,
-                    prj.created_by,
-                    prj.created_on_str,
-                )
-            click.echo()
-            make_console().print(table)
-            click.echo(f"Number of projects: {len(list_of_projects)}")
-            click.echo()
+        def _view():
+            return TableView(
+                title="Projects",
+                columns=[
+                    Column("Name", Kind.ID),
+                    Column("Description"),
+                    Column("Created by"),
+                    Column("Created on", Kind.TIME),
+                ],
+                rows=[
+                    [
+                        prj.name,
+                        present(prj.description),
+                        present(prj.created_by),
+                        present(prj.created_on_str),
+                    ]
+                    for prj in list_of_projects
+                ],
+                count="projects",
+            )
 
-        render(ctx, data=lambda: [p._data for p in list_of_projects], table=_table)
-        echo_more_results(ctx, truncated)
+        render(
+            ctx,
+            data=lambda: [p._data for p in list_of_projects],
+            view=_view,
+            truncated=truncated,
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list projects: {e}")
@@ -228,6 +236,7 @@ def list_projects(ctx: click.Context):
 
 @project.command()
 @format_option
+@view_options()
 @click.option("--name", "-n", help="Name of the project whose secrets to list.")
 @click.pass_context
 def secrets(ctx: click.Context, name: str):
@@ -238,18 +247,19 @@ def secrets(ctx: click.Context, name: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         project_secrets = server.get_project_secrets(name)
 
-        def _table():
-            table = Table(title=f"Secrets of project {name}")
-            table.add_column("Secret", style="cyan", no_wrap=True)
-            table.add_column("Keys")
-            for secret, keys in project_secrets.items():
-                table.add_row(secret, ", ".join(keys))
-            click.echo()
-            make_console(emoji=False, markup=False).print(table)
-            click.echo(f"Number of secrets: {len(project_secrets)}")
-            click.echo()
+        def _view():
+            return TableView(
+                title="Secrets",
+                context=[f"project '{name}'"],
+                columns=[Column("Secret", Kind.ID), Column("Keys")],
+                rows=[
+                    [secret, present(", ".join(keys))]
+                    for secret, keys in project_secrets.items()
+                ],
+                count="secrets",
+            )
 
-        render(ctx, data=lambda: project_secrets, table=_table)
+        render(ctx, data=lambda: project_secrets, view=_view)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list project secrets: {e}")

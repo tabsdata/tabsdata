@@ -8,18 +8,18 @@ import sys
 from pathlib import Path
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    beautify_list,
     format_option,
     logical_prompt,
-    make_console,
+    present,
     render,
     verify_login_or_prompt,
+    view_options,
 )
 from tabsdatak.common._datetime import _convert_timestamp_to_string
+from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 
 
 @cli_command
@@ -104,6 +104,7 @@ def delete_cert(ctx: click.Context, server: str):
 
 @auth.command()
 @format_option
+@view_options()
 @click.pass_context
 def info(ctx: click.Context):
     """Display information of the currently authenticated user"""
@@ -111,21 +112,17 @@ def info(ctx: click.Context):
     try:
         info = ctx.obj["tabsdataserver"].auth_info()
 
-        def _table():
-            table = Table(title="Current authenticated user")
-            table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("Email")
-            table.add_column("Roles")
-            table.add_row(
-                info["name"],
-                info["email"],
-                beautify_list(info["roles"]),
+        def _view():
+            return RecordView(
+                title="Current authenticated user",
+                fields=[
+                    ("Name", info["name"]),
+                    ("Email", present(info["email"])),
+                    ("Roles", present(", ".join(info["roles"] or []))),
+                ],
             )
-            click.echo()
-            make_console().print(table)
-            click.echo()
 
-        render(ctx, data=info, table=_table)
+        render(ctx, data=info, view=_view)
     except Exception as e:
         raise click.ClickException(f"Failed to display current user information: {e}")
 
@@ -227,6 +224,7 @@ def service_token():
 )
 @click.option("--comment", help="A label, so the two slots tell themselves apart.")
 @format_option
+@view_options()
 @click.pass_context
 def service_token_create(
     ctx: click.Context, slot: int, expires_in_days: int, comment: str
@@ -245,33 +243,30 @@ def service_token_create(
             slot, expires_in_days, comment=comment
         )
 
-        def _table():
-            table = Table(title="Service token created")
-            table.add_column("Slot", style="cyan", no_wrap=True)
-            table.add_column("Token")
-            table.add_column("Expires on")
-            table.add_row(
-                str(created["slot"]),
-                created["token"],
-                _moment(created.get("expires_on"), "never"),
+        def _view():
+            return RecordView(
+                title="Service token created",
+                fields=[
+                    ("Slot", created["slot"]),
+                    ("Token", created["token"]),
+                    ("Expires on", _moment(created.get("expires_on"), "never")),
+                ],
+                widths={"Token": 0},
+                notes=[
+                    "Store it now: this is the only time the token is shown. Pass "
+                    "it to 'tdk login --token', or export it as TDK_TOKEN and run "
+                    "'tdk login --token' with no value."
+                ],
             )
-            click.echo()
-            make_console().print(table)
-            click.echo()
-            click.echo(
-                "Store it now: this is the only time the token is shown. Pass "
-                "it to 'tdk login --token', or export it as TDK_TOKEN and run "
-                "'tdk login --token' with no value."
-            )
-            click.echo()
 
-        render(ctx, data=created, table=_table)
+        render(ctx, data=created, view=_view)
     except Exception as e:
         raise click.ClickException(f"Failed to create the token: {e}")
 
 
 @service_token.command(name="list")
 @format_option
+@view_options()
 @click.pass_context
 def service_token_list(ctx: click.Context):
     """List your service tokens.
@@ -283,28 +278,32 @@ def service_token_list(ctx: click.Context):
     try:
         tokens = ctx.obj["tabsdataserver"].list_service_tokens()
 
-        def _table():
-            table = Table(title="Service tokens")
-            table.add_column("Slot", style="cyan", no_wrap=True)
-            table.add_column("Hint")
-            table.add_column("Comment")
-            table.add_column("Created on")
-            table.add_column("Expires on")
-            table.add_column("Last used")
-            for entry in tokens:
-                table.add_row(
-                    str(entry["slot"]),
-                    entry["hint"],
-                    entry.get("comment") or "",
-                    _moment(entry["created_on"], "-"),
-                    _moment(entry.get("expires_on"), "never"),
-                    _moment(entry.get("last_used_on"), "never"),
-                )
-            click.echo()
-            make_console().print(table)
-            click.echo()
+        def _view():
+            return TableView(
+                title="Service tokens",
+                columns=[
+                    Column("Slot", Kind.ID),
+                    Column("Hint"),
+                    Column("Comment"),
+                    Column("Created on", Kind.TIME),
+                    Column("Expires on", Kind.TIME),
+                    Column("Last used", Kind.TIME),
+                ],
+                rows=[
+                    [
+                        entry["slot"],
+                        entry["hint"],
+                        present(entry.get("comment")),
+                        present(_moment(entry["created_on"], "")),
+                        _moment(entry.get("expires_on"), "never"),
+                        _moment(entry.get("last_used_on"), "never"),
+                    ]
+                    for entry in tokens
+                ],
+                count="service tokens",
+            )
 
-        render(ctx, data=tokens, table=_table)
+        render(ctx, data=tokens, view=_view)
     except Exception as e:
         raise click.ClickException(f"Failed to list the tokens: {e}")
 

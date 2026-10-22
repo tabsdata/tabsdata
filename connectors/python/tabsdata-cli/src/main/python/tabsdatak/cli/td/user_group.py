@@ -4,20 +4,20 @@
 
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    echo_more_results,
     format_option,
     hint_common_solutions,
     logical_prompt,
-    make_console,
     max_result_option,
+    present,
     render,
     take,
     verify_login_or_prompt,
+    view_options,
 )
+from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 
 
 @cli_command
@@ -103,6 +103,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 
 @user.command()
 @format_option
+@view_options()
 @click.option("--name", "-n", help="Name of the user to display.")
 @click.pass_context
 def get(ctx: click.Context, name: str):
@@ -112,18 +113,18 @@ def get(ctx: click.Context, name: str):
     try:
         user = ctx.obj["tabsdataserver"].get_user(name)
 
-        def _table():
-            table = Table(title="User")
-            table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("Full name")
-            table.add_column("Email")
-            table.add_column("Enabled")
-            table.add_row(user.name, user.full_name, user.email, str(user.enabled))
-            click.echo()
-            make_console().print(table)
-            click.echo()
+        def _view():
+            return RecordView(
+                title="User",
+                fields=[
+                    ("Name", user.name),
+                    ("Full name", present(user.full_name)),
+                    ("Email", present(user.email)),
+                    ("Enabled", user.enabled),
+                ],
+            )
 
-        render(ctx, data=lambda: user._data, table=_table)
+        render(ctx, data=lambda: user._data, view=_view)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display user: {e}")
@@ -131,6 +132,7 @@ def get(ctx: click.Context, name: str):
 
 @user.command(name="list")
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_users(ctx: click.Context):
@@ -141,21 +143,33 @@ def list_users(ctx: click.Context):
             ctx, ctx.obj["tabsdataserver"].list_users_generator()
         )
 
-        def _table():
-            table = Table(title="Users")
-            table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("Full name")
-            table.add_column("Email")
-            table.add_column("Enabled")
-            for user in list_of_users:
-                table.add_row(user.name, user.full_name, user.email, str(user.enabled))
-            click.echo()
-            make_console().print(table)
-            click.echo(f"Number of users: {len(list_of_users)}")
-            click.echo()
+        def _view():
+            return TableView(
+                title="Users",
+                columns=[
+                    Column("Name", Kind.ID),
+                    Column("Full name"),
+                    Column("Email"),
+                    Column("Enabled", Kind.FLAG),
+                ],
+                rows=[
+                    [
+                        user.name,
+                        present(user.full_name),
+                        present(user.email),
+                        user.enabled,
+                    ]
+                    for user in list_of_users
+                ],
+                count="users",
+            )
 
-        render(ctx, data=lambda: [u._data for u in list_of_users], table=_table)
-        echo_more_results(ctx, truncated)
+        render(
+            ctx,
+            data=lambda: [u._data for u in list_of_users],
+            view=_view,
+            truncated=truncated,
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list users: {e}")

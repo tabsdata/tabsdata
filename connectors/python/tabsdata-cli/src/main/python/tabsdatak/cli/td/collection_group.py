@@ -9,25 +9,25 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
-    echo_more_results,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
-    make_console,
     max_result_option,
+    present,
     proj_option,
     render,
     resolve_all_projects,
     serialize,
     take,
     verify_login_or_prompt,
+    view_options,
 )
+from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 
 if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
@@ -253,6 +253,7 @@ def delete(ctx: click.Context, name: str, confirm: str):
 @collection.command()
 @proj_option
 @format_option
+@view_options()
 @click.option("--name", "-n", help="Name of the collection to display.")
 @click.pass_context
 def get(ctx: click.Context, name: str):
@@ -272,33 +273,31 @@ def get(ctx: click.Context, name: str):
         if collection_type in ("S", "D"):
             conn_read = _public_connection(server.get_collection_connection(name))
 
-        def _table():
-            table = Table(title="Collection", show_header=False, show_lines=True)
-            table.add_column("Field", style="cyan", no_wrap=True)
-            table.add_column("Value")
-            table.add_row("Name:", collection.name)
-            table.add_row("Description:", collection.description or "")
-            table.add_row("Project:", data.get("project") or "-")
-            table.add_row("Group:", data.get("group") or "-")
-            table.add_row(
-                "Collection type:",
-                _COLLECTION_TYPE_LABELS.get(collection_type, collection_type or "-"),
-            )
-            table.add_row("Created by:", collection.created_by or "-")
-            table.add_row("Created on:", collection.created_on_str or "-")
+        def _view():
+            fields = [
+                ("Name", collection.name),
+                ("Description", present(collection.description)),
+                ("Project", present(data.get("project"))),
+                ("Group", present(data.get("group"))),
+                (
+                    "Collection type",
+                    present(
+                        _COLLECTION_TYPE_LABELS.get(collection_type, collection_type)
+                    ),
+                ),
+                ("Created by", present(collection.created_by)),
+                ("Created on", present(collection.created_on_str)),
+            ]
             if conn_read is not None:
                 doc = conn_read.get("connection") or {}
-                table.add_row("Connection type:", _connection_system(doc))
-                table.add_row(
-                    "Connection info:", serialize(conn_read, "yaml").rstrip("\n")
-                )
-            click.echo()
-            # emoji/markup off: connection info carries ':secret:' sentinels and
-            # '[]' that rich would otherwise treat as an emoji shortcode / markup.
-            make_console(emoji=False, markup=False).print(table)
-            click.echo()
+                fields.append(("Connection type", _connection_system(doc)))
+                fields.append((
+                    "Connection info",
+                    serialize(conn_read, "yaml").rstrip("\n"),
+                ))
+            return RecordView(title="Collection", fields=fields)
 
-        render(ctx, data=lambda: collection._data, table=_table)
+        render(ctx, data=lambda: collection._data, view=_view)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to display collection: {e}")
@@ -346,6 +345,7 @@ def connection(ctx: click.Context, fmt: str, name: str):
 @proj_option
 @all_projects_option
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_collections(ctx: click.Context, all_projects: bool):
@@ -356,34 +356,34 @@ def list_collections(ctx: click.Context, all_projects: bool):
         spanning = resolve_all_projects(ctx, all_projects)
         list_of_collections, truncated = take(ctx, server.list_collections_generator())
 
-        def _table():
-            table = Table(title="Collections")
-            table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("Description")
+        def _view():
+            columns = [Column("Name", Kind.ID), Column("Description")]
             if spanning:
-                table.add_column("Project")
-            table.add_column("Created by")
-            table.add_column("Created on")
+                columns.append(Column("Project"))
+            columns += [Column("Created by"), Column("Created on", Kind.TIME)]
+            rows = []
             for collection in list_of_collections:
-                row = [collection.name, collection.description or ""]
+                row = [collection.name, present(collection.description)]
                 if spanning:
-                    row.append(collection.project or "-")
-                row.extend([
-                    collection.created_by or "-",
-                    collection.created_on_str or "-",
-                ])
-                table.add_row(*row)
-            click.echo()
-            make_console().print(table)
-            click.echo(f"Number of collections: {len(list_of_collections)}")
-            click.echo()
+                    row.append(present(collection.project))
+                row += [
+                    present(collection.created_by),
+                    present(collection.created_on_str),
+                ]
+                rows.append(row)
+            return TableView(
+                title="Collections",
+                columns=columns,
+                rows=rows,
+                count="collections",
+            )
 
         render(
             ctx,
             data=lambda: [c._data for c in list_of_collections],
-            table=_table,
+            view=_view,
+            truncated=truncated,
         )
-        echo_more_results(ctx, truncated)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list collections: {e}")

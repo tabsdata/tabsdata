@@ -7,7 +7,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
@@ -15,10 +14,12 @@ from tabsdatak.cli.cli_utils import (
     format_option,
     hint_common_solutions,
     logical_prompt,
-    make_console,
+    present,
     render,
     verify_login_or_prompt,
+    view_options,
 )
+from tabsdatak.common._tabular import Column, Kind, TableView
 
 # noinspection PyProtectedMember
 from tabsdatak.sdk._permission_types import (
@@ -191,6 +192,7 @@ def revoke(ctx: click.Context, user: str, permission: str, project: str):
     mutually_exclusive=["user"],
 )
 @format_option
+@view_options()
 @click.pass_context
 def list_permissions(ctx: click.Context, user: str, project: str):
     """List a user's permissions, or who has access to a project"""
@@ -216,38 +218,33 @@ def list_permissions(ctx: click.Context, user: str, project: str):
 def _list_by_user(ctx: click.Context, server: TabsdataServer, user: str):
     permissions = server.list_permissions_by_user(user)
 
-    def _table():
-        table = Table(title="Permissions")
-        table.add_column("Permission", style="cyan", no_wrap=True)
-        table.add_column("Project")
-        for perm in permissions:
-            table.add_row(perm.permission, perm.project if perm.project else "-")
-        click.echo()
-        make_console().print(table)
-        click.echo(f"Number of permissions: {len(permissions)}")
-        click.echo()
+    def _view():
+        return TableView(
+            title="Permissions",
+            context=[f"user '{user}'"],
+            columns=[Column("Permission", Kind.ID), Column("Project")],
+            rows=[[perm.permission, present(perm.project)] for perm in permissions],
+            count="permissions",
+        )
 
     render(
         ctx,
         data=[{"permission": p.permission, "project": p.project} for p in permissions],
-        table=_table,
+        view=_view,
     )
 
 
 def _list_by_project(ctx: click.Context, server: TabsdataServer, project: str):
     access = server.list_permissions_by_project(project)
 
-    def _table():
-        table = Table(title="Access")
-        table.add_column("User", style="cyan", no_wrap=True)
-        table.add_column("Permission")
-        table.add_column("On")
-        for entry in access:
-            table.add_row(entry.user, entry.permission, entry.source)
-        click.echo()
-        make_console().print(table)
-        click.echo(f"Number of grants: {len(access)}")
-        click.echo()
+    def _view():
+        return TableView(
+            title="Access",
+            context=[f"project '{project}'"],
+            columns=[Column("User", Kind.ID), Column("Permission"), Column("On")],
+            rows=[[entry.user, entry.permission, entry.source] for entry in access],
+            count="grants",
+        )
 
     render(
         ctx,
@@ -255,5 +252,5 @@ def _list_by_project(ctx: click.Context, server: TabsdataServer, project: str):
             {"user": e.user, "permission": e.permission, "source": e.source}
             for e in access
         ],
-        table=_table,
+        view=_view,
     )

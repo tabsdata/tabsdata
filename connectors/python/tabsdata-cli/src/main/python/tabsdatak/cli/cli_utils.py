@@ -113,6 +113,14 @@ def beautify_time(time: str) -> str:
     return time
 
 
+def present(value):
+    """``value``, or None when it is missing, so a table view shows its
+    placeholder."""
+    if value is None or value == "" or value == "None":
+        return None
+    return value
+
+
 def collection_label(obj) -> str:
     """Collection name for display, suffixed with ' (deleted)' when the owning
     collection has been soft-deleted. The name itself is the real pre-deletion
@@ -471,7 +479,14 @@ def serialize(payload, fmt: str) -> str:
     return buf.getvalue()
 
 
-def render(ctx: click.Context, *, data, table=None, view=None) -> None:
+def render(
+    ctx: click.Context,
+    *,
+    data,
+    table=None,
+    view=None,
+    truncated: bool = False,
+) -> None:
     """Render a command's result in the active output format.
 
     ``view`` is a zero-arg callable returning the ``TableView`` or ``RecordView``
@@ -480,16 +495,23 @@ def render(ctx: click.Context, *, data, table=None, view=None) -> None:
     is -- or returns -- the full DTO(s) to serialize for ``json``/``yaml``; pass
     a callable to defer fetching the full payload when the table view is shown.
     JSON is pretty-printed and both machine formats carry all available fields;
-    data goes to stdout so it stays parseable."""
+    data goes to stdout so it stays parseable. ``truncated`` says the listing
+    was cut by ``--max-result``: the view's footer tells, and the machine
+    formats tell on stderr."""
     fmt = output_format(ctx)
     if fmt == "table":
         if view is not None:
             from tabsdatak.common._tabular import show
 
-            show(view(), display(ctx))
+            shown = view()
+            if truncated:
+                shown.notes.append(more_results_message(ctx))
+            show(shown, display(ctx))
             return
         table()
         return
+    if truncated and view is not None:
+        click.echo(more_results_message(ctx), err=True)
     payload = data() if callable(data) else data
     text = serialize(payload, fmt)
     # YAML already ends with a newline; JSON does not.
@@ -648,11 +670,14 @@ def echo_more_results(ctx: click.Context, truncated: bool) -> None:
     parseable document."""
     if not truncated:
         return
-    message = (
+    click.echo(more_results_message(ctx), err=output_format(ctx) != "table")
+
+
+def more_results_message(ctx: click.Context) -> str:
+    return (
         f"More results available: showing the first {max_result(ctx)}. Raise "
         "'--max-result <N>', or pass '--max-result 0' for all."
     )
-    click.echo(message, err=output_format(ctx) != "table")
 
 
 def verify_login_or_prompt(ctx: click.Context):

@@ -14,10 +14,15 @@ import sys
 from pathlib import Path
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
-from tabsdatak.cli.cli_utils import format_option, logical_prompt, make_console, render
+from tabsdatak.cli.cli_utils import (
+    format_option,
+    logical_prompt,
+    render,
+    view_options,
+)
+from tabsdatak.common._tabular import Column, Kind, TableView
 
 
 @cli_command
@@ -28,6 +33,7 @@ def connection():
 
 @connection.command()
 @format_option
+@view_options()
 @click.pass_context
 def types(ctx):
     """List the connection types available from installed connectors"""
@@ -36,22 +42,18 @@ def types(ctx):
 
     rows = template.list_connectors()
 
-    def _table():
-        table = Table(title="Available connectors")
-        table.add_column("Type", style="cyan", no_wrap=True)
-        table.add_column("Mode")
-        table.add_column("System")
-        for row in rows:
-            table.add_row(row.type, row.mode, row.system)
-        click.echo()
-        make_console().print(table)
-        click.echo(f"Number of connectors: {len(rows)}")
-        click.echo()
+    def _view():
+        return TableView(
+            title="Available connectors",
+            columns=[Column("Type", Kind.ID), Column("Mode"), Column("System")],
+            rows=[[row.type, row.mode, row.system] for row in rows],
+            count="connectors",
+        )
 
     render(
         ctx,
         data=[{"type": r.type, "mode": r.mode, "system": r.system} for r in rows],
-        table=_table,
+        view=_view,
     )
 
 
