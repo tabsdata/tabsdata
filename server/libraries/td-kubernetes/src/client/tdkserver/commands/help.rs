@@ -7,9 +7,13 @@ use clap_derive::Args;
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::client::tdkserver::arguments::{Arguments, GlobalArguments};
-use crate::client::tdkserver::commands::shell::{SPECIAL_COMMANDS, shell_grammar};
+use crate::client::tdkserver::arguments::{Arguments, GlobalArguments, cli_command};
+use crate::client::tdkserver::commands::shell::{
+    SPECIAL_COMMANDS, panelled_shell_grammar, shell_grammar,
+};
 use crate::core::system::exit::CommandResult;
+
+pub mod panels;
 
 pub const PROGRAM_NAME: &str = "tdkserver";
 
@@ -79,7 +83,7 @@ pub async fn command_help(arguments: HelpArguments, _globals: &GlobalArguments) 
     if arguments.full {
         println!("{}", build_full_help(arguments.format));
     } else {
-        Arguments::command().print_help().ok();
+        cli_command().print_help().ok();
         println!();
     }
     Ok(())
@@ -126,7 +130,7 @@ pub async fn command_shell_help(
     globals: &GlobalArguments,
 ) -> CommandResult {
     if !arguments.cli {
-        shell_grammar().print_help().ok();
+        panelled_shell_grammar().print_help().ok();
         println!();
         show_special_commands();
         return Ok(());

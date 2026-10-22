@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Command as SystemCommand;
 
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, FromArgMatches, Parser};
 use clap_derive::Subcommand;
 use colored::Colorize;
 use reedline::{
@@ -21,6 +21,7 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use super::about::command_about;
 use super::banner::command_banner;
 use super::config::{ConfigCommands, command_config};
+use super::help::panels::panelled;
 use super::help::{ShellHelpArguments, command_shell_help};
 use super::service::InstanceNameArguments;
 use super::service::assess::{AssessArguments, command_assess};
@@ -130,6 +131,13 @@ pub fn shell_grammar() -> clap::Command {
     ShellInput::command()
 }
 
+pub fn panelled_shell_grammar() -> clap::Command {
+    let mut grammar = shell_grammar();
+    grammar.build();
+    panelled(&mut grammar);
+    grammar
+}
+
 pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
     show_quick_reference();
     show_initial_active_context();
@@ -145,6 +153,7 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
     }
 
     let prompt = ShellPrompt::new(TOOL_NAME);
+    let grammar = panelled_shell_grammar();
 
     loop {
         let signal = match tokio::task::block_in_place(|| line_editor.read_line(&prompt)) {
@@ -182,7 +191,7 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 continue;
             }
             ":help" | ":h" => {
-                let _ = ShellInput::command().print_help();
+                let _ = grammar.clone().print_help();
                 println!();
                 continue;
             }
@@ -198,7 +207,11 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
             }
         };
 
-        match ShellInput::try_parse_from(tokens) {
+        let parsed = grammar
+            .clone()
+            .try_get_matches_from(tokens)
+            .and_then(|matches| ShellInput::from_arg_matches(&matches));
+        match parsed {
             Ok(input) => match input.command {
                 ShellCommand::Help(arguments) => {
                     let _ = command_shell_help(arguments, globals).await;

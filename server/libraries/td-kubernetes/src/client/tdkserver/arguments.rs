@@ -6,7 +6,7 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use clap::{CommandFactory, FromArgMatches, Parser};
+use clap::{Command, CommandFactory, FromArgMatches, Parser};
 use clap_derive::{Args, Subcommand};
 
 // use crate::client::tdkserver::commands::cluster::ClusterCommands;
@@ -15,6 +15,8 @@ use clap_derive::{Args, Subcommand};
 // use crate::client::tdkserver::commands::server::ServerCommands;
 use crate::client::tdkserver::commands::config::ConfigCommands;
 use crate::client::tdkserver::commands::help::HelpArguments;
+use crate::client::tdkserver::commands::help::PROGRAM_NAME;
+use crate::client::tdkserver::commands::help::panels::panelled;
 use crate::client::tdkserver::commands::service::InstanceNameArguments;
 use crate::client::tdkserver::commands::service::assess::AssessArguments;
 use crate::client::tdkserver::commands::service::create::CreateArguments;
@@ -74,8 +76,8 @@ const HELP_FLAGS: [&str; 2] = ["--help", "-h"];
 
 const FULL_FLAG: &str = "--full";
 
-pub fn parse_arguments() -> Arguments {
-    let mut command = Arguments::command();
+pub fn cli_command() -> Command {
+    let mut command = Arguments::command().bin_name(PROGRAM_NAME);
     command.build();
     for name in AUXILIARY_COMMANDS {
         let Some(subcommand) = command.find_subcommand_mut(name) else {
@@ -87,7 +89,12 @@ pub fn parse_arguments() -> Arguments {
         }
         *subcommand = hidden.mut_arg(HELP_ARGUMENT, |argument| argument);
     }
-    let matches = command.get_matches_from(help_command_form(env::args()));
+    panelled(&mut command);
+    command
+}
+
+pub fn parse_arguments() -> Arguments {
+    let matches = cli_command().get_matches_from(help_command_form(env::args()));
     Arguments::from_arg_matches(&matches).unwrap_or_else(|error| error.exit())
 }
 
