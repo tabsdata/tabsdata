@@ -8,6 +8,7 @@ import sys
 from collections.abc import Sequence
 
 from tabsdatak.common._tabular._printer import print_view, renderable
+from tabsdatak.common._tabular._theme import HELP_STYLES
 from tabsdatak.common._tabular._view import (
     DEFAULT_MAX_WIDTH,
     Column,
@@ -19,6 +20,7 @@ from tabsdatak.common._tabular._view import (
 
 __all__ = [
     "DEFAULT_MAX_WIDTH",
+    "HELP_STYLES",
     "Column",
     "Display",
     "Kind",
