@@ -2,4 +2,6 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
-tdtest: {}
+tdtest:
+  configs:
+    apiserver.service:jwt.access_token_expiration: 31622400
