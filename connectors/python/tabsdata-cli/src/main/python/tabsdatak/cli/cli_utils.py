@@ -483,7 +483,6 @@ def render(
     ctx: click.Context,
     *,
     data,
-    table=None,
     view=None,
     truncated: bool = False,
 ) -> None:
@@ -491,27 +490,22 @@ def render(
 
     ``view`` is a zero-arg callable returning the ``TableView`` or ``RecordView``
     (or a list of them) shown in ``table`` mode, through the options of
-    ``view_options``; ``table`` is a zero-arg callable that prints a command's
-    own table instead. ``data``
-    is -- or returns -- the full DTO(s) to serialize for ``json``/``yaml``; pass
-    a callable to defer fetching the full payload when the table view is shown.
-    JSON is pretty-printed and both machine formats carry all available fields;
-    data goes to stdout so it stays parseable. ``truncated`` says the listing
-    was cut by ``--max-result``: the view's footer tells, and the machine
-    formats tell on stderr."""
+    ``view_options``. ``data`` is -- or returns -- the full DTO(s) to serialize
+    for ``json``/``yaml``; pass a callable to defer fetching the full payload
+    when the table view is shown. JSON is pretty-printed and both machine
+    formats carry all available fields; data goes to stdout so it stays
+    parseable. ``truncated`` says the listing was cut by ``--max-result``: the
+    view's footer tells, and the machine formats tell on stderr."""
     fmt = output_format(ctx)
     if fmt == "table":
-        if view is not None:
-            from tabsdatak.common._tabular import show
+        from tabsdatak.common._tabular import show
 
-            shown = view()
-            views = list(shown) if isinstance(shown, (list, tuple)) else [shown]
-            views[-1].notes += more_results_notes(ctx, truncated)
-            show(views, display(ctx))
-            return
-        table()
+        shown = view()
+        views = list(shown) if isinstance(shown, (list, tuple)) else [shown]
+        views[-1].notes += more_results_notes(ctx, truncated)
+        show(views, display(ctx))
         return
-    if truncated and view is not None:
+    if truncated:
         click.echo(more_results_message(ctx), err=True)
     payload = data() if callable(data) else data
     text = serialize(payload, fmt)
@@ -662,16 +656,6 @@ def take(ctx: click.Context, rows: Iterable) -> tuple[list, bool]:
     if len(capped) > limit:
         return capped[:limit], True
     return capped, False
-
-
-def echo_more_results(ctx: click.Context, truncated: bool) -> None:
-    """Tell the user the listing was cut short by ``--max-result``.
-
-    In the machine formats the notice goes to stderr so stdout stays a single
-    parseable document."""
-    if not truncated:
-        return
-    click.echo(more_results_message(ctx), err=output_format(ctx) != "table")
 
 
 def more_results_notes(ctx: click.Context, truncated: bool) -> list[str]:

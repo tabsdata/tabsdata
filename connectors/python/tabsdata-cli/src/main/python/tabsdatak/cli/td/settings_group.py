@@ -25,6 +25,7 @@ from tabsdatak.cli.cli_utils import (
     get_pin,
     hint_common_solutions,
     load_cli_options,
+    present,
     read_default_profile,
     render,
     set_cli_option_enabled,
@@ -34,7 +35,9 @@ from tabsdatak.cli.cli_utils import (
     store_cli_options,
     store_default_profile,
     validate_profile_name,
+    view_options,
 )
+from tabsdatak.common._tabular import RecordView
 
 _NOTHING_TO_SET = (
     "Nothing to set. Specify at least one setting: --hints true|false, "
@@ -239,6 +242,7 @@ def unset_setting(
 @cli_command
 @click.command("settings")
 @format_option
+@view_options()
 @click.pass_context
 def settings(ctx: click.Context):
     """Show the current settings.
@@ -253,15 +257,18 @@ def settings(ctx: click.Context):
     project = get_pin(ctx, PIN_PROJECT)
     collection = get_pin(ctx, PIN_COLLECTION)
 
-    def _table():
-        click.echo(f"Profile:           {profile if profile else '(default)'}")
-        click.echo(f"Hints:             {_true_false(hints_enabled)}")
-        click.echo(f"Prompt:            {_true_false(prompt_enabled)}")
-        click.echo(
-            f"Server:            {current_server if current_server else '(none)'}"
+    def _view():
+        return RecordView(
+            title="Settings",
+            fields=[
+                ("Profile", profile or "(default)"),
+                ("Hints", _true_false(hints_enabled)),
+                ("Prompt", _true_false(prompt_enabled)),
+                ("Server", present(current_server)),
+                ("Pinned project", present(project)),
+                ("Pinned collection", present(collection)),
+            ],
         )
-        click.echo(f"Pinned project:    {project if project else '(none)'}")
-        click.echo(f"Pinned collection: {collection if collection else '(none)'}")
 
     render(
         ctx,
@@ -272,7 +279,7 @@ def settings(ctx: click.Context):
             OPTION_SERVER: current_server,
             "pins": {PIN_PROJECT: project, PIN_COLLECTION: collection},
         },
-        table=_table,
+        view=_view,
     )
 
 

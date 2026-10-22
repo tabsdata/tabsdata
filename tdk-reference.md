@@ -79,6 +79,17 @@ Applied where shown in each command. Every value option takes an argument.
                                   for it before any other value.
   -c, --col    COLLECTION         Target collection. Default: pinned collection.
   -o, --format {table|json|yaml}  Output format. Default: table.
+      --browse|--print            Open the table in a viewer that scrolls both
+                                  ways, or print it and return. Default: --print
+                                  (--browse for `table data`). Off a terminal the
+                                  table is always printed.
+      --wrap                      Show every value whole, wrapping long and
+                                  multi-line values inside their column.
+      --max-width N               Characters per column before a value is cut
+                                  ('…'). Default: 48 (128 for `table data`); 0
+                                  means no limit.
+                                  These three come with every command that
+                                  shows a table and apply only to `-o table`.
       --profile NAME              Profile whose connection and settings the
                                   command uses (`<NAME>-connection.json`,
                                   `<NAME>-options.json`). Default: the profile

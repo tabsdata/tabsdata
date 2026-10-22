@@ -15,6 +15,7 @@ server.
 from __future__ import annotations
 
 import json
+import re
 from unittest.mock import MagicMock, patch
 
 import click
@@ -116,10 +117,10 @@ def test_profile_option_selects_the_profile_files(tmp_path):
 def test_profile_option_is_reported_in_the_table_view(tmp_path):
     result, _ = _invoke(["settings", "--profile", "qa"], tmp_path=tmp_path)
     assert result.exit_code == 0, result.output
-    assert "Profile:           qa" in result.output
+    assert re.search(r"Profile\s+│ qa ", result.output), result.output
 
     result, _ = _invoke(["settings"], tmp_path=tmp_path)
-    assert "Profile:           (default)" in result.output
+    assert re.search(r"Profile\s+│ \(default\)", result.output), result.output
 
 
 @pytest.mark.parametrize("name", ["../x", "a/b", "", "-dev", "d e"])
