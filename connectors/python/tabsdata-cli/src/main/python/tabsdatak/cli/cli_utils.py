@@ -428,6 +428,7 @@ def _apply_format(ctx: click.Context, param, value):
     command's renderer can dispatch on it."""
     ctx.ensure_object(dict)
     ctx.obj["output_format"] = value or "table"
+    _check_view_options(ctx)
     return value
 
 
@@ -470,23 +471,125 @@ def serialize(payload, fmt: str) -> str:
     return buf.getvalue()
 
 
-def render(ctx: click.Context, *, data, table) -> None:
+def render(ctx: click.Context, *, data, table=None, view=None) -> None:
     """Render a command's result in the active output format.
 
-    ``table`` is a zero-arg callable that prints the human-facing view (the
-    per-command rich table); it is invoked only in ``table`` mode. ``data`` is
-    -- or returns -- the full DTO(s) to serialize for ``json``/``yaml``; pass a
-    callable to defer fetching the full payload when the table view is shown.
+    ``view`` is a zero-arg callable returning the ``TableView`` or ``RecordView``
+    shown in ``table`` mode, through the options of ``view_options``; ``table``
+    is a zero-arg callable that prints a command's own table instead. ``data``
+    is -- or returns -- the full DTO(s) to serialize for ``json``/``yaml``; pass
+    a callable to defer fetching the full payload when the table view is shown.
     JSON is pretty-printed and both machine formats carry all available fields;
     data goes to stdout so it stays parseable."""
     fmt = output_format(ctx)
     if fmt == "table":
+        if view is not None:
+            from tabsdatak.common._tabular import show
+
+            show(view(), display(ctx))
+            return
         table()
         return
     payload = data() if callable(data) else data
     text = serialize(payload, fmt)
     # YAML already ends with a newline; JSON does not.
     click.echo(text, nl=(fmt == "json"))
+
+
+# ---------------------------------------------------------------------------
+# Table views: --browse/--print, --wrap, --max-width.
+# ---------------------------------------------------------------------------
+
+VIEW_OPTIONS = "view_options"
+VIEW_OPTIONS_GIVEN = "view_options_given"
+BROWSE_OPTION = "--browse/--print"
+WRAP_OPTION = "--wrap"
+MAX_WIDTH_OPTION = "--max-width"
+
+
+def _apply_view_option(flag: str):
+    def apply(ctx: click.Context, param, value):
+        from click.core import ParameterSource
+
+        ctx.ensure_object(dict)
+        ctx.obj.setdefault(VIEW_OPTIONS, {})[param.name] = value
+        if ctx.get_parameter_source(param.name) is not ParameterSource.DEFAULT:
+            given = ctx.obj.setdefault(VIEW_OPTIONS_GIVEN, [])
+            given.append(flag if flag != BROWSE_OPTION else _browse_flag(value))
+            _check_view_options(ctx)
+        return value
+
+    return apply
+
+
+def _check_view_options(ctx: click.Context) -> None:
+    given = (ctx.obj or {}).get(VIEW_OPTIONS_GIVEN, [])
+    if given and output_format(ctx) != "table":
+        raise UsageError(
+            f"The '{given[0]}' option only applies to '-o table'.", ctx=ctx
+        )
+
+
+def _browse_flag(browse: bool) -> str:
+    return "--browse" if browse else "--print"
+
+
+def view_options(browse: bool = False):
+    """Decorator adding the table view options: ``--browse/--print`` (``browse``
+    is the command's default), ``--wrap`` and ``--max-width``."""
+
+    def decorate(fn):
+        fn = click.option(
+            MAX_WIDTH_OPTION,
+            "max_width",
+            type=click.IntRange(min=0),
+            default=None,
+            expose_value=False,
+            callback=_apply_view_option(MAX_WIDTH_OPTION),
+            help=(
+                "Maximum width of each column, in characters; longer values are "
+                "cut and end in '…'. Use 0 for no limit. Defaults to the width "
+                "each table sets."
+            ),
+        )(fn)
+        fn = click.option(
+            WRAP_OPTION,
+            "wrap",
+            is_flag=True,
+            default=False,
+            expose_value=False,
+            callback=_apply_view_option(WRAP_OPTION),
+            help=(
+                "Show every value whole, wrapping long and multi-line values "
+                "inside their column instead of cutting them."
+            ),
+        )(fn)
+        return click.option(
+            BROWSE_OPTION,
+            "browse",
+            default=browse,
+            show_default=True,
+            expose_value=False,
+            callback=_apply_view_option(BROWSE_OPTION),
+            help=(
+                "Open the table in a viewer that scrolls both ways, or print it "
+                "and return."
+            ),
+        )(fn)
+
+    return decorate
+
+
+def display(ctx: click.Context):
+    """The ``Display`` chosen with the table view options of this command."""
+    from tabsdatak.common._tabular import Display
+
+    chosen = (ctx.obj or {}).get(VIEW_OPTIONS, {})
+    return Display(
+        browse=bool(chosen.get("browse", False)),
+        wrap=bool(chosen.get("wrap", False)),
+        max_width=chosen.get("max_width"),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -215,20 +215,24 @@ table schema   --name NAME  [--proj PROJECT] [--col COLLECTION] [--at TS|--at-tr
 table versions --name NAME  [--proj PROJECT] [--col COLLECTION] [--details] [-o]
 table data     --name NAME  [--proj PROJECT] [--col COLLECTION] [--sql SQL] [--len N] [--offset N]
                             [--at TS|--at-trx TRX|--version V] [--extra-cols none|meta|sys|all]
-                            [--file FILE] [--print [--wide]] [-o]
+                            [--file FILE] [--browse|--print] [--wrap] [--max-width N] [-o]
                             #   --sql: server-side SQL query over the table, which is the
                             #          only queryable relation and is named after itself
                             #   --len: defaults to 100 rows, cannot exceed 1000
                             #   --extra-cols: non-user columns to add: 'meta' the '@td.'
                             #          connector metadata, 'sys' the '$td.' system ones,
                             #          'all' both; defaults to 'none'
-                            #   table format: every column at full width, one line per
-                            #          row; on a terminal it opens in a viewer that
-                            #          scrolls both ways ('q' or 'esc' quits)
-                            #   --print: print the table and return instead, each row
-                            #          on one line cut at the terminal width ('…')
-                            #   --wide: with --print, every column in full; the
-                            #          terminal wraps rows wider than itself
+                            #   --browse: the default; on a terminal the table opens in a
+                            #          viewer that scrolls both ways ('q' or 'esc'
+                            #          quits), each cell showing its first line and
+                            #          '…' opening the whole value
+                            #   --print: print the table and return instead, each line
+                            #          cut at the terminal width ('…')
+                            #   --wrap: show every value whole, wrapping long and
+                            #          multi-line values inside their column
+                            #   --max-width: characters per column before a value is
+                            #          cut, 128 by default; 0 means no limit
+                            #   the view options apply only to '-o table'
 table download --name NAME  [--proj PROJECT] [--col COLLECTION] --file FILE [--at TS|--at-trx TRX|--version V]
 table delete   --name NAME  [--proj PROJECT] [--col COLLECTION] [--confirm delete]
 ```

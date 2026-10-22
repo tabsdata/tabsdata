@@ -1247,13 +1247,24 @@ def test_settings_renders_settings_store_offline(tmp_path):
     assert "proj-a" in result.output and "coll-a" in result.output
 
 
-def test_table_data_wide_needs_print(tmp_path):
+@pytest.mark.parametrize(
+    "options, named",
+    [
+        (["--wrap", "-o", "json"], "--wrap"),
+        (["-o", "yaml", "--max-width", "10"], "--max-width"),
+        (["--print", "-o", "json"], "--print"),
+        (["-o", "json", "--browse", "--wrap"], "--browse"),
+    ],
+)
+def test_table_data_view_options_need_the_table_format(tmp_path, options, named):
     client = _client()
     _set_table_data(client)
-    argv = ["table", "data", "-c", "coll-a", "--name", "tbl-a", "--wide"]
+    argv = ["table", "data", "-c", "coll-a", "--name", "tbl-a", *options]
 
     result = _invoke(argv, client=client, tmp_path=tmp_path)
 
     assert result.exit_code == 2
-    assert "'--wide' needs '--print'" in result.output
+    assert f"The '{named}' option only applies to '-o table'." in " ".join(
+        result.output.split()
+    )
     client.sample_table.assert_not_called()

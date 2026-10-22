@@ -24,19 +24,51 @@ from tabsdatak.cli.cli_utils import (
     render,
     take,
     verify_login_or_prompt,
+    view_options,
 )
 
 if TYPE_CHECKING:
+    import polars as pl
+
+    from tabsdatak.common._tabular import TableView
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
 
 
 _TABLE_STATUS_LABELS = {"A": "Active", "F": "Frozen", "D": "Deleted"}
+
+TABLE_DATA_MAX_WIDTH = 128
+TABLE_DATA_PLACEHOLDER = "null"
 
 
 def _size_mb(data_bytes) -> str:
     if data_bytes is None:
         return "-"
     return f"{int(data_bytes) / (1024 * 1024):.2f}"
+
+
+def table_data_view(
+    name: str,
+    frame: pl.DataFrame,
+    collection: str | None = None,
+    project: str | None = None,
+) -> TableView:
+    from tabsdatak.common._tabular import Column, TableView
+
+    context = [f"collection '{collection}'"] if collection else []
+    if project:
+        context.append(f"project '{project}'")
+    context.append(f"{frame.height} rows × {frame.width} columns")
+    return TableView(
+        title=f"Data of table '{name}'",
+        context=context,
+        columns=[
+            Column(column, detail=str(dtype)) for column, dtype in frame.schema.items()
+        ],
+        rows=[list(values) for values in frame.iter_rows()],
+        rules=True,
+        placeholder=TABLE_DATA_PLACEHOLDER,
+        max_width=TABLE_DATA_MAX_WIDTH,
+    )
 
 
 @cli_command
@@ -383,26 +415,7 @@ def list_tables(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
         "both. Defaults to 'none'."
     ),
 )
-@click.option(
-    "--print",
-    "print_table",
-    is_flag=True,
-    default=False,
-    help=(
-        "Print the table and return, instead of opening it in the viewer. Each "
-        "row stays on one line, cut at the width of the terminal; add '--wide' to "
-        "keep every column and let the terminal wrap the rows instead."
-    ),
-)
-@click.option(
-    "--wide",
-    is_flag=True,
-    default=False,
-    help=(
-        "With '--print', print every column at its full width, letting the "
-        "terminal wrap rows wider than itself, instead of cutting them."
-    ),
-)
+@view_options(browse=True)
 @format_option
 @click.pass_context
 def data(
@@ -417,12 +430,8 @@ def data(
     at_trx: str,
     version: str,
     extra_cols: str,
-    print_table: bool,
-    wide: bool,
 ):
     """Show rows of data from the table"""
-    if wide and not print_table:
-        raise click.UsageError("'--wide' needs '--print'.")
     verify_login_or_prompt(ctx)
     name = name or logical_prompt(ctx, "Name of the table")
     coll = (
@@ -444,22 +453,14 @@ def data(
             extra_cols=extra_cols,
         )
 
-        def _table():
-            from tabsdatak.cli._table_viewer import show_table
-
-            click.echo()
-            show_table(
-                name,
-                table_data,
-                collection=coll,
-                project=server.connection.project,
-                viewer=not print_table,
-                wide=wide,
-            )
-            click.echo()
-
         # table_data is a polars DataFrame -> its rows are the full info.
-        render(ctx, data=lambda: table_data.to_dicts(), table=_table)
+        render(
+            ctx,
+            data=lambda: table_data.to_dicts(),
+            view=lambda: table_data_view(
+                name, table_data, coll, server.connection.project
+            ),
+        )
 
         if file:
             # Diagnostics to stderr so json/yaml stdout stays parseable.
