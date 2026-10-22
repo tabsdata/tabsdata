@@ -7,8 +7,6 @@ real tdd system / domain create (--descriptor-only: nothing provisioned)."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from tabsdatax.itest.fixture import backend as common
@@ -33,17 +31,17 @@ from tabsdatax.itest.fixture.backends.postgres import PostgresDomain, PostgresSy
 from tabsdatax.itest.fixture.backends.redpanda import RedpandaDomain, RedpandaSystem
 from tabsdatax.itest.fixture.backends.starrocks import StarrocksDomain, StarrocksSystem
 
-# slug, system_kind, staging, SystemCls, DomainCls
+# slug, system_kind, SystemCls, DomainCls
 CONTAINER = [
-    ("mysql", "sql", False, MysqlSystem, MysqlDomain),
-    ("postgres", "sql", False, PostgresSystem, PostgresDomain),
-    ("mssqlserver", "sql", False, MssqlserverSystem, MssqlserverDomain),
-    ("oracle", "sql", False, OracleSystem, OracleDomain),
-    ("db2", "sql", False, Db2System, Db2Domain),
-    ("mongodb", "mongodb", False, MongoDBSystem, MongoDBDomain),
-    ("redpanda", "kafka", False, RedpandaSystem, RedpandaDomain),
-    ("clickhouse", "sql", False, ClickhouseSystem, ClickhouseDomain),
-    ("starrocks", "sql", False, StarrocksSystem, StarrocksDomain),
+    ("mysql", "sql", MysqlSystem, MysqlDomain),
+    ("postgres", "sql", PostgresSystem, PostgresDomain),
+    ("mssqlserver", "sql", MssqlserverSystem, MssqlserverDomain),
+    ("oracle", "sql", OracleSystem, OracleDomain),
+    ("db2", "sql", Db2System, Db2Domain),
+    ("mongodb", "mongodb", MongoDBSystem, MongoDBDomain),
+    ("redpanda", "kafka", RedpandaSystem, RedpandaDomain),
+    ("clickhouse", "sql", ClickhouseSystem, ClickhouseDomain),
+    ("starrocks", "sql", StarrocksSystem, StarrocksDomain),
 ]
 IDS = [c[0] for c in CONTAINER]
 
@@ -60,8 +58,8 @@ SQL_URI = {"postgres": "external_sqlalchemy_uri"}
 ENTITY_REF = {"mongodb": "uri", "redpanda": "topic"}
 
 
-@pytest.mark.parametrize("slug,kind,staging,Sys,Dom", CONTAINER, ids=IDS)
-def test_container_system(provision, slug, kind, staging, Sys, Dom):
+@pytest.mark.parametrize("slug,kind,Sys,Dom", CONTAINER, ids=IDS)
+def test_container_system(provision, slug, kind, Sys, Dom):
     provision.system(slug, "s")
     obj = common.load("s", Sys)
     assert isinstance(obj, Sys) and obj.system_type == slug
@@ -69,12 +67,10 @@ def test_container_system(provision, slug, kind, staging, Sys, Dom):
         obj.system_kind == kind and getattr(obj, HOST.get(slug, "host")) == "127.0.0.1"
     )
     assert obj.docker_container_name == "tdd_s" and obj.image
-    if staging:
-        assert isinstance(obj.sys_path, Path)
 
 
-@pytest.mark.parametrize("slug,kind,staging,Sys,Dom", CONTAINER, ids=IDS)
-def test_container_domain(provision, slug, kind, staging, Sys, Dom):
+@pytest.mark.parametrize("slug,kind,Sys,Dom", CONTAINER, ids=IDS)
+def test_container_domain(provision, slug, kind, Sys, Dom):
     provision.system(slug, "s")
     provision.domain("s", "d")
     obj = common.load("d", Dom)
