@@ -64,12 +64,11 @@ ENV UV_CACHE_DIR="/root/.uv/cache/1"
 ENV TABSDATA_REPOSITORIES_HOME="/workspace"
 ENV TABSDATA_AG="/workspace/tabsdata-ag"
 ENV TABSDATA_CI="/workspace/tabsdata-ci"
-ENV TABSDATA_DX="/workspace/tabsdata-dx"
+ENV TABSDATA_DT="/workspace/tabsdata-dt"
 ENV TABSDATA_EE="/workspace/tabsdata-ee"
 ENV TABSDATA_KM="/workspace/tabsdata-km"
 ENV TABSDATA_OS="/workspace/tabsdata-os"
 ENV TABSDATA_UI="/workspace/tabsdata-ui"
-ENV TABSDATA_XP="/workspace/tabsdata-xp"
 
 ENV RUST_BACKTRACE=1
 ENV RUST_LOG=error
