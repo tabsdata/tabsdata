@@ -73,7 +73,7 @@ script = [
     debug "🚀 uv pip install --quiet -e ./devutils/automation/tasks/python/tabsdata-toolkit --config-settings editable_mode=compat --no-build-isolation"
     exec --fail-on-error uv pip install --quiet -e ./devutils/automation/tasks/python/tabsdata-toolkit --config-settings editable_mode=compat --no-build-isolation
 
-    tdd = tdd_exe
+    tdd = tdd_exe_path
     tdd_installed = set false
     if is_file ${tdd}
         tdd_info = exec ${tdd} info

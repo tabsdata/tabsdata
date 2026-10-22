@@ -2,19 +2,24 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+fn tdd_exe_path
+    tdd_exe_path_result = exec --fail-on-error python ${TDD_SCRIPT}
+    tdd_exe_path_value = trim ${tdd_exe_path_result.stdout}
+    return ${tdd_exe_path_value}
+end
+
 fn tdd_exe
-    tdd_exe_result = exec --fail-on-error python ${TDD_SCRIPT}
-    tdd_exe_path = trim ${tdd_exe_result.stdout}
-    return ${tdd_exe_path}
+    tdd_exe_value = tdd_exe_path
+    if not is_file ${tdd_exe_value}
+        error "🚫 Tool tdd is not installed at ${tdd_exe_value}; run 'cargo make permit' to install it."
+        assert_fail
+    end
+    return ${tdd_exe_value}
 end
 
 fn tdd_fetch
     tdd_fetch_selection = set ${1}
     tdd_fetch_exe = tdd_exe
-    if not is_file ${tdd_fetch_exe}
-        error "🚫 Tool tdd is not installed at ${tdd_fetch_exe}; run 'cargo make permit' to install it."
-        assert_fail
-    end
     debug "🚀 ${tdd_fetch_exe} _1p fetch ${tdd_fetch_selection} --format json"
     tdd_fetch_result = exec ${tdd_fetch_exe} _1p fetch ${tdd_fetch_selection} --format json
     if not eq ${tdd_fetch_result.code} "0"

@@ -229,6 +229,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -289,8 +290,9 @@ script = [
 
     info "📄 Using systems manifest: ${manifest}"
     info "🛠️ Creating backend systems..."
-    debug "🚀 tdx-system create --manifest ${manifest} --force"
-    exec --fail-on-error tdx-system create --manifest ${manifest} --force
+    tdd = tdd_exe
+    debug "🚀 ${tdd} system create --manifest ${manifest} --force"
+    exec --fail-on-error ${tdd} system create --manifest ${manifest} --force
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -304,6 +306,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
     for argument in ${arguments}
@@ -368,8 +371,9 @@ script = [
 
     info "📄 Using systems manifest: ${manifest}"
     info "💥 Destroying backend systems..."
-    debug "🚀 tdx-system destroy --manifest ${manifest}"
-    exec --fail-on-error tdx-system destroy --manifest ${manifest}
+    tdd = tdd_exe
+    debug "🚀 ${tdd} system destroy --manifest ${manifest}"
+    exec --fail-on-error ${tdd} system destroy --manifest ${manifest}
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -383,6 +387,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
@@ -390,8 +395,9 @@ script = [
 
     exec tdx-itest banner --color green "🚥 Status for backend systems"
 
-    debug "🚀 tdx-system status --sys ALL"
-    status_code = exec --get-exit-code tdx-system status --sys ALL
+    tdd = tdd_exe
+    debug "🚀 ${tdd} system status --sys ALL"
+    status_code = exec --get-exit-code ${tdd} system status --sys ALL
     if not eq ${status_code} "0"
         warn "⚠️ Some backend systems reported an unhealthy status (exit code ${status_code})."
     end
@@ -408,6 +414,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
@@ -415,48 +422,9 @@ script = [
 
     exec tdx-itest banner --color cyan "📇 Info for backend systems"
 
-    systems_folder = get_env TD_BACKENDS_DIR
-    systems_folder = trim ${systems_folder}
-    if is_empty ${systems_folder}
-        home = get_env HOME
-        systems_folder = set ${home}/.tabsdatax/systems2
-    else
-        systems_folder = set ${systems_folder}/systems2
-    end
-
-    documents = array
-    systems_folder_exists = is_path_exists ${systems_folder}
-    if ${systems_folder_exists}
-        systems = glob_array ${systems_folder}/*
-        for system in ${systems}
-            system_is_file = is_file ${system}
-            if ${system_is_file}
-                system_name = basename ${system}
-                debug "🚀 tdx-system info --sys ${system_name} --format json"
-                output = exec tdx-system info --sys ${system_name} --format json
-                if eq ${output.code} "0"
-                    document = map
-                    content = trim ${output.stdout}
-                    map_put ${document} title ${system_name}
-                    map_put ${document} content ${content}
-                    array_push ${documents} ${document}
-                else
-                    debug "➖ Skipping non-descriptor file: ${system_name}"
-                end
-            end
-        end
-    end
-
-    documents_count = array_length ${documents}
-    if eq ${documents_count} "0"
-        info "🚜 No backend systems found in ${systems_folder}."
-    else
-        payload = json_encode --collection ${documents}
-        set_env TD_RENDER_PAYLOAD ${payload}
-        exec --fail-on-error tdx-json --env TD_RENDER_PAYLOAD
-        unset_env TD_RENDER_PAYLOAD
-    end
-    release --recursive ${documents}
+    tdd = tdd_exe
+    debug "🚀 ${tdd} system info --sys ALL"
+    exec --fail-on-error ${tdd} system info --sys ALL
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -470,14 +438,16 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     cm_run_task __os__set_venv_env
     cm_run_task __os__set_crypto
 
     exec tdx-itest banner --color magenta "📋 List of backend systems"
 
-    debug "🚀 tdx-system list"
-    exec --fail-on-error tdx-system list
+    tdd = tdd_exe
+    debug "🚀 ${tdd} system list"
+    exec --fail-on-error ${tdd} system list
 
     cm_run_task __os__reset_venv_env
     ''']
