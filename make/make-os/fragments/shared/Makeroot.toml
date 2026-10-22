@@ -32,6 +32,7 @@ PROFILE = "${profile:dev}"
 
 PROJECT_TABSDATA_ROOT_FOLDER = { value = "${PROJECT_TABSDATA_BASE_FOLDER}/", normalize = true }
 PROJECT_TABSDATA_TOOLKIT_ROOT_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/python/tabsdata-toolkit", normalize = true }
+PROJECT_TABSDATA_DT_ROOT_FOLDER = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/../tabsdata-dt", normalize = true }
 
 TD_KM_PROJECT_PRIMARY_NAME = "tabsdata-km"
 TD_KM_PROJECT_ALTERNATE_NAME = "kminus"
@@ -89,6 +90,7 @@ MAKE_LIBRARIES_PATH = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/li
 SPINNER_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/spin.py", normalize = true }
 EXPORTS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/exports.py", normalize = true }
 WARMUP_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/warmup.py", normalize = true }
+TDD_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/tdd.py", normalize = true }
 TMUX_TEST_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/tmuxtestrs.py", normalize = true }
 WARP_TEST_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/warptestrs.py", normalize = true }
 

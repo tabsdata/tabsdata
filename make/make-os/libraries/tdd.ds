@@ -1,0 +1,9 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+fn tdd_exe
+    tdd_exe_result = exec --fail-on-error python ${TDD_SCRIPT}
+    tdd_exe_path = trim ${tdd_exe_result.stdout}
+    return ${tdd_exe_path}
+end

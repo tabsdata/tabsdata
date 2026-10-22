@@ -10,6 +10,7 @@ script_runner = "@duckscript"
 script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     tabsdata_python_version = set 3.12.0
     set_env TABSDATA_PYTHON_VERSION ${tabsdata_python_version}
@@ -71,6 +72,23 @@ script = [
 
     debug "🚀 uv pip install --quiet -e ./devutils/automation/tasks/python/tabsdata-toolkit --config-settings editable_mode=compat --no-build-isolation"
     exec --fail-on-error uv pip install --quiet -e ./devutils/automation/tasks/python/tabsdata-toolkit --config-settings editable_mode=compat --no-build-isolation
+
+    tdd = tdd_exe
+    tdd_installed = set false
+    if is_file ${tdd}
+        tdd_info = exec ${tdd} info
+        tdd_installed = eq ${tdd_info.code} "0"
+    end
+    if ${tdd_installed}
+        debug "✅ Tool tdd is installed at ${tdd}"
+    else
+        if not is_dir ${PROJECT_TABSDATA_DT_ROOT_FOLDER}
+            error "🚫🚫🚫🚫🚫 Tool tdd is not installed, and the tabsdata-dt repository is not checked out at ${PROJECT_TABSDATA_DT_ROOT_FOLDER} to install it. Make aborted."
+            assert_fail
+        end
+        debug "🚀 cargo make --cwd ${PROJECT_TABSDATA_DT_ROOT_FOLDER} dev"
+        exec --fail-on-error cargo make --cwd ${PROJECT_TABSDATA_DT_ROOT_FOLDER} dev
+    end
 
     pyenv = which pyenv
     if not eq ${pyenv} ""
