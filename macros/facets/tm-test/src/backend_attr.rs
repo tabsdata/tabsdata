@@ -4,7 +4,7 @@
 
 //! `#[td_test::domain("<name>")]` / `#[td_test::system("<name>")]`
 //!
-//! Each attribute names a backend in the tdx store, claims the parameter called
+//! Each attribute names a backend in the tdd store, claims the parameter called
 //! `domain_<name>` / `system_<name>`, resolves the backend into it, and hands the
 //! rest of the function on untouched. That is the Python fixtures' naming, where
 //! `@s3_domain("orders")` injects `domain_orders`.
@@ -13,8 +13,8 @@
 //! attribute at the bottom (`#[test]`, `#[tokio::test]`, …) finally sees a
 //! zero-argument function, which is the only shape it accepts.
 //!
-//! Nothing here is async: resolution is a file read and a key derivation, so the
-//! same emission serves sync and async tests.
+//! Nothing here is async: resolution is one blocking tdd process, so the same
+//! emission serves sync and async tests.
 
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
@@ -87,7 +87,7 @@ fn try_backend_attr(
         return Err(syn::Error::new(
             binding.span(),
             format!(
-                "names no backend — expected the name it has in the tdx store, e.g. \
+                "names no backend — expected the name it has in the tdd store, e.g. \
                  #[td_test::{attr}(\"orders\")]",
                 attr = role.attr(),
             ),

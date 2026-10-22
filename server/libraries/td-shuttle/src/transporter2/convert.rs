@@ -448,7 +448,7 @@ mod test {
 
     // ----------------------------------------------------------------------
     // Cloud integration: round-trip a convert through a real bucket, each one in
-    // its tdx-provisioned domain -- a prefix that re-provisioning clears, so the
+    // its tdd-provisioned domain -- a prefix that re-provisioning clears, so the
     // objects a run leaves behind do not accumulate under the staging root.
     // ----------------------------------------------------------------------
 
@@ -529,7 +529,7 @@ mod test {
         let _ = std::fs::remove_dir_all(&d);
     }
 
-    /// `configs` for a [`Location`], as `val:` literals — the tdx descriptor
+    /// `configs` for a [`Location`], as `val:` literals — the tdd descriptor
     /// hands out resolved credentials, so there is no env var left to reference.
     /// Blank keys are dropped, falling back to the cloud's default chain.
     fn configs<'a>(pairs: impl IntoIterator<Item = (&'a str, &'a str)>) -> HashMap<String, String> {

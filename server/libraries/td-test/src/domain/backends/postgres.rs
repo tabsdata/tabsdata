@@ -5,10 +5,12 @@
 //! Fixture structs for the `postgres` backend — port of
 //! `tabsdatax.itest.fixture.backends.postgres`.
 //!
-//! A tdx `postgres` system is a container running the server; a domain is one
+//! A tdd `postgres` system is a container running the server; a domain is one
 //! database in it, owned by a role of the same name, holding the tables
 //! `create-data` seeded. Postgres calls the entity container a schema, so the
-//! descriptor carries the database name as `DB`, `DATABASE` and `SCHEMA` alike.
+//! descriptor carries the database name as `DATABASE` and `SCHEMA` alike. The
+//! postgres family names the network it is reached on: tests reach it from the
+//! host, so they read the `EXTERNAL_*` host and URIs.
 
 use std::collections::BTreeMap;
 
@@ -24,9 +26,9 @@ crate::define_backend! {
     pub struct PostgresSystem: system("postgres") {
         name: String,
         system_kind: String,
-        container: String,
+        docker_container_name: String,
         image: String,
-        host: String,
+        external_host: String,
         /// The host-side port the container publishes, as the descriptor spells
         /// it. [`PostgresSystem::port`] is the parsed form.
         port: String,
@@ -41,18 +43,18 @@ crate::define_backend! {
         name: String,
         system_kind: String,
         image: String,
-        host: String,
+        external_host: String,
         port: String,
         user: String,
         password: String,
-        db: String,
+        database: String,
         /// The credential-less URI, as the descriptor spells it; the owner
         /// credentials are the `user` / `password` fields.
-        uri: String,
+        external_uri: String,
         /// The SQLAlchemy URI, dialect prefix and all — Python's connection
         /// string, not one a Rust client can use. See [`PostgresDomain::url`].
-        sqlalchemy_uri: String,
-        /// What postgres calls the entity container (== `db`).
+        external_sqlalchemy_uri: String,
+        /// What postgres calls the entity container (== `database`).
         schema: String,
         /// The owning system's superuser. The domain's own `user` owns only this
         /// database; creating schemas in it and ensuring the cluster-global RLS
@@ -106,7 +108,13 @@ fn url_of(host: &str, port: &str, db: &str, user: &str, password: &str) -> Resul
 impl PostgresSystem {
     /// A superuser connection to `db`.
     pub fn url(&self, db: &str) -> Result<Url, String> {
-        url_of(&self.host, &self.port, db, &self.user, &self.password)
+        url_of(
+            &self.external_host,
+            &self.port,
+            db,
+            &self.user,
+            &self.password,
+        )
     }
 
     /// A superuser connection to the [`MAINTENANCE_DB`] — where `CREATE` /
@@ -128,20 +136,26 @@ impl PostgresDomain {
     /// `postgres://<user>:<password>@<host>:<port>/<db>` — the owner's
     /// connection, in the libpq form sqlx and tokio-postgres take.
     ///
-    /// This is the one to connect with, not the `sqlalchemy_uri` field: that
-    /// carries the `+psycopg2` dialect prefix only SQLAlchemy understands, and
-    /// the `uri` field carries no credentials at all.
+    /// This is the one to connect with, not the `external_sqlalchemy_uri`
+    /// field: that carries the `+psycopg2` dialect prefix only SQLAlchemy
+    /// understands, and the `external_uri` field carries no credentials at all.
     pub fn url(&self) -> Result<Url, String> {
-        url_of(&self.host, &self.port, &self.db, &self.user, &self.password)
+        url_of(
+            &self.external_host,
+            &self.port,
+            &self.database,
+            &self.user,
+            &self.password,
+        )
     }
 
     /// The owning system's superuser, connected to this domain's own database —
     /// what a caller needs to create or drop schemas inside it.
     pub fn admin_url(&self) -> Result<Url, String> {
         url_of(
-            &self.host,
+            &self.external_host,
             &self.port,
-            &self.db,
+            &self.database,
             &self.sys_admin_user,
             &self.sys_admin_password,
         )
@@ -154,7 +168,7 @@ impl PostgresDomain {
             .map_err(|e| format!("'{}' is not a port: {e}", self.port))
     }
 
-    /// The seeded tables with their row counts. Empty until `tdx-domain
+    /// The seeded tables with their row counts. Empty until `tdd domain
     /// create-data` has run.
     pub fn tables(&self) -> Vec<(&str, i64)> {
         self.entities
@@ -174,81 +188,69 @@ impl PostgresDomain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::descriptor::{DomainInfo, Info, SystemInfo};
+    use crate::domain::tdd::{self, Descriptor};
     use crate::domain::{Attrs, Backend, Role};
 
     const PASSWORD: &str = "AbcdefghIJKL0123mnop";
 
-    fn system_info(meta: BTreeMap<String, String>) -> Info {
-        Info::System(SystemInfo {
-            system: "postgres".into(),
-            name: "postgres".into(),
-            uuid: String::new(),
-            started: String::new(),
-            meta,
-        })
+    fn system() -> Descriptor {
+        tdd::parse(
+            r#"
+            {
+                "role": "system",
+                "system": "postgres",
+                "name": "postgres",
+                "meta": {
+                    "SYSTEM_KIND": "sql",
+                    "DOCKER_CONTAINER_NAME": "tdd_postgres",
+                    "IMAGE": "postgres:17",
+                    "EXTERNAL_HOST": "127.0.0.1",
+                    "PORT": "15432",
+                    "USER": "postgres",
+                    "PASSWORD": "AbcdefghIJKL0123mnop"
+                }
+            }
+            "#,
+        )
     }
 
-    fn system_meta() -> BTreeMap<String, String> {
-        BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "sql".to_string()),
-            ("CONTAINER".to_string(), "tdx-postgres".to_string()),
-            ("IMAGE".to_string(), "postgres:17".to_string()),
-            ("HOST".to_string(), "127.0.0.1".to_string()),
-            ("PORT".to_string(), "15432".to_string()),
-            ("USER".to_string(), "postgres".to_string()),
-            ("PASSWORD".to_string(), PASSWORD.to_string()),
-        ])
-    }
-
-    fn domain_meta() -> BTreeMap<String, String> {
-        BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "sql".to_string()),
-            ("IMAGE".to_string(), "postgres:17".to_string()),
-            ("HOST".to_string(), "127.0.0.1".to_string()),
-            ("PORT".to_string(), "15432".to_string()),
-            ("USER".to_string(), "d_tucu_0_landing".to_string()),
-            ("PASSWORD".to_string(), PASSWORD.to_string()),
-            ("DB".to_string(), "d_tucu_0_landing".to_string()),
-            ("DATABASE".to_string(), "d_tucu_0_landing".to_string()),
-            ("SCHEMA".to_string(), "d_tucu_0_landing".to_string()),
-            ("SYS_ADMIN_USER".to_string(), "postgres".to_string()),
-            ("SYS_ADMIN_PASSWORD".to_string(), PASSWORD.to_string()),
-            (
-                "URI".to_string(),
-                "postgresql+psycopg2://127.0.0.1:15432/d_tucu_0_landing".to_string(),
-            ),
-            (
-                "SQLALCHEMY_URI".to_string(),
-                format!(
-                    "postgresql+psycopg2://d_tucu_0_landing:{PASSWORD}@127.0.0.1:15432/d_tucu_0_landing"
-                ),
-            ),
-        ])
-    }
-
-    fn domain_info(meta: BTreeMap<String, String>) -> Info {
-        Info::Domain(DomainInfo {
-            system: "postgres".into(),
-            name: "landing".into(),
-            uuid: String::new(),
-            started: String::new(),
-            sys_name: "postgres".into(),
-            external_name: "d_tucu_0_landing".into(),
-            meta,
-            model: Some("world".into()),
-            data: Some("200".into()),
-            entities: BTreeMap::from([
-                ("city".to_string(), 4079),
-                ("country".to_string(), 239),
-                ("country_language".to_string(), 984),
-            ]),
-            seed: 0,
-        })
+    fn landing() -> Descriptor {
+        tdd::parse(
+            r#"
+            {
+                "role": "domain",
+                "system": "postgres",
+                "name": "landing",
+                "sys_name": "postgres",
+                "external_name": "d_tucu_0_landing",
+                "meta": {
+                    "SYSTEM_KIND": "sql",
+                    "IMAGE": "postgres:17",
+                    "EXTERNAL_HOST": "127.0.0.1",
+                    "PORT": "15432",
+                    "USER": "d_tucu_0_landing",
+                    "PASSWORD": "AbcdefghIJKL0123mnop",
+                    "DATABASE": "d_tucu_0_landing",
+                    "SCHEMA": "d_tucu_0_landing",
+                    "SYS_ADMIN_USER": "postgres",
+                    "SYS_ADMIN_PASSWORD": "AbcdefghIJKL0123mnop",
+                    "EXTERNAL_URI": "postgresql+psycopg2://127.0.0.1:15432/d_tucu_0_landing",
+                    "EXTERNAL_SQLALCHEMY_URI": "postgresql+psycopg2://d_tucu_0_landing:AbcdefghIJKL0123mnop@127.0.0.1:15432/d_tucu_0_landing"
+                },
+                "model": "world",
+                "data": "200",
+                "entities": {
+                    "city": 4079,
+                    "country": 239,
+                    "country_language": 984
+                }
+            }
+            "#,
+        )
     }
 
     fn domain() -> PostgresDomain {
-        PostgresDomain::build(&Attrs::of(&domain_info(domain_meta()))).unwrap()
+        PostgresDomain::build(&Attrs::of(&landing())).unwrap()
     }
 
     #[test]
@@ -265,17 +267,20 @@ mod tests {
         assert_eq!(d.name, "landing");
         assert_eq!(d.system_kind, "sql");
         assert_eq!(d.image, "postgres:17");
-        assert_eq!(d.host, "127.0.0.1");
+        assert_eq!(d.external_host, "127.0.0.1");
         assert_eq!(d.port, "15432");
         assert_eq!(d.user, "d_tucu_0_landing");
         assert_eq!(d.password, PASSWORD);
-        assert_eq!(d.db, "d_tucu_0_landing");
+        assert_eq!(d.database, "d_tucu_0_landing");
         assert_eq!(
-            d.schema, d.db,
+            d.schema, d.database,
             "postgres names the entity container a schema"
         );
-        assert!(d.uri.starts_with("postgresql+psycopg2://127.0.0.1"));
-        assert!(d.sqlalchemy_uri.contains(PASSWORD));
+        assert!(
+            d.external_uri
+                .starts_with("postgresql+psycopg2://127.0.0.1")
+        );
+        assert!(d.external_sqlalchemy_uri.contains(PASSWORD));
         assert_eq!(d.model.as_deref(), Some("world"));
         assert_eq!(d.data.as_deref(), Some("200"));
         assert_eq!(d.entities.as_ref().unwrap()["city"], 4079);
@@ -296,21 +301,21 @@ mod tests {
 
     #[test]
     fn test_build_system_from_descriptor() {
-        let s = PostgresSystem::build(&Attrs::of(&system_info(system_meta()))).unwrap();
+        let s = PostgresSystem::build(&Attrs::of(&system())).unwrap();
         assert_eq!(s.name, "postgres");
-        assert_eq!(s.container, "tdx-postgres");
+        assert_eq!(s.docker_container_name, "tdd_postgres");
         assert_eq!(s.user, "postgres");
         assert_eq!(s.port().unwrap(), 15432);
     }
 
     #[test]
     fn test_build_reports_every_missing_key() {
-        let mut meta = domain_meta();
-        meta.remove("DB");
-        meta.remove("SQLALCHEMY_URI");
-        let err = PostgresDomain::build(&Attrs::of(&domain_info(meta))).unwrap_err();
-        assert!(err.contains("DB"), "got: {err}");
-        assert!(err.contains("SQLALCHEMY_URI"), "got: {err}");
+        let mut descriptor = landing();
+        descriptor.meta.remove("DATABASE");
+        descriptor.meta.remove("EXTERNAL_SQLALCHEMY_URI");
+        let err = PostgresDomain::build(&Attrs::of(&descriptor)).unwrap_err();
+        assert!(err.contains("DATABASE"), "got: {err}");
+        assert!(err.contains("EXTERNAL_SQLALCHEMY_URI"), "got: {err}");
     }
 
     #[test]
@@ -330,7 +335,7 @@ mod tests {
     /// is about to create or drop.
     #[test]
     fn test_system_url_takes_the_database() {
-        let s = PostgresSystem::build(&Attrs::of(&system_info(system_meta()))).unwrap();
+        let s = PostgresSystem::build(&Attrs::of(&system())).unwrap();
         assert_eq!(
             s.admin_url().unwrap().as_str(),
             format!("postgres://postgres:{PASSWORD}@127.0.0.1:15432/postgres")
@@ -346,9 +351,11 @@ mod tests {
     /// literal `%` is the one the url crate's own setters miss.
     #[test]
     fn test_url_percent_encodes_credentials() {
-        let mut meta = domain_meta();
-        meta.insert("PASSWORD".to_string(), "p@ss/w%rd?".to_string());
-        let d = PostgresDomain::build(&Attrs::of(&domain_info(meta))).unwrap();
+        let mut descriptor = landing();
+        descriptor
+            .meta
+            .insert("PASSWORD".to_string(), "p@ss/w%rd?".to_string());
+        let d = PostgresDomain::build(&Attrs::of(&descriptor)).unwrap();
         let url = d.url().unwrap();
         assert_eq!(url.password(), Some("p%40ss%2Fw%25rd%3F"));
         assert_eq!(url.host_str(), Some("127.0.0.1"), "the host is unaffected");
@@ -380,11 +387,9 @@ mod tests {
 
     #[test]
     fn test_tables_without_create_data() {
-        let Info::Domain(mut info) = domain_info(domain_meta()) else {
-            unreachable!()
-        };
-        info.entities.clear();
-        let d = PostgresDomain::build(&Attrs::of(&Info::Domain(info))).unwrap();
+        let mut descriptor = landing();
+        descriptor.entities.clear();
+        let d = PostgresDomain::build(&Attrs::of(&descriptor)).unwrap();
         assert_eq!(d.entities, None);
         assert_eq!(d.tables(), vec![]);
         assert_eq!(d.rows("city"), None);

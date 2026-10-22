@@ -5,7 +5,7 @@
 //! Fixture structs for the `azureblob` backend — port of
 //! `tabsdatax.itest.fixture.backends.azureblob`.
 //!
-//! A tdx `azureblob` system is a blob container plus a staging-root prefix
+//! A tdd `azureblob` system is a blob container plus a staging-root prefix
 //! (`SYS_PATH`); a domain is one prefix under it (`BASE_PATH`, named `PREFIX`),
 //! holding the staged files `create-data` wrote.
 
@@ -141,7 +141,7 @@ impl AzureblobDomain {
     }
 
     /// The staged entity files matching `suffix`, e.g. `.csv`, with their row
-    /// counts. Empty until `tdx-domain create-data` has run.
+    /// counts. Empty until `tdd domain create-data` has run.
     pub fn staged(&self, suffix: &str) -> Vec<(&str, i64)> {
         self.entities
             .iter()
@@ -155,56 +155,44 @@ impl AzureblobDomain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::descriptor::{DomainInfo, Info, SystemInfo};
+    use crate::domain::tdd::{self, Descriptor};
     use crate::domain::{Attrs, Backend, Role};
 
     /// `object_store` base64-decodes the shared key, so a fixture value that is
     /// not base64 fails to build a store at all.
     const ACCOUNT_KEY: &str = "YWNjb3VudC1rZXk=";
 
-    fn system_info(meta: BTreeMap<String, String>) -> Info {
-        Info::System(SystemInfo {
-            system: "azureblob".into(),
-            name: "azureblob".into(),
-            uuid: String::new(),
-            started: String::new(),
-            meta,
-        })
-    }
-
-    fn domain_meta() -> BTreeMap<String, String> {
-        BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "file".to_string()),
-            ("SYS_PATH".to_string(), "root".to_string()),
-            ("BASE_PATH".to_string(), "root/d_tucu_0_landing".to_string()),
-            ("PREFIX".to_string(), "d_tucu_0_landing".to_string()),
-            ("CONTAINER".to_string(), "a-container".to_string()),
-            ("ACCOUNT_NAME".to_string(), "an".to_string()),
-            ("ACCOUNT_KEY".to_string(), ACCOUNT_KEY.to_string()),
-        ])
-    }
-
-    fn domain_info(meta: BTreeMap<String, String>) -> Info {
-        Info::Domain(DomainInfo {
-            system: "azureblob".into(),
-            name: "landing".into(),
-            uuid: String::new(),
-            started: String::new(),
-            sys_name: "azureblob".into(),
-            external_name: "d_tucu_0_landing".into(),
-            meta,
-            model: Some("world".into()),
-            data: None,
-            entities: BTreeMap::from([
-                ("csv/city_1.csv".to_string(), 7),
-                ("parquet/city_1.parquet".to_string(), 7),
-            ]),
-            seed: 0,
-        })
+    fn landing() -> Descriptor {
+        tdd::parse(
+            r#"
+            {
+                "role": "domain",
+                "system": "azureblob",
+                "name": "landing",
+                "sys_name": "azureblob",
+                "external_name": "d_tucu_0_landing",
+                "meta": {
+                    "SYSTEM_KIND": "file",
+                    "SYS_PATH": "root",
+                    "BASE_PATH": "root/d_tucu_0_landing",
+                    "PREFIX": "d_tucu_0_landing",
+                    "CONTAINER": "a-container",
+                    "ACCOUNT_NAME": "an",
+                    "ACCOUNT_KEY": "YWNjb3VudC1rZXk="
+                },
+                "model": "world",
+                "data": null,
+                "entities": {
+                    "csv/city_1.csv": 7,
+                    "parquet/city_1.parquet": 7
+                }
+            }
+            "#,
+        )
     }
 
     fn domain() -> AzureblobDomain {
-        AzureblobDomain::build(&Attrs::of(&domain_info(domain_meta()))).unwrap()
+        AzureblobDomain::build(&Attrs::of(&landing())).unwrap()
     }
 
     #[test]
@@ -233,14 +221,23 @@ mod tests {
 
     #[test]
     fn test_build_system_from_descriptor() {
-        let meta = BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "file".to_string()),
-            ("SYS_PATH".to_string(), "root".to_string()),
-            ("CONTAINER".to_string(), "a-container".to_string()),
-            ("ACCOUNT_NAME".to_string(), "an".to_string()),
-            ("ACCOUNT_KEY".to_string(), ACCOUNT_KEY.to_string()),
-        ]);
-        let s = AzureblobSystem::build(&Attrs::of(&system_info(meta))).unwrap();
+        let system = tdd::parse(
+            r#"
+            {
+                "role": "system",
+                "system": "azureblob",
+                "name": "azureblob",
+                "meta": {
+                    "SYSTEM_KIND": "file",
+                    "SYS_PATH": "root",
+                    "CONTAINER": "a-container",
+                    "ACCOUNT_NAME": "an",
+                    "ACCOUNT_KEY": "YWNjb3VudC1rZXk="
+                }
+            }
+            "#,
+        );
+        let s = AzureblobSystem::build(&Attrs::of(&system)).unwrap();
         assert_eq!(s.name, "azureblob");
         assert_eq!(s.sys_path, PathBuf::from("root"));
         assert_eq!(s.url().unwrap().as_str(), "az://a-container/root");
@@ -248,10 +245,10 @@ mod tests {
 
     #[test]
     fn test_build_reports_every_missing_key() {
-        let mut meta = domain_meta();
-        meta.remove("CONTAINER");
-        meta.remove("ACCOUNT_NAME");
-        let err = AzureblobDomain::build(&Attrs::of(&domain_info(meta))).unwrap_err();
+        let mut descriptor = landing();
+        descriptor.meta.remove("CONTAINER");
+        descriptor.meta.remove("ACCOUNT_NAME");
+        let err = AzureblobDomain::build(&Attrs::of(&descriptor)).unwrap_err();
         assert!(err.contains("CONTAINER"), "got: {err}");
         assert!(err.contains("ACCOUNT_NAME"), "got: {err}");
     }
@@ -290,9 +287,11 @@ mod tests {
         assert_eq!(opts["azure_storage_account_name"], "an");
         assert_eq!(opts["azure_storage_account_key"], ACCOUNT_KEY);
 
-        let mut meta = domain_meta();
-        meta.insert("ACCOUNT_KEY".to_string(), String::new());
-        let anon = AzureblobDomain::build(&Attrs::of(&domain_info(meta))).unwrap();
+        let mut descriptor = landing();
+        descriptor
+            .meta
+            .insert("ACCOUNT_KEY".to_string(), String::new());
+        let anon = AzureblobDomain::build(&Attrs::of(&descriptor)).unwrap();
         let opts = anon.options();
         assert!(!opts.contains_key("azure_storage_account_key"));
         assert_eq!(opts["azure_storage_account_name"], "an");
@@ -344,11 +343,9 @@ mod tests {
 
     #[test]
     fn test_staged_without_create_data() {
-        let Info::Domain(mut info) = domain_info(domain_meta()) else {
-            unreachable!()
-        };
-        info.entities.clear();
-        let d = AzureblobDomain::build(&Attrs::of(&Info::Domain(info))).unwrap();
+        let mut descriptor = landing();
+        descriptor.entities.clear();
+        let d = AzureblobDomain::build(&Attrs::of(&descriptor)).unwrap();
         assert_eq!(d.entities, None);
         assert_eq!(d.staged(".csv"), vec![]);
     }

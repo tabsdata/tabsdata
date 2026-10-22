@@ -728,7 +728,7 @@ mod tests {
     }
 
     /// Mount `uri` at `path` with `options` and exercise it. Each caller writes
-    /// into its own `run_url` corner of the tdx staging root.
+    /// into its own `run_url` corner of the tdd staging root.
     async fn test_cloud_mount(path: &str, uri: Url, options: HashMap<String, String>) {
         let object_store = object_store::parse_url_opts(&uri, &options).unwrap().0;
 

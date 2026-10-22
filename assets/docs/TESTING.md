@@ -10,37 +10,38 @@ Otherwise it fails, unless it has been explicitly told to skip.
 ## Rust
 
 A test reaches an external resource with `#[td_test::domain("<name>")]` or
-`#[td_test::system("<name>")]` — a **tdx-provisioned backend**, read from the
-descriptor store. Both compose with any test attribute, sync or async. See
-[tdx Backends](#tdx-backends-domain--system).
+`#[td_test::system("<name>")]` — a **tdd-provisioned backend**, read from the
+descriptor store through tdd. Both compose with any test attribute, sync or async. See
+[tdd Backends](#tdd-backends-domain--system).
 
 *NOTE:* The Rust test-framework does not allow runtime test skipping, so a skipped test
 is still invoked and prints `[td-test] SKIP: <test>`.
 
-# tdx Backends (`domain` / `system`)
+# tdd Backends (`domain` / `system`)
 
-`tdx-system` / `tdx-domain` provision the external resources and record each one as an
-encrypted descriptor in the store. The Rust fixtures read the very same descriptors the
-Python `tabsdatax.itest.fixture` fixtures do, so a backend is provisioned once and both
-languages consume it — no per-resource credentials in the environment.
+`tdd system` / `tdd domain` (tabsdata-dt) provision the external resources and record each
+one as an encrypted descriptor in tdd's store. Only tdd reads or writes that store: the
+Rust fixtures and the Python `tabsdatax.itest.fixture` fixtures both ask tdd for a backend
+(`tdd ... info --format json`), so a backend is provisioned once and both languages consume
+it — no per-resource credentials in the environment, and no copy of the descriptor format
+outside tdd.
 
-Only two environment variables are involved:
+The environment variables involved:
 
-* `TD_BACKENDS_CRYPTO_KEY`: the secret the descriptors are encrypted with (min 12 chars).
-* `TD_BACKENDS_DIR`: the store root. Defaults to `~/.tabsdatax`; systems live under
-  `systems2/<name>` and domains under `domains2/<name>`.
+* `_TDD_CRYPTO_KEY`: the secret the descriptors are encrypted with (min 12 chars); load it
+  with `tdd env set --crypto`.
+* `TDD_DIR`: where tdd is installed, `~/.tdd` by default. The fixtures run its `tdd-exe`.
+* `TDD_SYSTEM_DIR` / `TDD_DOMAIN_DIR`: another store to use instead of tdd's own
+  (`<tdd_dir>/data/system` and `<tdd_dir>/data/domain`) — how the fixtures' own tests use
+  a scratch store.
 
-Descriptors are written in the `TDX3` format, which carries a per-descriptor salt. A
-store still holding the older `TDX2` descriptors is **rejected** — every tdx command and
-both languages' fixtures fail and tell you to convert it:
+A store still holding legacy `TDX2` descriptors is **rejected** — tdd fails, and both
+languages' fixtures fail with its message. Convert it once, explicitly:
 
 ```sh
-tdx-system upgrade    # converts every legacy descriptor in systems2/
-tdx-domain upgrade    # ... and in domains2/
+tdd system upgrade
+tdd domain upgrade
 ```
-
-Both are idempotent and report what they changed. Nothing upgrades a descriptor as a side
-effect of reading it — migrating a store is an explicit act, so it happens once, visibly.
 
 A **system** is the resource itself (a bucket plus its staging root); a **domain** is one
 container within it (a prefix), optionally seeded with a model and data.
@@ -48,7 +49,7 @@ container within it (a prefix), optionally seeded with a model and data.
 **Prefer the domain**, whether the test reads seeded entities or writes its own scratch
 data. Re-provisioning a domain clears its prefix, so what a run leaves behind is reclaimed;
 objects written straight into a system's staging root accumulate there until someone runs
-`tdx-system purge`. Reach for the system only when the test genuinely needs the resource
+`tdd system purge`. Reach for the system only when the test genuinely needs the resource
 itself rather than a container in it.
 
 The attribute's argument is the backend's **name in the store**; the parameter it fills is
@@ -75,8 +76,8 @@ and is never repeated in the attribute.
 
 Put the attribute **above** the test attribute. Attributes expand top-down, and this one
 has to remove the parameter before `#[test]` / `#[tokio::test]` sees a function it would
-reject for taking arguments. Sync and async are treated alike — resolution is a file read
-and a key derivation, so no runtime is involved.
+reject for taking arguments. Sync and async are treated alike — resolution is one blocking
+tdd process, so no runtime is involved.
 
 Stack one attribute per backend, several of the same type included; binding is by
 parameter name, so nothing is ambiguous:
@@ -93,7 +94,7 @@ parameter name, so nothing is ambiguous:
 
 The fixture struct's fields are read from the descriptor key of the same upper-cased name,
 so `S3Domain::bucket` comes from `BUCKET`. Nothing is created or torn down by the fixture:
-`tdx-domain destroy` / `tdx-system purge` own the lifecycle, and a test that writes should
+`tdd domain destroy` / `tdd system purge` own the lifecycle, and a test that writes should
 carve out its own corner with `run_prefix`.
 
 ## Available Fixture Structs
@@ -101,7 +102,7 @@ carve out its own corner with `run_prefix`.
 These are ported so far; the rest stay Python-only until a Rust test needs them. All of
 them live in `td_test::domain`:
 
-| tdx type | System | Domain |
+| tdd type | System | Domain |
 |---|---|---|
 | `s3` | `S3System` | `S3Domain` |
 | `gcs` | `GcsSystem` | `GcsDomain` |
@@ -128,11 +129,15 @@ for connectors that reach GCS over the S3 protocol.
 `path()`, `child_path()`, `run_path()` — and its `object_store()` is rooted at the
 fixture's own directory, where a `staged()` path addresses the store as-is.
 
-`postgres` is a SQL backend, so it has no store at all: a system is the container, a domain
-is one database in it owned by a role of the same name. `url()` is the connection —
-`postgres://<user>:<password>@<host>:<port>/<db>`, the libpq form sqlx and tokio-postgres
-take. Use it rather than the descriptor's `sqlalchemy_uri` field, which carries the
-`+psycopg2` dialect prefix only SQLAlchemy understands, or `uri`, which has no credentials.
+`postgres` is a SQL backend, so it has no store at all: a system is the container
+(`docker_container_name`), a domain is one database in it owned by a role of the same name.
+The postgres family names the network it is reached on, and tests reach it from the host, so
+the fields are the external ones: `external_host`, `external_uri`,
+`external_sqlalchemy_uri`, with the database as `database` (== `schema`). `url()` is the
+connection — `postgres://<user>:<password>@<external_host>:<port>/<database>`, the libpq form
+sqlx and tokio-postgres take. Use it rather than `external_sqlalchemy_uri`, which carries the
+`+psycopg2` dialect prefix only SQLAlchemy understands, or `external_uri`, which has no
+credentials.
 `PostgresSystem::admin_url()` connects as the superuser to the maintenance database, the
 only place `CREATE` / `DROP DATABASE` can be issued from. The seeded tables and their row
 counts are `tables()` and `rows(table)`, the SQL counterpart of `staged()`.
@@ -148,45 +153,45 @@ def test_reads_seeded_data(domain_s3_world_xs: S3Domain): ...
 
 A backend is looked for in three places, in this order, identically in Rust and Python:
 
-1. **The cache** — per `(descriptor path, fixture type)`. Python caches for the pytest
+1. **The cache** — per `(family, store, name, fixture type)`. Python caches for the pytest
    session; Rust caches for the process, and the Rust harness runs a process per test, so
    it buys much less there.
 2. **`<UPCASE_NAME>__<KEY>` environment variables.** A *complete* set is the whole
-   backend: neither the descriptor nor `TD_BACKENDS_CRYPTO_KEY` is touched. It is the
-   shape `tdx-domain info` emits, so exporting one is one command:
+   backend: neither tdd nor `_TDD_CRYPTO_KEY` is touched. It is the shape
+   `tdd domain info` emits, so exporting one is one command:
 
    ```sh
-   eval "$(tdx-domain info --domain apiserver_postgres \
+   eval "$(tdd domain info --domain apiserver_postgres \
              --format export --prefix APISERVER_POSTGRES)"
    ```
 
    A whole manifest exports in one go, each domain keyed on its own upper-cased name,
-   which is what `cargo make test_rs` does for the Rust domains:
+   which is what `cargo make test_rs` does for the Rust domains — handing the values to
+   the tests in memory, never through a file, since they hold the backends' passwords:
 
    ```sh
-   eval "$(tdx-domain info --manifest variant/config/pytest/domains_rs.yaml \
+   eval "$(tdd domain info --manifest variant/config/pytest/domains_rs.yaml \
              --format export)"
    ```
 
    `__ENTITIES` is read as a JSON object (`{"city": 4079}`), so a seeded domain's row
    counts survive the round trip and `staged()` / `tables()` keep working. `NAME` is
    filled from the requested name.
-3. **The descriptor**, which stays the source of truth.
+3. **The descriptor**, through tdd, which stays the source of truth.
 
-The environment tier exists for cost: opening a descriptor runs a 200k-round PBKDF2 key
-derivation (~350ms on an M-series Mac). Python pays that once per session, but the Rust
-harness runs a **process per test**, so it would pay it once per test — around 40s across
-the Rust suite.
+The environment tier exists for cost: asking tdd starts a process (a few hundred
+milliseconds, decryption included). Python pays that once per backend per session, but the
+Rust harness runs a **process per test**, so it would pay it once per test.
 
 An **incomplete** prefix is not an error. It prints
 `[td-test] WARNING: $<NAME>__* is set but does not describe a whole ...` on stderr, keeps
 **none** of the environment's values, and reads the descriptor instead — the two sources
 are never mixed. Falling through rather than failing is what makes a collision harmless:
-`<NAME>__<KEY>` is also the shape tdx's own create-time options use, so a system named
-`s3` shares a prefix with the `S3__BUCKET` / `S3__REGION` variables `tdx-system create`
+`<NAME>__<KEY>` is also the shape tdd's own create-time options use, so a system named
+`s3` shares a prefix with the `S3__BUCKET` / `S3__REGION` variables `tdd system create`
 reads.
 
-*WARNING:* **a stale export outranks a fresh descriptor.** `tdx-domain create` mints a new
+*WARNING:* **a stale export outranks a fresh descriptor.** `tdd domain create` mints a new
 password every time, so an environment exported before a re-provision still builds a
 complete — and wrong — backend, and every test then fails against a database that no longer
 exists. Re-export after provisioning, or unset the prefix.
@@ -196,23 +201,25 @@ exists. Re-export after provisioning, or unset the prefix.
 Independently per family, so systems and domains are governed separately:
 
 * `TD_TEST_ON_MISSING_SYSTEM` / `TD_TEST_ON_MISSING_DOMAIN` = `skip` | `fail` (default
-  `fail`) when the backend cannot be reached — either the descriptor is not in the store,
-  or `TD_BACKENDS_CRYPTO_KEY` is unset so it cannot be opened.
+  `fail`) when the backend cannot be reached — it is not in the tdd store, or, in Rust, tdd
+  is not installed or `_TDD_CRYPTO_KEY` is unset. Python fails outright on those two:
+  its fixtures are generated from tdd's store listing, so the tests that declare a backend
+  fail with tdd's message, and the rest of the run is untouched.
 * `TD_TEST_SKIP_SYSTEMS` / `TD_TEST_SKIP_DOMAINS` = comma-separated backend names to skip
   even when they are present.
 
 A backend that *is* reachable but unusable — wrong type, a descriptor missing a key the
-fixture needs, or a legacy `TDX2` descriptor — always fails, whatever the policy says.
-Those are defects to fix, not absences to skip.
+fixture needs, or one tdd cannot read (a legacy `TDX2` store) — always fails, whatever the
+policy says. Those are defects to fix, not absences to skip.
 
 CI provisions the backends and leaves these unset, so a missing one is a failure. Developers
-without a tdx setup can set `TD_TEST_ON_MISSING_SYSTEM=skip` and
+without a tdd setup can set `TD_TEST_ON_MISSING_SYSTEM=skip` and
 `TD_TEST_ON_MISSING_DOMAIN=skip` locally to run the rest of the suite.
 
 # Db-backed Tests (`#[td_test::test(db)]`)
 
 Tests of apiserver logic take a database rather than an external resource, and they get it
-from a tdx domain too — `apiserver_postgres`. **Nothing in the test code starts a database
+from a tdd domain too — `apiserver_postgres`. **Nothing in the test code starts a database
 server.** Each test creates its own uniquely-named schema in that domain's database,
 brings it to the current version, and drops it on teardown, so tests still provision in
 parallel and isolate completely:
@@ -227,7 +234,7 @@ parallel and isolate completely:
 `cargo make test_rs` provisions the domains itself, from a manifest of its own rather than
 `domains_py.yaml` — a Rust test run has no business provisioning the domains of the other two
 dozen systems, and nothing in it declares an env-sourced option, so the run needs no
-1Password load, only `TD_BACKENDS_CRYPTO_KEY`. That manifest,
+1Password load beyond the crypto key. That manifest,
 `variant/config/pytest/domains_rs.yaml`, holds `apiserver_postgres` for the db tests and
 `apiserver_s3` / `apiserver_az` / `apiserver_gcs` for the object-store ones — named apart
 from the `s3` / `azureblob` / `gcs` the Python suite reads, because the manifest recreates
@@ -238,7 +245,7 @@ empty database, no per-test schema outlives the run that made it, and the object
 object-store tests write are reclaimed rather than accumulating under a system's staging
 root. All four are **required**: a store missing one fails the provisioning task instead of
 failing every test that needed it. **Systems** are not this task's business: they are
-long-running and expected to be up, so `tdx-system create` / `restart` stay a separate,
+long-running and expected to be up, so `tdd system create` / `restart` stay a separate,
 deliberate act.
 
 `cargo make test_rs_backends` runs just that provisioning, for when you want the domains
@@ -247,14 +254,14 @@ provisioned yourself. Point the tests at a different one with `TD_TEST_DB_DOMAIN
 
 Every domain task takes a mandatory `--python` or `--rust` to say which suite's domains it
 means: `cargo make domains_create --rust`, `cargo make domains_destroy --python`. The
-descriptors are named to match, `domains_py.yaml` and `domains_rs.yaml`, with the GA Python
+manifests are named to match, `domains_py.yaml` and `domains_rs.yaml`, with the GA Python
 variants as `domains_py_ga_<os>.yaml`.
 
 The domain descriptor carries the owning system's superuser as `SYS_ADMIN_USER` /
 `SYS_ADMIN_PASSWORD`, which is what the per-test path connects as: creating and dropping
 schemas and ensuring the cluster-global RLS role are beyond the domain's own owner role.
 
-The same `TD_TEST_ON_MISSING_DOMAIN` policy applies, so a developer without a tdx setup can
+The same `TD_TEST_ON_MISSING_DOMAIN` policy applies, so a developer without a tdd setup can
 set it to `skip`. td-database's own internals suite (`components/tests/*`,
 `pool::connect`) tests the database layer itself rather than apiserver logic, so it needs
 a superuser: it creates and drops cluster-global roles and sets `BYPASSRLS`. It takes that

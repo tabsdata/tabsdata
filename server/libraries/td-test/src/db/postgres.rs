@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Postgres provider: the per-test schemas land in a **tdx-provisioned domain's
+//! Postgres provider: the per-test schemas land in a **tdd-provisioned domain's
 //! database**. Nothing here starts a server — `cargo make domains_create` does
 //! that before the run, with `--force`, so each provisioning drops and recreates
 //! the database and no schema outlives it.
@@ -39,9 +39,9 @@ fn domain_name() -> String {
 fn admin_connect(domain: &PostgresDomain) -> Result<PostgresConnect, String> {
     Ok(PostgresConnect {
         options: PostgresConfig {
-            host: domain.host.clone(),
+            host: domain.external_host.clone(),
             port: domain.port()?,
-            database: Some(domain.db.clone()),
+            database: Some(domain.database.clone()),
             ..Default::default()
         },
         username: domain.sys_admin_user.clone(),
@@ -85,46 +85,33 @@ mod tests {
 
     #[test]
     fn test_admin_connect_targets_the_domain_database_as_the_superuser() {
-        use crate::domain::descriptor::{DomainInfo, Info};
-        use crate::domain::{Attrs, Backend};
-        use std::collections::BTreeMap;
+        use crate::domain::{Attrs, Backend, tdd};
 
-        let meta = BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "sql".to_string()),
-            ("IMAGE".to_string(), "postgres:17".to_string()),
-            ("HOST".to_string(), "localhost".to_string()),
-            ("PORT".to_string(), "61553".to_string()),
-            (
-                "USER".to_string(),
-                "d_tucu_0_apiserver_postgres".to_string(),
-            ),
-            ("PASSWORD".to_string(), "owner-pw".to_string()),
-            ("DB".to_string(), "d_tucu_0_apiserver_postgres".to_string()),
-            (
-                "SCHEMA".to_string(),
-                "d_tucu_0_apiserver_postgres".to_string(),
-            ),
-            ("URI".to_string(), "postgresql+psycopg2://x".to_string()),
-            (
-                "SQLALCHEMY_URI".to_string(),
-                "postgresql+psycopg2://x".to_string(),
-            ),
-            ("SYS_ADMIN_USER".to_string(), "postgres".to_string()),
-            ("SYS_ADMIN_PASSWORD".to_string(), "super-pw".to_string()),
-        ]);
-        let domain = PostgresDomain::build(&Attrs::of(&Info::Domain(DomainInfo {
-            system: "postgres".into(),
-            name: "apiserver_postgres".into(),
-            uuid: String::new(),
-            started: String::new(),
-            sys_name: "postgres".into(),
-            external_name: "d_tucu_0_apiserver_postgres".into(),
-            meta,
-            model: None,
-            data: None,
-            entities: BTreeMap::new(),
-            seed: 0,
-        })))
+        let domain = PostgresDomain::build(&Attrs::of(&tdd::parse(
+            r#"
+            {
+                "role": "domain",
+                "system": "postgres",
+                "name": "apiserver_postgres",
+                "sys_name": "postgres",
+                "external_name": "d_tucu_0_apiserver_postgres",
+                "meta": {
+                    "SYSTEM_KIND": "sql",
+                    "IMAGE": "postgres:17",
+                    "EXTERNAL_HOST": "localhost",
+                    "PORT": "61553",
+                    "USER": "d_tucu_0_apiserver_postgres",
+                    "PASSWORD": "owner-pw",
+                    "DATABASE": "d_tucu_0_apiserver_postgres",
+                    "SCHEMA": "d_tucu_0_apiserver_postgres",
+                    "EXTERNAL_URI": "postgresql+psycopg2://x",
+                    "EXTERNAL_SQLALCHEMY_URI": "postgresql+psycopg2://x",
+                    "SYS_ADMIN_USER": "postgres",
+                    "SYS_ADMIN_PASSWORD": "super-pw"
+                }
+            }
+            "#,
+        )))
         .unwrap();
 
         let admin = admin_connect(&domain).unwrap();

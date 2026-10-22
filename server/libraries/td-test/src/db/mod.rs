@@ -37,7 +37,7 @@ impl DbTestSetup {
 impl TestSetup<Vec<TdPool>> for DbTestSetup {
     async fn setup(&self) -> TestSetupExecution<Vec<TdPool>> {
         // Provision the requested components, each on its own schema. Hand the test
-        // their serving pools (pure app pools); the per-test schemas in the tdx
+        // their serving pools (pure app pools); the per-test schemas in the tdd
         // domain's database are released by the guard's async teardown after the
         // test body. `None` declines the test — the database it needs is out of
         // reach and the policy says skip rather than fail.

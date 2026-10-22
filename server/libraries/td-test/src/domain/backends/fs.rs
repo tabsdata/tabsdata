@@ -5,7 +5,7 @@
 //! Fixture structs for the `fs` (local filesystem) backend — port of
 //! `tabsdatax.itest.fixture.backends.fs`.
 //!
-//! A tdx `fs` system is a real directory (the staging root, `SYS_PATH`); a
+//! A tdd `fs` system is a real directory (the staging root, `SYS_PATH`); a
 //! domain is one subdirectory under it (`BASE_PATH`, named `FOLDER`), holding
 //! the staged files `create-data` wrote.
 //!
@@ -119,7 +119,7 @@ impl FsDomain {
 
     /// The staged entity files matching `suffix`, e.g. `.csv`, with their row
     /// counts. Paths are relative to [`path`](Self::path); empty until
-    /// `tdx-domain create-data` has run.
+    /// `tdd domain create-data` has run.
     pub fn staged(&self, suffix: &str) -> Vec<(&str, i64)> {
         self.entities
             .iter()
@@ -133,53 +133,41 @@ impl FsDomain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::descriptor::{DomainInfo, Info, SystemInfo};
+    use crate::domain::tdd::{self, Descriptor};
     use crate::domain::{Attrs, Backend, Role};
     use object_store::ObjectStoreExt;
 
-    const ROOT: &str = "/srv/tdx/backends/fs";
-    const BASE: &str = "/srv/tdx/backends/fs/d_tucu_0_landing";
+    const ROOT: &str = "/srv/tdd/backends/fs";
+    const BASE: &str = "/srv/tdd/backends/fs/d_tucu_0_landing";
 
-    fn system_info(meta: BTreeMap<String, String>) -> Info {
-        Info::System(SystemInfo {
-            system: "fs".into(),
-            name: "fs".into(),
-            uuid: String::new(),
-            started: String::new(),
-            meta,
-        })
-    }
-
-    fn domain_meta() -> BTreeMap<String, String> {
-        BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "file".to_string()),
-            ("SYS_PATH".to_string(), ROOT.to_string()),
-            ("BASE_PATH".to_string(), BASE.to_string()),
-            ("FOLDER".to_string(), "d_tucu_0_landing".to_string()),
-        ])
-    }
-
-    fn domain_info(meta: BTreeMap<String, String>) -> Info {
-        Info::Domain(DomainInfo {
-            system: "fs".into(),
-            name: "landing".into(),
-            uuid: String::new(),
-            started: String::new(),
-            sys_name: "fs".into(),
-            external_name: "d_tucu_0_landing".into(),
-            meta,
-            model: Some("world".into()),
-            data: None,
-            entities: BTreeMap::from([
-                ("csv/city_1.csv".to_string(), 7),
-                ("parquet/city_1.parquet".to_string(), 7),
-            ]),
-            seed: 0,
-        })
+    fn landing() -> Descriptor {
+        tdd::parse(
+            r#"
+            {
+                "role": "domain",
+                "system": "fs",
+                "name": "landing",
+                "sys_name": "fs",
+                "external_name": "d_tucu_0_landing",
+                "meta": {
+                    "SYSTEM_KIND": "file",
+                    "SYS_PATH": "/srv/tdd/backends/fs",
+                    "BASE_PATH": "/srv/tdd/backends/fs/d_tucu_0_landing",
+                    "FOLDER": "d_tucu_0_landing"
+                },
+                "model": "world",
+                "data": null,
+                "entities": {
+                    "csv/city_1.csv": 7,
+                    "parquet/city_1.parquet": 7
+                }
+            }
+            "#,
+        )
     }
 
     fn domain() -> FsDomain {
-        FsDomain::build(&Attrs::of(&domain_info(domain_meta()))).unwrap()
+        FsDomain::build(&Attrs::of(&landing())).unwrap()
     }
 
     #[test]
@@ -205,21 +193,30 @@ mod tests {
 
     #[test]
     fn test_build_system_from_descriptor() {
-        let meta = BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "file".to_string()),
-            ("SYS_PATH".to_string(), ROOT.to_string()),
-        ]);
-        let s = FsSystem::build(&Attrs::of(&system_info(meta))).unwrap();
+        let system = tdd::parse(
+            r#"
+            {
+                "role": "system",
+                "system": "fs",
+                "name": "fs",
+                "meta": {
+                    "SYSTEM_KIND": "file",
+                    "SYS_PATH": "/srv/tdd/backends/fs"
+                }
+            }
+            "#,
+        );
+        let s = FsSystem::build(&Attrs::of(&system)).unwrap();
         assert_eq!(s.name, "fs");
         assert_eq!(s.path(), Path::new(ROOT));
     }
 
     #[test]
     fn test_build_reports_every_missing_key() {
-        let mut meta = domain_meta();
-        meta.remove("BASE_PATH");
-        meta.remove("FOLDER");
-        let err = FsDomain::build(&Attrs::of(&domain_info(meta))).unwrap_err();
+        let mut descriptor = landing();
+        descriptor.meta.remove("BASE_PATH");
+        descriptor.meta.remove("FOLDER");
+        let err = FsDomain::build(&Attrs::of(&descriptor)).unwrap_err();
         assert!(err.contains("BASE_PATH"), "got: {err}");
         assert!(err.contains("FOLDER"), "got: {err}");
     }
@@ -255,9 +252,11 @@ mod tests {
         std::fs::create_dir_all(base.join("csv")).unwrap();
         std::fs::write(base.join("csv/city_1.csv"), b"id\n1\n").unwrap();
 
-        let mut meta = domain_meta();
-        meta.insert("BASE_PATH".to_string(), base.to_str().unwrap().to_string());
-        let d = FsDomain::build(&Attrs::of(&domain_info(meta))).unwrap();
+        let mut descriptor = landing();
+        descriptor
+            .meta
+            .insert("BASE_PATH".to_string(), base.to_str().unwrap().to_string());
+        let d = FsDomain::build(&Attrs::of(&descriptor)).unwrap();
 
         let store = d.object_store().unwrap();
         let (path, _) = d.staged(".csv")[0];
@@ -304,11 +303,9 @@ mod tests {
 
     #[test]
     fn test_staged_without_create_data() {
-        let Info::Domain(mut info) = domain_info(domain_meta()) else {
-            unreachable!()
-        };
-        info.entities.clear();
-        let d = FsDomain::build(&Attrs::of(&Info::Domain(info))).unwrap();
+        let mut descriptor = landing();
+        descriptor.entities.clear();
+        let d = FsDomain::build(&Attrs::of(&descriptor)).unwrap();
         assert_eq!(d.entities, None);
         assert_eq!(d.staged(".csv"), vec![]);
     }

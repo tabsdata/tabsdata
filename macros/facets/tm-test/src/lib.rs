@@ -7,7 +7,7 @@
 //! take `db: TdPool`; `db(Type, ...)` provisions each listed component on its own
 //! schema and injects one `TdPool` per type, in declaration order.
 //!
-//! tdx-provisioned backends are not a flavor of this macro — see
+//! tdd-provisioned backends are not a flavor of this macro — see
 //! [`macro@domain`] / [`macro@system`], which compose with any test attribute.
 //!
 //! Any attribute key not handled by this macro (everything except `db`,
@@ -44,7 +44,7 @@ pub fn test(args: TokenStream, item: TokenStream) -> TokenStream {
     scoped_test::scoped_test(args, item)
 }
 
-/// Inject a tdx-provisioned **domain**, named by the parameter that receives it.
+/// Inject a tdd-provisioned **domain**, named by the parameter that receives it.
 ///
 /// The argument is the backend's name in the store; the parameter it fills is
 /// that name prefixed with `domain_`, so `"orders"` resolves the domain `orders`
@@ -62,9 +62,9 @@ pub fn test(args: TokenStream, item: TokenStream) -> TokenStream {
 /// `domain` module).
 ///
 /// The backend is resolved from, in order: the per-process cache; a complete set
-/// of `<UPCASE_NAME>__<KEY>` environment variables (the shape `tdx-domain info
-/// --format export --prefix <NAME>` emits, which avoids the descriptor's
-/// expensive key derivation); then the descriptor itself. An incomplete prefix
+/// of `<UPCASE_NAME>__<KEY>` environment variables (the shape `tdd domain info
+/// --format export --prefix <NAME>` emits, which avoids a tdd process per
+/// test); then the descriptor itself, through tdd. An incomplete prefix
 /// warns and is discarded rather than half-applied. A stale export outranks a
 /// fresh descriptor, so re-export after re-provisioning. See the `td-test`
 /// `domain` module for the full contract.
@@ -80,7 +80,7 @@ pub fn domain(args: TokenStream, item: TokenStream) -> TokenStream {
     backend_attr::backend_attr(Role::Domain, args, item)
 }
 
-/// Inject a tdx-provisioned **system**, named by the parameter that receives it.
+/// Inject a tdd-provisioned **system**, named by the parameter that receives it.
 ///
 /// The system sibling of [`macro@domain`]: `"s3"` reads the system `s3` from the
 /// store and injects it as the parameter `system_s3`.

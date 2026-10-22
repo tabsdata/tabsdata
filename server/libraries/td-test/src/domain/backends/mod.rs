@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! One fixture-struct pair per tdx system type, mirroring
+//! One fixture-struct pair per tdd system type, mirroring
 //! `tabsdatax.itest.fixture.backends`.
 //!
 //! The object-store backends (`s3`, `gcs`, `azureblob`) share the prefix / URL /

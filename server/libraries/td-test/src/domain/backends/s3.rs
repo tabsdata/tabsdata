@@ -5,7 +5,7 @@
 //! Fixture structs for the `s3` backend — port of
 //! `tabsdatax.itest.fixture.backends.s3`.
 //!
-//! A tdx `s3` system is a bucket plus a staging-root prefix (`SYS_PATH`); a
+//! A tdd `s3` system is a bucket plus a staging-root prefix (`SYS_PATH`); a
 //! domain is one prefix under it (`BASE_PATH`, named `PREFIX`), holding the
 //! staged files `create-data` wrote.
 
@@ -142,7 +142,7 @@ impl S3Domain {
     }
 
     /// The staged entity files matching `suffix`, e.g. `.csv`, with their row
-    /// counts. Empty until `tdx-domain create-data` has run.
+    /// counts. Empty until `tdd domain create-data` has run.
     pub fn staged(&self, suffix: &str) -> Vec<(&str, i64)> {
         self.entities
             .iter()
@@ -156,53 +156,41 @@ impl S3Domain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::descriptor::{DomainInfo, Info, SystemInfo};
+    use crate::domain::tdd::{self, Descriptor};
     use crate::domain::{Attrs, Backend, Role};
 
-    fn system_info(meta: BTreeMap<String, String>) -> Info {
-        Info::System(SystemInfo {
-            system: "s3".into(),
-            name: "s30".into(),
-            uuid: String::new(),
-            started: String::new(),
-            meta,
-        })
-    }
-
-    fn domain_meta() -> BTreeMap<String, String> {
-        BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "file".to_string()),
-            ("SYS_PATH".to_string(), "root".to_string()),
-            ("BASE_PATH".to_string(), "root/d_tucu_0_landing".to_string()),
-            ("PREFIX".to_string(), "d_tucu_0_landing".to_string()),
-            ("BUCKET".to_string(), "a-bucket".to_string()),
-            ("REGION".to_string(), "us-east-1".to_string()),
-            ("ACCESS_KEY".to_string(), "ak".to_string()),
-            ("SECRET_KEY".to_string(), "sk".to_string()),
-        ])
-    }
-
-    fn domain_info(meta: BTreeMap<String, String>) -> Info {
-        Info::Domain(DomainInfo {
-            system: "s3".into(),
-            name: "landing".into(),
-            uuid: String::new(),
-            started: String::new(),
-            sys_name: "s30".into(),
-            external_name: "d_tucu_0_landing".into(),
-            meta,
-            model: Some("world".into()),
-            data: None,
-            entities: BTreeMap::from([
-                ("csv/city_1.csv".to_string(), 7),
-                ("parquet/city_1.parquet".to_string(), 7),
-            ]),
-            seed: 0,
-        })
+    fn landing() -> Descriptor {
+        tdd::parse(
+            r#"
+            {
+                "role": "domain",
+                "system": "s3",
+                "name": "landing",
+                "sys_name": "s30",
+                "external_name": "d_tucu_0_landing",
+                "meta": {
+                    "SYSTEM_KIND": "file",
+                    "SYS_PATH": "root",
+                    "BASE_PATH": "root/d_tucu_0_landing",
+                    "PREFIX": "d_tucu_0_landing",
+                    "BUCKET": "a-bucket",
+                    "REGION": "us-east-1",
+                    "ACCESS_KEY": "ak",
+                    "SECRET_KEY": "sk"
+                },
+                "model": "world",
+                "data": null,
+                "entities": {
+                    "csv/city_1.csv": 7,
+                    "parquet/city_1.parquet": 7
+                }
+            }
+            "#,
+        )
     }
 
     fn domain() -> S3Domain {
-        S3Domain::build(&Attrs::of(&domain_info(domain_meta()))).unwrap()
+        S3Domain::build(&Attrs::of(&landing())).unwrap()
     }
 
     #[test]
@@ -232,15 +220,24 @@ mod tests {
 
     #[test]
     fn test_build_system_from_descriptor() {
-        let meta = BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "file".to_string()),
-            ("SYS_PATH".to_string(), "root".to_string()),
-            ("BUCKET".to_string(), "a-bucket".to_string()),
-            ("REGION".to_string(), "us-east-1".to_string()),
-            ("ACCESS_KEY".to_string(), "ak".to_string()),
-            ("SECRET_KEY".to_string(), "sk".to_string()),
-        ]);
-        let s = S3System::build(&Attrs::of(&system_info(meta))).unwrap();
+        let system = tdd::parse(
+            r#"
+            {
+                "role": "system",
+                "system": "s3",
+                "name": "s30",
+                "meta": {
+                    "SYSTEM_KIND": "file",
+                    "SYS_PATH": "root",
+                    "BUCKET": "a-bucket",
+                    "REGION": "us-east-1",
+                    "ACCESS_KEY": "ak",
+                    "SECRET_KEY": "sk"
+                }
+            }
+            "#,
+        );
+        let s = S3System::build(&Attrs::of(&system)).unwrap();
         assert_eq!(s.name, "s30");
         assert_eq!(s.sys_path, PathBuf::from("root"));
         assert_eq!(s.url().unwrap().as_str(), "s3://a-bucket/root");
@@ -248,10 +245,10 @@ mod tests {
 
     #[test]
     fn test_build_reports_every_missing_key() {
-        let mut meta = domain_meta();
-        meta.remove("BUCKET");
-        meta.remove("REGION");
-        let err = S3Domain::build(&Attrs::of(&domain_info(meta))).unwrap_err();
+        let mut descriptor = landing();
+        descriptor.meta.remove("BUCKET");
+        descriptor.meta.remove("REGION");
+        let err = S3Domain::build(&Attrs::of(&descriptor)).unwrap_err();
         assert!(err.contains("BUCKET"), "got: {err}");
         assert!(err.contains("REGION"), "got: {err}");
     }
@@ -281,10 +278,14 @@ mod tests {
         assert_eq!(opts["aws_access_key_id"], "ak");
         assert_eq!(opts["aws_secret_access_key"], "sk");
 
-        let mut meta = domain_meta();
-        meta.insert("ACCESS_KEY".to_string(), String::new());
-        meta.insert("SECRET_KEY".to_string(), String::new());
-        let anon = S3Domain::build(&Attrs::of(&domain_info(meta))).unwrap();
+        let mut descriptor = landing();
+        descriptor
+            .meta
+            .insert("ACCESS_KEY".to_string(), String::new());
+        descriptor
+            .meta
+            .insert("SECRET_KEY".to_string(), String::new());
+        let anon = S3Domain::build(&Attrs::of(&descriptor)).unwrap();
         let opts = anon.options();
         assert!(!opts.contains_key("aws_access_key_id"));
         assert!(!opts.contains_key("aws_secret_access_key"));
@@ -337,11 +338,9 @@ mod tests {
 
     #[test]
     fn test_staged_without_create_data() {
-        let Info::Domain(mut info) = domain_info(domain_meta()) else {
-            unreachable!()
-        };
-        info.entities.clear();
-        let d = S3Domain::build(&Attrs::of(&Info::Domain(info))).unwrap();
+        let mut descriptor = landing();
+        descriptor.entities.clear();
+        let d = S3Domain::build(&Attrs::of(&descriptor)).unwrap();
         assert_eq!(d.entities, None);
         assert_eq!(d.staged(".csv"), vec![]);
     }

@@ -5,7 +5,7 @@
 //! Fixture structs for the `gcs` backend — port of
 //! `tabsdatax.itest.fixture.backends.gcs`.
 //!
-//! A tdx `gcs` system is a bucket plus a staging-root prefix (`SYS_PATH`); a
+//! A tdd `gcs` system is a bucket plus a staging-root prefix (`SYS_PATH`); a
 //! domain is one prefix under it (`BASE_PATH`, named `PREFIX`), holding the
 //! staged files `create-data` wrote.
 
@@ -186,7 +186,7 @@ impl GcsDomain {
     }
 
     /// The staged entity files matching `suffix`, e.g. `.csv`, with their row
-    /// counts. Empty until `tdx-domain create-data` has run.
+    /// counts. Empty until `tdd domain create-data` has run.
     pub fn staged(&self, suffix: &str) -> Vec<(&str, i64)> {
         self.entities
             .iter()
@@ -200,58 +200,43 @@ impl GcsDomain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::descriptor::{DomainInfo, Info, SystemInfo};
+    use crate::domain::tdd::{self, Descriptor};
     use crate::domain::{Attrs, Backend, Role};
 
     const SERVICE_ACCOUNT_JSON: &str = r#"{"type": "service_account"}"#;
 
-    fn system_info(meta: BTreeMap<String, String>) -> Info {
-        Info::System(SystemInfo {
-            system: "gcs".into(),
-            name: "gcs".into(),
-            uuid: String::new(),
-            started: String::new(),
-            meta,
-        })
-    }
-
-    fn domain_meta() -> BTreeMap<String, String> {
-        BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "file".to_string()),
-            ("SYS_PATH".to_string(), "root".to_string()),
-            ("BASE_PATH".to_string(), "root/d_tucu_0_landing".to_string()),
-            ("PREFIX".to_string(), "d_tucu_0_landing".to_string()),
-            ("BUCKET".to_string(), "a-bucket".to_string()),
-            (
-                "SERVICE_ACCOUNT_KEY".to_string(),
-                SERVICE_ACCOUNT_JSON.to_string(),
-            ),
-            ("HMAC_ACCESS_KEY".to_string(), "hak".to_string()),
-            ("HMAC_SECRET_KEY".to_string(), "hsk".to_string()),
-        ])
-    }
-
-    fn domain_info(meta: BTreeMap<String, String>) -> Info {
-        Info::Domain(DomainInfo {
-            system: "gcs".into(),
-            name: "landing".into(),
-            uuid: String::new(),
-            started: String::new(),
-            sys_name: "gcs".into(),
-            external_name: "d_tucu_0_landing".into(),
-            meta,
-            model: Some("world".into()),
-            data: None,
-            entities: BTreeMap::from([
-                ("csv/city_1.csv".to_string(), 7),
-                ("parquet/city_1.parquet".to_string(), 7),
-            ]),
-            seed: 0,
-        })
+    fn landing() -> Descriptor {
+        tdd::parse(
+            r#"
+            {
+                "role": "domain",
+                "system": "gcs",
+                "name": "landing",
+                "sys_name": "gcs",
+                "external_name": "d_tucu_0_landing",
+                "meta": {
+                    "SYSTEM_KIND": "file",
+                    "SYS_PATH": "root",
+                    "BASE_PATH": "root/d_tucu_0_landing",
+                    "PREFIX": "d_tucu_0_landing",
+                    "BUCKET": "a-bucket",
+                    "SERVICE_ACCOUNT_KEY": "{\"type\": \"service_account\"}",
+                    "HMAC_ACCESS_KEY": "hak",
+                    "HMAC_SECRET_KEY": "hsk"
+                },
+                "model": "world",
+                "data": null,
+                "entities": {
+                    "csv/city_1.csv": 7,
+                    "parquet/city_1.parquet": 7
+                }
+            }
+            "#,
+        )
     }
 
     fn domain() -> GcsDomain {
-        GcsDomain::build(&Attrs::of(&domain_info(domain_meta()))).unwrap()
+        GcsDomain::build(&Attrs::of(&landing())).unwrap()
     }
 
     #[test]
@@ -281,16 +266,22 @@ mod tests {
 
     #[test]
     fn test_build_system_from_descriptor() {
-        let meta = BTreeMap::from([
-            ("SYSTEM_KIND".to_string(), "file".to_string()),
-            ("SYS_PATH".to_string(), "root".to_string()),
-            ("BUCKET".to_string(), "a-bucket".to_string()),
-            (
-                "SERVICE_ACCOUNT_KEY".to_string(),
-                SERVICE_ACCOUNT_JSON.to_string(),
-            ),
-        ]);
-        let s = GcsSystem::build(&Attrs::of(&system_info(meta))).unwrap();
+        let system = tdd::parse(
+            r#"
+            {
+                "role": "system",
+                "system": "gcs",
+                "name": "gcs",
+                "meta": {
+                    "SYSTEM_KIND": "file",
+                    "SYS_PATH": "root",
+                    "BUCKET": "a-bucket",
+                    "SERVICE_ACCOUNT_KEY": "{\"type\": \"service_account\"}"
+                }
+            }
+            "#,
+        );
+        let s = GcsSystem::build(&Attrs::of(&system)).unwrap();
         assert_eq!(s.name, "gcs");
         assert_eq!(s.sys_path, PathBuf::from("root"));
         assert_eq!(s.url().unwrap().as_str(), "gs://a-bucket/root");
@@ -298,10 +289,10 @@ mod tests {
 
     #[test]
     fn test_build_reports_every_missing_key() {
-        let mut meta = domain_meta();
-        meta.remove("BUCKET");
-        meta.remove("SERVICE_ACCOUNT_KEY");
-        let err = GcsDomain::build(&Attrs::of(&domain_info(meta))).unwrap_err();
+        let mut descriptor = landing();
+        descriptor.meta.remove("BUCKET");
+        descriptor.meta.remove("SERVICE_ACCOUNT_KEY");
+        let err = GcsDomain::build(&Attrs::of(&descriptor)).unwrap_err();
         assert!(err.contains("BUCKET"), "got: {err}");
         assert!(err.contains("SERVICE_ACCOUNT_KEY"), "got: {err}");
     }
@@ -310,10 +301,10 @@ mod tests {
     /// credentials still builds.
     #[test]
     fn test_hmac_keys_are_optional() {
-        let mut meta = domain_meta();
-        meta.remove("HMAC_ACCESS_KEY");
-        meta.remove("HMAC_SECRET_KEY");
-        let d = GcsDomain::build(&Attrs::of(&domain_info(meta))).unwrap();
+        let mut descriptor = landing();
+        descriptor.meta.remove("HMAC_ACCESS_KEY");
+        descriptor.meta.remove("HMAC_SECRET_KEY");
+        let d = GcsDomain::build(&Attrs::of(&descriptor)).unwrap();
         assert_eq!(d.hmac_access_key, None);
         assert_eq!(d.hmac_secret_key, None);
         assert_eq!(d.s3_options(), None);
@@ -345,12 +336,12 @@ mod tests {
             SERVICE_ACCOUNT_JSON
         );
 
-        let mut meta = domain_meta();
-        meta.insert(
+        let mut descriptor = landing();
+        descriptor.meta.insert(
             "SERVICE_ACCOUNT_KEY".to_string(),
             "/keys/sa.json".to_string(),
         );
-        let by_path = GcsDomain::build(&Attrs::of(&domain_info(meta))).unwrap();
+        let by_path = GcsDomain::build(&Attrs::of(&descriptor)).unwrap();
         let opts = by_path.options();
         assert_eq!(opts["google_service_account"], "/keys/sa.json");
         assert!(!opts.contains_key("google_service_account_key"));
@@ -358,9 +349,11 @@ mod tests {
 
     #[test]
     fn test_options_drop_a_blank_service_account_key() {
-        let mut meta = domain_meta();
-        meta.insert("SERVICE_ACCOUNT_KEY".to_string(), String::new());
-        let anon = GcsDomain::build(&Attrs::of(&domain_info(meta))).unwrap();
+        let mut descriptor = landing();
+        descriptor
+            .meta
+            .insert("SERVICE_ACCOUNT_KEY".to_string(), String::new());
+        let anon = GcsDomain::build(&Attrs::of(&descriptor)).unwrap();
         assert!(anon.options().is_empty());
     }
 
@@ -371,9 +364,11 @@ mod tests {
         assert_eq!(opts["aws_secret_access_key"], "hsk");
         assert_eq!(opts["aws_endpoint"], "https://storage.googleapis.com");
 
-        let mut meta = domain_meta();
-        meta.insert("HMAC_SECRET_KEY".to_string(), String::new());
-        let blank = GcsDomain::build(&Attrs::of(&domain_info(meta))).unwrap();
+        let mut descriptor = landing();
+        descriptor
+            .meta
+            .insert("HMAC_SECRET_KEY".to_string(), String::new());
+        let blank = GcsDomain::build(&Attrs::of(&descriptor)).unwrap();
         assert_eq!(blank.s3_options(), None);
     }
 
@@ -423,11 +418,9 @@ mod tests {
 
     #[test]
     fn test_staged_without_create_data() {
-        let Info::Domain(mut info) = domain_info(domain_meta()) else {
-            unreachable!()
-        };
-        info.entities.clear();
-        let d = GcsDomain::build(&Attrs::of(&Info::Domain(info))).unwrap();
+        let mut descriptor = landing();
+        descriptor.entities.clear();
+        let d = GcsDomain::build(&Attrs::of(&descriptor)).unwrap();
         assert_eq!(d.entities, None);
         assert_eq!(d.staged(".csv"), vec![]);
     }

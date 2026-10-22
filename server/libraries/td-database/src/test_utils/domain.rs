@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The tdx domain td-database's own internal tests (`components/tests/*`,
+//! The tdd domain td-database's own internal tests (`components/tests/*`,
 //! `pool::connect`, `pool::options`) run against. Like the
 //! `#[td_test::test(db)]` macro path, nothing here starts a server: the
 //! database is provisioned by `cargo make domains_create --rust` before the
@@ -16,7 +16,7 @@
 
 use crate::config::{PostgresConfig, PostgresConnect};
 
-/// The tdx domain this crate's internals suite runs against, declared in
+/// The tdd domain this crate's internals suite runs against, declared in
 /// `variant/config/pytest/domains_rs.yaml`.
 pub const INTERNALS_DOMAIN: &str = "APISERVER_POSTGRES_INTERNALS";
 
@@ -27,8 +27,8 @@ pub fn admin_base() -> PostgresConnect {
     domain_identity(INTERNALS_DOMAIN).unwrap_or_else(|| {
         panic!(
             "domain '{INTERNALS_DOMAIN}' is not in the environment — provision it with \
-             `cargo make domains_create --rust` and load the tdx secrets (the descriptor \
-             is encrypted, so `TD_BACKENDS_CRYPTO_KEY` has to be set)"
+             `cargo make domains_create --rust`, with `_TDD_CRYPTO_KEY` set so its \
+             descriptor can be read from tdd"
         )
     })
 }
@@ -44,9 +44,9 @@ fn domain_identity(domain: &str) -> Option<PostgresConnect> {
     };
     Some(PostgresConnect {
         options: PostgresConfig {
-            host: attribute("HOST")?,
+            host: attribute("EXTERNAL_HOST")?,
             port: attribute("PORT")?.parse().ok()?,
-            database: Some(attribute("DB")?),
+            database: Some(attribute("DATABASE")?),
             ..Default::default()
         },
         username: attribute("SYS_ADMIN_USER")?,

@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! Inject tdx-provisioned systems / domains into tests as typed structs.
+//! Inject tdd-provisioned systems / domains into tests as typed structs.
 //!
 //! Rust port of the Python `tabsdatax.itest.fixture` backend fixtures. A test
 //! names the backend it needs and receives it built from the very same
@@ -16,7 +16,7 @@
 //! }
 //! ```
 //!
-//! The attribute argument is the backend's name in the tdx store, and the
+//! The attribute argument is the backend's name in the tdd store, and the
 //! parameter it fills is that name prefixed with `domain_` / `system_` — so
 //! `#[td_test::domain("s3_world_xs")]` binds `domain_s3_world_xs`. That is the
 //! Python fixtures' naming, where `@s3_domain("orders")` injects
@@ -28,65 +28,64 @@
 //! uses — `#[test]` and `#[tokio::test]` both work, since resolution is
 //! synchronous.
 //!
-//! Resolution reads `$TD_BACKENDS_DIR/{systems2,domains2}/<name>`, decrypts it
-//! with `$TD_BACKENDS_CRYPTO_KEY`, checks the descriptor's role and
-//! `system_type` match the requested struct, and projects its `meta` onto the
-//! struct's fields — each field pulled from the descriptor key of the same
-//! (upper-cased) name. Loads are cached per `(descriptor path, struct)` for the
+//! Resolution asks tdd for the descriptor (`tdd ... info`, see [`tdd`]; only
+//! tdd knows the store and decrypts it with `$_TDD_CRYPTO_KEY`), checks its role
+//! and `system_type` match the requested struct, and projects its `meta` onto
+//! the struct's fields — each field pulled from the descriptor key of the same
+//! (upper-cased) name. Loads are cached per `(store, name, struct)` for the
 //! lifetime of the test binary.
 //!
 //! # Resolution order
 //!
 //! A backend is looked for in three places, in this order:
 //!
-//! 1. **The cache**, per `(descriptor path, struct)` — but only within one
-//!    process, and the test harness runs a process per test.
+//! 1. **The cache**, per `(store, name, struct)` — but only within one process,
+//!    and the test harness runs a process per test.
 //! 2. **`<UPCASE_NAME>__<KEY>` environment variables**, the shape
-//!    `tdx-domain info --format export --prefix <NAME>` emits. A *complete* set
-//!    is the whole backend: neither the descriptor nor
-//!    `$TD_BACKENDS_CRYPTO_KEY` is touched. This exists because decrypting a
-//!    descriptor costs a 200k-round key derivation (~350ms), which a
-//!    process-per-test harness would otherwise pay once per test. `__ENTITIES`
-//!    is read as a JSON object (`{"city": 4079}`) so a seeded domain's row
-//!    counts survive; `NAME` is filled from the requested name.
-//! 3. **The descriptor**, which stays the source of truth.
+//!    `tdd domain info --format export --prefix <NAME>` emits. A *complete* set
+//!    is the whole backend: neither tdd nor `$_TDD_CRYPTO_KEY` is touched. This
+//!    exists because asking tdd costs a process start, which a process-per-test
+//!    harness would otherwise pay once per test. `__ENTITIES` is read as a JSON
+//!    object (`{"city": 4079}`) so a seeded domain's row counts survive; `NAME`
+//!    is filled from the requested name.
+//! 3. **The descriptor**, through tdd, which stays the source of truth.
 //!
 //! An *incomplete* prefix is not an error — it warns on stderr and falls
 //! through to the descriptor, keeping **none** of the environment's values, so
 //! the two sources are never mixed. Falling through rather than failing is what
-//! makes a collision harmless: `<NAME>__<KEY>` is also the shape tdx's own
+//! makes a collision harmless: `<NAME>__<KEY>` is also the shape tdd's own
 //! create-time options use, so a system named `s3` shares a prefix with the
-//! `S3__BUCKET` / `S3__REGION` variables `tdx-system create` reads.
+//! `S3__BUCKET` / `S3__REGION` variables `tdd system create` reads.
 //!
-//! **A stale export outranks a fresh descriptor.** `tdx-domain create` mints a
+//! **A stale export outranks a fresh descriptor.** `tdd domain create` mints a
 //! new password each time, so an environment exported before a re-provision
 //! still builds a complete — and wrong — backend. Re-export after provisioning,
 //! which is what the `test_rs` backends task does.
 //!
 //! Unlike the `reqs` fixtures, nothing here is created or torn down: a domain is
-//! provisioned by `tdx-domain create` before the run and dropped by
-//! `tdx-domain destroy` after it. Per-test isolation is the test's job — carve
+//! provisioned by `tdd domain create` before the run and dropped by
+//! `tdd domain destroy` after it. Per-test isolation is the test's job — carve
 //! out a corner of the shared domain with [`run_prefix`].
 //!
 //! Env, split per family so systems and domains are governed independently:
 //! `TD_TEST_ON_MISSING_SYSTEM` / `TD_TEST_ON_MISSING_DOMAIN` = `skip` | `fail`
-//! (default) when the backend cannot be reached — no descriptor, or no
-//! `TD_BACKENDS_CRYPTO_KEY` to open it with; `TD_TEST_SKIP_SYSTEMS` /
-//! `TD_TEST_SKIP_DOMAINS` = comma-separated backend `name`s to skip even when
-//! present. A backend that is reachable but unusable (wrong type, descriptor
-//! missing a key the struct needs, or a legacy `TDX2` descriptor awaiting
-//! `tdx-system upgrade`) always fails, whatever the policy says.
+//! (default) when the backend cannot be reached — not in the tdd store, tdd not
+//! installed, or no `_TDD_CRYPTO_KEY` to open the store with;
+//! `TD_TEST_SKIP_SYSTEMS` / `TD_TEST_SKIP_DOMAINS` = comma-separated backend
+//! `name`s to skip even when present. A backend that is reachable but unusable
+//! (wrong type, a descriptor missing a key the struct needs, or one tdd cannot
+//! read) always fails, whatever the policy says.
 
 use std::any::{Any, TypeId};
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex};
 
+use serde::Deserialize;
+
 pub mod backends;
-pub mod crypto;
 mod define;
-pub mod descriptor;
-pub mod store;
+pub mod tdd;
 
 pub use backends::{
     AzureblobDomain, AzureblobSystem, FsDomain, FsSystem, GcsDomain, GcsSystem, PostgresDomain,
@@ -107,7 +106,8 @@ const ENV_KEY_SEPARATOR: &str = "__";
 /// Which family a backend struct belongs to. `system_orders` and
 /// `domain_orders` are distinct backends that happen to share a name, so every
 /// lookup is keyed by the pair.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Role {
     System,
     Domain,
@@ -134,6 +134,14 @@ impl Role {
         match self {
             Role::System => "TD_TEST_SKIP_SYSTEMS",
             Role::Domain => "TD_TEST_SKIP_DOMAINS",
+        }
+    }
+
+    /// tdd's store dir for this family, when not its default one.
+    pub fn store_env(self) -> &'static str {
+        match self {
+            Role::System => "TDD_SYSTEM_DIR",
+            Role::Domain => "TDD_DOMAIN_DIR",
         }
     }
 }
@@ -168,7 +176,7 @@ impl Attrs {
     }
 
     /// The same flat view, read from `<NAME>__<KEY>` environment variables
-    /// instead of a descriptor — the shape `tdx-domain info --format export
+    /// instead of a descriptor — the shape `tdd domain info --format export
     /// --prefix <NAME>` emits.
     ///
     /// `NAME` is seeded from the backend's store name (the env set carries the
@@ -203,33 +211,29 @@ impl Attrs {
         Some(attrs)
     }
 
-    pub(crate) fn of(info: &descriptor::Info) -> Self {
+    pub(crate) fn of(descriptor: &tdd::Descriptor) -> Self {
         let mut attrs = Attrs::default();
-        match info {
-            descriptor::Info::System(i) => {
-                attrs.strings.extend(i.meta.clone());
-                attrs.strings.insert(KEY_NAME.into(), i.name.clone());
+        attrs.strings.extend(descriptor.meta.clone());
+        attrs
+            .strings
+            .insert(KEY_NAME.into(), descriptor.name.clone());
+        if descriptor.role == Role::Domain {
+            if let Some(model) = &descriptor.model {
+                attrs.strings.insert(KEY_MODEL.into(), model.clone());
             }
-            descriptor::Info::Domain(i) => {
-                attrs.strings.extend(i.meta.clone());
-                attrs.strings.insert(KEY_NAME.into(), i.name.clone());
-                if let Some(model) = &i.model {
-                    attrs.strings.insert(KEY_MODEL.into(), model.clone());
-                }
-                if let Some(data) = &i.data {
-                    attrs.strings.insert(KEY_DATA.into(), data.clone());
-                }
-                if !i.entities.is_empty() {
-                    attrs.entities = i.entities.clone();
-                    attrs.has_entities = true;
-                }
-                attrs
-                    .strings
-                    .insert(KEY_EXTERNAL_NAME.into(), i.external_name.clone());
-                attrs
-                    .strings
-                    .insert(KEY_SYS_NAME.into(), i.sys_name.clone());
+            if let Some(data) = &descriptor.data {
+                attrs.strings.insert(KEY_DATA.into(), data.clone());
             }
+            if !descriptor.entities.is_empty() {
+                attrs.entities = descriptor.entities.clone();
+                attrs.has_entities = true;
+            }
+            attrs
+                .strings
+                .insert(KEY_EXTERNAL_NAME.into(), descriptor.external_name.clone());
+            attrs
+                .strings
+                .insert(KEY_SYS_NAME.into(), descriptor.sys_name.clone());
         }
         attrs
     }
@@ -276,14 +280,14 @@ impl FromAttr for Option<BTreeMap<String, i64>> {
 // The backend contract
 // --------------------------------------------------------------------------
 
-/// A typed view of a tdx-provisioned system or domain.
+/// A typed view of a tdd-provisioned system or domain.
 ///
 /// Implemented by [`define_backend!`](crate::define_backend), which derives
 /// [`Backend::build`] from the struct's fields.
 pub trait Backend: Sized + Clone + Send + Sync + 'static {
     /// The vendor slug the descriptor must carry, e.g. `s3`.
     const SYSTEM_TYPE: &'static str;
-    /// Which store dir the descriptor is read from.
+    /// Which family of the tdd store the descriptor is read from.
     const ROLE: Role;
 
     fn build(attrs: &Attrs) -> Result<Self, String>;
@@ -300,9 +304,9 @@ pub trait SystemBackend: Backend {}
 
 /// A unique child of `root` for one test to own: `<root>/<area>/<uuid4>`.
 ///
-/// Port of the Python connectors' `run_prefix`. A tdx domain is provisioned once
+/// Port of the Python connectors' `run_prefix`. A tdd domain is provisioned once
 /// and shared by the whole run, so tests that write must carve out their own
-/// corner; nothing deletes it, and a `tdx-system purge` reclaims the lot.
+/// corner; nothing deletes it, and a `tdd system purge` reclaims the lot.
 pub fn run_prefix(root: impl AsRef<str>, area: &str) -> String {
     let parent = root.as_ref().trim_matches('/');
     let suffix = format!("{area}/{}", uuid::Uuid::new_v4().simple());
@@ -317,20 +321,23 @@ pub fn run_prefix(root: impl AsRef<str>, area: &str) -> String {
 // Resolution
 // --------------------------------------------------------------------------
 
-/// Built backends, keyed by `(descriptor path, struct)` exactly like the Python
-/// fixture's session cache.
-type BackendCache = Mutex<HashMap<(PathBuf, TypeId), Arc<dyn Any + Send + Sync>>>;
+/// Which backend a cache entry is: `(family, store, name, struct)`, the store
+/// being `$TDD_SYSTEM_DIR` / `$TDD_DOMAIN_DIR` (`None` for tdd's own), exactly
+/// like the Python fixture's session cache.
+type CacheKey = (Role, Option<String>, String, TypeId);
+
+type BackendCache = Mutex<HashMap<CacheKey, Arc<dyn Any + Send + Sync>>>;
 
 static CACHE: LazyLock<BackendCache> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Why a backend could not be handed to the test.
 #[derive(Debug)]
 enum Unavailable {
-    /// The backend is out of reach: no descriptor, no crypto key to open it
-    /// with, or the name is listed in `TD_TEST_SKIP_*`.
+    /// The backend is out of reach: not in the store, no tdd or no crypto key to
+    /// read it with, or the name is listed in `TD_TEST_SKIP_*`.
     Skip(String),
     /// Anything the operator has to fix: wrong role, wrong system type, a
-    /// descriptor the crypto key cannot open, a missing required key.
+    /// descriptor tdd cannot read, a missing required key.
     Fail(String),
 }
 
@@ -345,10 +352,11 @@ fn on_missing_is_skip(role: Role) -> Result<bool, String> {
 
 /// Apply the per-family on-missing policy to a backend that cannot be reached.
 ///
-/// Both no-descriptor and no-crypto-key land here. Python raises outright on the
-/// missing key, but a key the developer does not have is exactly the "backend
-/// unavailable" the policy exists to govern — routing it through the policy is
-/// what keeps `TD_TEST_ON_MISSING_*=skip` a truthful promise.
+/// Not in the store, no tdd and no crypto key all land here. Python fails
+/// outright without tdd or the key, but a tool or key the developer does not
+/// have is exactly the "backend unavailable" the policy exists to govern —
+/// routing it through the policy is what keeps `TD_TEST_ON_MISSING_*=skip` a
+/// truthful promise.
 fn unreachable(role: Role, reason: &str, remedy: &str) -> Unavailable {
     match on_missing_is_skip(role) {
         Err(msg) => Unavailable::Fail(msg),
@@ -372,7 +380,6 @@ fn is_skipped_by_name(role: Role, name: &str) -> bool {
 
 fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
     let role = B::ROLE;
-    let path = store::path_of(role, name);
     let kind = role.as_str();
 
     // A backend the developer asked to skip is skipped whether or not it is
@@ -384,7 +391,12 @@ fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
         )));
     }
 
-    let key = (path.clone(), TypeId::of::<B>());
+    let key = (
+        role,
+        std::env::var(role.store_env()).ok(),
+        name.to_string(),
+        TypeId::of::<B>(),
+    );
     if let Some(cached) = CACHE.lock().unwrap().get(&key) {
         return Ok(cached
             .downcast_ref::<B>()
@@ -392,14 +404,14 @@ fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
             .clone());
     }
 
-    // Then the environment, ahead of the descriptor and of needing it at all: a
-    // complete `<NAME>__<KEY>` set is the whole backend, where opening the
-    // descriptor costs a 200k-round key derivation — and the harness runs a
-    // process per test, so it would pay that derivation once per test.
+    // Then the environment, ahead of the descriptor and of needing tdd at all: a
+    // complete `<NAME>__<KEY>` set is the whole backend, where asking tdd costs
+    // a process start — and the harness runs a process per test, so it would
+    // pay that once per test.
     //
     // An env set that does not build a whole backend is not an error; it falls
     // through to the descriptor, which stays the source of truth. That is what
-    // keeps a collision harmless, `<NAME>__<KEY>` being the shape tdx's own
+    // keeps a collision harmless, `<NAME>__<KEY>` being the shape tdd's own
     // create-time options already use.
     if let Some(attrs) = Attrs::from_env(name) {
         match B::build(&attrs) {
@@ -417,42 +429,51 @@ fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
         }
     }
 
-    if !path.exists() {
+    // Before asking tdd: without the key the store is unreadable, so the backend
+    // is unavailable rather than broken.
+    if std::env::var(tdd::ENV_CRYPTO_KEY)
+        .unwrap_or_default()
+        .is_empty()
+    {
         return Err(unreachable(
             role,
             &format!(
-                "provisioned {kind} '{name}' was not found at {}",
-                path.display()
+                "cannot read the {kind} '{name}': ${} is not set",
+                tdd::ENV_CRYPTO_KEY
             ),
-            &format!("Create it with tdx-{kind} create"),
+            "Load it with 'tdd env set --crypto'",
         ));
     }
-    // Before touching the file: without the key the descriptor is unreadable, so
-    // the backend is unavailable rather than broken.
-    if let Err(why) = crypto::require_secret() {
+    if !tdd::exe().is_file() {
         return Err(unreachable(
             role,
-            &format!("cannot read the {kind} '{name}' descriptor: {why}"),
-            "Export it from 1Password (see the backends make task)",
+            &format!(
+                "cannot read the {kind} '{name}': tdd is not installed at {}",
+                tdd::exe().display()
+            ),
+            "Install it with 'cargo make permit'",
         ));
     }
 
-    let info = descriptor::load(&path).map_err(Unavailable::Fail)?;
-    if info.role() != role {
+    let descriptor = match tdd::descriptor(role, name) {
+        Ok(descriptor) => descriptor,
+        Err(why) => return Err(not_found_or_fail(role, name, why)),
+    };
+    if descriptor.role != role {
         return Err(Unavailable::Fail(format!(
             "'{name}' is a {} descriptor, not a {kind}",
-            info.role().as_str()
+            descriptor.role.as_str()
         )));
     }
-    if info.system() != B::SYSTEM_TYPE {
+    if descriptor.system != B::SYSTEM_TYPE {
         return Err(Unavailable::Fail(format!(
             "'{name}' is a '{}' {kind}, but was requested as a '{}' one",
-            info.system(),
+            descriptor.system,
             B::SYSTEM_TYPE
         )));
     }
 
-    let attrs = Attrs::of(&info);
+    let attrs = Attrs::of(&descriptor);
     let built = B::build(&attrs).map_err(|missing| {
         Unavailable::Fail(format!(
             "'{name}': cannot build the {kind} from its descriptor (missing key(s): {missing})"
@@ -461,8 +482,23 @@ fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
     Ok(cache(key, built))
 }
 
+/// A backend tdd could not read: per the missing policy when the store has no
+/// such name, else a failure with tdd's own message — the backend is there and
+/// something else is wrong.
+fn not_found_or_fail(role: Role, name: &str, why: String) -> Unavailable {
+    let kind = role.as_str();
+    match tdd::names(role) {
+        Ok(names) if !names.iter().any(|stored| stored == name) => unreachable(
+            role,
+            &format!("provisioned {kind} '{name}' is not in the tdd store"),
+            &format!("Create it with 'tdd {kind} create'"),
+        ),
+        _ => Unavailable::Fail(format!("{kind} '{name}': {why}")),
+    }
+}
+
 /// Memoize a built backend for the rest of this process.
-fn cache<B: Backend>(key: (PathBuf, TypeId), built: B) -> B {
+fn cache<B: Backend>(key: CacheKey, built: B) -> B {
     CACHE
         .lock()
         .unwrap()
@@ -474,8 +510,8 @@ fn cache<B: Backend>(key: (PathBuf, TypeId), built: B) -> B {
 ///
 /// What `#[td_test::domain("<store_name>")]` expands to, binding
 /// `domain_<store_name>`. Synchronous —
-/// reading a descriptor is a file read and a key derivation, so a test needs no
-/// runtime to ask for a backend, and sync tests work the same as async ones.
+/// reading a descriptor is one tdd process, so a test needs no runtime to ask
+/// for a backend, and sync tests work the same as async ones.
 pub fn resolve_domain<B: DomainBackend>(store_name: &str, test_name: &str) -> Option<B> {
     resolve_or_skip::<B>(store_name, test_name)
 }
@@ -502,30 +538,35 @@ fn resolve_or_skip<B: Backend>(store_name: &str, test_name: &str) -> Option<B> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::descriptor::{DomainInfo, Info, SystemInfo};
+    use std::path::Path;
+    use std::process::Command;
 
-    fn domain_info() -> Info {
-        Info::Domain(DomainInfo {
-            system: "s3".into(),
-            name: "landing".into(),
-            uuid: "u".into(),
-            started: "t".into(),
-            sys_name: "s30".into(),
-            external_name: "d_tucu_0_landing".into(),
-            meta: BTreeMap::from([
-                ("BUCKET".to_string(), "b".to_string()),
-                ("PREFIX".to_string(), "d_tucu_0_landing".to_string()),
-            ]),
-            model: Some("world".into()),
-            data: None,
-            entities: BTreeMap::from([("csv/city_1.csv".to_string(), 7)]),
-            seed: 0,
-        })
+    fn domain() -> tdd::Descriptor {
+        tdd::parse(
+            r#"
+            {
+                "role": "domain",
+                "system": "s3",
+                "name": "landing",
+                "sys_name": "s30",
+                "external_name": "d_tucu_0_landing",
+                "meta": {
+                    "BUCKET": "b",
+                    "PREFIX": "d_tucu_0_landing"
+                },
+                "model": "world",
+                "data": null,
+                "entities": {
+                    "csv/city_1.csv": 7
+                }
+            }
+            "#,
+        )
     }
 
     #[test]
     fn test_attrs_of_domain() {
-        let attrs = Attrs::of(&domain_info());
+        let attrs = Attrs::of(&domain());
         assert_eq!(attrs.get("BUCKET"), Some("b"));
         assert_eq!(attrs.get("NAME"), Some("landing"));
         assert_eq!(attrs.get("EXTERNAL_NAME"), Some("d_tucu_0_landing"));
@@ -538,13 +579,18 @@ mod tests {
 
     #[test]
     fn test_attrs_of_system_has_no_domain_keys() {
-        let attrs = Attrs::of(&Info::System(SystemInfo {
-            system: "s3".into(),
-            name: "s30".into(),
-            uuid: "u".into(),
-            started: "t".into(),
-            meta: BTreeMap::from([("SYS_PATH".to_string(), "root".to_string())]),
-        }));
+        let attrs = Attrs::of(&tdd::parse(
+            r#"
+            {
+                "role": "system",
+                "system": "s3",
+                "name": "s30",
+                "meta": {
+                    "SYS_PATH": "root"
+                }
+            }
+            "#,
+        ));
         assert_eq!(attrs.get("SYS_PATH"), Some("root"));
         assert_eq!(attrs.get("NAME"), Some("s30"));
         assert_eq!(attrs.get("EXTERNAL_NAME"), None);
@@ -553,16 +599,14 @@ mod tests {
 
     #[test]
     fn test_entities_absent_when_empty() {
-        let Info::Domain(mut d) = domain_info() else {
-            unreachable!()
-        };
-        d.entities.clear();
-        assert!(Attrs::of(&Info::Domain(d)).entities().is_none());
+        let mut descriptor = domain();
+        descriptor.entities.clear();
+        assert!(Attrs::of(&descriptor).entities().is_none());
     }
 
     #[test]
     fn test_from_attr() {
-        let attrs = Attrs::of(&domain_info());
+        let attrs = Attrs::of(&domain());
         assert_eq!(String::from_attr(&attrs, "BUCKET").unwrap(), "b");
         assert_eq!(
             PathBuf::from_attr(&attrs, "BUCKET").unwrap(),
@@ -703,78 +747,154 @@ mod tests {
         });
     }
 
-    /// A present descriptor with no crypto key is unavailable, not broken.
-    #[test]
-    fn test_missing_crypto_key_skips_when_policy_allows() {
-        let store_dir = std::env::temp_dir().join("td-test-domain-nokey/domains2");
-        std::fs::create_dir_all(&store_dir).unwrap();
-        std::fs::write(
-            store_dir.join("landing"),
-            "-----BEGIN TDX2 DESCRIPTOR-----\n",
-        )
-        .unwrap();
+    const FAKE_KEY: &str = "a-test-secret-long-enough";
 
-        temp_env::with_vars(
-            [
-                (
-                    store::ENV_BACKENDS_DIR,
-                    Some(store_dir.parent().unwrap().to_str().unwrap()),
-                ),
-                (crypto::ENV_CRYPTO_KEY, None),
-                (Role::Domain.on_missing_env(), Some("skip")),
-            ],
-            || {
-                let Err(Unavailable::Skip(msg)) = resolve::<S3Domain>("landing") else {
-                    panic!("expected a skip");
-                };
-                assert!(msg.contains(crypto::ENV_CRYPTO_KEY), "got: {msg}");
-            },
-        );
-        temp_env::with_vars(
-            [
-                (
-                    store::ENV_BACKENDS_DIR,
-                    Some(store_dir.parent().unwrap().to_str().unwrap()),
-                ),
-                (crypto::ENV_CRYPTO_KEY, None),
-                (Role::Domain.on_missing_env(), None),
-            ],
-            || {
-                assert!(matches!(
-                    resolve::<S3Domain>("landing"),
-                    Err(Unavailable::Fail(_))
-                ));
-            },
+    /// A scratch tdd store for one test: `(system dir, domain dir)`.
+    fn scratch_store(tag: &str) -> (PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!(
+            "td-test-tdd-{tag}-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        (root.join("system"), root.join("domain"))
+    }
+
+    /// Run the real `tdd <args> --descriptor-only` against the scratch store:
+    /// the descriptors a create writes, with nothing provisioned. The fake
+    /// `S3__*` config is what an s3 create reads.
+    fn tdd_create(store: &(PathBuf, PathBuf), args: &[&str]) {
+        let output = Command::new(tdd::exe())
+            .args(args)
+            .args(["--descriptor-only", "--force", "--format", "json"])
+            .env(Role::System.store_env(), &store.0)
+            .env(Role::Domain.store_env(), &store.1)
+            .env(tdd::ENV_CRYPTO_KEY, FAKE_KEY)
+            .envs([
+                ("S3__BUCKET", "a-bucket"),
+                ("S3__REGION", "us-east-1"),
+                ("S3__ACCESS_KEY", "ak"),
+                ("S3__SECRET_KEY", "sk"),
+                ("S3__SYS_PATH", "root"),
+            ])
+            .output()
+            .expect("tdd runs");
+        assert!(
+            output.status.success(),
+            "tdd {args:?} failed:\n{}",
+            String::from_utf8_lossy(&output.stdout)
         );
     }
 
-    /// An incomplete prefix must not be half-applied: resolution falls through
-    /// to the descriptor, so a partial env set cannot smuggle a value in.
-    #[test]
-    fn test_incomplete_env_falls_through_to_the_descriptor() {
-        let store_dir = std::env::temp_dir().join("td-test-domain-partial-env/domains2");
-        std::fs::create_dir_all(&store_dir).unwrap();
-        std::fs::write(store_dir.join("landing"), "not a descriptor").unwrap();
-
+    fn with_store<T>(store: &(PathBuf, PathBuf), f: impl FnOnce() -> T) -> T {
         temp_env::with_vars(
             [
-                (
-                    store::ENV_BACKENDS_DIR,
-                    Some(store_dir.parent().unwrap().to_str().unwrap()),
-                ),
-                (crypto::ENV_CRYPTO_KEY, Some("a-test-secret-long-enough")),
-                // BUCKET/REGION/... are missing, so this cannot build an S3Domain
-                ("LANDING__HOST", Some("localhost")),
+                (Role::System.store_env(), Some(path_str(&store.0))),
+                (Role::Domain.store_env(), Some(path_str(&store.1))),
+                (tdd::ENV_CRYPTO_KEY, Some(FAKE_KEY)),
+                (Role::Domain.on_missing_env(), None),
+            ],
+            f,
+        )
+    }
+
+    fn path_str(path: &Path) -> &str {
+        path.to_str().expect("a utf-8 temp dir")
+    }
+
+    /// The whole path, against descriptors tdd itself writes: it fails the
+    /// moment tdd's JSON and this reader disagree.
+    #[test]
+    fn test_resolves_a_domain_tdd_wrote() {
+        let store = scratch_store("resolve");
+        tdd_create(
+            &store,
+            &["system", "create", "--type", "s3", "--sys", "s30"],
+        );
+        tdd_create(
+            &store,
+            &["domain", "create", "--sys", "s30", "--domain", "landing"],
+        );
+        with_store(&store, || {
+            let domain = resolve::<S3Domain>("landing").unwrap();
+            assert_eq!(domain.name, "landing");
+            assert_eq!(domain.bucket, "a-bucket");
+            assert_eq!(domain.access_key, "ak");
+            assert!(
+                domain.prefix.ends_with("_landing"),
+                "got: {}",
+                domain.prefix
+            );
+            assert_eq!(
+                domain.url().unwrap().as_str(),
+                format!("s3://a-bucket/root/{}", domain.prefix)
+            );
+            let Err(Unavailable::Fail(msg)) = resolve::<FsDomain>("landing") else {
+                panic!("an s3 domain must not build an fs one");
+            };
+            assert!(msg.contains("'s3'"), "got: {msg}");
+        });
+        std::fs::remove_dir_all(store.0.parent().unwrap()).unwrap();
+    }
+
+    /// Not in the store follows the policy; it is never a bare tdd error.
+    #[test]
+    fn test_a_backend_not_in_the_store_follows_the_policy() {
+        let store = scratch_store("absent");
+        with_store(&store, || {
+            let Err(Unavailable::Fail(msg)) = resolve::<S3Domain>("absent") else {
+                panic!("expected a failure");
+            };
+            assert!(msg.contains("not in the tdd store"), "got: {msg}");
+            assert!(msg.contains(Role::Domain.on_missing_env()), "got: {msg}");
+        });
+        with_store(&store, || {
+            temp_env::with_var(Role::Domain.on_missing_env(), Some("skip"), || {
+                assert!(matches!(
+                    resolve::<S3Domain>("absent"),
+                    Err(Unavailable::Skip(_))
+                ));
+            })
+        });
+    }
+
+    /// No key is unavailable, not broken, and tdd is not even asked.
+    #[test]
+    fn test_missing_crypto_key_follows_the_policy() {
+        temp_env::with_vars(
+            [
+                (tdd::ENV_CRYPTO_KEY, None),
+                (Role::Domain.on_missing_env(), Some("skip")),
             ],
             || {
-                // Reaching the descriptor at all is the proof: it is unreadable,
-                // so the error comes from the file, not from the env set.
-                let Err(Unavailable::Fail(msg)) = resolve::<S3Domain>("landing") else {
-                    panic!("expected the descriptor read to be attempted");
+                let Err(Unavailable::Skip(msg)) = resolve::<S3Domain>("zz_probe_nokey") else {
+                    panic!("expected a skip");
                 };
-                assert!(msg.contains("PEM armor"), "got: {msg}");
+                assert!(msg.contains(tdd::ENV_CRYPTO_KEY), "got: {msg}");
             },
         );
+        temp_env::with_vars_unset([tdd::ENV_CRYPTO_KEY, Role::Domain.on_missing_env()], || {
+            assert!(matches!(
+                resolve::<S3Domain>("zz_probe_nokey"),
+                Err(Unavailable::Fail(_))
+            ));
+        });
+    }
+
+    /// An incomplete prefix must not be half-applied: resolution falls through
+    /// to tdd, so a partial env set cannot smuggle a value in.
+    #[test]
+    fn test_incomplete_env_falls_through_to_the_descriptor() {
+        let store = scratch_store("partial-env");
+        with_store(&store, || {
+            // BUCKET/REGION/... are missing, so this cannot build an S3Domain.
+            temp_env::with_var("ZZ_PROBE_PARTIAL__HOST", Some("localhost"), || {
+                // Reaching tdd at all is the proof: the store is empty, so the
+                // error names the store, not the env set.
+                let Err(Unavailable::Fail(msg)) = resolve::<S3Domain>("zz_probe_partial") else {
+                    panic!("expected tdd to be asked");
+                };
+                assert!(msg.contains("not in the tdd store"), "got: {msg}");
+            })
+        });
     }
 
     #[test]
@@ -806,12 +926,17 @@ mod tests {
 mod attribute_tests {
     use super::{S3Domain, S3System};
 
-    const NO_STORE: &str = "/nonexistent/tdx/store";
+    const NO_STORE: &str = "/nonexistent/tdd/store";
 
     fn with_skip_policy<T>(f: impl FnOnce() -> T) -> T {
         temp_env::with_vars(
             [
-                (super::store::ENV_BACKENDS_DIR, Some(NO_STORE)),
+                (super::Role::System.store_env(), Some(NO_STORE)),
+                (super::Role::Domain.store_env(), Some(NO_STORE)),
+                (
+                    super::tdd::ENV_CRYPTO_KEY,
+                    Some("a-test-secret-long-enough"),
+                ),
                 (super::Role::Domain.on_missing_env(), Some("skip")),
                 (super::Role::System.on_missing_env(), Some("skip")),
             ],
