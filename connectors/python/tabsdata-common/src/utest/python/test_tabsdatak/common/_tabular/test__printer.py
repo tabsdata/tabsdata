@@ -7,8 +7,10 @@ from __future__ import annotations
 import io
 import os
 import re
+import sys
 
 import pytest
+from rich.console import Console
 
 # noinspection PyProtectedMember
 from tabsdatak.common._tabular import _printer
@@ -18,6 +20,8 @@ from tabsdatak.common._tabular import (
     RecordView,
     Kind,
     TableView,
+    renderable,
+    show,
 )
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -249,3 +253,39 @@ def test_a_field_width_of_zero_never_cuts(monkeypatch):
 
     assert token in output
     assert "c" * 48 + "…" in output
+
+
+def rendered(renderable) -> str:
+    stream = io.StringIO()
+    Console(file=stream, width=200).print(renderable)
+    return ANSI.sub("", stream.getvalue())
+
+
+@pytest.mark.common
+def test_a_renderable_holds_the_title_the_cut_table_and_the_footer():
+    output = rendered(renderable(plans()))
+
+    assert output.startswith("Plans  ·  project 'sales'")
+    assert LONG[:48] + "…" in output
+    assert "Number of plans: 2" in output
+
+
+@pytest.mark.common
+def test_an_empty_renderable_says_so():
+    output = rendered(renderable(plans(rows=[])))
+
+    assert "No plans found." in output
+    assert "┏" not in output
+
+
+@pytest.mark.common
+def test_several_views_share_one_block(monkeypatch):
+    stream = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", stream)
+
+    show([plans(), plans(title="Workers")])
+
+    lines = ANSI.sub("", stream.getvalue()).split("\n")
+    assert lines[0] == ""
+    assert lines.count("") == 4
+    assert any(line.startswith("Workers") for line in lines)

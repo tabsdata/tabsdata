@@ -7,34 +7,35 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    beautify_time,
     collection_label,
-    echo_more_results,
+    display,
     format_option,
     hint_common_solutions,
-    make_console,
     max_result_option,
+    more_results_notes,
     output_format,
+    present,
     render,
     show_hint,
     verify_login_or_prompt,
+    view_options,
 )
 from tabsdatak.cli.td.execution_utils import (
     confirm_cancel,
     emit_worker_logs,
-    function_runs_table,
+    function_runs_view,
     live_monitor,
     obtain_execution_list,
     obtain_list_exec_filters,
     pick_worker,
-    plans_table,
+    plans_view,
     span_projects,
-    workers_table,
+    workers_view,
 )
+from tabsdatak.common._tabular import Kind, RecordView
 from tabsdatak.sdk.status_utils.execution import (
     EXECUTION_FINAL_STATUSES,
     EXECUTION_SUCCESSFUL_FINAL_STATUSES,
@@ -103,6 +104,7 @@ def plan():
     ),
 )
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_plans(
@@ -133,30 +135,24 @@ def list_plans(
             ctx, server, request_filter, last
         )
 
-        if output_format(ctx) != "table":
+        if output_format(ctx) != "table" or not monitor:
             render(
                 ctx,
                 data=[e._data for e in list_of_executions],
-                table=lambda: None,
+                view=lambda: plans_view(list_of_executions),
+                truncated=truncated,
             )
-            echo_more_results(ctx, truncated)
-            return
-
-        if monitor:
-            click.echo("Waiting for the plans to finish...")
+            if output_format(ctx) != "table":
+                return
+        else:
             list_of_executions = live_monitor(
                 list_of_executions,
                 lambda: obtain_execution_list(ctx, server, request_filter, last)[0],
-                plans_table,
-                lambda e: e.status in EXECUTION_FINAL_STATUSES,
+                plans_view,
+                lambda plans: all(e.status in EXECUTION_FINAL_STATUSES for e in plans),
+                notes=more_results_notes(ctx, truncated),
+                presentation=display(ctx),
             )
-            click.echo("Plans finished.")
-        else:
-            click.echo()
-            console = make_console()
-            console.print(plans_table(list_of_executions))
-        echo_more_results(ctx, truncated)
-        click.echo()
         if not all([
             aux_exe.status in EXECUTION_SUCCESSFUL_FINAL_STATUSES
             for aux_exe in list_of_executions
@@ -175,6 +171,7 @@ def list_plans(
 @plan.command()
 @click.option("--plan", required=True, help="ID of the plan to display.")
 @format_option
+@view_options()
 @click.pass_context
 def get(ctx: click.Context, plan: str):
     """
@@ -188,44 +185,37 @@ def get(ctx: click.Context, plan: str):
         function_runs = server.list_function_runs(filter=f"execution_id:eq:{plan}")
         workers = server.list_workers(filter=f"execution_id:eq:{plan}")
 
-        if output_format(ctx) != "table":
-            render(
-                ctx,
-                data={
-                    "plan": execution._data,
-                    "function_runs": [r._data for r in function_runs],
-                    "workers": [w._data for w in workers],
-                },
-                table=lambda: None,
-            )
-            return
+        def _views():
+            return [
+                RecordView(
+                    title="Plan",
+                    context=[execution.id],
+                    fields=[
+                        ("Name", present(execution.name)),
+                        ("Project", present(execution.project)),
+                        ("Collection", collection_label(execution)),
+                        ("Function", execution.function.name),
+                        ("Triggered by", present(execution.triggered_by)),
+                        ("Triggered on", present(execution.triggered_on_str)),
+                        ("Started on", present(execution.started_on_str)),
+                        ("Ended on", present(execution.ended_on_str)),
+                        ("Status", present(execution.status)),
+                    ],
+                    kinds={"Status": Kind.STATUS},
+                ),
+                function_runs_view(function_runs),
+                workers_view(workers),
+            ]
 
-        table = Table(title="Plan")
-        table.add_column("Name")
-        table.add_column("Project")
-        table.add_column("Collection")
-        table.add_column("Function")
-        table.add_column("Triggered on")
-        table.add_column("Started on")
-        table.add_column("Ended on")
-        table.add_column("Status", no_wrap=True)
-        table.add_row(
-            execution.name,
-            execution.project or "-",
-            collection_label(execution),
-            execution.function.name,
-            beautify_time(execution.triggered_on_str),
-            beautify_time(execution.started_on_str),
-            beautify_time(execution.ended_on_str),
-            execution.status,
+        render(
+            ctx,
+            data={
+                "plan": execution._data,
+                "function_runs": [r._data for r in function_runs],
+                "workers": [w._data for w in workers],
+            },
+            view=_views,
         )
-
-        click.echo()
-        console = make_console()
-        console.print(table)
-        console.print(function_runs_table(function_runs))
-        console.print(workers_table(workers))
-        click.echo()
 
     except Exception as e:
         hint_common_solutions(ctx, e)

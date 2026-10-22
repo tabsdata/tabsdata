@@ -7,34 +7,35 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    beautify_time,
     collection_label,
-    echo_more_results,
+    display,
     format_option,
     hint_common_solutions,
-    make_console,
     max_result_option,
+    more_results_notes,
     output_format,
+    present,
     render,
     show_hint,
     verify_login_or_prompt,
+    view_options,
 )
 from tabsdatak.cli.td.execution_utils import (
     confirm_cancel,
     emit_worker_logs,
-    function_runs_table,
+    function_runs_view,
     live_monitor,
     obtain_list_trx_filters,
     obtain_transaction_list,
     pick_worker,
     span_projects,
-    transactions_table,
-    workers_table,
+    transactions_view,
+    workers_view,
 )
+from tabsdatak.common._tabular import Kind, RecordView
 from tabsdatak.sdk.status_utils.transaction import (
     TRANSACTION_FINAL_STATUSES,
     TRANSACTION_SUCCESSFUL_FINAL_STATUSES,
@@ -104,6 +105,7 @@ def trx():
     ),
 )
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_transactions(
@@ -134,30 +136,26 @@ def list_transactions(
             ctx, server, request_filter, last
         )
 
-        if output_format(ctx) != "table":
+        if output_format(ctx) != "table" or not monitor:
             render(
                 ctx,
                 data=[t._data for t in list_of_transactions],
-                table=lambda: None,
+                view=lambda: transactions_view(list_of_transactions),
+                truncated=truncated,
             )
-            echo_more_results(ctx, truncated)
-            return
-
-        if monitor:
-            click.echo("Waiting for the transactions to finish...")
+            if output_format(ctx) != "table":
+                return
+        else:
             list_of_transactions = live_monitor(
                 list_of_transactions,
                 lambda: obtain_transaction_list(ctx, server, request_filter, last)[0],
-                transactions_table,
-                lambda t: t.status in TRANSACTION_FINAL_STATUSES,
+                transactions_view,
+                lambda transactions: all(
+                    t.status in TRANSACTION_FINAL_STATUSES for t in transactions
+                ),
+                notes=more_results_notes(ctx, truncated),
+                presentation=display(ctx),
             )
-            click.echo("Transactions finished.")
-        else:
-            click.echo()
-            console = make_console()
-            console.print(transactions_table(list_of_transactions))
-        echo_more_results(ctx, truncated)
-        click.echo()
         if not all([
             aux_trx.status in TRANSACTION_SUCCESSFUL_FINAL_STATUSES
             for aux_trx in list_of_transactions
@@ -177,6 +175,7 @@ def list_transactions(
 @trx.command()
 @click.option("--trx", required=True, help="ID of the transaction to display.")
 @format_option
+@view_options()
 @click.pass_context
 def get(ctx: click.Context, trx: str):
     """
@@ -190,44 +189,36 @@ def get(ctx: click.Context, trx: str):
         function_runs = server.list_function_runs(filter=f"transaction_id:eq:{trx}")
         workers = server.list_workers(filter=f"transaction_id:eq:{trx}")
 
-        if output_format(ctx) != "table":
-            render(
-                ctx,
-                data={
-                    "transaction": transaction._data,
-                    "function_runs": [r._data for r in function_runs],
-                    "workers": [w._data for w in workers],
-                },
-                table=lambda: None,
-            )
-            return
+        def _views():
+            return [
+                RecordView(
+                    title="Transaction",
+                    context=[transaction.id],
+                    fields=[
+                        ("Plan ID", transaction.execution.id),
+                        ("Project", present(transaction.project)),
+                        ("Collection", collection_label(transaction)),
+                        ("Triggered by", present(transaction.triggered_by)),
+                        ("Triggered on", present(transaction.triggered_on_str)),
+                        ("Started on", present(transaction.started_on_str)),
+                        ("Ended on", present(transaction.ended_on_str)),
+                        ("Status", present(transaction.status)),
+                    ],
+                    kinds={"Status": Kind.STATUS},
+                ),
+                function_runs_view(function_runs),
+                workers_view(workers),
+            ]
 
-        table = Table(title="Transaction")
-        table.add_column("Plan ID", no_wrap=True)
-        table.add_column("Project")
-        table.add_column("Collection")
-        table.add_column("Triggered on")
-        table.add_column("Triggered by")
-        table.add_column("Started on")
-        table.add_column("Ended on")
-        table.add_column("Status", no_wrap=True)
-        table.add_row(
-            transaction.execution.id,
-            transaction.project or "-",
-            collection_label(transaction),
-            beautify_time(transaction.triggered_on_str),
-            transaction.triggered_by,
-            beautify_time(transaction.started_on_str),
-            beautify_time(transaction.ended_on_str),
-            transaction.status,
+        render(
+            ctx,
+            data={
+                "transaction": transaction._data,
+                "function_runs": [r._data for r in function_runs],
+                "workers": [w._data for w in workers],
+            },
+            view=_views,
         )
-
-        click.echo()
-        console = make_console()
-        console.print(table)
-        console.print(function_runs_table(function_runs))
-        console.print(workers_table(workers))
-        click.echo()
 
     except Exception as e:
         hint_common_solutions(ctx, e)

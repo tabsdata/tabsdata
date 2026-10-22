@@ -7,33 +7,31 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, List
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    beautify_time,
     collection_label,
-    echo_more_results,
     format_option,
     hint_common_solutions,
     logical_prompt,
-    make_console,
     max_result_option,
-    output_format,
+    present,
     render,
     take,
     verify_login_or_prompt,
+    view_options,
 )
 from tabsdatak.cli.td.execution_utils import (
-    echo_plan_status,
-    echo_transaction_status,
     emit_worker_logs,
-    function_runs_table,
+    function_runs_view,
     obtain_list_fn_run_filters,
+    patch_label,
     pick_worker,
     span_projects,
-    workers_table,
+    status_context,
+    workers_view,
 )
+from tabsdatak.common._tabular import Kind, RecordView
 from tabsdatak.sdk.status_utils.function_run import (
     FUNCTION_RUN_VALID_USER_PROVIDED_STATUSES,
 )
@@ -85,6 +83,7 @@ def fnrun():
     "--trx", type=str, help="ID of the transaction to filter function runs by."
 )
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_runs(
@@ -111,30 +110,21 @@ def list_runs(
             trx=trx,
             project=proj,
         )
-        if output_format(ctx) == "table":
-            if plan:
-                echo_plan_status(server, plan)
-            if trx:
-                echo_transaction_status(server, trx)
         list_of_function_runs, truncated = take(
             ctx, server.list_function_runs_generator(filter=request_filter)
         )
 
-        if output_format(ctx) != "table":
-            render(
-                ctx,
-                data=[r._data for r in list_of_function_runs],
-                table=lambda: None,
-            )
-            echo_more_results(ctx, truncated)
-            return
+        def _view():
+            view = function_runs_view(list_of_function_runs)
+            view.context = status_context(server, plan=plan, trx=trx)
+            return view
 
-        click.echo()
-        console = make_console()
-        console.print(function_runs_table(list_of_function_runs))
-        click.echo(f"Number of function runs: {len(list_of_function_runs)}")
-        echo_more_results(ctx, truncated)
-        click.echo()
+        render(
+            ctx,
+            data=[r._data for r in list_of_function_runs],
+            view=_view,
+            truncated=truncated,
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list function runs: {e}")
@@ -143,6 +133,7 @@ def list_runs(
 @fnrun.command()
 @click.option("--fnrun", required=True, help="ID of the function run to display.")
 @format_option
+@view_options()
 @click.pass_context
 def get(ctx: click.Context, fnrun: str):
     """
@@ -155,44 +146,36 @@ def get(ctx: click.Context, fnrun: str):
         function_run = server.get_function_run(fnrun)
         workers = server.list_workers(filter=f"logical_function_run_id:eq:{fnrun}")
 
-        if output_format(ctx) != "table":
-            render(
-                ctx,
-                data={
-                    "function_run": function_run._data,
-                    "workers": [w._data for w in workers],
-                },
-                table=lambda: None,
-            )
-            return
+        def _views():
+            return [
+                RecordView(
+                    title="Function run",
+                    context=[function_run.id],
+                    fields=[
+                        ("Project", present(function_run.project)),
+                        ("Collection", collection_label(function_run)),
+                        ("Function", function_run.function.name),
+                        ("Plan name", present(function_run.execution.name)),
+                        ("Plan ID", function_run.execution.id),
+                        ("Transaction ID", function_run.transaction.id),
+                        ("Started on", present(function_run.started_on_str)),
+                        ("Ended on", present(function_run.ended_on_str)),
+                        ("Patch", present(patch_label(function_run))),
+                        ("Status", present(function_run.status)),
+                    ],
+                    kinds={"Status": Kind.STATUS},
+                ),
+                workers_view(workers),
+            ]
 
-        table = Table(title="Function run")
-        table.add_column("Project")
-        table.add_column("Collection")
-        table.add_column("Function")
-        table.add_column("Plan name")
-        table.add_column("Plan ID", no_wrap=True)
-        table.add_column("Transaction ID", no_wrap=True)
-        table.add_column("Started on")
-        table.add_column("Ended on")
-        table.add_column("Status", no_wrap=True)
-        table.add_row(
-            function_run.project or "-",
-            collection_label(function_run),
-            function_run.function.name,
-            function_run.execution.name,
-            function_run.execution.id,
-            function_run.transaction.id,
-            beautify_time(function_run.started_on_str),
-            beautify_time(function_run.ended_on_str),
-            function_run.status,
+        render(
+            ctx,
+            data={
+                "function_run": function_run._data,
+                "workers": [w._data for w in workers],
+            },
+            view=_views,
         )
-
-        click.echo()
-        console = make_console()
-        console.print(table)
-        console.print(workers_table(workers))
-        click.echo()
 
     except Exception as e:
         hint_common_solutions(ctx, e)

@@ -5,8 +5,9 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 
-from tabsdatak.common._tabular._printer import print_view
+from tabsdatak.common._tabular._printer import print_view, renderable
 from tabsdatak.common._tabular._view import (
     DEFAULT_MAX_WIDTH,
     Column,
@@ -20,17 +21,23 @@ __all__ = [
     "DEFAULT_MAX_WIDTH",
     "Column",
     "Display",
-    "RecordView",
     "Kind",
+    "RecordView",
     "TableView",
+    "renderable",
     "show",
 ]
 
+View = TableView | RecordView
 
-def show(view: TableView | RecordView, display: Display = Display()) -> None:
+
+def show(views: View | Sequence[View], display: Display = Display()) -> None:
+    every = [views] if isinstance(views, (TableView, RecordView)) else list(views)
     if display.browse and sys.stdout.isatty():
         from tabsdatak.common._tabular._browser import TableBrowser
 
-        TableBrowser(view, display).run()
+        for view in every:
+            TableBrowser(view, display).run()
         return
-    print_view(view, display)
+    for index, view in enumerate(every):
+        print_view(view, display, lead=index == 0)

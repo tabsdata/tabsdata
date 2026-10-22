@@ -490,8 +490,9 @@ def render(
     """Render a command's result in the active output format.
 
     ``view`` is a zero-arg callable returning the ``TableView`` or ``RecordView``
-    shown in ``table`` mode, through the options of ``view_options``; ``table``
-    is a zero-arg callable that prints a command's own table instead. ``data``
+    (or a list of them) shown in ``table`` mode, through the options of
+    ``view_options``; ``table`` is a zero-arg callable that prints a command's
+    own table instead. ``data``
     is -- or returns -- the full DTO(s) to serialize for ``json``/``yaml``; pass
     a callable to defer fetching the full payload when the table view is shown.
     JSON is pretty-printed and both machine formats carry all available fields;
@@ -504,9 +505,9 @@ def render(
             from tabsdatak.common._tabular import show
 
             shown = view()
-            if truncated:
-                shown.notes.append(more_results_message(ctx))
-            show(shown, display(ctx))
+            views = list(shown) if isinstance(shown, (list, tuple)) else [shown]
+            views[-1].notes += more_results_notes(ctx, truncated)
+            show(views, display(ctx))
             return
         table()
         return
@@ -671,6 +672,10 @@ def echo_more_results(ctx: click.Context, truncated: bool) -> None:
     if not truncated:
         return
     click.echo(more_results_message(ctx), err=output_format(ctx) != "table")
+
+
+def more_results_notes(ctx: click.Context, truncated: bool) -> list[str]:
+    return [more_results_message(ctx)] if truncated else []
 
 
 def more_results_message(ctx: click.Context) -> str:

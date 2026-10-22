@@ -25,12 +25,10 @@ import rich_click as click
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
-    echo_more_results,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
-    make_console,
     max_result_option,
     present,
     proj_option,
@@ -44,7 +42,7 @@ from tabsdatak.cli.td.execution_utils import (
     obtain_execution_list,
     obtain_list_exec_filters,
     obtain_list_worker_filters,
-    plans_table,
+    plans_view,
 )
 from tabsdatak.cli.td.fn_group import set_function_enabled
 from tabsdatak.common._tabular import Column, Kind, TableView
@@ -156,6 +154,7 @@ def list_crons(ctx: click.Context, all_projects: bool, name: str, coll: str):
 @_name_option("Only list the plans triggered for this function.")
 @_coll_option("Only list the plans of functions in this collection.")
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_cron_plans(ctx: click.Context, all_projects: bool, name: str, coll: str):
@@ -211,6 +210,7 @@ def list_streams(ctx: click.Context, all_projects: bool, name: str, coll: str):
 @_name_option("Only list the plans triggered for this function.")
 @_coll_option("Only list the plans of functions in this collection.")
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_stream_plans(ctx: click.Context, all_projects: bool, name: str, coll: str):
@@ -269,21 +269,14 @@ def _list_plans(
             ctx, server, request_filter, last=False
         )
 
-        def _table():
-            click.echo()
-            title = f"Plans of the {kind.plural}"
-            make_console().print(plans_table(plans, title=title))
-            click.echo(f"Number of plans: {len(plans)}")
-            click.echo()
-
         # The listing already returned each row; ``_data`` would re-fetch them
         # one by one, and ``kwargs`` alone drops the id the row was built from.
         render(
             ctx,
             data=lambda: [{"id": plan.id, **plan.kwargs} for plan in plans],
-            table=_table,
+            view=lambda: plans_view(plans, title=f"Plans of the {kind.plural}"),
+            truncated=truncated,
         )
-        echo_more_results(ctx, truncated)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list plans of the {kind.plural}: {e}")

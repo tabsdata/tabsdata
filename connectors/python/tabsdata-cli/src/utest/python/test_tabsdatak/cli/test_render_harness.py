@@ -204,6 +204,7 @@ _EXECUTION = {
     "project": "proj-a",
     "collection": {"name": "coll-a"},
     "function": {"name": "fn-a"},
+    "triggered_by": "admin",
     "triggered_on_str": "2026-03-01",
     "started_on_str": "2026-03-01",
     "ended_on_str": "2026-03-02",

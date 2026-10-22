@@ -10,7 +10,7 @@ from collections.abc import Callable
 from typing import IO
 
 from rich import box
-from rich.console import Console, RenderableType
+from rich.console import Console, Group, RenderableType
 from rich.segment import Segment, Segments
 from rich.style import Style
 from rich.table import Table
@@ -161,10 +161,26 @@ def is_empty(view: TableView | RecordView) -> bool:
     return isinstance(view, TableView) and not view.rows
 
 
+def empty_lines(view: TableView) -> list[Text]:
+    return [Text(line, style=MUTED) for line in [view.empty_message(), *view.notes]]
+
+
+def renderable(
+    view: TableView | RecordView,
+    display: Display = Display(),
+) -> RenderableType:
+    title = title_line(view)
+    if is_empty(view):
+        return Group(title, *empty_lines(view))
+    table = build_table(view, cut_renderer(view, display))
+    return Group(title, table, *footer_lines(view))
+
+
 def print_view(
     view: TableView | RecordView,
     display: Display = Display(),
     file: IO[str] | None = None,
+    lead: bool = True,
 ) -> None:
     output = file or sys.stdout
     terminal = output.isatty()
@@ -172,12 +188,11 @@ def print_view(
     title = title_line(view)
     footer = footer_lines(view)
     if is_empty(view):
-        lines = [
-            Text(line, style=MUTED) for line in [view.empty_message(), *view.notes]
-        ]
+        lines = empty_lines(view)
         width = max(title.cell_len, *(line.cell_len for line in lines))
         console = Console(file=output, width=width)
-        console.print()
+        if lead:
+            console.print()
         console.print(title)
         for line in lines:
             console.print(line)
@@ -195,7 +210,8 @@ def print_view(
     if not (display.wrap and terminal):
         width = max(width, title.cell_len, *(line.cell_len for line in footer))
     console = Console(file=output, width=width)
-    console.print()
+    if lead:
+        console.print()
     console.print(title)
     if terminal and not display.wrap:
         lines = console.render_lines(table, console.options, pad=False)

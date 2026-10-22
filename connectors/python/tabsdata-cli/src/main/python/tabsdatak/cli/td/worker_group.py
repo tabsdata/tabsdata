@@ -10,25 +10,22 @@ import rich_click as click
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    echo_more_results,
     format_option,
     hint_common_solutions,
-    make_console,
     max_result_option,
     output_format,
     render,
     show_hint,
     take,
     verify_login_or_prompt,
+    view_options,
 )
 from tabsdatak.cli.td.execution_utils import (
-    echo_function_run_status,
-    echo_plan_status,
-    echo_transaction_status,
     emit_worker_logs,
     obtain_list_worker_filters,
     span_projects,
-    workers_table,
+    status_context,
+    workers_view,
 )
 from tabsdatak.sdk.status_utils.worker import WORKER_VALID_USER_PROVIDED_STATUSES
 
@@ -74,6 +71,7 @@ def worker():
 @click.option("--fnrun", type=str, help="ID of the function run to filter workers by.")
 @click.option("--trx", type=str, help="ID of the transaction to filter workers by.")
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_workers(
@@ -102,32 +100,23 @@ def list_workers(
             trx=trx,
             project=proj,
         )
-        if output_format(ctx) == "table":
-            if plan:
-                echo_plan_status(server, plan)
-            if trx:
-                echo_transaction_status(server, trx)
-            if fnrun:
-                echo_function_run_status(server, fnrun)
         list_of_workers, truncated = take(
             ctx, server.list_workers_generator(filter=request_filter)
         )
 
-        if output_format(ctx) != "table":
-            render(
-                ctx,
-                data=[w._data for w in list_of_workers],
-                table=lambda: None,
-            )
-            echo_more_results(ctx, truncated)
-            return
+        def _view():
+            view = workers_view(list_of_workers)
+            view.context = status_context(server, plan=plan, trx=trx, fnrun=fnrun)
+            return view
 
-        click.echo()
-        console = make_console()
-        console.print(workers_table(list_of_workers))
-        click.echo(f"Number of workers: {len(list_of_workers)}")
-        echo_more_results(ctx, truncated)
-        click.echo()
+        render(
+            ctx,
+            data=[w._data for w in list_of_workers],
+            view=_view,
+            truncated=truncated,
+        )
+        if output_format(ctx) != "table":
+            return
         show_hint(
             ctx,
             "Read logs with 'tdk worker logs --worker <WORKER-ID>', or "

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from itertools import count
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -54,6 +55,7 @@ def _trigger(client: MagicMock, tmp_path):
     with (
         patch("tabsdatak.cli.td.cli.initialise_tabsdata_server_connection", _inject),
         patch("tabsdatak.cli.td.cli.DEFAULT_TABSDATA_DIRECTORY", str(tmp_path)),
-        patch("tabsdatak.cli.td.fn_group.sleep", lambda seconds: None),
+        patch("tabsdatak.cli.td.execution_utils.sleep", lambda seconds: None),
+        patch("tabsdatak.cli.td.execution_utils.monotonic", count(step=60).__next__),
     ):
         return CliRunner().invoke(cli, ["fn", "trigger", "-n", "f1", "-c", "c1"])

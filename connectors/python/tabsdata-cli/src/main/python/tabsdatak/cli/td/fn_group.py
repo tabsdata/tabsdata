@@ -4,23 +4,18 @@
 
 from __future__ import annotations
 
-from time import sleep
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.live import Live
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    beautify_time,
     collection_label,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
     load_info_and_project_root,
     logical_prompt,
-    make_console,
     max_result_option,
     present,
     proj_option,
@@ -30,6 +25,7 @@ from tabsdatak.cli.cli_utils import (
     verify_login_or_prompt,
     view_options,
 )
+from tabsdatak.cli.td.execution_utils import live_monitor
 from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 from tabsdatak.sdk.status_utils.execution import EXECUTION_FINAL_STATUSES
 from tabsdatak.sdk.status_utils.function_run import (
@@ -653,54 +649,49 @@ def _monitor_execution_or_transaction(
     keyword = "plan" if execution else "transaction"
     supervised_entity = execution or transaction
 
-    list_of_runs = supervised_entity.function_runs
-
-    def build_table():
-        table = Table(title="Function runs")
-        table.add_column("Function run ID", style="cyan", no_wrap=True)
-        table.add_column("Collection")
-        table.add_column("Function")
-        (
-            table.add_column("Transaction ID", no_wrap=True)
-            if execution
-            else table.add_column("Plan ID", no_wrap=True)
+    def build_view(function_runs):
+        return TableView(
+            title="Function runs",
+            context=[f"{keyword} {supervised_entity.id}"],
+            columns=[
+                Column("Function run ID", Kind.ID),
+                Column("Collection"),
+                Column("Function"),
+                Column("Transaction ID" if execution else "Plan ID", Kind.ID),
+                Column("Started on", Kind.TIME),
+                Column("Ended on", Kind.TIME),
+                Column("Status", Kind.STATUS),
+            ],
+            rows=[
+                [
+                    function_run.id,
+                    collection_label(function_run),
+                    function_run.function.name,
+                    (
+                        function_run.transaction.id
+                        if execution
+                        else function_run.execution.id
+                    ),
+                    present(function_run.started_on_str),
+                    present(function_run.ended_on_str),
+                    present(function_run.status),
+                ]
+                for function_run in function_runs
+            ],
         )
-        table.add_column("Started on", no_wrap=True)
-        table.add_column("Ended on", no_wrap=True)
-        table.add_column("Status")
-        for function_run in list_of_runs:
-            table.add_row(
-                function_run.id,
-                collection_label(function_run),
-                function_run.function.name,
-                function_run.transaction.id if execution else function_run.execution.id,
-                beautify_time(function_run.started_on_str),
-                beautify_time(function_run.ended_on_str),
-                function_run.status,
-            )
-        return table
 
-    click.echo(f"Waiting for the {keyword} to finish...")
-
-    refresh_rate = 1  # seconds
-    with Live(
-        build_table(), refresh_per_second=refresh_rate, console=make_console()
-    ) as live:
-        while True:
-            # Note: while it would initially make more sense to write this as
-            # 'if transaction.status in FAILED_FINAL_STATUSES', this approach avoids
-            # the risk of ignoring failed transactions that are not in a recognized
-            # status due to a mismatch between the transaction status and the
-            # FINAL_STATUSES set (which ideally should not happen).
-            if supervised_entity.status in entity_final_statuses:
-                break
-            list_of_runs = supervised_entity.function_runs
-            live.update(build_table())
-            supervised_entity.refresh()
-            sleep(1 / refresh_rate)
-        list_of_runs = supervised_entity.function_runs
-        live.update(build_table())
+    def fetch():
         supervised_entity.refresh()
+        return supervised_entity.function_runs
+
+    # Finality is read from the plan or transaction itself: a run in a status
+    # the client does not know must not keep the watch open.
+    list_of_runs = live_monitor(
+        supervised_entity.function_runs,
+        fetch,
+        build_view,
+        lambda _: supervised_entity.status in entity_final_statuses,
+    )
 
     click.echo(f"{keyword.capitalize()} finished.")
 

@@ -10,11 +10,10 @@ from __future__ import annotations
 import os
 from itertools import islice
 from time import monotonic, sleep
-from typing import TYPE_CHECKING, Callable, List
+from typing import TYPE_CHECKING, Callable, List, Sequence
 
 import rich_click as click
 from rich.live import Live
-from rich.table import Table
 
 from tabsdatak.cli.cli_utils import (
     beautify_time,
@@ -23,8 +22,17 @@ from tabsdatak.cli.cli_utils import (
     logical_prompt,
     make_console,
     output_format,
+    present,
     render,
     take,
+)
+from tabsdatak.common._tabular import (
+    Column,
+    Display,
+    Kind,
+    TableView,
+    renderable,
+    show,
 )
 from tabsdatak.sdk.status_utils.execution import user_execution_status_to_api
 from tabsdatak.sdk.status_utils.function_run import user_function_run_status_to_api
@@ -208,145 +216,165 @@ def obtain_transaction_list(
     return take(ctx, transactions)
 
 
-def echo_plan_status(server: TabsdataServer, plan: str) -> None:
-    execution = server.get_execution(plan)
-    click.echo(f"The current status of the plan '{plan}' is '{execution.status}'")
+def status_context(
+    server: TabsdataServer,
+    plan: str | None = None,
+    trx: str | None = None,
+    fnrun: str | None = None,
+) -> list[str]:
+    """The status of the plan, transaction and function run a listing is
+    narrowed to, for its title line."""
+    context = []
+    if plan:
+        context.append(f"plan {plan} {server.get_execution(plan).status}")
+    if trx:
+        context.append(f"transaction {trx} {server.get_transaction(trx).status}")
+    if fnrun:
+        context.append(f"function run {fnrun} {server.get_function_run(fnrun).status}")
+    return context
 
 
-def echo_transaction_status(server: TabsdataServer, trx: str) -> None:
-    transaction = server.get_transaction(trx)
-    click.echo(
-        f"The current status of the transaction '{trx}' is '{transaction.status}'"
-    )
-
-
-def echo_function_run_status(server: TabsdataServer, fnrun: str) -> None:
-    function_run = server.get_function_run(fnrun)
-    click.echo(
-        f"The current status of the function run '{fnrun}' is '{function_run.status}'"
-    )
-
-
-def patch_label(item) -> str:
-    """The patch a run/worker executed (a function-version id), or '-' for head
+def patch_label(item) -> str | None:
+    """The patch a run/worker executed (a function-version id), or None for head
     code. The patch id is surfaced onto the row as `function_version_patch_id`;
     absent/None means unpatched (head)."""
-    return item.kwargs.get("function_version_patch_id") or "-"
+    return item.kwargs.get("function_version_patch_id")
 
 
-def _truncate(text: str, width: int = 20) -> str:
-    text = text or ""
-    return text if len(text) <= width else text[:width] + "..."
+ID = Column("ID", Kind.ID)
+NAME = Column("Name", width=20)
+STARTED = Column("Start time", Kind.TIME)
+ENDED = Column("End time", Kind.TIME)
+STATUS = Column("Status", Kind.STATUS)
 
 
-def plans_table(executions, title: str = "Plans") -> Table:
-    table = Table(title=title)
-    table.add_column("ID", style="cyan", no_wrap=True)
-    table.add_column("Name")
-    table.add_column("Project")
-    table.add_column("Trigger coll / fn", no_wrap=True)
-    table.add_column("Triggered by")
-    table.add_column("Start time", no_wrap=True)
-    table.add_column("End time", no_wrap=True)
-    table.add_column("Status", no_wrap=True)
-    for execution in executions:
-        table.add_row(
-            execution.id,
-            _truncate(execution.name),
-            execution.project or "-",
-            f"{collection_label(execution)} / {execution.function.name}",
-            execution.triggered_by,
-            beautify_time(execution.started_on_str),
-            beautify_time(execution.ended_on_str),
-            execution.status,
-        )
-    return table
+def plans_view(executions, title: str = "Plans") -> TableView:
+    return TableView(
+        title=title,
+        columns=[
+            ID,
+            NAME,
+            Column("Project"),
+            Column("Trigger"),
+            Column("Triggered by"),
+            STARTED,
+            ENDED,
+            STATUS,
+        ],
+        rows=[
+            [
+                execution.id,
+                present(execution.name),
+                present(execution.project),
+                f"{collection_label(execution)} / {execution.function.name}",
+                present(execution.triggered_by),
+                present(execution.started_on_str),
+                present(execution.ended_on_str),
+                present(execution.status),
+            ]
+            for execution in executions
+        ],
+        count="plans",
+    )
 
 
-def transactions_table(transactions) -> Table:
-    table = Table(title="Transactions")
-    table.add_column("ID", style="cyan", no_wrap=True)
-    table.add_column("Execution plan ID", no_wrap=True)
-    table.add_column("Project")
-    table.add_column("Collection")
-    table.add_column("Triggered by")
-    table.add_column("Start time", no_wrap=True)
-    table.add_column("End time", no_wrap=True)
-    table.add_column("Status", no_wrap=True)
-    for transaction in transactions:
-        table.add_row(
-            transaction.id,
-            transaction.execution.id,
-            transaction.project or "-",
-            collection_label(transaction),
-            transaction.triggered_by,
-            beautify_time(transaction.started_on_str),
-            beautify_time(transaction.ended_on_str),
-            transaction.status,
-        )
-    return table
+def transactions_view(transactions) -> TableView:
+    return TableView(
+        title="Transactions",
+        columns=[
+            ID,
+            Column("Plan ID", Kind.ID),
+            Column("Project"),
+            Column("Collection"),
+            Column("Triggered by"),
+            STARTED,
+            ENDED,
+            STATUS,
+        ],
+        rows=[
+            [
+                transaction.id,
+                transaction.execution.id,
+                present(transaction.project),
+                collection_label(transaction),
+                present(transaction.triggered_by),
+                present(transaction.started_on_str),
+                present(transaction.ended_on_str),
+                present(transaction.status),
+            ]
+            for transaction in transactions
+        ],
+        count="transactions",
+    )
 
 
-def function_runs_table(function_runs, title: str = "Function runs") -> Table:
-    table = Table(title=title)
-    table.add_column("Function run ID", style="cyan", no_wrap=True)
-    table.add_column("Function")
-    table.add_column("Execution plan ID", no_wrap=True)
-    table.add_column("Transaction ID", no_wrap=True)
-    table.add_column("Project")
-    table.add_column("Collection")
-    table.add_column("Start time", no_wrap=True)
-    table.add_column("End time", no_wrap=True)
-    table.add_column("Patch")
-    table.add_column("Status")
-    for fn_run in function_runs:
-        table.add_row(
-            fn_run.id,
-            fn_run.function.name,
-            fn_run.execution.id,
-            fn_run.transaction.id,
-            fn_run.project or "-",
-            collection_label(fn_run),
-            beautify_time(fn_run.started_on_str),
-            beautify_time(fn_run.ended_on_str),
-            patch_label(fn_run),
-            fn_run.status,
-        )
-    return table
+def function_runs_view(function_runs, title: str = "Function runs") -> TableView:
+    return TableView(
+        title=title,
+        columns=[
+            Column("Function run ID", Kind.ID),
+            Column("Function"),
+            Column("Plan ID", Kind.ID),
+            Column("Transaction ID", Kind.ID),
+            Column("Project"),
+            Column("Collection"),
+            STARTED,
+            ENDED,
+            Column("Patch", Kind.ID),
+            STATUS,
+        ],
+        rows=[
+            [
+                fn_run.id,
+                fn_run.function.name,
+                fn_run.execution.id,
+                fn_run.transaction.id,
+                present(fn_run.project),
+                collection_label(fn_run),
+                present(fn_run.started_on_str),
+                present(fn_run.ended_on_str),
+                present(patch_label(fn_run)),
+                present(fn_run.status),
+            ]
+            for fn_run in function_runs
+        ],
+        count="function runs",
+    )
 
 
-def workers_table(workers, title: str = "Workers", indexed: bool = False) -> Table:
-    table = Table(title=title)
-    if indexed:
-        table.add_column("Index")
-    table.add_column("Worker ID", style="cyan", no_wrap=True)
-    table.add_column("Function run ID", no_wrap=True)
-    table.add_column("Function")
-    table.add_column("Execution plan ID", no_wrap=True)
-    table.add_column("Transaction ID", no_wrap=True)
-    table.add_column("Project")
-    table.add_column("Collection")
-    table.add_column("Start time", no_wrap=True)
-    table.add_column("End time", no_wrap=True)
-    table.add_column("Patch")
-    table.add_column("Status")
+def workers_view(workers, title: str = "Workers", indexed: bool = False) -> TableView:
+    columns = [Column("Index", Kind.NUMBER)] if indexed else []
+    columns += [
+        Column("Worker ID", Kind.ID),
+        Column("Function run ID", Kind.ID),
+        Column("Function"),
+        Column("Plan ID", Kind.ID),
+        Column("Transaction ID", Kind.ID),
+        Column("Project"),
+        Column("Collection"),
+        STARTED,
+        ENDED,
+        Column("Patch", Kind.ID),
+        STATUS,
+    ]
+    rows = []
     for position, worker in enumerate(workers, start=1):
-        row = [str(position)] if indexed else []
-        row.extend([
+        row = [position] if indexed else []
+        row += [
             worker.id,
-            worker.kwargs.get("logical_function_run_id") or "-",
+            present(worker.kwargs.get("logical_function_run_id")),
             worker.function.name,
-            worker.kwargs.get("execution_id") or "-",
-            worker.kwargs.get("transaction_id") or "-",
-            worker.project or "-",
+            present(worker.kwargs.get("execution_id")),
+            present(worker.kwargs.get("transaction_id")),
+            present(worker.project),
             collection_label(worker),
-            beautify_time(worker.started_on_str),
-            beautify_time(worker.ended_on_str),
-            patch_label(worker),
-            worker_status_label(worker),
-        ])
-        table.add_row(*row)
-    return table
+            present(worker.started_on_str),
+            present(worker.ended_on_str),
+            present(patch_label(worker)),
+            present(worker_status_label(worker)),
+        ]
+        rows.append(row)
+    return TableView(title=title, columns=columns, rows=rows, count="workers")
 
 
 def worker_status_label(worker) -> str:
@@ -367,29 +395,56 @@ def worker_status_label(worker) -> str:
 
 
 MONITOR_OUTAGE_GRACE = 120  # seconds
+MONITOR_REFRESH = 1  # seconds
+
+
+def elapsed_label(seconds: float) -> str:
+    minutes, seconds = divmod(int(seconds), 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes:02d}m {seconds:02d}s"
+    if minutes:
+        return f"{minutes}m {seconds:02d}s"
+    return f"{seconds}s"
 
 
 def live_monitor(
-    items,
+    state,
     fetch: Callable,
-    build_table: Callable,
-    is_final: Callable,
+    build_view: Callable[..., TableView],
+    finished: Callable,
     outage_grace: float = MONITOR_OUTAGE_GRACE,
+    notes: Sequence[str] = (),
+    presentation: Display = Display(),
 ):
-    """Refresh a listing until every item reaches a final status; returns the
-    final listing.
+    """Refresh a view until ``finished`` holds for the fetched state; returns the
+    final state.
 
     Watching only reads, so a server that drops away for a moment (a restarted
-    apiserver, a dropped port-forward) does not end the watch: the last listing
+    apiserver, a dropped port-forward) does not end the watch: the last view
     stays up and polling resumes when the server answers again. Only an outage
     longer than ``outage_grace`` seconds is raised."""
     import requests
 
     transient = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
-    refresh_rate = 1  # seconds
+    started = monotonic()
     down_since = None
+
+    def frame(done: bool = False):
+        view = build_view(state)
+        view.notes += notes
+        watched = elapsed_label(monotonic() - started)
+        if done:
+            view.context.append(f"watched for {watched}")
+        else:
+            view.context += [
+                f"watching for {watched}",
+                f"refreshing every {MONITOR_REFRESH}s",
+            ]
+        return renderable(view, presentation)
+
     with Live(
-        build_table(items), refresh_per_second=refresh_rate, console=make_console()
+        frame(), auto_refresh=False, console=make_console(), transient=False
     ) as live:
 
         def poll():
@@ -415,12 +470,14 @@ def live_monitor(
         while True:
             fresh = poll()
             if fresh is not None:
-                items = fresh
-                live.update(build_table(items))
-                if all(is_final(item) for item in items):
+                state = fresh
+                if finished(state):
+                    live.update(frame(done=True), refresh=True)
                     break
-            sleep(1 / refresh_rate)
-    return items
+            live.update(frame(), refresh=True)
+            sleep(MONITOR_REFRESH)
+    click.echo()
+    return state
 
 
 def pick_worker(
@@ -434,8 +491,7 @@ def pick_worker(
     if len(workers) == 1:
         return workers[0].id
     if output_format(ctx) == "table":
-        click.echo()
-        make_console().print(workers_table(workers, indexed=True))
+        show(workers_view(workers, indexed=True))
     if output_format(ctx) != "table" or ctx.obj["no_prompt"]:
         raise click.ClickException(
             f"{subject} has {len(workers)} workers. Pick one and run "
@@ -469,7 +525,7 @@ def emit_worker_logs(
         if file:
             with open(file, "w") as f:
                 f.write(generated_logs)
-        render(ctx, data={"logs": generated_logs}, table=lambda: None)
+        render(ctx, data={"logs": generated_logs})
         return
     if file:
         click.echo(f"Saving logs to file '{file}'")

@@ -206,7 +206,7 @@ def test_print_never_opens_the_browser(monkeypatch):
     monkeypatch.setattr(
         tabular,
         "print_view",
-        lambda view, display: stream.write(view.title),
+        lambda view, display, lead: stream.write(view.title),
     )
 
     tabular.show(issues(), Display(browse=False))
