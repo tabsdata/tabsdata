@@ -7,25 +7,23 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     MutuallyExclusiveOption,
-    beautify_time,
-    echo_more_results,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
     logical_prompt,
-    make_console,
     max_result_option,
+    present,
     proj_option,
     render,
     take,
     verify_login_or_prompt,
     view_options,
 )
+from tabsdatak.common._tabular import Column, Kind, TableView
 
 if TYPE_CHECKING:
     import polars as pl
@@ -40,9 +38,9 @@ TABLE_DATA_MAX_WIDTH = 128
 TABLE_DATA_PLACEHOLDER = "null"
 
 
-def _size_mb(data_bytes) -> str:
+def _size_mb(data_bytes) -> str | None:
     if data_bytes is None:
-        return "-"
+        return None
     return f"{int(data_bytes) / (1024 * 1024):.2f}"
 
 
@@ -260,6 +258,7 @@ def download(
     mutually_exclusive=["at"],
 )
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_tables(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
@@ -282,42 +281,43 @@ def list_tables(ctx: click.Context, coll: str, name: str, at: str, at_trx: str):
             ),
         )
 
-        def _table():
+        def _view():
             from tabsdatak.sdk.tabsdata_server import _convert_timestamp_to_string
 
-            cli_table = Table(title="Tables")
-            cli_table.add_column("Name", style="cyan", no_wrap=True)
-            cli_table.add_column("Function")
-            cli_table.add_column("Status")
-            cli_table.add_column("Private")
-            cli_table.add_column("Created by")
-            cli_table.add_column("Created on")
+            rows = []
             for table in list_of_tables:
                 data = table.kwargs
                 defined_on = data.get("defined_on")
-                cli_table.add_row(
+                status = data.get("status")
+                rows.append([
                     table.name,
                     table.function.name,
-                    _TABLE_STATUS_LABELS.get(
-                        data.get("status"), data.get("status") or "-"
-                    ),
+                    present(_TABLE_STATUS_LABELS.get(status, status)),
                     "Yes" if data.get("private") else "No",
-                    data.get("defined_by") or "-",
-                    _convert_timestamp_to_string(defined_on) if defined_on else "-",
-                )
-            click.echo()
-            make_console().print(cli_table)
-            click.echo(
-                f"Number of tables in collection '{coll}': {len(list_of_tables)}"
+                    present(data.get("defined_by")),
+                    _convert_timestamp_to_string(defined_on) if defined_on else None,
+                ])
+            return TableView(
+                title="Tables",
+                context=[f"collection '{coll}'"],
+                columns=[
+                    Column("Name", Kind.ID),
+                    Column("Function"),
+                    Column("Status", Kind.STATUS),
+                    Column("Private", Kind.FLAG),
+                    Column("Created by"),
+                    Column("Created on", Kind.TIME),
+                ],
+                rows=rows,
+                count="tables",
             )
-            click.echo()
 
         render(
             ctx,
             data=lambda: [t._data for t in list_of_tables],
-            table=_table,
+            view=_view,
+            truncated=truncated,
         )
-        echo_more_results(ctx, truncated)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -531,6 +531,7 @@ def data(
     ),
 )
 @format_option
+@view_options()
 @click.pass_context
 def schema(
     ctx: click.Context,
@@ -560,18 +561,17 @@ def schema(
             extra_cols=extra_cols,
         )
 
-        def _table():
-            table = Table(title="Schema")
-            table.add_column("Column", style="cyan", no_wrap=True)
-            table.add_column("Type")
-            for column in table_schema:
-                table.add_row(column["name"], column["type"])
-            click.echo()
-            make_console().print(table)
-            click.echo()
+        def _view():
+            return TableView(
+                title="Schema",
+                context=[f"table '{name}'", f"collection '{coll}'"],
+                columns=[Column("Column", Kind.ID), Column("Type")],
+                rows=[[column["name"], column["type"]] for column in table_schema],
+                count="columns",
+            )
 
         # table_schema is already the raw list of column dicts -> full info.
-        render(ctx, data=lambda: table_schema, table=_table)
+        render(ctx, data=lambda: table_schema, view=_view)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -590,6 +590,7 @@ def schema(
     help="The name of the table to which the data belongs.",
 )
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def versions(ctx: click.Context, coll: str, name: str):
@@ -613,45 +614,49 @@ def versions(ctx: click.Context, coll: str, name: str):
             server.list_dataversions_generator(coll, name, filter="status:eq:C"),
         )
 
-        def _table():
-            table = Table(title="Data versions")
-            table.add_column("Version", style="cyan", no_wrap=True)
-            table.add_column("Function")
-            table.add_column("Function version", no_wrap=True)
-            table.add_column("Execution plan ID", no_wrap=True)
-            table.add_column("Transaction ID", no_wrap=True)
-            table.add_column("Created on", no_wrap=True)
-            table.add_column("Schema change")
-            table.add_column("Data changed")
-            table.add_column("Rows")
-            table.add_column("Size (MB)")
-            table.add_column("Status")
+        def _view():
+            rows = []
             for data_version in data_version_list:
                 data = data_version.kwargs
-                row_count = data.get("row_count")
-                table.add_row(
+                rows.append([
                     data_version.id,
-                    data.get("function") or "-",
-                    data.get("function_version_id") or "-",
-                    data.get("execution_id") or "-",
-                    data.get("transaction_id") or "-",
-                    beautify_time(data_version.created_at_str),
+                    present(data.get("function")),
+                    present(data.get("function_version_id")),
+                    present(data.get("execution_id")),
+                    present(data.get("transaction_id")),
+                    present(data_version.created_at_str),
                     "Yes" if data.get("schema_data_changed") else "No",
                     "Yes" if data.get("data_changed") else "No",
-                    str(row_count) if row_count is not None else "-",
+                    data.get("row_count"),
                     _size_mb(data.get("data_bytes")),
                     data_version.status,
-                )
-            click.echo()
-            make_console().print(table)
-            click.echo(f"Number of data versions: {len(data_version_list)}")
+                ])
+            return TableView(
+                title="Data versions",
+                context=[f"table '{name}'", f"collection '{coll}'"],
+                columns=[
+                    Column("Version", Kind.ID),
+                    Column("Function"),
+                    Column("Function version", Kind.ID),
+                    Column("Execution plan ID", Kind.ID),
+                    Column("Transaction ID", Kind.ID),
+                    Column("Created on", Kind.TIME),
+                    Column("Schema change", Kind.FLAG),
+                    Column("Data changed", Kind.FLAG),
+                    Column("Rows", Kind.NUMBER),
+                    Column("Size", Kind.NUMBER, detail="MB"),
+                    Column("Status", Kind.STATUS),
+                ],
+                rows=rows,
+                count="data versions",
+            )
 
         render(
             ctx,
             data=lambda: [dv._data for dv in data_version_list],
-            table=_table,
+            view=_view,
+            truncated=truncated,
         )
-        echo_more_results(ctx, truncated)
 
     except Exception as e:
         hint_common_solutions(ctx, e)

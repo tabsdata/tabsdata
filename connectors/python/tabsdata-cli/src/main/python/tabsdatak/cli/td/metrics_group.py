@@ -7,17 +7,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     format_option,
     hint_common_solutions,
-    make_console,
+    present,
     proj_option,
     render,
     verify_login_or_prompt,
+    view_options,
 )
+from tabsdatak.common._tabular import Column, Kind, TableView
 
 if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
@@ -30,7 +31,7 @@ def _split(value: str | None) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
-def _render_summary(data: dict) -> None:
+def _summary_view(data: dict) -> TableView:
     """Single condensed table: one row per
     `(dim_entity, group, status)`, magnitudes summed across buckets.
     """
@@ -38,13 +39,9 @@ def _render_summary(data: dict) -> None:
     unit = data.get("unit", "?")
     start_ms = data.get("start_ms")
     end_ms = data.get("end_ms")
-    click.echo(f"dim={dim or '?'}  unit={unit}  window=[{start_ms}, {end_ms})")
+    context = [f"dim {dim or '?'}", f"unit {unit}", f"window [{start_ms}, {end_ms})"]
 
     nodes = data.get("nodes") or []
-    if not nodes:
-        click.echo("(no activity in window)")
-        return
-
     is_collection_dim = dim == "collection"
 
     agg: dict[tuple[str, str, str], dict] = {}
@@ -82,49 +79,55 @@ def _render_summary(data: dict) -> None:
 
     show_bytes = any(r["bytes_in"] or r["bytes_out"] for r in agg.values())
 
-    table = Table(title=None, show_lines=False)
     if is_collection_dim:
-        table.add_column("Collection", style="cyan", no_wrap=True)
-        table.add_column("Group", no_wrap=True)
+        columns = [Column("Collection", Kind.ID), Column("Group", Kind.ID)]
     else:
-        table.add_column("Group", style="cyan", no_wrap=True)
-    table.add_column("Status", no_wrap=True)
-    table.add_column("Runs", justify="right")
-    table.add_column("Txns", justify="right")
-    table.add_column("Tables in", justify="right")
-    table.add_column("Rows in", justify="right")
+        columns = [Column("Group", Kind.ID)]
+    columns += [
+        Column("Status", Kind.STATUS),
+        Column("Runs", Kind.NUMBER),
+        Column("Txns", Kind.NUMBER),
+        Column("Tables in", Kind.NUMBER),
+        Column("Rows in", Kind.NUMBER),
+    ]
     if show_bytes:
-        table.add_column("Bytes in", justify="right")
-    table.add_column("Tables out", justify="right")
-    table.add_column("Rows out", justify="right")
+        columns.append(Column("Bytes in", Kind.NUMBER))
+    columns += [Column("Tables out", Kind.NUMBER), Column("Rows out", Kind.NUMBER)]
     if show_bytes:
-        table.add_column("Bytes out", justify="right")
+        columns.append(Column("Bytes out", Kind.NUMBER))
 
+    rows = []
     # Stable order: by dim_id then status.
     for key in sorted(agg.keys()):
         dim_key, grp_id, status = key
         r = agg[key]
-        cells: list[str] = []
+        cells: list[object] = []
         if is_collection_dim:
-            cells.append(r["collection_name"] or dim_key or "-")
-            cells.append(r["group_name"] or grp_id)
+            cells.append(present(r["collection_name"] or dim_key))
+            cells.append(present(r["group_name"] or grp_id))
         else:
-            cells.append(r["group_name"] or dim_key)
-        cells.extend([
-            status,
-            str(r["fn_runs"]),
-            str(r["transactions"]),
-            str(r["tables_in"]),
-            str(r["rows_in"]),
-        ])
+            cells.append(present(r["group_name"] or dim_key))
+        cells += [
+            present(status),
+            r["fn_runs"],
+            r["transactions"],
+            r["tables_in"],
+            r["rows_in"],
+        ]
         if show_bytes:
-            cells.append(str(r["bytes_in"]))
-        cells.extend([str(r["tables_out"]), str(r["rows_out"])])
+            cells.append(r["bytes_in"])
+        cells += [r["tables_out"], r["rows_out"]]
         if show_bytes:
-            cells.append(str(r["bytes_out"]))
-        table.add_row(*cells)
+            cells.append(r["bytes_out"])
+        rows.append(cells)
 
-    make_console().print(table)
+    return TableView(
+        title="Metrics",
+        context=context,
+        columns=columns,
+        rows=rows,
+        empty="No activity in the window.",
+    )
 
 
 @cli_command
@@ -199,6 +202,7 @@ def metrics():
     help="Comma-separated function run statuses to include (e.g. `C,D,E`).",
 )
 @format_option
+@view_options()
 @click.pass_context
 def show(
     ctx: click.Context,
@@ -235,7 +239,7 @@ def show(
             group_exclude=_split(group_exclude) or None,
             status=_split(status) or None,
         )
-        render(ctx, data=data, table=lambda: _render_summary(data))
+        render(ctx, data=data, view=lambda: _summary_view(data))
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to fetch metrics: {e}")
@@ -271,6 +275,7 @@ def show(
     ),
 )
 @format_option
+@view_options()
 @click.pass_context
 def inflight(
     ctx: click.Context,
@@ -295,29 +300,28 @@ def inflight(
         )
         rows = data.get("rows") or []
 
-        def _table():
-            if not rows:
-                click.echo("(no inflight runs)")
-                return
-            table = Table(title="Inflight")
-            table.add_column("Collection", style="cyan", no_wrap=True)
-            table.add_column("Group", no_wrap=True)
-            table.add_column("Status", no_wrap=True)
-            table.add_column("Count", justify="right")
-            for r in rows:
-                cid = str(r.get("collection_id") or "")
-                gid = str(r.get("group_id") or "")
-                cname = r.get("collection_name") or cid
-                gname = r.get("group_name") or gid
-                table.add_row(
-                    cname,
-                    gname,
-                    str(r.get("status", "")),
-                    str(r.get("count", 0)),
-                )
-            make_console().print(table)
+        def _view():
+            return TableView(
+                title="Inflight",
+                columns=[
+                    Column("Collection", Kind.ID),
+                    Column("Group", Kind.ID),
+                    Column("Status", Kind.STATUS),
+                    Column("Count", Kind.NUMBER),
+                ],
+                rows=[
+                    [
+                        r.get("collection_name") or str(r.get("collection_id") or ""),
+                        r.get("group_name") or str(r.get("group_id") or ""),
+                        str(r.get("status", "")),
+                        r.get("count", 0),
+                    ]
+                    for r in rows
+                ],
+                empty="No inflight runs.",
+            )
 
-        render(ctx, data=data, table=_table)
+        render(ctx, data=data, view=_view)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to fetch inflight: {e}")

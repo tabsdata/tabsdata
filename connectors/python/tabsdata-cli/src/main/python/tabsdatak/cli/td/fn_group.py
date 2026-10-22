@@ -13,10 +13,8 @@ from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
-    beautify_list,
     beautify_time,
     collection_label,
-    echo_more_results,
     format_option,
     get_currently_pinned_object,
     hint_common_solutions,
@@ -24,12 +22,15 @@ from tabsdatak.cli.cli_utils import (
     logical_prompt,
     make_console,
     max_result_option,
+    present,
     proj_option,
     render,
     show_hint,
     take,
     verify_login_or_prompt,
+    view_options,
 )
+from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 from tabsdatak.sdk.status_utils.execution import EXECUTION_FINAL_STATUSES
 from tabsdatak.sdk.status_utils.function_run import (
     FUNCTION_RUN_SUCCESSFUL_FINAL_STATUSES,
@@ -99,6 +100,7 @@ def delete(ctx: click.Context, name: str, coll: str, confirm: str):
 @fn.command()
 @proj_option
 @format_option
+@view_options()
 @click.option(
     "--name",
     "-n",
@@ -129,80 +131,72 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
         if show_history:
             function_list = server.list_function_history(coll, name)
 
-            def _table():
-                table = Table(title="History")
-                table.add_column("ID", style="cyan", no_wrap=True)
-                table.add_column("Patches", no_wrap=True)
-                table.add_column("Name")
-                table.add_column("Description")
-                table.add_column("Status")
-                table.add_column("Created by")
-                table.add_column("Created on")
+            def _view():
+                rows = []
                 for function in function_list:
-                    data = function._data or {}
-                    table.add_row(
-                        str(function.id),
-                        str(function.patch_of or ""),
+                    status = (function._data or {}).get("status")
+                    rows.append([
+                        function.id,
+                        present(function.patch_of),
                         function.name,
-                        function.description,
-                        _FUNCTION_STATUS_LABELS.get(
-                            data.get("status"), data.get("status") or "-"
-                        ),
-                        function.defined_by,
-                        function.defined_on_str,
-                    )
-                click.echo()
-                make_console().print(table)
-                click.echo(f"Number of versions: {len(function_list)}")
-                click.echo()
+                        present(function.description),
+                        present(_FUNCTION_STATUS_LABELS.get(status, status)),
+                        present(function.defined_by),
+                        present(function.defined_on_str),
+                    ])
+                return TableView(
+                    title="History",
+                    context=[f"function '{name}'", f"collection '{coll}'"],
+                    columns=[
+                        Column("ID", Kind.ID),
+                        Column("Patches", Kind.ID),
+                        Column("Name"),
+                        Column("Description"),
+                        Column("Status", Kind.STATUS),
+                        Column("Created by"),
+                        Column("Created on", Kind.TIME),
+                    ],
+                    rows=rows,
+                    count="versions",
+                )
 
-            render(
-                ctx,
-                data=lambda: [f._data for f in function_list],
-                table=_table,
-            )
+            render(ctx, data=lambda: [f._data for f in function_list], view=_view)
         else:
             # noinspection PyProtectedMember
             from tabsdatak.sdk.tabsdata_server import _function_type_to_mapping
 
             function = server.get_function(coll, name)
 
-            def _table():
+            def _view():
                 data = function._data or {}
-                table = Table(
+                status = data.get("status")
+                return RecordView(
                     title="Function",
-                    show_header=False,
-                    show_lines=True,
+                    fields=[
+                        ("Name", function.name),
+                        ("Description", present(function.description)),
+                        ("Project", present(server.connection.project)),
+                        ("Collection", coll),
+                        ("Created by", present(function.defined_by)),
+                        ("Created on", present(function.defined_on_str)),
+                        (
+                            "Status",
+                            present(_FUNCTION_STATUS_LABELS.get(status, status)),
+                        ),
+                        ("Enabled", "Yes" if function.enabled else "No"),
+                        ("Type", _function_type_to_mapping(function.type)),
+                        ("Tables", present(", ".join(t.name for t in function.tables))),
+                        ("Triggers", present(", ".join(function.triggers or []))),
+                        (
+                            "Dependencies",
+                            present(", ".join(function.dependencies or [])),
+                        ),
+                        ("Snippet", present(data.get("snippet"))),
+                    ],
+                    kinds={"Status": Kind.STATUS},
                 )
-                table.add_column("Field", style="cyan", no_wrap=True)
-                table.add_column("Value")
-                table.add_row("Name:", function.name)
-                table.add_row("Description:", function.description or "")
-                table.add_row("Project:", server.connection.project or "-")
-                table.add_row("Collection:", coll)
-                table.add_row("Created by:", function.defined_by or "-")
-                table.add_row("Created on:", function.defined_on_str or "-")
-                table.add_row(
-                    "Status:",
-                    _FUNCTION_STATUS_LABELS.get(
-                        data.get("status"), data.get("status") or "-"
-                    ),
-                )
-                table.add_row("Enabled:", "Yes" if function.enabled else "No")
-                table.add_row("Type:", _function_type_to_mapping(function.type))
-                table.add_row(
-                    "Tables:", beautify_list([t.name for t in function.tables])
-                )
-                table.add_row("Triggers:", beautify_list(function.triggers))
-                table.add_row("Dependencies:", beautify_list(function.dependencies))
-                table.add_row("Snippet:", data.get("snippet") or "")
-                click.echo()
-                # emoji/markup off: the snippet is Python source with ':'/'[]'
-                # that rich would otherwise treat as an emoji shortcode / markup.
-                make_console(emoji=False, markup=False).print(table)
-                click.echo()
 
-            render(ctx, data=lambda: function._data, table=_table)
+            render(ctx, data=lambda: function._data, view=_view)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -259,6 +253,7 @@ def bundle(ctx: click.Context, fn_version: str, file: str):
 @fn.command("list")
 @proj_option
 @format_option
+@view_options()
 @click.option(
     "--coll",
     "-c",
@@ -281,34 +276,36 @@ def list_functions(ctx: click.Context, coll: str):
         server: TabsdataServer = ctx.obj["tabsdataserver"]
         list_of_functions, truncated = take(ctx, server.list_functions_generator(coll))
 
-        def _table():
-            table = Table(title="Functions")
-            table.add_column("Name", style="cyan", no_wrap=True)
-            table.add_column("Type")
-            table.add_column("Description")
-            table.add_column("Created by")
-            table.add_column("Created on")
-            for function in list_of_functions:
-                table.add_row(
-                    function.name,
-                    _function_type_to_mapping(function.type),
-                    function.description,
-                    function.defined_by,
-                    function.defined_on_str,
-                )
-            click.echo()
-            make_console().print(table)
-            click.echo(
-                f"Number of functions in collection '{coll}': {len(list_of_functions)}"
+        def _view():
+            return TableView(
+                title="Functions",
+                context=[f"collection '{coll}'"],
+                columns=[
+                    Column("Name", Kind.ID),
+                    Column("Type"),
+                    Column("Description"),
+                    Column("Created by"),
+                    Column("Created on", Kind.TIME),
+                ],
+                rows=[
+                    [
+                        function.name,
+                        _function_type_to_mapping(function.type),
+                        present(function.description),
+                        present(function.defined_by),
+                        present(function.defined_on_str),
+                    ]
+                    for function in list_of_functions
+                ],
+                count="functions",
             )
-            click.echo()
 
         render(
             ctx,
             data=lambda: [f._data for f in list_of_functions],
-            table=_table,
+            view=_view,
+            truncated=truncated,
         )
-        echo_more_results(ctx, truncated)
 
     except Exception as e:
         hint_common_solutions(ctx, e)
@@ -1069,6 +1066,7 @@ def patch(
 @fn.command("patches")
 @proj_option
 @format_option
+@view_options()
 @click.option(
     "--name",
     "-n",
@@ -1098,39 +1096,49 @@ def list_patches(ctx: click.Context, name: str, coll: str):
             ctx, server.list_function_patches_generator(coll, name)
         )
 
-        def _table():
-            table = Table(title="Patches")
-            table.add_column("Patch id", style="cyan", no_wrap=True)
-            table.add_column("Patches")
-            table.add_column("Description")
-            table.add_column("Defined on")
-            table.add_column("Defined by")
-            table.add_column("Status")
-            for p in patches:
-                defined_on = p.get("defined_on")
-                if isinstance(defined_on, (int, float)):
-                    # epoch milliseconds -> ISO-ish UTC string
-                    from datetime import datetime, timezone
+        def _defined_on(patch):
+            defined_on = patch.get("defined_on")
+            if isinstance(defined_on, (int, float)):
+                # epoch milliseconds -> ISO-ish UTC string
+                from datetime import datetime, timezone
 
-                    defined_on = datetime.fromtimestamp(
-                        defined_on / 1000.0, tz=timezone.utc
-                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
-                table.add_row(
-                    p.get("id") or "",
-                    p.get("parent_function_version_id") or "",
-                    p.get("description") or "",
-                    beautify_time(defined_on) if defined_on else "",
-                    p.get("defined_by") or p.get("defined_by_id") or "",
-                    _FUNCTION_STATUS_LABELS.get(p.get("status"), p.get("status") or ""),
-                )
-            click.echo()
-            make_console().print(table)
-            click.echo(f"Number of patches: {len(patches)}")
-            click.echo()
+                defined_on = datetime.fromtimestamp(
+                    defined_on / 1000.0, tz=timezone.utc
+                ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            return present(defined_on)
+
+        def _view():
+            return TableView(
+                title="Patches",
+                context=[f"function '{name}'", f"collection '{coll}'"],
+                columns=[
+                    Column("Patch id", Kind.ID),
+                    Column("Patches", Kind.ID),
+                    Column("Description"),
+                    Column("Defined on", Kind.TIME),
+                    Column("Defined by"),
+                    Column("Status", Kind.STATUS),
+                ],
+                rows=[
+                    [
+                        present(p.get("id")),
+                        present(p.get("parent_function_version_id")),
+                        present(p.get("description")),
+                        _defined_on(p),
+                        present(p.get("defined_by") or p.get("defined_by_id")),
+                        present(
+                            _FUNCTION_STATUS_LABELS.get(
+                                p.get("status"), p.get("status")
+                            )
+                        ),
+                    ]
+                    for p in patches
+                ],
+                count="patches",
+            )
 
         # `patches` is already the raw list of patch dicts -> full info as-is.
-        render(ctx, data=lambda: patches, table=_table)
-        echo_more_results(ctx, truncated)
+        render(ctx, data=lambda: patches, view=_view, truncated=truncated)
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list patches: {e}")

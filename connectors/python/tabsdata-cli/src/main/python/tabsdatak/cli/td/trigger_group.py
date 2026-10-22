@@ -21,12 +21,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, NamedTuple
 
 import rich_click as click
-from rich.table import Table
 
 from tabsdatak.cli._registry import cli_command
 from tabsdatak.cli.cli_utils import (
     all_projects_option,
-    beautify_time,
     echo_more_results,
     format_option,
     get_currently_pinned_object,
@@ -34,11 +32,13 @@ from tabsdatak.cli.cli_utils import (
     logical_prompt,
     make_console,
     max_result_option,
+    present,
     proj_option,
     render,
     resolve_all_projects,
     take,
     verify_login_or_prompt,
+    view_options,
 )
 from tabsdatak.cli.td.execution_utils import (
     obtain_execution_list,
@@ -47,6 +47,7 @@ from tabsdatak.cli.td.execution_utils import (
     plans_table,
 )
 from tabsdatak.cli.td.fn_group import set_function_enabled
+from tabsdatak.common._tabular import Column, Kind, TableView
 
 if TYPE_CHECKING:
     from tabsdatak.sdk.tabsdata_server import TabsdataServer
@@ -141,6 +142,7 @@ def disable(ctx: click.Context, name: str, coll: str):
 @_name_option("Only list the trigger of this function.")
 @_coll_option("Only list triggers of functions in this collection.")
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_crons(ctx: click.Context, all_projects: bool, name: str, coll: str):
@@ -195,6 +197,7 @@ def disable_stream(ctx: click.Context, name: str, coll: str):
 @_name_option("Only list the publisher of this function.")
 @_coll_option("Only list publishers of functions in this collection.")
 @format_option
+@view_options()
 @max_result_option
 @click.pass_context
 def list_streams(ctx: click.Context, all_projects: bool, name: str, coll: str):
@@ -302,37 +305,42 @@ def _list_triggers(
         spanning = resolve_all_projects(ctx, all_projects)
         triggers, truncated = take(ctx, _triggers_of(server, kind, coll, name))
 
-        def _table():
-            table = Table(title=kind.title)
-            table.add_column("Function", style="cyan", no_wrap=True)
+        def _view():
+            columns = [Column("Function", Kind.ID)]
             if spanning:
-                table.add_column("Project")
-            table.add_column("Collection")
-            table.add_column("Worker ID", no_wrap=True)
-            table.add_column("Status")
-            table.add_column("Started on", no_wrap=True)
-            table.add_column("Ended on", no_wrap=True)
+                columns.append(Column("Project"))
+            columns += [
+                Column("Collection"),
+                Column("Worker ID", Kind.ID),
+                Column("Status", Kind.STATUS),
+                Column("Started on", Kind.TIME),
+                Column("Ended on", Kind.TIME),
+            ]
+            rows = []
             for trigger in triggers:
                 row = [trigger.function.name]
                 if spanning:
-                    row.append(trigger.project or "-")
-                row.extend([
+                    row.append(present(trigger.project))
+                row += [
                     trigger.collection.name,
                     trigger.id,
                     trigger.status,
-                    beautify_time(trigger.started_on_str),
-                    beautify_time(trigger.ended_on_str),
-                ])
-                table.add_row(*row)
-            click.echo()
-            make_console().print(table)
-            click.echo(f"Number of {kind.plural}: {len(triggers)}")
-            click.echo()
+                    present(trigger.started_on_str),
+                    present(trigger.ended_on_str),
+                ]
+                rows.append(row)
+            return TableView(
+                title=kind.title, columns=columns, rows=rows, count=kind.plural
+            )
 
         # ``kwargs`` is the row the listing already returned; ``_data`` would
         # re-fetch each worker one by one.
-        render(ctx, data=lambda: [t.kwargs for t in triggers], table=_table)
-        echo_more_results(ctx, truncated)
+        render(
+            ctx,
+            data=lambda: [t.kwargs for t in triggers],
+            view=_view,
+            truncated=truncated,
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list {kind.plural}: {e}")
