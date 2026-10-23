@@ -11,6 +11,8 @@
   account-name$: AZ__ACCOUNT_NAME
   account-key$: AZ__ACCOUNT_KEY
   sys-path$: AZ__SYS_PATH
+- name: azurebloblocal
+  type: azurebloblocal
 - name: bigquery
   type: bigquery
   project$: BIGQUERY__PROJECT

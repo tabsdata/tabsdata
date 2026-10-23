@@ -10,6 +10,12 @@
   sys: azureblob
   model: world
   size: 200
+- name: azurebloblocal
+  sys: azurebloblocal
+- name: azurebloblocal_world_xs
+  sys: azurebloblocal
+  model: world
+  size: 200
 - name: bigquery
   sys: bigquery
 - name: clickhouse
