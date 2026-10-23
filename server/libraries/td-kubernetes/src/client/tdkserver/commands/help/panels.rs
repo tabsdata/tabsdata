@@ -2,7 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use clap::{Arg, ArgAction, Command};
+use std::io::{IsTerminal, Write, stderr};
+
+use clap::error::ErrorKind;
+use clap::{Arg, ArgAction, Command, Error};
 use terminal_size::{Width, terminal_size};
 use textwrap::core::display_width;
 use textwrap::{Options, WordSeparator, WordSplitter, wrap};
@@ -13,6 +16,9 @@ const GAP: &str = "  ";
 const USAGE_PREFIX: &str = "Usage: ";
 const HELP_FLAG_HELP: &str = "Show this message and exit.";
 const VERSION_FLAG_HELP: &str = "Show the version and exit.";
+const ERROR_PREFIX: &str = "error: ";
+const TIP_PREFIX: &str = "tip: ";
+const MORE_INFORMATION: &str = "For more information";
 
 const RESET: &str = "\x1b[0m";
 const USAGE: &str = "\x1b[1;38;2;57;170;241m";
@@ -26,6 +32,8 @@ const BORDER: &str = "\x1b[38;2;106;179;92m";
 const PANEL_TITLE: &str = "\x1b[1;38;2;106;179;92m";
 const TEXT: &str = "\x1b[38;2;214;214;214m";
 const DEFAULT: &str = "\x1b[38;2;143;143;143m";
+const MUTED: &str = "\x1b[38;2;143;143;143m";
+const ERROR_BORDER: &str = "\x1b[38;2;239;130;130m";
 
 struct Cell {
     text: String,
@@ -112,24 +120,168 @@ pub fn render_help(command: &Command, width: usize) -> String {
 }
 
 fn usage_line(command: &Command) -> String {
-    let usage = command.clone().render_usage().to_string();
-    let usage = usage
+    styled_usage(&command.clone().render_usage().to_string())
+}
+
+fn usage_words(usage: &str) -> impl Iterator<Item = &str> {
+    usage
         .trim()
         .trim_start_matches(USAGE_PREFIX)
-        .trim()
-        .to_owned();
-    let path = command
-        .get_bin_name()
-        .unwrap_or_else(|| command.get_name())
-        .trim()
-        .to_owned();
-    let rest = usage.strip_prefix(&path).unwrap_or(&usage);
+        .split_whitespace()
+}
+
+fn is_command_word(word: &str) -> bool {
+    !word.starts_with(['[', '<', '-'])
+        && !word.chars().any(|character| character.is_ascii_uppercase())
+}
+
+fn styled_usage(usage: &str) -> String {
+    let words: Vec<String> = usage_words(usage)
+        .map(|word| {
+            if is_command_word(word) {
+                paint(word, PATH)
+            } else {
+                placeholders(word)
+            }
+        })
+        .collect();
     format!(
-        " {} {}{}",
+        " {} {}",
         paint(USAGE_PREFIX.trim_end(), USAGE),
-        paint(&path, PATH),
-        placeholders(rest)
+        words.join(" ")
     )
+}
+
+fn usage_path(usage: &str) -> String {
+    usage_words(usage)
+        .filter(|word| is_command_word(word))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+pub fn is_usage_error(error: &Error) -> bool {
+    !matches!(
+        error.kind(),
+        ErrorKind::DisplayHelp
+            | ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            | ErrorKind::DisplayVersion
+    )
+}
+
+pub fn print_error(error: &Error) {
+    if !is_usage_error(error) {
+        let _ = error.print();
+        return;
+    }
+    let rendered = render_error(error, help_width());
+    let mut output = stderr();
+    let text = if output.is_terminal() {
+        rendered
+    } else {
+        strip_styles(&rendered)
+    };
+    let _ = writeln!(output, "{text}");
+}
+
+pub fn exit_with(error: Error) -> ! {
+    print_error(&error);
+    std::process::exit(error.exit_code())
+}
+
+pub fn render_error(error: &Error, width: usize) -> String {
+    let rendered = error.render().to_string();
+    let usage = rendered
+        .lines()
+        .find(|line| line.trim_start().starts_with(USAGE_PREFIX));
+    let messages: Vec<String> = rendered
+        .lines()
+        .map(str::trim)
+        .filter(|line| {
+            !line.is_empty()
+                && !line.starts_with(USAGE_PREFIX)
+                && !line.starts_with(MORE_INFORMATION)
+        })
+        .map(|line| {
+            let line = line.strip_prefix(ERROR_PREFIX).unwrap_or(line);
+            let line = line.strip_prefix(TIP_PREFIX).unwrap_or(line);
+            capitalized(line)
+        })
+        .collect();
+    let mut lines = vec![String::new()];
+    if let Some(usage) = usage {
+        let path = usage_path(usage);
+        lines.push(styled_usage(usage));
+        lines.push(String::new());
+        lines.push(format!(
+            " {}{}{}",
+            paint("Try ", MUTED),
+            paint(&format!("'{path} -h'"), OPTION),
+            paint(" for help", MUTED)
+        ));
+    }
+    lines.push(error_border(width));
+    let inner = width.saturating_sub(4);
+    for message in &messages {
+        for line in wrapped(message, inner) {
+            let fill = inner.saturating_sub(display_width(&line));
+            lines.push(format!(
+                "{} {}{} {}",
+                paint("│", ERROR_BORDER),
+                quoted_options(&line),
+                " ".repeat(fill),
+                paint("│", ERROR_BORDER)
+            ));
+        }
+    }
+    lines.push(paint(
+        &format!("╰{}╯", "─".repeat(width.saturating_sub(2))),
+        ERROR_BORDER,
+    ));
+    lines.push(String::new());
+    lines.join("\n")
+}
+
+fn capitalized(text: &str) -> String {
+    let mut characters = text.chars();
+    match characters.next() {
+        Some(first) => first.to_uppercase().chain(characters).collect(),
+        None => String::new(),
+    }
+}
+
+fn quoted_options(text: &str) -> String {
+    let mut styled = String::new();
+    for (index, part) in text.split('\'').enumerate() {
+        if index > 0 {
+            styled.push('\'');
+        }
+        if index % 2 == 1 && part.starts_with('-') {
+            styled.push_str(&paint(part, OPTION));
+        } else {
+            styled.push_str(part);
+        }
+    }
+    styled
+}
+
+fn error_border(width: usize) -> String {
+    let label = " Error ";
+    let rest = width.saturating_sub(display_width(label) + 3);
+    paint(&format!("╭─{label}{}╮", "─".repeat(rest)), ERROR_BORDER)
+}
+
+fn strip_styles(text: &str) -> String {
+    let mut plain = String::new();
+    let mut escape = false;
+    for character in text.chars() {
+        match (escape, character) {
+            (false, '\x1b') => escape = true,
+            (true, 'm') => escape = false,
+            (true, _) => {}
+            (false, _) => plain.push(character),
+        }
+    }
+    plain
 }
 
 fn placeholders(text: &str) -> String {

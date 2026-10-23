@@ -115,7 +115,7 @@ fn test_the_whole_command_line_is_panelled() {
     assert!(help.contains("╭─ Options ─"), "{help}");
     let list = command.find_subcommand_mut("list").unwrap();
     let help = plain(&list.render_long_help().to_string());
-    assert!(help.contains("Usage: tool list"), "{help}");
+    assert!(help.contains("Usage: tool --name <name> list"), "{help}");
 }
 
 #[test]
@@ -128,4 +128,56 @@ fn test_a_multicall_grammar_names_each_command_once() {
     let start = grammar.find_subcommand("start").unwrap();
     let help = plain(&render_help(start, 80));
     assert!(help.contains(" Usage: start\n"), "{help}");
+}
+
+fn usage_error(arguments: &[&str]) -> Error {
+    sample()
+        .try_get_matches_from(arguments)
+        .expect_err("the arguments are valid")
+}
+
+#[test]
+fn test_a_usage_error_shows_the_usage_a_hint_and_an_error_panel() {
+    let error = usage_error(&["tool", "--bogus"]);
+    let text = plain(&render_error(&error, 80));
+    let lines: Vec<&str> = text.lines().collect();
+
+    assert_eq!(lines[0], "", "{text}");
+    assert!(lines[1].starts_with(" Usage: tool "), "{text}");
+    assert_eq!(lines[3], " Try 'tool -h' for help", "{text}");
+    assert!(lines[4].starts_with("╭─ Error ─"), "{text}");
+    assert!(
+        lines[5].starts_with("│ Unexpected argument '--bogus' found"),
+        "{text}"
+    );
+    assert!(!text.contains("For more information"), "{text}");
+    assert!(
+        text.lines()
+            .filter(|line| line.starts_with(['╭', '│', '╰']))
+            .all(|line| display_width(line) == 80),
+        "{text}"
+    );
+}
+
+#[test]
+fn test_a_subcommand_error_names_the_subcommand_in_the_hint() {
+    let error = usage_error(&["tool", "--name", "x", "list", "extra"]);
+    let text = plain(&render_error(&error, 80));
+
+    assert!(text.contains(" Try 'tool list -h' for help"), "{text}");
+}
+
+#[test]
+fn test_help_and_version_are_not_usage_errors() {
+    let error = sample()
+        .try_get_matches_from(["tool", "--help"])
+        .expect_err("help ends the parse");
+
+    assert!(!is_usage_error(&error));
+    assert!(is_usage_error(&usage_error(&["tool", "--bogus"])));
+}
+
+#[test]
+fn test_styles_are_stripped_off_a_terminal() {
+    assert_eq!(strip_styles(&paint("--name", OPTION)), "--name");
 }

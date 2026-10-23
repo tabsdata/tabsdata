@@ -16,7 +16,7 @@ use clap_derive::{Args, Subcommand};
 use crate::client::tdkserver::commands::config::ConfigCommands;
 use crate::client::tdkserver::commands::help::HelpArguments;
 use crate::client::tdkserver::commands::help::PROGRAM_NAME;
-use crate::client::tdkserver::commands::help::panels::panelled;
+use crate::client::tdkserver::commands::help::panels::{exit_with, panelled};
 use crate::client::tdkserver::commands::service::InstanceNameArguments;
 use crate::client::tdkserver::commands::service::assess::AssessArguments;
 use crate::client::tdkserver::commands::service::create::CreateArguments;
@@ -94,8 +94,10 @@ pub fn cli_command() -> Command {
 }
 
 pub fn parse_arguments() -> Arguments {
-    let matches = cli_command().get_matches_from(help_command_form(env::args()));
-    Arguments::from_arg_matches(&matches).unwrap_or_else(|error| error.exit())
+    let matches = cli_command()
+        .try_get_matches_from(help_command_form(env::args()))
+        .unwrap_or_else(|error| exit_with(error));
+    Arguments::from_arg_matches(&matches).unwrap_or_else(|error| exit_with(error))
 }
 
 fn help_command_form(arguments: impl Iterator<Item = String>) -> Vec<String> {

@@ -21,7 +21,7 @@ use crate::client::tdkserver::arguments::GlobalArguments;
 use super::about::command_about;
 use super::banner::command_banner;
 use super::config::{ConfigCommands, command_config};
-use super::help::panels::panelled;
+use super::help::panels::{panelled, print_error};
 use super::help::{ShellHelpArguments, command_shell_help};
 use super::service::InstanceNameArguments;
 use super::service::assess::{AssessArguments, command_assess};
@@ -284,9 +284,7 @@ pub async fn command_shell(globals: &GlobalArguments) -> CommandResult {
                 }
                 ShellCommand::Exit | ShellCommand::Quit => break,
             },
-            Err(error) => {
-                let _ = error.print();
-            }
+            Err(error) => print_error(&error),
         }
     }
     Ok(())
