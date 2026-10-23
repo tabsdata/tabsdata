@@ -288,8 +288,8 @@ install_uv() {
 }
 
 install_python() {
-   run uv python install "$python_version"
-   run uv python find "$python_version"
+   run uv python install --managed-python "$python_version"
+   run uv python find --managed-python "$python_version"
 }
 
 remove_virtual_environment() {
@@ -301,13 +301,13 @@ remove_virtual_environment() {
 
 create_compressor_environment() {
    remove_virtual_environment "$virtual_environment_z"
-   run uv venv --python-preference only-managed --python "$python_version" "$virtual_environment_z"
+   run uv venv --managed-python --python "$python_version" "$virtual_environment_z"
    run uv pip install --python "$virtual_environment_z/bin/python" $(constrained) "$ZSTANDARD_PACKAGE"
 }
 
 verify_packages() {
    local resolver="$work/resolver"
-   run uv venv --python-preference only-managed --python "$python_version" "$resolver"
+   run uv venv --managed-python --python "$python_version" "$resolver"
    local outcome=0
    run uv pip install --python "$resolver/bin/python" $(constrained) --dry-run \
       "$TABSDATA_PACKAGE==$version" || outcome="$?"
@@ -322,10 +322,10 @@ verify_packages() {
 
 create_virtual_environment() {
    remove_virtual_environment "$virtual_environment_td"
-   run uv venv --seed --relocatable --python-preference only-managed --python "$python_version" "$virtual_environment_td"
+   run uv venv --seed --relocatable --managed-python --python "$python_version" "$virtual_environment_td"
    run uv pip install --python "$virtual_environment_td/bin/python" $(constrained) --upgrade pip
    remove_virtual_environment "$virtual_environment_fn"
-   run uv venv --seed --relocatable --python-preference only-managed --python "$python_version" "$virtual_environment_fn"
+   run uv venv --seed --relocatable --managed-python --python "$python_version" "$virtual_environment_fn"
    run uv pip install --python "$virtual_environment_fn/bin/python" $(constrained) --upgrade pip
 }
 
