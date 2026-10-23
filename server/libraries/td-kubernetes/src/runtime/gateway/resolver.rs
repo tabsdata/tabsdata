@@ -99,6 +99,7 @@ pub(crate) mod walker;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use td_error::TdError;
 
@@ -117,6 +118,30 @@ impl ConfigurationResolver {
 
     pub async fn resolve(&self, content: &str) -> Result<String, TdError> {
         placeholder::system::resolve(content, &self.system)
+    }
+
+    pub fn materialize_system(&self, content: &str) -> Result<String, TdError> {
+        let system_kinds = [
+            kind::PlaceholderKind::System.as_str(),
+            kind::PlaceholderKind::SystemAuto.as_str(),
+        ];
+        let rendered = walker::splice_placeholders(content, |_, placeholder| {
+            if !system_kinds.contains(&placeholder.kind.as_str()) {
+                return Ok(placeholder.token());
+            }
+            let category = placeholder.category.as_deref().unwrap_or_default();
+            let key =
+                SystemKey::from_str(category).map_err(|_| ResolverError::UnsupportedSystemKey {
+                    key: category.to_owned(),
+                    supported: SystemKey::supported(),
+                })?;
+            self.system.lookup(key).map(str::to_owned).ok_or_else(|| {
+                ResolverError::MissingSystemValue {
+                    key: key.as_ref().to_owned(),
+                }
+            })
+        })?;
+        Ok(rendered)
     }
 
     pub async fn materialize(&self, content: &str) -> Result<String, TdError> {

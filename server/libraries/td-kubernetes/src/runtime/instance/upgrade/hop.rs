@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use chrono::Utc;
@@ -11,16 +12,19 @@ use crate::base::constants::{
     CONFIGMAP_FAMILY_LABEL, CONFIGMAP_TABSDATA_MANIFEST, KPROFILE_CONFIGS_FAMILY,
     SCHEMA_SOURCE_EXTENSION,
 };
+use crate::base::error::profile::ProfileError;
 use crate::base::error::upgrade::UpgradeError;
 use crate::base::naming::name_from_kube_resource_name;
 use crate::base::reporter::Reporter;
-use crate::client::registry::{instance_edit_folder, instance_init_folder};
+use crate::client::registry::{InstanceSettings, instance_edit_folder, instance_init_folder};
 use crate::core::system::exit::CommandResult;
 use crate::kube::api::domain::labels::LabelFilter;
 use crate::kube::api::entity::configmap::replace_configmap_at_version;
 use crate::kube::api::entity::{configmap as configmap_api, secret as secret_api};
 use crate::kube::context::KubeContext;
+use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues};
 use crate::runtime::instance::manifest::{MANIFEST_FILE, Manifest, serialize_manifest};
+use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::profile::bundle::Axis;
 use crate::runtime::instance::upgrade::apply::{Applied, apply_foreign_assets, apply_step};
 use crate::runtime::instance::upgrade::catalog::{load_spec, resolve_kupgrade_path};
@@ -88,6 +92,11 @@ pub async fn upgrade_resources(
         total.applied += walked.applied;
         total.retained += walked.retained;
     }
+    if let Some(last) = hops.last() {
+        let mut system = provider.system_values()?;
+        apply_ports(&mut system, &InstanceSettings::load(instance)?.ports);
+        total.applied += materialize_configs(context, &system, &last.to).await?;
+    }
     Ok(total)
 }
 
@@ -142,6 +151,54 @@ pub async fn walk(
     read.manifest.settle(&hop.to, Utc::now());
     commit(context, instance, &read, &hop.to).await?;
     Ok(walked)
+}
+
+async fn materialize_configs(
+    context: &KubeContext,
+    system: &SystemValues,
+    version: &str,
+) -> CommandResult<usize> {
+    let family = &KPROFILE_CONFIGS_FAMILY;
+    let filter = LabelFilter::new(CONFIGMAP_FAMILY_LABEL, family.kind);
+    let resolver = ConfigurationResolver::new(system.clone());
+    let mut materialized = 0;
+    for (name, entries) in configmap_api::get_configmaps(context, Some(filter)).await? {
+        let Some(data) = materialized_entries(&resolver, &name, entries)? else {
+            continue;
+        };
+        configmap_api::upsert_configmap(
+            context,
+            &name,
+            data,
+            BTreeMap::new(),
+            BTreeMap::new(),
+            None,
+            Some(family.kind),
+            Some(version),
+        )
+        .await?;
+        materialized += 1;
+        info!("  {name} -> system placeholders materialized");
+    }
+    Ok(materialized)
+}
+
+fn materialized_entries(
+    resolver: &ConfigurationResolver,
+    name: &str,
+    entries: Vec<(String, Vec<u8>)>,
+) -> CommandResult<Option<BTreeMap<String, String>>> {
+    let mut data = BTreeMap::new();
+    let mut changed = false;
+    for (file, bytes) in entries {
+        let content = String::from_utf8(bytes).map_err(|error| {
+            ProfileError::ConfigmapEntryNotUtf8(name.to_owned(), file.clone(), error.to_string())
+        })?;
+        let resolved = resolver.materialize_system(&content)?;
+        changed |= resolved != content;
+        data.insert(file, resolved);
+    }
+    Ok(changed.then_some(data))
 }
 
 async fn purge_staged_schemas(
@@ -219,3 +276,6 @@ async fn commit(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
