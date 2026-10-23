@@ -53,7 +53,7 @@ fastparquet==2026.9.0
 filelock==3.32.7
 frozenlist==1.8.0
 fsspec==2026.9.0
-google-api-core==2.42.0
+google-api-core==2.43.0
 google-auth==2.62.0
 google-cloud-bigquery==3.46.2
 google-cloud-compute==1.56.0
@@ -64,9 +64,9 @@ google-cloud-storage==3.17.1
 google-cloud-storage-control==1.16.0
 google-crc32c==1.9.0
 google-resumable-media==2.11.0
-googleapis-common-protos==1.75.5
+googleapis-common-protos==1.76.0
 greenlet==3.5.6 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
-grpc-google-iam-v1==0.14.5
+grpc-google-iam-v1==0.14.6
 grpcio==1.84.1
 grpcio-status==1.84.1
 grpcio-tools==1.84.1
