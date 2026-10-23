@@ -45,6 +45,8 @@
   hmac-access-key$: GCS__HMAC_ACCESS_KEY
   hmac-secret-key$: GCS__HMAC_SECRET_KEY
   sys-path$: GCS__SYS_PATH
+- name: gcslocal
+  type: gcslocal
 - name: mongodb
   type: mongodb
 - name: mssqlserver

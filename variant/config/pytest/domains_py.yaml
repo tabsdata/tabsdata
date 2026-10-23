@@ -58,6 +58,12 @@
   sys: gcs
   model: world
   size: 200
+- name: gcslocal
+  sys: gcslocal
+- name: gcslocal_world_xs
+  sys: gcslocal
+  model: world
+  size: 200
 - name: mongodb
   sys: mongodb
 - name: mssqlserver
