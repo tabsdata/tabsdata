@@ -84,3 +84,7 @@
   warehouse$: SNOWFLAKE__WAREHOUSE
 - name: starrocks
   type: starrocks
+- name: typesafe
+  type: typesafe
+  api-key$: TYPESAFE__API_KEY
+  api-key-name$: TYPESAFE__API_KEY_NAME
