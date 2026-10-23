@@ -3,18 +3,23 @@
 //
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use chrono::Utc;
 use indoc::formatdoc;
 use k8s_openapi::api::batch::v1::{CronJob, Job, JobCondition, JobStatus};
 use k8s_openapi::api::core::v1::{Pod, PodCondition, PodStatus};
 use kube::runtime::wait::Condition;
+use strum::IntoEnumIterator;
+use tm_workspace::workspace_root;
 
+use super::*;
+use crate::client::session::pod::{
+    POD_NAME_ENV, POD_NAMESPACE_ENV, POD_SERVICE_ACCOUNT_ENV, POD_TABSDATA_INSTANCE_ENV,
+};
 use crate::runtime::instance::manifest::Manifest;
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::tier::Tier;
-
-use super::*;
 
 fn job_with_conditions(conditions: &[(&str, &str)]) -> Job {
     let conditions = conditions
@@ -517,4 +522,99 @@ fn a_quoted_aiagent_label_is_not_a_boolean() {
 #[cfg(feature = "enterprise")]
 fn unparseable_yaml_leaves_a_workload_unconditional() {
     assert!(!wants_ai_keys("this: [is: not: valid"));
+}
+
+const CONFIG_FILE_ARGUMENT: &str = "--config-file";
+
+fn shipped_job(component: &str, provider: &str) -> Job {
+    let path = PathBuf::from(workspace_root!())
+        .join("variant/resources/kprofile/pods")
+        .join(format!("{component}_{provider}.yaml"));
+    let yaml = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("{} is readable: {error}", path.display()));
+    serde_yaml::from_str(&yaml)
+        .unwrap_or_else(|error| panic!("{} is a job: {error}", path.display()))
+}
+
+fn pod_spec(job: &Job) -> &k8s_openapi::api::core::v1::PodSpec {
+    job.spec
+        .as_ref()
+        .and_then(|spec| spec.template.spec.as_ref())
+        .expect("the job has a pod template")
+}
+
+fn config_files(job: &Job) -> Vec<String> {
+    let arguments = pod_spec(job).containers[0].args.clone().unwrap_or_default();
+    arguments
+        .windows(2)
+        .filter(|pair| pair[0] == CONFIG_FILE_ARGUMENT)
+        .map(|pair| {
+            pair[1]
+                .rsplit('/')
+                .next()
+                .expect("a path has a file name")
+                .to_owned()
+        })
+        .collect()
+}
+
+fn mounted_configmaps(job: &Job) -> Vec<String> {
+    pod_spec(job)
+        .volumes
+        .iter()
+        .flatten()
+        .filter_map(|volume| volume.projected.as_ref())
+        .flat_map(|projected| projected.sources.iter().flatten())
+        .filter_map(|source| source.config_map.as_ref())
+        .map(|configmap| configmap.name.clone())
+        .collect()
+}
+
+fn environment_names(job: &Job) -> Vec<String> {
+    pod_spec(job).containers[0]
+        .env
+        .iter()
+        .flatten()
+        .map(|variable| variable.name.clone())
+        .collect()
+}
+
+#[test]
+fn every_shipped_tdmanager_pod_reads_the_database_configuration_the_dbmanager_pod_reads() {
+    for provider in ClusterProvider::iter().map(ClusterProvider::as_str) {
+        let dbmanager = shipped_job(DBMANAGER_COMPONENT, provider);
+        let tdmanager = shipped_job(TDMANAGER_COMPONENT, provider);
+        let files = config_files(&tdmanager);
+        let configmaps = mounted_configmaps(&tdmanager);
+        for file in config_files(&dbmanager) {
+            assert!(
+                files.contains(&file),
+                "tdmanager on {provider} is not given {file}: {files:?}"
+            );
+            assert!(
+                configmaps
+                    .iter()
+                    .any(|configmap| configmap.ends_with(&format!("-{file}"))),
+                "tdmanager on {provider} does not mount {file}: {configmaps:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn every_shipped_tdmanager_pod_sets_the_environment_of_its_pod_context() {
+    for provider in ClusterProvider::iter().map(ClusterProvider::as_str) {
+        let names = environment_names(&shipped_job(TDMANAGER_COMPONENT, provider));
+        for variable in [
+            POD_NAME_ENV,
+            POD_NAMESPACE_ENV,
+            POD_SERVICE_ACCOUNT_ENV,
+            POD_TABSDATA_INSTANCE_ENV,
+        ] {
+            assert!(
+                names.iter().any(|name| name == variable),
+                "tdmanager on {provider} does not set {variable}: {names:?}"
+            );
+        }
+    }
 }

@@ -110,6 +110,8 @@ spec:
         - ${{system:tdk_tdmanager_rules}}
         - --config-file
         - /tabsdata/config/apiserver.database.yaml
+        - --config-file
+        - /tabsdata/config/dbmanager.database.yaml
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -125,6 +127,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        - name: POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName
         - name: POD_TABSDATA_INSTANCE
           value: "${{system:tdk_instance_name}}"
         - name: TD_LOG_CONFIG
@@ -160,6 +166,8 @@ spec:
           sources:
           - configMap:
               name: td-app-apiserver-config-apiserver.database.yaml
+          - configMap:
+              name: td-app-dbmanager-config-dbmanager.database.yaml
           - configMap:
               name: td-app-apiserver-config-apiserver.storage.yaml
           - configMap:
