@@ -291,8 +291,8 @@ script = [
     info "📄 Using systems manifest: ${manifest}"
     info "🛠️ Creating backend systems..."
     tdd = tdd_exe
-    debug "🚀 ${tdd} system create --manifest ${manifest} --force"
-    exec --fail-on-error ${tdd} system create --manifest ${manifest} --force
+    debug "🚀 ${tdd} system create --manifest ${manifest} --force --brief"
+    exec --fail-on-error ${tdd} system create --manifest ${manifest} --force --brief
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -478,8 +478,8 @@ script = [
     info "📄 Using domains manifest: ${manifest}"
     info "🛠️ Creating backend domains..."
     tdd = tdd_exe
-    debug "🚀 ${tdd} domain create --manifest ${manifest} --force"
-    exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force
+    debug "🚀 ${tdd} domain create --manifest ${manifest} --force --brief"
+    exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force --brief
 
     cm_run_task __os__reset_venv_env
     ''']
@@ -509,8 +509,8 @@ script = [
     info "📄 Using domains manifest: ${manifest}"
     info "🛠️ Creating backend domains..."
     tdd = tdd_exe
-    debug "🚀 ${tdd} domain create --manifest ${manifest} --force"
-    exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force
+    debug "🚀 ${tdd} domain create --manifest ${manifest} --force --brief"
+    exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force --brief
 
     cm_run_task __os__reset_venv_env
 
@@ -570,8 +570,8 @@ script = [
     info "📄 Using domains manifest: ${manifest}"
     info "🛠️ Creating backend domains..."
     tdd = tdd_exe
-    debug "🚀 ${tdd} domain create --manifest ${manifest} --force"
-    exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force
+    debug "🚀 ${tdd} domain create --manifest ${manifest} --force --brief"
+    exec --fail-on-error ${tdd} domain create --manifest ${manifest} --force --brief
 
     cm_run_task __os__reset_venv_env
 
