@@ -200,13 +200,13 @@ impl GcsDomain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::tdd::{self, Descriptor};
-    use crate::domain::{Attrs, Backend, Role};
+    use crate::domain::{Attrs, Backend, Role, parse_descriptor};
+    use td_tdd::Descriptor;
 
     const SERVICE_ACCOUNT_JSON: &str = r#"{"type": "service_account"}"#;
 
     fn landing() -> Descriptor {
-        tdd::parse(
+        parse_descriptor(
             r#"
             {
                 "role": "domain",
@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn test_build_system_from_descriptor() {
-        let system = tdd::parse(
+        let system = parse_descriptor(
             r#"
             {
                 "role": "system",

@@ -11,9 +11,9 @@
 //! callers that need the schema applied call [`TestDb::upgrade`].
 //!
 //! Nothing here starts a server. This crate's own internal factories take the
-//! superuser connect from the tdx domain in [`domain`]; the
+//! superuser connect from the tdd domain in [`domain`]; the
 //! [`postgres::pools`] path the `#[td_test::test(db)]` macro uses takes its
-//! connect from the caller, which points it at another tdx-provisioned
+//! connect from the caller, which points it at another tdd-provisioned
 //! domain's database.
 
 use crate::components::{AdminPool, ApiserverComponent};

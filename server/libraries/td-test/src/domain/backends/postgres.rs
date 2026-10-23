@@ -188,13 +188,13 @@ impl PostgresDomain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::tdd::{self, Descriptor};
-    use crate::domain::{Attrs, Backend, Role};
+    use crate::domain::{Attrs, Backend, Role, parse_descriptor};
+    use td_tdd::Descriptor;
 
     const PASSWORD: &str = "AbcdefghIJKL0123mnop";
 
     fn system() -> Descriptor {
-        tdd::parse(
+        parse_descriptor(
             r#"
             {
                 "role": "system",
@@ -215,7 +215,7 @@ mod tests {
     }
 
     fn landing() -> Descriptor {
-        tdd::parse(
+        parse_descriptor(
             r#"
             {
                 "role": "domain",

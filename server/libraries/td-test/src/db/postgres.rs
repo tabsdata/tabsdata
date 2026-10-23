@@ -85,9 +85,9 @@ mod tests {
 
     #[test]
     fn test_admin_connect_targets_the_domain_database_as_the_superuser() {
-        use crate::domain::{Attrs, Backend, tdd};
+        use crate::domain::{Attrs, Backend, parse_descriptor};
 
-        let domain = PostgresDomain::build(&Attrs::of(&tdd::parse(
+        let domain = PostgresDomain::build(&Attrs::of(&parse_descriptor(
             r#"
             {
                 "role": "domain",

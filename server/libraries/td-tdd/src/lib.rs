@@ -2,11 +2,11 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-//! The tdd services the backend fixtures read: a backend's descriptor and the
-//! store's names, each from tdd's JSON events.
+//! The tdd services test backends read: a backend's descriptor and the store's
+//! names, each from tdd's JSON events.
 //!
-//! Only tdd knows the descriptors; the fixtures never open the store. `tdd-exe`
-//! is found the way cargo make and the Python fixtures find it (`$TDD_DIR`, else
+//! Only tdd knows the descriptors; tests never open the store. `tdd-exe` is
+//! found the way cargo make and the Python fixtures find it (`$TDD_DIR`, else
 //! `~/.tdd`) and reads its key from `$_TDD_CRYPTO_KEY`; `$TDD_SYSTEM_DIR` /
 //! `$TDD_DOMAIN_DIR` point it at another store.
 
@@ -17,7 +17,32 @@ use std::process::Command;
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::Role;
+/// Which family of the tdd store a backend belongs to. `system_orders` and
+/// `domain_orders` are distinct backends that happen to share a name, so every
+/// lookup is keyed by the pair.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    System,
+    Domain,
+}
+
+impl Role {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Role::System => "system",
+            Role::Domain => "domain",
+        }
+    }
+
+    /// tdd's store dir for this family, when not its default one.
+    pub fn store_env(self) -> &'static str {
+        match self {
+            Role::System => "TDD_SYSTEM_DIR",
+            Role::Domain => "TDD_DOMAIN_DIR",
+        }
+    }
+}
 
 pub const ENV_TDD_DIR: &str = "TDD_DIR";
 pub const ENV_CRYPTO_KEY: &str = "_TDD_CRYPTO_KEY";
@@ -173,15 +198,21 @@ pub fn descriptor(role: Role, name: &str) -> Result<Descriptor, String> {
     }
 }
 
-/// A descriptor written out as the JSON `tdd ... info` prints, for tests.
-#[cfg(test)]
-pub(crate) fn parse(json: &str) -> Descriptor {
-    serde_json::from_str(json).expect("a descriptor in tdd's JSON shape")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parse(json: &str) -> Descriptor {
+        serde_json::from_str(json).expect("a descriptor in tdd's JSON shape")
+    }
+
+    #[test]
+    fn test_role_names() {
+        assert_eq!(Role::System.as_str(), "system");
+        assert_eq!(Role::Domain.as_str(), "domain");
+        assert_eq!(Role::System.store_env(), "TDD_SYSTEM_DIR");
+        assert_eq!(Role::Domain.store_env(), "TDD_DOMAIN_DIR");
+    }
 
     #[test]
     fn test_expand_user() {

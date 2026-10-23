@@ -59,6 +59,7 @@ members = [
     "server/libraries/td-storage",
     "server/libraries/td-supervisor",
     "server/libraries/td-tableframe",
+    "server/libraries/td-tdd",
     "server/libraries/td-test",
     "extensions/rust/te-apiserver",
     "extensions/rust/te-authz",
@@ -270,6 +271,9 @@ path = "server/libraries/td-supervisor"
 
 [workspace.dependencies.td-tableframe]
 path = "server/libraries/td-tableframe"
+
+[workspace.dependencies.td-tdd]
+path = "server/libraries/td-tdd"
 
 [workspace.dependencies.td-test]
 path = "server/libraries/td-test"

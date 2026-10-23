@@ -133,15 +133,15 @@ impl FsDomain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::tdd::{self, Descriptor};
-    use crate::domain::{Attrs, Backend, Role};
+    use crate::domain::{Attrs, Backend, Role, parse_descriptor};
     use object_store::ObjectStoreExt;
+    use td_tdd::Descriptor;
 
     const ROOT: &str = "/srv/tdd/backends/fs";
     const BASE: &str = "/srv/tdd/backends/fs/d_tucu_0_landing";
 
     fn landing() -> Descriptor {
-        tdd::parse(
+        parse_descriptor(
             r#"
             {
                 "role": "domain",
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_build_system_from_descriptor() {
-        let system = tdd::parse(
+        let system = parse_descriptor(
             r#"
             {
                 "role": "system",

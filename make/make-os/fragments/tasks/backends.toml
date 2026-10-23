@@ -45,39 +45,8 @@ script = [
     on_ga_true = eq ${on_ga} "true"
     skip_load = set ${skip_secrets_load_true} or ${on_ga_true}
     if ${skip_load}
-        info "🔑 Skipping the 1Password load; assuming TD_BACKENDS_CRYPTO_KEY and _TDD_CRYPTO_KEY are already provided"
+        info "🔑 Skipping the 1Password load; assuming _TDD_CRYPTO_KEY is already provided"
         exit 0
-    end
-
-    crypto_key = get_env TD_BACKENDS_CRYPTO_KEY
-    crypto_key = trim ${crypto_key}
-    if is_empty ${crypto_key}
-        vault = get_env ONE_PASSWORD_EMPLOYEE_VAULT
-        vault = trim ${vault}
-        if is_empty ${vault}
-            vault = set "Employee"
-        end
-
-        info "🔑 Loading personal development secrets from 1Password vault '${vault}'..."
-        debug "🚀 op read op://${vault}/DevSecrets/TD_BACKENDS_CRYPTO_KEY"
-        output = exec op read op://${vault}/DevSecrets/TD_BACKENDS_CRYPTO_KEY
-        if not eq ${output.code} "0"
-            error "🚫 Could not read TD_BACKENDS_CRYPTO_KEY from item 'DevSecrets' in 1Password vault '${vault}' (exit code ${output.code})."
-            error "\n${output.stderr}"
-            assert_fail
-        end
-        crypto_key = trim ${output.stdout}
-        set_env TD_BACKENDS_CRYPTO_KEY ${crypto_key}
-        info "🔑 Loaded personal development secrets"
-    else
-        debug "🔑 TD_BACKENDS_CRYPTO_KEY already set; keeping the current value"
-    end
-
-    crypto_key_size = length ${crypto_key}
-    crypto_key_short = less_than ${crypto_key_size} 12
-    if ${crypto_key_short}
-        error "🚫 TD_BACKENDS_CRYPTO_KEY must be at least 12 characters long (got ${crypto_key_size})."
-        assert_fail
     end
 
     tdd_crypto_key = get_env _TDD_CRYPTO_KEY

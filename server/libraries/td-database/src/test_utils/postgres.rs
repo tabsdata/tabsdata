@@ -4,7 +4,7 @@
 
 //! Postgres test database factories.
 //!
-//! Every test isolates on its **own uniquely-named schema** of a tdx-provisioned
+//! Every test isolates on its **own uniquely-named schema** of a tdd-provisioned
 //! domain's database. The schema is **superuser-owned** and the only role is the
 //! cluster-global `td_app` (created once); the per-test path therefore touches no
 //! cluster-global catalog (`pg_database`/`pg_authid`) — it is all schema-local DDL,
@@ -16,7 +16,7 @@
 //! - [`pools`] — the `#[td_test::test(db)]` macro path: one schema + serving pool
 //!   per requested component, brought to its current version. The caller supplies
 //!   the superuser connect, so the schemas land on whichever server it names — a
-//!   tdx-provisioned domain's database for the apiserver-logic tests; nothing
+//!   tdd-provisioned domain's database for the apiserver-logic tests; nothing
 //!   here starts a server.
 //! - [`pool`] — td-database's own `components`/RLS tests: one schema (left un-upgraded;
 //!   the caller applies it via [`TestDb::upgrade`]) plus the privileged handle and

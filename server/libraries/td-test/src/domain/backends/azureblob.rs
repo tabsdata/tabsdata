@@ -155,15 +155,15 @@ impl AzureblobDomain {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::tdd::{self, Descriptor};
-    use crate::domain::{Attrs, Backend, Role};
+    use crate::domain::{Attrs, Backend, Role, parse_descriptor};
+    use td_tdd::Descriptor;
 
     /// `object_store` base64-decodes the shared key, so a fixture value that is
     /// not base64 fails to build a store at all.
     const ACCOUNT_KEY: &str = "YWNjb3VudC1rZXk=";
 
     fn landing() -> Descriptor {
-        tdd::parse(
+        parse_descriptor(
             r#"
             {
                 "role": "domain",
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn test_build_system_from_descriptor() {
-        let system = tdd::parse(
+        let system = parse_descriptor(
             r#"
             {
                 "role": "system",

@@ -81,11 +81,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::{Arc, LazyLock, Mutex};
 
-use serde::Deserialize;
+use td_tdd as tdd;
+use td_tdd::Role;
 
 pub mod backends;
 mod define;
-pub mod tdd;
 
 pub use backends::{
     AzureblobDomain, AzureblobSystem, FsDomain, FsSystem, GcsDomain, GcsSystem, PostgresDomain,
@@ -103,46 +103,19 @@ const KEY_EXTERNAL_NAME: &str = "EXTERNAL_NAME";
 const KEY_SYS_NAME: &str = "SYS_NAME";
 const ENV_KEY_SEPARATOR: &str = "__";
 
-/// Which family a backend struct belongs to. `system_orders` and
-/// `domain_orders` are distinct backends that happen to share a name, so every
-/// lookup is keyed by the pair.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Role {
-    System,
-    Domain,
+/// `skip` | `fail` (default `fail`) when a backend of `role` cannot be reached.
+fn on_missing_env(role: Role) -> &'static str {
+    match role {
+        Role::System => "TD_TEST_ON_MISSING_SYSTEM",
+        Role::Domain => "TD_TEST_ON_MISSING_DOMAIN",
+    }
 }
 
-impl Role {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Role::System => "system",
-            Role::Domain => "domain",
-        }
-    }
-
-    /// `skip` | `fail` (default `fail`) when the backend cannot be reached.
-    pub fn on_missing_env(self) -> &'static str {
-        match self {
-            Role::System => "TD_TEST_ON_MISSING_SYSTEM",
-            Role::Domain => "TD_TEST_ON_MISSING_DOMAIN",
-        }
-    }
-
-    /// Comma-separated backend `name`s to skip even when present.
-    pub fn skip_env(self) -> &'static str {
-        match self {
-            Role::System => "TD_TEST_SKIP_SYSTEMS",
-            Role::Domain => "TD_TEST_SKIP_DOMAINS",
-        }
-    }
-
-    /// tdd's store dir for this family, when not its default one.
-    pub fn store_env(self) -> &'static str {
-        match self {
-            Role::System => "TDD_SYSTEM_DIR",
-            Role::Domain => "TDD_DOMAIN_DIR",
-        }
+/// Comma-separated backend `name`s of `role` to skip even when present.
+fn skip_env(role: Role) -> &'static str {
+    match role {
+        Role::System => "TD_TEST_SKIP_SYSTEMS",
+        Role::Domain => "TD_TEST_SKIP_DOMAINS",
     }
 }
 
@@ -342,7 +315,7 @@ enum Unavailable {
 }
 
 fn on_missing_is_skip(role: Role) -> Result<bool, String> {
-    let env = role.on_missing_env();
+    let env = on_missing_env(role);
     match std::env::var(env).unwrap_or_default().trim().to_lowercase() {
         s if s.is_empty() || s == "fail" => Ok(false),
         s if s == "skip" => Ok(true),
@@ -362,17 +335,17 @@ fn unreachable(role: Role, reason: &str, remedy: &str) -> Unavailable {
         Err(msg) => Unavailable::Fail(msg),
         Ok(true) => Unavailable::Skip(format!(
             "{reason}, so this test is skipped (${}=skip)",
-            role.on_missing_env()
+            on_missing_env(role)
         )),
         Ok(false) => Unavailable::Fail(format!(
             "{reason}. {remedy}, or set ${}=skip to skip instead of fail.",
-            role.on_missing_env()
+            on_missing_env(role)
         )),
     }
 }
 
 fn is_skipped_by_name(role: Role, name: &str) -> bool {
-    std::env::var(role.skip_env())
+    std::env::var(skip_env(role))
         .unwrap_or_default()
         .split(',')
         .any(|listed| listed.trim() == name && !name.is_empty())
@@ -387,7 +360,7 @@ fn resolve<B: Backend>(name: &str) -> Result<B, Unavailable> {
     if is_skipped_by_name(role, name) {
         return Err(Unavailable::Skip(format!(
             "requested {kind} '{name}' is listed in ${}, so this test is skipped",
-            role.skip_env()
+            skip_env(role)
         )));
     }
 
@@ -535,6 +508,12 @@ fn resolve_or_skip<B: Backend>(store_name: &str, test_name: &str) -> Option<B> {
     }
 }
 
+/// A descriptor written out as the JSON `tdd ... info` prints, for tests.
+#[cfg(test)]
+pub(crate) fn parse_descriptor(json: &str) -> tdd::Descriptor {
+    serde_json::from_str(json).expect("a descriptor in tdd's JSON shape")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -542,7 +521,7 @@ mod tests {
     use std::process::Command;
 
     fn domain() -> tdd::Descriptor {
-        tdd::parse(
+        parse_descriptor(
             r#"
             {
                 "role": "domain",
@@ -579,7 +558,7 @@ mod tests {
 
     #[test]
     fn test_attrs_of_system_has_no_domain_keys() {
-        let attrs = Attrs::of(&tdd::parse(
+        let attrs = Attrs::of(&parse_descriptor(
             r#"
             {
                 "role": "system",
@@ -694,15 +673,15 @@ mod tests {
     fn test_role_envs() {
         assert_eq!(Role::System.as_str(), "system");
         assert_eq!(Role::Domain.as_str(), "domain");
-        assert_eq!(Role::System.on_missing_env(), "TD_TEST_ON_MISSING_SYSTEM");
-        assert_eq!(Role::Domain.on_missing_env(), "TD_TEST_ON_MISSING_DOMAIN");
-        assert_eq!(Role::System.skip_env(), "TD_TEST_SKIP_SYSTEMS");
-        assert_eq!(Role::Domain.skip_env(), "TD_TEST_SKIP_DOMAINS");
+        assert_eq!(on_missing_env(Role::System), "TD_TEST_ON_MISSING_SYSTEM");
+        assert_eq!(on_missing_env(Role::Domain), "TD_TEST_ON_MISSING_DOMAIN");
+        assert_eq!(skip_env(Role::System), "TD_TEST_SKIP_SYSTEMS");
+        assert_eq!(skip_env(Role::Domain), "TD_TEST_SKIP_DOMAINS");
     }
 
     #[test]
     fn test_on_missing_policy() {
-        let env = Role::Domain.on_missing_env();
+        let env = on_missing_env(Role::Domain);
         temp_env::with_var_unset(env, || {
             assert!(!on_missing_is_skip(Role::Domain).unwrap());
         });
@@ -722,7 +701,7 @@ mod tests {
     /// missing the descriptor or only the key to open it.
     #[test]
     fn test_unreachable_follows_the_policy() {
-        let env = Role::Domain.on_missing_env();
+        let env = on_missing_env(Role::Domain);
         temp_env::with_var(env, Some("skip"), || {
             let reason = matches!(
                 unreachable(Role::Domain, "no descriptor", "Create it"),
@@ -790,7 +769,7 @@ mod tests {
                 (Role::System.store_env(), Some(path_str(&store.0))),
                 (Role::Domain.store_env(), Some(path_str(&store.1))),
                 (tdd::ENV_CRYPTO_KEY, Some(FAKE_KEY)),
-                (Role::Domain.on_missing_env(), None),
+                (on_missing_env(Role::Domain), None),
             ],
             f,
         )
@@ -844,10 +823,10 @@ mod tests {
                 panic!("expected a failure");
             };
             assert!(msg.contains("not in the tdd store"), "got: {msg}");
-            assert!(msg.contains(Role::Domain.on_missing_env()), "got: {msg}");
+            assert!(msg.contains(on_missing_env(Role::Domain)), "got: {msg}");
         });
         with_store(&store, || {
-            temp_env::with_var(Role::Domain.on_missing_env(), Some("skip"), || {
+            temp_env::with_var(on_missing_env(Role::Domain), Some("skip"), || {
                 assert!(matches!(
                     resolve::<S3Domain>("absent"),
                     Err(Unavailable::Skip(_))
@@ -862,7 +841,7 @@ mod tests {
         temp_env::with_vars(
             [
                 (tdd::ENV_CRYPTO_KEY, None),
-                (Role::Domain.on_missing_env(), Some("skip")),
+                (on_missing_env(Role::Domain), Some("skip")),
             ],
             || {
                 let Err(Unavailable::Skip(msg)) = resolve::<S3Domain>("zz_probe_nokey") else {
@@ -871,7 +850,7 @@ mod tests {
                 assert!(msg.contains(tdd::ENV_CRYPTO_KEY), "got: {msg}");
             },
         );
-        temp_env::with_vars_unset([tdd::ENV_CRYPTO_KEY, Role::Domain.on_missing_env()], || {
+        temp_env::with_vars_unset([tdd::ENV_CRYPTO_KEY, on_missing_env(Role::Domain)], || {
             assert!(matches!(
                 resolve::<S3Domain>("zz_probe_nokey"),
                 Err(Unavailable::Fail(_))
@@ -899,7 +878,7 @@ mod tests {
 
     #[test]
     fn test_skip_by_name() {
-        let env = Role::Domain.skip_env();
+        let env = skip_env(Role::Domain);
         temp_env::with_var_unset(env, || {
             assert!(!is_skipped_by_name(Role::Domain, "landing"));
         });
@@ -937,8 +916,8 @@ mod attribute_tests {
                     super::tdd::ENV_CRYPTO_KEY,
                     Some("a-test-secret-long-enough"),
                 ),
-                (super::Role::Domain.on_missing_env(), Some("skip")),
-                (super::Role::System.on_missing_env(), Some("skip")),
+                (super::on_missing_env(super::Role::Domain), Some("skip")),
+                (super::on_missing_env(super::Role::System), Some("skip")),
             ],
             f,
         )

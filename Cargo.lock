@@ -10304,7 +10304,9 @@ dependencies = [
  "td-error",
  "td-schema",
  "td-security",
+ "td-tdd",
  "te-system",
+ "temp-env",
  "thiserror 2.0.21",
  "tokio",
  "tracing",
@@ -10785,17 +10787,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "td-test"
+name = "td-tdd"
 version = "2.3.0"
 dependencies = [
  "homedir",
- "object_store 0.14.2",
  "serde",
+ "serde_json",
+ "td-build",
+ "td-common",
+ "temp-env",
+]
+
+[[package]]
+name = "td-test"
+version = "2.3.0"
+dependencies = [
+ "object_store 0.14.2",
  "serde_json",
  "td-build",
  "td-common",
  "td-database",
  "td-schema",
+ "td-tdd",
  "td-test",
  "temp-env",
  "tm-test",
