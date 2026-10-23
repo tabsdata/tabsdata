@@ -2,9 +2,14 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::path::PathBuf;
+
 use indoc::indoc;
+use strum::IntoEnumIterator;
+use tm_workspace::workspace_root;
 
 use super::*;
+use crate::runtime::provider::ClusterProvider;
 
 #[test]
 fn an_empty_document_yields_no_pods_global_envs() {
@@ -139,13 +144,14 @@ fn a_file_holding_only_a_comment_yields_no_envs() {
 
 #[test]
 fn shipped_configs_parse() {
-    for provider in ["kminus", "docker", "eks", "fargate"] {
-        let path = format!(
-            "{}/../../../variant/resources/kprofile/configs/tabsdata_{provider}.yaml",
-            env!("CARGO_MANIFEST_DIR")
-        );
-        let yaml = std::fs::read_to_string(&path).expect(&path);
-        let config = TabsdataConfig::parse(&yaml).expect(&path);
+    for provider in ClusterProvider::iter().map(ClusterProvider::as_str) {
+        let path = PathBuf::from(workspace_root!()).join(format!(
+            "variant/resources/kprofile/configs/tabsdata_{provider}.yaml"
+        ));
+        let yaml = std::fs::read_to_string(&path)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+        let config = TabsdataConfig::parse(&yaml)
+            .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
 
         assert!(
             !config.pods.function.resources.is_empty(),

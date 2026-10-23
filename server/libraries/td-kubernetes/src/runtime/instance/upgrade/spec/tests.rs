@@ -2,6 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::path::PathBuf;
+
+use tm_workspace::workspace_root;
+
 use super::*;
 
 const SAMPLE: &str = "\
@@ -262,11 +266,10 @@ configs:
 
 #[test]
 fn the_shipped_specs_parse() {
-    let folder = format!(
-        "{}/../../../variant/resources/kupgrade/upgrades",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    for entry in std::fs::read_dir(&folder).expect(&folder) {
+    let folder = PathBuf::from(workspace_root!()).join("variant/resources/kupgrade/upgrades");
+    for entry in
+        std::fs::read_dir(&folder).unwrap_or_else(|error| panic!("{}: {error}", folder.display()))
+    {
         let path = entry.expect("entry").path();
         if path.extension().is_none_or(|suffix| suffix != "yaml") {
             continue;

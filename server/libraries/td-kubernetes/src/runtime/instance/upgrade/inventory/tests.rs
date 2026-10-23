@@ -2,7 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::path::PathBuf;
+
 use indoc::indoc;
+use tm_workspace::workspace_root;
 
 use super::*;
 
@@ -259,11 +262,11 @@ fn pep440_versions_order_as_python_does() {
 
 #[test]
 fn the_shipped_inventory_is_valid() {
-    let path = format!(
-        "{}/../../../variant/resources/kupgrade/{INVENTORY_FILE}",
-        env!("CARGO_MANIFEST_DIR")
-    );
-    let yaml = std::fs::read_to_string(&path).expect(&path);
+    let path = PathBuf::from(workspace_root!())
+        .join("variant/resources/kupgrade")
+        .join(INVENTORY_FILE);
+    let yaml = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
     let inventory = deserialize_inventory(&yaml).expect("the shipped inventory must be valid");
     assert_eq!(inventory.floor(), "2.0.0");
 }

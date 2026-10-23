@@ -2,7 +2,10 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::path::PathBuf;
+
 use indoc::indoc;
+use tm_workspace::workspace_root;
 
 use super::*;
 use crate::base::constants::{
@@ -766,7 +769,7 @@ fn the_shipped_ttl_bump_rewrites_the_previous_retention() {
     let spec = crate::runtime::instance::upgrade::spec::deserialize_spec(
         "2.0.2",
         include_str!(concat!(
-            tm_workspace::workspace_root!(),
+            workspace_root!(),
             "/variant/resources/kupgrade/upgrades/2.0.2.yaml"
         )),
     )
@@ -910,9 +913,7 @@ fn an_empty_block_nests_nothing() {
 }
 
 fn shipped(relative: &str) -> String {
-    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../..")
-        .join(relative);
+    let path = PathBuf::from(workspace_root!()).join(relative);
     std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
 }
 
@@ -927,22 +928,46 @@ fn parsed(yaml: &str) -> serde_yaml::Value {
     serde_yaml::from_str(yaml).expect("parses")
 }
 
-/// The 2.0.2 shape of `configs/apiserver.database.yaml`, as every variant shipped it.
-const APISERVER_DATABASE_2_0_2: &str = "\
-database:
-  apiserver:
-    postgres:
-      password: ${{secretAuto:postgres_apiserver_password}}
-    pool:
-      min_connections: 5
-      max_connections: 50
-      acquire_timeout: 30
-      max_lifetime: 3600
-      idle_timeout: 60
-      test_before_acquire: true
-";
+#[cfg(not(feature = "enterprise"))]
+const APISERVER_DATABASE_2_0_2: &str = indoc! {"
+    database:
+      apiserver:
+        postgres:
+          password: ${{secretAuto:postgres_apiserver_password}}
+        pool:
+          min_connections: 5
+          max_connections: 50
+          acquire_timeout: 30
+          max_lifetime: 3600
+          idle_timeout: 60
+          test_before_acquire: true
+"};
 
-/// The 2.0.2 shape of `configs/dbmanager.database.yaml`, as the kminus variant shipped it.
+#[cfg(feature = "enterprise")]
+const APISERVER_DATABASE_2_0_2: &str = indoc! {"
+    database:
+      apiserver:
+        postgres:
+          password: ${{secretAuto:postgres_apiserver_password}}
+        pool:
+          min_connections: 5
+          max_connections: 50
+          acquire_timeout: 30
+          max_lifetime: 3600
+          idle_timeout: 60
+          test_before_acquire: true
+      aiagent:
+        postgres:
+          password: ${{secretAuto:postgres_aiagent_password}}
+        pool:
+          min_connections: 1
+          max_connections: 10
+          acquire_timeout: 30
+          max_lifetime: 3600
+          idle_timeout: 60
+          test_before_acquire: true
+"};
+
 const DBMANAGER_DATABASE_2_0_2: &str = "\
 database_server:
   postgres:

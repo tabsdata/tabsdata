@@ -2,21 +2,17 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::path::PathBuf;
+
+use tm_workspace::workspace_root;
+
 use super::*;
 
 const DIVERGED_OUTPUT_VARIABLE: &str = "TD_KUPGRADE_REPLAY_OUTPUT";
 const HEAD_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-fn repository() -> PathBuf {
-    let mut root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    for _ in 0..3 {
-        root.pop();
-    }
-    root
-}
-
 fn sources() -> Sources {
-    Sources::of(&repository())
+    Sources::of(&PathBuf::from(workspace_root!()))
 }
 
 fn report(mismatches: &[Mismatch]) -> String {

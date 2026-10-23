@@ -3,8 +3,10 @@
 //
 
 use std::fs;
+use std::path::PathBuf;
 
 use indoc::{formatdoc, indoc};
+use tm_workspace::workspace_root;
 
 use super::*;
 use crate::runtime::instance::upgrade::rules::RULES_FOLDER;
@@ -79,10 +81,7 @@ fn a_missing_inventory_is_rejected() {
 
 #[test]
 fn the_shipped_catalog_loads() {
-    let root = PathBuf::from(format!(
-        "{}/../../../variant/resources/kupgrade",
-        env!("CARGO_MANIFEST_DIR")
-    ));
+    let root = PathBuf::from(workspace_root!()).join("variant/resources/kupgrade");
     let inventory = load_inventory(&root).expect("the shipped catalog must load");
     assert_eq!(inventory.floor(), "2.0.0");
     for entry in &inventory.versions {
@@ -220,11 +219,7 @@ fn variants_grouped_under_their_stripped_name_are_accepted() {
 
 #[test]
 fn the_shipped_kupgrade_catalog_loads() {
-    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../variant/resources/kupgrade");
-    let Ok(root) = root.canonicalize() else {
-        return;
-    };
+    let root = PathBuf::from(workspace_root!()).join("variant/resources/kupgrade");
     let inventory = load_inventory(&root).expect("the shipped inventory loads");
     for entry in &inventory.versions {
         if entry.upgrader {
@@ -241,11 +236,7 @@ fn the_shipped_kupgrade_catalog_loads() {
 
 #[test]
 fn no_shipped_pod_uses_a_placeholder_as_a_list_item_identity() {
-    let folder = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../variant/resources/kprofile/pods");
-    let Ok(folder) = folder.canonicalize() else {
-        return;
-    };
+    let folder = PathBuf::from(workspace_root!()).join("variant/resources/kprofile/pods");
     for entry in fs::read_dir(&folder).expect("pods folder") {
         let path = entry.expect("entry").path();
         if path.extension().is_none_or(|suffix| suffix != "yaml") {
