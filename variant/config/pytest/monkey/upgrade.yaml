@@ -1,0 +1,111 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+releases:
+  - versions: "==2.0.0"
+    commands:
+      - arguments:
+          - quickstart
+          - --instance
+          - "{instance}"
+          - --provider
+          - kminus
+          - --port
+          - "{port}"
+          - --loglevel
+          - debug
+          - --reqs-td
+          - "{requirements}"
+          - --verbose
+          - --accept-terms
+          - "yes"
+          - --yes
+        environment:
+          UV_INDEX: "{uv_index}"
+  - versions: ">=2.0.1,<2.2.0"
+    commands:
+      - arguments:
+          - quickstart
+          - --instance
+          - "{instance}"
+          - --provider
+          - kminus
+          - --port
+          - "{port}"
+          - --loglevel
+          - debug
+          - --uv-index
+          - "{uv_index}"
+          - --verbose
+          - --accept-terms
+          - "yes"
+          - --yes
+      - arguments:
+          - venv
+          - update
+          - --instance
+          - "{instance}"
+          - --name
+          - fn
+          - --requirements
+          - "{requirements}"
+          - --verbose
+          - --accept-terms
+          - "yes"
+          - --yes
+  - versions: ">=2.2.0,<2.3.0"
+    commands:
+      - arguments:
+          - quickstart
+          - --instance
+          - "{instance}"
+          - --provider
+          - kminus
+          - --port
+          - "{port}"
+          - --loglevel
+          - debug
+          - --uv-index
+          - "{uv_index}"
+          - --config
+          - apiserver.service:jwt.access_token_expiration=31622400
+          - --verbose
+          - --accept-terms
+          - "yes"
+          - --yes
+      - arguments:
+          - venv
+          - update
+          - --instance
+          - "{instance}"
+          - --name
+          - fn
+          - --requirements
+          - "{requirements}"
+          - --verbose
+          - --accept-terms
+          - "yes"
+          - --yes
+  - versions: ">=2.3.0"
+    commands:
+      - arguments:
+          - quickstart
+          - --instance
+          - "{instance}"
+          - --provider
+          - kminus
+          - --port
+          - "{port}"
+          - --loglevel
+          - debug
+          - --requirements
+          - "{requirements}"
+          - --uv-index
+          - "{uv_index}"
+          - --config
+          - apiserver.service:jwt.access_token_expiration=31622400
+          - --verbose
+          - --accept-terms
+          - "yes"
+          - --yes

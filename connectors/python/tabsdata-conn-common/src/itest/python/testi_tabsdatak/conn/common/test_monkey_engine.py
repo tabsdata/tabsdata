@@ -24,6 +24,7 @@ from testi_tabsdatak.conn.common.cluster import (
     DECORATOR,
     FUNCTION_ID,
     FUNCTION_VERSION_ID,
+    LEGACY_FUNCTION_LABEL,
     server_errors_in,
 )
 from testi_tabsdatak.conn.common.monkey import runner
@@ -903,3 +904,38 @@ def test_every_server_error_in_a_log_is_found():
         ("POST", "/api/v1/x1", "500"),
         ("POST", "/api/v1/x2", "503"),
     ]
+
+
+def labelled(name: str, labels: dict[str, str]) -> SimpleNamespace:
+    return SimpleNamespace(metadata=SimpleNamespace(name=name, labels=labels))
+
+
+def test_triggers_of_different_functions_are_told_apart_without_function_ids():
+    items = [
+        labelled(
+            "crn-wkr1",
+            {LEGACY_FUNCTION_LABEL: "crn00", DECORATOR: "cron_publisher"},
+        ),
+        labelled(
+            "crn-wkr7",
+            {LEGACY_FUNCTION_LABEL: "crn01", DECORATOR: "cron_publisher"},
+        ),
+    ]
+    groups = runner.workload_groups(items, set())
+    assert all(len(names) == 1 for names in groups.values())
+
+
+def test_triggers_are_grouped_by_function_id_first():
+    items = [
+        labelled(
+            "crn-wkr1",
+            {
+                FUNCTION_ID: "f1",
+                LEGACY_FUNCTION_LABEL: "crn00",
+                DECORATOR: "cron_publisher",
+            },
+        ),
+        labelled("crn-wkr2", {FUNCTION_ID: "f1", DECORATOR: "cron_publisher"}),
+    ]
+    groups = runner.workload_groups(items, set())
+    assert groups == {("f1", "cron_publisher"): {"crn-wkr1", "crn-wkr2"}}

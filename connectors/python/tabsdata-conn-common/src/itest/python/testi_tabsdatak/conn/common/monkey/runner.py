@@ -61,6 +61,7 @@ from testi_tabsdatak.conn.common.cluster import (
     DECORATOR,
     FUNCTION_ID,
     FUNCTION_VERSION_ID,
+    LEGACY_FUNCTION_LABEL,
     PROJECT_ID,
     WORKER_ID,
     Cluster,
@@ -232,6 +233,21 @@ def labels_of(item) -> dict:
     return item.metadata.labels or {}
 
 
+def function_of(item) -> str:
+    labels = labels_of(item)
+    return labels.get(FUNCTION_ID) or labels.get(LEGACY_FUNCTION_LABEL, "")
+
+
+def workload_groups(items: list, ignored: set[str]) -> dict[tuple[str, str], set[str]]:
+    groups: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for item in items:
+        if item.metadata.name in ignored:
+            continue
+        key = (function_of(item), labels_of(item).get(DECORATOR, ""))
+        groups[key].add(item.metadata.name)
+    return groups
+
+
 class Lane:
     def __init__(self, server: TabsdataServer, namespace: str):
         self.server = server
@@ -276,14 +292,7 @@ class ProjectMonitor:
                 items = self.cluster.unfinished_in_project(self.project_id)
             except kube.ApiException:
                 continue
-            groups: dict[tuple[str, str], set[str]] = defaultdict(set)
-            for item in items:
-                if item.metadata.name in self.ignored:
-                    continue
-                labels = labels_of(item)
-                groups[(labels.get(FUNCTION_ID, ""), labels.get(DECORATOR, ""))].add(
-                    item.metadata.name
-                )
+            groups = workload_groups(items, self.ignored)
             for (function_id, decorator), names in groups.items():
                 if decorator in RUN_DECORATORS:
                     continue
@@ -344,9 +353,7 @@ class MonkeyRun:
 
     def execute(self) -> Report:
         started = time.monotonic()
-        self.progress.layout(
-            len(self.plan.ops), (spec.name for spec in self.plan.fleet.functions)
-        )
+        self.progress.layout(spec.name for spec in self.plan.fleet.functions)
         self.progress(
             f"Running {counted(len(self.plan.ops), 'operation')} on "
             f"{counted(len(self.plan.fleet.functions), 'function')} in "

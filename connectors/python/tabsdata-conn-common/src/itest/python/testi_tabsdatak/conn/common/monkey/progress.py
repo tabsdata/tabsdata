@@ -72,6 +72,8 @@ ACTIONS = (
 ACTION_WIDTH = max(len(action) for action in ACTIONS)
 RESULT_WIDTH = max(len(result) for result in (OK, REJECTED, SKIPPED, ERROR))
 STATUS_WIDTH = 3
+NUMBER_WIDTH = 4
+TAG_WIDTH = 2 * NUMBER_WIDTH + 3
 ELAPSED_WIDTH = 7
 DETAIL_LENGTH = 160
 
@@ -126,7 +128,6 @@ class Progress:
         self._lock = threading.Lock()
         self._started = time.monotonic()
         self._written = False
-        self._total_width = 4
         self._name_width = 8
 
     @staticmethod
@@ -139,8 +140,7 @@ class Progress:
             return Progress()
         return Progress(stream, colored=target == TTY)
 
-    def layout(self, total: int, names: Iterable[str]) -> None:
-        self._total_width = len(str(total))
+    def layout(self, names: Iterable[str]) -> None:
         self._name_width = max((len(name) for name in names), default=8)
 
     def elapsed(self) -> float:
@@ -149,7 +149,6 @@ class Progress:
     def __call__(
         self, message: str, tag: str = RUN, concern: str | None = None
     ) -> None:
-        width = 2 * self._total_width + 3
         color = TAG_COLORS.get(tag, GREY)
         message = sentence(message)
         if concern is not None:
@@ -158,7 +157,7 @@ class Progress:
             body = message
         else:
             body = self._paint(message, color)
-        self._write(f"{self._paint(tag.ljust(width), color)}  {body}")
+        self._write(f"{self._paint(tag.ljust(TAG_WIDTH), color)}  {body}")
 
     def table(
         self, header: tuple[str, ...], rows: list[tuple[str, ...]], tag: str = SETUP
@@ -182,7 +181,7 @@ class Progress:
             parts = [cell(*column) for column in zip(row, widths, paint)]
             return bar + bar.join(parts) + bar
 
-        tag_column = self._paint(tag.ljust(2 * self._total_width + 3), TAG_COLORS[tag])
+        tag_column = self._paint(tag.ljust(TAG_WIDTH), TAG_COLORS[tag])
         lines = [
             border("┌", "┬", "┐"),
             cells(header, [GREY] * len(header)),
@@ -206,12 +205,12 @@ class Progress:
         elapsed: float,
         detail: str,
     ) -> None:
-        counter = f"[{done:>{self._total_width}}/{total:>{self._total_width}}]"
+        counter = f"[{done:>{NUMBER_WIDTH}}/{total:>{NUMBER_WIDTH}}]"
         color = RESULT_COLORS.get(result, GREY)
         columns = [
             self._paint(counter, STEEL),
-            self._paint(f"lane {lane:<2}", DIM),
-            self._paint(f"op {index:>{self._total_width}}", DIM),
+            self._paint(f"lane {lane:>{NUMBER_WIDTH}}", DIM),
+            self._paint(f"op {index:>{NUMBER_WIDTH}}", DIM),
             self._paint(action.ljust(ACTION_WIDTH), TEAL),
             self._paint((function or "-").ljust(self._name_width), SAND),
             self._paint(result.ljust(RESULT_WIDTH), color),

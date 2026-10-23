@@ -511,6 +511,24 @@ script = [
     set_env TD_MONKEY_WEIGHT ${monkey_weight}
     debug "🔅 Using td monkey weight: '${monkey_weight}'"
 
+    monkey_upgrade_from_versions = get_env TD_MONKEY_UPGRADE_FROM_VERSIONS
+    monkey_upgrade_from_venv = get_env TD_MONKEY_UPGRADE_FROM_VENV
+    if not is_empty ${monkey_upgrade_from_versions}
+        if not is_empty ${monkey_upgrade_from_venv}
+            error ""
+            error "🧨 Set either TD_MONKEY_UPGRADE_FROM_VERSIONS or TD_MONKEY_UPGRADE_FROM_VENV, not both."
+            error ""
+            assert false
+        end
+    end
+    if is_empty ${monkey_upgrade_from_versions}
+        if is_empty ${monkey_upgrade_from_venv}
+            monkey_upgrade_from_versions = set "2.0.0"
+            set_env TD_MONKEY_UPGRADE_FROM_VERSIONS ${monkey_upgrade_from_versions}
+        end
+    end
+    debug "🔅 Using td monkey upgrade from versions: '${monkey_upgrade_from_versions}', venv: '${monkey_upgrade_from_venv}'"
+
     markers_base_captured = get_env TD_MARKERS_BASE_CAPTURED
     if eq ${markers_base_captured} "true"
         markers_base = get_env TD_MARKERS_BASE

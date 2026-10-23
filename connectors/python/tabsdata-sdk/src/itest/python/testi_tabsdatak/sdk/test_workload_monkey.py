@@ -293,7 +293,7 @@ def run_plan(
 ) -> tuple[str, Report]:
     deadline = time.monotonic() + seconds - REPORT_MARGIN_SECONDS
     namespace = run_namespace()
-    progress.layout(len(plan.ops), (spec.name for spec in plan.fleet.functions))
+    progress.layout(spec.name for spec in plan.fleet.functions)
     progress(f"Plan written to {write_plan(tmp_path / PLAN_FILE, plan)}", SETUP)
     for spec in plan.fleet.collections:
         factory(
@@ -370,7 +370,7 @@ def test_a_stored_monkey_run_holds(
 ):
     seconds = run_seconds(total_deadline)
     plan = load_plan(descriptor)
-    progress.layout(len(plan.ops), (spec.name for spec in plan.fleet.functions))
+    progress.layout(spec.name for spec in plan.fleet.functions)
     progress(f"Replaying {descriptor.name}", SETUP)
     progress.table(PARAMETERS, stored_parameters(descriptor, plan, seconds))
     _, report = run_plan(
@@ -401,7 +401,7 @@ def test_a_random_monkey_run_holds(
     seconds = run_seconds(total_deadline)
     seed = int(SEED) if SEED else random.SystemRandom().randrange(2**32)
     plan = generate(seed, OPERATIONS, LANES, FAULTS, FLEET_SCALE, LONGEST_SLEEP_SECONDS)
-    progress.layout(len(plan.ops), (spec.name for spec in plan.fleet.functions))
+    progress.layout(spec.name for spec in plan.fleet.functions)
     progress("Starting a random run", SETUP)
     progress.table(PARAMETERS, random_parameters(seed, plan, seconds))
     namespace = "-"

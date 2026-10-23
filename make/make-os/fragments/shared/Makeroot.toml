@@ -146,6 +146,9 @@ BACKENDS_PY_DOMAINS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/domains_py
 BACKENDS_RS_DOMAINS_MANIFEST = { value = "${BACKENDS_MANIFEST_FOLDER}/domains_rs.yaml", normalize = true }
 ITEST_REGISTRY_FILE = { value = "${HOME}/.tabsdatax/instances/tdkpytest.yaml", normalize = true }
 ITEST_PORTS_LOCK = { value = "${HOME}/.tabsdatax/instances/tdkpytest.ports.lock", normalize = true }
+ITEST_MONKEY_UPGRADE_LAUNCH_CONFIG = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/variant/config/pytest/monkey/upgrade.yaml", normalize = true }
+ITEST_MONKEY_UPGRADE_REQUIREMENTS = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/requirements/requirements-drivers-all.txt", normalize = true }
+ITEST_MONKEY_UPGRADE_VENVS_FOLDER = { value = "${HOME}/.tabsdatax/uvtrash", normalize = true }
 
 [config]
 load_script = [

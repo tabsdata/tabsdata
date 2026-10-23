@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 WORKER_ID = "tabsdata.com/worker-id"
 FUNCTION_ID = "tabsdata.com/function-id"
+LEGACY_FUNCTION_LABEL = "tabsdata.com/function"
 FUNCTION_VERSION_ID = "tabsdata.com/function-version-id"
 PROJECT_ID = "tabsdata.com/project-id"
 DECORATOR = "tabsdata.com/decorator"
