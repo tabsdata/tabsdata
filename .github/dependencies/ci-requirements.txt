@@ -5,7 +5,7 @@
 # Required packages to set up the continuous integration environment.
 
 build==1.6.1
-setuptools==84.2.0
+setuptools==84.2.1
 tk==0.1.0
 tzdata==2026.5
 wheel==0.48.0

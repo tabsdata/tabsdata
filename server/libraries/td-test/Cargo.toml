@@ -66,7 +66,6 @@ td-schema = { workspace = true }
 
 # External dependencies
 
-base64 = { workspace = true }
 homedir = { workspace = true }
 object_store = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

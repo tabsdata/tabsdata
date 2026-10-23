@@ -2,6 +2,6 @@
 # Copyright 2025 Tabsdata Inc.
 #
 
-mysql-connector-python==26.7.0
+mysql-connector-python==26.10.0
 oracledb==26.0.1
 psycopg2-binary==2.9.13

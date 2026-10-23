@@ -8,4 +8,4 @@
 # picks for the ``mysql+mysqlconnector://`` URIs that the conftest
 # uses to talk to StarRocks.
 docker==7.2.0
-mysql-connector-python==26.7.0
+mysql-connector-python==26.10.0

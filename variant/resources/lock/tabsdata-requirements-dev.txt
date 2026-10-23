@@ -19,8 +19,8 @@ azure-storage-blob==12.31.0
 babel==2.18.0
 black==26.10.1
 boolean-py==5.0
-boto3==1.43.115
-botocore==1.43.117
+boto3==1.43.118
+botocore==1.43.118
 build==1.6.1
 cachecontrol==0.14.4
 cattrs==26.2.1
@@ -33,7 +33,7 @@ colorama==0.4.6
 colorlog==6.12.0
 configurator==3.2.0
 contourpy==1.4.0
-coverage==7.16.2
+coverage==7.17.0
 cryptography==50.0.2
 csvkit==2.2.0
 cycler==0.12.1
@@ -51,7 +51,7 @@ docutils==0.23
 entry-points-txt==0.3.0
 et-xmlfile==2.0.0
 execnet==2.1.2
-fastapi==0.149.0
+fastapi==0.161.1
 filelock==3.32.7
 fonttools==4.67.0
 ghp-import==2.1.0
@@ -110,7 +110,7 @@ more-itertools==11.2.1 ; platform_machine != 'ppc64le' and platform_machine != '
 msgpack==1.2.3
 mypy==2.4.0
 mypy-extensions==1.1.0
-mysql-connector-python==26.7.0
+mysql-connector-python==26.10.0
 nab==0.0.22
 nab-index==0.0.22
 nab-markersets==0.0.22
@@ -151,7 +151,7 @@ py-serializable==2.1.0
 py-spy==0.4.2
 pyasn1==0.6.4
 pyasn1-modules==0.4.2
-pycparser==3.11 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
+pycparser==3.12 ; implementation_name != 'PyPy' and platform_python_implementation != 'PyPy'
 pydantic==2.14.1
 pydantic-core==2.50.1
 pydevd-pycharm==263.7031.30
@@ -188,11 +188,11 @@ requests-toolbelt==1.0.0
 requirements-parser==0.13.1
 rfc3986==2.0.0
 rich==15.0.0
-ruff==0.17.1
+ruff==0.17.2
 s3transfer==0.19.3
 secretstorage==3.5.0 ; platform_machine != 'ppc64le' and platform_machine != 's390x' and sys_platform == 'linux'
 semantic-version==2.10.0
-setuptools==84.2.0
+setuptools==84.2.1
 six==1.17.0
 smmap==5.0.3
 sortedcontainers==2.4.0
@@ -214,13 +214,13 @@ types-pyyaml==6.0.12.20260906
 typing-extensions==4.16.0
 typing-inspection==0.4.4
 tzdata==2026.5 ; sys_platform == 'win32'
-tzlocal==5.4.4
+tzlocal==5.4.5
 url-normalize==3.0.1
 urllib3==2.8.0
 uvicorn==0.54.0
-virtualenv==21.14.11
+virtualenv==21.14.13
 watchdog==6.0.0
-wcwidth==0.9.2
+wcwidth==0.9.3
 wheel==0.48.0
 wheel-filename==2.1.0
 wheel-inspect==1.8.0
