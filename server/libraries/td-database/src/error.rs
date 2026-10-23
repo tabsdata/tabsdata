@@ -141,11 +141,18 @@ pub enum DbError {
     )]
     MissingRlsRoleName = 5049,
     #[error(
-        "The serving tenant role holds membership in the cross-project role,          so the `across_projects` policy applies to every tenant read and          project isolation is void. Revoke it: REVOKE td_across_projects FROM          <in_project_role>."
+        "The serving tenant role holds membership in the cross-project role, \
+         so the `across_projects` policy applies to every tenant read and \
+         project isolation is void. Revoke it: REVOKE td_across_projects FROM \
+         <in_project_role>."
     )]
     TenantRoleSpansProjects = 5050,
     #[error(
-        "Cross-project row-level-security membership is missing, so the          schema's `across_projects` policy admits nobody: cross-project reads          would return no rows and a data delta would rewrite none. Only the          creator of a cluster-global role may grant it, so a database          administrator has to run: {0}"
+        "Cross-project row-level-security membership is missing, so the \
+         schema's `across_projects` policy admits nobody: cross-project reads \
+         would return no rows and a data delta would rewrite none. Only the \
+         creator of a cluster-global role may grant it, so a database \
+         administrator has to run: {0}"
     )]
     MissingAcrossProjectsMembership(String) = 5051,
     #[error(
