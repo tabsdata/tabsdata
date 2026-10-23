@@ -21,6 +21,7 @@ use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use kube::Config;
 use serde::{Deserialize, Serialize};
+use strum::EnumIter;
 use td_common::settings::DEFAULT_INSTANCE;
 
 #[cfg(unix)]
@@ -103,7 +104,7 @@ const AXES: &[Axis] = &[Axis {
     known: PROVIDER_VALUES,
 }];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, EnumIter)]
 #[serde(rename_all = "lowercase")]
 pub enum ClusterProvider {
     Kminus,
@@ -879,3 +880,6 @@ async fn provider_for_instance_inner(
     )
     .await
 }
+
+#[cfg(test)]
+mod tests;
