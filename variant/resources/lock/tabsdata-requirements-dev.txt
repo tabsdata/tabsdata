@@ -119,6 +119,7 @@ nab-provider==0.0.22
 nab-resolver==0.0.22
 nh3==0.3.7
 numpy==2.5.4
+obstore==0.12.0
 olefile==0.47
 openpyxl==3.1.5
 opentelemetry-api==1.45.1

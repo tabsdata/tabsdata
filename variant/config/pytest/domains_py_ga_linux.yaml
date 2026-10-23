@@ -112,6 +112,12 @@
   sys: s3
   model: world
   size: 200
+- name: s3local
+  sys: s3local
+- name: s3local_world_xs
+  sys: s3local
+  model: world
+  size: 200
 - name: salesforce
   sys: salesforce
 - name: snowflake
