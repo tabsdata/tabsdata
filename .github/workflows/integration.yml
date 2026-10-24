@@ -151,7 +151,7 @@ jobs:
       - name: Mark pull request
         id: mark-pull-request
         if: ${{ github.event_name == 'pull_request' && steps.check-label.outputs.permit_workflow == 'false' }}
-        uses: LouisBrunner/checks-action@v2.0.0
+        uses: LouisBrunner/checks-action@v3.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: "😶 Skipped"
