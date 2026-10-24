@@ -168,26 +168,6 @@ def check_oss_index(username: str, api_key: str) -> None:
 
 GROUPS: list[Group] = [
     Group(
-        "aws-s3 (S30)",
-        ["S30__S3_ACCESS_KEY", "S30__S3_SECRET_KEY", "S30__S3_REGION", "S30__S3_URI"],
-        lambda e: check_aws(
-            e["S30__S3_ACCESS_KEY"],
-            e["S30__S3_SECRET_KEY"],
-            e["S30__S3_REGION"],
-            e["S30__S3_URI"],
-        ),
-    ),
-    Group(
-        "aws-s3 (S31)",
-        ["S31__S3_ACCESS_KEY", "S31__S3_SECRET_KEY", "S31__S3_REGION", "S31__S3_URI"],
-        lambda e: check_aws(
-            e["S31__S3_ACCESS_KEY"],
-            e["S31__S3_SECRET_KEY"],
-            e["S31__S3_REGION"],
-            e["S31__S3_URI"],
-        ),
-    ),
-    Group(
         "aws-s3 (S3)",
         ["S3__ACCESS_KEY", "S3__SECRET_KEY", "S3__REGION", "S3__BUCKET"],
         lambda e: check_aws(
@@ -198,99 +178,10 @@ GROUPS: list[Group] = [
         ),
     ),
     Group(
-        "aws-s3 (COPY_AWS)",
-        [
-            "COPY_AWS_AWS_ACCESS_KEY_ID",
-            "COPY_AWS_AWS_SECRET_ACCESS_KEY",
-            "COPY_AWS_AWS_REGION",
-            "COPY_AWS_BASE_URL",
-        ],
-        lambda e: check_aws(
-            e["COPY_AWS_AWS_ACCESS_KEY_ID"],
-            e["COPY_AWS_AWS_SECRET_ACCESS_KEY"],
-            e["COPY_AWS_AWS_REGION"],
-            e["COPY_AWS_BASE_URL"],
-        ),
-    ),
-    Group(
-        "aws-s3 (IMPORT_AWS)",
-        [
-            "IMPORT_AWS_ACCESS_KEY",
-            "IMPORT_AWS_SECRET_KEY",
-            "IMPORT_AWS_REGION",
-            "IMPORT_AWS_BASE_URL",
-        ],
-        lambda e: check_aws(
-            e["IMPORT_AWS_ACCESS_KEY"],
-            e["IMPORT_AWS_SECRET_KEY"],
-            e["IMPORT_AWS_REGION"],
-            e["IMPORT_AWS_BASE_URL"],
-        ),
-    ),
-    Group(
-        "aws-s3 (TRANSPORTER_AWS)",
-        [
-            "TRANSPORTER_AWS_ACCESS_KEY_ID",
-            "TRANSPORTER_AWS_SECRET_ACCESS_KEY",
-            "TRANSPORTER_AWS_REGION",
-            "TRANSPORTER_AWS_URI",
-        ],
-        lambda e: check_aws(
-            e["TRANSPORTER_AWS_ACCESS_KEY_ID"],
-            e["TRANSPORTER_AWS_SECRET_ACCESS_KEY"],
-            e["TRANSPORTER_AWS_REGION"],
-            e["TRANSPORTER_AWS_URI"],
-        ),
-    ),
-    Group(
-        "azure-blob (AZ0)",
-        ["AZ0__AZ_ACCOUNT_NAME", "AZ0__AZ_ACCOUNT_KEY", "AZ0__AZ_URI"],
-        lambda e: check_azure(
-            e["AZ0__AZ_ACCOUNT_NAME"],
-            e["AZ0__AZ_ACCOUNT_KEY"],
-            e["AZ0__AZ_URI"].split("/")[-1] or "tabsdataci",
-        ),
-    ),
-    Group(
         "azure-blob (AZ)",
         ["AZ__ACCOUNT_NAME", "AZ__ACCOUNT_KEY", "AZ__CONTAINER"],
         lambda e: check_azure(
             e["AZ__ACCOUNT_NAME"], e["AZ__ACCOUNT_KEY"], e["AZ__CONTAINER"]
-        ),
-    ),
-    Group(
-        "azure-blob (COPY_AZURE)",
-        ["COPY_AZURE_ACCOUNT_NAME", "COPY_AZURE_ACCOUNT_KEY", "COPY_AZURE_BASE_URL"],
-        lambda e: check_azure(
-            e["COPY_AZURE_ACCOUNT_NAME"],
-            e["COPY_AZURE_ACCOUNT_KEY"],
-            e["COPY_AZURE_BASE_URL"].rstrip("/").split("/")[-1],
-        ),
-    ),
-    Group(
-        "azure-blob (IMPORT_AZURE)",
-        [
-            "IMPORT_AZURE_ACCOUNT_NAME",
-            "IMPORT_AZURE_ACCOUNT_KEY",
-            "IMPORT_AZURE_BASE_URL",
-        ],
-        lambda e: check_azure(
-            e["IMPORT_AZURE_ACCOUNT_NAME"],
-            e["IMPORT_AZURE_ACCOUNT_KEY"],
-            e["IMPORT_AZURE_BASE_URL"].rstrip("/").split("/")[-1],
-        ),
-    ),
-    Group(
-        "gcs-hmac (GCP0)",
-        [
-            "GCP0__GCP_STORAGE_ACCESS_KEY",
-            "GCP0__GCP_STORAGE_SECRET_KEY",
-            "GCP0__GCP_STORAGE_URI",
-        ],
-        lambda e: check_gcs_hmac(
-            e["GCP0__GCP_STORAGE_ACCESS_KEY"],
-            e["GCP0__GCP_STORAGE_SECRET_KEY"],
-            e["GCP0__GCP_STORAGE_URI"],
         ),
     ),
     Group(
@@ -310,13 +201,6 @@ GROUPS: list[Group] = [
         ),
     ),
     Group(
-        "bigquery (GCP0)",
-        ["GCP0__GCP_SERVICE_ACCOUNT_KEY", "GCP0__BIGQUERY_PROJECT"],
-        lambda e: check_bigquery(
-            e["GCP0__GCP_SERVICE_ACCOUNT_KEY"], e["GCP0__BIGQUERY_PROJECT"]
-        ),
-    ),
-    Group(
         "bigquery (BIGQUERY)",
         ["BIGQUERY__SERVICE_ACCOUNT_KEY", "BIGQUERY__PROJECT"],
         lambda e: check_bigquery(
@@ -324,40 +208,15 @@ GROUPS: list[Group] = [
         ),
     ),
     Group(
-        "databricks (DBX0)",
-        ["DBX0__HOST", "DBX0__TOKEN"],
-        lambda e: check_databricks(e["DBX0__HOST"], e["DBX0__TOKEN"]),
-    ),
-    Group(
         "databricks (DATABRICKS)",
         ["DATABRICKS__HOST", "DATABRICKS__TOKEN"],
         lambda e: check_databricks(e["DATABRICKS__HOST"], e["DATABRICKS__TOKEN"]),
-    ),
-    Group(
-        "snowflake (SNW)",
-        ["SNW__ACCOUNT", "SNW__USER", "SNW__PAT"],
-        lambda e: check_snowflake(e["SNW__ACCOUNT"], e["SNW__USER"], e["SNW__PAT"]),
     ),
     Group(
         "snowflake (SNOWFLAKE)",
         ["SNOWFLAKE__ACCOUNT", "SNOWFLAKE__USERNAME", "SNOWFLAKE__PAT"],
         lambda e: check_snowflake(
             e["SNOWFLAKE__ACCOUNT"], e["SNOWFLAKE__USERNAME"], e["SNOWFLAKE__PAT"]
-        ),
-    ),
-    Group(
-        "salesforce (SF0)",
-        [
-            "SF0__USERNAME",
-            "SF0__PASSWORD",
-            "SF0__SECURITY_TOKEN",
-            "SF0__INSTANCE_URL",
-        ],
-        lambda e: check_salesforce(
-            e["SF0__USERNAME"],
-            e["SF0__PASSWORD"],
-            e["SF0__SECURITY_TOKEN"],
-            e["SF0__INSTANCE_URL"],
         ),
     ),
     Group(
@@ -381,14 +240,9 @@ GROUPS: list[Group] = [
         lambda e: check_openai(e["OPENAI__API_KEY"]),
     ),
     Group(
-        "openai (OPENAI__API_KEY)",
-        ["OPENAI__API_KEY"],
-        lambda e: check_openai(e["OPENAI__API_KEY"]),
-    ),
-    Group(
-        "oss-index (OSS_INDEX)",
-        ["OSS_INDEX_USERNAME", "OSS_INDEX_API_KEY"],
-        lambda e: check_oss_index(e["OSS_INDEX_USERNAME"], e["OSS_INDEX_API_KEY"]),
+        "oss-index (SONATYPE)",
+        ["SONATYPE__USERNAME", "SONATYPE__KEY"],
+        lambda e: check_oss_index(e["SONATYPE__USERNAME"], e["SONATYPE__KEY"]),
     ),
 ]
 

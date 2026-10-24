@@ -17,11 +17,21 @@ fn tdd_exe
     return ${tdd_exe_value}
 end
 
+fn tdd_crypto_selection
+    tdd_crypto_selection_on_ga = get_env TD_ON_GA
+    tdd_crypto_selection_on_ga_true = eq ${tdd_crypto_selection_on_ga} "true"
+    tdd_crypto_selection_value = set "--crypto"
+    if ${tdd_crypto_selection_on_ga_true}
+        tdd_crypto_selection_value = set "--crypto ${TDD_CRYPTO_VAULT_GA} --item ${TDD_CRYPTO_ITEM_GA}"
+    end
+    return ${tdd_crypto_selection_value}
+end
+
 fn tdd_fetch
     tdd_fetch_selection = set ${1}
     tdd_fetch_exe = tdd_exe
     debug "🚀 ${tdd_fetch_exe} _1p fetch ${tdd_fetch_selection} --format json"
-    tdd_fetch_result = exec ${tdd_fetch_exe} _1p fetch ${tdd_fetch_selection} --format json
+    tdd_fetch_result = exec ${tdd_fetch_exe} _1p fetch %{tdd_fetch_selection} --format json
     if not eq ${tdd_fetch_result.code} "0"
         error "🚫 Tool tdd could not fetch ${tdd_fetch_selection} from 1Password (exit code ${tdd_fetch_result.code})."
         error "\n${tdd_fetch_result.stderr}"

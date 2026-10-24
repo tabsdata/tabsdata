@@ -91,6 +91,8 @@ SPINNER_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/librari
 EXPORTS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/exports.py", normalize = true }
 WARMUP_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/warmup.py", normalize = true }
 TDD_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/make/make-os/libraries/tdd.py", normalize = true }
+TDD_CRYPTO_VAULT_GA = "1p:dev_xp"
+TDD_CRYPTO_ITEM_GA = "Tabsdata"
 TMUX_TEST_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/tmuxtestrs.py", normalize = true }
 WARP_TEST_RS_SCRIPT = { value = "${PROJECT_TABSDATA_ROOT_FOLDER}/devutils/automation/tasks/makers/td-scripts/warptestrs.py", normalize = true }
 

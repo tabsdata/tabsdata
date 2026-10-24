@@ -41,10 +41,7 @@ script = [
 
     skip_secrets_load = get_env TD_SKIP_SECRETS_LOAD
     skip_secrets_load_true = eq ${skip_secrets_load} "true"
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    skip_load = set ${skip_secrets_load_true} or ${on_ga_true}
-    if ${skip_load}
+    if ${skip_secrets_load_true}
         info "🔑 Skipping the 1Password load; assuming _TDD_CRYPTO_KEY is already provided"
         exit 0
     end
@@ -52,7 +49,8 @@ script = [
     tdd_crypto_key = get_env _TDD_CRYPTO_KEY
     if is_empty ${tdd_crypto_key}
         info "🔑 Loading the tdd crypto key from 1Password..."
-        tdd_fetch --crypto
+        crypto_selection = tdd_crypto_selection
+        tdd_fetch ${crypto_selection}
     else
         debug "🔑 Variable _TDD_CRYPTO_KEY is already set; keeping the current value"
     end
@@ -152,10 +150,7 @@ script = [
 
     skip_secrets_load = get_env TD_SKIP_SECRETS_LOAD
     skip_secrets_load_true = eq ${skip_secrets_load} "true"
-    on_ga = get_env TD_ON_GA
-    on_ga_true = eq ${on_ga} "true"
-    skip_load = set ${skip_secrets_load_true} or ${on_ga_true}
-    if ${skip_load}
+    if ${skip_secrets_load_true}
         info "🔐 Skipping the 1Password load; assuming backend systems secrets are already provided"
         exit 0
     end
