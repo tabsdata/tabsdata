@@ -2,6 +2,9 @@
 # Copyright 2026 Tabsdata Inc.
 #
 
+- name: anthropic
+  type: anthropic
+  api-key$: ANTHROPIC__API_KEY
 - name: azureblob
   type: azureblob
   container$: AZ__CONTAINER
@@ -21,6 +24,8 @@
   warehouse-id$: DATABRICKS__WAREHOUSE_ID
   catalog$: DATABRICKS__CATALOG
   volume$: DATABRICKS__VOLUME
+- name: dev
+  type: dev
 - name: fs
   type: fs
 - name: gcs
@@ -30,6 +35,9 @@
   hmac-access-key$: GCS__HMAC_ACCESS_KEY
   hmac-secret-key$: GCS__HMAC_SECRET_KEY
   sys-path$: GCS__SYS_PATH
+- name: openai
+  type: openai
+  api-key$: OPENAI__API_KEY
 - name: s3
   type: s3
   bucket$: S3__BUCKET
@@ -50,3 +58,7 @@
   pat$: SNOWFLAKE__PAT
   database$: SNOWFLAKE__DATABASE
   warehouse$: SNOWFLAKE__WAREHOUSE
+- name: typesafe
+  type: typesafe
+  api-key$: TYPESAFE__API_KEY
+  api-key-name$: TYPESAFE__API_KEY_NAME

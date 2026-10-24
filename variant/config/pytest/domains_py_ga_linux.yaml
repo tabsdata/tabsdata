@@ -136,3 +136,5 @@
   sys: snowflake
 - name: starrocks
   sys: starrocks
+- name: typesafe
+  sys: typesafe
