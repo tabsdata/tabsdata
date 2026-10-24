@@ -1,0 +1,60 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+name: Portability Workflow (Open Source)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tabsdata version to install (with index)"
+        type: string
+        required: false
+      index:
+        description: "Package index to install from (with version)"
+        type: string
+        required: false
+      run_id:
+        description: "Build run id to take the wheels from (instead of version + index)"
+        type: string
+        required: false
+      scope:
+        description: "Distro coverage"
+        type: choice
+        default: floor-and-edges
+        options:
+          - floor-and-edges
+          - full
+      architecture:
+        description: "Architectures to verify"
+        type: choice
+        default: both
+        options:
+          - both
+          - x86_64
+          - aarch64
+      verbose:
+        description: "Run tdkserver quickstart with --verbose"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  portability:
+    name: Portability
+    uses: tabsdata/tabsdata-ci/.github/workflows/portability.yml@main
+    secrets:
+      TOKEN_GITHUB_AOINOKIMI: ${{ secrets.TOKEN_GITHUB_AOINOKIMI }}
+    with:
+      version: ${{ inputs.version }}
+      index: ${{ inputs.index }}
+      run_id: ${{ inputs.run_id }}
+      scope: ${{ inputs.scope }}
+      architecture: ${{ inputs.architecture }}
+      verbose: ${{ inputs.verbose }}
+      ai_keys: false
+      ci_ref: main
