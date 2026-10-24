@@ -13,6 +13,8 @@
 #     "simple-salesforce",
 #     "databricks-sdk",
 #     "openai",
+#     "anthropic",
+#     "typesafe-sdk",
 #     "requests",
 #     "rich",
 # ]
@@ -50,6 +52,12 @@ def summarize(detail: str, limit: int = 80) -> str:
     return concise
 
 
+def check_anthropic(api_key: str) -> None:
+    from anthropic import Anthropic
+
+    Anthropic(api_key=api_key).models.list(limit=1)
+
+
 def check_aws(access_key: str, secret_key: str, region: str, uri: str) -> None:
     import boto3
 
@@ -72,6 +80,24 @@ def check_azure(account_name: str, account_key: str, container: str) -> None:
     )
     container_client = service.get_container_client(container)
     container_client.get_container_properties()
+
+
+def check_bigquery(service_account_key: str, project: str) -> None:
+    from google.cloud import bigquery
+    from google.oauth2 import service_account
+
+    credentials = service_account.Credentials.from_service_account_info(
+        json.loads(service_account_key)
+    )
+    client = bigquery.Client(credentials=credentials, project=project)
+    list(client.query("SELECT 1").result(timeout=30))
+
+
+def check_databricks(host: str, token: str) -> None:
+    from databricks.sdk import WorkspaceClient
+
+    client = WorkspaceClient(host=host, token=token)
+    client.current_user.me()
 
 
 def check_gcs_hmac(access_key: str, secret_key: str, uri: str) -> None:
@@ -99,22 +125,24 @@ def check_gcs_service_account(service_account_key: str, bucket: str) -> None:
     next(client.list_blobs(bucket, max_results=1).pages)
 
 
-def check_bigquery(service_account_key: str, project: str) -> None:
-    from google.cloud import bigquery
-    from google.oauth2 import service_account
+def check_openai(api_key: str) -> None:
+    from openai import OpenAI
 
-    credentials = service_account.Credentials.from_service_account_info(
-        json.loads(service_account_key)
-    )
-    client = bigquery.Client(credentials=credentials, project=project)
-    list(client.query("SELECT 1").result(timeout=30))
+    OpenAI(api_key=api_key).models.list()
 
 
-def check_databricks(host: str, token: str) -> None:
-    from databricks.sdk import WorkspaceClient
+def check_salesforce(
+    username: str, password: str, security_token: str, instance_url: str
+) -> None:
+    from simple_salesforce import Salesforce
 
-    client = WorkspaceClient(host=host, token=token)
-    client.current_user.me()
+    domain = "test" if "test.salesforce" in instance_url else "login"
+    Salesforce(
+        username=username,
+        password=password,
+        security_token=security_token,
+        domain=domain,
+    ).query("SELECT Id FROM Organization LIMIT 1")
 
 
 def check_snowflake(account: str, user: str, pat: str) -> None:
@@ -133,27 +161,7 @@ def check_snowflake(account: str, user: str, pat: str) -> None:
     response.raise_for_status()
 
 
-def check_salesforce(
-    username: str, password: str, security_token: str, instance_url: str
-) -> None:
-    from simple_salesforce import Salesforce
-
-    domain = "test" if "test.salesforce" in instance_url else "login"
-    Salesforce(
-        username=username,
-        password=password,
-        security_token=security_token,
-        domain=domain,
-    ).query("SELECT Id FROM Organization LIMIT 1")
-
-
-def check_openai(api_key: str) -> None:
-    from openai import OpenAI
-
-    OpenAI(api_key=api_key).models.list()
-
-
-def check_oss_index(username: str, api_key: str) -> None:
+def check_sonatype(username: str, api_key: str) -> None:
     import requests
 
     response = requests.post(
@@ -166,7 +174,19 @@ def check_oss_index(username: str, api_key: str) -> None:
     response.raise_for_status()
 
 
+def check_typesafe(api_key: str) -> None:
+    from typesafe_sdk import TypeSafeClient
+
+    with TypeSafeClient(api_key=api_key) as client:
+        client.models.list()
+
+
 GROUPS: list[Group] = [
+    Group(
+        "anthropic (ANTHROPIC)",
+        ["ANTHROPIC__API_KEY"],
+        lambda e: check_anthropic(e["ANTHROPIC__API_KEY"]),
+    ),
     Group(
         "aws-s3 (S3)",
         ["S3__ACCESS_KEY", "S3__SECRET_KEY", "S3__REGION", "S3__BUCKET"],
@@ -185,6 +205,18 @@ GROUPS: list[Group] = [
         ),
     ),
     Group(
+        "bigquery (BIGQUERY)",
+        ["BIGQUERY__SERVICE_ACCOUNT_KEY", "BIGQUERY__PROJECT"],
+        lambda e: check_bigquery(
+            e["BIGQUERY__SERVICE_ACCOUNT_KEY"], e["BIGQUERY__PROJECT"]
+        ),
+    ),
+    Group(
+        "databricks (DATABRICKS)",
+        ["DATABRICKS__HOST", "DATABRICKS__TOKEN"],
+        lambda e: check_databricks(e["DATABRICKS__HOST"], e["DATABRICKS__TOKEN"]),
+    ),
+    Group(
         "gcs-hmac (GCS)",
         ["GCS__HMAC_ACCESS_KEY", "GCS__HMAC_SECRET_KEY", "GCS__BUCKET"],
         lambda e: check_gcs_hmac(
@@ -201,23 +233,9 @@ GROUPS: list[Group] = [
         ),
     ),
     Group(
-        "bigquery (BIGQUERY)",
-        ["BIGQUERY__SERVICE_ACCOUNT_KEY", "BIGQUERY__PROJECT"],
-        lambda e: check_bigquery(
-            e["BIGQUERY__SERVICE_ACCOUNT_KEY"], e["BIGQUERY__PROJECT"]
-        ),
-    ),
-    Group(
-        "databricks (DATABRICKS)",
-        ["DATABRICKS__HOST", "DATABRICKS__TOKEN"],
-        lambda e: check_databricks(e["DATABRICKS__HOST"], e["DATABRICKS__TOKEN"]),
-    ),
-    Group(
-        "snowflake (SNOWFLAKE)",
-        ["SNOWFLAKE__ACCOUNT", "SNOWFLAKE__USERNAME", "SNOWFLAKE__PAT"],
-        lambda e: check_snowflake(
-            e["SNOWFLAKE__ACCOUNT"], e["SNOWFLAKE__USERNAME"], e["SNOWFLAKE__PAT"]
-        ),
+        "openai (OPENAI)",
+        ["OPENAI__API_KEY"],
+        lambda e: check_openai(e["OPENAI__API_KEY"]),
     ),
     Group(
         "salesforce (SALESFORCE)",
@@ -235,14 +253,21 @@ GROUPS: list[Group] = [
         ),
     ),
     Group(
-        "openai (OPENAI__API_KEY)",
-        ["OPENAI__API_KEY"],
-        lambda e: check_openai(e["OPENAI__API_KEY"]),
+        "snowflake (SNOWFLAKE)",
+        ["SNOWFLAKE__ACCOUNT", "SNOWFLAKE__USERNAME", "SNOWFLAKE__PAT"],
+        lambda e: check_snowflake(
+            e["SNOWFLAKE__ACCOUNT"], e["SNOWFLAKE__USERNAME"], e["SNOWFLAKE__PAT"]
+        ),
     ),
     Group(
-        "oss-index (SONATYPE)",
+        "sonatype (SONATYPE)",
         ["SONATYPE__USERNAME", "SONATYPE__KEY"],
-        lambda e: check_oss_index(e["SONATYPE__USERNAME"], e["SONATYPE__KEY"]),
+        lambda e: check_sonatype(e["SONATYPE__USERNAME"], e["SONATYPE__KEY"]),
+    ),
+    Group(
+        "typesafe (TYPESAFE)",
+        ["TYPESAFE__API_KEY"],
+        lambda e: check_typesafe(e["TYPESAFE__API_KEY"]),
     ),
 ]
 
@@ -279,7 +304,9 @@ def main() -> int:
             console.print(f"[green]✓[/green] {group.name} valid in {elapsed:.2f}s")
         except Exception as error:
             elapsed = time.perf_counter() - started
-            detail = str(error).splitlines()[0] if str(error) else type(error).__name__
+            detail = (
+                " ".join(str(error).split()) if str(error) else type(error).__name__
+            )
             results.append((group.name, "FAIL", detail, elapsed))
             failed = True
             console.print(f"[red]✗[/red] {group.name} failed in {elapsed:.2f}s")
