@@ -11,7 +11,7 @@ from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from ..backend import Domain, System, require
+from ..backend import Domain, StorageOptions, System, require
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,8 @@ class AzureblobSystem(System):
     container: str
     account_name: str
     account_key: str
+    location: str
+    storage_options: StorageOptions | None = None  # absent from an older descriptor
 
 
 @dataclass(frozen=True)
@@ -33,9 +35,11 @@ class AzureblobDomain(Domain):
     sys_path: PurePosixPath
     base_path: PurePosixPath
     prefix: str  # the domain's object-store prefix (== the entity container)
+    uri: str
     container: str
     account_name: str
     account_key: str
+    storage_options: StorageOptions | None = None  # absent from an older descriptor
     model: str | None = None
     data: str | None = None
     entities: dict[str, int] | None = None  # {table: record count}, once loaded

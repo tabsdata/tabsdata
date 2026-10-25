@@ -11,7 +11,7 @@ from typing import ClassVar
 
 from pydantic.dataclasses import dataclass
 
-from ..backend import Domain, System, require
+from ..backend import Domain, StorageOptions, System, require
 
 
 @dataclass(frozen=True)
@@ -22,9 +22,11 @@ class GCSSystem(System):
     sys_path: PurePosixPath
     bucket: str
     service_account_key: str
+    location: str
     # S3-interop HMAC keys (optional; present when the system carries S3-compat creds)
     hmac_access_key: str | None = None
     hmac_secret_key: str | None = None
+    storage_options: StorageOptions | None = None  # absent from an older descriptor
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,7 @@ class GCSDomain(Domain):
     sys_path: PurePosixPath
     base_path: PurePosixPath
     prefix: str  # the domain's object-store prefix (== the entity container)
+    uri: str
     bucket: str
     service_account_key: str
     # S3-compatible HMAC keys (present in the descriptor since TD-2772); optional so
@@ -42,6 +45,7 @@ class GCSDomain(Domain):
     # GCS over the S3 protocol (e.g. ClickHouse staging's ``s3()`` path).
     hmac_access_key: str | None = None
     hmac_secret_key: str | None = None
+    storage_options: StorageOptions | None = None  # absent from an older descriptor
     model: str | None = None
     data: str | None = None
     entities: dict[str, int] | None = None  # {table: record count}, once loaded

@@ -75,10 +75,10 @@ import dataclasses
 import json
 import os
 import sys
-from typing import ClassVar
+from typing import Annotated, ClassVar
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BeforeValidator, ValidationError
 
 from . import _tdd, operations
 from ._tdd import DOMAIN, SYSTEM, TddError
@@ -109,6 +109,17 @@ KEY_ENTITIES = "ENTITIES"
 KEY_EXTERNAL_NAME = "EXTERNAL_NAME"
 KEY_SYS_NAME = "SYS_NAME"
 ENV_KEY_SEPARATOR = "__"
+
+
+def _storage_options(value: object) -> object:
+    return json.loads(value) if isinstance(value, str) else value
+
+
+#: An object store's polars / obstore ``storage_options``, as tdd records them in
+#: the descriptor (``STORAGE_OPTIONS``, JSON): the same for a cloud store and its
+#: local twin, so ``pl.scan_parquet(domain.uri + "/...",
+#: storage_options=domain.storage_options)`` reads either.
+StorageOptions = Annotated[dict[str, str], BeforeValidator(_storage_options)]
 
 
 class System:

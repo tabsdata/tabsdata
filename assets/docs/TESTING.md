@@ -149,6 +149,25 @@ Python names the same things the same way, so a test reads alike in either langu
 def test_reads_seeded_data(domain_s3_world_xs: S3Domain): ...
 ```
 
+### Local twins of the object stores
+
+`s3local`, `gcslocal` and `azurebloblocal` are the cloud object stores run as containers on
+this machine (served by RustFS, cloudburrow and Azurite; tdd names them after the store they
+stand in for, not the program behind it). They need no credentials, so they also run on CI.
+Their descriptors, like every object store's, carry `STORAGE_OPTIONS`: the polars / obstore
+`storage_options` that reach the store, built by the same tdd code for a cloud store and its
+twin. So far they are Python-only (`S3LocalDomain`, `GcsLocalDomain`, `AzureBlobLocalDomain`
+and their systems); every object-store fixture has `uri` and `storage_options`, so one line
+reads any of the six, and a test moves between a store and its twin by its fixture alone:
+
+```python
+@s3local_domain("s3local_world_xs")
+def test_scans(domain_s3local_world_xs: S3LocalDomain):
+    domain = domain_s3local_world_xs
+    lf = pl.scan_parquet(f"{domain.uri}/parquet/*.parquet",
+                         storage_options=domain.storage_options)
+```
+
 ## Resolution Order
 
 A backend is looked for in three places, in this order, identically in Rust and Python:
