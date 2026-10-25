@@ -1,0 +1,225 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+import yaml
+
+from tabsdatak.common._storage import mounts
+from tabsdatak.common._storage.mounts import MountDeclaration, MountError
+from tabsdatak.common._storage.transfer import StoreKind
+
+pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
+
+PLACEHOLDER = "${{secret}}"
+OPTIONAL_PLACEHOLDER = "${{secret?}}"
+
+
+def storage_config(folder: Path, *declared: dict) -> Path:
+    path = folder / "apiserver.storage.yaml"
+    path.write_text(yaml.safe_dump({"storage": {"mounts": list(declared)}}))
+    return path
+
+
+def option_variable(mount: str, key: str) -> str:
+    return mounts.secret_variable("storage", "mounts", mount, "options", key)
+
+
+@pytest.mark.parametrize(
+    "segment, encoded",
+    [
+        ("region", "REGION"),
+        ("azure_storage_account_key", "AZURE_STORAGE_ACCOUNT_KEY"),
+        ("my-key.name", "MY_KEY_NAME"),
+        ("0day", "_0DAY"),
+    ],
+)
+def test_segments_encode_like_the_kubernetes_secret_keys(segment: str, encoded: str):
+    assert mounts.encode_segment(segment) == encoded
+
+
+def test_variables_follow_the_secret_naming():
+    assert mounts.secret_variable("storage", "mounts", "IMAGES", "uri") == (
+        "SECRETS__STORAGE__MOUNTS__IMAGES__URI"
+    )
+    assert option_variable("IMAGES", "region") == (
+        "SECRETS__STORAGE__MOUNTS__IMAGES__OPTIONS__REGION"
+    )
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["${{secret}}", "${{secret?}}", "${{secret:name}}", "${{secretAuto:password}}"],
+)
+def test_placeholders_follow_the_kubernetes_grammar(text: str):
+    assert mounts.PLACEHOLDER_PATTERN.match(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["${{secret", "secret}}", "${{other}}", "prefix ${{secret}}", "s3://bucket"],
+)
+def test_other_values_are_literals(text: str):
+    assert mounts.resolve(text, "storage", "mounts", "ROOT", "uri") == text
+
+
+def test_read_returns_the_declared_mount(tmp_path: Path):
+    config = storage_config(
+        tmp_path,
+        {"id": "ROOT", "uri": "s3://root"},
+        {"id": "IMAGES", "uri": PLACEHOLDER, "options": {"region": "eu-west-1"}},
+    )
+    assert mounts.read(config, "IMAGES") == MountDeclaration(
+        id="IMAGES",
+        uri=PLACEHOLDER,
+        options={"region": "eu-west-1"},
+    )
+
+
+def test_read_of_an_undeclared_mount_fails(tmp_path: Path):
+    config = storage_config(tmp_path, {"id": "IMAGES", "uri": "s3://images"})
+    with pytest.raises(MountError, match="not declared"):
+        mounts.read(config, "LOGS")
+
+
+def test_read_of_an_unreadable_configuration_fails(tmp_path: Path):
+    with pytest.raises(MountError, match="Cannot read"):
+        mounts.read(tmp_path / "missing.yaml", "IMAGES")
+
+
+def test_literal_uri_is_used_as_written():
+    declaration = MountDeclaration(id="IMAGES", uri="s3://images/prod")
+    assert mounts.uri(declaration) == "s3://images/prod"
+
+
+def test_placeholder_uri_comes_from_its_variable(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("SECRETS__STORAGE__MOUNTS__BUNDLES__URI", "az://bundles/one")
+    declaration = MountDeclaration(id="BUNDLES", uri=PLACEHOLDER)
+    assert mounts.uri(declaration) == "az://bundles/one"
+
+
+def test_placeholder_uri_without_variable_fails(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv("SECRETS__STORAGE__MOUNTS__BUNDLES__URI", raising=False)
+    declaration = MountDeclaration(id="BUNDLES", uri=PLACEHOLDER)
+    with pytest.raises(MountError, match="storage.mounts.BUNDLES.uri"):
+        mounts.uri(declaration)
+
+
+def test_mount_without_uri_fails():
+    with pytest.raises(MountError, match="declares no uri"):
+        mounts.uri(MountDeclaration(id="IMAGES", uri=""))
+
+
+@pytest.mark.parametrize(
+    "location, kind",
+    [
+        ("s3://bucket/key", StoreKind.S3),
+        ("az://container/key", StoreKind.AZURE),
+        ("abfss://container@account/key", StoreKind.AZURE),
+        ("gs://bucket/key", StoreKind.GCS),
+        ("file:///tmp/key", StoreKind.LOCAL),
+    ],
+)
+def test_store_kind_comes_from_the_scheme(location: str, kind: StoreKind):
+    assert mounts.store_kind(location) == kind
+
+
+def test_unsupported_scheme_fails():
+    with pytest.raises(MountError, match="unsupported scheme"):
+        mounts.store_kind("ftp://host/key")
+
+
+def test_friendly_and_prefixed_keys_become_canonical():
+    assert mounts.canonical(StoreKind.S3, "region") == "aws_region"
+    assert mounts.canonical(StoreKind.S3, "anonymous") == "aws_skip_signature"
+    assert mounts.canonical(StoreKind.AZURE, "azure_endpoint") == "azure_endpoint"
+    assert mounts.canonical(StoreKind.GCS, "allow_http") == "google_allow_http"
+
+
+def test_unknown_key_fails():
+    with pytest.raises(MountError, match="not a known s3 option"):
+        mounts.canonical(StoreKind.S3, "colour")
+
+
+def test_options_mix_placeholders_and_literals(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv(option_variable("IMAGES", "access_key_id"), "identity")
+    monkeypatch.setenv(option_variable("IMAGES", "secret_access_key"), "secret")
+    declaration = MountDeclaration(
+        id="IMAGES",
+        uri="s3://images",
+        options={
+            "access_key_id": PLACEHOLDER,
+            "secret_access_key": PLACEHOLDER,
+            "region": "eu-west-1",
+        },
+    )
+    assert mounts.options(declaration, "s3://images/python/image.tar.zst") == {
+        "aws_access_key_id": "identity",
+        "aws_secret_access_key": "secret",
+        "aws_region": "eu-west-1",
+    }
+
+
+def test_unset_optional_placeholder_drops_the_option(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv(option_variable("ROOT", "endpoint"), raising=False)
+    declaration = MountDeclaration(
+        id="ROOT",
+        uri="s3://root",
+        options={
+            "anonymous": "true",
+            "region": "us-east-1",
+            "endpoint": OPTIONAL_PLACEHOLDER,
+        },
+    )
+    assert mounts.options(declaration, "s3://root/key") == {
+        "aws_skip_signature": "true",
+        "aws_region": "us-east-1",
+    }
+
+
+def test_unset_mandatory_placeholder_fails(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.delenv(option_variable("IMAGES", "secret_access_key"), raising=False)
+    declaration = MountDeclaration(
+        id="IMAGES",
+        uri="s3://images",
+        options={"secret_access_key": PLACEHOLDER},
+    )
+    with pytest.raises(MountError, match="IMAGES.options.secret_access_key"):
+        mounts.options(declaration, "s3://images/key")
+
+
+@pytest.mark.parametrize(
+    "location, declared, requirement",
+    [
+        ("s3://bucket/key", {"region": "eu-west-1"}, "access_key_id"),
+        (
+            "s3://bucket/key",
+            {"access_key_id": "identity", "secret_access_key": "secret"},
+            "region or endpoint",
+        ),
+        ("az://container/key", {"account_key": "key"}, "account_name"),
+        ("az://container/key", {"account_name": "account"}, "account_key"),
+        ("gs://bucket/key", {"allow_http": "true"}, "service_account_key"),
+    ],
+)
+def test_missing_credentials_fail(location: str, declared: dict, requirement: str):
+    declaration = MountDeclaration(id="ROOT", uri=location, options=declared)
+    with pytest.raises(MountError, match=requirement):
+        mounts.options(declaration, location)
+
+
+def test_local_mount_needs_no_options(tmp_path: Path):
+    declaration = MountDeclaration(id="ROOT", uri=tmp_path.as_uri())
+    assert mounts.options(declaration, (tmp_path / "key").as_uri()) == {}
+
+
+def test_read_turns_scalars_into_text(tmp_path: Path):
+    config = storage_config(
+        tmp_path,
+        {"id": "ROOT", "uri": "s3://root", "options": {"allow_http": True, "port": 9}},
+    )
+    assert mounts.read(config, "ROOT").options == {"allow_http": "true", "port": "9"}

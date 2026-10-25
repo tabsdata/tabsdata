@@ -34,7 +34,6 @@ mimesis==22.2.0
 mkdocs==1.6.1
 mypy==2.4.0
 mypy-extensions==1.1.0
-obstore==0.12.0
 pdoc==16.0.0
 pip-audit==2.10.1
 pip-tools==7.6.2
