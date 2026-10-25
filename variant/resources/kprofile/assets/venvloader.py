@@ -13,27 +13,15 @@ import subprocess
 import sys
 import tarfile
 import time
-import urllib.parse
-import urllib.request
 from pathlib import Path
 from typing import IO, Iterator
 
-import boto3
-import botocore.exceptions
-import yaml
+import obstore.exceptions
 import zstandard
 
-STORAGE_KEY = "storage"
-MOUNTS_KEY = "mounts"
-MOUNT_ID_KEY = "id"
-MOUNT_URI_KEY = "uri"
-MOUNT_OPTIONS_KEY = "options"
-
-SECRET_ENV_PREFIX = "SECRETS__STORAGE__MOUNTS__"
-SECRET_ENV_OPTIONS_INFIX = "__OPTIONS__"
-SECRET_ENV_URI_SUFFIX = "__URI"
-
-PLACEHOLDER_PREFIX = "${{"
+from tabsdatak.common._storage import mounts, transfer
+from tabsdatak.common._storage.mounts import MountError
+from tabsdatak.common._storage.transfer import StorageLocation, TransferError
 
 IMAGES_MOUNT_ID = "IMAGES"
 IMAGES_SUBFOLDER = "python"
@@ -47,25 +35,6 @@ KENVS_FOLDER = "kenvs"
 CLEAR_ATTEMPTS = 8
 CLEAR_DELAY = 1
 
-SCHEME_FILE = "file"
-SCHEME_AZS = "az"
-SCHEME_GCS = "gs"
-SCHEME_S3 = "s3"
-
-OPTION_AZS_ACCOUNT_NAME = "azure_storage_account_name"
-OPTION_AZS_ACCOUNT_KEY = "azure_storage_account_key"
-OPTION_GCS_SERVICE_ACCOUNT_KEY = "google_service_account_key"
-OPTION_S3_REGION = "aws_region"
-OPTION_S3_ACCESS_KEY_ID = "aws_access_key_id"
-OPTION_S3_SECRET_ACCESS_KEY = "aws_secret_access_key"
-
-ENV_AZS_ACCOUNT_NAME = "AZURE_STORAGE_ACCOUNT_NAME"
-ENV_AZS_ACCOUNT_KEY = "AZURE_STORAGE_ACCOUNT_KEY"
-ENV_GCS_SERVICE_ACCOUNT_KEY = "GOOGLE_SERVICE_ACCOUNT_KEY"
-ENV_S3_REGION = "AWS_REGION"
-ENV_S3_ACCESS_KEY_ID = "AWS_ACCESS_KEY_ID"
-ENV_S3_SECRET_ACCESS_KEY = "AWS_SECRET_ACCESS_KEY"
-
 ENV_UV_MODE = "TD_KUBE_UV_MODE"
 UV_MODE_LINKED = "linked"
 UV_MODE_LOCAL = "local"
@@ -74,7 +43,7 @@ UV_MODES_HOST = (UV_MODE_LINKED, UV_MODE_LOCAL)
 TAR_EXECUTABLE = "tar"
 COPY_BLOCK_SIZE = 1 << 22
 
-LOCALHOST = "localhost"
+PATH_SEPARATOR = "/"
 
 STARTED = time.monotonic()
 
@@ -152,82 +121,26 @@ def human_size(size: int) -> str:
     raise AssertionError
 
 
-def secret_env_name(mount_id: str, option_key: str) -> str:
-    return (
-        f"{SECRET_ENV_PREFIX}{mount_id}{SECRET_ENV_OPTIONS_INFIX}{option_key.upper()}"
-    )
+def mount_location(storage_config: Path, mount_id: str) -> StorageLocation:
+    declaration = mounts.read(storage_config, mount_id)
+    uri = mounts.uri(declaration)
+    return StorageLocation(uri=uri, options=mounts.options(declaration, uri))
 
 
-def secret_uri_env_name(mount_id: str) -> str:
-    return f"{SECRET_ENV_PREFIX}{mount_id}{SECRET_ENV_URI_SUFFIX}"
-
-
-def resolve_uri(uri: str, mount_id: str) -> str:
-    if not uri.startswith(PLACEHOLDER_PREFIX):
-        return uri
-    variable = secret_uri_env_name(mount_id)
-    resolved = os.environ.get(variable, "").strip()
-    if not resolved:
-        die(
-            "Reading the mount",
-            f"Mount {mount_id!r} holds the placeholder {uri!r} and the environment "
-            f"variable {variable} is unset or empty",
-        )
-    return resolved
-
-
-def load_mount(storage_config: Path, mount_id: str) -> tuple[str, dict[str, str]]:
-    try:
-        document = yaml.safe_load(storage_config.read_text(encoding="utf-8"))
-    except OSError as error:
-        die("Reading the storage configuration", str(error))
-    mounts = (document or {}).get(STORAGE_KEY, {}).get(MOUNTS_KEY, []) or []
-    for mount in mounts:
-        if mount.get(MOUNT_ID_KEY) != mount_id:
-            continue
-        uri = mount.get(MOUNT_URI_KEY)
-        if not uri:
-            die("Reading the mount", f"Mount {mount_id!r} declares no uri")
-        options = mount.get(MOUNT_OPTIONS_KEY) or {}
-        resolved = {}
-        for key in options:
-            value = os.environ.get(secret_env_name(mount_id, key), "")
-            if value:
-                resolved[key] = value
-        return resolve_uri(str(uri), mount_id), resolved
-    die("Reading the mount", f"Mount {mount_id!r} not found in {storage_config}")
-    raise AssertionError
-
-
-def image_uri(uri: str, subfolder: str, name: str) -> str:
-    prefix = uri if uri.endswith("/") else f"{uri}/"
-    if subfolder:
-        prefix = f"{prefix}{subfolder.strip('/')}/"
-    return f"{prefix}{name}"
-
-
-def file_uri_to_path(source: str) -> Path:
-    parsed = urllib.parse.urlparse(source)
-    path = urllib.request.url2pathname(parsed.path)
-    if parsed.netloc and parsed.netloc.lower() != LOCALHOST:
-        return Path(f"//{parsed.netloc}") / path.lstrip("\\/")
-    return Path(path)
-
-
-@contextlib.contextmanager
-def open_file(source: str) -> Iterator[IO[bytes]]:
-    origin = file_uri_to_path(source)
-    if not origin.is_file():
-        die("Downloading the image", f"Image not found: {origin}")
-    trace(f"Reading {origin}")
-    with open(origin, "rb") as reader:
-        yield reader
+def image_location(
+    mount: StorageLocation, subfolder: str, name: str
+) -> StorageLocation:
+    segments = [mount.uri.rstrip(PATH_SEPARATOR)]
+    if subfolder.strip(PATH_SEPARATOR):
+        segments.append(subfolder.strip(PATH_SEPARATOR))
+    segments.append(name)
+    return StorageLocation(uri=PATH_SEPARATOR.join(segments), options=mount.options)
 
 
 class ChunkReader(io.RawIOBase):
-    def __init__(self, chunks: Iterator[bytes]) -> None:
+    def __init__(self, chunks: Iterator[memoryview]) -> None:
         self._chunks = chunks
-        self._buffer = b""
+        self._buffer = memoryview(b"")
 
     def readable(self) -> bool:
         return True
@@ -243,119 +156,19 @@ class ChunkReader(io.RawIOBase):
         self._buffer = self._buffer[size:]
         return size
 
+    def close(self) -> None:
+        self._chunks.close()
+        super().close()
+
 
 @contextlib.contextmanager
-def open_azs(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
-    from azure.storage.blob import BlobServiceClient
-
-    parsed = urllib.parse.urlparse(source)
-    container = parsed.netloc
-    blob_name = parsed.path.lstrip("/")
-    if not container or not blob_name:
-        die("Downloading the image", f"Malformed az uri: {source}")
-    account = options.get(OPTION_AZS_ACCOUNT_NAME) or os.environ.get(
-        ENV_AZS_ACCOUNT_NAME
-    )
-    secret = options.get(OPTION_AZS_ACCOUNT_KEY) or os.environ.get(ENV_AZS_ACCOUNT_KEY)
-    if not account:
-        die("Downloading the image", f"No storage account for {source}")
-    client = BlobServiceClient(
-        account_url=f"https://{account}.blob.core.windows.net",
-        credential=secret,
-    )
-    trace(f"Downloading {source}")
-    blob = client.get_blob_client(container=container, blob=blob_name)
-    try:
-        download = blob.download_blob()
-    except Exception as error:
-        die("Downloading the image", f"{source}: {error}")
-    stream = io.BufferedReader(ChunkReader(download.chunks()))
+def open_image(location: StorageLocation) -> Iterator[IO[bytes]]:
+    trace(f"Downloading {location.uri}")
+    stream = io.BufferedReader(ChunkReader(transfer.chunks(location)))
     try:
         yield stream
     finally:
         stream.close()
-
-
-@contextlib.contextmanager
-def open_gcs(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
-    import json
-
-    from google.cloud import storage as gcs
-    from google.oauth2 import service_account
-
-    parsed = urllib.parse.urlparse(source)
-    bucket = parsed.netloc
-    blob_name = parsed.path.lstrip("/")
-    if not bucket or not blob_name:
-        die("Downloading the image", f"Malformed gs uri: {source}")
-    key = options.get(OPTION_GCS_SERVICE_ACCOUNT_KEY) or os.environ.get(
-        ENV_GCS_SERVICE_ACCOUNT_KEY
-    )
-    if key:
-        credentials = service_account.Credentials.from_service_account_info(
-            json.loads(key)
-        )
-        client = gcs.Client(credentials=credentials, project=credentials.project_id)
-    else:
-        client = gcs.Client()
-    trace(f"Downloading {source}")
-    blob = client.bucket(bucket).blob(blob_name)
-    stream = None
-    try:
-        stream = blob.open("rb")
-        yield stream
-    except Exception as error:
-        die("Downloading the image", f"{source}: {error}")
-    finally:
-        if stream is not None:
-            stream.close()
-
-
-@contextlib.contextmanager
-def open_s3(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
-    parsed = urllib.parse.urlparse(source)
-    bucket = parsed.netloc
-    key = parsed.path.lstrip("/")
-    if not bucket or not key:
-        die("Downloading the image", f"Malformed s3 uri: {source}")
-    client = boto3.client(
-        "s3",
-        region_name=options.get(OPTION_S3_REGION) or os.environ.get(ENV_S3_REGION),
-        aws_access_key_id=options.get(OPTION_S3_ACCESS_KEY_ID)
-        or os.environ.get(ENV_S3_ACCESS_KEY_ID),
-        aws_secret_access_key=options.get(OPTION_S3_SECRET_ACCESS_KEY)
-        or os.environ.get(ENV_S3_SECRET_ACCESS_KEY),
-    )
-    trace(f"Downloading {source}")
-    try:
-        body = client.get_object(Bucket=bucket, Key=key)["Body"]
-    except botocore.exceptions.ClientError as error:
-        die("Downloading the image", f"{source}: {error}")
-    except botocore.exceptions.BotoCoreError as error:
-        die("Downloading the image", f"{source}: {error}")
-    try:
-        yield body
-    finally:
-        body.close()
-
-
-@contextlib.contextmanager
-def open_image(source: str, options: dict[str, str]) -> Iterator[IO[bytes]]:
-    scheme = urllib.parse.urlparse(source).scheme or SCHEME_FILE
-    if scheme == SCHEME_FILE:
-        with open_file(source) as stream:
-            yield stream
-    elif scheme == SCHEME_AZS:
-        with open_azs(source, options) as stream:
-            yield stream
-    elif scheme == SCHEME_GCS:
-        with open_gcs(source, options) as stream:
-            yield stream
-    elif scheme == SCHEME_S3:
-        with open_s3(source, options) as stream:
-            yield stream
-    else:
-        die("Downloading the image", f"Unsupported storage scheme: {scheme}")
 
 
 def clear_venv(uv_home: Path, venv: str) -> None:
@@ -400,9 +213,9 @@ def extract_with_tarfile(stream: IO[bytes], uv_home: Path) -> None:
         archive.extractall(path=uv_home, filter=None)
 
 
-def extract_image(source: str, options: dict[str, str], uv_home: Path) -> None:
+def extract_image(location: StorageLocation, uv_home: Path) -> None:
     use_tar = shutil.which(TAR_EXECUTABLE) is not None
-    with open_image(source, options) as body:
+    with open_image(location) as body:
         decompressor = zstandard.ZstdDecompressor()
         with decompressor.stream_reader(body) as stream:
             trace(
@@ -429,13 +242,20 @@ def main() -> int:
     output = Path(arguments.output)
     uv_home = output / UV_FOLDER
 
-    uri, options = load_mount(Path(arguments.storage_config), arguments.mount)
-
     output.mkdir(parents=True, exist_ok=True)
-    for venv in venvs:
-        clear_venv(uv_home, venv)
-        name = image_for_venv(arguments.image, venv)
-        extract_image(image_uri(uri, arguments.subfolder, name), options, uv_home)
+    try:
+        mount = mount_location(Path(arguments.storage_config), arguments.mount)
+        for venv in venvs:
+            clear_venv(uv_home, venv)
+            name = image_for_venv(arguments.image, venv)
+            extract_image(image_location(mount, arguments.subfolder, name), uv_home)
+    except (
+        OSError,
+        MountError,
+        TransferError,
+        obstore.exceptions.BaseError,
+    ) as error:
+        die("Loading the image", str(error))
 
     trace(f"Done! Virtual environments available at {uv_home}")
     return 0

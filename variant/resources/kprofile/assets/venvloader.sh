@@ -58,9 +58,7 @@ PYTHON_BINARY="python3"
 UV_BINARY="uv"
 TAR_BINARY="tar"
 PIP_PACKAGES=(
-   "azure-storage-blob"
-   "boto3"
-   "google-cloud-storage"
+   "obstore"
    "pyyaml"
    "zstandard"
 )
@@ -73,6 +71,7 @@ show_usage() {
    echo "      --subfolder FOLDER         Subfolder under the mount            (default: python)"
    echo "      --image NAME               Image file name; the venv name is appended to the stem    (default: tdvenvs.tar.zst)"
    echo "      --venv NAME                Virtual environment to load; repeat to load several    (default: td)"
+   echo "      --constraint FILE          Constraints for the prerequisites    (default: none)"
    echo "  -h, --help                     Show this help"
 }
 
@@ -83,6 +82,7 @@ parse_arguments() {
    subfolder=""
    image=""
    venvs=()
+   constraint=""
    while [[ $# -gt 0 ]]; do
       case "$1" in
          -o|--output)        output="$2";         shift 2 ;;
@@ -91,6 +91,7 @@ parse_arguments() {
          --subfolder)        subfolder="$2";      shift 2 ;;
          --image)            image="$2";          shift 2 ;;
          --venv)             venvs+=("$2");       shift 2 ;;
+         --constraint)       constraint="$2";     shift 2 ;;
          -h|--help)          show_usage; exit 0 ;;
          *) echo "Unknown option: $1" >&2; show_usage; exit 2 ;;
       esac
@@ -112,6 +113,10 @@ validate_arguments() {
       echo "Storage configuration not found: $storage_config" >&2
       exit 1
    fi
+   if [[ -n "$constraint" && ! -f "$constraint" ]]; then
+      echo "Constraints file not found: $constraint" >&2
+      exit 1
+   fi
    if [[ ! -f "$LOADER" ]]; then
       echo "The loader script is not present: $LOADER" >&2
       exit 1
@@ -119,10 +124,14 @@ validate_arguments() {
 }
 
 install_prerequisites() {
+   local constraints=()
+   if [[ -n "$constraint" ]]; then
+      constraints=(--constraint "$constraint")
+   fi
    if command -v "$UV_BINARY" >/dev/null 2>&1; then
-      run "$UV_BINARY" pip install --system --quiet "${PIP_PACKAGES[@]}"
+      run "$UV_BINARY" pip install --system --quiet "${constraints[@]}" "${PIP_PACKAGES[@]}"
    else
-      run "$PYTHON_BINARY" -m pip install --quiet --disable-pip-version-check "${PIP_PACKAGES[@]}"
+      run "$PYTHON_BINARY" -m pip install --quiet --disable-pip-version-check "${constraints[@]}" "${PIP_PACKAGES[@]}"
    fi
    if command -v "$TAR_BINARY" >/dev/null 2>&1; then
       trace "Unpacking with $TAR_BINARY"

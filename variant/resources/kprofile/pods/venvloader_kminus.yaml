@@ -89,6 +89,16 @@ spec:
         projected:
           sources:
           - configMap:
+              name: td-app-mounts-asset-mounts.py
+              items:
+              - key: mounts.py
+                path: tabsdatak/common/_storage/mounts.py
+          - configMap:
+              name: td-app-transfer-asset-transfer.py
+              items:
+              - key: transfer.py
+                path: tabsdatak/common/_storage/transfer.py
+          - configMap:
               name: td-app-venvloader-asset-venvloader.py
       - name: config
         projected:
