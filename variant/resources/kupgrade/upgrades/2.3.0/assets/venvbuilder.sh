@@ -142,8 +142,6 @@ parse_arguments() {
    image="$IMAGE_NAME$IMAGE_SUFFIX"
    version=""
    storage_config=""
-   transporter_request=""
-   transporter_response=""
    while [[ $# -gt 0 ]]; do
       case "$1" in
          -p|--python)         python_version="$2";  shift 2 ;;
@@ -154,8 +152,6 @@ parse_arguments() {
          --image)             image="$2";           shift 2 ;;
          --version)           version="$2";         shift 2 ;;
          --storage-config)    storage_config="$2";  shift 2 ;;
-         --transporter-request)  transporter_request="$2";  shift 2 ;;
-         --transporter-response) transporter_response="$2"; shift 2 ;;
          -h|--help)           show_usage; exit 0 ;;
          *) echo "Unknown option: $1" >&2; show_usage; exit 2 ;;
       esac
@@ -212,16 +208,6 @@ validate_arguments() {
    if [[ -n "$storage_config" && ! -f "$storage_config" ]]; then
       echo "Storage configuration file not found: $storage_config" >&2
       exit 1
-   fi
-
-   if [[ -n "$storage_config" && -z "$transporter_request" ]]; then
-      echo "Transporter request file is mandatory when a storage configuration is given" >&2
-      exit 2
-   fi
-
-   if [[ -n "$storage_config" && -z "$transporter_response" ]]; then
-      echo "Transporter response file is mandatory when a storage configuration is given" >&2
-      exit 2
    fi
 }
 
@@ -436,28 +422,14 @@ write_image() {
    rm -rf "$work"
 }
 
-shuttle_path() {
-   local base="$1"
-   local tag="$2"
-   local folder="$(dirname "$base")"
-   local name="$(basename "$base")"
-   echo "$folder/${name%.*}-$tag.${name##*.}"
-}
-
 send_one_image() {
    local target="$1"
-   local tag="$2"
-   local request="$(shuttle_path "$transporter_request" "$tag")"
-   local response="$(shuttle_path "$transporter_response" "$tag")"
    local size
    size="$(file_size "$target")"
    trace "Sending $target: $(human_size "$size") ($size bytes)"
-   rm -f "$response"
    run "$virtual_environment_td/bin/python" -m "$ARCHIVE_MODULE" \
       --image "$target" \
-      --storage-config "$storage_config" \
-      --transporter-request "$request" \
-      --transporter-response "$response"
+      --storage-config "$storage_config"
 }
 
 send_image() {
@@ -465,8 +437,8 @@ send_image() {
       echo ">> Skipping the image upload; no storage configuration given"
       return
    fi
-   send_one_image "$output_image_td" "$VENV_TD"
-   send_one_image "$output_image_fn" "$VENV_FN"
+   send_one_image "$output_image_td"
+   send_one_image "$output_image_fn"
 }
 
 main() {

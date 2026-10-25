@@ -4,6 +4,12 @@
 
 schema: 1
 assets:
+  mounts.py:
+    mounts.py:
+      action: create
+  transfer.py:
+    transfer.py:
+      action: create
   venvbuilder.py:
     venvbuilder.py:
       action: replace
@@ -153,6 +159,32 @@ pods:
     function-transformer_gke.yaml:
       action: replace
     function-transformer_kminus.yaml:
+      action: replace
+  pymanager.yaml:
+    pymanager_aks.yaml:
+      action: replace
+    pymanager_docker.yaml:
+      action: replace
+    pymanager_eks.yaml:
+      action: replace
+    pymanager_fargate.yaml:
+      action: replace
+    pymanager_gke.yaml:
+      action: replace
+    pymanager_kminus.yaml:
+      action: replace
+  stream-publisher.yaml:
+    stream-publisher_aks.yaml:
+      action: replace
+    stream-publisher_docker.yaml:
+      action: replace
+    stream-publisher_eks.yaml:
+      action: replace
+    stream-publisher_fargate.yaml:
+      action: replace
+    stream-publisher_gke.yaml:
+      action: replace
+    stream-publisher_kminus.yaml:
       action: replace
   tdmanager.yaml:
     tdmanager_aks.yaml:
