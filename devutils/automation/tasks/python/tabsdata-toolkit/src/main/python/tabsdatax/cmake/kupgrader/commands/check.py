@@ -7,6 +7,7 @@ from pathlib import Path
 
 import rich_click as click
 
+from tabsdatax.cmake.kupgrader.common.assets import verify_assets
 from tabsdatax.cmake.kupgrader.common.commit import Difference, compare
 from tabsdatax.cmake.kupgrader.common.emission import Emission
 from tabsdatax.cmake.kupgrader.common.pipeline import (
@@ -37,6 +38,8 @@ log = logging.getLogger(__name__)
 def perform_check(root_folder: Path) -> None:
     context = context_of("check", root_folder)
     display_context(context)
+
+    verify_assets(context)
 
     generation = generate(context)
     if generation is None:

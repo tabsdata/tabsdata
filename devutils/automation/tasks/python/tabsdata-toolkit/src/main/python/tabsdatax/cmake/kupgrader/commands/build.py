@@ -7,6 +7,7 @@ from pathlib import Path
 
 import rich_click as click
 
+from tabsdatax.cmake.kupgrader.common.assets import copy_assets
 from tabsdatax.cmake.kupgrader.common.commit import commit
 from tabsdatax.cmake.kupgrader.common.pipeline import (
     generate,
@@ -37,6 +38,9 @@ log = logging.getLogger(__name__)
 def perform_build(root_folder: Path) -> None:
     context = context_of("build", root_folder)
     display_context(context)
+
+    for asset in copy_assets(context):
+        log.info(f"Copied {asset.source} to the kprofile asset {asset.target}.")
 
     generation = generate(context)
     if generation is None:

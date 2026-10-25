@@ -37,8 +37,10 @@ def main() -> None:
     """Check and build the kupgrade upgraders of a tabsdata repository.
 
     \b
-    The `check` command verifies the shipped upgrader is correct and complete.
-    The `build` command regenerates the upgrader and verifies its outcome.
+    The `check` command verifies the kprofile assets copied from sources match
+    them, and the shipped upgrader is correct and complete.
+    The `build` command copies the kprofile assets taken from sources, then
+    regenerates the upgrader and verifies its outcome.
     The `templates` command writes the templates of every version.
     """
 
