@@ -18,7 +18,7 @@ import yaml
 from tabsdatak.common._archive.bundle import build_bundle
 from tabsdatak.server._tdrunner.function.commands import (
     begin_execution,
-    localize_fn_bundle,
+    get_bundle,
     prep_localize_state,
     prep_upload_raw,
     prep_upload_state,
@@ -86,7 +86,11 @@ class Driver:
         self.storage = root / "storage.yaml"
         self.storage.write_text(
             yaml.safe_dump({
-                "storage": {"mounts": [{"id": STORAGE_MOUNT, "options": {}}]}
+                "storage": {
+                    "mounts": [
+                        {"id": STORAGE_MOUNT, "uri": root.as_uri(), "options": {}},
+                    ],
+                },
             })
         )
         self.store = root / "store"
@@ -175,13 +179,11 @@ class Driver:
     def begin(self) -> None:
         self.step(begin_execution, "begin-execution")
         self.step(
-            localize_fn_bundle,
-            "localize-fn-bundle",
+            get_bundle,
+            "get-bundle",
             request=self.request,
             bundle_dir=self.path("bundle"),
             bundle_archive=self.path("shuttle/bundle.tar.zst"),
-            transporter_request=self.path("shuttle/bundle-request.yaml"),
-            transporter_response=self.path("shuttle/bundle-response.yaml"),
             storage_config=self.storage,
         )
         self.step(

@@ -22,7 +22,7 @@ Pod chain (see ``stream-publisher_kminus.yaml``):
 
   * ``0010-begin-execution`` -- initialise journal + notify_status_running
   * ``0020-fetch-request`` -- pull request.yaml from apiserver
-  * ``0030-localize-fn-bundle`` -- download + extract the user bundle
+  * ``0030-get-bundle`` -- download + extract the user bundle
   * ``0900-manifest-trigger`` -- sidecar (NU7); scans
     ``<stage>/manifests/`` and POSTs ``fn_trigger`` per manifest
   * ``1000-run-streamer`` (this command) -- long-running, exits 0 on

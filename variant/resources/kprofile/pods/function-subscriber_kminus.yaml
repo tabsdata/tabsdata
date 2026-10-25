@@ -255,10 +255,10 @@ spec:
               readOnly: true
             - name: shared
               mountPath: /tabsdata/shared
-        - name: 0040-localize-fn-bundle
+        - name: 0040-get-bundle
           image: function
           imagePullPolicy: IfNotPresent
-          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_localize_fn_bundle${{system:tdk_exe_suffix}}"]
+          command: ["$(CONTAINER_ROOT)/tabsdata/pyenv/${{system:tdk_pyenv_scripts_folder}}/td_get_bundle${{system:tdk_exe_suffix}}"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -282,10 +282,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --bundle-archive
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/archive/bundle.tar.zst
-            - --transporter-request
-            - $(CONTAINER_ROOT)/tabsdata/shuttle/request/bundle-fetch.yaml
-            - --transporter-response
-            - $(CONTAINER_ROOT)/tabsdata/shuttle/response/bundle-fetch.yaml
             - --storage-config
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
           securityContext:
@@ -316,7 +312,7 @@ spec:
                 name: td-app-apiserver-secret-config-apiserver.storage.yaml
               prefix: SECRETS__
           volumeMounts:
-            - name: config-localize-fn-bundle
+            - name: config-get-bundle
               mountPath: /tabsdata/config
               readOnly: true
             - name: pyenv
@@ -801,7 +797,7 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-localize-fn-bundle
+        - name: config-get-bundle
           projected:
             sources:
               - configMap:

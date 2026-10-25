@@ -13,7 +13,7 @@ apiserver endpoint that `report-completion` POSTs to.
 
 The chain executed (matches `donotmerge.py`):
 
-  1.  localize-fn-bundle   — pulls + extracts the bundle.
+  1.  get-bundle   — pulls + extracts the bundle.
   2.  prep-localize-state  — emits an empty transporter request
                              (no input / system_input).
   3.  run-transporter      — no-op.
@@ -130,7 +130,7 @@ def user_project(tmp_path, monkeypatch) -> Path:
 
 @pytest.fixture
 def bundle_path(tmp_path, user_project) -> Path:
-    """Build the bundle tarball. Not extracted — `localize-fn-bundle`
+    """Build the bundle tarball. Not extracted — `get-bundle`
     is what extracts it during the test."""
     from my_pkg.publisher import my_publisher  # noqa: E402  (lazy)
 
@@ -333,7 +333,7 @@ _STORAGE_CONFIG_COMMANDS = {
     "prep-localize-state",
     "prep-upload-state",
     "prep-upload-tables",
-    "localize-fn-bundle",
+    "get-bundle",
 }
 
 
@@ -390,8 +390,8 @@ def test_publisher_full_chain(
         uploaded_dir=uploaded_dir,
     )
 
-    # --- 1. localize-fn-bundle ------------------------------------------
-    from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle import (
+    # --- 1. get-bundle ------------------------------------------
+    from tabsdatak.server._tdrunner.function.commands.get_bundle import (
         main as localize_main,
     )
 
@@ -399,7 +399,7 @@ def test_publisher_full_chain(
         monkeypatch,
         localize_main,
         [
-            "localize-fn-bundle",
+            "get-bundle",
             "--request",
             str(request_yaml),
             "--bundle-dir",
@@ -840,8 +840,8 @@ def test_publisher_full_chain_multi_input_path(
         uploaded_dir=uploaded_dir,
     )
 
-    # --- 1. localize-fn-bundle ------------------------------------------
-    from tabsdatak.server._tdrunner.function.commands.localize_fn_bundle import (
+    # --- 1. get-bundle ------------------------------------------
+    from tabsdatak.server._tdrunner.function.commands.get_bundle import (
         main as localize_main,
     )
 
@@ -849,7 +849,7 @@ def test_publisher_full_chain_multi_input_path(
         monkeypatch,
         localize_main,
         [
-            "localize-fn-bundle",
+            "get-bundle",
             "--request",
             str(request_yaml),
             "--bundle-dir",

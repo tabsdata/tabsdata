@@ -337,10 +337,10 @@ spec:
               mountPath: /tabsdata/shared
             - name: work
               mountPath: /tabsdata/work
-        - name: 0060-localize-fn-bundle
+        - name: 0060-get-bundle
           image: ubuntu:24.04
           imagePullPolicy: IfNotPresent
-          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_localize_fn_bundle"]
+          command: ["${{system:tdk_pyenv_fn_root}}/bin/td_get_bundle"]
           args:
             - --shared-dir
             - $(CONTAINER_ROOT)/tabsdata/shared
@@ -364,10 +364,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --bundle-archive
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/archive/bundle.tar.zst
-            - --transporter-request
-            - $(CONTAINER_ROOT)/tabsdata/shuttle/request/bundle-fetch.yaml
-            - --transporter-response
-            - $(CONTAINER_ROOT)/tabsdata/shuttle/response/bundle-fetch.yaml
             - --storage-config
             - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
           securityContext:
@@ -403,7 +399,7 @@ spec:
             - name: certs
               mountPath: /tabsdata/certs
               readOnly: true
-            - name: config-localize-fn-bundle
+            - name: config-get-bundle
               mountPath: /tabsdata/config
               readOnly: true
             - name: liveness
@@ -1043,7 +1039,7 @@ spec:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.rs.yaml
-        - name: config-localize-fn-bundle
+        - name: config-get-bundle
           projected:
             sources:
               - configMap:
