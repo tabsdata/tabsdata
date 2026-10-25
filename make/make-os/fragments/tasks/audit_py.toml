@@ -61,11 +61,11 @@ script = [
     if ${file_is_empty}
         warn "🪹 File ${requirements-third-party-all-path} contains no requirement. Skipping audit on it."
     else
-        debug "🚀 pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-third-party-all-path}"
-        exec --fail-on-error pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-third-party-all-path}
+        debug "🚀 pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver uv --compact --requirements-files ${requirements-third-party-all-path}"
+        exec --fail-on-error pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver uv --compact --requirements-files ${requirements-third-party-all-path}
 
-        debug "🚀 pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-third-party-all-path}"
-        exec --fail-on-error pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-third-party-all-path}
+        debug "🚀 pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver pip-tools --compact --requirements-files ${requirements-third-party-all-path}"
+        exec --fail-on-error pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver pip-tools --compact --requirements-files ${requirements-third-party-all-path}
     end
 
     requirements-dev-third-party-path = temp_file txt
@@ -77,11 +77,11 @@ script = [
     if ${file_is_empty}
         warn "🪹 File ${requirements-dev-third-party-path} contains no requirement. Skipping audit on it."
     else
-        debug "🚀 pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
-        exec --fail-on-error pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver uv --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
+        debug "🚀 pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver uv --compact --requirements-files ${requirements-dev-third-party-path}"
+        exec --fail-on-error pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver uv --compact --requirements-files ${requirements-dev-third-party-path}
 
-        debug "🚀 pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}"
-        exec --fail-on-error pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver pip-tools --verbose --detailed --requirements-files ${requirements-dev-third-party-path}
+        debug "🚀 pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver pip-tools --compact --requirements-files ${requirements-dev-third-party-path}"
+        exec --fail-on-error pysentry-rs --fail-on low %{ignore_arguments} --no-cache --sources pypa,osv,pypi --resolver pip-tools --compact --requirements-files ${requirements-dev-third-party-path}
     end
 
     debug "🚀 python -m pip install --upgrade pip==${TD_PIP_VERSION}"
