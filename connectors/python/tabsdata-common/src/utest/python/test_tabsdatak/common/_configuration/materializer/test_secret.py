@@ -37,9 +37,7 @@ def test_encode_empty_segment_raises():
 def test_materialize_resolves_required_secret(monkeypatch):
     monkeypatch.setenv("SECRETS__AI_PROVIDERS__OPENAI__API_KEY", "sk-live")
     document = {"ai_providers": {"openai": {"api_key": "${{secret:openai-key}}"}}}
-    assert materialize(document) == {
-        "ai_providers": {"openai": {"api_key": "sk-live"}}
-    }
+    assert materialize(document) == {"ai_providers": {"openai": {"api_key": "sk-live"}}}
 
 
 def test_materialize_missing_required_secret_raises(monkeypatch):
@@ -73,10 +71,45 @@ def test_materialize_leaves_non_secret_scalars_unchanged():
     assert materialize(document) == document
 
 
-def test_materialize_resolves_secret_inside_list(monkeypatch):
-    monkeypatch.setenv("SECRETS__PROVIDERS___0__KEY", "first")
-    document = {"providers": [{"key": "${{secret:k}}"}]}
-    assert materialize(document) == {"providers": [{"key": "first"}]}
+def test_materialize_keys_list_items_by_their_first_value(monkeypatch):
+    monkeypatch.setenv("SECRETS__STORAGE__MOUNTS__ROOT__URI", "s3://root")
+    monkeypatch.setenv("SECRETS__STORAGE__MOUNTS__IMAGES__URI", "s3://images")
+    document = {
+        "storage": {
+            "mounts": [
+                {"id": "ROOT", "uri": "${{secret}}"},
+                {"id": "IMAGES", "uri": "${{secret}}"},
+            ],
+        },
+    }
+    assert materialize(document) == {
+        "storage": {
+            "mounts": [
+                {"id": "ROOT", "uri": "s3://root"},
+                {"id": "IMAGES", "uri": "s3://images"},
+            ],
+        },
+    }
+
+
+def test_materialize_rejects_a_list_item_keyed_by_a_secret():
+    document = {"mounts": [{"id": "${{secret}}", "uri": "s3://root"}]}
+    with pytest.raises(MaterializerSecretException, match="keyed by a secret"):
+        materialize(document)
+
+
+@pytest.mark.parametrize(
+    "placeholder",
+    ["${{secret}}", "${{secret?}}", "${{secret:name}}", "${{secretAuto:password}}"],
+)
+def test_materialize_accepts_every_placeholder_form(monkeypatch, placeholder):
+    monkeypatch.setenv("SECRETS__API_KEY", "value")
+    assert materialize({"api_key": placeholder}) == {"api_key": "value"}
+
+
+def test_materialize_leaves_embedded_placeholders_as_text():
+    document = {"api_key": "prefix ${{secret}}"}
+    assert materialize(document) == document
 
 
 def test_materialize_trims_resolved_value(monkeypatch):

@@ -23,3 +23,7 @@ class MaterializerErrorCode(ErrorCode):
         MaterializerSecretException,
         "Environment variable {variable!r} for secret at path {path!r} is not set",
     )
+    MATERIALIZER_3 = ErrorDef(
+        MaterializerSecretException,
+        "List item {index} at path {path!r} is keyed by a secret placeholder",
+    )

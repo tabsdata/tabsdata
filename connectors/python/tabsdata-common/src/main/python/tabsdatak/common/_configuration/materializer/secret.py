@@ -9,9 +9,11 @@ import re
 
 from tabsdatak.common._configuration.materializer.error import MaterializerErrorCode
 
-SECRET_PLACEHOLDER_PATTERN = re.compile(r"\$\{\{secret:([^}?]+)(\?)?}}")
+SECRET_PLACEHOLDER_PATTERN = re.compile(
+    r"^\$\{\{secret(Auto)?(?::([A-Za-z0-9._-]*))?(\?)?}}$",
+)
 
-OPTIONAL_GROUP = 2
+OPTIONAL_GROUP = 3
 
 PATH_SEPARATOR = "."
 SECRET_KEY_SEPARATOR = "__"
@@ -46,19 +48,29 @@ def encode_secret_variable(path: list[str]) -> str:
 
 
 def resolve_scalar(value: str, path: list[str]) -> str:
-    def substitute(match: re.Match[str]) -> str:
-        optional = match.group(OPTIONAL_GROUP) is not None
-        variable = encode_secret_variable(path)
-        resolved = os.environ.get(variable)
-        if resolved is None:
-            if optional:
-                return EMPTY_VALUE
-            raise MaterializerErrorCode.MATERIALIZER_2.exception(
-                variable=variable, path=PATH_SEPARATOR.join(path)
-            )
+    match = SECRET_PLACEHOLDER_PATTERN.match(value)
+    if match is None:
+        return value
+    variable = encode_secret_variable(path)
+    resolved = os.environ.get(variable)
+    if resolved is not None:
         return resolved.strip()
+    if match.group(OPTIONAL_GROUP) is not None:
+        return EMPTY_VALUE
+    raise MaterializerErrorCode.MATERIALIZER_2.exception(
+        variable=variable, path=PATH_SEPARATOR.join(path)
+    )
 
-    return SECRET_PLACEHOLDER_PATTERN.sub(substitute, value)
+
+def item_segment(item: object, index: int, path: list[str]) -> str:
+    if not isinstance(item, dict) or not item:
+        return str(index)
+    key = next(iter(item.values()))
+    if isinstance(key, str) and SECRET_PLACEHOLDER_PATTERN.match(key):
+        raise MaterializerErrorCode.MATERIALIZER_3.exception(
+            index=index, path=PATH_SEPARATOR.join(path)
+        )
+    return str(key).lower() if isinstance(key, bool) else str(key)
 
 
 def materialize(node: object, path: list[str] | None = None) -> object:
@@ -69,7 +81,8 @@ def materialize(node: object, path: list[str] | None = None) -> object:
         }
     if isinstance(node, list):
         return [
-            materialize(item, path + [str(index)]) for index, item in enumerate(node)
+            materialize(item, path + [item_segment(item, index, path)])
+            for index, item in enumerate(node)
         ]
     if isinstance(node, str):
         return resolve_scalar(node, path)
