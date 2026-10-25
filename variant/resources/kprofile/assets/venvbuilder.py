@@ -258,18 +258,6 @@ def parse_arguments() -> argparse.Namespace:
         default="",
         help="Storage configuration used to copy the image (default: none)",
     )
-    parser.add_argument(
-        "--transporter-request",
-        dest="transporter_request",
-        default="",
-        help="Transporter request file written when the image is sent",
-    )
-    parser.add_argument(
-        "--transporter-response",
-        dest="transporter_response",
-        default="",
-        help="Transporter response file written when the image is sent",
-    )
     return parser.parse_args()
 
 
@@ -325,22 +313,6 @@ def validate_arguments(arguments: argparse.Namespace) -> None:
             file=sys.stderr,
         )
         sys.exit(1)
-
-    if arguments.storage_config and not arguments.transporter_request:
-        print(
-            "Transporter request file is mandatory when a storage "
-            "configuration is given",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    if arguments.storage_config and not arguments.transporter_response:
-        print(
-            "Transporter response file is mandatory when a storage "
-            "configuration is given",
-            file=sys.stderr,
-        )
-        sys.exit(2)
 
 
 def image_for_venv(image: str, venv: str) -> str:
@@ -837,25 +809,13 @@ def write_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> Non
     shutil.rmtree(workspace["work"], ignore_errors=True)
 
 
-def shuttle_path(base: str, tag: str) -> str:
-    folder, name = os.path.split(base)
-    stem, extension = os.path.splitext(name)
-    return os.path.join(folder, f"{stem}-{tag}{extension}")
-
-
 def send_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None:
     if not arguments.storage_config:
         print(">> Skipping the image upload; no storage configuration given")
         return
-    for target, tag in (
-        (workspace["output_image_td"], VENV_TD),
-        (workspace["output_image_fn"], VENV_FN),
-    ):
+    for target in (workspace["output_image_td"], workspace["output_image_fn"]):
         size = os.path.getsize(target)
         trace(f"Sending {target}: {human_size(size)} ({size} bytes)")
-        response = shuttle_path(arguments.transporter_response, tag)
-        if os.path.exists(response):
-            os.remove(response)
         run([
             venv_python(workspace["virtual_environment_td"]),
             "-m",
@@ -864,10 +824,6 @@ def send_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None
             target,
             "--storage-config",
             arguments.storage_config,
-            "--transporter-request",
-            shuttle_path(arguments.transporter_request, tag),
-            "--transporter-response",
-            response,
         ])
 
 

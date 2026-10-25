@@ -59,10 +59,6 @@ spec:
         - ${{system:tdk_tabsdata_version}}
         - --storage-config
         - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
-        - --transporter-request
-        - $(CONTAINER_ROOT)/tabsdata/shuttle/request/image-upload.yaml
-        - --transporter-response
-        - $(CONTAINER_ROOT)/tabsdata/shuttle/response/image-upload.yaml
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -104,8 +100,6 @@ spec:
           readOnly: true
         - name: runtimes
           mountPath: /tabsdata/runtimes
-        - name: shuttle
-          mountPath: /tabsdata/shuttle
       volumes:
       - name: assets
         projected:
@@ -131,5 +125,3 @@ spec:
       - name: runtimes
         hostPath:
           path: "${{system:tdk_runtimes_root}}"
-      - name: shuttle
-        emptyDir: {}

@@ -6,113 +6,59 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 from pathlib import Path
 
-import yaml
+import obstore.exceptions
 
-from tabsdatak.common._transporter.handler.handler2 import (
-    TransporterHandler2,
-    local_location,
-)
-from tabsdatak.common._transporter.invoker import transporter2
+from tabsdatak.common._configuration.document.error import DocumentException
+from tabsdatak.common._configuration.document.loader import load
+from tabsdatak.common._configuration.model.storage import StorageConfiguration
+from tabsdatak.common._storage import mounts, transfer
+from tabsdatak.common._storage.mounts import MountError
+from tabsdatak.common._storage.transfer import StorageLocation, TransferError
 
 logger = logging.getLogger(__name__)
-
-STORAGE_KEY = "storage"
-MOUNTS_KEY = "mounts"
-MOUNT_ID_KEY = "id"
-MOUNT_URI_KEY = "uri"
-MOUNT_OPTIONS_KEY = "options"
-
-SECRET_ENV_PREFIX = "SECRETS__STORAGE__MOUNTS__"
-SECRET_ENV_OPTIONS_INFIX = "__OPTIONS__"
-SECRET_ENV_URI_SUFFIX = "__URI"
-
-PLACEHOLDER_PREFIX = "${{"
 
 IMAGES_MOUNT_ID = "IMAGES"
 IMAGES_SUBFOLDER = "python"
 
-
-class MountNotFoundError(ValueError):
-    pass
+PATH_SEPARATOR = "/"
 
 
-def secret_env_name(mount_id: str, option_key: str) -> str:
-    return (
-        f"{SECRET_ENV_PREFIX}{mount_id}{SECRET_ENV_OPTIONS_INFIX}{option_key.upper()}"
-    )
-
-
-def secret_uri_env_name(mount_id: str) -> str:
-    return f"{SECRET_ENV_PREFIX}{mount_id}{SECRET_ENV_URI_SUFFIX}"
-
-
-def resolve_uri(uri: str, mount_id: str, storage_config: Path) -> str:
-    if not uri.startswith(PLACEHOLDER_PREFIX):
-        return uri
-    variable = secret_uri_env_name(mount_id)
-    resolved = os.environ.get(variable, "").strip()
-    if not resolved:
-        raise MountNotFoundError(
-            f"Mount {mount_id!r} in {storage_config} holds the placeholder {uri!r} "
-            f"and the environment variable {variable} is unset or empty."
-        )
-    return resolved
-
-
-def load_mount(storage_config: Path, mount_id: str) -> tuple[str, list[str]]:
-    document = yaml.safe_load(storage_config.read_text(encoding="utf-8"))
-    mounts = (document or {}).get(STORAGE_KEY, {}).get(MOUNTS_KEY, []) or []
-    for mount in mounts:
-        if mount.get(MOUNT_ID_KEY) != mount_id:
-            continue
-        uri = mount.get(MOUNT_URI_KEY)
-        if not uri:
-            raise MountNotFoundError(
-                f"Mount {mount_id!r} in {storage_config} declares no uri."
-            )
-        options = mount.get(MOUNT_OPTIONS_KEY) or {}
-        return resolve_uri(uri, mount_id, storage_config), list(options.keys())
-    raise MountNotFoundError(f"Mount {mount_id!r} not found in {storage_config}.")
+def target_uri(mount_uri: str, subfolder: str, name: str) -> str:
+    prefix = mount_uri.rstrip(PATH_SEPARATOR)
+    if subfolder.strip(PATH_SEPARATOR):
+        prefix = f"{prefix}{PATH_SEPARATOR}{subfolder.strip(PATH_SEPARATOR)}"
+    return f"{prefix}{PATH_SEPARATOR}{name}"
 
 
 def target_location(
-    uri: str, mount_id: str, option_keys: list[str], subfolder: str, name: str
-) -> transporter2.Location:
-    prefix = uri if uri.endswith("/") else f"{uri}/"
-    if subfolder:
-        prefix = f"{prefix}{subfolder.strip('/')}/"
-    configs = {key: f"env:{secret_env_name(mount_id, key)}" for key in option_keys}
-    return transporter2.Location(uri=f"{prefix}{name}", configs=configs)
+    storage_config: Path, mount_id: str, subfolder: str, name: str
+) -> StorageLocation:
+    configuration = load(storage_config, StorageConfiguration)
+    declaration = configuration.mount(mount_id).declaration()
+    uri = target_uri(mounts.uri(declaration), subfolder, name)
+    return StorageLocation(uri=uri, options=mounts.options(declaration, uri))
 
 
 def send_image(
     image: Path,
     storage_config: Path,
-    transporter_request: Path,
-    transporter_response: Path,
     mount_id: str = IMAGES_MOUNT_ID,
     subfolder: str = IMAGES_SUBFOLDER,
-) -> None:
+) -> int:
     if not image.is_file():
         raise FileNotFoundError(f"Image not found: {image}")
-    uri, option_keys = load_mount(storage_config, mount_id)
-    handler = TransporterHandler2()
-    source = local_location(image)
-    target = target_location(uri, mount_id, option_keys, subfolder, image.name)
-    request = handler.make_request([(source, target)])
-    handler.write_request(request, transporter_request)
-    logger.info("Sending %s to %s", image, target.uri)
-    handler.run_or_raise(transporter_request, transporter_response)
+    target = target_location(storage_config, mount_id, subfolder, image.name)
+    logger.info(f"Sending {image} to {target.uri}")
+    return transfer.upload(image, target)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="archive",
-        description="Send a built image to a storage mount using transporter2.",
+        description="Send a built image to a storage mount.",
     )
     parser.add_argument(
         "--image",
@@ -123,16 +69,6 @@ def main() -> int:
         "--storage-config",
         required=True,
         help="Path to apiserver.storage.yaml",
-    )
-    parser.add_argument(
-        "--transporter-request",
-        required=True,
-        help="Transporter request file to write",
-    )
-    parser.add_argument(
-        "--transporter-response",
-        required=True,
-        help="Transporter response file to write",
     )
     parser.add_argument(
         "--mount",
@@ -146,14 +82,23 @@ def main() -> int:
     )
     arguments = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    send_image(
-        Path(arguments.image),
-        Path(arguments.storage_config),
-        Path(arguments.transporter_request),
-        Path(arguments.transporter_response),
-        mount_id=arguments.mount,
-        subfolder=arguments.subfolder,
-    )
+    try:
+        size = send_image(
+            Path(arguments.image),
+            Path(arguments.storage_config),
+            mount_id=arguments.mount,
+            subfolder=arguments.subfolder,
+        )
+    except (
+        OSError,
+        DocumentException,
+        MountError,
+        TransferError,
+        obstore.exceptions.BaseError,
+    ) as error:
+        logger.error(f"Cannot send the image {arguments.image}: {error}")
+        return 1
+    logger.info(f"Sent {size} bytes")
     return 0
 
 
