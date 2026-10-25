@@ -30,6 +30,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     command,
 )
+from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.prep_localize_state.runner import (
     _build_inputs_manifest_entries,
     _build_state_manifest_entries,
@@ -43,7 +44,8 @@ __all__ = [
     "main",
 ]
 
-VERSION = "2.3.0"
+VERSION = version()
+GENERATION = 1
 INFO = (
     "prep-localize-state — generate the transporter request that pulls "
     "input + state-in tables to local, plus the inputs and state manifests"

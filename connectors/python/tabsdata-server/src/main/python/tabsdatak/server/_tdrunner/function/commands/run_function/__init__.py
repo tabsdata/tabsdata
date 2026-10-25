@@ -36,6 +36,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     command,
 )
+from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.run_function.runner import (
     _FunctionContext,
     _infer_table_modes,
@@ -63,7 +64,8 @@ __all__ = [
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
-VERSION = "2.3.0"
+VERSION = version()
+GENERATION = 1
 INFO = (
     "run-function — invoke the decorated function on the prepared inputs "
     "and sink the returned tables to parquet"

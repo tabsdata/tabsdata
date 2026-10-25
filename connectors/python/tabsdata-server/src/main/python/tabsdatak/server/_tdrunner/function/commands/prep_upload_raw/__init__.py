@@ -31,13 +31,15 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     command,
 )
+from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.prep_upload_raw.runner import run
 
 __all__ = ["run", "main"]
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
-VERSION = "2.3.0"
+VERSION = version()
+GENERATION = 1
 INFO = (
     "prep-upload-raw — generate the transporter request that persists a "
     "publisher's ingested data"

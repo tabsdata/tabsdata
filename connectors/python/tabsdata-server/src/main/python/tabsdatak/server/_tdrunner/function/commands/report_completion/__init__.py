@@ -38,11 +38,13 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     command,
 )
+from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.report_completion.runner import run
 
 __all__ = ["run", "main"]
 
-VERSION = "2.3.0"
+VERSION = version()
+GENERATION = 1
 INFO = "report-completion — report the function-run response to the API server"
 MAN = (
     "report-completion --request <PATH> --outputs-manifest <PATH> "

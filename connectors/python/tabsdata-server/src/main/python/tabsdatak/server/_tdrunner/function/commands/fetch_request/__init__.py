@@ -23,6 +23,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     command,
 )
+from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.fetch_request.runner import (
     _fetch,
     run,
@@ -30,7 +31,8 @@ from tabsdatak.server._tdrunner.function.commands.fetch_request.runner import (
 
 __all__ = ["_fetch", "run", "main"]
 
-VERSION = "2.3.0"
+VERSION = version()
+GENERATION = 1
 INFO = (
     "fetch-request — fetch a function-run definition (request.yaml) from the API server"
 )

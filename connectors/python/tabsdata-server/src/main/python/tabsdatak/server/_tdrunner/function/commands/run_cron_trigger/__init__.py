@@ -40,6 +40,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     command,
 )
+from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.runner import (
     _execution_request_body,
     _fire,
@@ -48,7 +49,8 @@ from tabsdatak.server._tdrunner.function.commands.run_cron_trigger.runner import
 
 __all__ = ["_execution_request_body", "_fire", "run", "main"]
 
-VERSION = "2.3.0"
+VERSION = version()
+GENERATION = 1
 INFO = (
     "run-cron-trigger — one-shot; POSTs the function execute endpoint once "
     "per CronJob fire and exits"

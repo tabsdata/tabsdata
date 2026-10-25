@@ -32,6 +32,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     command,
 )
+from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.runner import (
     _stamp_file,
     run,
@@ -41,7 +42,8 @@ __all__ = ["_stamp_file", "run", "main"]
 
 # TODO: After all commands are done, version will be unified in a single
 #  source of truth file.
-VERSION = "2.3.0"
+VERSION = version()
+GENERATION = 1
 INFO = (
     "stamp-inputs — stamp framework system columns onto the parquets "
     "produced by run-source-plugin"

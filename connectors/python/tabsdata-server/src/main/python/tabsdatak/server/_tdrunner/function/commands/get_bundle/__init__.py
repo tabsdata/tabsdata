@@ -10,9 +10,11 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     command,
 )
+from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.get_bundle.runner import run
 
-VERSION = "2.3.0"
+VERSION = version()
+GENERATION = 2
 INFO = "get-bundle — download the function bundle and extract it"
 MAN = (
     "get-bundle --request <PATH> --bundle-dir <PATH> --bundle-archive <PATH> "

@@ -41,6 +41,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     command,
 )
+from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.run_streamer.runner import (
     _load_function_def,
     _resolve_plugin,
@@ -49,7 +50,8 @@ from tabsdatak.server._tdrunner.function.commands.run_streamer.runner import (
 
 __all__ = ["_load_function_def", "_resolve_plugin", "run", "main"]
 
-VERSION = "2.3.0"
+VERSION = version()
+GENERATION = 1
 INFO = (
     "run-streamer — long-running streamer pod entrypoint; runs the "
     "@stream_publisher's StreamSrcPlugin until SIGTERM"

@@ -31,6 +31,7 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     build_parser,
     command,
 )
+from tabsdatak.server._tdrunner.function._commons.run.version import version
 from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.runner import (
     _DestContext,
     _invoke_write_out,
@@ -50,7 +51,8 @@ __all__ = [
     "main",
 ]
 
-VERSION = "2.3.0"
+VERSION = version()
+GENERATION = 1
 INFO = (
     "run-destination-plugin — hand the function's output parquets to the "
     "subscriber's destination plugin"
