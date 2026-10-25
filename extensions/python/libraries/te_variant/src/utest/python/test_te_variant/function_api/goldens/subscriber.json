@@ -1,0 +1,57 @@
+{
+  "callbacks": [
+    {
+      "action": "notify",
+      "exit_status": 0,
+      "start": "<masked>",
+      "status": "Running"
+    },
+    {
+      "op": "destination_write"
+    },
+    {
+      "action": "notify",
+      "context": {
+        "Function": {
+          "output": []
+        }
+      },
+      "end": "<masked>",
+      "exit_status": 0,
+      "start": "<masked>",
+      "status": "Done"
+    }
+  ],
+  "delivered": {
+    "columns": [
+      [
+        "order_id",
+        "Int64"
+      ],
+      [
+        "customer_id",
+        "Int64"
+      ],
+      [
+        "amount",
+        "Float64"
+      ]
+    ],
+    "rows": [
+      {
+        "amount": 12.0,
+        "customer_id": 20,
+        "order_id": 2
+      },
+      {
+        "amount": 30.25,
+        "customer_id": 10,
+        "order_id": 3
+      }
+    ]
+  },
+  "outputs": {},
+  "response": {
+    "output": []
+  }
+}

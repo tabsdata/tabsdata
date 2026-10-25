@@ -1,0 +1,171 @@
+{
+  "callbacks": [
+    {
+      "action": "notify",
+      "exit_status": 0,
+      "start": "<masked>",
+      "status": "Running"
+    },
+    {
+      "action": "notify",
+      "context": {
+        "Function": {
+          "output": [
+            {
+              "Data": {
+                "info": {
+                  "column_count": 6,
+                  "data_bytes": "<masked>",
+                  "row_count": 3,
+                  "schema_hash": "sha256:338fd209243bdee0c26b54e79c61bb8c0ae3509d09a1f84de272c379c7cc8cf7"
+                },
+                "table": "orders_a"
+              }
+            },
+            {
+              "Data": {
+                "info": {
+                  "column_count": 5,
+                  "data_bytes": "<masked>",
+                  "row_count": 2,
+                  "schema_hash": "sha256:a1966104f0a929f3be1c573c4475b7ab73058f3895082ace3b6830dd245b4a60"
+                },
+                "table": "orders_b"
+              }
+            },
+            {
+              "NoData": {
+                "table": "untouched"
+              }
+            }
+          ]
+        }
+      },
+      "end": "<masked>",
+      "exit_status": 0,
+      "start": "<masked>",
+      "status": "Done"
+    }
+  ],
+  "outputs": {
+    "orders_a": {
+      "columns": [
+        [
+          "order_id",
+          "Int64"
+        ],
+        [
+          "customer_id",
+          "Int64"
+        ],
+        [
+          "amount",
+          "Float64"
+        ],
+        [
+          "stage",
+          "String"
+        ],
+        [
+          "@td.file.path",
+          "String"
+        ],
+        [
+          "$td.id",
+          "String"
+        ]
+      ],
+      "rows": [
+        {
+          "$td.id": "<random>",
+          "@td.file.path": "<root>/connection-base/orders_1.parquet",
+          "amount": 12.0,
+          "customer_id": 20,
+          "order_id": 2,
+          "stage": "published"
+        },
+        {
+          "$td.id": "<random>",
+          "@td.file.path": "<root>/connection-base/orders_1.parquet",
+          "amount": 30.25,
+          "customer_id": 10,
+          "order_id": 3,
+          "stage": "published"
+        },
+        {
+          "$td.id": "<random>",
+          "@td.file.path": "<root>/connection-base/orders_1.parquet",
+          "amount": 5.5,
+          "customer_id": 10,
+          "order_id": 1,
+          "stage": "published"
+        }
+      ]
+    },
+    "orders_b": {
+      "columns": [
+        [
+          "order_id",
+          "Int64"
+        ],
+        [
+          "customer_id",
+          "Int64"
+        ],
+        [
+          "amount",
+          "Float64"
+        ],
+        [
+          "@td.file.path",
+          "String"
+        ],
+        [
+          "$td.id",
+          "String"
+        ]
+      ],
+      "rows": [
+        {
+          "$td.id": "<random>",
+          "@td.file.path": "<root>/connection-base/orders_2.parquet",
+          "amount": 8.0,
+          "customer_id": 30,
+          "order_id": 4
+        },
+        {
+          "$td.id": "<random>",
+          "@td.file.path": "<root>/connection-base/orders_2.parquet",
+          "amount": 99.9,
+          "customer_id": 20,
+          "order_id": 5
+        }
+      ]
+    }
+  },
+  "response": {
+    "output": [
+      {
+        "info": {
+          "column_count": 6,
+          "data_bytes": "<masked>",
+          "row_count": 3,
+          "schema_hash": "sha256:338fd209243bdee0c26b54e79c61bb8c0ae3509d09a1f84de272c379c7cc8cf7"
+        },
+        "table": "orders_a"
+      },
+      {
+        "info": {
+          "column_count": 5,
+          "data_bytes": "<masked>",
+          "row_count": 2,
+          "schema_hash": "sha256:a1966104f0a929f3be1c573c4475b7ab73058f3895082ace3b6830dd245b4a60"
+        },
+        "table": "orders_b"
+      },
+      {
+        "table": "untouched"
+      }
+    ]
+  }
+}

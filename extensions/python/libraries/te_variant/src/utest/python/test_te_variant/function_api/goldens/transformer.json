@@ -1,0 +1,104 @@
+{
+  "callbacks": [
+    {
+      "action": "notify",
+      "exit_status": 0,
+      "start": "<masked>",
+      "status": "Running"
+    },
+    {
+      "action": "notify",
+      "context": {
+        "Function": {
+          "output": [
+            {
+              "Data": {
+                "info": {
+                  "column_count": 5,
+                  "data_bytes": "<masked>",
+                  "row_count": 3,
+                  "schema_hash": "sha256:0664f6e7b30b57f9dbab60298ed7bb6bfded87bbc79cf1e9b710e94ee78be2e8"
+                },
+                "table": "enriched"
+              }
+            },
+            {
+              "NoData": {
+                "table": "untouched"
+              }
+            }
+          ]
+        }
+      },
+      "end": "<masked>",
+      "exit_status": 0,
+      "start": "<masked>",
+      "status": "Done"
+    }
+  ],
+  "outputs": {
+    "enriched": {
+      "columns": [
+        [
+          "order_id",
+          "Int64"
+        ],
+        [
+          "customer_id",
+          "Int64"
+        ],
+        [
+          "amount",
+          "Float64"
+        ],
+        [
+          "customer",
+          "String"
+        ],
+        [
+          "$td.id",
+          "String"
+        ]
+      ],
+      "rows": [
+        {
+          "$td.id": "<random>",
+          "amount": 12.0,
+          "customer": "globex",
+          "customer_id": 20,
+          "order_id": 2
+        },
+        {
+          "$td.id": "<random>",
+          "amount": 30.25,
+          "customer": "acme",
+          "customer_id": 10,
+          "order_id": 3
+        },
+        {
+          "$td.id": "<random>",
+          "amount": 5.5,
+          "customer": "acme",
+          "customer_id": 10,
+          "order_id": 1
+        }
+      ]
+    }
+  },
+  "response": {
+    "output": [
+      {
+        "info": {
+          "column_count": 5,
+          "data_bytes": "<masked>",
+          "row_count": 3,
+          "schema_hash": "sha256:0664f6e7b30b57f9dbab60298ed7bb6bfded87bbc79cf1e9b710e94ee78be2e8"
+        },
+        "table": "enriched"
+      },
+      {
+        "table": "untouched"
+      }
+    ]
+  }
+}
