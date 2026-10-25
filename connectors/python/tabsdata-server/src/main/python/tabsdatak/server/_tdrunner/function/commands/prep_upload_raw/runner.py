@@ -16,13 +16,13 @@ import argparse
 import logging
 from pathlib import Path
 
+from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_INPUT_IDX_KEY,
     MANIFEST_TABLES_KEY,
     load_inputs_manifest_or_raise,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.transporter import (
     build_upload_raw_request,
     write_transporter_request,
@@ -53,7 +53,7 @@ def run(args: argparse.Namespace) -> int:
     storage_config = Path(args.storage_config)
 
     logger.info("Preparing upload-raw transporter request")
-    request = load_request_or_raise(request_path, PrepUploadRawErrorCode.PUR_1)
+    request = Request.load(request_path, PrepUploadRawErrorCode.PUR_1)
     if request.info.function_raw is None:
         logger.debug(
             "The request carries no raw-data location; this function ingests "

@@ -12,11 +12,11 @@ import yaml
 from tabsdatak.common._transporter.invoker.transporter1 import (
     TransporterBinaryNotFoundError,
 )
+from tabsdatak.server._tdrunner.function._commons.document.request import AnyRequest
 from tabsdatak.server._tdrunner.function._legacies.localize_fn_bundle import fetch
 from tabsdatak.server._tdrunner.function._legacies.localize_fn_bundle.error import (
     TransporterFailedError,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_any_request_or_raise
 from tabsdatak.server._tdrunner.function.commands.get_bundle.error import (
     GetBundleErrorCode,
 )
@@ -34,7 +34,7 @@ def arguments(tmp_path: Path) -> dict:
         "storage:\n  mounts:\n    - id: ROOT\n      options: {}\n"
     )
     return {
-        "request": load_any_request_or_raise(
+        "request": AnyRequest.load(
             request_path,
             GetBundleErrorCode.GB_1,
         ),

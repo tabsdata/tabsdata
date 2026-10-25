@@ -18,11 +18,11 @@ from tabsdatak.common._configuration.model.storage import StorageConfiguration
 from tabsdatak.common._storage import mounts, transfer
 from tabsdatak.common._storage.mounts import MountError
 from tabsdatak.common._storage.transfer import StorageLocation, TransferError
-from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
-from tabsdatak.server._tdrunner.function._lib.request import (
+from tabsdatak.server._tdrunner.function._commons.document.request import (
+    AnyRequest,
     Location,
-    load_any_request_or_raise,
 )
+from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function.commands.get_bundle.error import (
     GetBundleErrorCode,
 )
@@ -66,7 +66,7 @@ def run(arguments: argparse.Namespace) -> int:
     storage_config = Path(arguments.storage_config)
 
     logger.info("Getting the function bundle")
-    request = load_any_request_or_raise(request_path, GetBundleErrorCode.GB_1)
+    request = AnyRequest.load(request_path, GetBundleErrorCode.GB_1)
     bundle = request.info.function_bundle
     logger.debug(
         f"Bundle {bundle.uri} goes to archive {bundle_archive} and folder {bundle_dir}"

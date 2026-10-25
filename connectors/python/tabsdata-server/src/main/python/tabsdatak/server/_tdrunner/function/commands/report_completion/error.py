@@ -45,7 +45,7 @@ class ReportCompletionErrorCode(ErrorCode):
         BadRequestError,
         "unreadable request.yaml {path}: {detail}",
     )
-    # ``load_request_or_raise``.
+    # ``Request.load``.
 
     RC_2 = ErrorDef(
         BadManifestError,
@@ -60,10 +60,10 @@ class ReportCompletionErrorCode(ErrorCode):
             "in the outputs manifest"
         ),
     )
-    # ``Response.from_fn_response`` declared-table-not-in-manifest.
+    # ``Response.build`` declared-table-not-in-manifest.
 
     RC_4 = ErrorDef(
         WriteFailedError,
         "failed to write {path}: {detail}",
     )
-    # ``write_response`` / ``Journal.save`` ``OSError``.
+    # ``Response.write`` / ``Journal.save`` ``OSError``.

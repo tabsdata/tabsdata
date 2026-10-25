@@ -37,6 +37,7 @@ from tabsdatak._info import (
 from tabsdatak.api import FunctionCtx
 from tabsdatak.common._actions.dataquality.record import Check
 from tabsdatak.server._tdrunner import dataquality
+from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     ProjectSecret,
     take_project_secret,
@@ -52,7 +53,6 @@ from tabsdatak.server._tdrunner.function._lib.initial_values import (
     drain_ctx_to_state_or_raise,
     hydrate_ctx_from_state_or_raise,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function.commands.run_function.error import (
     RunFunctionErrorCode,
@@ -459,7 +459,7 @@ def run(args: argparse.Namespace) -> int:
     state_dir = Path(args.state_dir)
 
     logger.info("Running user function")
-    request = load_request_or_raise(request_path, RunFunctionErrorCode.RF_1)
+    request = Request.load(request_path, RunFunctionErrorCode.RF_1)
     info = _load_function_def(bundle_dir)
     logger.debug(
         "Loaded function '%s' (kind=%s) from bundle %s",

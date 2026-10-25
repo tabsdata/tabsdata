@@ -17,15 +17,15 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
+from tabsdatak.server._tdrunner.function._commons.document.request import Request
+from tabsdatak.server._tdrunner.function._commons.document.response import (
+    ManifestEntry,
+    Response,
+)
 from tabsdatak.server._tdrunner.function._commons.run.command import notify_status_done
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     load_outputs_manifest_or_raise,
-)
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
-from tabsdatak.server._tdrunner.function._lib.response import (
-    Response,
-    write_response,
 )
 from tabsdatak.server._tdrunner.function.commands.report_completion.error import (
     ReportCompletionErrorCode,
@@ -41,7 +41,7 @@ def run(args: argparse.Namespace) -> int:
     out_path = Path(args.out)
 
     logger.info("Building and submitting function-run response")
-    request = load_request_or_raise(request_path, ReportCompletionErrorCode.RC_1)
+    request = Request.load(request_path, ReportCompletionErrorCode.RC_1)
     manifest_entries = load_outputs_manifest_or_raise(
         outputs_manifest_path, ReportCompletionErrorCode.RC_2
     )
@@ -57,11 +57,11 @@ def run(args: argparse.Namespace) -> int:
         request.system_output,
     )
 
-    response = Response.from_fn_response(
+    response = Response.build(
         request,
-        manifest_entries,
+        [ManifestEntry.of(entry) for entry in manifest_entries],
         state_dir,
-        mismatch_error_code=ReportCompletionErrorCode.RC_3,
+        ReportCompletionErrorCode.RC_3,
     )
     data_count = sum(1 for e in response.output if e.info is not None)
     nodata_count = len(response.output) - data_count
@@ -74,7 +74,7 @@ def run(args: argparse.Namespace) -> int:
     # Write the response to --out FIRST so it's persisted even when a
     # later step fails.
     try:
-        write_response(response, out_path)
+        response.write(out_path)
     except OSError as exc:
         raise ReportCompletionErrorCode.RC_4.exception(
             cause=exc, path=out_path, detail=str(exc)
@@ -95,6 +95,6 @@ def run(args: argparse.Namespace) -> int:
         )
 
     logger.info("report-completion: recorded end=%s", end)
-    notify_status_done(args, context=response.to_worker_output())
+    notify_status_done(args, context=response.worker_output().document())
     logger.info("Reported completion to apiserver successfully")
     return 0

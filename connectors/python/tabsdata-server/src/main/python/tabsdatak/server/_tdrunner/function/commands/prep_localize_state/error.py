@@ -49,7 +49,7 @@ class PrepLocalizeStateErrorCode(ErrorCode):
         BadRequestError,
         "unreadable request.yaml {path}: {detail}",
     )
-    # ``load_request_or_raise``.
+    # ``Request.load``.
 
     PLS_2 = ErrorDef(
         BadEndpointSchemeError,

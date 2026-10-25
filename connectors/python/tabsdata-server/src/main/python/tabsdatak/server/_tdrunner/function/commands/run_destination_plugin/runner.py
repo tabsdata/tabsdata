@@ -18,6 +18,7 @@ from pathlib import Path
 
 from tabsdatak._connectors import get_dest
 from tabsdatak._info import KIND_SUBSCRIBER_DEF, SubscriberInfo
+from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.run.command import (
     notify_step_destination_write,
 )
@@ -30,7 +31,6 @@ from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     MANIFEST_NAME_KEY,
     load_outputs_manifest_or_raise,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function.commands.run_destination_plugin.error import (
     RunDestinationPluginErrorCode,
@@ -108,7 +108,7 @@ def run(args: argparse.Namespace) -> int:
     connection_file = Path(args.connection_file)
 
     logger.info("Running destination plugin")
-    request = load_request_or_raise(request_path, RunDestinationPluginErrorCode.RDP_1)
+    request = Request.load(request_path, RunDestinationPluginErrorCode.RDP_1)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
     conn = load_connection(connection_file)

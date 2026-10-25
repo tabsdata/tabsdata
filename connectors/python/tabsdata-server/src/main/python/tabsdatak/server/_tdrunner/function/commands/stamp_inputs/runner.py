@@ -18,6 +18,7 @@ from pathlib import Path
 
 import polars as pl
 
+from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     MANIFEST_FILE_KEY,
     MANIFEST_INPUT_IDX_KEY,
@@ -27,7 +28,6 @@ from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     load_inputs_manifest_or_raise,
     write_inputs_manifest,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function.commands.stamp_inputs.error import (
     StampInputsErrorCode,
 )
@@ -84,7 +84,7 @@ def run(args: argparse.Namespace) -> int:
     enriched_manifest = Path(args.enriched_inputs_manifest)
 
     logger.info("Stamping framework system columns onto inputs")
-    request = load_request_or_raise(request_path, StampInputsErrorCode.SI_1)
+    request = Request.load(request_path, StampInputsErrorCode.SI_1)
     entries = load_inputs_manifest_or_raise(inputs_manifest, StampInputsErrorCode.SI_2)
     logger.debug(
         "Loaded inputs manifest with %d slot(s): %s from %s",

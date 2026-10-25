@@ -44,7 +44,7 @@ class PrepUploadRawErrorCode(ErrorCode):
         BadRequestError,
         "unreadable request.yaml {path}: {detail}",
     )
-    # ``load_request_or_raise``.
+    # ``Request.load``.
 
     PUR_2 = ErrorDef(
         BadManifestError,

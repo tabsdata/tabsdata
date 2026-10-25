@@ -51,7 +51,7 @@ class RunManifestTriggerErrorCode(ErrorCode):
         BadRequestError,
         "unreadable request.yaml {path}: {detail}",
     )
-    # ``load_request_or_raise`` failure on startup.
+    # ``Request.load`` failure on startup.
 
     MT_2 = ErrorDef(
         UnsupportedStageSchemeError,

@@ -28,6 +28,10 @@ from tabsdatak._info import (
     StreamPublisherInfo,
     _unwrap_info,
 )
+from tabsdatak.server._tdrunner.function._commons.document.request import (
+    Location,
+    Request,
+)
 from tabsdatak.server._tdrunner.function._lib.connection import load_connection
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
 from tabsdatak.server._tdrunner.function._lib.function_def import (
@@ -41,10 +45,6 @@ from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     build_entry,
     build_table_record,
     write_inputs_manifest,
-)
-from tabsdatak.server._tdrunner.function._lib.request import (
-    Location,
-    load_request_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromRequestCtx
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (
@@ -330,7 +330,7 @@ def run(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Running source plugin")
-    request = load_request_or_raise(request_path, RunSourcePluginErrorCode.RSP_1)
+    request = Request.load(request_path, RunSourcePluginErrorCode.RSP_1)
     info = _load_function_def(bundle_dir)
     plugin, conn, src, cardinality = _resolve_plugin_and_io(
         info, request.info.function_stage, connection_file

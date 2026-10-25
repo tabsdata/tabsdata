@@ -27,7 +27,7 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from tabsdatak.server._tdrunner.function._lib.request import Location
+from tabsdatak.server._tdrunner.function._commons.document.request import Location
 
 # ---- credential references ------------------------------------------------
 

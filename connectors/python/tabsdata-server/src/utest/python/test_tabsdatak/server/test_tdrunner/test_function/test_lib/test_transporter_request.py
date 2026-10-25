@@ -24,7 +24,7 @@ from tabsdatak.common._transporter.handler.handler1 import (
     UnsupportedSchemeError,
     make_dumper,
 )
-from tabsdatak.server._tdrunner.function._lib.request import (
+from tabsdatak.server._tdrunner.function._commons.document.request import (
     Info,
     InputTable,
     Location,

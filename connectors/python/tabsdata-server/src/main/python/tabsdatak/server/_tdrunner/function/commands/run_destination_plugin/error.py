@@ -64,7 +64,7 @@ class RunDestinationPluginErrorCode(ErrorCode):
         BadRequestError,
         "unreadable request.yaml {path}: {detail}",
     )
-    # ``load_request_or_raise``.
+    # ``Request.load``.
 
     RDP_2 = ErrorDef(
         BadBundleError,

@@ -12,20 +12,19 @@ from tabsdatak.common._transporter.handler.handler2 import (
     local_location,
 )
 from tabsdatak.common._transporter.invoker import transporter2
-from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
-from tabsdatak.server._tdrunner.function._lib.mounts import secret_env_name
-from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
-    MANIFEST_FILE_KEY,
-    MANIFEST_NAME_KEY,
-)
-from tabsdatak.server._tdrunner.function._lib.request import (
+from tabsdatak.server._tdrunner.function._commons.document.request import (
     RAW_SUFFIX,
     AnyRequest,
     InputTable,
     InputTableVersions,
     Location,
     Request,
-    input_tables,
+)
+from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
+from tabsdatak.server._tdrunner.function._lib.mounts import secret_env_name
+from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
+    MANIFEST_FILE_KEY,
+    MANIFEST_NAME_KEY,
 )
 
 logger = logging.getLogger(__name__)
@@ -59,7 +58,7 @@ def localized_input_files(
     if isinstance(entry, InputTableVersions):
         return [
             (member, in_dir / f"{member.table}.{member.version_pos}.parquet")
-            for member in input_tables(entry)
+            for member in entry.tables
         ]
     return [(entry, in_dir / f"{entry.table}.parquet")]
 

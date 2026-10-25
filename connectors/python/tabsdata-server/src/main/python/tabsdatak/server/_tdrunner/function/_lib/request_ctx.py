@@ -75,8 +75,8 @@ from pathlib import Path
 from typing import Self
 
 from tabsdatak.api import BasicTypeSpec, ContextKeySpec, FlowCtx, TransactionCtx
+from tabsdatak.server._tdrunner.function._commons.document.request import Info
 from tabsdatak.server._tdrunner.function._lib.initial_values import _validate_key
-from tabsdatak.server._tdrunner.function._lib.request import Info
 
 
 class FromFlowRequestCtx(FlowCtx):

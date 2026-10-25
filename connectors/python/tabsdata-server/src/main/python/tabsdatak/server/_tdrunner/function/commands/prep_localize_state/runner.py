@@ -16,16 +16,14 @@ import argparse
 import logging
 from pathlib import Path
 
+from tabsdatak.server._tdrunner.function._commons.document.request import (
+    InputTableVersions,
+    Request,
+)
 from tabsdatak.server._tdrunner.function._lib.inputs_manifest import (
     build_entry,
     build_table_record,
     write_inputs_manifest,
-)
-from tabsdatak.server._tdrunner.function._lib.request import (
-    InputTableVersions,
-    Request,
-    input_tables,
-    load_request_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.state_manifest import (
     MANIFEST_FILES_KEY,
@@ -56,7 +54,7 @@ def _build_inputs_manifest_entries(request: Request, in_dir: Path) -> list[dict]
     entries: list[dict] = []
     for entry in request.input:
         is_empty = isinstance(entry, InputTableVersions) and entry.is_empty
-        members = input_tables(entry)
+        members = entry.tables
         records: list[dict] = []
         if not is_empty:
             for member, path in localized_input_files(in_dir, entry):
@@ -124,7 +122,7 @@ def run(args: argparse.Namespace) -> int:
     storage_config = Path(args.storage_config)
 
     logger.info("Preparing localize-state transporter request and manifests")
-    request = load_request_or_raise(request_path, PrepLocalizeStateErrorCode.PLS_1)
+    request = Request.load(request_path, PrepLocalizeStateErrorCode.PLS_1)
     logger.debug(
         "Request has %d input slot(s): %s; %d system_input slot(s): %s",
         len(request.input),

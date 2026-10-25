@@ -38,6 +38,7 @@ from tabsdatak.common._transporter.handler.handler import TransporterHandler
 from tabsdatak.conn.common.file import _input, _output
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
+from tabsdatak.server._tdrunner.function._commons.document.request import Location
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureConfigs,
     AzureEndpoint,
@@ -52,7 +53,6 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
 )
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
 from tabsdatak.server._tdrunner.function._lib.mounts import secret_env_name
-from tabsdatak.server._tdrunner.function._lib.request import Location
 
 # Baseline handed to the transporter so last-modified tracking activates on the
 # first fetch (no cursor yet): epoch means every object is a candidate.

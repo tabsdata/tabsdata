@@ -35,19 +35,19 @@ from tabsdatak._info import PublisherInfo
 from tabsdatak.api import TableFrameSpec, TableFramesSpec  # noqa: F401
 from tabsdatak.common._archive.bundle import BUNDLE_MANIFEST_FILENAME, build_bundle
 from tabsdatak.common._transporter.handler.handler1 import TransporterHandler1
+from tabsdatak.server._tdrunner.function._commons.document.request import (
+    Info,
+    InputTable,
+    Location,
+    OutputTable,
+    Request,
+)
 from tabsdatak.server._tdrunner.function._lib.bundle import extract_bundle
 from tabsdatak.server._tdrunner.function._lib.initial_values import (
     drain_ctx_to_state_or_raise,
     hydrate_ctx_from_state_or_raise,
     read_initial_values,
     write_initial_values,
-)
-from tabsdatak.server._tdrunner.function._lib.request import (
-    Info,
-    InputTable,
-    Location,
-    OutputTable,
-    Request,
 )
 from tabsdatak.server._tdrunner.function.commands.run_source_plugin import (
     _build_manifest_stage_conn,

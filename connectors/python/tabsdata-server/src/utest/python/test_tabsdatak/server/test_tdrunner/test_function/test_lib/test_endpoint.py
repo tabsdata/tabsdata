@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from tabsdatak.server._tdrunner.function._commons.document.request import Location
 from tabsdatak.server._tdrunner.function._lib.endpoint import (
     AzureConfigs,
     AzureEndpoint,
@@ -19,7 +20,6 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
     UnsupportedSchemeError,
     endpoint_from_location,
 )
-from tabsdatak.server._tdrunner.function._lib.request import Location
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 

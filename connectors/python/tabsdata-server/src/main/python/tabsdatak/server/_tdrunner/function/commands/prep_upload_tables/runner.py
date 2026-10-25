@@ -16,10 +16,10 @@ import argparse
 import logging
 from pathlib import Path
 
+from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._lib.outputs_manifest import (
     load_outputs_manifest_or_raise,
 )
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
 from tabsdatak.server._tdrunner.function._lib.transporter import (
     OutputTableNotInManifestError,
     build_upload_tables_request,
@@ -39,7 +39,7 @@ def run(args: argparse.Namespace) -> int:
     storage_config = Path(args.storage_config)
 
     logger.info("Preparing upload-tables transporter request")
-    request = load_request_or_raise(request_path, PrepUploadTablesErrorCode.PUT_1)
+    request = Request.load(request_path, PrepUploadTablesErrorCode.PUT_1)
     manifest_entries = load_outputs_manifest_or_raise(
         outputs_manifest_path, PrepUploadTablesErrorCode.PUT_2
     )

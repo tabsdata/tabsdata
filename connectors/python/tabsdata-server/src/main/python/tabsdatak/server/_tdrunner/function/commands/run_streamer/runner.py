@@ -21,6 +21,9 @@ from pathlib import Path
 from tabsdatak._connectors import get_stream_src
 from tabsdatak._info import KIND_STREAM_PUBLISHER_DEF, StreamPublisherInfo, _unwrap_info
 from tabsdatak.extensions.variant.version import version as _tabsdata_version
+from tabsdatak.server._tdrunner.function._commons.document.request import (
+    StreamerRequest,
+)
 from tabsdatak.server._tdrunner.function._commons.http.retry import is_retriable
 from tabsdatak.server._tdrunner.function._commons.run.command import notify_status_done
 from tabsdatak.server._tdrunner.function._commons.run.shutdown import (
@@ -35,9 +38,6 @@ from tabsdatak.server._tdrunner.function._lib.function_def import (
     load_function_def_or_raise,
 )
 from tabsdatak.server._tdrunner.function._lib.journal import Journal
-from tabsdatak.server._tdrunner.function._lib.request import (
-    load_streamer_request_or_raise,
-)
 from tabsdatak.server._tdrunner.function._lib.stream_src_ctx import (
     StreamerPluginCtx,
 )
@@ -87,7 +87,7 @@ def run(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Starting streamer pod")
-    request = load_streamer_request_or_raise(request_path, RunStreamerErrorCode.RS_1)
+    request = StreamerRequest.load(request_path, RunStreamerErrorCode.RS_1)
     info = _load_function_def(bundle_dir)
     plugin = _resolve_plugin(info)
     conn = load_connection(connection_file)

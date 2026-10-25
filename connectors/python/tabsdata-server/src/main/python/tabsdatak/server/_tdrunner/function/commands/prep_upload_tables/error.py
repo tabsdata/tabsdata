@@ -52,7 +52,7 @@ class PrepUploadTablesErrorCode(ErrorCode):
         BadRequestError,
         "unreadable request.yaml {path}: {detail}",
     )
-    # ``load_request_or_raise``.
+    # ``Request.load``.
 
     PUT_2 = ErrorDef(
         BadManifestError,

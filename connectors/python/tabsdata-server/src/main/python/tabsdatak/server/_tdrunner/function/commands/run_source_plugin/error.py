@@ -89,7 +89,7 @@ class RunSourcePluginErrorCode(ErrorCode):
         BadRequestError,
         "unreadable request.yaml {path}: {detail}",
     )
-    # ``load_request_or_raise``.
+    # ``Request.load``.
 
     RSP_2 = ErrorDef(
         BadBundleError,

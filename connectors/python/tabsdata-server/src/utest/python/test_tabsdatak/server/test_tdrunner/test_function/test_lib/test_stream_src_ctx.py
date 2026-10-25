@@ -36,12 +36,12 @@ from tabsdatak.common._transporter.handler.handler2 import TransporterHandler2
 from tabsdatak.common._transporter.invoker import transporter2
 from tabsdatak.conn.localfile import LocalFileSrcConn
 from tabsdatak.conn.stream.stage._backend import StageBackend, _LocalStageBackend
+from tabsdatak.server._tdrunner.function._commons.document.request import Location
 from tabsdatak.server._tdrunner.function._lib import stage_backend
 from tabsdatak.server._tdrunner.function._lib.errors import (
     BadStreamStateError,
     CommandErrorCode,
 )
-from tabsdatak.server._tdrunner.function._lib.request import Location
 from tabsdatak.server._tdrunner.function._lib.stage_layout import (
     FILES_SUBDIR,
     MANIFESTS_SUBDIR,

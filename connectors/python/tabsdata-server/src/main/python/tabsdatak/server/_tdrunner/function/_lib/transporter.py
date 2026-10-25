@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import Any
 
 from tabsdatak.common._transporter.facade import TRANSPORTER_MODE
-from tabsdatak.server._tdrunner.function._lib import transporter1, transporter2
-from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
-from tabsdatak.server._tdrunner.function._lib.mounts import load_mount_option_keys
-from tabsdatak.server._tdrunner.function._lib.request import (
+from tabsdatak.server._tdrunner.function._commons.document.request import (
     AnyRequest,
     Request,
 )
+from tabsdatak.server._tdrunner.function._lib import transporter1, transporter2
+from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
+from tabsdatak.server._tdrunner.function._lib.mounts import load_mount_option_keys
 
 match TRANSPORTER_MODE:
     case 1:

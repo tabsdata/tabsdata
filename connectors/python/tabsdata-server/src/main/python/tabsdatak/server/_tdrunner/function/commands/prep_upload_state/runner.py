@@ -16,7 +16,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from tabsdatak.server._tdrunner.function._lib.request import load_request_or_raise
+from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._lib.transporter import (
     build_upload_state_request,
     write_transporter_request,
@@ -35,7 +35,7 @@ def run(args: argparse.Namespace) -> int:
     storage_config = Path(args.storage_config)
 
     logger.info("Preparing upload-state transporter request")
-    request = load_request_or_raise(request_path, PrepUploadStateErrorCode.PUS_1)
+    request = Request.load(request_path, PrepUploadStateErrorCode.PUS_1)
     logger.debug(
         "Request declares %d system_output state slot(s): %s; state_dir=%s",
         len(request.system_output),

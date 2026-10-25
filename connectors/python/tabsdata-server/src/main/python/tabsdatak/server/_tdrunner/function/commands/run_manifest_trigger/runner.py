@@ -25,6 +25,9 @@ from typing import assert_never
 from urllib.parse import urlparse
 
 from tabsdatak.conn.stream.stage._backend import StageBackend
+from tabsdatak.server._tdrunner.function._commons.document.request import (
+    AnyRequest,
+)
 from tabsdatak.server._tdrunner.function._commons.http.request import (
     HttpRequest,
     HttpRequestError,
@@ -37,9 +40,6 @@ from tabsdatak.server._tdrunner.function._commons.solver.arguments import (
     resolve_value,
 )
 from tabsdatak.server._tdrunner.function._lib.endpoint import UnsupportedSchemeError
-from tabsdatak.server._tdrunner.function._lib.request import (
-    load_any_request_or_raise,
-)
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (
     stage_backend_from_location,
 )
@@ -397,7 +397,7 @@ def run(args: argparse.Namespace) -> int:
     back_off_secs = int(args.back_off_secs)
 
     logger.info("Starting manifest-trigger sidecar (back_off_secs=%d)", back_off_secs)
-    request = load_any_request_or_raise(request_path, RunManifestTriggerErrorCode.MT_1)
+    request = AnyRequest.load(request_path, RunManifestTriggerErrorCode.MT_1)
     function_stage = request.info.function_stage
     try:
         backend = stage_backend_from_location(function_stage)

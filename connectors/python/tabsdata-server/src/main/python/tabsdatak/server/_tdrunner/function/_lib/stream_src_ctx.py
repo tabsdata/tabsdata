@@ -67,8 +67,8 @@ from typing import Any
 
 from tabsdatak.api import BasicDictSpec, StreamThresholds
 from tabsdatak.conn.stream.stage._backend import StageBackend
+from tabsdatak.server._tdrunner.function._commons.document.request import Location
 from tabsdatak.server._tdrunner.function._lib.errors import CommandErrorCode
-from tabsdatak.server._tdrunner.function._lib.request import Location
 from tabsdatak.server._tdrunner.function._lib.request_ctx import FromFlowRequestCtx
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (
     stage_backend_from_location,
