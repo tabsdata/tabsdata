@@ -281,7 +281,7 @@ pub fn changed_tracked_files(repository: &Path, strict: bool) -> Result<Vec<Chan
     Ok(real_changes)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -348,7 +348,6 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
     fn layout() -> (Scratch, PathBuf, PathBuf) {
         let scratch = scratch();
         let owner = scratch.0.join("owner");
@@ -367,7 +366,6 @@ mod tests {
         (scratch, owner, overlay)
     }
 
-    #[cfg(unix)]
     #[test]
     fn identical_materializations_are_clean_in_strict_mode_only() {
         let (_scratch, _owner, overlay) = layout();
@@ -378,7 +376,6 @@ mod tests {
         assert_eq!(changed_tracked_files(&overlay, false).unwrap().len(), 2);
     }
 
-    #[cfg(unix)]
     #[test]
     fn modified_materializations_are_real_changes() {
         let (_scratch, _owner, overlay) = layout();
@@ -397,7 +394,6 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[test]
     fn regular_changes_are_real_changes_in_strict_mode() {
         let (_scratch, _owner, overlay) = layout();
