@@ -39,7 +39,6 @@ from tabsdatak.server._tdrunner.function._lib.message import (
     DestinationWriteMessage,
     ResponseMessagePayload,
 )
-from tabsdatak.server._tdrunner.function.commands import tabsdata_command
 
 logger = logging.getLogger(__name__)
 
@@ -298,6 +297,15 @@ def notify_step_destination_write(arguments: argparse.Namespace) -> None:
         DestinationWriteMessage().to_body(),
         DESTINATION_WRITE_REPORT,
     )
+
+
+def tabsdata_command(*, name: str) -> Callable[[Callable], Callable]:
+    def wrap(target: Callable) -> Callable:
+        target.tabsdata_command = True
+        target.tabsdata_command_name = name
+        return target
+
+    return wrap
 
 
 def command(

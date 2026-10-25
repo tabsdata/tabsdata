@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import argparse
 
-from tabsdatak.server._tdrunner.function.commands import tabsdata_command
+from tabsdatak.server._tdrunner.function._commons.run.command import (
+    tabsdata_command,
+)
 from tabsdatak.server._tdrunner.function.commands.inspect_instance.runner import run
 
 __all__ = ["main"]
