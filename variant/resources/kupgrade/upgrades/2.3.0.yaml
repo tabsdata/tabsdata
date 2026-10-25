@@ -16,6 +16,12 @@ assets:
   venvbuilder.sh:
     venvbuilder.sh:
       action: replace
+  venvloader.py:
+    venvloader.py:
+      action: replace
+  venvloader.sh:
+    venvloader.sh:
+      action: replace
 configs:
   tabsdata.yaml:
     tabsdata_aks.yaml:
@@ -121,6 +127,45 @@ configs:
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
 pods:
+  apiserver.yaml:
+    apiserver_aks.yaml:
+      action: replace
+    apiserver_docker.yaml:
+      action: replace
+    apiserver_eks.yaml:
+      action: replace
+    apiserver_fargate.yaml:
+      action: replace
+    apiserver_gke.yaml:
+      action: replace
+    apiserver_kminus.yaml:
+      action: retain
+  cron-publisher.yaml:
+    cron-publisher_aks.yaml:
+      action: replace
+    cron-publisher_docker.yaml:
+      action: replace
+    cron-publisher_eks.yaml:
+      action: replace
+    cron-publisher_fargate.yaml:
+      action: replace
+    cron-publisher_gke.yaml:
+      action: replace
+    cron-publisher_kminus.yaml:
+      action: retain
+  dbmanager.yaml:
+    dbmanager_aks.yaml:
+      action: replace
+    dbmanager_docker.yaml:
+      action: replace
+    dbmanager_eks.yaml:
+      action: replace
+    dbmanager_fargate.yaml:
+      action: replace
+    dbmanager_gke.yaml:
+      action: replace
+    dbmanager_kminus.yaml:
+      action: retain
   function-publisher.yaml:
     function-publisher_aks.yaml:
       action: replace
@@ -199,3 +244,16 @@ pods:
       action: create
     tdmanager_kminus.yaml:
       action: create
+  venvloader.yaml:
+    venvloader_aks.yaml:
+      action: replace
+    venvloader_docker.yaml:
+      action: replace
+    venvloader_eks.yaml:
+      action: replace
+    venvloader_fargate.yaml:
+      action: replace
+    venvloader_gke.yaml:
+      action: replace
+    venvloader_kminus.yaml:
+      action: replace
