@@ -29,6 +29,7 @@ from tabsdatak.conn.dev import DataGenSrcConn, TrashDestConn
 from tabsdatak.sdk.tabsdata_server import TabsdataServer
 from testi_tabsdatak.conn.common.cluster import Cluster
 from testi_tabsdatak.conn.common.monkey.descriptor import load_plan
+from testi_tabsdatak.conn.common.monkey.listing import listed
 from testi_tabsdatak.conn.common.monkey.naming import collection_name
 from testi_tabsdatak.conn.common.monkey.plan import (
     DATAGEN,
@@ -207,18 +208,6 @@ def timings(outcomes: list[dict]) -> dict[str, dict]:
         }
         for action, values in sorted(by_action.items())
     }
-
-
-def listed(server: TabsdataServer, path: str) -> list[dict]:
-    items, params = [], {}
-    while True:
-        response = server.connection.get(path, params=params)
-        response.raise_for_status()
-        page = response.json()["data"]
-        items += page.get("data") or []
-        if page.get("next") is None or page.get("next_pagination_id") is None:
-            return items
-        params = {"next": page["next"], "pagination_id": page["next_pagination_id"]}
 
 
 def graph_problems(server: TabsdataServer, project: str) -> list[str]:
