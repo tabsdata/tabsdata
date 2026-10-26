@@ -31,6 +31,9 @@ pub(crate) mod users;
 pub(crate) mod workers;
 
 #[cfg(test)]
+mod openapi_refs;
+
+#[cfg(test)]
 mod tests {
     use crate::router::roles::LIST_ROLE_PATH;
     use crate::router::simple_permissions::LIST_BY_USER_PATH;
