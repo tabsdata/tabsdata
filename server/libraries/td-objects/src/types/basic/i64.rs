@@ -42,6 +42,11 @@ pub struct SampleOffset(i64);
 #[typed(min = 0, max = SampleLen::MAX, default = 100)]
 pub struct SampleLen(i64);
 
+/// How many distinct tag keys or values a facet read returns at most.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(min = 1, max = 1000, default = 100)]
+pub struct TagFacetLen(i64);
+
 impl SampleLen {
     pub const MAX: i64 = 1000;
 }

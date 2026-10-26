@@ -3,6 +3,7 @@
 //
 
 pub mod collection;
+pub mod facets;
 pub mod function;
 pub mod group;
 pub mod list;

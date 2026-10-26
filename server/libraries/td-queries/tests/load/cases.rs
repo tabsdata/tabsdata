@@ -109,6 +109,18 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
+        name: "tags::keys",
+        covers: &["Tags::keys"],
+        family: Family::Default,
+        status: Status::Implemented,
+    },
+    LoadCase {
+        name: "tags::values",
+        covers: &["Tags::values"],
+        family: Family::Default,
+        status: Status::Implemented,
+    },
+    LoadCase {
         name: "default::fetch_latest_before",
         covers: &["Unversioned::first"],
         family: Family::Default,
@@ -201,7 +213,7 @@ pub const LOAD_CASES: &[LoadCase] = &[
     },
     LoadCase {
         name: "tagged::list",
-        covers: &["Scd2Tagged::list"],
+        covers: &["Current::list"],
         family: Family::Latest,
         status: Status::Implemented,
     },

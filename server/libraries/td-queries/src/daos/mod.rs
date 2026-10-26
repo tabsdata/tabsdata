@@ -13,4 +13,5 @@ pub mod projects;
 pub mod session;
 pub(crate) mod status_rollup;
 pub mod table_data_versions;
+pub mod tags;
 pub mod topology;

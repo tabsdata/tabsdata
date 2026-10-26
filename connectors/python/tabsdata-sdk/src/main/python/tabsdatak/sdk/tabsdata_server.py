@@ -4721,7 +4721,7 @@ class TabsdataServer:
     ) -> List[dict]:
         """The open tags of the collection, function, table or group named, or,
         when nothing is named, of every entity in the project, narrowed by
-        ``filter`` (``entity_type:eq:T``, ``key:eq:td.parent``,
+        ``filter`` (``entity_type:eq:T``, ``key:eq:_parent``,
         ``value:eq:<id>``, ...). Each tag is a dict with ``entity_type``
         (``P``, ``G``, ``C``, ``F`` or ``T``), ``entity_id``, ``key``,
         ``value`` and ``kind``: ``T`` for topology tags (``_``-prefixed, like
@@ -4755,6 +4755,49 @@ class TabsdataServer:
             tags.extend(data.get("data") or [])
             first_page = False
         return tags
+
+    def list_tag_keys(
+        self,
+        entity_type: str = None,
+        kind: str = None,
+        prefix: str = None,
+        len: int = None,
+        raise_for_status: bool = True,
+    ) -> List[str]:
+        """The tag keys open on the project's entities, sorted: what a tag
+        filter can name. ``entity_type`` (``P``, ``G``, ``C``, ``F`` or
+        ``T``) and ``kind`` (``T``, ``S`` or ``U``) narrow them, ``prefix`` is
+        a literal start, and at most ``len`` come back (100 unless given, up
+        to 1000). ``list_tags`` reads every tag, page by page."""
+        response = self.connection.tag_keys(
+            entity_type,
+            kind,
+            prefix,
+            len,
+            raise_for_status=raise_for_status,
+        )
+        return response.json().get("data")
+
+    def list_tag_values(
+        self,
+        key: str,
+        entity_type: str = None,
+        kind: str = None,
+        prefix: str = None,
+        len: int = None,
+        raise_for_status: bool = True,
+    ) -> List[str]:
+        """The values ``key`` is open with, sorted, narrowed as in
+        ``list_tag_keys``."""
+        response = self.connection.tag_values(
+            key,
+            entity_type,
+            kind,
+            prefix,
+            len,
+            raise_for_status=raise_for_status,
+        )
+        return response.json().get("data")
 
     def set_tag(
         self,

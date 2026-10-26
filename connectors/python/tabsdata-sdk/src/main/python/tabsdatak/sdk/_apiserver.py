@@ -1128,6 +1128,39 @@ class APIServer:
         response = self.get(endpoint, params)
         return self.raise_for_status_or_return(raise_for_status, response)
 
+    def tag_keys(
+        self,
+        entity_type: str = None,
+        kind: str = None,
+        prefix: str = None,
+        request_len: int = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = self._scoped("/tag-keys")
+        params = self.get_params_dict(
+            ["entity_type", "kind", "prefix", "len"],
+            [entity_type, kind, prefix, request_len],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def tag_values(
+        self,
+        key: str,
+        entity_type: str = None,
+        kind: str = None,
+        prefix: str = None,
+        request_len: int = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = self._scoped(f"/tag-keys/{quote(key, safe='')}/values")
+        params = self.get_params_dict(
+            ["entity_type", "kind", "prefix", "len"],
+            [entity_type, kind, prefix, request_len],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
     def tag_set(self, entity: str, key: str, value: str, raise_for_status: bool = True):
         endpoint = self._scoped(f"{entity}/tags")
         response = self.post(endpoint, json={"key": key, "value": value})

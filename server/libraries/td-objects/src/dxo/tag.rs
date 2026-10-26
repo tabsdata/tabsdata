@@ -8,8 +8,8 @@
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
-    ProjectId, TagEntity, TagEntityId, TagEntityType, TagId, TagKey, TagKind, TagValue,
-    TagVersionId, TopologyTagKey, UserId, UserTagKey,
+    ProjectId, TagEntity, TagEntityId, TagEntityType, TagFacetLen, TagId, TagKey, TagKind,
+    TagPrefix, TagValue, TagVersionId, TopologyTagKey, UserId, UserTagKey,
 };
 use ta_objects::and;
 use ta_objects::sql_condition::SqlCondition;
@@ -17,7 +17,6 @@ use ta_objects::{FromDao, HasColumn};
 use td_error::TdError;
 
 impl TagEntity {
-    /// The rows of one entity.
     pub fn rows<D>(&self) -> impl SqlCondition<D> + '_
     where
         D: HasColumn<TagEntityType> + HasColumn<TagEntityId>,
@@ -205,4 +204,22 @@ pub struct TagSet {
 #[ta_objects::UrlParam]
 pub struct TagParam {
     pub key: UserTagKey,
+}
+
+#[ta_objects::UrlParam]
+pub struct TagKeyParam {
+    pub key: TagKey,
+}
+
+/// The keys or values in use, for a picker: narrowed to one entity type or
+/// kind and to a literal `prefix`, sorted, at most `len` of them. Exhaustive
+/// reads go through `GET /tags`, which paginates.
+#[ta_objects::QueryParam]
+#[derive(Default)]
+pub struct TagFacetParams {
+    pub entity_type: Option<TagEntityType>,
+    pub kind: Option<TagKind>,
+    pub prefix: Option<TagPrefix>,
+    #[serde(default)]
+    pub len: TagFacetLen,
 }

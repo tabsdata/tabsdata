@@ -1047,6 +1047,20 @@ def test_list_tags_of_an_entity_returns_the_entity_list():
     connection.tags_list.assert_not_called()
 
 
+def test_list_tag_keys_and_values_pass_their_narrowing():
+    server, connection = _tag_server()
+    connection.tag_keys.return_value.json.return_value = {"data": ["team"]}
+    connection.tag_values.return_value.json.return_value = {"data": ["a", "b"]}
+    assert server.list_tag_keys(entity_type="T", prefix="te", len=5) == ["team"]
+    connection.tag_keys.assert_called_once_with(
+        "T", None, "te", 5, raise_for_status=True
+    )
+    assert server.list_tag_values("team", kind="U") == ["a", "b"]
+    connection.tag_values.assert_called_once_with(
+        "team", None, "U", None, None, raise_for_status=True
+    )
+
+
 def test_list_tags_of_the_project_walks_every_page_with_the_filter():
     server, connection = _tag_server()
     pages = [

@@ -87,7 +87,7 @@ impl Entity for Defs {
                 .and_where(open_interval(Tags::ValidTo))
                 .to_owned(),
             // `text_pattern_ops` on the value so a `tag.<key>:lk:<prefix>*`
-            // filter is a range scan; `=` still uses it.
+            // filter and a facet prefix are a range scan; `=` still uses it.
             Index::create()
                 .name("tags___key__value__entity_type___current_idx")
                 .table(Tags::Table)

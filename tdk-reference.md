@@ -273,7 +273,8 @@ table delete   --name NAME  [--proj PROJECT] [--coll COLLECTION] [--confirm dele
 Every entity listing (`project`, `group`, `collection`, `fn`, `table` list)
 also takes tag filters beside its column filters: `tag.<key>:eq:<value>`,
 `:ne:<value>`, `:lk:<pattern>` and `:is:null` / `:is:not_null`. The same key
-repeated is OR, different keys AND.
+repeated is OR, different keys AND. The SDK's `list_tag_keys()` and
+`list_tag_values(key)` list the keys and values in use.
 
 ## Execution
 

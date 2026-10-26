@@ -18,7 +18,8 @@ use td_objects::dxo::crudl::{ListParams, RequestContext};
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::group::GroupParam;
 use td_objects::dxo::table::TableParam;
-use td_objects::dxo::tag::{Tag, TagParam, TagSet};
+use td_objects::dxo::tag::{Tag, TagFacetParams, TagKeyParam, TagParam, TagSet};
+use td_objects::types::basic::{TagKey, TagValue};
 use td_services::Services;
 
 const TAGS_TAG: &str = "Tags";
@@ -41,6 +42,47 @@ pub async fn list_tags(
     let request = context.list((), list_params).in_project(project_id);
     let response = state.tag_list(request).await?;
     Ok(ListStatus::OK(response))
+}
+
+#[apiserver_path(
+    version(v1),
+    scope(project),
+    auth(session, service_token),
+    method(get),
+    path = "/projects/{project}/tag-keys",
+    tag(TAGS_TAG),
+    doc = "The tag keys open on the project's entities, or on those of one type"
+)]
+pub async fn list_tag_keys(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Query(facet): Query<TagFacetParams>,
+) -> Result<GetStatus<Vec<TagKey>>, ErrorStatus> {
+    let request = context.read(facet).in_project(project_id);
+    let response = state.tag_keys(request).await?;
+    Ok(GetStatus::OK(response))
+}
+
+#[apiserver_path(
+    version(v1),
+    scope(project),
+    auth(session, service_token),
+    method(get),
+    path = "/projects/{project}/tag-keys/{key}/values",
+    tag(TAGS_TAG),
+    doc = "The values a tag key is open with, across the project or on one entity type"
+)]
+pub async fn list_tag_values(
+    State(state): State<Services>,
+    Extension(context): Extension<RequestContext>,
+    Project(project_id): Project,
+    Path(key): Path<TagKeyParam>,
+    Query(facet): Query<TagFacetParams>,
+) -> Result<GetStatus<Vec<TagValue>>, ErrorStatus> {
+    let request = context.read((key, facet)).in_project(project_id);
+    let response = state.tag_values(request).await?;
+    Ok(GetStatus::OK(response))
 }
 
 #[apiserver_path(

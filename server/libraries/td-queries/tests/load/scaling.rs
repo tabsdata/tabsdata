@@ -20,6 +20,7 @@ use crate::raw::delete_by_pk;
 use crate::scd2_cases::build_attempt;
 use std::collections::BTreeSet;
 use std::collections::HashSet;
+use ta_objects::Typed;
 use td_common::datetime::Timestamp;
 use td_database::access::LockInstant;
 use td_database::connection::PgConnectionExt;
@@ -38,13 +39,15 @@ use td_objects::dxo::physical_function_run::{PhysicalFunctionRunDB, PhysicalFunc
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
 use td_objects::dxo::table::{Table, TableDB};
+use td_objects::dxo::tag::TagFacetParams;
 use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::list::params::ListQueryParams;
-use td_objects::list::tagged::TaggedListQuery;
 use td_objects::types::basic::{
     AtTime, DependencyPos, EpochMs, FactSide, IncludePrivate, IncludeReplaced, InputIdx,
-    LogicalFunctionRunInputId, LogicalFunctionRunStatus, PhysicalFunctionRunStatus, VersionPos,
+    LogicalFunctionRunInputId, LogicalFunctionRunStatus, PhysicalFunctionRunStatus, TagKey,
+    VersionPos,
 };
+use td_objects::types::tag_selector::TagSelector;
 use td_objects::types::visible_projects::VisibleProjects;
 use td_queries::Queries;
 use td_queries::test_utils::{derive_metrics_facts, topology_write};
@@ -560,28 +563,38 @@ async fn time_chain_queries(
             .list::<Function>((), &fn_params)
             .await?
     );
-    let team_a = TaggedListQuery::<Table>::try_from(&ListParams {
+    let team_a = ListQueryParams::<Table, TagSelector>::try_from(&ListParams {
         filter: vec!["tag.team:eq:a".to_string()],
         ..ListParams::default()
     })?;
     let _ = timed!(
         out,
         "tagged::list",
-        (db).scd2()
-            .tagged(&team_a.selector)
-            .list::<Table>((), &team_a.params)
-            .await?
+        (db).scd2().list::<Table>((), &team_a).await?
     );
-    let team_a_collections = TaggedListQuery::<CollectionRead>::try_from(&ListParams {
-        filter: vec!["tag.team:eq:a".to_string()],
-        ..ListParams::default()
-    })?;
+    let team_a_collections =
+        ListQueryParams::<CollectionRead, TagSelector>::try_from(&ListParams {
+            filter: vec!["tag.team:eq:a".to_string()],
+            ..ListParams::default()
+        })?;
     let _ = timed!(
         out,
         "latest::tagged::collections",
         (db).scd2()
-            .tagged(&team_a_collections.selector)
-            .list::<CollectionRead>((), &team_a_collections.params)
+            .list::<CollectionRead>((), &team_a_collections)
+            .await?
+    );
+    let team = TagKey::try_new("team")?;
+    let _ = timed!(
+        out,
+        "tags::keys",
+        (db).tags().keys(&TagFacetParams::default()).await?
+    );
+    let _ = timed!(
+        out,
+        "tags::values",
+        (db).tags()
+            .values(&team, &TagFacetParams::default())
             .await?
     );
 

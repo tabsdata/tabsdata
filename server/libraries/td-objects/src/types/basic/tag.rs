@@ -4,7 +4,6 @@
 
 use crate::types::basic::{CollectionId, FunctionId, GroupId, ProjectId, TableId, TagEntityId};
 use std::collections::BTreeMap;
-use std::str::FromStr;
 use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_common::id::Id;
 use td_error::{TdError, td_error};
@@ -135,12 +134,6 @@ pub struct UserTagKey(String);
 #[typed(try_from = UserTagKey)]
 pub struct TagKey(String);
 
-impl TagKey {
-    pub fn topology(&self) -> Option<TopologyTagKey> {
-        TopologyTagKey::from_str(self).ok()
-    }
-}
-
 impl From<TopologyTagKey> for TagKey {
     fn from(key: TopologyTagKey) -> Self {
         Self::try_new(key.to_string()).expect("a topology key is a valid tag key")
@@ -150,6 +143,11 @@ impl From<TopologyTagKey> for TagKey {
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 #[typed(max_len = 256, default = "")]
 pub struct TagValue(String);
+
+/// The literal start of the tag keys or values a facet read returns.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(max_len = 256)]
+pub struct TagPrefix(String);
 
 /// An entity's topology tags at one topology version.
 pub type TopologyTags = BTreeMap<TopologyTagKey, TagValue>;
@@ -199,16 +197,6 @@ mod tests {
         assert!(UserTagKey::try_new("Team").is_err());
         assert!(UserTagKey::try_new(".team").is_err());
         assert!(UserTagKey::try_new("a".repeat(64)).is_err());
-    }
-
-    #[test]
-    fn test_stored_keys_name_their_topology_key() {
-        assert_eq!(
-            TagKey::from(TopologyTagKey::Parent).topology(),
-            Some(TopologyTagKey::Parent)
-        );
-        let user = TagKey::try_from(UserTagKey::try_new("team").unwrap()).unwrap();
-        assert_eq!(user.topology(), None);
     }
 
     #[test]
