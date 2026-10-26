@@ -3,11 +3,8 @@ Copyright 2025 Tabsdata Inc.
 -->
 
 <div align="center">
-    <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="../images/tabsdata-logo-for-dark-theme.svg">
-        <source media="(prefers-color-scheme: light)" srcset="../images/tabsdata-logo-for-light-theme.svg">
-        <img src="../images/tabsdata-logo-adaptive.svg" alt="Tabsdata" width="500">
-    </picture>
+    <img src="../images/tabsdata-logo-for-light-theme.svg#gh-light-mode-only" alt="Tabsdata" width="500">
+    <img src="../images/tabsdata-logo-for-dark-theme.svg#gh-dark-mode-only" alt="Tabsdata" width="500">
 </div>
 
 # GitHub Actions Workflows

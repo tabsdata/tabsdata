@@ -3,11 +3,8 @@ Copyright 2026 Tabsdata Inc.
 -->
 
 <div align="center">
-    <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="assets/images/tabsdata-logo-for-dark-theme.svg">
-        <source media="(prefers-color-scheme: light)" srcset="assets/images/tabsdata-logo-for-light-theme.svg">
-        <img src="assets/images/tabsdata-logo-adaptive.svg" alt="Tabsdata" width="500">
-    </picture>
+    <img src="assets/images/tabsdata-logo-for-light-theme.svg#gh-light-mode-only" alt="Tabsdata" width="500">
+    <img src="assets/images/tabsdata-logo-for-dark-theme.svg#gh-dark-mode-only" alt="Tabsdata" width="500">
 </div>
 
 # Contributor Covenant Code of Conduct
