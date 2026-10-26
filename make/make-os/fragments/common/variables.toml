@@ -263,6 +263,11 @@ script = [
             with_monkey = replace ${argument} "--with-monkey=" ""
             set_env TD_WITH_MONKEY ${with_monkey}
         end
+        is_storage = starts_with ${argument} "--storage="
+        if ${is_storage}
+            storage = replace ${argument} "--storage=" ""
+            set_env TD_STORAGE ${storage}
+        end
         is_monkey_weight = starts_with ${argument} "--monkey-weight="
         if ${is_monkey_weight}
             monkey_weight = replace ${argument} "--monkey-weight=" ""
@@ -493,6 +498,27 @@ script = [
     end
     set_env TD_WITH_MONKEY ${with_monkey}
     debug "🔅 Using td with monkey: '${with_monkey}'"
+
+    storage = get_env TD_STORAGE
+    if is_empty ${storage}
+        storage = set "file"
+    end
+    storage_valid = set false
+    storages = array file awsc gcpc azrc awse gcpe azre
+    for known_storage in ${storages}
+        if eq ${storage} ${known_storage}
+            storage_valid = set true
+        end
+    end
+    release ${storages}
+    if not ${storage_valid}
+        error ""
+        error "🧨 Invalid '--storage=${storage}': use 'file', 'awsc', 'gcpc', 'azrc', 'awse', 'gcpe' or 'azre'."
+        error ""
+        assert false
+    end
+    set_env TD_STORAGE ${storage}
+    debug "🔅 Using td storage: '${storage}'"
 
     monkey_weight = get_env TD_MONKEY_WEIGHT
     if is_empty ${monkey_weight}

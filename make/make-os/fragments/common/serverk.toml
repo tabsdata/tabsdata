@@ -80,11 +80,18 @@ script = [
     '''
     !include_files ./make/make-os/libraries/log.ds
     !include_files ./make/make-os/libraries/gen.ds
+    !include_files ./make/make-os/libraries/tdd.ds
 
     debug "🔷 _____ Starting tabsdata kubernetes testing servers..."
 
     on_ga = get_env TD_ON_GA
     on_ga_true = eq ${on_ga} "true"
+
+    storage = get_env TD_STORAGE
+    if is_empty ${storage}
+        storage = set "file"
+    end
+    storage_cloud = not eq ${storage} "file"
 
     verbose = set false
     arguments = split ${CARGO_MAKE_TASK_ARGS} ;
@@ -108,6 +115,31 @@ script = [
 
     exists = is_path_exists ${ITEST_TDKSERVER_BINARY}
     if ${exists}
+        if ${storage_cloud}
+            cm_run_task __os__set_crypto
+            storage_real = set false
+            if eq ${storage} "awsc"
+                storage_real = set true
+            end
+            if eq ${storage} "gcpc"
+                storage_real = set true
+            end
+            if eq ${storage} "azrc"
+                storage_real = set true
+            end
+            if ${storage_real}
+                cm_run_task __os__set_secrets
+            end
+            tdd = tdd_exe
+            info "🪣 Creating the storage domain of '${storage}'..."
+            storage_domain = exec tdx-itest storage create --storage ${storage} --tdd ${tdd}
+            if not eq ${storage_domain.code} "0"
+                error "🚫 Could not create the storage domain of '${storage}' (exit code ${storage_domain.code})."
+                error "\n${storage_domain.stderr}"
+                assert_fail
+            end
+        end
+
         instance_types = exec --fail-on-error tdx-itest types ${ITEST_INSTANCES_CONFIG}
         instance_types = split ${instance_types.stdout} "\n"
 
@@ -115,14 +147,14 @@ script = [
             instance_type = trim ${instance_type}
             in_arena = instance_type_wanted ${instance_type}
             if ${in_arena}
-                resolved_arguments = exec tdx-itest arguments ${ITEST_INSTANCES_CONFIG} ${instance_type}
+                resolved_arguments = exec tdx-itest arguments ${ITEST_INSTANCES_CONFIG} ${instance_type} --storage ${storage}
                 if not eq ${resolved_arguments.code} "0"
                     error "🚫 Could not resolve arguments for instance type '${instance_type}' (exit code ${resolved_arguments.code})."
                     error "\n${resolved_arguments.stderr}"
                     assert_fail
                 end
 
-                instance = exec tdx-itest name ${instance_type}
+                instance = exec tdx-itest name ${instance_type} --storage ${storage}
                 if not eq ${instance.code} "0"
                     error "🚫 Could not generate a name for instance type '${instance_type}'."
                     assert_fail
@@ -138,9 +170,23 @@ script = [
                 base_port = trim ${base_port.stdout}
 
                 generation = get_env TD_TABSDATA_GENERATION
-                exec tdx-itest banner --color blue "🔅 Starting kubernetes instance: ${instance} (type ${instance_type}, base port ${base_port}, generation ${generation})"
+                exec tdx-itest banner --color blue "🔅 Starting kubernetes instance: ${instance} (type ${instance_type}, storage ${storage}, base port ${base_port}, generation ${generation})"
 
                 instance_arguments = array
+                if ${storage_cloud}
+                    array_push ${instance_arguments} tdx-itest
+                    array_push ${instance_arguments} storage
+                    array_push ${instance_arguments} exec
+                    array_push ${instance_arguments} --config
+                    array_push ${instance_arguments} ${ITEST_INSTANCES_CONFIG}
+                    array_push ${instance_arguments} --storage
+                    array_push ${instance_arguments} ${storage}
+                    array_push ${instance_arguments} --instance
+                    array_push ${instance_arguments} ${instance}
+                    array_push ${instance_arguments} --tdd
+                    array_push ${instance_arguments} ${tdd}
+                    array_push ${instance_arguments} --
+                end
                 array_push ${instance_arguments} ${ITEST_TDKSERVER_BINARY}
                 array_push ${instance_arguments} --accept-terms
                 array_push ${instance_arguments} y

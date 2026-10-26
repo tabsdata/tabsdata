@@ -1,0 +1,18 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+files:
+  apiserver.storage:
+    storage.mounts[id=ROOT]:
+      uri: env:${TD_STORAGE__URI}/${TD_STORAGE__INSTANCE}/data/
+      options.azure_storage_account_name: env:TD_STORAGE__OPTIONS__AZURE_STORAGE_ACCOUNT_NAME
+      options.azure_storage_account_key: env:TD_STORAGE__OPTIONS__AZURE_STORAGE_ACCOUNT_KEY
+    storage.mounts[id=BUNDLES]:
+      uri: env:${TD_STORAGE__URI}/${TD_STORAGE__INSTANCE}/bundles/
+      options.azure_storage_account_name: env:TD_STORAGE__OPTIONS__AZURE_STORAGE_ACCOUNT_NAME
+      options.azure_storage_account_key: env:TD_STORAGE__OPTIONS__AZURE_STORAGE_ACCOUNT_KEY
+    storage.mounts[id=IMAGES]:
+      uri: env:${TD_STORAGE__URI}/${TD_STORAGE__INSTANCE}/images/
+      options.azure_storage_account_name: env:TD_STORAGE__OPTIONS__AZURE_STORAGE_ACCOUNT_NAME
+      options.azure_storage_account_key: env:TD_STORAGE__OPTIONS__AZURE_STORAGE_ACCOUNT_KEY

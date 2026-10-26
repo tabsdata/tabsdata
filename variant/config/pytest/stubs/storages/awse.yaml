@@ -1,0 +1,27 @@
+#
+# Copyright 2026 Tabsdata Inc.
+#
+
+files:
+  apiserver.storage:
+    storage.mounts[id=ROOT]:
+      uri: env:${TD_STORAGE__URI}/${TD_STORAGE__INSTANCE}/data/
+      options.aws_access_key_id: env:TD_STORAGE__OPTIONS__AWS_ACCESS_KEY_ID
+      options.aws_secret_access_key: env:TD_STORAGE__OPTIONS__AWS_SECRET_ACCESS_KEY
+      options.aws_region: env:TD_STORAGE__OPTIONS__AWS_REGION
+      options.aws_endpoint_url: env:TD_STORAGE__OPTIONS__AWS_ENDPOINT_URL
+      options.aws_allow_http: env:TD_STORAGE__OPTIONS__AWS_ALLOW_HTTP
+    storage.mounts[id=BUNDLES]:
+      uri: env:${TD_STORAGE__URI}/${TD_STORAGE__INSTANCE}/bundles/
+      options.aws_access_key_id: env:TD_STORAGE__OPTIONS__AWS_ACCESS_KEY_ID
+      options.aws_secret_access_key: env:TD_STORAGE__OPTIONS__AWS_SECRET_ACCESS_KEY
+      options.aws_region: env:TD_STORAGE__OPTIONS__AWS_REGION
+      options.aws_endpoint_url: env:TD_STORAGE__OPTIONS__AWS_ENDPOINT_URL
+      options.aws_allow_http: env:TD_STORAGE__OPTIONS__AWS_ALLOW_HTTP
+    storage.mounts[id=IMAGES]:
+      uri: env:${TD_STORAGE__URI}/${TD_STORAGE__INSTANCE}/images/
+      options.aws_access_key_id: env:TD_STORAGE__OPTIONS__AWS_ACCESS_KEY_ID
+      options.aws_secret_access_key: env:TD_STORAGE__OPTIONS__AWS_SECRET_ACCESS_KEY
+      options.aws_region: env:TD_STORAGE__OPTIONS__AWS_REGION
+      options.aws_endpoint_url: env:TD_STORAGE__OPTIONS__AWS_ENDPOINT_URL
+      options.aws_allow_http: env:TD_STORAGE__OPTIONS__AWS_ALLOW_HTTP

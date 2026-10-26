@@ -11,6 +11,7 @@ from tabsdatax.itest.tdkinstance.commands.port import port
 from tabsdatax.itest.tdkinstance.commands.ps import ps
 from tabsdatax.itest.tdkinstance.commands.ready import ready
 from tabsdatax.itest.tdkinstance.commands.registry import registry
+from tabsdatax.itest.tdkinstance.commands.storage import storage
 from tabsdatax.itest.tdkinstance.commands.types import types
 
 
@@ -30,6 +31,7 @@ main.add_command(port)
 main.add_command(ps)
 main.add_command(ready)
 main.add_command(registry)
+main.add_command(storage)
 
 
 if __name__ == "__main__":
