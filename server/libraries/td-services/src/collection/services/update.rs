@@ -297,7 +297,7 @@ mod tests {
         assert_eq!(updated.description, description);
         assert!(updated.defined_on > before_update);
         assert_eq!(updated.defined_by_id, UserId::admin());
-        assert_eq!(updated.defined_by, UserLabel::from(UserName::admin()));
+        assert_eq!(updated.defined_by, UserLabel::new(UserName::admin()));
 
         // The update is a new version of the collection, not of the topology.
         let mut timeline: Vec<CollectionDB> = db

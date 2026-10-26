@@ -157,7 +157,7 @@ mod tests {
             CollectionLabel::new(collection.base.name)
         );
         assert_eq!(response.execution, execution.base.name);
-        assert_eq!(response.triggered_by, UserLabel::from(UserName::admin()));
+        assert_eq!(response.triggered_by, UserLabel::new(UserName::admin()));
         Ok(())
     }
 }

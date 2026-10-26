@@ -118,7 +118,7 @@ mod tests {
         PhysicalFunctionRunStatus, ProjectId, ProjectName, StageId, StorageVersion, TransactionId,
         Trigger, UserId, UserName,
     };
-    use td_objects::types::basic::{CollectionLabel, ProjectLabel};
+    use td_objects::types::basic::{CollectionLabel, ProjectLabel, UserLabel};
 
     /// Proves each stamped base_path on `PhysicalFunctionRunToExecute` is routed
     /// to the CORRECT storage location (no cross-wiring): bundle → `bundle_base_path`,
@@ -160,7 +160,7 @@ mod tests {
                 execution: None,
                 execution_function_version_id: FunctionVersionId::new().into(),
                 storage_version: StorageVersion::V1,
-                triggered_by: UserName::try_from("u0").unwrap().into(),
+                triggered_by: UserLabel::new(UserName::try_from("u0").unwrap()),
                 connection: None,
             },
             bundle_id: BundleId::default(),

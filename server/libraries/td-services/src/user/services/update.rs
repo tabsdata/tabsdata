@@ -153,13 +153,13 @@ mod tests {
         );
         assert!(*updated.created_on < before);
         assert_eq!(*updated.created_by_id, UserId::admin());
-        assert_eq!(*updated.created_by, UserLabel::from(UserName::admin()));
+        assert_eq!(*updated.created_by, UserLabel::new(UserName::admin()));
         assert_eq!(
             updated.modified_on.timestamp_millis(),
             request_time.timestamp_millis()
         );
         assert_eq!(*updated.modified_by_id, UserId::admin());
-        assert_eq!(*updated.modified_by, UserLabel::from(UserName::admin()));
+        assert_eq!(*updated.modified_by, UserLabel::new(UserName::admin()));
         assert!(!*updated.enabled);
         assert!(*updated.password_must_change);
 
@@ -203,13 +203,13 @@ mod tests {
         );
         assert!(*updated.created_on < before);
         assert_eq!(*updated.created_by_id, UserId::admin());
-        assert_eq!(*updated.created_by, UserLabel::from(UserName::admin()));
+        assert_eq!(*updated.created_by, UserLabel::new(UserName::admin()));
         assert_eq!(
             updated.modified_on.timestamp_millis(),
             request_time.timestamp_millis()
         );
         assert_eq!(*updated.modified_by_id, user.id);
-        assert_eq!(*updated.modified_by, UserLabel::from(user.name.clone()));
+        assert_eq!(*updated.modified_by, UserLabel::new(user.name.clone()));
         assert!(*updated.enabled);
     }
 

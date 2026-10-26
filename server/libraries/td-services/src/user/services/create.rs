@@ -98,10 +98,10 @@ mod tests {
         }
         assert!(*created.created_on >= before);
         assert_eq!(*created.created_by_id, UserId::admin());
-        assert_eq!(*created.created_by, UserLabel::from(UserName::admin()));
+        assert_eq!(*created.created_by, UserLabel::new(UserName::admin()));
         assert_eq!(*created.modified_on, *created.created_on);
         assert_eq!(*created.modified_by_id, UserId::admin());
-        assert_eq!(*created.modified_by, UserLabel::from(UserName::admin()));
+        assert_eq!(*created.modified_by, UserLabel::new(UserName::admin()));
         assert_eq!(*created.enabled, expected_enabled);
 
         let res: Option<UserRoleDB> = db.fetch_first::<UserRoleDB>(&created.id).await.unwrap();

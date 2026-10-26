@@ -6,7 +6,7 @@ use crate::dxo::table::TableDBWithNames;
 use crate::parse::{
     DATA_LOCATION_REGEX, NAME_PATTERN, SECRET_NAME_PATTERN, UNDERSCORE_NAME_PATTERN, parse_email,
 };
-use crate::types::basic::{CollectionId, GroupId, ProjectId};
+use crate::types::basic::{CollectionId, GroupId, ProjectId, UserId};
 use crate::types::label::Label;
 use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_error::{ApiError, api_error};
@@ -303,17 +303,7 @@ pub struct ProjectLabel(Label<ProjectName, ProjectId>);
 /// How a row names the user who touched it: the name while the account
 /// exists, `[<id>]` after it is deleted.
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
-#[typed(
-    regex = LABEL_PATTERN,
-    expected = "a user name, or the bracketed id of a deleted user"
-)]
-pub struct UserLabel(String);
-
-impl From<UserName> for UserLabel {
-    fn from(name: UserName) -> Self {
-        UserLabel(name.0)
-    }
-}
+pub struct UserLabel(Label<UserName, UserId>);
 
 impl UserName {
     pub fn admin() -> Self {
@@ -369,7 +359,7 @@ mod tests {
         assert!(UserLabel::try_from("06gcsccq9hpjl7iqa38ocao15s").is_err());
         assert!(UserLabel::try_from("[admin]").is_err());
         assert!(UserLabel::try_from("").is_err());
-        assert_eq!(*UserLabel::from(UserName::admin()), "admin");
+        assert_eq!(UserLabel::new(UserName::admin()).to_string(), "admin");
     }
 
     // BasePath is validated by DATA_LOCATION_REGEX:

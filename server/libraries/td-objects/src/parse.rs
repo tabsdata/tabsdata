@@ -230,9 +230,6 @@ pub fn parse_versions(s: impl Into<String>) -> Result<Versions, TdError> {
 
 pub const NAME_PATTERN: &str = concat!("^", IDENTIFIER_PATTERN, "$");
 
-/// A name-or-id view column: the referent's name, or `[<id>]` once it is gone.
-pub const LABEL_PATTERN: &str = concat!("^(", IDENTIFIER_PATTERN, "|\\[[0-9a-v]{26}\\])$");
-
 pub const UNDERSCORE_NAME_PATTERN: &str = concat!("^", UNDERSCORE_IDENTIFIER_PATTERN, "$");
 
 pub const SECRET_NAME_PATTERN: &str = "^[A-Za-z][A-Za-z0-9]*(_[A-Za-z0-9]+)*$";

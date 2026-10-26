@@ -266,7 +266,7 @@ mod tests {
         );
         assert_eq!(
             response.function.defined_by,
-            UserLabel::from(UserName::try_from("admin")?)
+            UserLabel::new(UserName::try_from("admin")?)
         );
 
         assert_eq!(

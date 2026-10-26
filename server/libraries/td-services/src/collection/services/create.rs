@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(created.collection_type, CollectionType::DataFactory);
         assert!(created.defined_on >= before);
         assert_eq!(created.defined_by_id, UserId::admin());
-        assert_eq!(created.defined_by, UserLabel::from(UserName::admin()));
+        assert_eq!(created.defined_by, UserLabel::new(UserName::admin()));
 
         let found: Vec<CollectionDB> = db.scd2().fetch_all::<CollectionDB>(&name).await.unwrap();
         assert_eq!(found.len(), 1);

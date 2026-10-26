@@ -71,6 +71,6 @@ mod tests {
         assert_eq!(created.description, Description::default());
         assert!(created.defined_on >= before);
         assert_eq!(created.defined_by_id, UserId::admin());
-        assert_eq!(created.defined_by, UserLabel::from(UserName::admin()));
+        assert_eq!(created.defined_by, UserLabel::new(UserName::admin()));
     }
 }
