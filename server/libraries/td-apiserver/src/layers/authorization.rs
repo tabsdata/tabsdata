@@ -8,7 +8,7 @@ use axum::http;
 use axum::middleware::Next;
 use axum::response::Response;
 use std::string::ToString;
-use ta_apiserver::router::{Auth, accepts};
+use ta_apiserver::router::{Auth, route_auth};
 use ta_apiserver::status::error_status::ErrorStatus;
 use ta_services::service::Ctx;
 use td_authz::rbac::enforce::RbacError;
@@ -16,7 +16,7 @@ use td_authz::session_provider::{Session, SessionError, active_session};
 use td_authz::token_provider::ServiceTokens;
 use td_common::jwt::{JwtConfig, decode_token};
 use td_database::access::{DbPool, GatedConnection, Global, Grant, RO, retrying};
-use td_error::TdError;
+use td_error::{TdError, api_error};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::service_token::ServiceTokenDBWithNames;
 use td_objects::types::basic::{AccessToken, AccessTokenId, TokenDigest};
@@ -76,9 +76,7 @@ async fn session(
     request: Request,
     next: Next,
 ) -> Result<Response, ErrorStatus> {
-    if !route_accepts(&request, Auth::Session) {
-        Err(TdError::from(RbacError::SessionUnsupported))?
-    }
+    route_gate(&request, Auth::Session, RbacError::SessionUnsupported)?;
 
     let access_token = AccessToken::try_from(bearer.as_str())?;
     let token = decode_token(&jwt_config, access_token.as_str()).map_err(|e| {
@@ -120,9 +118,11 @@ async fn service_token(
     request: Request,
     next: Next,
 ) -> Result<Response, ErrorStatus> {
-    if !route_accepts(&request, Auth::ServiceToken) {
-        Err(TdError::from(RbacError::ServiceTokenUnsupported))?
-    }
+    route_gate(
+        &request,
+        Auth::ServiceToken,
+        RbacError::ServiceTokenUnsupported,
+    )?;
 
     let presented = token::parse(&bearer).ok_or_else(|| {
         warn!("Malformed service token");
@@ -217,7 +217,9 @@ fn service_token_span(token: &ServiceTokenDBWithNames) -> Span {
 }
 
 /// Fails closed without a matched path, as the internal-token layer does.
-fn route_accepts(request: &Request, auth: Auth) -> bool {
+/// A path some route answers, called with a method none answers there, is
+/// 405 whatever the credential: the credential is not what is wrong.
+fn route_gate(request: &Request, auth: Auth, refused: RbacError) -> Result<(), TdError> {
     let matched = request
         .extensions()
         .get::<MatchedPath>()
@@ -226,11 +228,17 @@ fn route_accepts(request: &Request, auth: Auth) -> bool {
         .as_deref()
         .and_then(|matched| matched.strip_prefix(BASE_URL));
     let method = request.method().as_str();
-    let accepted = route.is_some_and(|route| accepts(method, route, auth));
-    if !accepted {
-        debug!(method = %method, route = ?route, ?auth, "the route does not accept this credential");
+    match route.map(|route| route_auth(method, route)) {
+        Some(Some(accepted)) if accepted.contains(&auth) => Ok(()),
+        Some(None) => Err(api_error!(
+            status = http::StatusCode::METHOD_NOT_ALLOWED,
+            "{method} is not an operation of this endpoint"
+        )),
+        _ => {
+            debug!(method = %method, route = ?route, ?auth, "the route does not accept this credential");
+            Err(TdError::from(refused))
+        }
     }
-    accepted
 }
 
 #[cfg(test)]
@@ -412,6 +420,31 @@ mod tests {
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body["code"], "RbacError::3002");
+    }
+
+    #[td_test::test(db)]
+    async fn test_a_method_no_route_answers_is_405_for_any_credential(db: TdPool) {
+        db.seed().test_project().await.unwrap();
+        let (router, services) = build(db.clone());
+        let login = Login {
+            name: UserName::admin(),
+            password: Password::try_from("tabsdata").unwrap(),
+        };
+        let session = services
+            .login(login)
+            .await
+            .unwrap()
+            .data
+            .access_token
+            .to_string();
+        let service_token = mint(&services, UserId::admin(), 1).await.token.to_string();
+
+        for bearer in [session, service_token] {
+            assert_eq!(
+                status(&router, Method::DELETE, "/collections", &bearer).await,
+                StatusCode::METHOD_NOT_ALLOWED
+            );
+        }
     }
 
     /// The session is read on every request, so a logout takes effect on

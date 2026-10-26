@@ -316,13 +316,14 @@ pub fn named_router(names: &[&str], states: &RouterStates) -> OpenApiRouter {
     })
 }
 
-/// Unknown `(method, path)` pairs accept nothing.
-pub fn accepts(method: &str, path: &str, auth: Auth) -> bool {
+/// The credentials the route answering `method` on `path` accepts; `None`
+/// when no route answers that method there.
+pub fn route_auth(method: &str, path: &str) -> Option<&'static [Auth]> {
     let by_route = by_route();
     Method::from_http(method)
         .and_then(|method| by_route.get(&(method, path)))
         .or_else(|| by_route.get(&(Method::Any, path)))
-        .is_some_and(|accepted| accepted.contains(&auth))
+        .copied()
 }
 
 fn by_route() -> &'static HashMap<(Method, &'static str), &'static [Auth]> {
