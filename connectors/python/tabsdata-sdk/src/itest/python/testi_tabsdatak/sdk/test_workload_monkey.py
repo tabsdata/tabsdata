@@ -43,7 +43,10 @@ from pathlib import Path
 
 import pytest
 from tabsdatax.itest.fixture.backends.redpanda import RedpandaDomain, redpanda_domain
-from tabsdatax.itest.fixture.functions.harness import CollectionFactory
+from tabsdatax.itest.fixture.functions.harness import (
+    CollectionFactory,
+    project_collections,
+)
 from tabsdatax.itest.fixture.instances.tabsdata import Instance, tabsdata_instance
 
 from tabsdatak.conn.dev import DataGenSrcConn, TrashDestConn
@@ -262,11 +265,15 @@ def run_seconds(total_deadline: float) -> float:
     return min(RUN_TIMEOUT_SECONDS, left)
 
 
-def connect(instance: Instance, project: str) -> TabsdataServer:
+def client(instance: Instance) -> TabsdataServer:
     api = instance.apiserver
-    server = TabsdataServer(
+    return TabsdataServer(
         f"{api.host}:{api.port}", api.superuser.user, api.superuser.password
     )
+
+
+def connect(instance: Instance, project: str) -> TabsdataServer:
+    server = client(instance)
     server.connection.project = project
     return server
 
@@ -282,6 +289,21 @@ def connection(kind: str | None, domain: RedpandaDomain):
 
 
 def run_plan(
+    plan: Plan,
+    instance: Instance,
+    domain: RedpandaDomain,
+    tmp_path: Path,
+    progress: Progress,
+    seconds: float,
+) -> tuple[str, Report]:
+    server = client(instance)
+    with project_collections(server) as factory:
+        return run_fleet(
+            plan, instance, domain, factory, server, tmp_path, progress, seconds
+        )
+
+
+def run_fleet(
     plan: Plan,
     instance: Instance,
     domain: RedpandaDomain,
@@ -351,7 +373,7 @@ def summary(report: Report, descriptor: Path) -> str:
     return "\n".join([header, *lines])
 
 
-@tabsdata_instance(consumer="tdtest")
+@tabsdata_instance(consumer="fntest")
 @redpanda_domain("redpanda")
 @pytest.mark.timeout(RUN_TIMEOUT_SECONDS, func_only=True)
 @pytest.mark.skipif(
@@ -360,10 +382,8 @@ def summary(report: Report, descriptor: Path) -> str:
 @pytest.mark.parametrize("descriptor", stored(DESCRIPTORS), ids=lambda path: path.stem)
 def test_a_stored_monkey_run_holds(
     descriptor: Path,
-    instance_tdtest: Instance,
+    instance_fntest: Instance,
     domain_redpanda: RedpandaDomain,
-    collection_factory: CollectionFactory,
-    server: TabsdataServer,
     tmp_path: Path,
     progress: Progress,
     total_deadline: float,
@@ -375,10 +395,8 @@ def test_a_stored_monkey_run_holds(
     progress.table(PARAMETERS, stored_parameters(descriptor, plan, seconds))
     _, report = run_plan(
         plan,
-        instance_tdtest,
+        instance_fntest,
         domain_redpanda,
-        collection_factory,
-        server,
         tmp_path,
         progress,
         seconds,
@@ -386,14 +404,12 @@ def test_a_stored_monkey_run_holds(
     assert not report.problems, summary(report, descriptor)
 
 
-@tabsdata_instance(consumer="tdtest")
+@tabsdata_instance(consumer="fntest")
 @redpanda_domain("redpanda")
 @pytest.mark.timeout(RUN_TIMEOUT_SECONDS, func_only=True)
 def test_a_random_monkey_run_holds(
-    instance_tdtest: Instance,
+    instance_fntest: Instance,
     domain_redpanda: RedpandaDomain,
-    collection_factory: CollectionFactory,
-    server: TabsdataServer,
     tmp_path: Path,
     progress: Progress,
     total_deadline: float,
@@ -408,10 +424,8 @@ def test_a_random_monkey_run_holds(
     try:
         namespace, report = run_plan(
             plan,
-            instance_tdtest,
+            instance_fntest,
             domain_redpanda,
-            collection_factory,
-            server,
             tmp_path,
             progress,
             seconds,
