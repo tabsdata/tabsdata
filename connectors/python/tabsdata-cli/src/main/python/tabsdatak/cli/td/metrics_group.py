@@ -34,16 +34,15 @@ def _split(value: str | None) -> list[str]:
 
 def _summary_view(data: dict, scope: list) -> TableView:
     """Single condensed table: one row per
-    `(dim_entity, group, status)`, magnitudes summed across buckets.
+    `(dim_entity, group, status)`, magnitudes summed across nodes. Each node
+    carries its measures per run status in `by_status`.
     """
     dim = (data.get("dim") or "").lower()
-    unit = data.get("unit", "?")
     start_ms = data.get("start_ms")
     end_ms = data.get("end_ms")
     context = [
         *scope,
         ("Dim", dim or "?"),
-        ("Unit", unit),
         ("Window", f"[{start_ms}, {end_ms})"),
     ]
 
@@ -56,32 +55,29 @@ def _summary_view(data: dict, scope: list) -> TableView:
         coll_name = (n.get("collection_name") or "") if is_collection_dim else ""
         grp_id = n.get("group_id") or ""
         grp_name = n.get("group_name") or ""
-        status = n.get("status") or ""
         dim_key = coll_id if is_collection_dim else grp_id
-        key = (dim_key, grp_id, status)
-        row = agg.setdefault(
-            key,
-            {
-                "collection_name": coll_name,
-                "group_name": grp_name,
-                "fn_runs": 0,
-                "transactions": 0,
-                "tables_in": 0,
-                "rows_in": 0,
-                "bytes_in": 0,
-                "tables_out": 0,
-                "rows_out": 0,
-                "bytes_out": 0,
-            },
-        )
-        row["fn_runs"] += int(n.get("fn_runs") or 0)
-        row["transactions"] += int(n.get("transactions") or 0)
-        row["tables_in"] += int(n.get("table_versions_in") or 0)
-        row["rows_in"] += int(n.get("row_count_in") or 0)
-        row["bytes_in"] += int(n.get("data_bytes_in") or 0)
-        row["tables_out"] += int(n.get("table_versions_out") or 0)
-        row["rows_out"] += int(n.get("row_count_out") or 0)
-        row["bytes_out"] += int(n.get("data_bytes_out") or 0)
+        for status, measures in (n.get("by_status") or {}).items():
+            row = agg.setdefault(
+                (dim_key, grp_id, status),
+                {
+                    "collection_name": coll_name,
+                    "group_name": grp_name,
+                    "fn_runs": 0,
+                    "tables_in": 0,
+                    "rows_in": 0,
+                    "bytes_in": 0,
+                    "tables_out": 0,
+                    "rows_out": 0,
+                    "bytes_out": 0,
+                },
+            )
+            row["fn_runs"] += int(measures.get("fn_runs") or 0)
+            row["tables_in"] += int(measures.get("table_versions_in") or 0)
+            row["rows_in"] += int(measures.get("row_count_in") or 0)
+            row["bytes_in"] += int(measures.get("data_bytes_in") or 0)
+            row["tables_out"] += int(measures.get("table_versions_out") or 0)
+            row["rows_out"] += int(measures.get("row_count_out") or 0)
+            row["bytes_out"] += int(measures.get("data_bytes_out") or 0)
 
     show_bytes = any(r["bytes_in"] or r["bytes_out"] for r in agg.values())
 
@@ -92,7 +88,6 @@ def _summary_view(data: dict, scope: list) -> TableView:
     columns += [
         Column("Status", Kind.STATUS),
         Column("Runs", Kind.NUMBER),
-        Column("Txns", Kind.NUMBER),
         Column("Tables in", Kind.NUMBER),
         Column("Rows in", Kind.NUMBER),
     ]
@@ -116,7 +111,6 @@ def _summary_view(data: dict, scope: list) -> TableView:
         cells += [
             present(status),
             r["fn_runs"],
-            r["transactions"],
             r["tables_in"],
             r["rows_in"],
         ]
@@ -225,7 +219,7 @@ def show(
 ):
     """Per-collection (or per-group) operational summary over the window.
 
-    Renders one row per `(dim_entity, status)` with `Runs / Txns /
+    Renders one row per `(dim_entity, status)` with `Runs /
     Tables in / Rows in / Tables out / Rows out` (bytes columns added
     when any non-zero). Edges are dropped from the rendering — they
     belong in a flow visualization; use `-o json` for the raw shape.
