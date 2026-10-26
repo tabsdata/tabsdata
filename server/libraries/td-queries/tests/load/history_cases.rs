@@ -124,11 +124,75 @@ async fn load_history_list_until(db: TdPool) -> Result<(), TdError> {
     let now = AtTime::now();
     let params = ListQueryParams::<Table>::try_from(&ListParams::default())?;
     let t = Instant::now();
+    let rows = db.timeline().until(&now).list::<Table>((), &params).await?;
+    record("history::list_until", profile, t, rows.len(), seeded);
+    assert!(!rows.is_empty());
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_until_fetch_one(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    let now = AtTime::now();
+    let t = Instant::now();
+    let _row: FunctionDB = db
+        .timeline()
+        .until(&now)
+        .fetch_one(&h.producer_function_version_id)
+        .await?;
+    record("until::fetch_one", profile, t, 1, seeded);
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_until_fetch_first(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    let now = AtTime::now();
+    let t = Instant::now();
+    let row = db
+        .timeline()
+        .until(&now)
+        .fetch_first::<TableDB>(&h.table_id)
+        .await?;
+    record(
+        "until::fetch_first",
+        profile,
+        t,
+        row.is_some() as usize,
+        seeded,
+    );
+    assert!(row.is_some());
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_until_fetch_all(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    let now = AtTime::now();
+    let t = Instant::now();
     let rows = db
         .timeline()
-        .list_until::<Table, _>(&now, (), &params)
+        .until(&now)
+        .fetch_all::<TableDB>(&h.table_id)
         .await?;
-    record("history::list_until", profile, t, rows.len(), seeded);
+    record("until::fetch_all", profile, t, rows.len(), seeded);
+    assert!(!rows.is_empty());
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_until_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    let now = AtTime::now();
+    let fvids = vec![h.producer_function_version_id.clone()];
+    let t = Instant::now();
+    let rows = db
+        .timeline()
+        .until(&now)
+        .chunked()
+        .fetch_all::<TableDB>(&fvids, ())
+        .await?;
+    record("until::fetch_all_chunked", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
 }

@@ -44,7 +44,8 @@ async fn list_function_patches(
     let query_params = ListQueryParams::<FunctionPatchRecord>::try_from(&list_params)?;
     let rows = conn
         .timeline()
-        .list_until(&at, &function.base.base.function_id, &query_params)
+        .until(&at)
+        .list(&function.base.base.function_id, &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }

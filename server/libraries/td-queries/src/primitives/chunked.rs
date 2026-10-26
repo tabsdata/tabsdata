@@ -6,18 +6,13 @@
 //! slice may exceed the bind-parameter limit.
 
 use crate::QueryExecutor;
-use crate::primitives::scd2::{
-    close_query, last_version_cond, open_interval_cond, stamp, visible_at_cond,
-};
+use crate::primitives::scd2::{close_query, open_interval_cond, stamp};
 use sea_query::{Condition, InsertStatement, Query, SelectStatement, UpdateStatement};
 use sqlx::FromRow;
 use sqlx::postgres::PgRow;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{
-    Dao, Insertable, PkDao, SameInner, Scd2Dao, Scd2OpenDao, SelectDao, TableDao, TimelineDao,
-    UpdateDao,
-};
+use ta_objects::{Dao, Insertable, Scd2Dao, Scd2OpenDao, SelectDao, TableDao, UpdateDao};
 use td_database::access::LockInstant;
 use td_database::sea_query::builder::SeaQueryExt;
 use tracing::warn;
@@ -164,7 +159,10 @@ where
         .take()
 }
 
-fn select_chunk<D: SelectDao>(chunk: &[impl SqlCondition<D>], extra: Condition) -> SelectStatement {
+pub(crate) fn select_chunk<D: SelectDao>(
+    chunk: &[impl SqlCondition<D>],
+    extra: Condition,
+) -> SelectStatement {
     Query::select()
         .columns(D::columns())
         .from(D::TABLE)
@@ -174,51 +172,10 @@ fn select_chunk<D: SelectDao>(chunk: &[impl SqlCondition<D>], extra: Condition) 
         .take()
 }
 
-pub(crate) fn fetch_all_chunk_query<D: SelectDao>(
-    chunk: &[impl SqlCondition<D>],
-    extra: &Condition,
-) -> SelectStatement {
-    select_chunk::<D>(chunk, extra.clone())
-}
-
-pub(crate) fn fetch_all_at_chunk_query<
-    D: SelectDao + Scd2Dao + TimelineDao,
-    V: SameInner<D::VersionOrder>,
->(
-    chunk: &[impl SqlCondition<D>],
-    on: &V,
-    extra: &Condition,
-) -> SelectStatement {
-    select_chunk::<D>(chunk, visible_at_cond::<D, V>(on).add(extra.clone()))
-}
-
-pub(crate) fn fetch_all_current_chunk_query<D: SelectDao + Scd2Dao>(
-    chunk: &[impl SqlCondition<D>],
-    extra: &Condition,
-) -> SelectStatement {
-    select_chunk::<D>(
-        chunk,
-        Condition::all()
-            .add(open_interval_cond::<D>())
-            .add(extra.clone()),
-    )
-}
-
-pub(crate) fn fetch_all_last_chunk_query<D: SelectDao + Scd2Dao + PkDao>(
-    chunk: &[impl SqlCondition<D>],
-    extra: &Condition,
-) -> SelectStatement {
-    select_chunk::<D>(
-        chunk,
-        Condition::all()
-            .add(last_version_cond::<D>())
-            .add(extra.clone()),
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::generic::grain::{Current, LastVersion, Unversioned, VisibleAt, select_chunk_in};
     use sea_query::{Alias, Asterisk, PostgresQueryBuilder};
     use ta_objects::{IntervalColumns, Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
     use td_common::datetime::Timestamp;
@@ -349,12 +306,12 @@ mod tests {
     }
 
     #[test]
-    fn test_fetch_all_chunk_query() {
+    fn test_unversioned_chunk_query() {
         let ids = vec![
             TestId::try_from("x").unwrap(),
             TestId::try_from("y").unwrap(),
         ];
-        let sql = fetch_all_chunk_query::<TestDao>(&ids, &Condition::all())
+        let sql = select_chunk_in::<TestDao, _>(&Unversioned, &ids, &Condition::all())
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
@@ -389,13 +346,13 @@ mod tests {
     }
 
     #[test]
-    fn test_fetch_all_at_chunk_query() {
+    fn test_visible_at_chunk_query() {
         let ids = vec![
             TestPartition::try_from("p1").unwrap(),
             TestPartition::try_from("p2").unwrap(),
         ];
         let on = TestValidFrom::try_from(100).unwrap();
-        let sql = fetch_all_at_chunk_query::<TestScd2Dao, _>(&ids, &on, &Condition::all())
+        let sql = select_chunk_in::<TestScd2Dao, _>(&VisibleAt(&on), &ids, &Condition::all())
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
@@ -478,12 +435,12 @@ mod tests {
     }
 
     #[test]
-    fn test_fetch_all_current_chunk_query() {
+    fn test_current_chunk_query() {
         let ids = vec![
             TestPartition::try_from("p1").unwrap(),
             TestPartition::try_from("p2").unwrap(),
         ];
-        let sql = fetch_all_current_chunk_query::<TestCurrentDao>(&ids, &Condition::all())
+        let sql = select_chunk_in::<TestCurrentDao, _>(&Current, &ids, &Condition::all())
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
@@ -492,12 +449,12 @@ mod tests {
     }
 
     #[test]
-    fn test_fetch_all_last_chunk_query() {
+    fn test_last_version_chunk_query() {
         let ids = vec![
             TestPartition::try_from("p1").unwrap(),
             TestPartition::try_from("p2").unwrap(),
         ];
-        let sql = fetch_all_last_chunk_query::<TestCurrentDao>(&ids, &Condition::all())
+        let sql = select_chunk_in::<TestCurrentDao, _>(&LastVersion, &ids, &Condition::all())
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,

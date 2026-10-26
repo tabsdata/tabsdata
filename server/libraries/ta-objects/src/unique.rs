@@ -30,9 +30,9 @@ impl<D: Dao, S: DbScope, T: AddressesOneRow<D, S> + ?Sized> AddressesOneRow<D, S
 /// disjoint, and the unique partial index pins the open one.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` can match more than one version of `{D}` at an instant",
-    note = "`scd2()` / `scd2().as_of()` single-row reads need the `#[dao(partition_by)]` \
-            column or a whole unique set, optionally narrowed with `and!`; the key \
-            columns lead, narrowing conditions trail",
+    note = "`scd2()`, `scd2().as_of()` and `scd2().last()` single-row reads need the \
+            `#[dao(partition_by)]` column or a whole unique set, optionally narrowed with \
+            `and!`; the key columns lead, narrowing conditions trail",
     note = "for the first row of however many match, use `fetch_first`"
 )]
 pub trait AddressesOneVersion<D: Dao>: SqlCondition<D> {}

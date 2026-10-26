@@ -8,14 +8,12 @@
 //! the condition's own indexes.
 
 use sea_query::{
-    Alias, Condition, Expr, ExprTrait, Func, InsertStatement, IntoColumnRef, Query,
-    SelectStatement, UpdateStatement,
+    Alias, Condition, Expr, ExprTrait, Func, InsertStatement, IntoColumnRef, Query, UpdateStatement,
 };
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    PkDao, SameInner, Scd2Dao, Scd2OpenDao, SeaValue, SelectDao, TableDao, TimelineDao, TypedInner,
-    UpdateDao,
+    PkDao, SameInner, Scd2Dao, Scd2OpenDao, SeaValue, TableDao, TimelineDao, TypedInner, UpdateDao,
 };
 use td_common::datetime::{IntervalEnd, Timestamp};
 use td_database::access::LockInstant;
@@ -122,51 +120,6 @@ pub(crate) fn open_query<D: Scd2OpenDao>(
     Ok(query)
 }
 
-fn select_where<D: SelectDao>(
-    condition: impl SqlCondition<D>,
-    extra: Condition,
-) -> SelectStatement {
-    Query::select()
-        .columns(D::columns())
-        .from(D::TABLE)
-        .cond_where(Condition::all().add(condition.resolve()).add(extra))
-        .take()
-}
-
-/// Every version at or before `on`, deliberately without a validity filter.
-pub(crate) fn select_until<D: SelectDao + TimelineDao, V: SameInner<D::VersionOrder>>(
-    condition: impl SqlCondition<D>,
-    on: &V,
-) -> SelectStatement {
-    select_where::<D>(
-        condition,
-        Condition::all().add(Expr::col(D::VERSION_ORDER).lte(on.as_sea_expr())),
-    )
-}
-
-pub(crate) fn select_visible_at<
-    D: SelectDao + Scd2Dao + TimelineDao,
-    V: SameInner<D::VersionOrder>,
->(
-    condition: impl SqlCondition<D>,
-    on: &V,
-) -> SelectStatement {
-    select_where::<D>(condition, visible_at_cond::<D, V>(on))
-}
-
-pub(crate) fn select_open<D: SelectDao + Scd2Dao>(
-    condition: impl SqlCondition<D>,
-) -> SelectStatement {
-    select_where::<D>(condition, Condition::all().add(open_interval_cond::<D>()))
-}
-
-/// The last version of every matching timeline, open or closed.
-pub(crate) fn select_last<D: SelectDao + Scd2Dao + PkDao>(
-    condition: impl SqlCondition<D>,
-) -> SelectStatement {
-    select_where::<D>(condition, Condition::all().add(last_version_cond::<D>()))
-}
-
 /// A payload update of the matching open rows; closed versions stay as written.
 pub(crate) fn update_open_query<U: UpdateDao>(
     dao: &U,
@@ -253,6 +206,7 @@ pub(crate) fn close_query<D: TableDao + Scd2Dao>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::generic::grain::{Current, Until, VisibleAt, select_in};
     use sea_query::PostgresQueryBuilder;
     use ta_objects::Dao;
     use ta_objects::{IntervalColumns, Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
@@ -324,7 +278,7 @@ mod tests {
     fn test_select_at_all() {
         let id = TestPartition::try_from("p1").unwrap();
         let on = at(100);
-        let sql = select_until::<TestScd2Dao, _>(&id, &on).to_string(PostgresQueryBuilder);
+        let sql = select_in::<TestScd2Dao, _>(&Until(&on), &id).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"SELECT "id", "partition_id", "status", "valid_from", "valid_to" FROM "test_scd2" WHERE "partition_id" = 'p1' AND "valid_from" <= 100"#
@@ -335,7 +289,7 @@ mod tests {
     fn test_select_at_active() {
         let id = TestPartition::try_from("p1").unwrap();
         let on = at(100);
-        let sql = select_until::<TestScd2Dao, _>(and!(&id, TestScd2Dao::active()), &on)
+        let sql = select_in::<TestScd2Dao, _>(&Until(&on), and!(&id, TestScd2Dao::active()))
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
@@ -347,7 +301,7 @@ mod tests {
     fn test_select_visible_at() {
         let id = TestPartition::try_from("p1").unwrap();
         let on = at(100);
-        let sql = select_visible_at::<TestScd2Dao, _>(and!(&id, TestScd2Dao::active()), &on)
+        let sql = select_in::<TestScd2Dao, _>(&VisibleAt(&on), and!(&id, TestScd2Dao::active()))
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
@@ -358,7 +312,7 @@ mod tests {
     #[test]
     fn test_select_open() {
         let id = TestPartition::try_from("p1").unwrap();
-        let sql = select_open::<TestScd2Dao>(and!(&id, TestScd2Dao::active()))
+        let sql = select_in::<TestScd2Dao, _>(&Current, and!(&id, TestScd2Dao::active()))
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,

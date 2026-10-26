@@ -71,7 +71,7 @@ use ServedBy::{Constraint, List, Path, Queries};
 const KEYSET: &str = "keyset pagination: ORDER BY id under the tenant predicate";
 const GROUP_FK: &str = "group-delete RESTRICT FK probe";
 const LATEST: &str = "a referrer's join to its timeline's latest version, open or closed";
-const TIMELINE: &[&str] = &["Timeline::list_until", "Scd2::fetch_one"];
+const TIMELINE: &[&str] = &["Until::list", "Current::one"];
 
 const INDEX_CASES: &[IndexCase] = &[
     IndexCase {
@@ -320,7 +320,7 @@ const INDEX_CASES: &[IndexCase] = &[
     IndexCase {
         index: "logical_table_data_versions___table_id__triggered_on__id___idx",
         served_by: Queries(&[
-            "Timeline::list_until",
+            "Until::list",
             "TableDataVersions::committed_data_at",
             "TableDataVersions::committed_data_before",
         ]),

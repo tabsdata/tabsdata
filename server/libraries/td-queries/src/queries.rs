@@ -28,20 +28,18 @@ use crate::daos::session::Sessions;
 use crate::daos::table_data_versions::TableDataVersions;
 use crate::daos::topology::Topology;
 use crate::generic::chunked::Chunked;
-use crate::generic::for_update::ForUpdate;
-use crate::generic::scd2::Scd2;
-use crate::generic::timeline::Timeline;
+use crate::generic::grain::{AllVersions, Current, Locked, Unversioned};
+use crate::generic::reader::Reader;
 use crate::primitives::table::{
-    delete_query, insert_or_ignore_query, insert_query, select, select_last, select_nth_last,
-    select_unordered, update_query, upsert_query,
+    delete_query, insert_or_ignore_query, insert_query, update_query, upsert_query,
 };
 use sqlx::postgres::PgQueryResult;
 use std::future::Future;
-use ta_objects::errors::{SqlError, format_hint};
+use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
     AddressesOneRow, DeleteDao, InsertDao, InsertableFrom, ListDto, SelectDao, UnversionedDao,
-    UpdateDao, UpsertDao, single_row,
+    UpdateDao, UpsertDao,
 };
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::list::params::ListQueryParams;
@@ -140,15 +138,7 @@ pub trait Queries: QueryExecutor {
     where
         Self: Serves<D>,
     {
-        async move {
-            let rows = select::<D>(condition)
-                .limit(2)
-                .build_query_as()
-                .fetch_all(self)
-                .await
-                .map_err(SqlError::on_read::<D>)?;
-            single_row::<D>(rows)?.ok_or_else(SqlError::not_found::<D>)
-        }
+        unversioned(self).fetch_one(condition)
     }
 
     fn fetch_optional<D: SelectDao + UnversionedDao>(
@@ -158,15 +148,7 @@ pub trait Queries: QueryExecutor {
     where
         Self: Serves<D>,
     {
-        async move {
-            let rows = select::<D>(condition)
-                .limit(2)
-                .build_query_as()
-                .fetch_all(self)
-                .await
-                .map_err(SqlError::on_read::<D>)?;
-            single_row::<D>(rows)
-        }
+        unversioned(self).fetch_optional(condition)
     }
 
     fn fetch_all<D: SelectDao + UnversionedDao>(
@@ -176,13 +158,7 @@ pub trait Queries: QueryExecutor {
     where
         Self: Serves<D>,
     {
-        async move {
-            select::<D>(condition)
-                .build_query_as()
-                .fetch_all(self)
-                .await
-                .map_err(SqlError::on_read::<D>)
-        }
+        unversioned(self).fetch_all(condition)
     }
 
     /// The first row in the DAO's default order, of however many match.
@@ -193,14 +169,7 @@ pub trait Queries: QueryExecutor {
     where
         Self: Serves<D>,
     {
-        async move {
-            select::<D>(condition)
-                .limit(1)
-                .build_query_as()
-                .fetch_optional(self)
-                .await
-                .map_err(SqlError::on_read::<D>)
-        }
+        unversioned(self).fetch_first(condition)
     }
 
     /// The DAO's default ordering reversed, `LIMIT 1`.
@@ -211,13 +180,7 @@ pub trait Queries: QueryExecutor {
     where
         Self: Serves<D>,
     {
-        async move {
-            select_last::<D>(condition)
-                .build_query_as()
-                .fetch_optional(self)
-                .await
-                .map_err(SqlError::on_read::<D>)
-        }
+        unversioned(self).fetch_last(condition)
     }
 
     /// `offset = 0` is the most recent match.
@@ -229,16 +192,9 @@ pub trait Queries: QueryExecutor {
     where
         Self: Serves<D>,
     {
-        async move {
-            select_nth_last::<D>(condition, offset)
-                .build_query_as()
-                .fetch_optional(self)
-                .await
-                .map_err(SqlError::on_read::<D>)
-        }
+        unversioned(self).fetch_nth_last(condition, offset)
     }
 
-    /// A clean "could not find" error rather than the raw fetch error path.
     fn assert_exists<D: SelectDao + UnversionedDao>(
         self,
         condition: impl SqlCondition<D>,
@@ -246,23 +202,9 @@ pub trait Queries: QueryExecutor {
     where
         Self: Serves<D>,
     {
-        async move {
-            let vals = condition.display_values();
-            match self.fetch_first::<D>(condition).await? {
-                Some(_) => Ok(()),
-                None => {
-                    let cols: Vec<String> = vals.iter().map(|(k, _)| k.clone()).collect();
-                    Err(SqlError::CouldNotFindEntity(
-                        D::display_name().to_string(),
-                        format_hint(&cols, &vals),
-                    ))
-                }
-            }
-        }
+        unversioned(self).assert_exists(condition)
     }
 
-    /// Fails with "already exists" rather than the unique-constraint
-    /// violation a later write would raise.
     fn assert_not_exists<D: SelectDao + UnversionedDao>(
         self,
         condition: impl SqlCondition<D>,
@@ -270,25 +212,9 @@ pub trait Queries: QueryExecutor {
     where
         Self: Serves<D>,
     {
-        async move {
-            let vals = condition.display_values();
-            match self.fetch_first::<D>(condition).await? {
-                Some(_) => {
-                    let cols: Vec<String> = vals.iter().map(|(k, _)| k.clone()).collect();
-                    Err(SqlError::EntityAlreadyExists(
-                        D::display_name().to_string(),
-                        format_hint(&cols, &vals),
-                    ))
-                }
-                None => Ok(()),
-            }
-        }
+        unversioned(self).assert_not_exists(condition)
     }
 
-    /// The list surface: a cross-project caller narrows by its viewable
-    /// projects in `condition`. Bounded like every other read, so a `Global`
-    /// handle cannot list a project-partitioned relation — that is
-    /// `AcrossProjects` work.
     fn list<T>(
         self,
         condition: impl SqlCondition<T::Dao>,
@@ -299,40 +225,46 @@ pub trait Queries: QueryExecutor {
         T::Dao: UnversionedDao,
         Self: Serves<T::Dao>,
     {
-        async move {
-            let daos: Vec<T::Dao> = params
-                .apply_to(select_unordered::<T::Dao>(condition))
-                .build_query_as()
-                .fetch_all(self)
-                .await
-                .map_err(SqlError::on_read::<T::Dao>)?;
-            daos.into_iter()
-                .map(|dao| T::from_dao(dao).map_err(SqlError::DtoConversionError))
-                .collect()
-        }
+        unversioned(self).list(condition, params)
     }
 
-    /// The interval-table surface: the open SCD2 intervals
-    /// (`valid_to = 'infinity'`) until [`Scd2::as_of`] moves the instant.
-    fn scd2(self) -> Scd2<Self> {
-        Scd2 { executor: self }
+    /// The interval-table door: the open SCD2 intervals
+    /// (`valid_to = 'infinity'`) until [`as_of`](Reader::as_of) moves the
+    /// instant.
+    fn scd2(self) -> Reader<Self, Current> {
+        Reader {
+            executor: self,
+            grain: Current,
+        }
     }
 
     /// The version log of a `TimelineDao`: every version row, no time
     /// predicate. The only door to a `timeline` relation.
-    fn timeline(self) -> Timeline<Self> {
-        Timeline { executor: self }
+    fn timeline(self) -> Reader<Self, AllVersions> {
+        Reader {
+            executor: self,
+            grain: AllVersions,
+        }
     }
 
-    /// The same reads, holding row locks until the transaction ends.
-    fn for_update(self) -> ForUpdate<Self> {
-        ForUpdate { executor: self }
+    /// The wordless reads, holding row locks until the transaction ends.
+    fn for_update(self) -> Reader<Self, Locked>
+    where
+        Self: Writes,
+    {
+        Reader {
+            executor: self,
+            grain: Locked,
+        }
     }
 
     /// The same operations over a slice that may exceed the bind-parameter
     /// limit.
     fn chunked(self) -> Chunked<Self> {
-        Chunked { executor: self }
+        Chunked {
+            executor: self,
+            grain: Unversioned,
+        }
     }
 
     fn logical_runs(self) -> LogicalRuns<Self> {
@@ -373,3 +305,10 @@ pub trait Queries: QueryExecutor {
 }
 
 impl<E: QueryExecutor> Queries for E {}
+
+fn unversioned<E>(executor: E) -> Reader<E, Unversioned> {
+    Reader {
+        executor,
+        grain: Unversioned,
+    }
+}

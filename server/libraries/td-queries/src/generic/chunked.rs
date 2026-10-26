@@ -4,45 +4,50 @@
 
 //! The same operations over a slice of conditions that may exceed the
 //! bind-parameter limit: each chunk is one statement, the slice's conditions
-//! OR-joined and `extra` AND-ed onto every chunk.
+//! OR-joined and `extra` AND-ed onto every chunk. Reads keep the grain of the
+//! handle they came from; writes exist on the grains that have them.
 
 use crate::Serves;
 use crate::Writes;
+use crate::generic::grain::{Current, Grain, Unversioned, select_chunk_in};
 use crate::primitives::chunked::{
-    MAX_INSERT_ROWS, MAX_QUERY_CONDITIONS, close_chunk_query, fetch_all_at_chunk_query,
-    fetch_all_chunk_query, fetch_all_current_chunk_query, fetch_all_last_chunk_query,
-    fetch_chunked, insert_vec_query, open_vec_query, update_chunk_query, update_open_chunk_query,
-    warn_if_chunked,
+    MAX_INSERT_ROWS, MAX_QUERY_CONDITIONS, close_chunk_query, fetch_chunked, insert_vec_query,
+    open_vec_query, update_chunk_query, update_open_chunk_query, warn_if_chunked,
 };
 use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    InsertDao, InsertableFrom, PkDao, SameInner, Scd2CloseDao, Scd2Dao, Scd2OpenDao, SelectDao,
-    TimelineDao, UnversionedDao, UpdateDao,
+    InsertDao, InsertableFrom, Scd2CloseDao, Scd2Dao, Scd2OpenDao, SelectDao, UnversionedDao,
+    UpdateDao,
 };
 use td_database::sea_query::builder::SeaQueryExt;
 
-pub struct Chunked<E> {
+pub struct Chunked<E, G = Unversioned> {
     pub(crate) executor: E,
+    pub(crate) grain: G,
 }
 
-impl<E> Chunked<E> {
-    pub async fn fetch_all<D: SelectDao + UnversionedDao>(
+impl<E, G> Chunked<E, G> {
+    pub async fn fetch_all<D: SelectDao>(
         self,
         values: &[impl SqlCondition<D>],
         extra: impl SqlCondition<D>,
     ) -> Result<Vec<D>, SqlError>
     where
+        G: Grain<D>,
         E: Serves<D>,
     {
         let extra = extra.resolve();
+        let grain = self.grain;
         fetch_chunked::<D, D, _, _>(self.executor, values, |chunk| {
-            fetch_all_chunk_query::<D>(chunk, &extra)
+            select_chunk_in::<D, G>(&grain, chunk, &extra)
         })
         .await
     }
+}
 
+impl<E> Chunked<E, Unversioned> {
     pub async fn insert<D: InsertDao + InsertableFrom<E::Scope>>(
         self,
         daos: &[D],
@@ -93,11 +98,7 @@ impl<E> Chunked<E> {
     }
 }
 
-pub struct Scd2Chunked<E> {
-    pub(crate) executor: E,
-}
-
-impl<E> Scd2Chunked<E> {
+impl<E> Chunked<E, Current> {
     /// Ends the matching open intervals at `at`, chunk by chunk.
     pub async fn close<D: Scd2CloseDao>(
         self,
@@ -175,85 +176,5 @@ impl<E> Scd2Chunked<E> {
             result.extend(std::iter::once(r));
         }
         Ok(result)
-    }
-
-    pub async fn fetch_all<D: SelectDao + Scd2Dao>(
-        self,
-        values: &[impl SqlCondition<D>],
-        extra: impl SqlCondition<D>,
-    ) -> Result<Vec<D>, SqlError>
-    where
-        E: Serves<D>,
-    {
-        let extra = extra.resolve();
-        fetch_chunked::<D, D, _, _>(self.executor, values, |chunk| {
-            fetch_all_current_chunk_query::<D>(chunk, &extra)
-        })
-        .await
-    }
-}
-
-pub struct AsOfChunked<'a, E, V> {
-    pub(crate) on: &'a V,
-    pub(crate) executor: E,
-}
-
-impl<E, V> AsOfChunked<'_, E, V> {
-    pub async fn fetch_all<D: SelectDao + Scd2Dao + TimelineDao>(
-        self,
-        values: &[impl SqlCondition<D>],
-        extra: impl SqlCondition<D>,
-    ) -> Result<Vec<D>, SqlError>
-    where
-        V: SameInner<D::VersionOrder>,
-        E: Serves<D>,
-    {
-        let extra = extra.resolve();
-        fetch_chunked::<D, D, _, _>(self.executor, values, |chunk| {
-            fetch_all_at_chunk_query::<D, V>(chunk, self.on, &extra)
-        })
-        .await
-    }
-}
-
-pub struct LastChunked<E> {
-    pub(crate) executor: E,
-}
-
-impl<E> LastChunked<E> {
-    pub async fn fetch_all<D: SelectDao + Scd2Dao + PkDao>(
-        self,
-        values: &[impl SqlCondition<D>],
-        extra: impl SqlCondition<D>,
-    ) -> Result<Vec<D>, SqlError>
-    where
-        E: Serves<D>,
-    {
-        let extra = extra.resolve();
-        fetch_chunked::<D, D, _, _>(self.executor, values, |chunk| {
-            fetch_all_last_chunk_query::<D>(chunk, &extra)
-        })
-        .await
-    }
-}
-
-pub struct TimelineChunked<E> {
-    pub(crate) executor: E,
-}
-
-impl<E> TimelineChunked<E> {
-    pub async fn fetch_all<D: SelectDao + TimelineDao>(
-        self,
-        values: &[impl SqlCondition<D>],
-        extra: impl SqlCondition<D>,
-    ) -> Result<Vec<D>, SqlError>
-    where
-        E: Serves<D>,
-    {
-        let extra = extra.resolve();
-        fetch_chunked::<D, D, _, _>(self.executor, values, |chunk| {
-            fetch_all_chunk_query::<D>(chunk, &extra)
-        })
-        .await
     }
 }

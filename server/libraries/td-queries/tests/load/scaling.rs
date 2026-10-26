@@ -418,6 +418,27 @@ async fn time_chain_queries(
         let mut conn = db.begin().await.expect("write transaction");
         let _ = timed!(
             out,
+            "default::fetch_first_for_update",
+            conn.for_update()
+                .fetch_first::<LogicalFunctionRunDB>(&h.producer_lfrs[0])
+                .await?
+        );
+    }
+    {
+        let mut conn = db.begin().await.expect("write transaction");
+        let _ = timed!(
+            out,
+            "default::fetch_all_for_update_chunked",
+            conn.for_update()
+                .chunked()
+                .fetch_all::<LogicalFunctionRunDB>(&h.producer_lfrs, ())
+                .await?
+        );
+    }
+    {
+        let mut conn = db.begin().await.expect("write transaction");
+        let _ = timed!(
+            out,
             "default::claim_all",
             conn.for_update()
                 .claim_all::<LogicalFunctionRunDB>(())
@@ -581,7 +602,56 @@ async fn time_chain_queries(
         out,
         "history::list_until",
         (db).timeline()
-            .list_until::<Table, _>(&now, (), &table_params)
+            .until(&now)
+            .list::<Table>((), &table_params)
+            .await?
+    );
+    let _ = timed!(
+        out,
+        "last::fetch_one",
+        (db).scd2().last().fetch_one::<TableDB>(&h.table_id).await?
+    );
+    let _ = timed!(
+        out,
+        "last::fetch_first",
+        (db).scd2().last().fetch_first::<TableDB>(()).await?
+    );
+    let _ = timed!(
+        out,
+        "last::list",
+        (db).scd2().last().list::<Table>((), &table_params).await?
+    );
+    let _ = timed!(
+        out,
+        "until::fetch_one",
+        (db).timeline()
+            .until(&now)
+            .fetch_one::<FunctionDB>(&h.producer_function_version_id)
+            .await?
+    );
+    let _ = timed!(
+        out,
+        "until::fetch_first",
+        (db).timeline()
+            .until(&now)
+            .fetch_first::<TableDB>(&h.table_id)
+            .await?
+    );
+    let _ = timed!(
+        out,
+        "until::fetch_all",
+        (db).timeline()
+            .until(&now)
+            .fetch_all::<TableDB>(&h.table_id)
+            .await?
+    );
+    let _ = timed!(
+        out,
+        "until::fetch_all_chunked",
+        (db).timeline()
+            .until(&now)
+            .chunked()
+            .fetch_all::<TableDB>(&fvids, ())
             .await?
     );
     let _ = timed!(

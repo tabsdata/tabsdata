@@ -13,47 +13,6 @@ use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{Insertable, SelectDao, TableDao, UpdateDao, UpsertDao};
 
-/// No ordering: the base a listing extends, since `ListQueryParams::apply_to`
-/// only appends `ORDER BY`, and a DAO default order left in front of the
-/// caller's would outrank the keyset predicate's column.
-pub(crate) fn select_unordered<D: SelectDao>(condition: impl SqlCondition<D>) -> SelectStatement {
-    Query::select()
-        .from(D::TABLE)
-        .columns(D::columns())
-        .cond_where(condition.resolve())
-        .take()
-}
-
-pub(crate) fn select<D: SelectDao>(condition: impl SqlCondition<D>) -> SelectStatement {
-    select_unordered::<D>(condition)
-        .order_by_columns(D::order_by())
-        .take()
-}
-
-pub(crate) fn select_last<D: SelectDao>(condition: impl SqlCondition<D>) -> SelectStatement {
-    select_unordered::<D>(condition)
-        .order_by_columns(reverse_order::<D>())
-        .limit(1)
-        .take()
-}
-
-pub(crate) fn select_nth_last<D: SelectDao>(
-    condition: impl SqlCondition<D>,
-    offset: u64,
-) -> SelectStatement {
-    let mut query = select::<D>(condition).limit(1).take();
-    if offset > 0 {
-        query.offset(offset);
-    }
-    query
-}
-
-pub(crate) fn select_for_update<D: SelectDao>(condition: impl SqlCondition<D>) -> SelectStatement {
-    select::<D>(condition)
-        .lock_with_tables(LockType::Update, [D::TABLE.into_table_ref()])
-        .take()
-}
-
 /// `FOR UPDATE OF <table> SKIP LOCKED`: a row another transaction is already
 /// mutating is passed over instead of waited on; `OF` keeps the lock to the
 /// DAO's own rows, so a joined table is read, not claimed.
@@ -63,21 +22,6 @@ pub(crate) fn claim<D: SelectDao>(query: &mut SelectStatement) -> &mut SelectSta
         [D::TABLE.into_table_ref()],
         LockBehavior::SkipLocked,
     )
-}
-
-pub(crate) fn select_claim<D: SelectDao>(condition: impl SqlCondition<D>) -> SelectStatement {
-    claim::<D>(&mut select::<D>(condition)).take()
-}
-
-fn reverse_order<D: SelectDao>() -> impl Iterator<Item = (D::Iden, sea_query::Order)> {
-    D::order_by().into_iter().map(|(col, ord)| {
-        let flipped = match ord {
-            sea_query::Order::Asc => sea_query::Order::Desc,
-            sea_query::Order::Desc => sea_query::Order::Asc,
-            other => other,
-        };
-        (col, flipped)
-    })
 }
 
 pub(crate) fn insert_query<D: Insertable>(dao: &D) -> Result<InsertStatement, SqlError> {
@@ -172,25 +116,6 @@ mod tests {
     }
 
     #[test]
-    fn test_select_with_condition() {
-        let id = TestId::try_from("abc").unwrap();
-        let sql = select::<TestDao>(&id).to_string(PostgresQueryBuilder);
-        assert_eq!(
-            sql,
-            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' ORDER BY "id" DESC"#
-        );
-    }
-
-    #[test]
-    fn test_select_no_condition() {
-        let sql = select::<TestDao>(()).to_string(PostgresQueryBuilder);
-        assert_eq!(
-            sql,
-            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE TRUE ORDER BY "id" DESC"#
-        );
-    }
-
-    #[test]
     fn test_insert_query_sql() {
         let dao = TestDao {
             id: TestId::try_from("i1").unwrap(),
@@ -233,38 +158,6 @@ mod tests {
         assert_eq!(
             sql,
             r#"INSERT INTO "test_keyed" ("id", "name", "status") VALUES ('i1', 'n1', 'A') ON CONFLICT ("id") DO NOTHING"#
-        );
-    }
-
-    #[test]
-    fn test_select_last_reverses_order() {
-        let id = TestId::try_from("abc").unwrap();
-        // TestDao's default order is `id DESC` (no explicit order_by); the
-        // last row reverses it to `id ASC`.
-        let sql = select_last::<TestDao>(&id).to_string(PostgresQueryBuilder);
-        assert_eq!(
-            sql,
-            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' ORDER BY "id" ASC LIMIT 1"#
-        );
-    }
-
-    #[test]
-    fn test_select_for_update_emits_lock() {
-        let id = TestId::try_from("abc").unwrap();
-        let sql = select_for_update::<TestDao>(&id).to_string(PostgresQueryBuilder);
-        assert_eq!(
-            sql,
-            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "id" = 'abc' ORDER BY "id" DESC FOR UPDATE OF "test_basic""#
-        );
-    }
-
-    #[test]
-    fn test_claim_emits_skip_locked() {
-        let mut query = select::<TestDao>(TestStatus::Active);
-        let sql = claim::<TestDao>(&mut query).to_string(PostgresQueryBuilder);
-        assert_eq!(
-            sql,
-            r#"SELECT "id", "name", "status" FROM "test_basic" WHERE "status" = 'A' ORDER BY "id" DESC FOR UPDATE OF "test_basic" SKIP LOCKED"#
         );
     }
 }

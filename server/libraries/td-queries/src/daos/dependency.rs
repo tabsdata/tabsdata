@@ -4,11 +4,8 @@
 
 //! Per-DAO queries for `DependencyDB`.
 
-use crate::Serves;
-use crate::primitives::scd2::select_visible_at;
-use ta_objects::Dao;
+use crate::{Queries, Serves};
 use ta_objects::errors::SqlError;
-use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::types::basic::{AtTime, FunctionId};
 
@@ -26,20 +23,17 @@ where
         function_id: &FunctionId,
         on: &AtTime,
     ) -> Result<Vec<DependencyDB>, SqlError> {
-        select_visible_at::<DependencyDB, _>(function_id, on)
-            .order_by_columns(DependencyDB::order_by())
-            .build_query_as()
-            .fetch_all(self.executor)
-            .await
-            .map_err(SqlError::on_read::<DependencyDB>)
+        self.executor.scd2().as_of(on).fetch_all(function_id).await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::generic::grain::{VisibleAt, select_in};
     use chrono::{DateTime, Utc};
     use sea_query::PostgresQueryBuilder;
+    use ta_objects::Dao;
     use td_objects::types::basic::AtTime;
 
     #[test]
@@ -50,7 +44,7 @@ mod tests {
                 .parse::<DateTime<Utc>>()
                 .unwrap(),
         );
-        let sql = select_visible_at::<DependencyDB, _>(&function_id, &on)
+        let sql = select_in::<DependencyDB, _>(&VisibleAt(&on), &function_id)
             .order_by_columns(DependencyDB::order_by())
             .to_string(PostgresQueryBuilder);
         assert_eq!(

@@ -59,3 +59,14 @@ async fn load_find_at_list_full(db: TdPool) -> Result<(), TdError> {
     assert!(!rows.is_empty());
     Ok(())
 }
+
+#[td_test::test(db)]
+async fn load_last_list(db: TdPool) -> Result<(), TdError> {
+    let (_h, profile, seeded) = seed(&db).await?;
+    let params = ListQueryParams::<Table>::try_from(&ListParams::default())?;
+    let t = Instant::now();
+    let rows = db.scd2().last().list::<Table>((), &params).await?;
+    record("last::list", profile, t, rows.len(), seeded);
+    assert!(!rows.is_empty());
+    Ok(())
+}

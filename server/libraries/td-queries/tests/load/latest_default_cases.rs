@@ -242,6 +242,72 @@ async fn load_default_claim_all_in(db: TdPool) -> Result<(), TdError> {
 }
 
 #[td_test::test(db)]
+async fn load_default_fetch_first_for_update(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    let mut conn = db.begin().await.expect("write transaction");
+    let t = Instant::now();
+    let row = conn
+        .for_update()
+        .fetch_first::<LogicalFunctionRunDB>(&h.producer_lfrs[0])
+        .await?;
+    record(
+        "default::fetch_first_for_update",
+        profile,
+        t,
+        row.is_some() as usize,
+        seeded,
+    );
+    assert!(row.is_some());
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_default_fetch_all_for_update_chunked(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    let mut conn = db.begin().await.expect("write transaction");
+    let t = Instant::now();
+    let rows = conn
+        .for_update()
+        .chunked()
+        .fetch_all::<LogicalFunctionRunDB>(&h.producer_lfrs, ())
+        .await?;
+    record(
+        "default::fetch_all_for_update_chunked",
+        profile,
+        t,
+        rows.len(),
+        seeded,
+    );
+    assert!(!rows.is_empty());
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_last_fetch_one(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    let t = Instant::now();
+    let _row: TableDB = db.scd2().last().fetch_one::<TableDB>(&h.table_id).await?;
+    record("last::fetch_one", profile, t, 1, seeded);
+    Ok(())
+}
+
+#[td_test::test(db)]
+async fn load_last_fetch_first(db: TdPool) -> Result<(), TdError> {
+    let (_h, profile, seeded) = seed(&db).await?;
+    let t = Instant::now();
+    let row = db.scd2().last().fetch_first::<TableDB>(()).await?;
+    record(
+        "last::fetch_first",
+        profile,
+        t,
+        row.is_some() as usize,
+        seeded,
+    );
+    assert!(row.is_some());
+    Ok(())
+}
+
+#[td_test::test(db)]
 async fn load_sessions_purge(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();

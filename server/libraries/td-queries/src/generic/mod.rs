@@ -19,11 +19,11 @@
 //! connection's business — RLS scopes project rows, and cross-project reads
 //! narrow by the requester's viewable projects before querying.
 
-pub mod as_of;
 pub mod chunked;
 pub mod data_version;
 pub mod for_update;
-pub mod last;
+pub mod grain;
+pub mod reader;
 mod row_locks;
 pub mod scd2;
 pub mod timeline;

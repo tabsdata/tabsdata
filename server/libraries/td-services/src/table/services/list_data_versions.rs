@@ -46,7 +46,8 @@ async fn table_list_data_versions(
     let query_params = ListQueryParams::<TableDataVersion>::try_from(&list_params)?;
     let rows = conn
         .timeline()
-        .list_until(&at, &table.base.base.table_id, &query_params)
+        .until(&at)
+        .list(&table.base.base.table_id, &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }

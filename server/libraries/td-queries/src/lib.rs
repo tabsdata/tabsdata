@@ -23,13 +23,12 @@ pub use daos::session::Sessions;
 pub use daos::table_data_versions::TableDataVersions;
 
 pub use executor::{QueryExecutor, Serves, Writes};
-pub use generic::as_of::AsOf;
-pub use generic::chunked::{AsOfChunked, Chunked, LastChunked, Scd2Chunked, TimelineChunked};
-pub use generic::data_version::DataVersion;
-pub use generic::for_update::ForUpdate;
-pub use generic::timeline::Timeline;
-
-pub use generic::scd2::Scd2;
+pub use generic::chunked::Chunked;
+pub use generic::data_version::{DataVersion, Heads};
+pub use generic::grain::{
+    AllVersions, Current, Grain, LastVersion, Locked, OneRow, Until, Unversioned, VisibleAt,
+};
+pub use generic::reader::Reader;
 
 pub use logic_id::initialize_logical_ids;
 pub use queries::Queries;

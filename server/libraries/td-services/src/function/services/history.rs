@@ -43,7 +43,8 @@ async fn function_history(
     let query_params = ListQueryParams::<FunctionVersion>::try_from(&list_params)?;
     let rows = conn
         .timeline()
-        .list_until(&at, and!(&function.base.base.function_id), &query_params)
+        .until(&at)
+        .list(and!(&function.base.base.function_id), &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }

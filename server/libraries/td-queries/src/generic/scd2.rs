@@ -2,52 +2,37 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::generic::as_of::AsOf;
-use crate::generic::chunked::Scd2Chunked;
-use crate::generic::last::Last;
-use crate::primitives::scd2::select_open;
+//! The interval-table door: [`Reader`] over the open SCD2 intervals until
+//! [`as_of`](Reader::as_of) moves the instant or [`last`](Reader::last) reads
+//! every timeline's last version, plus the SCD2 writes.
+
+use crate::generic::grain::{Current, LastVersion, VisibleAt};
+use crate::generic::reader::Reader;
 use crate::primitives::scd2::{close_query, open_query, update_open_query};
-use crate::{QueryExecutor, Serves, Writes};
+use crate::{Serves, Writes};
 use sqlx::postgres::PgQueryResult;
-use ta_objects::errors::{SqlError, format_hint};
+use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{
-    AddressesOneVersion, Dao, InsertableFrom, ListDto, Scd2CloseDao, Scd2Dao, Scd2OpenDao,
-    SelectDao, UpdateDao, single_row,
-};
-use td_database::domain::Domained;
+use ta_objects::{InsertableFrom, Scd2CloseDao, Scd2Dao, Scd2OpenDao, UpdateDao};
 use td_database::sea_query::builder::SeaQueryExt;
-use td_objects::list::params::ListQueryParams;
 
-/// The only door to an interval table: the open intervals
-/// (`valid_to = 'infinity'`, served by the partial indexes) until
-/// [`as_of`](Self::as_of) moves the instant.
-pub struct Scd2<E> {
-    pub(crate) executor: E,
-}
-
-impl<E> Scd2<E> {
+impl<E> Reader<E, Current> {
     /// The caller's condition composed with the visibility interval at `on`,
     /// so cost follows the condition's selectivity.
     #[allow(clippy::wrong_self_convention)]
-    pub fn as_of<V>(self, on: &V) -> AsOf<'_, E, V> {
-        AsOf {
-            on,
+    pub fn as_of<V>(self, on: &V) -> Reader<E, VisibleAt<'_, V>> {
+        Reader {
             executor: self.executor,
+            grain: VisibleAt(on),
         }
     }
 
     /// Every matching timeline's latest version, open or closed: how a
     /// deleted entity is still read.
-    pub fn last(self) -> Last<E> {
-        Last {
+    pub fn last(self) -> Reader<E, LastVersion> {
+        Reader {
             executor: self.executor,
-        }
-    }
-
-    pub fn chunked(self) -> Scd2Chunked<E> {
-        Scd2Chunked {
-            executor: self.executor,
+            grain: LastVersion,
         }
     }
 
@@ -102,114 +87,12 @@ impl<E> Scd2<E> {
             .await
             .map_err(|e| SqlError::on_write::<D>(e, &values))
     }
-
-    pub async fn fetch_one<D: SelectDao + Scd2Dao>(
-        self,
-        condition: impl AddressesOneVersion<D>,
-    ) -> Result<D, SqlError>
-    where
-        E: Serves<D>,
-    {
-        self.fetch_optional(condition)
-            .await?
-            .ok_or_else(SqlError::not_found::<D>)
-    }
-
-    pub async fn fetch_optional<D: SelectDao + Scd2Dao>(
-        self,
-        condition: impl AddressesOneVersion<D>,
-    ) -> Result<Option<D>, SqlError>
-    where
-        E: Serves<D>,
-    {
-        let rows = select_open::<D>(condition)
-            .limit(2)
-            .build_query_as()
-            .fetch_all(self.executor)
-            .await
-            .map_err(SqlError::on_read::<D>)?;
-        single_row::<D>(rows)
-    }
-
-    /// The first open row in the DAO's default order, of however many match.
-    pub async fn fetch_first<D: SelectDao + Scd2Dao>(
-        self,
-        condition: impl SqlCondition<D>,
-    ) -> Result<Option<D>, SqlError>
-    where
-        E: Serves<D>,
-    {
-        select_open::<D>(condition)
-            .order_by_columns(D::order_by())
-            .limit(1)
-            .build_query_as()
-            .fetch_optional(self.executor)
-            .await
-            .map_err(SqlError::on_read::<D>)
-    }
-
-    pub async fn fetch_all<D: SelectDao + Scd2Dao>(
-        self,
-        condition: impl SqlCondition<D>,
-    ) -> Result<Vec<D>, SqlError>
-    where
-        E: Serves<D>,
-    {
-        select_open::<D>(condition)
-            .order_by_columns(D::order_by())
-            .build_query_as()
-            .fetch_all(self.executor)
-            .await
-            .map_err(SqlError::on_read::<D>)
-    }
-
-    pub async fn assert_not_exists<D: SelectDao + Scd2Dao>(
-        self,
-        condition: impl SqlCondition<D>,
-    ) -> Result<(), SqlError>
-    where
-        E: Serves<D>,
-    {
-        let vals = condition.display_values();
-        match self.fetch_first::<D>(condition).await? {
-            Some(_) => {
-                let cols: Vec<String> = vals.iter().map(|(k, _)| k.clone()).collect();
-                Err(SqlError::EntityAlreadyExists(
-                    D::display_name().to_string(),
-                    format_hint(&cols, &vals),
-                ))
-            }
-            None => Ok(()),
-        }
-    }
-
-    /// The cross-project surface: a project-blind caller narrows by its
-    /// viewable projects in `condition`, so this asks only for the domain.
-    pub async fn list<T>(
-        self,
-        condition: impl SqlCondition<T::Dao>,
-        params: &ListQueryParams<T>,
-    ) -> Result<Vec<T>, SqlError>
-    where
-        T: ListDto,
-        T::Dao: Scd2Dao,
-        E: QueryExecutor + Domained<Domain = <T::Dao as Dao>::Db>,
-    {
-        let daos: Vec<T::Dao> = params
-            .apply_to(select_open::<T::Dao>(condition))
-            .build_query_as()
-            .fetch_all(self.executor)
-            .await
-            .map_err(SqlError::on_read::<T::Dao>)?;
-        daos.into_iter()
-            .map(|dao| T::from_dao(dao).map_err(SqlError::DtoConversionError))
-            .collect()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::generic::grain::select_in;
     use sea_query::PostgresQueryBuilder;
     use ta_objects::Dao;
     use ta_objects::{IntervalColumns, Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
@@ -270,9 +153,9 @@ mod tests {
     }
 
     #[test]
-    fn test_select_open_no_state() {
+    fn test_current_grain_no_state() {
         let id = TestPartition::try_from("p1").unwrap();
-        let sql = select_open::<TestCurrentDao>(&id).to_string(PostgresQueryBuilder);
+        let sql = select_in::<TestCurrentDao, _>(&Current, &id).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"SELECT "id", "partition_id", "status", "valid_from", "valid_to" FROM "test_current_table" WHERE "partition_id" = 'p1' AND "valid_to" = ('infinity'::timestamptz)"#
@@ -280,9 +163,9 @@ mod tests {
     }
 
     #[test]
-    fn test_select_open_with_active_state() {
+    fn test_current_grain_with_active_state() {
         let id = TestPartition::try_from("p1").unwrap();
-        let sql = select_open::<TestCurrentDao>(and!(&id, TestCurrentDao::active()))
+        let sql = select_in::<TestCurrentDao, _>(&Current, and!(&id, TestCurrentDao::active()))
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
@@ -291,11 +174,107 @@ mod tests {
     }
 
     #[test]
-    fn test_select_open_no_condition() {
-        let sql = select_open::<TestCurrentDao>(()).to_string(PostgresQueryBuilder);
+    fn test_current_grain_no_condition() {
+        let sql = select_in::<TestCurrentDao, _>(&Current, ()).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"SELECT "id", "partition_id", "status", "valid_from", "valid_to" FROM "test_current_table" WHERE TRUE AND "valid_to" = ('infinity'::timestamptz)"#
         );
+    }
+}
+
+#[cfg(test)]
+mod last_tests {
+    use crate::Queries;
+    use crate::test_utils::SeedEntry;
+    use td_database::access::LockInstant;
+    use td_database::pool::TdPool;
+    use td_objects::dxo::collection::{CollectionDB, CollectionInsertDB};
+    use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
+    use td_objects::types::basic::{
+        AtTime, BundleId, CollectionLabel, CollectionName, CollectionVersionId, Decorator,
+        FunctionName, ReuseFrozen, UserId,
+    };
+    use td_objects::types::label::Label;
+
+    /// Two versions opened at one instant are the close-out trigger's
+    /// zero-length case; the last-version reads see one row, the higher id.
+    #[td_test::test(db)]
+    async fn test_last_reads_one_row_per_timeline(db: TdPool) {
+        let p = db.seed().test_project().await.unwrap();
+        let scoped = db.scoped(p.base.project_id);
+        let first = scoped
+            .seed()
+            .collection(&CollectionName::try_from("c").unwrap(), &UserId::admin())
+            .await
+            .unwrap();
+        let create = FunctionRegister {
+            child_functions: None,
+            name: FunctionName::try_from("f").unwrap(),
+            description: "d".try_into().unwrap(),
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into().unwrap(),
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            parent_tables: None,
+            runtime_values: "rv".try_into().unwrap(),
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        let function = scoped.seed().function(&first, &create).await.unwrap();
+
+        let same_instant = LockInstant::asserted(*first.interval.valid_from);
+        let renamed = CollectionInsertDB {
+            id: CollectionVersionId::default(),
+            name: CollectionName::try_from("renamed").unwrap(),
+            ..first.base.clone()
+        };
+        scoped.scd2().open(&renamed, same_instant).await.unwrap();
+
+        let last: Vec<CollectionDB> = scoped.scd2().last().fetch_all(()).await.unwrap();
+        assert_eq!(last.len(), 1);
+        assert_eq!(last[0].base.id, renamed.id);
+
+        let rows: Vec<FunctionDBWithNames> = scoped
+            .scd2()
+            .fetch_all(&function.base.function_id)
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].collection,
+            CollectionLabel::new(renamed.name.clone())
+        );
+        assert_eq!(rows[0].group_id, first.base.group_id);
+
+        scoped
+            .scd2()
+            .close::<CollectionDB>(
+                &first.base.collection_id,
+                LockInstant::asserted(*AtTime::now()),
+            )
+            .await
+            .unwrap();
+        let rows: Vec<FunctionDBWithNames> = scoped
+            .scd2()
+            .fetch_all(&function.base.function_id)
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].collection,
+            CollectionLabel::new(Label::Deleted(first.base.collection_id))
+        );
+        assert_eq!(rows[0].group_id, first.base.group_id);
+        let last: Vec<CollectionDB> = scoped.scd2().last().fetch_all(()).await.unwrap();
+        assert_eq!(last.len(), 1);
+        assert!(!last[0].interval.valid_to.is_infinity());
     }
 }
