@@ -107,7 +107,7 @@ pub enum InjectorError {
     #[error(
         "Setting {origin} targets '{address}', which does not exist; settings can change \
          existing values only, not add new ones, except environment variables under \
-         'tabsdata:pods.global.envs'."
+         'tabsdata:pods.global.envs' and keys of a mapping its config schema declares open."
     )]
     KeyNotFound { origin: String, address: String } = 1002,
     #[error(

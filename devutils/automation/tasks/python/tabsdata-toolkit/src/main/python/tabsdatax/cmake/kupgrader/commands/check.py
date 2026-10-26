@@ -10,6 +10,7 @@ import rich_click as click
 from tabsdatax.cmake.kupgrader.common.assets import verify_assets
 from tabsdatax.cmake.kupgrader.common.commit import Difference, compare
 from tabsdatax.cmake.kupgrader.common.emission import Emission
+from tabsdatax.cmake.kupgrader.common.ownership import ownership_problems
 from tabsdatax.cmake.kupgrader.common.pipeline import (
     generate,
     shipped_content_folder,
@@ -118,6 +119,22 @@ def perform_check(root_folder: Path) -> None:
         log.error(
             f"The upgrade rules in {context.rules_folder} do not match the upgrades "
             "inventory."
+        )
+        raise SystemExit(1)
+
+    owned = ownership_problems(
+        binary,
+        context.kupgrade_folder,
+        generation.version,
+        generation.preparation.previous_kprofile_folder,
+        generation.preparation.current_kprofile_folder,
+    )
+    for problem in owned:
+        log.error(problem)
+    if owned:
+        log.error(
+            f"The upgrader shipped for version '{generation.version}' changes keys "
+            "that belong to the user."
         )
         raise SystemExit(1)
 

@@ -491,3 +491,33 @@ fn a_non_scalar_global_env_is_a_hard_failure() {
     let outcome = inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &BTreeSet::new());
     assert!(outcome.is_err());
 }
+
+#[test]
+fn options_a_user_added_are_injected_one_env_each() {
+    let profile = build_profile(&[(
+        "apiserver.storage.yaml",
+        indoc! {"
+            storage:
+              mounts:
+              - id: ROOT
+                path: /
+                uri: file:///data/
+                options:
+                  aws_access_key_id: ${{secret}}
+                  aws_endpoint_url: ${{secret}}
+        "},
+    )]);
+    let mut spec = build_pod_spec_mounting(&["apiserver"], &["apiserver.storage.yaml"]);
+    let mut secrets: BTreeSet<String> = BTreeSet::new();
+    secrets.insert("td-app-apiserver-secret-config-apiserver.storage.yaml".to_owned());
+    inject_secret_envs(&profile, "apiserver.yaml", &mut spec, &secrets).expect("ok");
+    let mut injected = names(&spec, "apiserver");
+    injected.sort();
+    assert_eq!(
+        injected,
+        [
+            "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID",
+            "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ENDPOINT_URL",
+        ]
+    );
+}

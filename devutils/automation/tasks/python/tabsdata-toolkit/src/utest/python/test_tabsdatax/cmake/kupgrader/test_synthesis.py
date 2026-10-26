@@ -269,3 +269,60 @@ def test_resolved_changes_are_emitted_under_their_bundle():
             }
         }
     }
+
+
+def test_a_child_every_item_gained_is_inserted_into_every_item():
+    previous = {"mounts": [{"id": "ROOT", "uri": "a"}, {"id": "BUNDLES", "uri": "b"}]}
+    current = {
+        "mounts": [
+            {"id": "ROOT", "uri": "a", "options": {}},
+            {"id": "BUNDLES", "uri": "b", "options": {}},
+        ]
+    }
+    synthesis = synthesize(previous, current)
+    assert synthesis.expressible
+    assert rendered(synthesis) == [
+        {
+            "op": "insert-child-if-missing",
+            "leaf": "mounts[*]",
+            "child": "options",
+            "value": {},
+        }
+    ]
+
+
+def test_a_child_only_some_items_gained_is_still_a_gap():
+    previous = {"mounts": [{"id": "ROOT"}, {"id": "BUNDLES"}]}
+    current = {"mounts": [{"id": "ROOT", "options": {}}, {"id": "BUNDLES"}]}
+    synthesis = synthesize(previous, current)
+    assert not synthesis.expressible
+    assert synthesis.gaps[0].shape == "Sequence items changed"
+
+
+def test_items_that_also_changed_a_value_are_still_a_gap():
+    previous = {"mounts": [{"id": "ROOT", "uri": "a"}]}
+    current = {"mounts": [{"id": "ROOT", "uri": "z", "options": {}}]}
+    assert not synthesize(previous, current).expressible
+
+
+def test_a_schema_whose_winner_moves_needs_no_resolved_change(tmp_path):
+    bundle = Bundle(
+        family="configs",
+        name="apiserver.storage.schema.yaml",
+        variants=[
+            variant(
+                tmp_path,
+                "apiserver.storage.schema.yaml",
+                State.UNCHANGED,
+                "directives: []\n",
+                "directives: []\n",
+            ),
+            variant(
+                tmp_path,
+                "apiserver.storage.schema_kminus.yaml",
+                State.NEW,
+                current_text="directives:\n  - at: a\n    treat: open\n",
+            ),
+        ],
+    )
+    assert synthesize_resolved([bundle], {}) == []

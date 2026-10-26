@@ -608,3 +608,158 @@ fn non_ascii_text_keeps_offsets_aligned() {
     "}
     );
 }
+
+const KMINUS_STORAGE: &str = "\
+storage:
+  mounts:
+  - id: ROOT
+    path: /
+    uri: ${{system:tdk_storage_url}}data/
+    options: {}
+  - id: BUNDLES
+    path: /bundles
+    uri: ${{system:tdk_storage_url}}bundles/
+    options: {}
+";
+
+const KMINUS_STORAGE_SCHEMA: &str = "\
+directives:
+  - at: storage.mounts[*].uri
+    treat: secret
+  - at: storage.mounts[*].options.*
+    treat: secret
+  - at: storage.mounts[*].options
+    treat: open
+";
+
+const OPTIONS_ONLY_SCHEMA: &str = "\
+directives:
+  - at: storage.mounts[*].options.*
+    treat: secret
+  - at: storage.mounts[*].options
+    treat: open
+";
+
+fn storage_plan(
+    schema: &str,
+    arguments: &[&str],
+) -> Result<BTreeMap<String, String>, InjectorError> {
+    let configs = BTreeMap::from([
+        (
+            "apiserver.storage.yaml".to_owned(),
+            KMINUS_STORAGE.to_owned(),
+        ),
+        ("apiserver.storage.yamls".to_owned(), schema.to_owned()),
+    ]);
+    plan(&configs, &settings(arguments))
+}
+
+#[test]
+fn a_uri_the_schema_declares_secret_can_be_set_over_a_system_placeholder() {
+    let files = storage_plan(
+        KMINUS_STORAGE_SCHEMA,
+        &["apiserver.storage:storage.mounts[id=ROOT].uri=s3://bucket/root/"],
+    )
+    .expect("injected");
+    let storage = read(&files["apiserver.storage.yaml"]);
+    assert_eq!(storage["storage"]["mounts"][0]["uri"], "s3://bucket/root/");
+    assert_eq!(
+        storage["storage"]["mounts"][1]["uri"],
+        "${{system:tdk_storage_url}}bundles/"
+    );
+}
+
+#[test]
+fn a_uri_the_schema_does_not_declare_secret_stays_system_controlled() {
+    let error = storage_plan(
+        OPTIONS_ONLY_SCHEMA,
+        &["apiserver.storage:storage.mounts[id=ROOT].uri=s3://bucket/root/"],
+    )
+    .expect_err("rejected");
+    assert!(matches!(error, InjectorError::NonEditableKey { .. }));
+}
+
+#[test]
+fn a_secret_uri_cannot_be_set_empty() {
+    let error = storage_plan(
+        KMINUS_STORAGE_SCHEMA,
+        &["apiserver.storage:storage.mounts[id=ROOT].uri="],
+    )
+    .expect_err("rejected");
+    assert!(matches!(error, InjectorError::EmptyMandatoryValue { .. }));
+}
+
+#[test]
+fn keys_can_be_added_to_empty_open_mappings() {
+    let files = storage_plan(
+        KMINUS_STORAGE_SCHEMA,
+        &[
+            "apiserver.storage:storage.mounts[id=ROOT].options.aws_region=eu-west-1",
+            "apiserver.storage:storage.mounts[id=ROOT].options.aws_access_key_id=an-id",
+            "apiserver.storage:storage.mounts[id=BUNDLES].options.aws_region=eu-west-1",
+        ],
+    )
+    .expect("injected");
+    let storage = read(&files["apiserver.storage.yaml"]);
+    let root = &storage["storage"]["mounts"][0]["options"];
+    assert_eq!(root["aws_region"], "eu-west-1");
+    assert_eq!(root["aws_access_key_id"], "an-id");
+    let bundles = &storage["storage"]["mounts"][1]["options"];
+    assert_eq!(bundles["aws_region"], "eu-west-1");
+    assert_eq!(bundles.as_mapping().map(serde_yaml::Mapping::len), Some(1));
+    assert_eq!(
+        storage["storage"]["mounts"][1]["uri"],
+        "${{system:tdk_storage_url}}bundles/"
+    );
+}
+
+#[test]
+fn a_key_added_to_an_open_mapping_twice_is_a_duplicate() {
+    let error = storage_plan(
+        KMINUS_STORAGE_SCHEMA,
+        &[
+            "apiserver.storage:storage.mounts[id=ROOT].options.aws_region=eu-west-1",
+            "apiserver.storage:storage.mounts[id=ROOT].options.aws_region=us-east-1",
+        ],
+    )
+    .expect_err("rejected");
+    assert!(matches!(error, InjectorError::DuplicateSetting { .. }));
+}
+
+#[test]
+fn a_key_cannot_be_added_to_a_mapping_the_schema_does_not_open() {
+    let error = storage_plan(
+        KMINUS_STORAGE_SCHEMA,
+        &["apiserver.storage:storage.mounts[id=ROOT].extra=value"],
+    )
+    .expect_err("rejected");
+    assert!(matches!(error, InjectorError::KeyNotFound { .. }));
+}
+
+#[test]
+fn a_storage_stub_sets_uris_and_options_together() {
+    let stub = indoc! {"
+        files:
+          apiserver.storage:
+            storage.mounts[id=ROOT]:
+              uri: s3://bucket/root/
+              options.aws_region: eu-west-1
+              options.aws_endpoint_url: http://127.0.0.1:9000
+            storage.mounts[id=BUNDLES]:
+              uri: s3://bucket/bundles/
+              options.aws_region: eu-west-1
+    "};
+    let mut file = tempfile::NamedTempFile::new().expect("a stub file");
+    file.write_all(stub.as_bytes()).expect("written");
+    let argument = format!("@{}", file.path().display());
+    let files = storage_plan(KMINUS_STORAGE_SCHEMA, &[argument.as_str()]).expect("injected");
+    let storage = read(&files["apiserver.storage.yaml"]);
+    let root = &storage["storage"]["mounts"][0];
+    assert_eq!(root["uri"], "s3://bucket/root/");
+    assert_eq!(root["options"]["aws_region"], "eu-west-1");
+    assert_eq!(root["options"]["aws_endpoint_url"], "http://127.0.0.1:9000");
+    assert_eq!(
+        storage["storage"]["mounts"][1]["uri"],
+        "s3://bucket/bundles/"
+    );
+}

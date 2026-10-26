@@ -7,7 +7,8 @@ configs/apiserver.storage.yaml:
     help: >
       Each mount maps a logical path prefix onto a storage location given by its
       `uri`. The optional `options` map holds backend-specific settings, keyed by
-      the object store configuration names for the mount's `uri` scheme. Every
+      the object store configuration names for the mount's `uri` scheme. Any of
+      these keys can be added or removed, whatever the template declares. Every
       value under `options` is treated as a secret: it is never stored in clear
       text and is supplied at runtime through the environment.
 

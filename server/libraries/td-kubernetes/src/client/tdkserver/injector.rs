@@ -15,12 +15,14 @@ use crate::base::error::cli::CliError;
 use crate::base::error::injector::InjectorError;
 use crate::client::tdkserver::injector::engine::address::Segment;
 use crate::client::tdkserver::injector::engine::document::{
-    Document, Edit, Leaf, Lookup, apply, set_at,
+    Document, Edit, Leaf, Lookup, apply, coalesce, set_at,
 };
 use crate::client::tdkserver::injector::engine::value::{
     LeafType, placeholder_text, render_leaf, render_placeholder,
 };
+use crate::runtime::gateway::resolver::fusion::schema_of;
 use crate::runtime::gateway::resolver::kind::PlaceholderKind;
+use crate::runtime::gateway::resolver::schema::Schema;
 use crate::runtime::gateway::resolver::walker::{
     Placeholder, Rule, contains_placeholder, parse_bare_placeholder, placeholder_occurrences,
 };
@@ -83,9 +85,14 @@ strings, a mapping of addresses to values, or a mapping with two sections: \
       secret:postgres_system_password: env:POSTGRES_PASSWORD
 
 Only values that already exist can be set: never new keys, and never a key \
-that holds other keys or a list. The one exception is 'tabsdata:pods.global.envs', \
-where new environment variables can be added for every pod and function:
+that holds other keys or a list. There are two exceptions. New environment \
+variables can be added under 'tabsdata:pods.global.envs' for every pod and function:
     tabsdata:pods.global.envs.MY_API_KEY=env:MY_API_KEY
+and new keys can be added to any mapping its config schema declares open, such as \
+the 'options' of a storage mount:
+    apiserver.storage:storage.mounts[id=ROOT].options.aws_region=eu-west-1
+A value the schema declares secret can be set even where it holds a placeholder \
+the system resolves, such as the 'uri' of a kminus storage mount.
 Their values are written as strings. A string value replaces a string, while numbers \
 and booleans replace only values of their own type. A VALUE starting with \
 'env:' is read from that environment variable of this machine, so secrets need \
@@ -136,6 +143,17 @@ pub fn plan(
             })?;
         documents.insert(file.as_str(), document);
     }
+    let mut schemas: BTreeMap<&str, Schema> = BTreeMap::new();
+    for file in documents.keys() {
+        let schema =
+            schema_of(file, configs).map_err(|cause| InjectorError::ConfigParseFailed {
+                file: (*file).to_owned(),
+                cause: cause.to_string(),
+            })?;
+        if let Some(schema) = schema {
+            schemas.insert(file, schema);
+        }
+    }
 
     let mut bare: Vec<Occurrence> = Vec::new();
     let mut embedded: Vec<Placeholder> = Vec::new();
@@ -162,7 +180,9 @@ pub fn plan(
             Address::Category { kind, category } => {
                 category_targets(setting, *kind, category, &bare, &embedded, &documents)?
             }
-            Address::Key { file, path } => key_target(setting, file, path, &documents)?,
+            Address::Key { file, path } => {
+                key_target(setting, file, path, &documents, schemas.get(file.as_str()))?
+            }
         };
         if let Some(first) = claimed.get(&identity) {
             return Err(InjectorError::DuplicateSetting {
@@ -182,7 +202,7 @@ pub fn plan(
     let mut injected = BTreeMap::new();
     for (file, edits) in by_file {
         let document = &documents[file.as_str()];
-        let content = apply(document.source(), &edits);
+        let content = apply(document.source(), &coalesce(&edits));
         verify(&file, document.source(), &content, &edits)?;
         injected.insert(file, content);
     }
@@ -288,6 +308,7 @@ fn key_target(
     file: &str,
     path: &[Segment],
     documents: &BTreeMap<&str, Document>,
+    schema: Option<&Schema>,
 ) -> Result<(String, String, Vec<Target>), InjectorError> {
     let origin = &setting.origin;
     let address = setting.address.to_string();
@@ -299,10 +320,13 @@ fn key_target(
         });
     };
     let found = document.find(path);
-    if matches!(found, Err(Lookup::Missing))
-        && let Some(name) = global_env_name(file, path)
-    {
-        return global_env_target(setting, file, path, name, document);
+    if matches!(found, Err(Lookup::Missing)) {
+        if let Some(name) = global_env_name(file, path) {
+            return global_env_target(setting, file, path, name, document);
+        }
+        if let Some(name) = open_child_name(path, document, schema) {
+            return inserted_target(setting, file, path, name, document);
+        }
     }
     let leaf = found.map_err(|lookup| match lookup {
         Lookup::Missing => InjectorError::KeyNotFound {
@@ -327,38 +351,57 @@ fn key_target(
     })?;
 
     let rendered = if contains_placeholder(&leaf.scalar.value) {
-        let Some(placeholder) = parse_bare_placeholder(&leaf.scalar.value) else {
-            return Err(InjectorError::NonEditableKey {
-                origin: origin.clone(),
-                address,
-            });
-        };
-        let kind = PlaceholderKind::from_str(&placeholder.kind)
-            .ok()
-            .filter(|kind| kind.is_editable() && kind.is_supported());
-        let Some(kind) = kind else {
-            return Err(InjectorError::NonEditableKey {
-                origin: origin.clone(),
-                address,
-            });
-        };
-        if let Some(category) = placeholder.category.as_deref().filter(|c| !c.is_empty()) {
-            return Err(InjectorError::PlaceholderAtKey {
-                origin: origin.clone(),
-                address,
-                identity: format!("{}:{category}", kind.as_str()),
-            });
+        let editable = parse_bare_placeholder(&leaf.scalar.value).and_then(|placeholder| {
+            PlaceholderKind::from_str(&placeholder.kind)
+                .ok()
+                .filter(|kind| kind.is_editable() && kind.is_supported())
+                .map(|kind| (placeholder, kind))
+        });
+        let secret_by_schema =
+            schema.is_some_and(|schema| schema.secret_at(&document.identities(&leaf.steps)));
+        match editable {
+            Some((placeholder, kind)) => {
+                if let Some(category) = placeholder.category.as_deref().filter(|c| !c.is_empty()) {
+                    return Err(InjectorError::PlaceholderAtKey {
+                        origin: origin.clone(),
+                        address,
+                        identity: format!("{}:{category}", kind.as_str()),
+                    });
+                }
+                let text = placeholder_text(&setting.value).map_err(|_| {
+                    InjectorError::ValueNotScalar {
+                        origin: origin.clone(),
+                    }
+                })?;
+                if text.is_empty() && placeholder.rule == Rule::Mandatory && !kind.is_auto() {
+                    return Err(InjectorError::EmptyMandatoryValue {
+                        origin: origin.clone(),
+                        identity: address,
+                    });
+                }
+                render_placeholder(&text, leaf.scalar.flow)
+            }
+            None if secret_by_schema => {
+                let text = placeholder_text(&setting.value).map_err(|_| {
+                    InjectorError::ValueNotScalar {
+                        origin: origin.clone(),
+                    }
+                })?;
+                if text.is_empty() {
+                    return Err(InjectorError::EmptyMandatoryValue {
+                        origin: origin.clone(),
+                        identity: address,
+                    });
+                }
+                render_placeholder(&text, leaf.scalar.flow)
+            }
+            None => {
+                return Err(InjectorError::NonEditableKey {
+                    origin: origin.clone(),
+                    address,
+                });
+            }
         }
-        let text = placeholder_text(&setting.value).map_err(|_| InjectorError::ValueNotScalar {
-            origin: origin.clone(),
-        })?;
-        if text.is_empty() && placeholder.rule == Rule::Mandatory && !kind.is_auto() {
-            return Err(InjectorError::EmptyMandatoryValue {
-                origin: origin.clone(),
-                identity: address,
-            });
-        }
-        render_placeholder(&text, leaf.scalar.flow)
     } else {
         let leaf_type = LeafType::of(leaf.scalar);
         render_leaf(&setting.value, leaf_type, leaf.scalar.flow).map_err(|reason| {
@@ -409,15 +452,37 @@ fn global_env_target(
     name: &str,
     document: &Document,
 ) -> Result<(String, String, Vec<Target>), InjectorError> {
-    let origin = &setting.origin;
-    let address = setting.address.to_string();
     if !is_env_name(name) {
         return Err(InjectorError::InvalidEnvName {
-            origin: origin.clone(),
-            address,
+            origin: setting.origin.clone(),
+            address: setting.address.to_string(),
             name: name.to_owned(),
         });
     }
+    inserted_target(setting, file, path, name, document)
+}
+
+fn open_child_name<'a>(
+    path: &'a [Segment],
+    document: &Document,
+    schema: Option<&Schema>,
+) -> Option<&'a str> {
+    let (child, parent) = path.split_last()?;
+    let schema = schema?;
+    let steps = document.steps_to(parent).ok()?;
+    let open = child.selectors.is_empty() && schema.open_at(&document.identities(&steps));
+    open.then_some(child.key.as_str())
+}
+
+fn inserted_target(
+    setting: &Setting,
+    file: &str,
+    path: &[Segment],
+    name: &str,
+    document: &Document,
+) -> Result<(String, String, Vec<Target>), InjectorError> {
+    let origin = &setting.origin;
+    let address = setting.address.to_string();
     let rendered = render_leaf(&setting.value, LeafType::Text, false).map_err(|reason| {
         InjectorError::ValueTypeMismatch {
             origin: origin.clone(),

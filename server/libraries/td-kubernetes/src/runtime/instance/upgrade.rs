@@ -10,6 +10,7 @@ pub mod inventory;
 pub mod latch;
 pub mod lock;
 pub mod offline;
+pub mod ownership;
 pub mod plan;
 pub mod preflight;
 pub mod replay;

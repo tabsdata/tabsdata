@@ -13,6 +13,7 @@ const AT_KEY: &str = "at";
 const TREAT_KEY: &str = "treat";
 const TREAT_SECRET: &str = "secret";
 const TREAT_OPTIONAL: &str = "optional";
+const TREAT_OPEN: &str = "open";
 const PATTERN_SEPARATOR: char = '.';
 const WILDCARD_TOKEN: &str = "*";
 const LIST_WILDCARD_SUFFIX: &str = "[*]";
@@ -21,6 +22,7 @@ const LIST_WILDCARD_SUFFIX: &str = "[*]";
 pub enum Treatment {
     Secret,
     Optional,
+    Open,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,6 +69,7 @@ impl Schema {
             let treatment = match entry.get(TREAT_KEY).and_then(Value::as_str) {
                 Some(TREAT_SECRET) => Treatment::Secret,
                 Some(TREAT_OPTIONAL) => Treatment::Optional,
+                Some(TREAT_OPEN) => Treatment::Open,
                 other => {
                     return Err(SchemaError::UnsupportedTreatment {
                         schema: schema.to_owned(),
@@ -96,6 +99,12 @@ impl Schema {
         self.rules
             .iter()
             .any(|rule| rule.treatment == Treatment::Optional && matches_full(&rule.segments, path))
+    }
+
+    pub fn open_at(&self, path: &[String]) -> bool {
+        self.rules
+            .iter()
+            .any(|rule| rule.treatment == Treatment::Open && matches_full(&rule.segments, path))
     }
 
     pub fn could_match_prefix(&self, path: &[String]) -> bool {
@@ -142,7 +151,7 @@ impl Schema {
     }
 }
 
-fn secret_token() -> Value {
+pub fn secret_token() -> Value {
     let placeholder = Placeholder {
         kind: PlaceholderKind::Secret.as_str().to_owned(),
         category: None,

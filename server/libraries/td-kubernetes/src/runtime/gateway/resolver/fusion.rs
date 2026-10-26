@@ -322,7 +322,7 @@ fn resolve_configs_files(
     Ok(FusedSecrets { by_file })
 }
 
-fn schema_of(file: &str, configs: &RenderedConfigmap) -> Result<Option<Schema>, ResolverError> {
+pub fn schema_of(file: &str, configs: &RenderedConfigmap) -> Result<Option<Schema>, ResolverError> {
     let Some(stem) = file.strip_suffix(CONFIG_EXTENSION) else {
         return Ok(None);
     };
@@ -335,6 +335,15 @@ fn schema_of(file: &str, configs: &RenderedConfigmap) -> Result<Option<Schema>, 
             cause: cause.to_string(),
         })?;
     Ok((!schema.is_empty()).then_some(schema))
+}
+
+pub fn bake_config(
+    file: &str,
+    template: &str,
+    configs: &RenderedConfigmap,
+) -> Result<String, ResolverError> {
+    let schema = schema_of(file, configs)?;
+    bake_schema_secrets(file, template, schema.as_ref())
 }
 
 fn bake_schema_secrets(

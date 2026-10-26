@@ -222,3 +222,17 @@ fn multiple_directives_all_apply() {
     assert!(schema.secret_at(&path(&["b", "token"])));
     assert!(!schema.secret_at(&path(&["a", "token"])));
 }
+
+#[test]
+fn open_treatment_matches_only_its_own_mapping() {
+    let text = indoc! {"
+        directives:
+          - at: storage.mounts[*].options
+            treat: open
+    "};
+    let schema = Schema::parse("x.yamls", text).expect("parse");
+    assert!(schema.open_at(&path(&["storage", "mounts", "ROOT", "options"])));
+    assert!(!schema.open_at(&path(&["storage", "mounts", "ROOT", "options", "k"])));
+    assert!(!schema.optional_at(&path(&["storage", "mounts", "ROOT", "options"])));
+    assert!(!schema.secret_at(&path(&["storage", "mounts", "ROOT", "options", "k"])));
+}

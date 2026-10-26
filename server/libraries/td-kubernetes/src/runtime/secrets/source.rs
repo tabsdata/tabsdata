@@ -6,7 +6,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::base::constants::{
-    CONFIGMAP_FAMILY_LABEL, Family, KIND_SECRET_CONFIG, KPROFILE_CONFIGS_FAMILY,
+    CONFIGMAP_FAMILY_LABEL, Family, KIND_SECRET_CONFIG, KPROFILE_CONFIGS_FAMILY, SCHEMA_EXTENSION,
 };
 use crate::base::error::naming::NamingError;
 use crate::base::error::provider::ProviderError;
@@ -17,7 +17,8 @@ use crate::core::system::file::is_hidden_or_system;
 use crate::kube::api::domain::labels::LabelFilter;
 use crate::kube::api::entity::configmap::get_configmaps;
 use crate::kube::context::KubeContext;
-use crate::runtime::instance::profile::load_profile;
+use crate::runtime::gateway::resolver::fusion::bake_config;
+use crate::runtime::instance::profile::{RenderedConfigmap, load_profile};
 use crate::runtime::provider::{ClusterProvider, Provider};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,12 +83,19 @@ fn read_configs_from_kprofile(
     verbose: bool,
 ) -> Result<Vec<ConfigEntry>, SecretError> {
     let profile = load_profile(provider.cluster_provider(), verbose)?;
-    let mut entries: Vec<ConfigEntry> = Vec::with_capacity(profile.configs.len());
-    for (file, yaml) in profile.configs {
+    kprofile_entries(&profile.configs)
+}
+
+fn kprofile_entries(configs: &RenderedConfigmap) -> Result<Vec<ConfigEntry>, SecretError> {
+    let mut entries: Vec<ConfigEntry> = Vec::with_capacity(configs.len());
+    for (file, template) in configs {
+        if file.ends_with(SCHEMA_EXTENSION) {
+            continue;
+        }
         entries.push(ConfigEntry {
-            secret: to_secret_name(&file)?,
-            file,
-            yaml,
+            secret: to_secret_name(file)?,
+            file: file.clone(),
+            yaml: bake_config(file, template, configs)?,
         });
     }
     entries.sort_by(|left, right| left.file.cmp(&right.file));
@@ -183,3 +191,6 @@ fn command_error_to_string(error: &CommandError) -> String {
         None => format!("{:?}", error.status()),
     }
 }
+
+#[cfg(test)]
+mod tests;

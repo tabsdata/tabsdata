@@ -52,8 +52,9 @@ pub struct GetArguments {
         long,
         value_enum,
         required = true,
-        long_help = "Where to read the configs from. 'default' reads the on-disk kprofile shipped with this binary. \
-                     'current' reads the deployed state: for kminus it reads the staging folder if present (instance \
+        long_help = "Where to read the configs from. 'default' reads the on-disk kprofile shipped with this binary, \
+                     with the secrets its schemas declare; options a user adds to an instance appear only in \
+                     'current'. 'current' reads the deployed state: for kminus it reads the staging folder if present (instance \
                      never started yet), otherwise it queries the live cluster; for other providers it queries the \
                      live cluster. 'current' requires a running cluster (except when the kminus stage is present)."
     )]

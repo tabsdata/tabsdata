@@ -10,6 +10,7 @@ use serde::Serialize;
 
 use td_kubernetes::runtime::instance::upgrade::catalog::read_inventory;
 use td_kubernetes::runtime::instance::upgrade::offline::upgrade_kprofile;
+use td_kubernetes::runtime::instance::upgrade::ownership::ownership_problems;
 use td_kubernetes::runtime::instance::upgrade::replay::{
     Mismatch, Sources, drifted_digests, materialize, materialize_scratch, record_digests,
     replay_all,
@@ -86,6 +87,22 @@ enum Command {
         /// Upgrade tree holding the inventory and the rules folder.
         #[arg(long, required = true)]
         kupgrade: PathBuf,
+    },
+    /// Check that the upgrader of a version leaves the keys of open mappings alone.
+    Ownership {
+        #[arg(long, required = true)]
+        kupgrade: PathBuf,
+
+        #[arg(long, required = true)]
+        version: String,
+
+        /// Kprofile folder of the version the upgrader starts from.
+        #[arg(long, required = true)]
+        previous: PathBuf,
+
+        /// Kprofile folder whose schemas declare the open mappings.
+        #[arg(long, required = true)]
+        current: PathBuf,
     },
     /// Write the templates of every version to a folder.
     Templates {
@@ -169,6 +186,16 @@ async fn run(command: Command) -> Result<String, String> {
             serde_json::to_string(&Problems {
                 problems: verify_rules(&kupgrade, &inventory),
             })
+        }
+        Command::Ownership {
+            kupgrade,
+            version,
+            previous,
+            current,
+        } => {
+            let problems = ownership_problems(&kupgrade, &version, &previous, &current)
+                .map_err(|error| format!("{error:?}"))?;
+            serde_json::to_string(&Problems { problems })
         }
         Command::Templates { repository, output } => {
             let templates = materialize(&repository.sources(), &output)

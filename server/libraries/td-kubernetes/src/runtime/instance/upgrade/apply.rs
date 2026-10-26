@@ -26,6 +26,8 @@ use crate::runtime::instance::upgrade::spec::{
 };
 use crate::runtime::instance::upgrade::store::Store;
 
+const EVERY_ITEM: &str = "[*]";
+
 pub struct Outcome {
     pub applied: usize,
     pub stamped: usize,
@@ -472,17 +474,41 @@ impl InsertChildIfMissing {
     }
 
     fn insert(&self, document: &mut serde_yaml::Value) -> bool {
-        let mut cursor = document;
-        for segment in split_leaf(&self.leaf) {
-            let key = serde_yaml::Value::from(segment.as_str());
-            if cursor.is_null() {
-                *cursor = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
-            }
-            let serde_yaml::Value::Mapping(holder) = cursor else {
-                return false;
-            };
-            cursor = holder.entry(key).or_insert(serde_yaml::Value::Null);
+        self.insert_below(document, &split_leaf(&self.leaf))
+    }
+
+    fn insert_below(&self, cursor: &mut serde_yaml::Value, segments: &[String]) -> bool {
+        let Some((segment, rest)) = segments.split_first() else {
+            return self.insert_child(cursor);
+        };
+        if cursor.is_null() {
+            *cursor = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
         }
+        let serde_yaml::Value::Mapping(holder) = cursor else {
+            return false;
+        };
+        match segment.strip_suffix(EVERY_ITEM) {
+            Some(name) => {
+                let Some(serde_yaml::Value::Sequence(items)) =
+                    holder.get_mut(serde_yaml::Value::from(name))
+                else {
+                    return false;
+                };
+                let mut inserted = false;
+                for item in items {
+                    inserted |= self.insert_below(item, rest);
+                }
+                inserted
+            }
+            None => {
+                let key = serde_yaml::Value::from(segment.as_str());
+                let child = holder.entry(key).or_insert(serde_yaml::Value::Null);
+                self.insert_below(child, rest)
+            }
+        }
+    }
+
+    fn insert_child(&self, cursor: &mut serde_yaml::Value) -> bool {
         if cursor.is_null() {
             *cursor = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
         }

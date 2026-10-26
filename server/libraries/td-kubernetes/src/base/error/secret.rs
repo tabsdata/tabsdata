@@ -4,6 +4,7 @@
 
 use td_error::td_error;
 
+use crate::base::error::gateway::ResolverError;
 use crate::base::error::kubernetes::KubernetesError;
 use crate::base::error::naming::NamingError;
 use crate::base::error::profile::ProfileError;
@@ -171,4 +172,6 @@ pub enum SecretError {
     Naming(#[from] NamingError) = 5006,
     #[error(transparent)]
     Provider(#[from] ProviderError) = 5010,
+    #[error(transparent)]
+    Resolver(#[from] ResolverError) = 5024,
 }

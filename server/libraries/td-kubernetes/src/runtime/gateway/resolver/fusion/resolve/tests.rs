@@ -1268,3 +1268,253 @@ fn an_optional_mapping_still_rejects_a_missing_key_elsewhere() {
     .expect_err("uri is not covered by the directive");
     assert!(matches!(error, ResolverError::StructureMismatch { .. }));
 }
+
+fn resolve_with_schema(
+    template: &str,
+    supplied: &str,
+    directives: &str,
+) -> Result<ResolveOutcome, ResolverError> {
+    let schema = Schema::parse("apiserver.storage.yaml", directives).expect("schema");
+    resolve_config_file(
+        "apiserver.storage.yaml",
+        template,
+        supplied,
+        &SystemValues::default(),
+        &HashMap::new(),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        Some(&schema),
+    )
+}
+
+const OPEN_SECRET_OPTIONS: &str = indoc! {"
+    directives:
+      - at: storage.mounts[*].options.*
+        treat: secret
+      - at: storage.mounts[*].options
+        treat: open
+"};
+
+#[test]
+fn an_open_mapping_keeps_a_key_the_template_lacks_as_a_secret() {
+    let template = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            uri: ${{secret}}
+            options: {}
+    "};
+    let supplied = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            uri: s3://bucket/root/
+            options:
+              aws_access_key_id: an-id
+    "};
+    let outcome = resolve_with_schema(template, supplied, OPEN_SECRET_OPTIONS).expect("resolve");
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(
+        value["storage"]["mounts"][0]["options"]["aws_access_key_id"],
+        Value::String("${{secret}}".to_owned())
+    );
+    assert!(
+        outcome.secrets.iter().any(|secret| {
+            secret.key == "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID"
+                && secret.value == "an-id"
+        }),
+        "the added key must be collected as a secret"
+    );
+}
+
+#[test]
+fn an_open_mapping_drops_a_template_key_the_initialization_omits() {
+    let template = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            options:
+              aws_region: ${{secret}}
+    "};
+    let supplied = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            options:
+              azure_storage_account_name: an-account
+    "};
+    let outcome = resolve_with_schema(template, supplied, OPEN_SECRET_OPTIONS).expect("resolve");
+    assert!(!outcome.rendered.contains("aws_region"));
+    assert!(outcome.rendered.contains("azure_storage_account_name"));
+    assert_eq!(outcome.secrets.len(), 1);
+}
+
+#[test]
+fn an_open_mapping_keeps_an_empty_initialization_empty() {
+    let template = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            options: {}
+    "};
+    let outcome = resolve_with_schema(template, template, OPEN_SECRET_OPTIONS).expect("resolve");
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(
+        value["storage"]["mounts"][0]["options"],
+        Value::Mapping(Mapping::new())
+    );
+    assert!(outcome.secrets.is_empty());
+}
+
+#[test]
+fn an_open_mapping_keeps_a_key_no_secret_rule_covers_as_given() {
+    let template = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            options: {}
+    "};
+    let supplied = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            options:
+              allow_http: 'true'
+    "};
+    let directives = indoc! {"
+        directives:
+          - at: storage.mounts[*].options
+            treat: open
+    "};
+    let outcome = resolve_with_schema(template, supplied, directives).expect("resolve");
+    let value: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    assert_eq!(
+        value["storage"]["mounts"][0]["options"]["allow_http"],
+        Value::String("true".to_owned())
+    );
+    assert!(outcome.secrets.is_empty());
+}
+
+#[test]
+fn an_open_mapping_still_rejects_a_missing_key_elsewhere() {
+    let template = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            uri: gs://bucket/
+            options: {}
+    "};
+    let supplied = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            options: {}
+    "};
+    let error = resolve_with_schema(template, supplied, OPEN_SECRET_OPTIONS)
+        .expect_err("uri is not covered by the directive");
+    assert!(matches!(error, ResolverError::StructureMismatch { .. }));
+}
+
+#[test]
+fn a_list_the_schema_reaches_names_its_items_by_first_value_without_placeholders() {
+    let template = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            options: {}
+    "};
+    let supplied = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            options:
+              aws_access_key_id: an-id
+    "};
+    let outcome = resolve_with_schema(template, supplied, OPEN_SECRET_OPTIONS).expect("resolve");
+    let keys: Vec<&str> = outcome
+        .secrets
+        .iter()
+        .map(|secret| secret.key.as_str())
+        .collect();
+    assert_eq!(keys, ["STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID"]);
+}
+
+#[test]
+fn a_list_the_schema_does_not_reach_still_pairs_its_items_by_position() {
+    let template = indoc! {"
+        tolerations:
+        - key: a
+        - key: b
+    "};
+    let supplied = indoc! {"
+        tolerations:
+        - key: a
+    "};
+    let error = resolve_with_schema(template, supplied, OPEN_SECRET_OPTIONS)
+        .expect_err("a positional list keeps its length");
+    assert!(matches!(error, ResolverError::StructureMismatch { .. }));
+}
+
+const SECRET_URI_TEMPLATE: &str = indoc! {"
+    storage:
+      mounts:
+      - id: ROOT
+        uri: ${{secret}}
+"};
+
+fn resolve_secret_uri(supplied_uri: &str) -> Result<ResolveOutcome, ResolverError> {
+    let supplied = format!("storage:\n  mounts:\n  - id: ROOT\n    uri: '{supplied_uri}'\n");
+    let system = SystemValues {
+        storage_url: Some("file:///home/td/storage/".to_owned()),
+        ..SystemValues::default()
+    };
+    resolve_config_file(
+        "apiserver.storage.yaml",
+        SECRET_URI_TEMPLATE,
+        &supplied,
+        &system,
+        &HashMap::new(),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        None,
+    )
+}
+
+fn secret_uri(outcome: &ResolveOutcome) -> &str {
+    outcome
+        .secrets
+        .iter()
+        .find(|secret| secret.key == "STORAGE__MOUNTS__ROOT__URI")
+        .map(|secret| secret.value.as_str())
+        .expect("the uri secret")
+}
+
+#[test]
+fn a_secret_value_embedding_a_system_placeholder_is_stored_resolved() {
+    let outcome = resolve_secret_uri("${{system:tdk_storage_url}}data/").expect("resolve");
+    assert_eq!(secret_uri(&outcome), "file:///home/td/storage/data/");
+    assert!(outcome.rendered.contains("uri: ${{secret}}"));
+}
+
+#[test]
+fn a_plain_secret_value_is_stored_as_given() {
+    let outcome = resolve_secret_uri("s3://bucket/root/").expect("resolve");
+    assert_eq!(secret_uri(&outcome), "s3://bucket/root/");
+}
+
+#[test]
+fn a_secret_value_embedding_a_placeholder_resolved_later_is_rejected() {
+    let error = resolve_secret_uri("${{env:HOME}}/data/").expect_err("env resolves in the pod");
+    assert!(matches!(
+        error,
+        ResolverError::SecretValuePlaceholderUnsupported { .. }
+    ));
+}
+
+#[test]
+fn the_secret_token_itself_still_counts_as_not_supplied() {
+    let error = resolve_secret_uri("${{secret}}").expect_err("nothing supplied");
+    assert!(matches!(error, ResolverError::MissingRequiredValue { .. }));
+}

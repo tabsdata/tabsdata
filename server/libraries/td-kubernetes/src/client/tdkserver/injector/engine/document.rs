@@ -8,6 +8,9 @@ use serde_yaml::Value;
 use crate::client::tdkserver::injector::engine::address::{Segment, Selector};
 
 const MAPPING_INDICATOR: char = ':';
+const FLOW_MAPPING_OPEN: char = '{';
+const FLOW_MAPPING_CLOSE: char = '}';
+const NESTED_INDENT: usize = 2;
 
 #[derive(Debug)]
 pub enum Node {
@@ -66,6 +69,7 @@ pub struct Edit {
     pub text: String,
     pub value: String,
     pub steps: Vec<Step>,
+    pub fills_empty: bool,
 }
 
 pub struct Document {
@@ -106,7 +110,7 @@ impl Document {
             return Err("its parent is not a mapping".to_owned());
         };
         let (Some(first), Some(last)) = (entries.first(), entries.last()) else {
-            return Err("its parent is an empty mapping".to_owned());
+            return self.insert_into_empty(parent, key, text, steps);
         };
         let Node::Scalar(last_value) = &last.value else {
             return Err("the last entry of its parent does not hold a single value".to_owned());
@@ -128,7 +132,94 @@ impl Document {
             text: format!("\n{}{key}: {text}", " ".repeat(indent)),
             value: text.to_owned(),
             steps,
+            fills_empty: false,
         })
+    }
+
+    fn insert_into_empty(
+        &self,
+        parent: &[Segment],
+        key: &str,
+        text: &str,
+        mut steps: Vec<Step>,
+    ) -> Result<Edit, String> {
+        let Some((last, above)) = parent.split_last() else {
+            return Err("its parent is an empty document".to_owned());
+        };
+        if !last.selectors.is_empty() {
+            return Err("its parent is an empty list item".to_owned());
+        }
+        let (holder, _) = self
+            .node_at(above)
+            .map_err(|_| "its parent does not exist".to_owned())?;
+        let Node::Mapping(entries) = holder else {
+            return Err("its parent is not a mapping".to_owned());
+        };
+        let entry = entries
+            .iter()
+            .find(|entry| entry.key.as_deref() == Some(last.key.as_str()))
+            .ok_or_else(|| "its parent does not exist".to_owned())?;
+        let line_start = self.source[..entry.key_start]
+            .rfind('\n')
+            .map_or(0, |offset| offset + 1);
+        let indent = self.source[line_start..entry.key_start].chars().count() + NESTED_INDENT;
+        let line_end = self.source[entry.key_start..]
+            .find('\n')
+            .map_or(self.source.len(), |offset| entry.key_start + offset);
+        let line = &self.source[entry.key_start..line_end];
+        let colon = line
+            .find(MAPPING_INDICATOR)
+            .ok_or_else(|| "its parent could not be delimited".to_owned())?;
+        let value = line[colon + MAPPING_INDICATOR.len_utf8()..].trim();
+        if value != format!("{FLOW_MAPPING_OPEN}{FLOW_MAPPING_CLOSE}") {
+            return Err("its parent is an empty mapping written other than '{}'".to_owned());
+        }
+        steps.push(Step::Key(key.to_owned()));
+        Ok(Edit {
+            start: entry.key_start + colon + MAPPING_INDICATOR.len_utf8(),
+            end: line_end,
+            text: format!("\n{}{key}: {text}", " ".repeat(indent)),
+            value: text.to_owned(),
+            steps,
+            fills_empty: true,
+        })
+    }
+
+    pub fn steps_to(&self, path: &[Segment]) -> Result<Vec<Step>, Lookup> {
+        self.node_at(path).map(|(_, steps)| steps)
+    }
+
+    pub fn identities(&self, steps: &[Step]) -> Vec<String> {
+        let mut identities = Vec::with_capacity(steps.len());
+        let mut node = self.root.as_ref();
+        for step in steps {
+            node = match (step, node) {
+                (Step::Key(key), Some(Node::Mapping(entries))) => {
+                    identities.push(key.clone());
+                    entries
+                        .iter()
+                        .find(|entry| entry.key.as_deref() == Some(key.as_str()))
+                        .map(|entry| &entry.value)
+                }
+                (Step::Index(index), Some(Node::Sequence(items))) => {
+                    let item = items.get(*index);
+                    identities.push(
+                        item.and_then(first_scalar)
+                            .unwrap_or_else(|| index.to_string()),
+                    );
+                    item
+                }
+                (Step::Key(key), _) => {
+                    identities.push(key.clone());
+                    None
+                }
+                (Step::Index(index), _) => {
+                    identities.push(index.to_string());
+                    None
+                }
+            };
+        }
+        identities
     }
 
     fn node_at(&self, path: &[Segment]) -> Result<(&Node, Vec<Step>), Lookup> {
@@ -183,6 +274,7 @@ impl Document {
                 text: format!(" {text}"),
                 value: text.to_owned(),
                 steps: leaf.steps.clone(),
+                fills_empty: false,
             });
         }
         let delimited = serde_yaml::from_str::<Value>(&self.source[scalar.start..scalar.end])
@@ -198,6 +290,7 @@ impl Document {
             text: text.to_owned(),
             value: text.to_owned(),
             steps: leaf.steps.clone(),
+            fills_empty: false,
         })
     }
 }
@@ -210,6 +303,33 @@ pub fn apply(source: &str, edits: &[Edit]) -> String {
         result.replace_range(edit.start..edit.end, &edit.text);
     }
     result
+}
+
+pub fn coalesce(edits: &[Edit]) -> Vec<Edit> {
+    let mut coalesced: Vec<Edit> = Vec::with_capacity(edits.len());
+    for edit in edits {
+        let shared = coalesced.iter_mut().find(|existing| {
+            edit.fills_empty
+                && existing.fills_empty
+                && existing.start == edit.start
+                && existing.end == edit.end
+        });
+        match shared {
+            Some(existing) => existing.text.push_str(&edit.text),
+            None => coalesced.push(edit.clone()),
+        }
+    }
+    coalesced
+}
+
+fn first_scalar(node: &Node) -> Option<String> {
+    match node {
+        Node::Mapping(entries) => match entries.first().map(|entry| &entry.value) {
+            Some(Node::Scalar(scalar)) => Some(scalar.value.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 pub fn set_at(node: &mut Value, steps: &[Step], replacement: Value) -> bool {

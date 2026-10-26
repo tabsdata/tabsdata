@@ -8,7 +8,7 @@ import yaml
 
 from tabsdatax.cmake.kupgrader.common.actions import Action, Form, Plan
 from tabsdatax.cmake.kupgrader.common.inventory import Bundle
-from tabsdatax.cmake.kupgrader.common.naming import parse_name
+from tabsdatax.cmake.kupgrader.common.naming import is_schema, parse_name
 from tabsdatax.cmake.kupgrader.common.operations import (
     Gap,
     Synthesis,
@@ -123,7 +123,7 @@ def winner(files: dict, provider: str):
 def synthesize_resolved(bundles: list[Bundle], renames: dict[str, str]) -> list[Change]:
     changes = []
     for bundle in bundles:
-        if bundle.family != RESOLVED_SOURCE_FAMILY:
+        if bundle.family != RESOLVED_SOURCE_FAMILY or is_schema(bundle.name):
             continue
         previous = {v.name: v.previous for v in bundle.variants if v.previous}
         current = {v.name: v.current for v in bundle.variants if v.current}

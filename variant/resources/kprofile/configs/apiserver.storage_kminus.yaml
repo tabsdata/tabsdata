@@ -7,9 +7,12 @@ storage:
   - id: ROOT
     path: /
     uri: ${{system:tdk_storage_url}}data/
+    options: {}
   - id: BUNDLES
     path: /bundles
     uri: ${{system:tdk_storage_url}}bundles/
+    options: {}
   - id: IMAGES
     path: /images
     uri: ${{system:tdk_storage_url}}images/
+    options: {}

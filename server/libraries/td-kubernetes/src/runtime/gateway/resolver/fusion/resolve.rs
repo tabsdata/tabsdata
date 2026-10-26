@@ -6,13 +6,13 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use serde_yaml::Value;
+use serde_yaml::{Mapping, Value};
 
 use crate::base::constants::YAML_NULL;
 use crate::base::error::gateway::ResolverError;
 use crate::runtime::gateway::resolver::kind::{PlaceholderKind, Substitution};
 use crate::runtime::gateway::resolver::placeholder::{SystemValues, resolver_for};
-use crate::runtime::gateway::resolver::schema::Schema;
+use crate::runtime::gateway::resolver::schema::{Schema, secret_token};
 use crate::runtime::gateway::resolver::walker::{
     LiteralOrigin, PATH_SEPARATOR, Phase, Placeholder, ResolveContext, SecretEntry,
     contains_placeholder, parse_bare_placeholder, placeholder_occurrences, splice_placeholders,
@@ -104,28 +104,20 @@ impl ResolveSession<'_> {
                 let Value::Mapping(init_map) = init else {
                     return Err(self.structure_mismatch(path));
                 };
-                let mut rendered = serde_yaml::Mapping::new();
-                let omittable = self.schema.is_some_and(|schema| schema.optional_at(path));
-                for (key, template_child) in template_map {
-                    let segment = scalar_key(key);
-                    let Some(init_child) = init_map.get(key) else {
-                        if omittable {
-                            continue;
-                        }
-                        return Err(self.structure_mismatch_at(path, &segment));
-                    };
-                    path.push(segment);
-                    let rendered_child = self.resolve_node(template_child, init_child, path)?;
-                    path.pop();
-                    rendered.insert(key.clone(), rendered_child);
+                if self.schema.is_some_and(|schema| schema.open_at(path)) {
+                    self.resolve_open_mapping(template_map, init_map, path)
+                } else {
+                    self.resolve_closed_mapping(template_map, init_map, path)
                 }
-                Ok(Value::Mapping(rendered))
             }
             Value::Sequence(template_items) => {
                 let Value::Sequence(init_items) = init else {
                     return Err(self.structure_mismatch(path));
                 };
-                if is_keyed_map_sequence(template_items) {
+                let schema_reaches = self
+                    .schema
+                    .is_some_and(|schema| schema.could_match_prefix(path));
+                if is_keyed_map_sequence(template_items, schema_reaches) {
                     self.resolve_keyed_sequence(template_items, init_items, path)
                 } else {
                     if template_items.len() != init_items.len() {
@@ -144,6 +136,58 @@ impl ResolveSession<'_> {
                 }
             }
             _ => Ok(init.clone()),
+        }
+    }
+
+    fn resolve_closed_mapping(
+        &mut self,
+        template_map: &Mapping,
+        init_map: &Mapping,
+        path: &mut Vec<String>,
+    ) -> Result<Value, ResolverError> {
+        let mut rendered = Mapping::new();
+        let omittable = self.schema.is_some_and(|schema| schema.optional_at(path));
+        for (key, template_child) in template_map {
+            let segment = scalar_key(key);
+            let Some(init_child) = init_map.get(key) else {
+                if omittable {
+                    continue;
+                }
+                return Err(self.structure_mismatch_at(path, &segment));
+            };
+            path.push(segment);
+            let rendered_child = self.resolve_node(template_child, init_child, path)?;
+            path.pop();
+            rendered.insert(key.clone(), rendered_child);
+        }
+        Ok(Value::Mapping(rendered))
+    }
+
+    fn resolve_open_mapping(
+        &mut self,
+        template_map: &Mapping,
+        init_map: &Mapping,
+        path: &mut Vec<String>,
+    ) -> Result<Value, ResolverError> {
+        let mut rendered = Mapping::new();
+        for (key, init_child) in init_map {
+            path.push(scalar_key(key));
+            let template_child = match template_map.get(key) {
+                Some(template_child) => template_child.clone(),
+                None => self.added_template(init_child, path),
+            };
+            let rendered_child = self.resolve_node(&template_child, init_child, path)?;
+            path.pop();
+            rendered.insert(key.clone(), rendered_child);
+        }
+        Ok(Value::Mapping(rendered))
+    }
+
+    fn added_template(&self, init: &Value, path: &[String]) -> Value {
+        if self.schema.is_some_and(|schema| schema.secret_at(path)) {
+            secret_token()
+        } else {
+            init.clone()
         }
     }
 
@@ -242,7 +286,8 @@ impl ResolveSession<'_> {
                 Ok(scalar_value(resolution.rendered))
             }
             Substitution::Retained => {
-                let context = self.context(placeholder, init_text, path);
+                let supplied = self.supplied_secret(placeholder, init_text, path)?;
+                let context = self.context(placeholder, supplied.as_deref(), path);
                 let resolution = resolver.resolve(&context)?;
                 if let Some(secret) = resolution.secret {
                     self.record_value_as(placeholder, &displayed_path, &secret.value, true)?;
@@ -251,6 +296,41 @@ impl ResolveSession<'_> {
                 Ok(Value::String(resolution.rendered))
             }
         }
+    }
+
+    fn supplied_secret(
+        &mut self,
+        placeholder: &Placeholder,
+        init_text: Option<&str>,
+        path: &[String],
+    ) -> Result<Option<String>, ResolverError> {
+        match init_text {
+            Some(text) if text != placeholder.token() && contains_placeholder(text) => {
+                self.resolve_secret_value(text, path).map(Some)
+            }
+            other => Ok(other.map(str::to_owned)),
+        }
+    }
+
+    fn resolve_secret_value(
+        &mut self,
+        text: &str,
+        path: &[String],
+    ) -> Result<String, ResolverError> {
+        let displayed_path = self.displayed(path);
+        for placeholder in placeholder_occurrences(text) {
+            let kind = resolver_for(&placeholder.kind, &displayed_path)?.kind();
+            if kind.behavior() != Substitution::Fixed || kind.phase() != Phase::Creation {
+                return Err(ResolverError::SecretValuePlaceholderUnsupported {
+                    path: displayed_path,
+                    token: placeholder.token(),
+                });
+            }
+        }
+        splice_placeholders(text, |_, placeholder| {
+            let kind = resolver_for(&placeholder.kind, &displayed_path)?.kind();
+            self.fixed_value(placeholder, kind, path, &displayed_path)
+        })
     }
 
     fn resolve_embedded(
@@ -409,13 +489,13 @@ impl ResolveSession<'_> {
     }
 }
 
-fn is_keyed_map_sequence(template_items: &[Value]) -> bool {
+fn is_keyed_map_sequence(template_items: &[Value], schema_reaches: bool) -> bool {
     !template_items.is_empty()
         && template_items
             .iter()
             .all(|item| matches!(item, Value::Mapping(_)))
         && template_items.iter().all(first_value_is_scalar)
-        && template_items.iter().any(node_contains_placeholder)
+        && (schema_reaches || template_items.iter().any(node_contains_placeholder))
 }
 
 fn first_value_is_scalar(item: &Value) -> bool {

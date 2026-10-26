@@ -10,6 +10,7 @@ QUOTED = '"'
 DERIVED_PORT = "port"
 DERIVED_VALUE = "value"
 MINIMUM_DERIVED_LENGTH = 4
+EVERY_ITEM = "[*]"
 
 USER_OWNED_MAPPINGS: dict[tuple[str, str], frozenset[tuple[str, ...]]] = {
     ("configs", "tabsdata.yaml"): frozenset({("pods", "global", "envs")}),
@@ -147,10 +148,14 @@ def walk(
 
     if is_sequence(previous) or is_sequence(current):
         derived = derived_items(path, previous, current)
-        if derived is None:
-            synthesis.gaps.append(sequence_gap(path, previous, current))
+        if derived is not None:
+            synthesis.operations.extend(derived)
             return
-        synthesis.operations.extend(derived)
+        children = item_children(path, previous, current)
+        if children is not None:
+            synthesis.operations.extend(children)
+            return
+        synthesis.gaps.append(sequence_gap(path, previous, current))
         return
 
     synthesis.operations.append(
@@ -209,6 +214,38 @@ def derived_items(
             return None
         operations.append(operation)
     return operations
+
+
+def added_children(previous: Any, current: Any) -> dict | None:
+    if not is_mapping(previous) or not is_mapping(current):
+        return None
+    if any(
+        key not in current or current[key] != value for key, value in previous.items()
+    ):
+        return None
+    return {key: value for key, value in current.items() if key not in previous}
+
+
+def item_children(
+    path: tuple[str, ...], previous: Any, current: Any
+) -> list[Operation] | None:
+    if not is_sequence(previous) or not is_sequence(current):
+        return None
+    if not previous or len(previous) != len(current):
+        return None
+    added = [added_children(before, after) for before, after in zip(previous, current)]
+    if any(children is None for children in added):
+        return None
+    if not added[0] or any(children != added[0] for children in added):
+        return None
+    leaf = f"{render_leaf(path)}{EVERY_ITEM}"
+    return [
+        Operation(
+            op="insert-child-if-missing",
+            fields={"leaf": leaf, "child": child, "value": value},
+        )
+        for child, value in added[0].items()
+    ]
 
 
 def scalar_text(value: Any) -> str | None:

@@ -2,6 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::collections::BTreeMap;
+
 use indoc::indoc;
 
 use super::*;
@@ -793,4 +795,216 @@ fn schema_files_are_not_seeded() {
         )],
     );
     assert!(literals.is_empty());
+}
+
+const OPEN_STORAGE_TEMPLATE: &str = indoc! {"
+    storage:
+      mounts:
+      - id: ROOT
+        path: /
+        uri: file:///data/
+        options: {}
+"};
+
+const OPEN_STORAGE_SCHEMA: &str = indoc! {"
+    directives:
+      - at: storage.mounts[*].options.*
+        treat: secret
+      - at: storage.mounts[*].options
+        treat: open
+"};
+
+#[test]
+fn config_put_keeps_added_options_and_drops_removed_ones() {
+    let edited = indoc! {"
+        storage:
+          mounts:
+          - id: ROOT
+            path: /
+            uri: file:///data/
+            options:
+              aws_access_key_id: ${{secret}}
+              aws_endpoint_url: http://localhost:9000
+    "};
+    let input = tempfile::tempdir().expect("an edit folder");
+    write_family(
+        input.path(),
+        KPROFILE_CONFIGS_FAMILY.folder,
+        &[
+            ("apiserver.storage.yaml", edited),
+            ("apiserver.storage.yamls", OPEN_STORAGE_SCHEMA),
+        ],
+    );
+    let profile = Profile {
+        pods: RenderedConfigmap::new(),
+        assets: RenderedConfigmap::new(),
+        configs: configs(&[
+            ("apiserver.storage.yaml", OPEN_STORAGE_TEMPLATE),
+            ("apiserver.storage.yamls", OPEN_STORAGE_SCHEMA),
+        ]),
+        manifest: Manifest::initial_install("2.3.0", chrono::Utc::now(), Vec::new()),
+    };
+    let server_secrets = HashMap::from([(
+        "apiserver.storage.yaml".to_owned(),
+        HashMap::from([
+            (
+                "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID".to_owned(),
+                "an-id".to_owned(),
+            ),
+            (
+                "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_REGION".to_owned(),
+                "eu-west-1".to_owned(),
+            ),
+        ]),
+    )]);
+
+    let merged = merge(
+        &profile,
+        &SystemValues::default(),
+        input.path(),
+        &server_secrets,
+    )
+    .expect("merges");
+
+    assert_eq!(merged.len(), 1);
+    let secrets: BTreeMap<&str, &str> = merged[0]
+        .secrets
+        .iter()
+        .map(|secret| (secret.key.as_str(), secret.value.as_str()))
+        .collect();
+    assert_eq!(
+        secrets,
+        BTreeMap::from([
+            ("STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID", "an-id"),
+            (
+                "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ENDPOINT_URL",
+                "http://localhost:9000"
+            ),
+        ])
+    );
+    let rendered: Value = serde_yaml::from_str(&merged[0].rendered).expect("yaml");
+    let options = &rendered["storage"]["mounts"][0]["options"];
+    assert_eq!(
+        options["aws_access_key_id"],
+        Value::String("${{secret}}".to_owned())
+    );
+    assert_eq!(
+        options["aws_endpoint_url"],
+        Value::String("${{secret}}".to_owned())
+    );
+    assert!(options.get("aws_region").is_none());
+}
+
+fn shipped(relative: &str) -> String {
+    let path = std::path::PathBuf::from(tm_workspace::workspace_root!()).join(relative);
+    std::fs::read_to_string(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()))
+}
+
+const KMINUS_STORAGE_FILE: &str = "apiserver.storage.yaml";
+
+fn kminus_storage_fused(arguments: &[&str]) -> (Value, BTreeMap<String, String>) {
+    let configs = configs(&[
+        (
+            KMINUS_STORAGE_FILE,
+            &shipped("variant/resources/kprofile/configs/apiserver.storage_kminus.yaml"),
+        ),
+        (
+            "apiserver.storage.yamls",
+            &shipped("variant/resources/kprofile/configs/apiserver.storage.schema_kminus.yaml"),
+        ),
+    ]);
+    let settings: Vec<String> = arguments.iter().map(|text| (*text).to_owned()).collect();
+    let settings = crate::client::tdkserver::injector::parse_settings(&settings).expect("settings");
+    let injected = crate::client::tdkserver::injector::plan(&configs, &settings).expect("injects");
+    let template = &configs[KMINUS_STORAGE_FILE];
+    let input = injected
+        .get(KMINUS_STORAGE_FILE)
+        .cloned()
+        .unwrap_or_else(|| template.clone());
+    let baked = bake_config(KMINUS_STORAGE_FILE, template, &configs).expect("bakes");
+    let schema = schema_of(KMINUS_STORAGE_FILE, &configs)
+        .expect("parses")
+        .expect("kminus has a storage schema");
+    let system = SystemValues {
+        storage_url: Some("file:///home/td/storage/".to_owned()),
+        ..SystemValues::default()
+    };
+    let outcome = resolve_config_file(
+        KMINUS_STORAGE_FILE,
+        &baked,
+        &input,
+        &system,
+        &HashMap::new(),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        &RefCell::new(HashMap::new()),
+        Some(&schema),
+    )
+    .expect("fuses");
+    let rendered: Value = serde_yaml::from_str(&outcome.rendered).expect("yaml");
+    let secrets = outcome
+        .secrets
+        .into_iter()
+        .map(|secret| (secret.key, secret.value))
+        .collect();
+    (rendered, secrets)
+}
+
+#[test]
+fn kminus_storage_defaults_to_local_files_held_as_secrets() {
+    let (rendered, secrets) = kminus_storage_fused(&[]);
+    assert_eq!(
+        secrets,
+        BTreeMap::from([
+            (
+                "STORAGE__MOUNTS__BUNDLES__URI".to_owned(),
+                "file:///home/td/storage/bundles/".to_owned()
+            ),
+            (
+                "STORAGE__MOUNTS__IMAGES__URI".to_owned(),
+                "file:///home/td/storage/images/".to_owned()
+            ),
+            (
+                "STORAGE__MOUNTS__ROOT__URI".to_owned(),
+                "file:///home/td/storage/data/".to_owned()
+            ),
+        ])
+    );
+    for mount in rendered["storage"]["mounts"].as_sequence().expect("mounts") {
+        assert_eq!(mount["uri"], Value::String("${{secret}}".to_owned()));
+        assert_eq!(mount["options"], Value::Mapping(serde_yaml::Mapping::new()));
+    }
+}
+
+#[test]
+fn kminus_storage_goes_cloud_through_a_stub() {
+    let (rendered, secrets) = kminus_storage_fused(&[
+        "apiserver.storage:storage.mounts[id=ROOT].uri=s3://bucket/root/",
+        "apiserver.storage:storage.mounts[id=ROOT].options.aws_region=eu-west-1",
+        "apiserver.storage:storage.mounts[id=ROOT].options.aws_endpoint_url=http://127.0.0.1:9000",
+        "apiserver.storage:storage.mounts[id=BUNDLES].uri=s3://bucket/bundles/",
+    ]);
+    assert_eq!(secrets["STORAGE__MOUNTS__ROOT__URI"], "s3://bucket/root/");
+    assert_eq!(
+        secrets["STORAGE__MOUNTS__ROOT__OPTIONS__AWS_REGION"],
+        "eu-west-1"
+    );
+    assert_eq!(
+        secrets["STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ENDPOINT_URL"],
+        "http://127.0.0.1:9000"
+    );
+    assert_eq!(
+        secrets["STORAGE__MOUNTS__BUNDLES__URI"],
+        "s3://bucket/bundles/"
+    );
+    assert_eq!(
+        secrets["STORAGE__MOUNTS__IMAGES__URI"],
+        "file:///home/td/storage/images/"
+    );
+    assert_eq!(secrets.len(), 5);
+    let images = &rendered["storage"]["mounts"][2];
+    assert_eq!(
+        images["options"],
+        Value::Mapping(serde_yaml::Mapping::new())
+    );
 }

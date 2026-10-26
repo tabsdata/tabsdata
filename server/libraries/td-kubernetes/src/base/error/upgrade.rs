@@ -312,4 +312,6 @@ pub enum UpgradeError {
         minor: String,
         newest: String,
     } = 5372,
+    #[error("Could not read the schema at '{path}': {cause}.")]
+    SchemaReadFailed { path: String, cause: String } = 5373,
 }

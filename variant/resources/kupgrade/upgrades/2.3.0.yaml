@@ -23,6 +23,37 @@ assets:
     venvloader.sh:
       action: replace
 configs:
+  apiserver.storage.schema.yaml:
+    apiserver.storage.schema.yaml:
+      action: replace
+    apiserver.storage.schema_aks.yaml:
+      action: replace
+    apiserver.storage.schema_eks.yaml:
+      action: replace
+    apiserver.storage.schema_fargate.yaml:
+      action: replace
+    apiserver.storage.schema_gke.yaml:
+      action: replace
+    apiserver.storage.schema_kminus.yaml:
+      action: create
+  apiserver.storage.yaml:
+    apiserver.storage_aks.yaml:
+      action: retain
+    apiserver.storage_docker.yaml:
+      action: retain
+    apiserver.storage_eks.yaml:
+      action: retain
+    apiserver.storage_fargate.yaml:
+      action: retain
+    apiserver.storage_gke.yaml:
+      action: retain
+    apiserver.storage_kminus.yaml:
+      action: modify
+      changes:
+        - op: insert-child-if-missing
+          leaf: storage.mounts[*]
+          child: options
+          value: {}
   tabsdata.yaml:
     tabsdata_aks.yaml:
       action: modify

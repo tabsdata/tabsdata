@@ -1362,3 +1362,88 @@ fn an_invalid_derivation_pattern_is_an_error() {
     );
     assert!(outcome.is_err());
 }
+
+const USER_OPTIONS: &str = indoc! {"
+    storage:
+      mounts:
+      - id: ROOT
+        path: /
+        uri: ${{secret}}
+        options:
+          aws_access_key_id: ${{secret}}
+          aws_endpoint_url: ${{secret}}
+    limits:
+      size: 1
+"};
+
+#[test]
+fn an_upgrade_keeps_the_options_a_user_added_or_removed() {
+    let (rendered, touched) = applied(
+        USER_OPTIONS,
+        &[operation(
+            "limits.size",
+            serde_yaml::Value::from(1),
+            serde_yaml::Value::from(2),
+        )],
+    );
+    assert!(touched);
+    let before: serde_yaml::Value = serde_yaml::from_str(USER_OPTIONS).expect("yaml");
+    let after: serde_yaml::Value = serde_yaml::from_str(&rendered).expect("yaml");
+    assert_eq!(
+        after["storage"]["mounts"][0]["options"],
+        before["storage"]["mounts"][0]["options"]
+    );
+    assert_eq!(after["limits"]["size"], serde_yaml::Value::from(2));
+}
+
+const MOUNTS_WITHOUT_OPTIONS: &str = indoc! {"
+    storage:
+      mounts:
+      - id: ROOT
+        uri: file:///data/
+      - id: BUNDLES
+        uri: file:///bundles/
+        options:
+          aws_region: eu-west-1
+"};
+
+fn empty_mapping() -> serde_yaml::Value {
+    serde_yaml::Value::Mapping(serde_yaml::Mapping::new())
+}
+
+#[test]
+fn a_child_is_added_to_every_item_that_lacks_it() {
+    let (rendered, touched) = applied(
+        MOUNTS_WITHOUT_OPTIONS,
+        &[child("storage.mounts[*]", "options", empty_mapping())],
+    );
+    assert!(touched);
+    let document: serde_yaml::Value = serde_yaml::from_str(&rendered).expect("yaml");
+    let mounts = &document["storage"]["mounts"];
+    assert_eq!(mounts[0]["options"], empty_mapping());
+    assert_eq!(mounts[1]["options"]["aws_region"], "eu-west-1");
+}
+
+#[test]
+fn every_item_already_holding_the_child_is_left_alone() {
+    let (once, _) = applied(
+        MOUNTS_WITHOUT_OPTIONS,
+        &[child("storage.mounts[*]", "options", empty_mapping())],
+    );
+    let (twice, touched) = applied(
+        &once,
+        &[child("storage.mounts[*]", "options", empty_mapping())],
+    );
+    assert!(!touched);
+    assert_eq!(once, twice);
+}
+
+#[test]
+fn every_item_of_a_missing_sequence_is_no_item() {
+    let (rendered, touched) = applied(
+        "storage: {}\n",
+        &[child("storage.mounts[*]", "options", empty_mapping())],
+    );
+    assert!(!touched);
+    assert_eq!(rendered, "storage: {}\n");
+}

@@ -432,3 +432,44 @@ fn a_held_value_of_a_retired_format_is_not_usable() {
     ));
     assert!(usable(Generator::JwtSigningKey, "held-key"));
 }
+
+const ADDED_OPTIONS: &str = indoc! {"
+    storage:
+      mounts:
+      - id: ROOT
+        path: /
+        uri: file:///data/
+        options:
+          aws_access_key_id: ${{secret}}
+          aws_endpoint_url: ${{secret}}
+"};
+
+#[test]
+fn options_a_user_added_settle_against_their_secret_keys() {
+    let input = Settlement {
+        config: "apiserver.storage.yaml",
+        config_yaml: ADDED_OPTIONS,
+        secret: "td-app-apiserver-secret-config-apiserver.storage.yaml",
+        actual_keys: Some(keys(&[
+            "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID",
+            "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ENDPOINT_URL",
+        ])),
+    };
+    settle_secret_keys(&input).expect("keys match");
+}
+
+#[test]
+fn a_secret_key_left_over_from_a_removed_option_fails() {
+    let input = Settlement {
+        config: "apiserver.storage.yaml",
+        config_yaml: ADDED_OPTIONS,
+        secret: "td-app-apiserver-secret-config-apiserver.storage.yaml",
+        actual_keys: Some(keys(&[
+            "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID",
+            "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ENDPOINT_URL",
+            "STORAGE__MOUNTS__ROOT__OPTIONS__AWS_REGION",
+        ])),
+    };
+    let error = settle_secret_keys(&input).expect_err("a removed option leaves an extra key");
+    assert!(matches!(error, SecretError::SettlementKeysMismatch { .. }));
+}

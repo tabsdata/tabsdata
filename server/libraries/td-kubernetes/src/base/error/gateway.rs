@@ -131,4 +131,9 @@ pub enum ResolverError {
     ConfigParseFailed { cause: String } = 5035,
     #[error("Could not serialize revealed configmap content as YAML: {cause}.")]
     ConfigSerializeFailed { cause: String } = 5036,
+    #[error(
+        "The secret value at '{path}' embeds '{token}'; a secret value can embed only \
+         placeholders resolved at creation, such as '${{{{system:...}}}}'."
+    )]
+    SecretValuePlaceholderUnsupported { path: String, token: String } = 5037,
 }

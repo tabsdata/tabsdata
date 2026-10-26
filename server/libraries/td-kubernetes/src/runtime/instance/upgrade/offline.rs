@@ -42,7 +42,7 @@ fn bundle_variants(kprofile_folder: &Path, folder: &str, file: &str) -> Vec<Stri
     variants
 }
 
-fn steps_of(spec: &Spec, kprofile_folder: &Path) -> CommandResult<Vec<Step>> {
+pub(super) fn steps_of(spec: &Spec, kprofile_folder: &Path) -> CommandResult<Vec<Step>> {
     let mut steps = Vec::new();
     for (family, groups) in spec.families() {
         let folder = family_of(family)?.folder;

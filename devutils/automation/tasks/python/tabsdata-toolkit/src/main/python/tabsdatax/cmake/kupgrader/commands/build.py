@@ -9,6 +9,7 @@ import rich_click as click
 
 from tabsdatax.cmake.kupgrader.common.assets import copy_assets
 from tabsdatax.cmake.kupgrader.common.commit import commit
+from tabsdatax.cmake.kupgrader.common.ownership import ownership_problems
 from tabsdatax.cmake.kupgrader.common.pipeline import (
     generate,
     shipped_content_folder,
@@ -84,6 +85,22 @@ def perform_build(root_folder: Path) -> None:
         log.error(
             "Released templates no longer resolve as their recorded digests say. "
             "Explain the drift before touching the digests."
+        )
+        raise SystemExit(1)
+
+    problems = ownership_problems(
+        binary,
+        staged,
+        generation.version,
+        generation.preparation.previous_kprofile_folder,
+        generation.preparation.current_kprofile_folder,
+    )
+    for problem in problems:
+        log.error(problem)
+    if problems:
+        log.error(
+            "The generated upgrader changes keys that belong to the user. Nothing was "
+            "written to the repository."
         )
         raise SystemExit(1)
 
