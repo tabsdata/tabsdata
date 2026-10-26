@@ -2,7 +2,13 @@
 Copyright 2025 Tabsdata Inc.
 --> 
 
-![Tabsdata](assets/images/tabsdata.png)
+<div align="center">
+    <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="assets/images/tabsdata-logo-for-dark-theme.svg">
+        <source media="(prefers-color-scheme: light)" srcset="assets/images/tabsdata-logo-for-light-theme.svg">
+        <img src="assets/images/tabsdata-logo-adaptive.svg" alt="Tabsdata" width="500">
+    </picture>
+</div>
 
 <div align="center">
     <a href="https://tabsdata.com">Tabsdata</a> |
