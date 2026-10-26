@@ -1269,3 +1269,16 @@ def test_table_data_view_options_need_the_table_format(tmp_path, options, named)
         result.output.split()
     )
     client.sample_table.assert_not_called()
+
+
+def test_fn_patches_names_its_author_only_from_defined_by(tmp_path):
+    client = _client()
+    row = {**_PATCHES[0], "defined_by": None, "defined_by_id": "UID_AUTHOR"}
+    _wire_listing(client, "list_function_patches", [row])
+    result = _invoke(
+        ["fn", "patches", "-n", "fn-a", "-c", "coll-a"],
+        client=client,
+        tmp_path=tmp_path,
+    )
+    assert result.exit_code == 0, result.output
+    assert "UID_AUTHOR" not in result.output
