@@ -28,6 +28,15 @@ def local_location(path: Path) -> transporter2.Location:
     return transporter2.Location(uri=path.absolute().as_uri())
 
 
+def env_configs(
+    extra_config_envs: Mapping[str, str] | None,
+) -> dict[str, transporter2.TransporterEnv]:
+    return {
+        key: transporter2.TransporterEnv(variable)
+        for key, variable in (extra_config_envs or {}).items()
+    }
+
+
 def _copied_file_to_dict(copied: transporter2.CopiedFile) -> dict:
     return {
         "from": copied.from_,
@@ -136,6 +145,7 @@ class TransporterHandler2(TransporterHandler):
         access_key_env: str,
         secret_key_env: str,
         region_env: str | None = None,
+        extra_config_envs: Mapping[str, str] | None = None,
     ) -> transporter2.TransporterS3:
         return transporter2.TransporterS3(
             url=uri,
@@ -146,23 +156,33 @@ class TransporterHandler2(TransporterHandler):
                 if region_env is not None
                 else None
             ),
+            extra_configs=env_configs(extra_config_envs),
         )
 
     def gcs_location(
-        self, uri: str, service_account_key_env: str
+        self,
+        uri: str,
+        service_account_key_env: str,
+        extra_config_envs: Mapping[str, str] | None = None,
     ) -> transporter2.TransporterGCS:
         return transporter2.TransporterGCS(
             url=uri,
             service_account_key=transporter2.TransporterEnv(service_account_key_env),
+            extra_configs=env_configs(extra_config_envs),
         )
 
     def azure_location(
-        self, uri: str, account_name_env: str, account_key_env: str
+        self,
+        uri: str,
+        account_name_env: str,
+        account_key_env: str,
+        extra_config_envs: Mapping[str, str] | None = None,
     ) -> transporter2.TransporterAzure:
         return transporter2.TransporterAzure(
             url=uri,
             account_name=transporter2.TransporterEnv(account_name_env),
             account_key=transporter2.TransporterEnv(account_key_env),
+            extra_configs=env_configs(extra_config_envs),
         )
 
     def local_location(self, uri: str) -> transporter2.TransporterLocalFile:

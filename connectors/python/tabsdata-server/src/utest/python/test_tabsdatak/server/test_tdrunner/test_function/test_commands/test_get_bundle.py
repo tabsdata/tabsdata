@@ -33,7 +33,6 @@ class Paths:
     request: Path
     bundle_dir: Path
     bundle_archive: Path
-    storage_config: Path
     store: Path
     liveness: Path
 
@@ -42,16 +41,10 @@ class Paths:
 def paths(tmp_path: Path) -> Paths:
     store = tmp_path / "store"
     store.mkdir()
-    storage_config = tmp_path / "config" / "apiserver.storage.yaml"
-    storage_config.parent.mkdir()
-    storage_config.write_text(
-        yaml.safe_dump({"storage": {"mounts": [{"id": MOUNT, "uri": store.as_uri()}]}}),
-    )
     return Paths(
         request=tmp_path / "request.yaml",
         bundle_dir=tmp_path / "bundle",
         bundle_archive=tmp_path / "stage" / "bundle.tar.zst",
-        storage_config=storage_config,
         store=store,
         liveness=tmp_path / "live",
     )
@@ -71,8 +64,6 @@ def set_arguments(monkeypatch: pytest.MonkeyPatch, paths: Paths, responder_url: 
             str(paths.bundle_archive),
             "--liveness",
             str(paths.liveness),
-            "--storage-config",
-            str(paths.storage_config),
             "--responder-url",
             responder_url,
             "--responder-method",
@@ -85,9 +76,10 @@ def set_arguments(monkeypatch: pytest.MonkeyPatch, paths: Paths, responder_url: 
     )
 
 
-def write_request(path: Path, bundle: Path, mount: str | None = MOUNT) -> None:
+def write_request(path: Path, bundle: Path | str, mount: str | None = MOUNT) -> None:
+    uri = bundle.as_uri() if isinstance(bundle, Path) else bundle
     info = info_payload(
-        function_bundle={"uri": bundle.as_uri(), "env_prefix": mount},
+        function_bundle={"uri": uri, "env_prefix": mount},
     )
     path.write_text(yaml.safe_dump({"Function": {"info": info}}))
 
@@ -133,39 +125,24 @@ def test_main_malformed_request_returns_bad_request(monkeypatch, paths, http_ok_
     assert main() == BadRequestError.exit_code
 
 
-def test_main_undeclared_mount_returns_storage_configuration_error(
+def test_main_cloud_bundle_without_mount_options_returns_storage_configuration_error(
     monkeypatch,
     paths,
     http_ok_url,
 ):
-    bundle = make_tarball(paths.store / "bundle.tar.zst", {"a.py": b"pass"})
-    write_request(paths.request, bundle, mount="BUNDLES")
+    write_request(paths.request, "s3://bucket/bundle.tar.zst")
     set_arguments(monkeypatch, paths, http_ok_url)
     assert main() == StorageConfigurationError.exit_code
 
 
-def test_main_unreadable_storage_configuration_returns_storage_configuration_error(
+def test_main_unknown_mount_option_returns_storage_configuration_error(
     monkeypatch,
     paths,
     http_ok_url,
 ):
     bundle = make_tarball(paths.store / "bundle.tar.zst", {"a.py": b"pass"})
     write_request(paths.request, bundle)
-    paths.storage_config.write_text("storage: { unclosed")
-    set_arguments(monkeypatch, paths, http_ok_url)
-    assert main() == StorageConfigurationError.exit_code
-
-
-def test_main_unset_mount_secret_returns_storage_configuration_error(
-    monkeypatch,
-    paths,
-    http_ok_url,
-):
-    bundle = make_tarball(paths.store / "bundle.tar.zst", {"a.py": b"pass"})
-    write_request(paths.request, bundle)
-    paths.storage_config.write_text(
-        yaml.safe_dump({"storage": {"mounts": [{"id": MOUNT, "uri": "${{secret}}"}]}}),
-    )
+    monkeypatch.setenv(f"SECRETS__STORAGE__MOUNTS__{MOUNT}__OPTIONS__BOGUS", "x")
     set_arguments(monkeypatch, paths, http_ok_url)
     assert main() == StorageConfigurationError.exit_code
 

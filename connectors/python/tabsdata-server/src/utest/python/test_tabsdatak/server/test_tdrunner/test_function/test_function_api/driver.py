@@ -184,7 +184,6 @@ class Driver:
             request=self.request,
             bundle_dir=self.path("bundle"),
             bundle_archive=self.path("shuttle/bundle.tar.zst"),
-            storage_config=self.storage,
         )
         self.step(
             prep_localize_state,

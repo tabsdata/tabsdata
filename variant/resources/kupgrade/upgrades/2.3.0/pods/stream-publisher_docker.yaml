@@ -256,8 +256,6 @@ spec:
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/folder
             - --bundle-archive
             - $(CONTAINER_ROOT)/tabsdata/shared/bundle/archive/bundle.tar.zst
-            - --storage-config
-            - $(CONTAINER_ROOT)/tabsdata/config/apiserver.storage.yaml
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -506,8 +504,6 @@ spec:
         - name: config-get-bundle
           projected:
             sources:
-              - configMap:
-                  name: td-app-apiserver-config-apiserver.storage.yaml
               - configMap:
                   name: td-app-tabsdata-config-tabsdata.log.py.yaml
               - configMap:

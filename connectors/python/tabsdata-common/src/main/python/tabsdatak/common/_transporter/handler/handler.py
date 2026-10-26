@@ -61,18 +61,28 @@ class TransporterHandler(ABC):
         access_key_env: str,
         secret_key_env: str,
         region_env: str | None = None,
+        extra_config_envs: Mapping[str, str] | None = None,
     ) -> Any:
         raise NotImplementedError(
             f"{type(self).__name__} does not build provider locations."
         )
 
-    def gcs_location(self, uri: str, service_account_key_env: str) -> Any:
+    def gcs_location(
+        self,
+        uri: str,
+        service_account_key_env: str,
+        extra_config_envs: Mapping[str, str] | None = None,
+    ) -> Any:
         raise NotImplementedError(
             f"{type(self).__name__} does not build provider locations."
         )
 
     def azure_location(
-        self, uri: str, account_name_env: str, account_key_env: str
+        self,
+        uri: str,
+        account_name_env: str,
+        account_key_env: str,
+        extra_config_envs: Mapping[str, str] | None = None,
     ) -> Any:
         raise NotImplementedError(
             f"{type(self).__name__} does not build provider locations."

@@ -235,3 +235,55 @@ def test_read_turns_scalars_into_text(tmp_path: Path):
         {"id": "ROOT", "uri": "s3://root", "options": {"allow_http": True, "port": 9}},
     )
     assert mounts.read(config, "ROOT").options == {"allow_http": "true", "port": "9"}
+
+
+def test_the_scan_finds_every_option_of_a_mount():
+    environment = {
+        option_variable("ROOT", "aws_access_key_id"): "k",
+        option_variable("ROOT", "aws_endpoint_url"): "http://127.0.0.1:9000",
+        option_variable("BUNDLES", "aws_region"): "eu-west-1",
+        mounts.secret_variable("storage", "mounts", "ROOT", "uri"): "s3://b",
+        "AWS_REGION": "us-east-1",
+    }
+    assert mounts.mount_option_variables("ROOT", environment) == {
+        "aws_access_key_id": option_variable("ROOT", "aws_access_key_id"),
+        "aws_endpoint_url": option_variable("ROOT", "aws_endpoint_url"),
+    }
+
+
+def test_the_scan_encodes_the_mount_like_the_secret_keys():
+    environment = {option_variable("my-mount", "region"): "eu-west-1"}
+    assert mounts.mount_option_variables("my-mount", environment) == {
+        "region": "SECRETS__STORAGE__MOUNTS__MY_MOUNT__OPTIONS__REGION"
+    }
+
+
+def test_a_mount_without_variables_has_no_options():
+    assert mounts.mount_option_variables("ROOT", {}) == {}
+
+
+def test_an_environment_mount_resolves_canonical_options(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv(option_variable("ROOT", "access_key_id"), " k ")
+    monkeypatch.setenv(option_variable("ROOT", "aws_secret_access_key"), "s")
+    monkeypatch.setenv(option_variable("ROOT", "endpoint"), "http://127.0.0.1:9000")
+    declaration = mounts.EnvironmentMountDeclaration(id="ROOT")
+    assert declaration.storage_options("s3://b/x") == {
+        "aws_access_key_id": "k",
+        "aws_secret_access_key": "s",
+        "aws_endpoint": "http://127.0.0.1:9000",
+    }
+
+
+def test_an_environment_mount_without_credentials_fails(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv(option_variable("ROOT", "aws_region"), "eu-west-1")
+    with pytest.raises(MountError, match=mounts.S3_SIGNATURE_REQUIREMENT):
+        mounts.EnvironmentMountDeclaration(id="ROOT").storage_options("s3://b/x")
+
+
+def test_a_local_environment_mount_needs_no_options():
+    declaration = mounts.EnvironmentMountDeclaration(id="ROOT")
+    assert declaration.storage_options("file:///data/x") == {}

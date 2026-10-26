@@ -215,7 +215,7 @@ def _construct_ctx_for(stage_uri: str, tmp_path: Path) -> StreamerPluginCtx:
         function_id="F-1",
         function="stream_people",
         function_version_id="fv-1",
-        function_stage=Location(uri=stage_uri),
+        function_stage=Location(uri=stage_uri, env_prefix="ROOT"),
         thresholds=StreamThresholds(batch=BatchThresholds(max_secs=300)),
         tabsdata_version=_TABSDATA_VERSION,
     )
@@ -224,6 +224,8 @@ def _construct_ctx_for(stage_uri: str, tmp_path: Path) -> StreamerPluginCtx:
 def _cloud_find(monkeypatch, outcome) -> None:
     """Make the transporter's find for the cloud stage report nothing, or
     raise ``outcome`` when it is an exception."""
+    for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"):
+        monkeypatch.setenv(f"SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__{key}", "v")
     handler = TransporterHandler2()
 
     def fake_execute(request, work_dir, environment=None, extra_args=()):

@@ -521,11 +521,15 @@ def test_build_manifest_stage_conn_file_scheme_resolves_localfile():
     assert conn.gcs is None
 
 
-def test_build_manifest_stage_conn_s3_resolves_to_object_store_backend():
+def test_build_manifest_stage_conn_s3_resolves_to_object_store_backend(monkeypatch):
     """Cloud schemes resolve (via endpoint.py) to a prebuilt StageBackend
     carried on `stage_backend`; backend_for_conn returns it as-is. The
     stage-relative path is appended to the stage-root URL."""
-    conn = _build_manifest_stage_conn(Location(uri="s3://bucket/stage"))
+    for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"):
+        monkeypatch.setenv(f"SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__{key}", "v")
+    conn = _build_manifest_stage_conn(
+        Location(uri="s3://bucket/stage", env_prefix="ROOT")
+    )
     assert conn.local is None
     backend = conn.stage_backend
     assert backend is not None

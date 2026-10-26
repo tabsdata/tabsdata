@@ -18,11 +18,12 @@ GENERATION = 2
 INFO = "get-bundle — download the function bundle and extract it"
 MAN = (
     "get-bundle --request <PATH> --bundle-dir <PATH> --bundle-archive <PATH> "
-    "--storage-config <PATH> --liveness <PATH>\n\n"
+    "--liveness <PATH>\n\n"
     "Reads the bundle location from --request, downloads the bundle to "
-    "--bundle-archive with the credentials of its storage mount in "
-    "--storage-config, and extracts the archive into --bundle-dir. The "
-    "caller owns the lifecycle of every path."
+    "--bundle-archive with the options of its storage mount, read from the "
+    "SECRETS__STORAGE__MOUNTS__<MOUNT>__OPTIONS__* environment variables, and "
+    "extracts the archive into --bundle-dir. The caller owns the lifecycle of "
+    "every path."
 )
 
 
@@ -48,12 +49,6 @@ def build_command_parser() -> argparse.ArgumentParser:
         "--bundle-archive",
         required=True,
         help="Path to download the bundle archive to.",
-    )
-    parser.add_argument(
-        "--storage-config",
-        required=True,
-        dest="storage_config",
-        help="Path to the storage configuration file.",
     )
     return parser
 

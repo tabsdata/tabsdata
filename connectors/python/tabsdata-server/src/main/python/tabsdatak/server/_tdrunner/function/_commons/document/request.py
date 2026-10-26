@@ -12,9 +12,9 @@ from pydantic import model_validator
 
 from tabsdatak.common._configuration.document.error import DocumentException
 from tabsdatak.common._configuration.document.loader import DocumentModel, load
-from tabsdatak.common._configuration.model.storage import StorageConfiguration
 from tabsdatak.common._storage.mounts import (
     AnonymousMountDeclaration,
+    EnvironmentMountDeclaration,
     MountDeclaration,
 )
 from tabsdatak.error import ErrorCode
@@ -69,12 +69,11 @@ class Location(DocumentModel):
     uri: str
     env_prefix: str | None = None
 
-    def mount_declaration(self, storage_config: Path) -> MountDeclaration:
+    def mount_declaration(self) -> MountDeclaration:
         if self.env_prefix is None:
             declaration = AnonymousMountDeclaration()
         else:
-            configuration = load(storage_config, StorageConfiguration)
-            declaration = configuration.mount(self.env_prefix).declaration()
+            declaration = EnvironmentMountDeclaration(id=self.env_prefix)
         return declaration
 
 

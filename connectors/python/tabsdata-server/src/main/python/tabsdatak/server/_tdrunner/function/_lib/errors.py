@@ -31,7 +31,8 @@ Exit-code semantics (per ``docs/01-CommandBasics.md``):
 * ``6``       -- bad storage configuration (:class:`BadStorageConfigError`).
 * ``7``       -- the apiserver answered a status report as stale
   (:class:`StaleReportError`); nothing is reported Failed.
-* ``8..9``    -- reserved.
+* ``8``       -- bad stream state (:class:`BadStreamStateError`).
+* ``9``       -- reserved.
 * ``10..``    -- command-specific (see ``commands/<command>/error.py``).
 """
 
@@ -50,6 +51,7 @@ EXIT_INCONSISTENT: int = 4
 EXIT_PREMATURE: int = 5
 EXIT_BAD_CONFIG: int = 6
 EXIT_STALE_REPORT: int = 7
+EXIT_BAD_STREAM_STATE: int = 8
 COMMAND_SPECIFIC_MIN_EXIT_CODE: int = 10
 
 
@@ -187,6 +189,8 @@ class BadStreamStateError(CommandRuntimeException):
     """The stream state a streamer resumes from could not be read, or is not
     what the streamer writes."""
 
+    exit_code = EXIT_BAD_STREAM_STATE
+
 
 class ManifestMismatchError(CommandRuntimeException):
     """Manifest is structurally valid but disagrees with the
@@ -300,3 +304,9 @@ class CommandErrorCode(ErrorCode):
         "The apiserver answered the {status} report as stale; the attempt was "
         "superseded or had already ended, so this worker stops.",
     )
+    CMD_9 = ErrorDef(
+        BadStorageConfigError,
+        "The options of the storage mount '{mount}' cannot be used: {detail}.",
+    )
+    # Raised by ``_lib.stage_backend`` when a mount option is unknown, or one the
+    # transporter requires is missing.

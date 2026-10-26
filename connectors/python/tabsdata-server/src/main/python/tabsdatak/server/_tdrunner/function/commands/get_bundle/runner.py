@@ -12,7 +12,6 @@ from pathlib import Path
 import obstore.exceptions
 import zstandard
 
-from tabsdatak.common._configuration.document.error import DocumentException
 from tabsdatak.common._storage import transfer
 from tabsdatak.common._storage.mounts import MountError
 from tabsdatak.common._storage.transfer import StorageLocation, TransferError
@@ -28,14 +27,14 @@ from tabsdatak.server._tdrunner.function.commands.get_bundle.error import (
 logger = logging.getLogger(__name__)
 
 
-def storage_location(location: Location, storage_config: Path) -> StorageLocation:
+def storage_location(location: Location) -> StorageLocation:
     try:
-        declaration = location.mount_declaration(storage_config)
+        declaration = location.mount_declaration()
         return StorageLocation(
             uri=location.uri,
             options=declaration.storage_options(location.uri),
         )
-    except (DocumentException, MountError) as error:
+    except MountError as error:
         raise GetBundleErrorCode.GB_2.exception(cause=error, detail=str(error))
 
 
@@ -58,7 +57,6 @@ def run(arguments: argparse.Namespace) -> int:
     request_path = Path(arguments.request)
     bundle_dir = Path(arguments.bundle_dir)
     bundle_archive = Path(arguments.bundle_archive)
-    storage_config = Path(arguments.storage_config)
 
     logger.info("Getting the function bundle")
     request = AnyRequest.load(request_path, GetBundleErrorCode.GB_1)
@@ -66,7 +64,7 @@ def run(arguments: argparse.Namespace) -> int:
     logger.debug(
         f"Bundle {bundle.uri} goes to archive {bundle_archive} and folder {bundle_dir}"
     )
-    fetch(storage_location(bundle, storage_config), bundle_archive)
+    fetch(storage_location(bundle), bundle_archive)
     logger.info(f"Extracting the bundle archive into {bundle_dir}")
     extract(bundle_archive, bundle_dir)
     logger.info("Function bundle ready")

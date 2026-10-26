@@ -219,7 +219,6 @@ _STORAGE_CONFIG_COMMANDS = {
     "prep-localize-state",
     "prep-upload-state",
     "prep-upload-tables",
-    "get-bundle",
 }
 
 

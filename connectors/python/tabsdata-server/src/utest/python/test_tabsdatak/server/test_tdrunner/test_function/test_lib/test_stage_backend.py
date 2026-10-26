@@ -29,10 +29,14 @@ from tabsdatak.server._tdrunner.function._lib.endpoint import (
     UnsupportedSchemeError,
     endpoint_from_location,
 )
-from tabsdatak.server._tdrunner.function._lib.errors import UnexpectedError
+from tabsdatak.server._tdrunner.function._lib.errors import (
+    BadStorageConfigError,
+    CommandErrorCode,
+    UnexpectedError,
+)
 from tabsdatak.server._tdrunner.function._lib.stage_backend import (
-    _mount_endpoint,
     location_from_endpoint,
+    mount_location,
     stage_backend_from_location,
 )
 
@@ -42,6 +46,19 @@ pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 # caller drives it with; these tests pin the legacy (v1) handler so the
 # asserted location types are the ``transporter1.Transporter*`` shapes.
 HANDLER = TransporterHandler1()
+
+S3_OPTIONS = ("aws_access_key_id", "aws_secret_access_key", "aws_region")
+AZURE_OPTIONS = ("azure_storage_account_name", "azure_storage_account_key")
+GCS_OPTIONS = ("google_service_account_key",)
+
+
+def option_variable(mount: str, key: str) -> str:
+    return f"SECRETS__STORAGE__MOUNTS__{mount}__OPTIONS__{key.upper()}"
+
+
+def set_options(monkeypatch, mount: str, keys) -> None:
+    for key in keys:
+        monkeypatch.setenv(option_variable(mount, key), f"value-of-{key}")
 
 
 # --- location_from_endpoint -----------------------------------------------
@@ -96,7 +113,8 @@ def test_azure_gcs_local_endpoints_build_their_locations():
 # --- stage_backend_from_location ------------------------------------------
 
 
-def test_stage_backend_from_s3_location():
+def test_stage_backend_from_s3_location(monkeypatch):
+    set_options(monkeypatch, "PFX", S3_OPTIONS)
     backend = stage_backend_from_location(
         Location(uri="s3://bkt/stage/f", env_prefix="PFX")
     )
@@ -155,8 +173,9 @@ def _env(name: str) -> transporter1.TransporterEnv:
     return transporter1.TransporterEnv(name)
 
 
-def _build_for_mode(uri: str, mode: int, monkeypatch):
+def _build_for_mode(uri: str, mode: int, monkeypatch, keys=()):
     monkeypatch.setattr(stage_backend, "TRANSPORTER_MODE", mode)
+    set_options(monkeypatch, _MOUNT, keys)
     backend = stage_backend_from_location(Location(uri=uri, env_prefix=_MOUNT))
     # HANDLER (v1) pins the asserted location types; build_location only
     # varies the credential env-var *names* by mode, not the handler.
@@ -172,7 +191,7 @@ def test_s3_credentials_use_endpoint_scheme_in_mode_1(monkeypatch):
 
 
 def test_s3_credentials_use_mounts_scheme_in_mode_2(monkeypatch):
-    loc = _build_for_mode("s3://bkt/stage", 2, monkeypatch)
+    loc = _build_for_mode("s3://bkt/stage", 2, monkeypatch, S3_OPTIONS)
     assert isinstance(loc, transporter1.TransporterS3)
     assert loc.access_key == _env(
         "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID"
@@ -189,7 +208,7 @@ def test_azure_credentials_follow_transporter_mode(monkeypatch):
     assert legacy.account_name == _env("ROOT_AZURE_ACCOUNT_NAME")
     assert legacy.account_key == _env("ROOT_AZURE_ACCOUNT_KEY")
 
-    mounts = _build_for_mode("az://c/x", 2, monkeypatch)
+    mounts = _build_for_mode("az://c/x", 2, monkeypatch, AZURE_OPTIONS)
     assert mounts.account_name == _env(
         "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AZURE_STORAGE_ACCOUNT_NAME"
     )
@@ -203,7 +222,7 @@ def test_gcs_credentials_follow_transporter_mode(monkeypatch):
     assert isinstance(legacy, transporter1.TransporterGCS)
     assert legacy.service_account_key == _env("ROOT_GCP_SERVICE_ACCOUNT_KEY")
 
-    mounts = _build_for_mode("gs://b/x", 2, monkeypatch)
+    mounts = _build_for_mode("gs://b/x", 2, monkeypatch, GCS_OPTIONS)
     assert mounts.service_account_key == _env(
         "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__GOOGLE_SERVICE_ACCOUNT_KEY"
     )
@@ -219,40 +238,82 @@ def test_build_location_rejects_unknown_transporter_mode(monkeypatch):
     assert "99" in str(excinfo.value)
 
 
-def test_mount_endpoint_rekeys_each_provider_to_mounts_scheme():
-    s3 = _mount_endpoint(
-        endpoint_from_location(Location(uri="s3://b/x", env_prefix=_MOUNT)), _MOUNT
+def test_every_mount_option_reaches_the_location(monkeypatch):
+    set_options(
+        monkeypatch, _MOUNT, (*S3_OPTIONS, "aws_endpoint_url", "aws_allow_http")
     )
-    assert s3.configs.access_key == EnvRef(
-        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ACCESS_KEY_ID"
+    endpoint = endpoint_from_location(Location(uri="s3://b/x", env_prefix=_MOUNT))
+    location = mount_location(endpoint, _MOUNT, "m", TransporterHandler2())
+    assert location.access_key == transporter2.TransporterEnv(
+        option_variable(_MOUNT, "aws_access_key_id")
     )
-    assert s3.configs.secret_key == EnvRef(
-        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_SECRET_ACCESS_KEY"
+    assert location.region == transporter2.TransporterEnv(
+        option_variable(_MOUNT, "aws_region")
     )
-    assert s3.configs.region == EnvRef(
-        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_REGION"
-    )
+    assert location.extra_configs == {
+        "aws_allow_http": transporter2.TransporterEnv(
+            option_variable(_MOUNT, "aws_allow_http")
+        ),
+        "aws_endpoint_url": transporter2.TransporterEnv(
+            option_variable(_MOUNT, "aws_endpoint_url")
+        ),
+    }
 
-    az = _mount_endpoint(
-        endpoint_from_location(Location(uri="az://c/x", env_prefix=_MOUNT)), _MOUNT
-    )
-    assert az.configs.account_name == EnvRef(
-        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AZURE_STORAGE_ACCOUNT_NAME"
-    )
-    assert az.configs.account_key == EnvRef(
-        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AZURE_STORAGE_ACCOUNT_KEY"
-    )
 
-    gcs = _mount_endpoint(
-        endpoint_from_location(Location(uri="gs://b/x", env_prefix=_MOUNT)), _MOUNT
+def test_a_friendly_option_name_lands_in_its_field(monkeypatch):
+    set_options(monkeypatch, _MOUNT, ("access_key_id", "secret_access_key", "region"))
+    endpoint = endpoint_from_location(Location(uri="s3://b/x", env_prefix=_MOUNT))
+    location = mount_location(endpoint, _MOUNT, "m", TransporterHandler2())
+    assert location.region == transporter2.TransporterEnv(
+        option_variable(_MOUNT, "region")
     )
-    assert gcs.configs.service_account_key == EnvRef(
-        name="SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__GOOGLE_SERVICE_ACCOUNT_KEY"
-    )
+    assert location.extra_configs == {}
 
-    # LocalFileEndpoint has no credentials to re-key -> returned unchanged.
-    local = LocalFileEndpoint(url="file:///s")
-    assert _mount_endpoint(local, _MOUNT) is local
+
+def test_azure_and_gcs_extra_options_reach_the_location(monkeypatch):
+    set_options(monkeypatch, _MOUNT, (*AZURE_OPTIONS, "azure_endpoint", "allow_http"))
+    azure = mount_location(
+        endpoint_from_location(Location(uri="az://c/x", env_prefix=_MOUNT)),
+        _MOUNT,
+        "m",
+        TransporterHandler2(),
+    )
+    assert set(azure.extra_configs) == {"azure_endpoint", "azure_allow_http"}
+
+    monkeypatch.delenv(option_variable(_MOUNT, "azure_endpoint"))
+    for key in AZURE_OPTIONS:
+        monkeypatch.delenv(option_variable(_MOUNT, key))
+    set_options(monkeypatch, _MOUNT, GCS_OPTIONS)
+    gcs = mount_location(
+        endpoint_from_location(Location(uri="gs://b/x", env_prefix=_MOUNT)),
+        _MOUNT,
+        "m",
+        TransporterHandler2(),
+    )
+    assert set(gcs.extra_configs) == {"google_allow_http"}
+
+
+def test_a_missing_required_option_is_a_storage_error(monkeypatch):
+    set_options(monkeypatch, _MOUNT, ("aws_access_key_id", "aws_region"))
+    endpoint = endpoint_from_location(Location(uri="s3://b/x", env_prefix=_MOUNT))
+    with pytest.raises(BadStorageConfigError) as raised:
+        mount_location(endpoint, _MOUNT, "m", TransporterHandler2())
+    assert raised.value.api_error is CommandErrorCode.CMD_9
+    assert "aws_secret_access_key" in str(raised.value)
+
+
+def test_an_unknown_option_is_a_storage_error(monkeypatch):
+    set_options(monkeypatch, _MOUNT, (*S3_OPTIONS, "azure_endpoint"))
+    endpoint = endpoint_from_location(Location(uri="s3://b/x", env_prefix=_MOUNT))
+    with pytest.raises(BadStorageConfigError):
+        mount_location(endpoint, _MOUNT, "m", TransporterHandler2())
+
+
+def test_a_local_endpoint_needs_no_option():
+    location = mount_location(
+        LocalFileEndpoint(url="file:///s"), _MOUNT, "m", TransporterHandler2()
+    )
+    assert location.url == "file:///s/m"
 
 
 # --- credentials reach the transporter request (regression) ---------------
@@ -283,6 +344,7 @@ def _capturing_handler2(monkeypatch) -> dict:
 
 def test_upload_request_carries_mounts_scheme_creds(tmp_path, monkeypatch):
     captured = _capturing_handler2(monkeypatch)
+    set_options(monkeypatch, _MOUNT, (*S3_OPTIONS, "aws_endpoint_url"))
     backend = stage_backend_from_location(
         Location(uri="s3://bkt/stage", env_prefix=_MOUNT)
     )
@@ -305,11 +367,16 @@ def test_upload_request_carries_mounts_scheme_creds(tmp_path, monkeypatch):
         target.configs["region"]
         == "env:SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_REGION"
     )
+    assert (
+        target.configs["aws_endpoint_url"]
+        == "env:SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_ENDPOINT_URL"
+    )
     assert captured["env"] is None
 
 
 def test_next_after_request_carries_mounts_scheme_creds(tmp_path, monkeypatch):
     captured = _capturing_handler2(monkeypatch)
+    set_options(monkeypatch, _MOUNT, S3_OPTIONS)
     backend = stage_backend_from_location(
         Location(uri="s3://bkt/stage", env_prefix=_MOUNT)
     )
@@ -350,6 +417,7 @@ def test_cloud_read_text_returns_none_only_when_the_find_reports_nothing(
     monkeypatch,
 ):
     captured = _finding_handler2(monkeypatch, None)
+    set_options(monkeypatch, _MOUNT, S3_OPTIONS)
     backend = stage_backend_from_location(
         Location(uri="s3://bkt/stage", env_prefix=_MOUNT)
     )
@@ -360,6 +428,7 @@ def test_cloud_read_text_returns_none_only_when_the_find_reports_nothing(
 
 def test_cloud_read_text_returns_the_found_file(monkeypatch):
     _finding_handler2(monkeypatch, '{"kind": "streamState"}')
+    set_options(monkeypatch, _MOUNT, S3_OPTIONS)
     backend = stage_backend_from_location(
         Location(uri="s3://bkt/stage", env_prefix=_MOUNT)
     )
@@ -374,6 +443,7 @@ def test_cloud_read_text_raises_when_the_transporter_fails(monkeypatch):
         raise transporter2.TransporterRunError(1, "", "access denied")
 
     monkeypatch.setattr(handler, "execute", failing_execute)
+    set_options(monkeypatch, _MOUNT, S3_OPTIONS)
     monkeypatch.setattr(stage_backend, "make_handler", lambda *a, **k: handler)
     backend = stage_backend_from_location(
         Location(uri="s3://bkt/stage", env_prefix=_MOUNT)

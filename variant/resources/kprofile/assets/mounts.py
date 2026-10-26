@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
@@ -142,6 +143,43 @@ class NamedMountDeclaration(MountDeclaration):
         if missing:
             raise MountError(f"Mount {self.id} lacks the {kind} options {missing}")
         return resolved
+
+
+@dataclass(frozen=True)
+class EnvironmentMountDeclaration(MountDeclaration):
+    id: str
+
+    def storage_options(self, location: str) -> dict[str, str]:
+        kind = store_kind(location)
+        resolved = {
+            key: os.environ[variable].strip()
+            for key, variable in canonical_option_variables(self.id, location).items()
+        }
+        missing = missing_options(kind, resolved)
+        if missing:
+            raise MountError(f"Mount {self.id} lacks the {kind} options {missing}")
+        return resolved
+
+
+def mount_option_variables(
+    mount: str, environment: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    variables = os.environ if environment is None else environment
+    prefix = secret_variable(STORAGE_KEY, MOUNTS_KEY, mount, OPTIONS_KEY)
+    prefix = f"{prefix}{SECRET_SEPARATOR}"
+    return {
+        name[len(prefix) :].lower(): name
+        for name in sorted(variables)
+        if name.startswith(prefix) and len(name) > len(prefix)
+    }
+
+
+def canonical_option_variables(mount: str, location: str) -> dict[str, str]:
+    kind = store_kind(location)
+    return {
+        canonical(kind, key): variable
+        for key, variable in mount_option_variables(mount).items()
+    }
 
 
 def text(value: object) -> str:

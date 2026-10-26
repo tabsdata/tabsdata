@@ -129,6 +129,14 @@ class TransporterCopyRequest(BaseModel):
     parallelism: int | None = None
 
 
+def reject_extra_configs(extra_config_envs: Mapping[str, str] | None) -> None:
+    if extra_config_envs:
+        raise ValueError(
+            "The legacy transporter does not forward the extra options "
+            f"{sorted(extra_config_envs)}."
+        )
+
+
 def env_ref(prefix: str | None, name: str) -> EnvRef:
     return EnvRef(name=f"{prefix}_{name}" if prefix else name)
 
@@ -434,7 +442,9 @@ class TransporterHandler1(TransporterHandler):
         access_key_env: str,
         secret_key_env: str,
         region_env: str | None = None,
+        extra_config_envs: Mapping[str, str] | None = None,
     ) -> transporter1.TransporterS3:
+        reject_extra_configs(extra_config_envs)
         return transporter1.TransporterS3(
             url=uri,
             access_key=transporter1.TransporterEnv(access_key_env),
@@ -447,16 +457,25 @@ class TransporterHandler1(TransporterHandler):
         )
 
     def gcs_location(
-        self, uri: str, service_account_key_env: str
+        self,
+        uri: str,
+        service_account_key_env: str,
+        extra_config_envs: Mapping[str, str] | None = None,
     ) -> transporter1.TransporterGCS:
+        reject_extra_configs(extra_config_envs)
         return transporter1.TransporterGCS(
             url=uri,
             service_account_key=transporter1.TransporterEnv(service_account_key_env),
         )
 
     def azure_location(
-        self, uri: str, account_name_env: str, account_key_env: str
+        self,
+        uri: str,
+        account_name_env: str,
+        account_key_env: str,
+        extra_config_envs: Mapping[str, str] | None = None,
     ) -> transporter1.TransporterAzure:
+        reject_extra_configs(extra_config_envs)
         return transporter1.TransporterAzure(
             url=uri,
             account_name=transporter1.TransporterEnv(account_name_env),
