@@ -66,7 +66,7 @@ google-crc32c==1.9.0
 google-resumable-media==2.11.0
 googleapis-common-protos==1.76.0
 greenlet==3.5.6 ; platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64'
-grimp==3.17
+grimp==3.18
 gtts==2.2.4
 h11==0.16.0
 headerparser==0.5.2
@@ -111,12 +111,12 @@ msgpack==1.2.3
 mypy==2.4.0
 mypy-extensions==1.1.0
 mysql-connector-python==26.10.0
-nab==0.0.22
-nab-index==0.0.22
-nab-markersets==0.0.22
-nab-project==0.0.22
-nab-provider==0.0.22
-nab-resolver==0.0.22
+nab==0.0.23
+nab-index==0.0.23
+nab-markersets==0.0.23
+nab-project==0.0.23
+nab-provider==0.0.23
+nab-resolver==0.0.23
 nh3==0.3.7
 numpy==2.5.4
 olefile==0.47
@@ -144,7 +144,6 @@ pluggy==1.7.0
 prompt-toolkit==3.0.53
 proto-plus==1.29.0
 protobuf==7.36.2
-psutil==7.2.2
 psycopg2-binary==2.9.13
 py-cpuinfo==9.0.0
 py-serializable==2.1.0
@@ -224,6 +223,6 @@ wcwidth==0.9.3
 wheel==0.48.0
 wheel-filename==2.1.0
 wheel-inspect==1.8.0
-win32-setctime==1.2.0 ; sys_platform == 'win32'
+win32-setctime==1.2.1 ; sys_platform == 'win32'
 wrapt==2.5.1
 xlrd==2.0.2
