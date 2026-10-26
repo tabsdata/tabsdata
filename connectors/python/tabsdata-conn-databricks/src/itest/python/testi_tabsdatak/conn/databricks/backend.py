@@ -6,12 +6,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import TYPE_CHECKING
+
 import polars as pl
 from tabsdatax.itest.fixture.backends.databricks import DatabricksDomain
 from tabsdatax.itest.fixture.functions.sql import SqlStore
 
 from tabsdatak.api import Secret
 from tabsdatak.conn.databricks import DatabricksDestConn, DatabricksSrcConn
+
+if TYPE_CHECKING:
+    from databricks.sql.client import Cursor
 
 # Unity Catalog quotes identifiers with backticks.
 DELIMITERS = ("`", "`")
@@ -53,30 +60,29 @@ def store(domain: DatabricksDomain) -> DatabricksStore:
 class DatabricksStore(SqlStore):
     """A ``databricks.sql``-backed :class:`SqlStore`. The connector carries no
     SQLAlchemy layer by design, so verification runs over the same warehouse
-    driver the write path uses, against the domain's own catalog and schema."""
+    driver the write path uses, against the domain's own catalog and schema.
+
+    Each operation opens and closes its own connection. A connection left for
+    the garbage collector closes in ``__del__``, which takes the driver's
+    telemetry lock; if that runs inside a thread the telemetry flush worker is
+    starting while holding the same lock, the two deadlock."""
 
     def __init__(self, domain: DatabricksDomain) -> None:
-        import databricks.sql as dbsql
-
+        self._domain = domain
         self._catalog = domain.catalog
         self._schema = domain.schema
-        self._connection = dbsql.connect(
-            server_hostname=domain.host,
-            http_path=f"/sql/1.0/warehouses/{domain.warehouse_id}",
-            access_token=domain.token,
-        )
 
     def quote(self, identifier: str) -> str:
         open_, close = DELIMITERS
         return f"{open_}{identifier}{close}"
 
     def read_table(self, table: str) -> pl.DataFrame:
-        with self._connection.cursor() as cursor:
+        with self._cursor() as cursor:
             cursor.execute(f"SELECT * FROM {self._fqn(table)}")
             return pl.from_arrow(cursor.fetchall_arrow())
 
     def drop_table(self, table: str) -> None:
-        with self._connection.cursor() as cursor:
+        with self._cursor() as cursor:
             cursor.execute(f"DROP TABLE IF EXISTS {self._fqn(table)}")
 
     def column_types(self, table: str) -> dict[str, str]:
@@ -89,7 +95,7 @@ class DatabricksStore(SqlStore):
         partition/metadata block ``DESCRIBE`` appends after the columns opens
         with a blank name, which is where the walk stops.
         """
-        with self._connection.cursor() as cursor:
+        with self._cursor() as cursor:
             cursor.execute(f"DESCRIBE TABLE {self._fqn(table)}")
             types = {}
             for name, type_, *_ in cursor.fetchall():
@@ -97,6 +103,20 @@ class DatabricksStore(SqlStore):
                     break
                 types[name] = type_.lower()
             return types
+
+    @contextmanager
+    def _cursor(self) -> Iterator[Cursor]:
+        import databricks.sql as dbsql
+
+        with (
+            dbsql.connect(
+                server_hostname=self._domain.host,
+                http_path=f"/sql/1.0/warehouses/{self._domain.warehouse_id}",
+                access_token=self._domain.token,
+            ) as connection,
+            connection.cursor() as cursor,
+        ):
+            yield cursor
 
     def _fqn(self, table: str) -> str:
         return ".".join(
