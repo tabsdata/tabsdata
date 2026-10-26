@@ -13,9 +13,7 @@ import obstore.exceptions
 import zstandard
 
 from tabsdatak.common._configuration.document.error import DocumentException
-from tabsdatak.common._configuration.document.loader import load
-from tabsdatak.common._configuration.model.storage import StorageConfiguration
-from tabsdatak.common._storage import mounts, transfer
+from tabsdatak.common._storage import transfer
 from tabsdatak.common._storage.mounts import MountError
 from tabsdatak.common._storage.transfer import StorageLocation, TransferError
 from tabsdatak.server._tdrunner.function._commons.document.request import (
@@ -31,14 +29,11 @@ logger = logging.getLogger(__name__)
 
 
 def storage_location(location: Location, storage_config: Path) -> StorageLocation:
-    if location.env_prefix is None:
-        return StorageLocation(uri=location.uri)
     try:
-        configuration = load(storage_config, StorageConfiguration)
-        declaration = configuration.mount(location.env_prefix).declaration()
+        declaration = location.mount_declaration(storage_config)
         return StorageLocation(
             uri=location.uri,
-            options=mounts.options(declaration, location.uri),
+            options=declaration.storage_options(location.uri),
         )
     except (DocumentException, MountError) as error:
         raise GetBundleErrorCode.GB_2.exception(cause=error, detail=str(error))

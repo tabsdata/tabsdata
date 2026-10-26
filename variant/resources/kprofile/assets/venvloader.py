@@ -123,8 +123,8 @@ def human_size(size: int) -> str:
 
 def mount_location(storage_config: Path, mount_id: str) -> StorageLocation:
     declaration = mounts.read(storage_config, mount_id)
-    uri = mounts.uri(declaration)
-    return StorageLocation(uri=uri, options=mounts.options(declaration, uri))
+    uri = declaration.resolved_uri()
+    return StorageLocation(uri=uri, options=declaration.storage_options(uri))
 
 
 def image_location(

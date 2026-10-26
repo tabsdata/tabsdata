@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import re
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
@@ -94,11 +95,53 @@ class MountError(ValueError):
     pass
 
 
+class MountDeclaration(ABC):
+    @abstractmethod
+    def storage_options(self, location: str) -> dict[str, str]: ...
+
+
 @dataclass(frozen=True)
-class MountDeclaration:
+class AnonymousMountDeclaration(MountDeclaration):
+    def storage_options(self, location: str) -> dict[str, str]:
+        return {}
+
+
+@dataclass(frozen=True)
+class NamedMountDeclaration(MountDeclaration):
     id: str
     uri: str
     options: dict[str, str] = field(default_factory=dict)
+
+    def resolved_uri(self) -> str:
+        resolved = resolve(
+            self.uri,
+            STORAGE_KEY,
+            MOUNTS_KEY,
+            self.id,
+            URI_KEY,
+        )
+        if not resolved:
+            raise MountError(f"Mount {self.id} declares no uri")
+        return resolved
+
+    def storage_options(self, location: str) -> dict[str, str]:
+        kind = store_kind(location)
+        resolved = {}
+        for key, declared in self.options.items():
+            value = resolve(
+                declared,
+                STORAGE_KEY,
+                MOUNTS_KEY,
+                self.id,
+                OPTIONS_KEY,
+                key,
+            )
+            if value is not None:
+                resolved[canonical(kind, key)] = value
+        missing = missing_options(kind, resolved)
+        if missing:
+            raise MountError(f"Mount {self.id} lacks the {kind} options {missing}")
+        return resolved
 
 
 def text(value: object) -> str:
@@ -141,7 +184,7 @@ def resolve(text: str, *path: str) -> str | None:
     )
 
 
-def read(storage_config: Path, mount: str) -> MountDeclaration:
+def read(storage_config: Path, mount: str) -> NamedMountDeclaration:
     try:
         document = yaml.safe_load(storage_config.read_text(encoding="utf-8"))
     except (OSError, yaml.YAMLError) as error:
@@ -150,7 +193,7 @@ def read(storage_config: Path, mount: str) -> MountDeclaration:
         ) from error
     for entry in ((document or {}).get(STORAGE_KEY) or {}).get(MOUNTS_KEY) or []:
         if str(entry.get(ID_KEY)) == mount:
-            return MountDeclaration(
+            return NamedMountDeclaration(
                 id=mount,
                 uri=text(entry.get(URI_KEY) or ""),
                 options={
@@ -159,19 +202,6 @@ def read(storage_config: Path, mount: str) -> MountDeclaration:
                 },
             )
     raise MountError(f"Mount {mount} is not declared in {storage_config}")
-
-
-def uri(declaration: MountDeclaration) -> str:
-    resolved = resolve(
-        declaration.uri,
-        STORAGE_KEY,
-        MOUNTS_KEY,
-        declaration.id,
-        URI_KEY,
-    )
-    if not resolved:
-        raise MountError(f"Mount {declaration.id} declares no uri")
-    return resolved
 
 
 def store_kind(location: str) -> StoreKind:
@@ -188,26 +218,6 @@ def canonical(kind: StoreKind, key: str) -> str:
     if prefix and key.startswith(prefix):
         return key
     raise MountError(f"Option {key} is not a known {kind} option")
-
-
-def options(declaration: MountDeclaration, location: str) -> dict[str, str]:
-    kind = store_kind(location)
-    resolved = {}
-    for key, declared in declaration.options.items():
-        value = resolve(
-            declared,
-            STORAGE_KEY,
-            MOUNTS_KEY,
-            declaration.id,
-            OPTIONS_KEY,
-            key,
-        )
-        if value is not None:
-            resolved[canonical(kind, key)] = value
-    missing = missing_options(kind, resolved)
-    if missing:
-        raise MountError(f"Mount {declaration.id} lacks the {kind} options {missing}")
-    return resolved
 
 
 def missing_options(kind: StoreKind, resolved: dict[str, str]) -> str | None:

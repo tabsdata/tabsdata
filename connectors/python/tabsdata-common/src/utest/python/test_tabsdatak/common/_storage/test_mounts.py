@@ -10,7 +10,11 @@ import pytest
 import yaml
 
 from tabsdatak.common._storage import mounts
-from tabsdatak.common._storage.mounts import MountDeclaration, MountError
+from tabsdatak.common._storage.mounts import (
+    AnonymousMountDeclaration,
+    MountError,
+    NamedMountDeclaration,
+)
 from tabsdatak.common._storage.transfer import StoreKind
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -73,7 +77,7 @@ def test_read_returns_the_declared_mount(tmp_path: Path):
         {"id": "ROOT", "uri": "s3://root"},
         {"id": "IMAGES", "uri": PLACEHOLDER, "options": {"region": "eu-west-1"}},
     )
-    assert mounts.read(config, "IMAGES") == MountDeclaration(
+    assert mounts.read(config, "IMAGES") == NamedMountDeclaration(
         id="IMAGES",
         uri=PLACEHOLDER,
         options={"region": "eu-west-1"},
@@ -92,26 +96,26 @@ def test_read_of_an_unreadable_configuration_fails(tmp_path: Path):
 
 
 def test_literal_uri_is_used_as_written():
-    declaration = MountDeclaration(id="IMAGES", uri="s3://images/prod")
-    assert mounts.uri(declaration) == "s3://images/prod"
+    declaration = NamedMountDeclaration(id="IMAGES", uri="s3://images/prod")
+    assert declaration.resolved_uri() == "s3://images/prod"
 
 
 def test_placeholder_uri_comes_from_its_variable(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SECRETS__STORAGE__MOUNTS__BUNDLES__URI", "az://bundles/one")
-    declaration = MountDeclaration(id="BUNDLES", uri=PLACEHOLDER)
-    assert mounts.uri(declaration) == "az://bundles/one"
+    declaration = NamedMountDeclaration(id="BUNDLES", uri=PLACEHOLDER)
+    assert declaration.resolved_uri() == "az://bundles/one"
 
 
 def test_placeholder_uri_without_variable_fails(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("SECRETS__STORAGE__MOUNTS__BUNDLES__URI", raising=False)
-    declaration = MountDeclaration(id="BUNDLES", uri=PLACEHOLDER)
+    declaration = NamedMountDeclaration(id="BUNDLES", uri=PLACEHOLDER)
     with pytest.raises(MountError, match="storage.mounts.BUNDLES.uri"):
-        mounts.uri(declaration)
+        declaration.resolved_uri()
 
 
 def test_mount_without_uri_fails():
     with pytest.raises(MountError, match="declares no uri"):
-        mounts.uri(MountDeclaration(id="IMAGES", uri=""))
+        NamedMountDeclaration(id="IMAGES", uri="").resolved_uri()
 
 
 @pytest.mark.parametrize(
@@ -148,7 +152,7 @@ def test_unknown_key_fails():
 def test_options_mix_placeholders_and_literals(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv(option_variable("IMAGES", "access_key_id"), "identity")
     monkeypatch.setenv(option_variable("IMAGES", "secret_access_key"), "secret")
-    declaration = MountDeclaration(
+    declaration = NamedMountDeclaration(
         id="IMAGES",
         uri="s3://images",
         options={
@@ -157,7 +161,7 @@ def test_options_mix_placeholders_and_literals(monkeypatch: pytest.MonkeyPatch):
             "region": "eu-west-1",
         },
     )
-    assert mounts.options(declaration, "s3://images/python/image.tar.zst") == {
+    assert declaration.storage_options("s3://images/python/image.tar.zst") == {
         "aws_access_key_id": "identity",
         "aws_secret_access_key": "secret",
         "aws_region": "eu-west-1",
@@ -166,7 +170,7 @@ def test_options_mix_placeholders_and_literals(monkeypatch: pytest.MonkeyPatch):
 
 def test_unset_optional_placeholder_drops_the_option(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv(option_variable("ROOT", "endpoint"), raising=False)
-    declaration = MountDeclaration(
+    declaration = NamedMountDeclaration(
         id="ROOT",
         uri="s3://root",
         options={
@@ -175,7 +179,7 @@ def test_unset_optional_placeholder_drops_the_option(monkeypatch: pytest.MonkeyP
             "endpoint": OPTIONAL_PLACEHOLDER,
         },
     )
-    assert mounts.options(declaration, "s3://root/key") == {
+    assert declaration.storage_options("s3://root/key") == {
         "aws_skip_signature": "true",
         "aws_region": "us-east-1",
     }
@@ -183,13 +187,13 @@ def test_unset_optional_placeholder_drops_the_option(monkeypatch: pytest.MonkeyP
 
 def test_unset_mandatory_placeholder_fails(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv(option_variable("IMAGES", "secret_access_key"), raising=False)
-    declaration = MountDeclaration(
+    declaration = NamedMountDeclaration(
         id="IMAGES",
         uri="s3://images",
         options={"secret_access_key": PLACEHOLDER},
     )
     with pytest.raises(MountError, match="IMAGES.options.secret_access_key"):
-        mounts.options(declaration, "s3://images/key")
+        declaration.storage_options("s3://images/key")
 
 
 @pytest.mark.parametrize(
@@ -207,14 +211,22 @@ def test_unset_mandatory_placeholder_fails(monkeypatch: pytest.MonkeyPatch):
     ],
 )
 def test_missing_credentials_fail(location: str, declared: dict, requirement: str):
-    declaration = MountDeclaration(id="ROOT", uri=location, options=declared)
+    declaration = NamedMountDeclaration(id="ROOT", uri=location, options=declared)
     with pytest.raises(MountError, match=requirement):
-        mounts.options(declaration, location)
+        declaration.storage_options(location)
 
 
 def test_local_mount_needs_no_options(tmp_path: Path):
-    declaration = MountDeclaration(id="ROOT", uri=tmp_path.as_uri())
-    assert mounts.options(declaration, (tmp_path / "key").as_uri()) == {}
+    declaration = NamedMountDeclaration(id="ROOT", uri=tmp_path.as_uri())
+    assert declaration.storage_options((tmp_path / "key").as_uri()) == {}
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["s3://bucket/key", "az://container/key", "gs://bucket/key", "file:///data/key"],
+)
+def test_an_anonymous_mount_contributes_no_options(location: str):
+    assert AnonymousMountDeclaration().storage_options(location) == {}
 
 
 def test_read_turns_scalars_into_text(tmp_path: Path):

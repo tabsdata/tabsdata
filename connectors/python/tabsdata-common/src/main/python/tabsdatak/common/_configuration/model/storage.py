@@ -7,7 +7,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from tabsdatak.common._configuration.document.loader import DocumentModel
-from tabsdatak.common._storage.mounts import MountDeclaration, MountError, text
+from tabsdatak.common._storage.mounts import MountError, NamedMountDeclaration, text
 
 Scalar = str | bool | int | float
 
@@ -18,8 +18,8 @@ class Mount(DocumentModel):
     uri: str
     options: dict[str, Scalar] = Field(default_factory=dict)
 
-    def declaration(self) -> MountDeclaration:
-        return MountDeclaration(
+    def declaration(self) -> NamedMountDeclaration:
+        return NamedMountDeclaration(
             id=self.id,
             uri=self.uri,
             options={

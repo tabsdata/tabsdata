@@ -12,6 +12,10 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from tabsdatak.common._storage.mounts import (
+    AnonymousMountDeclaration,
+    NamedMountDeclaration,
+)
 from tabsdatak.error import ErrorCode, ErrorDef
 from tabsdatak.server._tdrunner.function._commons.document.request import (
     AnyRequest,
@@ -269,3 +273,39 @@ def test_any_request_reads_either_envelope(tmp_path: Path, envelope: str):
 def test_any_request_needs_exactly_one_envelope(tmp_path: Path, document: dict):
     with pytest.raises(RequestFailure, match="exactly one of Function or Streamer"):
         AnyRequest.load(written(tmp_path, document), RequestErrorCode.READ)
+
+
+def test_a_location_without_prefix_names_no_mount(tmp_path: Path):
+    location = Location(uri="file:///data/bundle.tar.zst")
+
+    declaration = location.mount_declaration(tmp_path / "unread.yaml")
+
+    assert declaration == AnonymousMountDeclaration()
+
+
+def test_a_location_with_prefix_names_its_configured_mount(tmp_path: Path):
+    storage_config = tmp_path / "apiserver.storage.yaml"
+    storage_config.write_text(
+        yaml.safe_dump(
+            {
+                "storage": {
+                    "mounts": [
+                        {
+                            "id": "BUNDLES",
+                            "uri": "s3://bundles",
+                            "options": {"region": "eu-west-1"},
+                        },
+                    ],
+                },
+            },
+        ),
+    )
+    location = Location(uri="s3://bundles/one.tar.zst", env_prefix="BUNDLES")
+
+    declaration = location.mount_declaration(storage_config)
+
+    assert declaration == NamedMountDeclaration(
+        id="BUNDLES",
+        uri="s3://bundles",
+        options={"region": "eu-west-1"},
+    )

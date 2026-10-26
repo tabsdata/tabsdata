@@ -12,6 +12,11 @@ from pydantic import model_validator
 
 from tabsdatak.common._configuration.document.error import DocumentException
 from tabsdatak.common._configuration.document.loader import DocumentModel, load
+from tabsdatak.common._configuration.model.storage import StorageConfiguration
+from tabsdatak.common._storage.mounts import (
+    AnonymousMountDeclaration,
+    MountDeclaration,
+)
 from tabsdatak.error import ErrorCode
 
 RAW_SUFFIX = ".t"
@@ -63,6 +68,14 @@ def read(
 class Location(DocumentModel):
     uri: str
     env_prefix: str | None = None
+
+    def mount_declaration(self, storage_config: Path) -> MountDeclaration:
+        if self.env_prefix is None:
+            declaration = AnonymousMountDeclaration()
+        else:
+            configuration = load(storage_config, StorageConfiguration)
+            declaration = configuration.mount(self.env_prefix).declaration()
+        return declaration
 
 
 class InputTable(DocumentModel):

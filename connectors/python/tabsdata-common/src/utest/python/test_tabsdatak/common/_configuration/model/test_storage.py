@@ -11,7 +11,7 @@ import pytest
 from tabsdatak.common._configuration.document.loader import load
 from tabsdatak.common._configuration.model.storage import StorageConfiguration
 from tabsdatak.common._storage import mounts
-from tabsdatak.common._storage.mounts import MountDeclaration, MountError
+from tabsdatak.common._storage.mounts import MountError, NamedMountDeclaration
 from test_tabsdatak.bootest import ROOT_FOLDER
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
@@ -57,7 +57,7 @@ def configuration(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def test_declaration_carries_resolved_text_options(configuration: Path):
     root = load(configuration, StorageConfiguration).mount("ROOT")
-    assert root.declaration() == MountDeclaration(
+    assert root.declaration() == NamedMountDeclaration(
         id="ROOT",
         uri="s3://root/prefix",
         options={
@@ -73,8 +73,8 @@ def test_typed_and_standalone_readers_agree(configuration: Path):
     typed = load(configuration, StorageConfiguration).mount("ROOT").declaration()
     standalone = mounts.read(configuration, "ROOT")
     location = "s3://root/prefix/python/image.tar.zst"
-    assert mounts.uri(typed) == mounts.uri(standalone)
-    assert mounts.options(typed, location) == mounts.options(standalone, location)
+    assert typed.resolved_uri() == standalone.resolved_uri()
+    assert typed.storage_options(location) == standalone.storage_options(location)
 
 
 def test_undeclared_mount_fails(configuration: Path):

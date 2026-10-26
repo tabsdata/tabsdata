@@ -10,7 +10,6 @@ from pathlib import Path
 
 import obstore
 import pytest
-import yaml
 from tabsdatax.itest.fixture.backends.azureblob import AzureblobDomain, azureblob_domain
 from tabsdatax.itest.fixture.backends.azurebloblocal import (
     AzureBlobLocalDomain,
@@ -21,61 +20,22 @@ from tabsdatax.itest.fixture.backends.gcslocal import GcsLocalDomain, gcslocal_d
 from tabsdatax.itest.fixture.backends.s3 import S3Domain, s3_domain
 from tabsdatax.itest.fixture.backends.s3local import S3LocalDomain, s3local_domain
 
-from tabsdatak.common._storage import mounts, transfer
+from tabsdatak.common._storage import transfer
 from tabsdatak.common._storage.transfer import StorageLocation
+from testi_tabsdatak.common._storage import mounted
 
 pytestmark = [pytest.mark.integration, pytest.mark.tabsdatak]
 
-MOUNT = "ROOT"
-PLACEHOLDER = "${{secret}}"
 SIZE = 3 * transfer.MEBIBYTE + 17
 RANGED_THRESHOLD = transfer.MEBIBYTE
 RANGED_SIZE = 256 * 1024
 
 
-def declared_options(domain) -> dict[str, str]:
-    if domain.storage_options:
-        return dict(domain.storage_options)
-    if isinstance(domain, S3Domain):
-        return {
-            "access_key_id": domain.access_key,
-            "secret_access_key": domain.secret_key,
-            "region": domain.region,
-        }
-    if isinstance(domain, GCSDomain):
-        return {"service_account_key": domain.service_account_key}
-    return {
-        "account_name": domain.account_name,
-        "account_key": domain.account_key,
-    }
-
-
-def mounted(domain, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    options = declared_options(domain)
-    config = tmp_path / "apiserver.storage.yaml"
-    mount = {
-        "id": MOUNT,
-        "uri": PLACEHOLDER,
-        "options": {key: PLACEHOLDER for key in options},
-    }
-    config.write_text(yaml.safe_dump({"storage": {"mounts": [mount]}}))
-    monkeypatch.setenv(
-        mounts.secret_variable("storage", "mounts", MOUNT, "uri"),
-        domain.uri,
-    )
-    for key, value in options.items():
-        monkeypatch.setenv(
-            mounts.secret_variable("storage", "mounts", MOUNT, "options", key),
-            value,
-        )
-    return config
-
-
 def round_trip(domain, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    declaration = mounts.read(mounted(domain, tmp_path, monkeypatch), MOUNT)
-    root = mounts.uri(declaration).rstrip("/")
+    declaration = mounted.declaration(domain, tmp_path, monkeypatch)
+    root = declaration.resolved_uri().rstrip("/")
     uri = f"{root}/transfer-{uuid.uuid4().hex}/object.bin"
-    location = StorageLocation(uri=uri, options=mounts.options(declaration, uri))
+    location = StorageLocation(uri=uri, options=declaration.storage_options(uri))
     source = tmp_path / "source.bin"
     source.write_bytes(os.urandom(SIZE))
     expected = source.read_bytes()

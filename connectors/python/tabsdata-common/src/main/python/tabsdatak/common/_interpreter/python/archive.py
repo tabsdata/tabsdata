@@ -14,7 +14,7 @@ import obstore.exceptions
 from tabsdatak.common._configuration.document.error import DocumentException
 from tabsdatak.common._configuration.document.loader import load
 from tabsdatak.common._configuration.model.storage import StorageConfiguration
-from tabsdatak.common._storage import mounts, transfer
+from tabsdatak.common._storage import transfer
 from tabsdatak.common._storage.mounts import MountError
 from tabsdatak.common._storage.transfer import StorageLocation, TransferError
 
@@ -38,8 +38,8 @@ def target_location(
 ) -> StorageLocation:
     configuration = load(storage_config, StorageConfiguration)
     declaration = configuration.mount(mount_id).declaration()
-    uri = target_uri(mounts.uri(declaration), subfolder, name)
-    return StorageLocation(uri=uri, options=mounts.options(declaration, uri))
+    uri = target_uri(declaration.resolved_uri(), subfolder, name)
+    return StorageLocation(uri=uri, options=declaration.storage_options(uri))
 
 
 def send_image(
