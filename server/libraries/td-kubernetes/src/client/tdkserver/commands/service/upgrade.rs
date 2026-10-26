@@ -278,6 +278,7 @@ async fn cluster_start_phase(
         info!("Operation cancelled.");
         return Ok(false);
     }
+    provider.stop_orphaned(reporter).await?;
     provider.start_cluster(reporter).await?;
     Ok(true)
 }

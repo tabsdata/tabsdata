@@ -4,6 +4,7 @@
 
 pub mod cluster;
 pub mod instance;
+pub mod postmaster;
 
 use std::fs;
 use std::io::Write;
@@ -453,6 +454,25 @@ impl Provider for KminusProvider {
     async fn upgrade_database(&self, reporter: &dyn Reporter) -> CommandResult {
         self.create_database_as_pod(reporter, DbManagerMode::Upgrade)
             .await
+    }
+
+    async fn stop_orphaned(&self, reporter: &dyn Reporter) -> CommandResult {
+        let data_dir = self.folder.join(FOLDER_REPOSITORY).join(FOLDER_DATABASE);
+        let Some(postmaster) = postmaster::running_on(&data_dir) else {
+            return Ok(());
+        };
+        let step = reporter.step("Stopping the database server left running by a previous stop");
+        if !postmaster::stop(&data_dir, &postmaster, self.verbose) {
+            step.fail();
+            return Err(ProviderError::OrphanedDatabaseStopFailed {
+                pid: postmaster.pid,
+                folder: data_dir.display().to_string(),
+            }
+            .into());
+        }
+        self.clear_stale_database_pid();
+        step.done("Database server left running stopped");
+        Ok(())
     }
 
     async fn upgrade_system(&self, _reporter: &dyn Reporter, rules: &[String]) -> CommandResult {

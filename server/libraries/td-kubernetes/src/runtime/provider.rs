@@ -425,6 +425,9 @@ pub trait Provider: Send + Sync {
         self.create_database(reporter).await
     }
     async fn upgrade_system(&self, reporter: &dyn Reporter, rules: &[String]) -> CommandResult;
+    async fn stop_orphaned(&self, _reporter: &dyn Reporter) -> CommandResult {
+        Ok(())
+    }
 
     async fn cluster_alive(&self) -> bool;
     async fn cluster_dead(&self) -> bool {

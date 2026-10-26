@@ -3,11 +3,12 @@
 //
 
 use std::io::{self, BufRead, BufReader, Read};
+use std::path::{Path, PathBuf};
 use std::process::{Command as SystemCommand, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use sysinfo::{Pid, ProcessStatus, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System, UpdateKind};
 use tracing::{debug, info, warn};
 
 use crate::base::trace;
@@ -179,6 +180,25 @@ pub fn is_alive(pid: u32) -> bool {
         Some(process) => process.status() != ProcessStatus::Zombie,
         None => false,
     }
+}
+
+pub fn process_paths(pid: u32) -> Option<(Option<PathBuf>, Option<PathBuf>)> {
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[Pid::from_u32(pid)]),
+        true,
+        ProcessRefreshKind::nothing()
+            .with_exe(UpdateKind::Always)
+            .with_cwd(UpdateKind::Always),
+    );
+    let process = system.process(Pid::from_u32(pid))?;
+    if process.status() == ProcessStatus::Zombie {
+        return None;
+    }
+    Some((
+        process.exe().map(Path::to_path_buf),
+        process.cwd().map(Path::to_path_buf),
+    ))
 }
 
 pub fn terminate_process(pid: u32, grace: Duration) {

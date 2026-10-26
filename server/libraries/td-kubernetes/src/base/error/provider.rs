@@ -151,6 +151,11 @@ pub enum ProviderError {
     #[error("Could not read the global environment variables of config '{config}': {cause}.")]
     GlobalEnvsParseFailed { config: String, cause: String } = 5128,
     #[error(
+        "The database server (pid {pid}) left running on '{folder}' by a previous stop could \
+         not be stopped."
+    )]
+    OrphanedDatabaseStopFailed { pid: u32, folder: String } = 5129,
+    #[error(
         "Another process is already building the Python virtual environments under \
          '{folder}'{holder}. Wait for it to finish before provisioning again."
     )]
