@@ -2,16 +2,15 @@
 Copyright 2026 Tabsdata Inc.
 -->
 
-# `tdk` CLI — proposed reference
+# `tdk` CLI reference
 
-Proposed command surface after the intuitiveness pass:
+The command surface of `tdk`, the Tabsdata client. `tdk --help --full` prints
+the same from the installed CLI.
 
 - **Identifiers are named options** — every command takes its target via `--name NAME` (entities) or `--plan`/`--trx`/`--fnrun`/`--worker`/`--user` (execution & access); nothing is positional.
-- **Full canonical names + short aliases**: `collection`/`col`, `function`/`fn`, `transaction`/`trx`.
-- **Execution split into entity subgroups** (`plan`, `transaction`, `fnrun`, `worker`).
-- **Consistent flags**: `--enabled/--disabled`, `-y/--yes` for destructive ops, `-o/--format {table,json,yaml}`.
-- **Pinned-aware defaults**: `--proj` → pinned project, `--col` → pinned collection.
-- `role` and `stage` groups removed; `cron` is back alongside a matching `stream`.
+- **Execution split into entity subgroups** (`plan`, `trx`, `fnrun`, `worker`).
+- **Consistent flags**: `--enabled/--disabled`, `--confirm delete` for destructive ops, `-o/--format {table,json,yaml}`.
+- **Pinned-aware defaults**: `--proj` → pinned project, `--coll` → pinned collection.
 
 ---
 
@@ -30,31 +29,34 @@ Session
 
 Work
   project                Manage projects
-  collection  (col)      Manage collections
+  collection             Manage collections
   group                  Manage user-groups within a project
-  function    (fn)       Register, update and trigger functions
+  fn                     Register, update and trigger functions
   cron                   Cron-triggered functions
   stream                 Stream-publisher functions
   table                  Inspect and download function output tables
 
 Execution
   plan                   Execution plans (a triggered DAG run)
-  transaction (trx)      Transactions within a plan
+  trx                    Transactions within a plan
   fnrun                  Function runs within a transaction
   worker                 Worker processes and their logs
 
 Ops & access
   metrics                Operational metrics
+  user                   Manage users
   permission             Grant/revoke user permissions
   connection             Inspect connector types & build connection docs (offline)
   set / unset            Persistent CLI settings (pins, server, hints, prompting,
                          default profile)
   settings               Show the persistent CLI settings
+  ai                     Tabsdata AI (present when the AI agent package is installed)
 
 Help & misc
   shell                  Interactive shell
-  examples               Generate example projects
-  info / about / version
+  examples               List and extract example projects
+  info / about           License, third-party dependencies, release notes, build
+                         metadata
 
 Global options
   -h, --help             Show help
@@ -74,10 +76,10 @@ tdk refuses to run inside AI agents — use the Tabsdata MCP server instead. Set
 Applied where shown in each command. Every value option takes an argument.
 
 ```
-  -p, --proj   PROJECT            Target project. Default: pinned project; a
+  -P, --proj   PROJECT            Target project. Default: pinned project; a
                                   command that needs one and has neither prompts
                                   for it before any other value.
-  -c, --col    COLLECTION         Target collection. Default: pinned collection.
+  -c, --coll   COLLECTION         Target collection. Default: pinned collection.
   -o, --format {table|json|yaml}  Output format. Default: table.
       --browse|--print            Open the table in a viewer that scrolls both
                                   ways, or print it and return. Default: --print
@@ -99,13 +101,13 @@ Applied where shown in each command. Every value option takes an argument.
                                   0 lists everything. When rows are left over,
                                   the command says so (on stderr under
                                   --format json|yaml, so stdout stays parseable).
-  -y, --yes                       Skip the confirmation prompt (destructive ops).
+      --confirm delete|cancel     Confirm a destructive op without the prompt.
   -h, --help                      Show help.
 ```
 
 Required identifiers (`--name`, `--plan`, ...) are shown without brackets; `[...]` marks optional options.
 
-`--password` (`login` / `auth password-change` / `user`) is long-only — it has no short flag, since `-p` is `--proj`.
+`-p` is `--password` (`login` / `user`) and `--old-password` (`auth password-change`); the project is `-P`.
 
 ---
 
@@ -135,18 +137,23 @@ A secret or key left out of the file is removed; an empty file removes them
 all. Functions read them through `ctx.secret("aws", "key1")` or
 `ctx.secret("aws.key1")`.
 
-## `tdk collection` (alias `col`)
+## `tdk collection`
 
 ```
-collection create --name NAME [--proj PROJECT] [--description D] [--group G]
-                              [--storage-path PATH] [--conn-file FILE]
-collection update --name NAME [--proj PROJECT] [--new-name N] [--description D]
-                              [--group G] [--storage-path PATH|-] [--conn-file FILE]
-                              # '-' = inherit project storage path; --conn-file updates the connection
-collection delete --name NAME [--proj PROJECT] [--confirm delete]
-collection get    --name NAME [--proj PROJECT] [-o]
-collection list               [--proj PROJECT] [-o]
+collection create     --name NAME [--proj PROJECT] [--description D] [--group G]
+                                  [--storage-path PATH] [--conn-file FILE]
+                                  # a source/destination collection is created with its connection
+collection update     --name NAME [--proj PROJECT] [--new-name N] [--description D]
+                                  [--storage-path PATH|-] [--conn-file FILE]
+                                  # '-' = inherit project storage path; --conn-file updates the connection
+collection delete     --name NAME [--proj PROJECT] [--confirm delete]
+collection get        --name NAME [--proj PROJECT] [-o]
+collection connection --name NAME [--proj PROJECT] [-o]      # the collection's connection
+collection list                   [--proj PROJECT] [--all-projects] [-o]
 ```
+
+`--conn-file` takes a `connectionDef` YAML document (`-` reads stdin); `tdk
+connection template` writes one to fill in.
 
 ## `tdk group`
 
@@ -158,31 +165,31 @@ group get    --name NAME [--proj PROJECT] [-o]
 group list               [--proj PROJECT] [-o]
 ```
 
-## `tdk function` (alias `fn`)
+## `tdk fn`
 
 ```
-function register --path PATH [--proj PROJECT] [--col COLLECTION] [--description D] [--dir-to-bundle DIR]
+fn register --path FILE::FUNCTION [--proj PROJECT] [--coll COLLECTION] [--description D] [--dir-to-bundle DIR]
                               [--reuse-tables] [--enabled|--disabled] [--update] [--storage-path PATH]
                               #   name is taken from the decorated function in the bundle
                               #   (--requirements / --local-pkg are temporarily disabled)
-function update   --name NAME [--proj PROJECT] [--col COLLECTION] [--description D] [--path PATH]
+fn update   --name NAME [--proj PROJECT] [--coll COLLECTION] [--description D] [--path PATH]
                               [--dir-to-bundle DIR] [--reuse-tables]
                               [--enabled|--disabled] [--storage-path PATH] [--reset-state] [--reset-stage]
-function delete   --name NAME [--proj PROJECT] [--col COLLECTION] [--confirm delete]
-function get      --name NAME [--proj PROJECT] [--col COLLECTION] [--version V] [--history] [-o]
-                              #   --version: details of a specific version (default: current)
-function bundle   --fn-version FVID [--proj PROJECT] --file FILE
+fn delete   --name NAME [--proj PROJECT] [--coll COLLECTION] [--confirm delete]
+fn get      --name NAME [--proj PROJECT] [--coll COLLECTION] [--show-history] [-o]
+                              #   --show-history: every version, newest first
+fn bundle   --fn-version FVID [--proj PROJECT] --file FILE
                               #   downloads a function version's bundle (a .tar.zst archive)
-function list                 [--proj PROJECT] [--col COLLECTION] [-o]
+fn list                 [--proj PROJECT] [--coll COLLECTION] [-o]
                               #   cron-triggered / stream-publisher functions: see `tdk cron|stream list`
-function trigger  --name NAME [--proj PROJECT] [--col COLLECTION] [--plan-name N] [--detach]
-function enable   --name NAME [--proj PROJECT] [--col COLLECTION]
-function disable  --name NAME [--proj PROJECT] [--col COLLECTION]
+fn trigger  --name NAME [--proj PROJECT] [--coll COLLECTION] [--plan-name N] [--detach]
+fn enable   --name NAME [--proj PROJECT] [--coll COLLECTION]
+fn disable  --name NAME [--proj PROJECT] [--coll COLLECTION]
                               #   already in that state: reports it, changes nothing
-function patch    --name NAME [--proj PROJECT] [--col COLLECTION] --fn-version REF [--path PATH] [--description D]
+fn patch    --name NAME [--proj PROJECT] [--coll COLLECTION] --fn-version REF [--path PATH] [--description D]
                               [--dir-to-bundle DIR]
                               #   (--requirements / --local-pkg are temporarily disabled)
-function patches  --name NAME [--proj PROJECT] [--col COLLECTION] [-o]      # was: list-patches
+fn patches  --name NAME [--proj PROJECT] [--coll COLLECTION] [-o]
 ```
 
 ## `tdk cron` / `tdk stream`
@@ -220,11 +227,11 @@ always shows one).
 ## `tdk table`
 
 ```
-table list                 [--proj PROJECT] [--col COLLECTION] [--name PATTERN] [--at TS] [--at-trx TRX] [-o]
-table schema   --name NAME  [--proj PROJECT] [--col COLLECTION] [--at TS|--at-trx TRX|--version V]
+table list                 [--proj PROJECT] [--coll COLLECTION] [--name PATTERN] [--at TS] [--at-trx TRX] [-o]
+table schema   --name NAME  [--proj PROJECT] [--coll COLLECTION] [--at TS|--at-trx TRX|--version V]
                             [--extra-cols none|meta|sys|all] [-o]
-table versions --name NAME  [--proj PROJECT] [--col COLLECTION] [--details] [-o]
-table data     --name NAME  [--proj PROJECT] [--col COLLECTION] [--sql SQL] [--len N] [--offset N]
+table versions --name NAME  [--proj PROJECT] [--coll COLLECTION] [-o]
+table data     --name NAME  [--proj PROJECT] [--coll COLLECTION] [--sql SQL] [--len N] [--offset N]
                             [--at TS|--at-trx TRX|--version V] [--extra-cols none|meta|sys|all]
                             [--file FILE] [--browse|--print] [--wrap] [--max-width N] [-o]
                             #   --sql: server-side SQL query over the table, which is the
@@ -244,8 +251,8 @@ table data     --name NAME  [--proj PROJECT] [--col COLLECTION] [--sql SQL] [--l
                             #   --max-width: characters per column before a value is
                             #          cut, 128 by default; 0 means no limit
                             #   the view options apply only to '-o table'
-table download --name NAME  [--proj PROJECT] [--col COLLECTION] --file FILE [--at TS|--at-trx TRX|--version V]
-table delete   --name NAME  [--proj PROJECT] [--col COLLECTION] [--confirm delete]
+table download --name NAME  [--proj PROJECT] [--coll COLLECTION] --file FILE [--at TS|--at-trx TRX|--version V]
+table delete   --name NAME  [--proj PROJECT] [--coll COLLECTION] [--confirm delete]
 ```
 
 ---
@@ -306,9 +313,9 @@ worker recover --worker WORKER      # recovers the worker's owning transaction
 ## `tdk metrics`
 
 ```
-metrics summary  [--proj PROJECT] [--dim collection|group] [--unit U] [--align A] [--from T] [--span S]
+metrics show     [--proj PROJECT] [--dim collection|group] [--unit U] [--align A] [--from T] [--span S]
                  [--collection C ...] [--collection-exclude C ...]
-                 [--group G ...] [--group-exclude G ...] [--status S ...] [-o]   # was: show, --json
+                 [--group G ...] [--group-exclude G ...] [--status S ...] [-o]
 metrics inflight [--proj PROJECT] [--collection C ...] [--collection-exclude C ...]
                  [--group G ...] [--group-exclude G ...] [--status S ...] [-o]
 ```
@@ -319,6 +326,16 @@ metrics inflight [--proj PROJECT] [--collection C ...] [--collection-exclude C .
 connection types                            [-o]      # list available connector types
 connection template --type TYPE [--file FILE]         # print/write a fill-in template
 connection validate --file FILE                       # validate a connection document
+```
+
+## `tdk user` *(system-scoped — no `--proj`)*
+
+```
+user create --name NAME [--full-name F] [--email E] [--password P] [--disabled]
+user update --name NAME [--full-name F] [--email E] [--password P] [--enabled]
+user delete --name NAME [--confirm delete]
+user get    --name NAME [-o]
+user list               [-o]
 ```
 
 ## `tdk permission`
@@ -383,7 +400,7 @@ so the bare files apply again. `settings` names the profile it reports on.
 auth info
 auth add-cert        --server S --pem FILE
 auth delete-cert     --server S
-auth password-change --server S --old-password OLD --new-password NEW
+auth password-change --user U --old-password OLD --new-password NEW
 auth service-token create    --slot 1|2 --expires-in-days N|-1 [--comment C]
 auth service-token list
 auth service-token revoke    --slot 1|2
@@ -428,11 +445,22 @@ refused:
 login    [--server S] [--user U] [--password P] [--token[=T]]
 logout
 status
-info     [--license] [--third-party] [--release-notes]
+info license | release-notes | third-party [--wide]
 about
-version
 shell
-examples [--dir D] [--guide]
+examples list    [-o]
+examples extract --name NAME --dir DIR     # runs the example's setup step in DIR
+```
+
+`tdk --version` prints the client version.
+
+## `tdk ai`
+
+Added by the Tabsdata AI agent package when it is installed.
+
+```
+ai refresh --conn NAME     # reclassify the external system behind a connection
+                           # at the next metadata sweep
 ```
 
 `login` takes the server from `tdk set --server` when `--server` is

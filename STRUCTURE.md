@@ -6,124 +6,95 @@ Copyright 2026 Tabsdata Inc.
 
 ## User-facing API
 
-Everything is accessible via `import tabsdata as td`.
-Do NOT import from internal paths (anything with `_` prefix).
+The public surface lives in the `tabsdatak` namespace package: `tabsdatak.api`,
+`tabsdatak.tableframe`, `tabsdatak.dataquality`, `tabsdatak.error`, and one
+`tabsdatak.conn.<name>` package per connector. Do NOT import from internal
+paths (anything with a `_` prefix).
 
-See `LLM_GUIDE.md` for usage examples.
+See `LLM_GUIDE.md` for usage examples and `books/guides/LLM.md` for the full
+authoring reference.
+
+`tabsdatak` is an implicit namespace package: every distribution under
+`connectors/python/tabsdata-*` contributes its own subpackages to it. The one
+anchor `tabsdatak/__init__.py` lives in `client/platform/src/main/python/`.
+Each distribution keeps its code in `src/main/python/tabsdatak/`.
 
 ## Where to find things
 
-### Decorators
-`_decorators.py` → `td.publisher`, `td.transformer`, `td.subscriber`
+### Core API — `connectors/python/tabsdata-api`
+- `api.py` → `tabsdatak.api`: `publisher`, `transformer`, `subscriber`,
+  `stream_publisher`, `CronTrigger`, `TablesTrigger`, `AllTablesTrigger`,
+  `Secret`, the `Src` / `Dest` / `StreamSrc` bases, the `*Spec` type aliases
+- `tableframe/` → `TableFrame`; `tableframe/functions.py` → `col()`, `lit()`,
+  `concat()`
+- `dataquality/` → `DataQuality`, classifiers, operators
+- `error.py` → `TabsdataException`, `ApiException`, `ApiErrorCode`
+- `_connectors.py` → connector discovery: `avail_srcs()`,
+  `avail_stream_srcs()`, `avail_dests()`
+- `spi.py` → the connector implementer surface (not for flow code)
 
-### Connections (Conn classes)
+### Connector shared code
+- `tabsdata-conn-common` → `tabsdatak.conn.common`: credentials and value
+  types (`types.py`: `UserPassword`, `AwsAccessSecretKey`, `GCPJson`,
+  `GCPHmac`, `AzureAccountKey`), `ConnException` (`error.py`)
+- `tabsdata-conn-common-sql` → `tabsdatak.conn.common.sql`: shared SQL source
+  and destination machinery, `@td.sql.*` metadata
+- `tabsdata-conn-common-file` → `tabsdatak.conn.common.file`: shared file
+  formats and validators for the file connectors, `@td.file.*` metadata
+
+### Connectors (Src, Dest and Conn classes)
+One distribution per connector, `connectors/python/tabsdata-conn-<name>`,
+imported as `tabsdatak.conn.<name>`. Each exposes `<Vendor>Src` /
+`<Vendor>Dest` for flow code and `<Vendor>SrcConn` / `<Vendor>DestConn` for the
+connection registered on the collection.
+
 SQL databases:
-- `_io/connections/mysql_connection.py` → `MySQLConn`
-- `_io/connections/postgres_connection.py` → `PostgresConn`
-- `_io/connections/mariadb_connection.py` → `MariaDBConn`
-- `_io/connections/oracle_connection.py` → `OracleConn`
-- `_io/connections/db2_connection.py` → `Db2Conn`
-- `_io/connections/clickhouse_connection.py` → `ClickHouseConn`
-- `_io/connections/starrocks_connection.py` → `StarRocksConn`
-- `_io/connections/druid_connection.py` → `DruidConn`
+- `mysql` → `MySQLSrc`, `MySQLDest`, `MySQLCdcStreamSrc`
+- `postgres` → `PostgresSrc`, `PostgresDest`, `PostgresCdcStreamSrc`
+- `oracle` → `OracleSrc`, `OracleDest`
+- `mssql` → `MSSQLSrc`, `MSSQLDest`
+- `db2` → `Db2Src`, `Db2Dest`, `Db2CdcStreamSrc`
 
-Cloud storage:
-- `_io/connections/file_connections/s3_connection.py` → `S3Conn`
-- `_io/connections/file_connections/gcp_connection.py` → `GCSConn`
-- `_io/connections/file_connections/azure_connection.py` → `AzureConn`
+Warehouses and analytical stores:
+- `databricks` → `DatabricksSrc`, `DatabricksDest`
+- `bigquery` → `BigQueryDest`
+- `snowflake` → `SnowflakeDest`
+- `clickhouse` → `ClickHouseDest`
+- `druid` → `DruidDest`
+- `starrocks` → `StarRocksDest`
+- `mongodb` → `MongoDBDest`
 
-Named connections:
-- `_io/connections/named_connection/named_connection.py` → `NamedConn`
+Files and object storage:
+- `localfile` → `LocalFileSrc`, `LocalFileDest`
+- `s3` → `S3Src`, `S3Dest`
+- `gcs` → `GCSSrc`, `GCSDest`
+- `azureblob` → `AzureBlobSrc`, `AzureBlobDest`
 
-### Sources (Src classes) — for @td.publisher
-SQL (new style):
-- `_io/inputs/sql/mysql_input.py` → `MySQLSrc`
-- `_io/inputs/sql/postgres_input.py` → `PostgresSrc`
-- `_io/inputs/sql/mariadb_input.py` → `MariaDBSrc`
-- `_io/inputs/sql/oracle_input.py` → `OracleSrc`
-- `_io/inputs/sql/db2_input.py` → `Db2Src`
+Applications and streams:
+- `salesforce` → `SalesforceSrc`, `SalesforceReportSrc`
+- `kafka` → `KafkaStreamSrc`
 
-Cloud files (new style):
-- `_io/inputs/file/s3_input.py` → `S3Src`
-- `_io/inputs/file/gcs_input.py` → `GCSSrc`
-- `_io/inputs/file/azure_input.py` → `AzureSrc`
+Development:
+- `dev` → `DataGenSrc`, `TrashDest`
 
-Local and internal:
-- `_io/inputs/file_inputs.py` → `LocalFileSource`
-- `_io/inputs/table_inputs.py` → `TableInput`
-- `_io/inputs/stage_input.py` → `Stage`
+Stream staging:
+- `tabsdata-conn-stream-stage` → `tabsdatak.conn.stream`: stages the batches
+  of the stream sources (internal)
 
-Legacy (deprecated — use new-style classes above):
-- `_io/inputs/file_inputs.py` → `S3Source`, `AzureSource`, `GCSSource`
-- `_io/inputs/sql_inputs.py` → `MySQLSource`, `PostgresSource`, `MariaDBSource`, `OracleSource`
+Scaffold a new connector from `templates/connector/`; `books/guides/CONN_DEV.md`
+covers the implementer side.
 
-### Destinations (Dest classes) — for @td.subscriber
-SQL (new style):
-- `_io/outputs/sql/mysql_output.py` → `MySQLDest`
-- `_io/outputs/sql/postgres_output.py` → `PostgresDest`
-- `_io/outputs/sql/mariadb_output.py` → `MariaDBDest`
-- `_io/outputs/sql/oracle_output.py` → `OracleDest`
-- `_io/outputs/sql/clickhouse_output.py` → `ClickHouseDest`
-- `_io/outputs/sql/starrocks_output.py` → `StarRocksDest`
-- `_io/outputs/sql/druid_output.py` → `DruidDest`
-
-Cloud files (new style):
-- `_io/outputs/file/s3_output.py` → `S3Dest`
-- `_io/outputs/file/gcs_output.py` → `GCSDest`
-- `_io/outputs/file/azure_output.py` → `AzureDest`
-
-Local and internal:
-- `_io/outputs/file_outputs.py` → `LocalFileDestination`
-- `_io/outputs/table_outputs.py` → `TableOutput`
-
-Legacy (deprecated — use new-style classes above):
-- `_io/outputs/file_outputs.py` → `S3Destination`, `AzureDestination`, `GCSDestination`
-- `_io/outputs/sql_outputs.py` → `MySQLDestination`, `PostgresDestination`, `MariaDBDestination`, `OracleDestination`
-
-### External connectors (separate pip packages)
-These live under `connectors/python/tabsdata-<name>/` in the repo
-and install into the `tabsdata.connector.<name>` namespace:
-- `tabsdata-bigquery` → `BigQueryConn`, `BigQueryDest`
-- `tabsdata-databricks` → `DatabricksConn`, `DatabricksSrc`, `DatabricksDest`
-- `tabsdata-kafka` → `KafkaConn`, `KafkaTrigger`
-- `tabsdata-mongodb` → `MongoDBConn`, `MongoDBDest`
-- `tabsdata-mssql` → `MSSQLConn`, `MSSQLSrc`, `MSSQLDest`
-- `tabsdata-salesforce` → `SalesforceConn`, `SalesforceSrc`, `SalesforceReportSrc`
-- `tabsdata-snowflake` → `SnowflakeConn`, `SnowflakeDest`
-
-### Credentials
-`_credentials.py` → `UserPasswordCredentials`, `S3AccessKeyCredentials`, `GCPServiceAccountKeyCredentials`, `AzureAccountKeyCredentials`, `HMACCredentials`
-
-### Secrets
-`_secret.py` → `EnvironmentSecret`, `HashiCorpSecret`
-
-### File formats
-`_format.py` → `CSVFormat`, `ParquetFormat`, `AvroFormat`, `NDJSONFormat`, `LogFormat`
-
-### Triggers
-`_cron_trigger.py` → `CronTrigger`
-`_io/stage_trigger.py` → `StageTrigger`
-
-### TableFrame (data processing)
-`tableframe/lazyframe/frame.py` → `TableFrame`
-`tableframe/functions/col.py` → `col()`
-`tableframe/functions/lit.py` → `lit()`
-`tableframe/functions/eager.py` → `concat()`
-`tableframe/dtypes.py` → type classes (Int32, String, etc.)
-
-### Data quality
-`dataquality/` → `DataQuality`, classifiers, operators
-
-### Exceptions
-`exceptions.py` → all exception and error code definitions
+### Tools and clients
+- `tabsdata-cli` → `tabsdatak.cli`: the `tdk` command (`tdk-reference.md`)
+- `tabsdata-sdk` → `tabsdatak.sdk`: `TabsdataServer`
+  (`sdk/tabsdata_server.py`), the Python client of the API server
+- `tabsdata-common` → `tabsdatak.common`: shared helpers and logging
 
 ### Backend runtime (internal — not user-facing)
-`_tabsserver/` → function execution, YAML parsing, environment creation
-`_tabsserver/tools/` → janitor, config resolver, server info
-
-### CLI (internal)
-`_cli/` → command-line interface implementation
-
-### API client
-`api/apiserver.py` → `APIServer` (HTTP client)
-`api/tabsdata_server.py` → `TabsdataServer` (high-level SDK)
+- `tabsdata-server` → `tabsdatak.server`: function and data quality execution
+  (`_tdrunner`), workers and rendering (`_tdserver`)
+- `tabsdata-backend`, `tabsdata-control-plane`, `tabsdata-execution-plane` →
+  `tabsdatak._subsystem`: the binary components of the backend tier and of the
+  control and execution planes
+- `tabsdata-medallion` → `tabsdatak._medallion`: bronze, silver and gold
+  pipeline support

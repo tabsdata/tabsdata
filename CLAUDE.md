@@ -29,19 +29,24 @@ exist in both repos, and after dependency changes here ee needs re-locking
   (`tdserver`, `td_apiserver`, `td_supervisor`, ...). Binary names must stay in
   sync with `setup.toml` `[[binary_groups]]` and the bundling utils in the
   tabsdata package (grep for `binary_groups`).
-- `client/platform/src/main/python/` — the `tabsdata` SDK and the `tabsdatak`
-  CLI package. **`tabsdatak` must not import `tabsdata`** (ruff banned-api
-  enforces this).
-- `connectors/python/` — connector packages: `tabsdata-conn-*` building blocks,
-  `tabsdata-<name>` installable packages in the `tabsdata.connector.<name>`
-  namespace. Scaffold new ones from `templates/connector/`.
+- `client/platform/src/main/python/` — the `tabsdata` distribution: a thin
+  `tabsdata` package and the anchor of the `tabsdatak` namespace package.
+  **`tabsdatak` must not import `tabsdata`** (ruff banned-api enforces this).
+- `connectors/python/` — the `tabsdatak` distributions: `tabsdata-api`,
+  `tabsdata-cli` (`tdk`), `tabsdata-sdk`, the runtime (`tabsdata-server`,
+  `tabsdata-backend`, ...), and one `tabsdata-conn-<name>` per connector in the
+  `tabsdatak.conn.<name>` namespace. Scaffold new connectors from
+  `templates/connector/`.
 - `extensions/` — extension points with open-source default implementations.
 - `variant/` — edition-specific resources (locks, manifest assets, configs).
-- Docs for the SDK surface: `LLM_GUIDE.md`, `STRUCTURE.md`, `tdk-reference.md`.
+- Docs for the SDK surface: `LLM_GUIDE.md`, `STRUCTURE.md`, `tdk-reference.md`,
+  and the fuller `books/guides/LLM.md`. The official documentation is
+  https://docs.tabsdata.com/guide/.
 
 ## Conventions
 
-- The public Python API is only what `import tabsdata as td` re-exports; never
+- The public Python API is `tabsdatak.api`, `tabsdatak.tableframe`,
+  `tabsdatak.dataquality` and the `tabsdatak.conn.<name>` packages; never
   import from `_`-prefixed paths in examples, docs, or tests of public behavior.
 - Rust errors: thiserror-style domain enums mapped to `td-error`'s `ApiError`
   via the `td_error!` / `api_error!` macros — follow existing crates.
