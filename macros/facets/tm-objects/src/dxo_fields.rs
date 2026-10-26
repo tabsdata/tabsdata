@@ -254,6 +254,27 @@ pub fn fields_callback(
     }
 }
 
+/// Reads and writes of a flattened base's fields reach through to it, so a
+/// nested `x.base.base.id` reads `x.id`. Sound only because the merged
+/// duplicate-name check guarantees an outer field never shadows a base one.
+pub fn flat_deref(ident: &Ident, field: &Ident, base: &Path) -> proc_macro2::TokenStream {
+    quote! {
+        impl ::std::ops::Deref for #ident {
+            type Target = #base;
+
+            fn deref(&self) -> &#base {
+                &self.#field
+            }
+        }
+
+        impl ::std::ops::DerefMut for #ident {
+            fn deref_mut(&mut self) -> &mut #base {
+                &mut self.#field
+            }
+        }
+    }
+}
+
 /// `__dxo_fields_<Ident>`.
 pub fn callback_ident(ident: &Ident) -> Ident {
     quote::format_ident!("__dxo_fields_{}", ident)
@@ -302,6 +323,10 @@ pub fn dlo_dto_flat_machinery(item: &syn::ItemStruct) -> syn::Result<proc_macro2
             Some(tp.path.clone())
         }
     };
+    let deref = match (flat_fields.first(), &base_ty) {
+        (Some(f), Some(base)) => flat_deref(ident, f.ident.as_ref().expect("named field"), base),
+        _ => quote! {},
+    };
 
     let own: Vec<(&Ident, &Type)> = named
         .named
@@ -330,5 +355,6 @@ pub fn dlo_dto_flat_machinery(item: &syn::ItemStruct) -> syn::Result<proc_macro2
     Ok(quote! {
         #callback
         #name_check
+        #deref
     })
 }

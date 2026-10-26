@@ -8,7 +8,7 @@
 
 use crate::dao_marks::{FieldMarks, field_ident, field_type, option_inner_type, type_names};
 use crate::dao_unique::{Under, addresses};
-use crate::dxo_fields::{callback_ident, fields_callback};
+use crate::dxo_fields::{callback_ident, fields_callback, flat_deref};
 use crate::type_builder::parse_input_item_struct;
 use darling::ast::NestedMeta;
 use darling::util::{Flag, Override, PathList};
@@ -217,6 +217,9 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
     let marks = FieldMarks::parse(fields)?;
     let flatten = flatten_info(&marks)?;
     let base_ty = flatten.as_ref().map(|fi| &fi.base_ty);
+    let deref = flatten
+        .as_ref()
+        .map(|fi| flat_deref(ident, &fi.field, &fi.base_ty));
     let interval = fields.iter().find(|f| type_names(&f.ty, "Scd2Interval"));
     if let Some(f) = interval
         && !marks.has(f, "flatten")
@@ -1055,6 +1058,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
         #update_impl
         #timeline_impl
         #registration
+        #deref
     })
 }
 
