@@ -30,15 +30,15 @@ pub async fn find_data_version_location_at<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     collection: &CollectionIdName,
     table: &TableIdName,
-    at: &AtTime,
+    at: Option<&AtTime>,
     uncommitted: &UncommittedStatus,
 ) -> Result<(TableDBWithNames, Option<SPath>), TdError> {
     let collection_id = resolve_collection_id(conn, collection).await?;
-    let table_row: TableDBWithNames = conn
-        .scd2()
-        .as_of(at)
-        .fetch_one(and!(&collection_id, table))
-        .await?;
+    let condition = and!(&collection_id, table);
+    let table_row: TableDBWithNames = match at {
+        Some(at) => conn.scd2().as_of(at).fetch_one(condition).await?,
+        None => conn.scd2().fetch_one(condition).await?,
+    };
     let table_id = table_row.table_id;
     let location = resolve_table_location(conn, at, &table_id, uncommitted).await?;
     Ok((table_row, location))

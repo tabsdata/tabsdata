@@ -83,7 +83,7 @@ async fn load_ltdv_committed_data_at(db: TdPool) -> Result<(), TdError> {
     let t = Instant::now();
     let row = db
         .table_data_versions()
-        .committed_data_at(&h.table_id, &AtTime::from(h.before_time))
+        .committed_data_at(&h.table_id, Some(&AtTime::from(h.before_time)))
         .await?;
     record(
         "ltdv::committed_data_at",

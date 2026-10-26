@@ -28,20 +28,25 @@ async fn function_history(
         .await?;
     let conn = gated_conn.get(grant);
 
-    let at = at.at;
     let collection_id = resolve_collection_id(conn, &collection_param.collection).await?;
-    let function: FunctionDBWithNames = conn
-        .scd2()
-        .as_of(&at)
-        .fetch_one(and!(&collection_id, &function_param.function))
-        .await?;
-
+    let condition = and!(&collection_id, &function_param.function);
     // Head versions and patches interleave: the union DAO is the one
     // patch-aware surface.
-    conn.timeline()
-        .until(&at)
-        .list(and!(&function.function_id), list_params)
-        .await
+    match &at.at {
+        Some(at) => {
+            let function: FunctionDBWithNames = conn.scd2().as_of(at).fetch_one(condition).await?;
+            conn.timeline()
+                .until(at)
+                .list(and!(&function.function_id), list_params)
+                .await
+        }
+        None => {
+            let function: FunctionDBWithNames = conn.scd2().fetch_one(condition).await?;
+            conn.timeline()
+                .list(and!(&function.function_id), list_params)
+                .await
+        }
+    }
 }
 
 #[cfg(test)]
@@ -208,7 +213,7 @@ mod tests {
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
                     },
-                    AtTimeParam { at: t0 },
+                    AtTimeParam { at: Some(t0) },
                 ),
                 ListParams::default(),
             )
@@ -231,7 +236,7 @@ mod tests {
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
                     },
-                    AtTimeParam { at: t1 },
+                    AtTimeParam { at: Some(t1) },
                 ),
                 ListParams {
                     filter: Default::default(),
@@ -264,7 +269,7 @@ mod tests {
                     FunctionParam {
                         function: FunctionIdName::from_str("function_2")?,
                     },
-                    AtTimeParam { at: t2 },
+                    AtTimeParam { at: Some(t2) },
                 ),
                 ListParams::default(),
             )
@@ -293,7 +298,7 @@ mod tests {
                     FunctionParam {
                         function: FunctionIdName::from_str("function_2")?,
                     },
-                    AtTimeParam { at: t2p },
+                    AtTimeParam { at: Some(t2p) },
                 ),
                 ListParams::default(),
             )
@@ -325,7 +330,7 @@ mod tests {
                     FunctionParam {
                         function: FunctionIdName::from_str("function_2")?,
                     },
-                    AtTimeParam { at: t3 },
+                    AtTimeParam { at: Some(t3) },
                 ),
                 ListParams::default(),
             )
@@ -348,7 +353,7 @@ mod tests {
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
                     },
-                    AtTimeParam { at: t4 },
+                    AtTimeParam { at: Some(t4) },
                 ),
                 ListParams {
                     filter: Default::default(),
@@ -428,7 +433,7 @@ mod tests {
                         FunctionParam {
                             function: FunctionIdName::from_str("publisher").unwrap(),
                         },
-                        AtTimeParam { at },
+                        AtTimeParam { at: Some(at) },
                     ),
                     ListParams::default(),
                 )

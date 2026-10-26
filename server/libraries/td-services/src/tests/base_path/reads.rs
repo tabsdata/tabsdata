@@ -22,9 +22,8 @@ use td_objects::dxo::physical_function_run::{FunctionRunParam, InputIdxParam};
 use td_objects::dxo::project::ProjectDB;
 use td_objects::dxo::table::{TableDB, TableParam, UncommittedParam};
 use td_objects::types::basic::{
-    AccessTokenId, AtTime, BasePath, CollectionIdName, CollectionName, InputIdx,
-    LogicalFunctionRunStatus, PhysicalFunctionRunId, StorageVersion, TableIdName, TransactionKey,
-    UncommittedStatus, UserId,
+    AccessTokenId, BasePath, CollectionIdName, CollectionName, InputIdx, LogicalFunctionRunStatus,
+    PhysicalFunctionRunId, StorageVersion, TableIdName, TransactionKey, UncommittedStatus, UserId,
 };
 use td_objects::types::stream::BoxedSyncStream;
 use td_queries::Queries;
@@ -79,7 +78,7 @@ async fn get_table_download(
             TableParam {
                 table: TableIdName::from_str(table)?,
             },
-            AtTimeParam { at: AtTime::now() },
+            AtTimeParam { at: None },
             UncommittedParam {
                 uncommitted: UncommittedStatus::TRUE,
             },

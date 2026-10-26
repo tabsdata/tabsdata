@@ -24,7 +24,7 @@ pub enum StorageServiceError {
 
 pub async fn resolve_table_location<S: DbScope, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
-    triggered_on: &AtTime,
+    triggered_on: Option<&AtTime>,
     table_id: &TableId,
     uncommitted: &UncommittedStatus,
 ) -> Result<Option<SPath>, TdError> {
@@ -78,7 +78,6 @@ mod tests {
     use td_objects::dxo::project::ProjectDB;
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::dxo::transaction::TransactionDB;
-    use td_objects::types::basic::AtTime;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
@@ -470,7 +469,7 @@ mod tests {
             DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
         resolve_table_location(
             &mut connection,
-            &AtTime::now(),
+            None,
             &table_id,
             &if uncommitted {
                 UncommittedStatus::TRUE

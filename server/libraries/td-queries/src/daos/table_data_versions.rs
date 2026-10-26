@@ -43,8 +43,9 @@ const INCLUDING_UNCOMMITTED: &[LogicalFunctionRunStatus] = &[
 
 /// Where the newest with-data version is looked for.
 enum Anchor<'a> {
-    /// Logical versions of `table` triggered at or before `at`.
-    At(&'a TableId, &'a AtTime),
+    /// Logical versions of `table` triggered at or before `at`, or any of
+    /// them without it.
+    At(&'a TableId, Option<&'a AtTime>),
     /// Logical versions of the same table strictly before this one, in
     /// `(triggered_on, id)` order.
     Before(&'a LogicalTableDataVersionId),
@@ -56,11 +57,12 @@ where
 {
     /// The committed data of `table_id` a reader at `at` sees: the newest
     /// current materialization with data among the logical versions
-    /// triggered at or before `at` whose producer committed.
+    /// triggered at or before `at` (any, without it) whose producer
+    /// committed.
     pub async fn committed_data_at(
         self,
         table_id: &TableId,
-        at: &AtTime,
+        at: Option<&AtTime>,
     ) -> Result<Option<PhysicalTableDataVersionDBWithNames>, SqlError> {
         self.fetch(with_data_query(Anchor::At(table_id, at), COMMITTED))
             .await
@@ -81,7 +83,7 @@ where
     pub async fn data_including_uncommitted_at(
         self,
         table_id: &TableId,
-        at: &AtTime,
+        at: Option<&AtTime>,
     ) -> Result<Option<PhysicalTableDataVersionDBWithNames>, SqlError> {
         self.fetch(with_data_query(
             Anchor::At(table_id, at),
@@ -190,8 +192,10 @@ fn with_data_query(anchor: Anchor<'_>, producers: &[LogicalFunctionRunStatus]) -
     );
     match anchor {
         Anchor::At(table_id, at) => {
-            q.and_where(Expr::col(ltdv_table_id).eq(table_id.as_sea_expr()))
-                .and_where(Expr::col(ltdv_triggered_on).lte(at.as_sea_expr()));
+            q.and_where(Expr::col(ltdv_table_id).eq(table_id.as_sea_expr()));
+            if let Some(at) = at {
+                q.and_where(Expr::col(ltdv_triggered_on).lte(at.as_sea_expr()));
+            }
         }
         Anchor::Before(logical_version) => {
             q.join_as(
@@ -256,11 +260,21 @@ mod tests {
 
     #[test]
     fn test_committed_data_at_query() {
-        let sql = with_data_query(Anchor::At(&table_id(), &at()), COMMITTED)
+        let sql = with_data_query(Anchor::At(&table_id(), Some(&at())), COMMITTED)
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"SELECT "physical_table_data_versions__with_names".* FROM "physical_table_data_versions__with_names" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "physical_table_data_versions__with_names"."logical_table_data_version_id" LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE "logical_table_data_versions"."table_id" = '00000000000000000000000t00' AND "logical_table_data_versions"."triggered_on" <= '2023-11-14 22:13:20.000000 +00:00' AND "physical_table_data_versions__with_names"."valid_to" = ('infinity'::timestamptz) AND "physical_table_data_versions__with_names"."has_data" = TRUE AND ("producer_lfr"."id" IS NULL OR "producer_lfr"."status" IN ('C')) ORDER BY "logical_table_data_versions"."triggered_on" DESC, "logical_table_data_versions"."id" DESC LIMIT 1"#
+        );
+    }
+
+    #[test]
+    fn test_committed_data_now_query() {
+        let sql = with_data_query(Anchor::At(&table_id(), None), COMMITTED)
+            .to_string(PostgresQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"SELECT "physical_table_data_versions__with_names".* FROM "physical_table_data_versions__with_names" INNER JOIN "logical_table_data_versions" ON "logical_table_data_versions"."id" = "physical_table_data_versions__with_names"."logical_table_data_version_id" LEFT JOIN "logical_function_runs" AS "producer_lfr" ON "logical_table_data_versions"."producer_logical_function_run_id" = "producer_lfr"."id" WHERE "logical_table_data_versions"."table_id" = '00000000000000000000000t00' AND "physical_table_data_versions__with_names"."valid_to" = ('infinity'::timestamptz) AND "physical_table_data_versions__with_names"."has_data" = TRUE AND ("producer_lfr"."id" IS NULL OR "producer_lfr"."status" IN ('C')) ORDER BY "logical_table_data_versions"."triggered_on" DESC, "logical_table_data_versions"."id" DESC LIMIT 1"#
         );
     }
 
@@ -276,7 +290,7 @@ mod tests {
 
     #[test]
     fn test_data_including_uncommitted_at_query() {
-        let sql = with_data_query(Anchor::At(&table_id(), &at()), INCLUDING_UNCOMMITTED)
+        let sql = with_data_query(Anchor::At(&table_id(), Some(&at())), INCLUDING_UNCOMMITTED)
             .to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,

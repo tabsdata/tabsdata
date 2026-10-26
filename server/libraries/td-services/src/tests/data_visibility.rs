@@ -135,7 +135,7 @@ async fn test_replay_in_flight_keeps_committed_data_visible(db: TdPool) -> Resul
                     .table_id;
                 let committed = db
                     .table_data_versions()
-                    .committed_data_at(&table_id, &AtTime::now())
+                    .committed_data_at(&table_id, None)
                     .await?
                     .expect("the committed run's data is visible")
                     .base
@@ -145,7 +145,7 @@ async fn test_replay_in_flight_keeps_committed_data_visible(db: TdPool) -> Resul
                 let visible = || async {
                     Ok::<_, TdError>(
                         db.table_data_versions()
-                            .committed_data_at(&table_id, &AtTime::now())
+                            .committed_data_at(&table_id, None)
                             .await?
                             .map(|v| v.id.clone()),
                     )

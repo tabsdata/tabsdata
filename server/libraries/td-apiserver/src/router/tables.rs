@@ -84,9 +84,10 @@ pub async fn list_tables(
     State(state): State<Services>,
     Extension(context): Extension<RequestContext>,
     Project(project_id): Project,
+    Query(at): Query<AtTimeParam>,
     Query(list_params): Query<ListParams>,
 ) -> Result<ListStatus<Table>, ErrorStatus> {
-    let request = context.list((), list_params).in_project(project_id);
+    let request = context.list(at, list_params).in_project(project_id);
     let response = state.table_list(request).await?;
     Ok(ListStatus::OK(response))
 }
@@ -105,9 +106,12 @@ pub async fn list_tables_by_collection(
     Extension(context): Extension<RequestContext>,
     Project(project_id): Project,
     Path(collection): Path<CollectionParam>,
+    Query(at): Query<AtTimeParam>,
     Query(list_params): Query<ListParams>,
 ) -> Result<ListStatus<Table>, ErrorStatus> {
-    let request = context.list(collection, list_params).in_project(project_id);
+    let request = context
+        .list((collection, at), list_params)
+        .in_project(project_id);
     let response = state.table_list_by_collection(request).await?;
     Ok(ListStatus::OK(response))
 }

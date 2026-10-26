@@ -36,7 +36,7 @@ async fn table_download(
         gated_conn.get(grant),
         &collection.collection,
         &table.table,
-        &at.at,
+        at.at.as_ref(),
         &uncommitted.uncommitted,
     )
     .await?;
@@ -136,7 +136,7 @@ pub(crate) mod tests {
                     TableParam {
                         table: TableIdName::from_str(table)?,
                     },
-                    AtTimeParam { at: *at_time },
+                    AtTimeParam { at: Some(*at_time) },
                     UncommittedParam {
                         uncommitted: UncommittedStatus::TRUE,
                     },
@@ -157,7 +157,7 @@ pub(crate) mod tests {
                     TableParam {
                         table: TableIdName::from_str(table)?,
                     },
-                    AtTimeParam { at: *at_time },
+                    AtTimeParam { at: Some(*at_time) },
                     UncommittedParam {
                         uncommitted: UncommittedStatus::TRUE,
                     },

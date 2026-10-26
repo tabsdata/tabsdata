@@ -8,7 +8,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
-use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
+use td_objects::dxo::crudl::{AtTimeParam, ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::table::{Table, TableDBWithNames};
 use td_queries::Queries;
 
@@ -16,18 +16,28 @@ use td_queries::Queries;
 async fn table_list(
     authz: Ctx<AuthzContext>,
     gated_conn: &mut GatedConnection<RO, InProject>,
-    request: WithinProject<ListRequest>,
+    request: WithinProject<ListRequest<AtTimeParam>>,
 ) -> Result<ListResponse<Table>, TdError> {
     let (project, request) = request.into_parts();
-    let (ctx, _, list_params) = request.into_parts();
+    let (ctx, at, list_params) = request.into_parts();
     // A project viewer sees all collections in the project.
     let grant = authz
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    conn.scd2()
-        .list(TableDBWithNames::user(), list_params)
-        .await
+    match &at.at {
+        None => {
+            conn.scd2()
+                .list(TableDBWithNames::user(), list_params)
+                .await
+        }
+        Some(at) => {
+            conn.scd2()
+                .as_of(at)
+                .list(TableDBWithNames::user(), list_params)
+                .await
+        }
+    }
 }
 
 #[cfg(test)]
@@ -41,8 +51,8 @@ mod tests {
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::{TdError, assert_service_error};
     use td_objects::dxo::collection::CollectionParam;
-    use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::dxo::crudl::{AtTimeParam, ListParams};
     use td_objects::dxo::function::{ChildFunction, FunctionRegister};
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::ReuseFrozen;
@@ -94,7 +104,7 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .list((), ListParams::default())
+            .list(AtTimeParam { at: None }, ListParams::default())
             .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
@@ -178,7 +188,7 @@ mod tests {
         let data = service
             .table_list(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .list((), ListParams::default())
+                    .list(AtTimeParam { at: None }, ListParams::default())
                     .in_project(p.project_id),
             )
             .await?
@@ -207,7 +217,7 @@ mod tests {
                     .table_list(
                         RequestContext::with(AccessTokenId::default(), UserId::admin())
                             .list(
-                                (),
+                                AtTimeParam { at: None },
                                 ListParams {
                                     filter: vec![filter],
                                     ..ListParams::default()
@@ -289,7 +299,7 @@ mod tests {
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-            .list((), ListParams::default())
+            .list(AtTimeParam { at: None }, ListParams::default())
             .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
@@ -302,7 +312,7 @@ mod tests {
         assert_eq!(data[1].name, TableName::try_from("table_2")?);
 
         let request = RequestContext::with(AccessTokenId::default(), user.id)
-            .list((), ListParams::default())
+            .list(AtTimeParam { at: None }, ListParams::default())
             .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());

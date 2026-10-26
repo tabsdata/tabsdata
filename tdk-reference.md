@@ -279,9 +279,10 @@ functions. A list accepts the entities whose ids its rows carry (its API
 schema marks those fields `tags`); the same entity and key repeated is OR,
 otherwise AND. `:ne:` and `:lk:` match only rows whose entity carries the
 key, so an untagged row matches neither. Tag filters test current tags,
-except on as-of listings, which test the tags of their instant. System keys
-start with `_`, like `_parent`. The SDK's `list_tag_keys()` and
-`list_tag_values(key)` list the keys and values in use.
+except on `table list --at` / `--at-trx`, which lists the tables and tests
+the tags of that instant. System keys start with `_`, like `_parent`. The
+SDK's `list_tag_keys()` and `list_tag_values(key)` list the keys and values
+in use.
 
 ## Execution
 

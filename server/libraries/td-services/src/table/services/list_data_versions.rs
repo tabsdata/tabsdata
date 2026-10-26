@@ -32,19 +32,22 @@ async fn table_list_data_versions(
     let conn = gated_conn.get(grant);
 
     let collection_id_name = collection_param.collection;
-    let at = at_param.at;
     let table_id_name = table_param.table;
     let collection_id = resolve_collection_id(conn, &collection_id_name).await?;
-    let table: TableDBWithNames = conn
-        .scd2()
-        .as_of(&at)
-        .fetch_one(and!(&collection_id, &table_id_name))
-        .await?;
-
-    conn.timeline()
-        .until(&at)
-        .list(&table.table_id, list_params)
-        .await
+    let condition = and!(&collection_id, &table_id_name);
+    match &at_param.at {
+        Some(at) => {
+            let table: TableDBWithNames = conn.scd2().as_of(at).fetch_one(condition).await?;
+            conn.timeline()
+                .until(at)
+                .list(&table.table_id, list_params)
+                .await
+        }
+        None => {
+            let table: TableDBWithNames = conn.scd2().fetch_one(condition).await?;
+            conn.timeline().list(&table.table_id, list_params).await
+        }
+    }
 }
 
 #[cfg(test)]
@@ -156,7 +159,7 @@ mod tests {
                         TableParam {
                             table: TableIdName::from_str("t0").unwrap(),
                         },
-                        AtTimeParam { at },
+                        AtTimeParam { at: Some(at) },
                     ),
                     ListParams::default(),
                 )

@@ -226,9 +226,9 @@ pub struct ListResponse<LL> {
     pub next_pagination_id: Option<String>,
 }
 
-/// `?at=`, now by default: the instant a historical read resolves at.
+/// `?at=`: the instant a read resolves at, rows and tags alike. Without it
+/// the read takes the current rows.
 #[ta_objects::QueryParam]
 pub struct AtTimeParam {
-    #[serde(default)]
-    pub at: AtTime,
+    pub at: Option<AtTime>,
 }

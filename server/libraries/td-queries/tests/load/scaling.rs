@@ -264,7 +264,7 @@ async fn time_chain_queries(
         out,
         "ltdv::committed_data_at",
         (db).table_data_versions()
-            .committed_data_at(&h.table_id, &AtTime::from(h.before_time))
+            .committed_data_at(&h.table_id, Some(&AtTime::from(h.before_time)))
             .await?
     );
 

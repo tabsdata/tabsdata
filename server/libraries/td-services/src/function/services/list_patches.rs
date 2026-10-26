@@ -31,18 +31,23 @@ async fn list_function_patches(
 
     let collection_id_name = collection_param.collection;
     let function_id_name = function_param.function;
-    let at = at_param.at;
     let collection_id = resolve_collection_id(conn, &collection_id_name).await?;
-    let function: FunctionDBWithNames = conn
-        .scd2()
-        .as_of(&at)
-        .fetch_one(and!(&collection_id, &function_id_name))
-        .await?;
-
-    conn.timeline()
-        .until(&at)
-        .list(&function.function_id, list_params)
-        .await
+    let condition = and!(&collection_id, &function_id_name);
+    match &at_param.at {
+        Some(at) => {
+            let function: FunctionDBWithNames = conn.scd2().as_of(at).fetch_one(condition).await?;
+            conn.timeline()
+                .until(at)
+                .list(&function.function_id, list_params)
+                .await
+        }
+        None => {
+            let function: FunctionDBWithNames = conn.scd2().fetch_one(condition).await?;
+            conn.timeline()
+                .list(&function.function_id, list_params)
+                .await
+        }
+    }
 }
 
 #[cfg(test)]
@@ -113,7 +118,7 @@ mod tests {
             FunctionParam {
                 function: FunctionIdName::from_str("f0")?,
             },
-            AtTimeParam { at: AtTime::now() },
+            AtTimeParam { at: None },
         );
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(param, ListParams::default())
@@ -227,7 +232,7 @@ mod tests {
                         FunctionParam {
                             function: FunctionIdName::from_str(function)?,
                         },
-                        AtTimeParam { at: AtTime::now() },
+                        AtTimeParam { at: None },
                     ),
                     ListParams::default(),
                 )
@@ -324,7 +329,7 @@ mod tests {
                         FunctionParam {
                             function: FunctionIdName::from_str("f0")?,
                         },
-                        AtTimeParam { at },
+                        AtTimeParam { at: Some(at) },
                     ),
                     ListParams::default(),
                 )

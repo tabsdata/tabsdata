@@ -36,29 +36,38 @@ async fn table_state_download(
     let mut trx = db.read().await?;
     let conn = trx.get(authz.none());
     let function: FunctionDBWithNames = conn.timeline().fetch_one(&function_version_id).await?;
-    if !function.interval.covers(&at) {
-        return Err(api_error!(
-            ApiError::NotFound,
-            "Function version '{function_version_id}' was not live at '{at}'",
-        ));
+    match &at {
+        Some(at) if !function.interval.covers(at) => {
+            return Err(api_error!(
+                ApiError::NotFound,
+                "Function version '{function_version_id}' was not live at '{at}'",
+            ));
+        }
+        None if function.interval.valid_to.at().is_some() => {
+            return Err(api_error!(
+                ApiError::NotFound,
+                "Function version '{function_version_id}' is not live",
+            ));
+        }
+        _ => {}
     }
     let project = function.project_id;
     let mut trx = trx.enter_project(&project).await?;
     let conn = trx.get(authz.none());
 
-    let system_tables: Vec<TableDBWithNames> = conn
-        .scd2()
-        .as_of(&at)
-        .fetch_all(and!(&function.id, TableDBWithNames::system()))
-        .await?;
+    let condition = and!(&function.id, TableDBWithNames::system());
+    let system_tables: Vec<TableDBWithNames> = match &at {
+        Some(at) => conn.scd2().as_of(at).fetch_all(condition).await?,
+        None => conn.scd2().fetch_all(condition).await?,
+    };
     let (collection, table, version_at, uncommitted) =
-        get_table_at_id_name(&at, &function, &system_tables)?;
+        get_table_at_id_name(at.as_ref(), &function, &system_tables)?;
 
     let (_, location) = find_data_version_location_at(
         conn,
         &collection.collection,
         &table.table,
-        &version_at.at,
+        version_at.at.as_ref(),
         &uncommitted.uncommitted,
     )
     .await?;
@@ -66,7 +75,7 @@ async fn table_state_download(
 }
 
 pub fn get_table_at_id_name(
-    at_time: &AtTime,
+    at_time: Option<&AtTime>,
     function: &FunctionDBWithNames,
     system_tables: &[TableDBWithNames],
 ) -> Result<(CollectionParam, TableParam, AtTimeParam, UncommittedParam), TdError> {
@@ -88,7 +97,9 @@ pub fn get_table_at_id_name(
         TableParam {
             table: TableIdName::Id(state_table.table_id),
         },
-        AtTimeParam { at: *at_time },
+        AtTimeParam {
+            at: at_time.copied(),
+        },
         // Internal path: allow uncommitted versions for now.
         UncommittedParam {
             uncommitted: UncommittedStatus::TRUE,
@@ -173,7 +184,7 @@ mod tests {
                 FunctionVersionParam {
                     function_version: function_version_id.clone(),
                 },
-                AtTimeParam { at: *at_time },
+                AtTimeParam { at: Some(*at_time) },
             ));
             let service = context.clone();
             let response = service.table_state_download(request).await?.data;
@@ -186,7 +197,7 @@ mod tests {
                 FunctionVersionParam {
                     function_version: function_version_id.clone(),
                 },
-                AtTimeParam { at: *at_time },
+                AtTimeParam { at: Some(*at_time) },
             ));
             let service = context.clone();
             let response = service.table_state_download(request).await?.data;
