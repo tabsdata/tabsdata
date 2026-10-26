@@ -20,7 +20,7 @@ from tabsdatak.server._tdrunner.function._lib.errors import (
     CommandErrorCode,
     InvalidOptionsError,
 )
-from tabsdatak.server._tdrunner.function._lib.message import ResponseMessagePayload
+from tabsdatak.server._tdrunner.function._lib.message import CallbackRequest
 
 pytestmark = [pytest.mark.unit, pytest.mark.tabsdatak]
 
@@ -201,7 +201,7 @@ def test_a_status_report_names_no_operation(monkeypatch):
     bodies = _posted(monkeypatch)
     notify_status(
         argparse.Namespace(),
-        ResponseMessagePayload(status=WorkerCallbackStatus.RUNNING),
+        CallbackRequest(status=WorkerCallbackStatus.RUNNING),
     )
     assert "op" not in bodies[0]
 

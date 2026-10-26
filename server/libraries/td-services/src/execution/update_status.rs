@@ -12,13 +12,13 @@ use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, W
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error, td_error};
 use td_objects::and;
+use td_objects::dxo::callback::CallbackRequest;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::{
     PhysicalTableDataVersionDBWithNames, PhysicalTableDataVersionUpdateDB,
 };
-use td_objects::dxo::worker::{CallbackRequest, WorkerDB, WorkerUpdateDB};
-use td_objects::dxo::worker_input::WorkerOutput;
+use td_objects::dxo::worker::{WorkerDB, WorkerUpdateDB};
 use td_objects::dxo::worker_input::function::WrittenTable;
 use td_objects::types::basic::{
     ExecutionId, FunctionId, HasData, LogicalFunctionRunId, LogicalFunctionRunStatus,
@@ -559,7 +559,7 @@ pub async fn update_table_data_version_status<S: SeesProjectRows, M: WriteMode>(
     if callback.status != WorkerCallbackStatus::Done {
         return Ok(());
     }
-    if let Some(WorkerOutput::Function(output)) = &callback.context {
+    if let Some(output) = &callback.output {
         for written in &output.output {
             let (table_name, table_info) = match written {
                 WrittenTable::NoData { table } => (table, None),

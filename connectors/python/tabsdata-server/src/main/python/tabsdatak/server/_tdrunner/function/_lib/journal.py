@@ -14,7 +14,7 @@ available; readers ignore unknown keys.
 
 ``start`` and ``end`` are Rust i64 unix timestamps (milliseconds since
 epoch) matching the ``start`` / ``end`` fields of
-``ResponseMessagePayload`` in ``td-common/src/server.rs``, so the values
+``CallbackRequest`` in ``td-objects/src/dxo/callback.rs``, so the values
 can flow through the chain into the eventual ``report-completion`` POST
 body without an extra conversion. ``begin-execution`` writes ``start``;
 a later step stamps ``end`` when the run finishes.

@@ -1,7 +1,6 @@
 {
   "callbacks": [
     {
-      "action": "notify",
       "exit_status": 0,
       "start": "<masked>",
       "status": "Running"
@@ -10,14 +9,11 @@
       "op": "destination_write"
     },
     {
-      "action": "notify",
-      "context": {
-        "Function": {
-          "output": []
-        }
-      },
       "end": "<masked>",
       "exit_status": 0,
+      "output": {
+        "output": []
+      },
       "start": "<masked>",
       "status": "Done"
     }

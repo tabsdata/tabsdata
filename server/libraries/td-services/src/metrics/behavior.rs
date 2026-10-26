@@ -20,7 +20,6 @@ use td_objects::dxo::metrics::{
     Dimension, EdgeRow, MetricsRequest, MetricsResponse, NodeKind, NodeRow, NodeStatusMeasures,
 };
 use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
-use td_objects::dxo::worker_input::WorkerOutput;
 use td_objects::dxo::worker_input::function::{FunctionOutput, TableInfo, WrittenTable};
 use td_objects::types::basic::{
     AccessTokenId, CollectionName, ColumnCount, EpochMs, ExecutionStatus, FunctionName,
@@ -124,7 +123,7 @@ async fn publisher_callback(db: &TdPool, project: ProjectId) -> Result<(), TdErr
         }],
         "f_0",
         WorkerCallbackStatus::Done,
-        Some(WorkerOutput::Function(FunctionOutput {
+        Some(FunctionOutput {
             output: vec![
                 WrittenTable::NoData {
                     table: TableName::try_from("t_0")?,
@@ -139,7 +138,7 @@ async fn publisher_callback(db: &TdPool, project: ProjectId) -> Result<(), TdErr
                     },
                 },
             ],
-        })),
+        }),
     )
     .await
 }

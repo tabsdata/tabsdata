@@ -264,7 +264,7 @@ pub enum WrittenTable {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dxo::worker_input::{WorkerInput, WorkerOutput};
+    use crate::dxo::worker_input::WorkerInput;
     use crate::types::basic::{EnvPrefix, FunctionId};
     use itertools::Itertools;
     use std::collections::HashSet;
@@ -713,8 +713,6 @@ output:
                 },
             ],
         };
-        let function_output = WorkerOutput::Function(function_output);
-
         println!("{}", serde_json::to_string(&function_output).unwrap());
         println!("{}", serde_yaml::to_string(&function_output).unwrap());
 

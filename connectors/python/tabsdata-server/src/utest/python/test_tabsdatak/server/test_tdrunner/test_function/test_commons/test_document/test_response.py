@@ -83,27 +83,25 @@ def test_write_to_a_folder_fails(tmp_path: Path):
         Response(output=()).write(tmp_path)
 
 
-def test_worker_output_tags_each_written_table():
+def test_function_output_tags_each_written_table():
     response = Response(
         output=(TableEntry(table="customers", info=INFO), TableEntry(table="orders")),
     )
-    assert response.worker_output().document() == {
-        "Function": {
-            "output": [
-                {
-                    "Data": {
-                        "table": "customers",
-                        "info": {
-                            "column_count": 3,
-                            "row_count": 10,
-                            "schema_hash": "sha256:abc",
-                            "data_bytes": 64,
-                        },
+    assert response.function_output().document() == {
+        "output": [
+            {
+                "Data": {
+                    "table": "customers",
+                    "info": {
+                        "column_count": 3,
+                        "row_count": 10,
+                        "schema_hash": "sha256:abc",
+                        "data_bytes": 64,
                     },
                 },
-                {"NoData": {"table": "orders"}},
-            ],
-        },
+            },
+            {"NoData": {"table": "orders"}},
+        ],
     }
 
 

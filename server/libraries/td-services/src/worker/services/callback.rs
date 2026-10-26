@@ -7,13 +7,12 @@ use crate::worker::retry::after_failure;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_common::execution_status::{CallbackOutcome, CallbackResponse};
 use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
+use td_objects::dxo::callback::CallbackRequest;
+use td_objects::dxo::callback::{CallbackOutcome, CallbackResponse};
 use td_objects::dxo::crudl::UpdateRequest;
-use td_objects::dxo::worker::{
-    CallbackRequest, WorkerDB, WorkerExecutionUpdate, WorkerParam, WorkerUpdateDB,
-};
+use td_objects::dxo::worker::{WorkerDB, WorkerExecutionUpdate, WorkerParam, WorkerUpdateDB};
 use td_objects::types::basic::{AtTime, WorkerStatus, WorkerType};
 use td_queries::Queries;
 
@@ -24,7 +23,7 @@ async fn worker_callback(
     request: UpdateRequest<CallbackRequest, WorkerParam>,
 ) -> Result<CallbackResponse, TdError> {
     let (_, param, callback) = request.into_parts();
-    let update = WorkerExecutionUpdate::try_from(&callback)?;
+    let update = WorkerExecutionUpdate::from(&callback);
 
     let worker_id = param.worker;
     let applied = retrying(|attempt| async {
@@ -61,7 +60,6 @@ mod tests {
     use crate::Services;
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::status::ExitStatus;
-    use td_common::worker::{MessageAction, ResponseMessagePayload};
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
@@ -120,14 +118,13 @@ mod tests {
             .await?;
 
         let started_on = AtTime::now();
-        let response: CallbackRequest = ResponseMessagePayload {
-            action: MessageAction::Notify,
-            start: Some(started_on.timestamp_millis()),
+        let response: CallbackRequest = CallbackRequest {
+            start: Some(started_on),
             end: None,
             status: WorkerCallbackStatus::Running,
             error_message: None,
             exit_status: ExitStatus::Success.code(),
-            context: None,
+            output: None,
         };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
@@ -147,14 +144,13 @@ mod tests {
         assert_eq!(worker.base.base.ended_on, None);
 
         let ended_on = AtTime::now();
-        let response: CallbackRequest = ResponseMessagePayload {
-            action: MessageAction::Notify,
-            start: Some(AtTime::now().timestamp_millis()), // it wont get updated anyway
-            end: Some(ended_on.timestamp_millis()),
+        let response: CallbackRequest = CallbackRequest {
+            start: Some(AtTime::now()), // it wont get updated anyway
+            end: Some(ended_on),
             status: WorkerCallbackStatus::Done,
             error_message: None,
             exit_status: ExitStatus::Success.code(),
-            context: None,
+            output: None,
         };
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(

@@ -95,6 +95,6 @@ def run(args: argparse.Namespace) -> int:
         )
 
     logger.info("report-completion: recorded end=%s", end)
-    notify_status_done(args, context=response.worker_output().document())
+    notify_status_done(args, output=response.function_output().document())
     logger.info("Reported completion to apiserver successfully")
     return 0

@@ -9,19 +9,19 @@ use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
-use td_common::execution_status::{CallbackOutcome, CallbackResponse};
 use td_database::access::{AcrossProjects, DbPool, InProject, LockInstant, WriteMode, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
 use td_execution::SchedulerNotify;
+use td_objects::dxo::callback::CallbackRequest;
+use td_objects::dxo::callback::ExecutionCallbackRequest;
+use td_objects::dxo::callback::{CallbackOutcome, CallbackResponse};
 use td_objects::dxo::crudl::UpdateRequest;
-use td_objects::dxo::execution_callback::ExecutionCallbackRequest;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::FunctionRunParam;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::worker::{
-    CallbackRequest, WorkerDB, WorkerDestinationWriteUpdateDB, WorkerExecutionUpdate, WorkerParam,
-    WorkerUpdateDB,
+    WorkerDB, WorkerDestinationWriteUpdateDB, WorkerExecutionUpdate, WorkerParam, WorkerUpdateDB,
 };
 use td_objects::types::basic::{
     AtTime, DestinationWrite, LogicalFunctionRunStatus, PhysicalFunctionRunStatus, WorkerId,
@@ -103,7 +103,7 @@ async fn apply_report(
     report: &CallbackRequest,
     at: LockInstant,
 ) -> Result<(CallbackOutcome, bool), TdError> {
-    let update: WorkerExecutionUpdate = WorkerExecutionUpdate::try_from(report)?;
+    let update = WorkerExecutionUpdate::from(report);
     let reported = PhysicalFunctionRunStatus::try_from(update.status.clone())?;
     let current = is_current(physical_run);
     let from = physical_run.base.status;
@@ -168,15 +168,14 @@ pub(crate) mod tests {
     use crate::execution::update_status::tests::{
         TestExecution, TestFunction, TestTransaction, test_status_update,
     };
+    use td_common::datetime::Timestamp;
     use td_common::execution_status::WorkerCallbackStatus;
     use td_common::status::ExitStatus;
-    use td_common::worker::{MessageAction, ResponseMessagePayload};
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBWithNames;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
-    use td_objects::dxo::worker_input::WorkerOutput;
     use td_objects::dxo::worker_input::function::{FunctionOutput, TableInfo, WrittenTable};
     use td_objects::types::basic::{
         AccessTokenId, CollectionName, ColumnCount, ExecutionStatus, FunctionName, HasData,
@@ -193,7 +192,7 @@ pub(crate) mod tests {
         test_executions: Vec<TestExecution>,
         callback_function: &str,
         callback_status: WorkerCallbackStatus,
-        function_output: Option<WorkerOutput>,
+        function_output: Option<FunctionOutput>,
     ) -> Result<(), TdError> {
         test_status_update(db.clone(), project_id, &test_executions, |_, _, _, f, w| {
             let db = db.clone();
@@ -209,14 +208,13 @@ pub(crate) mod tests {
             let worker = (*w[&test_function].base.id).clone();
 
             async move {
-                let response: CallbackRequest = ResponseMessagePayload {
-                    action: MessageAction::Notify,
-                    start: Some(123),
-                    end: Some(456),
+                let response: CallbackRequest = CallbackRequest {
+                    start: Some(AtTime::from(Timestamp::try_from(123).unwrap())),
+                    end: Some(AtTime::from(Timestamp::try_from(456).unwrap())),
                     status: callback_status,
                     error_message: None,
                     exit_status: ExitStatus::Success.code(),
-                    context: function_output,
+                    output: function_output,
                 };
 
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -566,7 +564,7 @@ pub(crate) mod tests {
             }],
             "f_0",
             WorkerCallbackStatus::Done,
-            Some(WorkerOutput::Function(FunctionOutput {
+            Some(FunctionOutput {
                 output: vec![
                     WrittenTable::NoData {
                         table: TableName::try_from("t_0")?,
@@ -581,7 +579,7 @@ pub(crate) mod tests {
                         },
                     },
                 ],
-            })),
+            }),
         )
         .await?;
 
@@ -686,7 +684,7 @@ pub(crate) mod tests {
             }],
             "f_0",
             WorkerCallbackStatus::Done,
-            Some(WorkerOutput::Function(FunctionOutput {
+            Some(FunctionOutput {
                 output: vec![
                     WrittenTable::NoData {
                         table: TableName::try_from("t_0")?,
@@ -701,7 +699,7 @@ pub(crate) mod tests {
                         },
                     },
                 ],
-            })),
+            }),
         )
         .await?;
 
@@ -727,7 +725,7 @@ pub(crate) mod tests {
             }],
             "f_0",
             WorkerCallbackStatus::Done,
-            Some(WorkerOutput::Function(FunctionOutput {
+            Some(FunctionOutput {
                 output: vec![
                     WrittenTable::Data {
                         table: TableName::try_from("t_0")?,
@@ -742,7 +740,7 @@ pub(crate) mod tests {
                         table: TableName::try_from("t_1")?,
                     },
                 ],
-            })),
+            }),
         )
         .await?;
 
@@ -898,14 +896,13 @@ pub(crate) mod tests {
     }
 
     fn done_callback() -> CallbackRequest {
-        ResponseMessagePayload {
-            action: MessageAction::Notify,
-            start: Some(123),
-            end: Some(456),
+        CallbackRequest {
+            start: Some(AtTime::from(Timestamp::try_from(123).unwrap())),
+            end: Some(AtTime::from(Timestamp::try_from(456).unwrap())),
             status: WorkerCallbackStatus::Done,
             error_message: None,
             exit_status: ExitStatus::Success.code(),
-            context: None,
+            output: None,
         }
     }
 

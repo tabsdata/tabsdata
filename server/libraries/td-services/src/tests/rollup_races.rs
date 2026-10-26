@@ -10,9 +10,10 @@ use crate::execution::update_status::tests::{
 };
 use crate::tests::callback_outcomes::report_attempt;
 use futures_util::future::try_join_all;
-use td_common::execution_status::{CallbackOutcome, WorkerCallbackStatus};
+use td_common::execution_status::WorkerCallbackStatus;
 use td_database::pool::TdPool;
 use td_error::TdError;
+use td_objects::dxo::callback::CallbackOutcome;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{

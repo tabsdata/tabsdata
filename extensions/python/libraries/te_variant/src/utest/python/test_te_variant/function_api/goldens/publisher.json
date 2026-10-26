@@ -1,48 +1,44 @@
 {
   "callbacks": [
     {
-      "action": "notify",
       "exit_status": 0,
       "start": "<masked>",
       "status": "Running"
     },
     {
-      "action": "notify",
-      "context": {
-        "Function": {
-          "output": [
-            {
-              "Data": {
-                "info": {
-                  "column_count": 6,
-                  "data_bytes": "<masked>",
-                  "row_count": 3,
-                  "schema_hash": "sha256:338fd209243bdee0c26b54e79c61bb8c0ae3509d09a1f84de272c379c7cc8cf7"
-                },
-                "table": "orders_a"
-              }
-            },
-            {
-              "Data": {
-                "info": {
-                  "column_count": 5,
-                  "data_bytes": "<masked>",
-                  "row_count": 2,
-                  "schema_hash": "sha256:a1966104f0a929f3be1c573c4475b7ab73058f3895082ace3b6830dd245b4a60"
-                },
-                "table": "orders_b"
-              }
-            },
-            {
-              "NoData": {
-                "table": "untouched"
-              }
-            }
-          ]
-        }
-      },
       "end": "<masked>",
       "exit_status": 0,
+      "output": {
+        "output": [
+          {
+            "Data": {
+              "info": {
+                "column_count": 6,
+                "data_bytes": "<masked>",
+                "row_count": 3,
+                "schema_hash": "sha256:338fd209243bdee0c26b54e79c61bb8c0ae3509d09a1f84de272c379c7cc8cf7"
+              },
+              "table": "orders_a"
+            }
+          },
+          {
+            "Data": {
+              "info": {
+                "column_count": 5,
+                "data_bytes": "<masked>",
+                "row_count": 2,
+                "schema_hash": "sha256:a1966104f0a929f3be1c573c4475b7ab73058f3895082ace3b6830dd245b4a60"
+              },
+              "table": "orders_b"
+            }
+          },
+          {
+            "NoData": {
+              "table": "untouched"
+            }
+          }
+        ]
+      },
       "start": "<masked>",
       "status": "Done"
     }

@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::worker_input::WorkerOutput;
+use crate::dxo::callback::CallbackRequest;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, DestinationWrite,
     Enabled, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
@@ -13,13 +13,9 @@ use crate::types::basic::{
 use chrono::{DateTime, Utc};
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{FromDao, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx, and, lte, or};
-use td_common::datetime::Timestamp;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::logging::LOG_EXTENSION;
-use td_common::worker::{
-    ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, ResponseMessagePayload,
-    TD_LOG_FILE_NAME,
-};
+use td_common::worker::{ERR_LOG_FILE_NAME, FN_LOG_FILE_NAME, OUT_LOG_FILE_NAME, TD_LOG_FILE_NAME};
 use td_database::access::LockInstant;
 use td_error::TdError;
 
@@ -212,8 +208,6 @@ impl FromDao for Worker {
     }
 }
 
-pub type CallbackRequest = ResponseMessagePayload<WorkerOutput>;
-
 #[ta_objects::Dlo]
 pub struct WorkerExecutionUpdate {
     pub started_on: Option<Started<AtTime>>,
@@ -221,29 +215,13 @@ pub struct WorkerExecutionUpdate {
     pub status: WorkerCallbackStatus,
 }
 
-impl TryFrom<&CallbackRequest> for WorkerExecutionUpdate {
-    type Error = TdError;
-
-    fn try_from(value: &CallbackRequest) -> Result<Self, Self::Error> {
-        let ended_on = value
-            .end
-            .map(|v| {
-                let ts = Timestamp::try_from(v)?;
-                Ok::<_, TdError>(Ended::from(AtTime::from(ts)))
-            })
-            .transpose()?;
-
-        Ok(WorkerExecutionUpdate {
-            started_on: value
-                .start
-                .map(|v| {
-                    let ts = Timestamp::try_from(v)?;
-                    Ok::<_, TdError>(Started::from(AtTime::from(ts)))
-                })
-                .transpose()?,
-            ended_on,
+impl From<&CallbackRequest> for WorkerExecutionUpdate {
+    fn from(value: &CallbackRequest) -> Self {
+        WorkerExecutionUpdate {
+            started_on: value.start.map(Started::from),
+            ended_on: value.end.map(Ended::from),
             status: value.status.clone(),
-        })
+        }
     }
 }
 

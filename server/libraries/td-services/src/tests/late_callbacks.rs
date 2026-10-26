@@ -15,39 +15,39 @@ use crate::tests::fixtures::register;
 use std::str::FromStr;
 use std::time::Duration;
 use ta_services::service::Ctx;
+use td_common::datetime::Timestamp;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::status::ExitStatus;
-use td_common::worker::{MessageAction, ResponseMessagePayload};
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
 use td_execution::{RecoveryConfig, StuckRequestedTimeout};
 use td_objects::and;
+use td_objects::dxo::callback::CallbackRequest;
+use td_objects::dxo::callback::ExecutionCallbackRequest;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::ExecutionRequest;
-use td_objects::dxo::execution_callback::ExecutionCallbackRequest;
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::{FunctionRunParam, PhysicalFunctionRunDB};
-use td_objects::dxo::worker::{CallbackRequest, WorkerDB, WorkerParam};
+use td_objects::dxo::worker::{WorkerDB, WorkerParam};
 use td_objects::types::basic::{
-    AccessTokenId, CollectionIdName, CollectionName, ExecutionStatus, FunctionIdName, FunctionName,
-    LogicalFunctionRunStatus, PhysicalFunctionRunId, PhysicalFunctionRunStatus, TableNameDto,
-    TransactionStatus, UserId, WorkerId, WorkerStatus,
+    AccessTokenId, AtTime, CollectionIdName, CollectionName, ExecutionStatus, FunctionIdName,
+    FunctionName, LogicalFunctionRunStatus, PhysicalFunctionRunId, PhysicalFunctionRunStatus,
+    TableNameDto, TransactionStatus, UserId, WorkerId, WorkerStatus,
 };
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
 fn callback(status: WorkerCallbackStatus) -> CallbackRequest {
-    ResponseMessagePayload {
-        action: MessageAction::Notify,
-        start: Some(123),
-        end: Some(456),
+    CallbackRequest {
+        start: Some(AtTime::from(Timestamp::try_from(123).unwrap())),
+        end: Some(AtTime::from(Timestamp::try_from(456).unwrap())),
         status,
         error_message: None,
         exit_status: ExitStatus::Success.code(),
-        context: None,
+        output: None,
     }
 }
 

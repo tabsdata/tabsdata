@@ -139,8 +139,8 @@ def responder():
     """Tiny HTTP server in a thread acting as the responder endpoint.
 
     Yields (base_url, request_log, server). ``report-completion`` POSTs
-    its ``Done`` callback (carrying the response as the ``WorkerOutput``
-    context) here via ``--responder-url``.
+    its ``Done`` callback (carrying the response as the function
+    ``output``) here via ``--responder-url``.
     """
     requests_log = []
 
@@ -224,7 +224,7 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
     assert by_name["td-initial-values"]["info"]["data_bytes"] > 0
 
     # The responder received exactly one Done POST carrying the response
-    # as the WorkerOutput context (JSON, externally-tagged Data/NoData).
+    # as the function output (JSON, externally-tagged Data/NoData).
     assert len(request_log) == 1
     posted = request_log[0]
     assert posted["path"] == "/api/v1/done"
@@ -232,7 +232,7 @@ def test_main_writes_response_and_posts_done(monkeypatch, tmp_path, responder):
     assert posted["headers"]["Content-Type"] == "application/json"
     payload = json.loads(posted["body"])
     assert payload["status"] == "Done"
-    written = payload["context"]["Function"]["output"]
+    written = payload["output"]["output"]
     posted_by_name = {next(iter(entry.values()))["table"]: entry for entry in written}
     assert "Data" in posted_by_name["customers"]
     assert (
@@ -296,7 +296,7 @@ def test_main_no_info_when_manifest_file_is_null(monkeypatch, tmp_path, responde
     assert parsed["output"][0] == {"table": "missing"}
     # NoData on the wire too.
     payload = json.loads(request_log[0]["body"])
-    written = payload["context"]["Function"]["output"]
+    written = payload["output"]["output"]
     assert written[0] == {"NoData": {"table": "missing"}}
 
 
@@ -522,7 +522,7 @@ def test_responder_http_error_surfaces_response_body(
         journal_file=str(journal),
     )
     with pytest.raises(urllib.error.HTTPError) as caught:
-        command_lib.notify_status_done(args, context=None)
+        command_lib.notify_status_done(args, output=None)
     rendered = str(caught.value)
     assert "Bad Request" in rendered
     assert apiserver_body.decode("utf-8") in rendered

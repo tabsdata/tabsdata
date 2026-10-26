@@ -14,11 +14,5 @@ class WorkerCallbackStatus(str, Enum):
     STOPPED = "Stopped"
 
 
-class MessageAction(str, Enum):
-    START = "start"
-    STOP = "stop"
-    NOTIFY = "notify"
-
-
 class DestinationWriteOp(str, Enum):
     DESTINATION_WRITE = "destination_write"

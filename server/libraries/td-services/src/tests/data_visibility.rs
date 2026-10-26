@@ -9,20 +9,20 @@ use crate::Services;
 use crate::execution::update_status::tests::{
     TestExecution, TestFunction, TestTransaction, test_status_update,
 };
+use td_common::datetime::Timestamp;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::status::ExitStatus;
-use td_common::worker::{MessageAction, ResponseMessagePayload};
 use td_database::access::Grant;
 use td_database::pool::TdPool;
 use td_error::TdError;
+use td_objects::dxo::callback::CallbackRequest;
+use td_objects::dxo::callback::ExecutionCallbackRequest;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::ExecutionParam;
-use td_objects::dxo::execution_callback::ExecutionCallbackRequest;
 use td_objects::dxo::logical::LogicalFunctionRunParam;
 use td_objects::dxo::physical_function_run::FunctionRunParam;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
-use td_objects::dxo::worker::{CallbackRequest, WorkerParam};
-use td_objects::dxo::worker_input::WorkerOutput;
+use td_objects::dxo::worker::WorkerParam;
 use td_objects::dxo::worker_input::function::{FunctionOutput, TableInfo, WrittenTable};
 use td_objects::types::basic::{
     AccessTokenId, AtTime, CollectionName, ColumnCount, ExecutionStatus, FunctionName,
@@ -33,30 +33,28 @@ use td_queries::Queries;
 use td_queries::test_utils::{SeedEntry, begin_exclusive};
 
 fn done_without_data(table: &str) -> Result<CallbackRequest, TdError> {
-    Ok(ResponseMessagePayload {
-        action: MessageAction::Notify,
-        start: Some(123),
-        end: Some(456),
+    Ok(CallbackRequest {
+        start: Some(AtTime::from(Timestamp::try_from(123).unwrap())),
+        end: Some(AtTime::from(Timestamp::try_from(456).unwrap())),
         status: WorkerCallbackStatus::Done,
         error_message: None,
         exit_status: ExitStatus::Success.code(),
-        context: Some(WorkerOutput::Function(FunctionOutput {
+        output: Some(FunctionOutput {
             output: vec![WrittenTable::NoData {
                 table: TableName::try_from(table)?,
             }],
-        })),
+        }),
     })
 }
 
 fn done_with_data(table: &str) -> Result<CallbackRequest, TdError> {
-    Ok(ResponseMessagePayload {
-        action: MessageAction::Notify,
-        start: Some(123),
-        end: Some(456),
+    Ok(CallbackRequest {
+        start: Some(AtTime::from(Timestamp::try_from(123).unwrap())),
+        end: Some(AtTime::from(Timestamp::try_from(456).unwrap())),
         status: WorkerCallbackStatus::Done,
         error_message: None,
         exit_status: ExitStatus::Success.code(),
-        context: Some(WorkerOutput::Function(FunctionOutput {
+        output: Some(FunctionOutput {
             output: vec![WrittenTable::Data {
                 table: TableName::try_from(table)?,
                 info: TableInfo {
@@ -66,7 +64,7 @@ fn done_with_data(table: &str) -> Result<CallbackRequest, TdError> {
                     data_bytes: None,
                 },
             }],
-        })),
+        }),
     })
 }
 

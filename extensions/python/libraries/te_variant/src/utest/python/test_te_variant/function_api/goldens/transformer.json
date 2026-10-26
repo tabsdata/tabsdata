@@ -1,37 +1,33 @@
 {
   "callbacks": [
     {
-      "action": "notify",
       "exit_status": 0,
       "start": "<masked>",
       "status": "Running"
     },
     {
-      "action": "notify",
-      "context": {
-        "Function": {
-          "output": [
-            {
-              "Data": {
-                "info": {
-                  "column_count": 5,
-                  "data_bytes": "<masked>",
-                  "row_count": 3,
-                  "schema_hash": "sha256:0664f6e7b30b57f9dbab60298ed7bb6bfded87bbc79cf1e9b710e94ee78be2e8"
-                },
-                "table": "enriched"
-              }
-            },
-            {
-              "NoData": {
-                "table": "untouched"
-              }
-            }
-          ]
-        }
-      },
       "end": "<masked>",
       "exit_status": 0,
+      "output": {
+        "output": [
+          {
+            "Data": {
+              "info": {
+                "column_count": 5,
+                "data_bytes": "<masked>",
+                "row_count": 3,
+                "schema_hash": "sha256:0664f6e7b30b57f9dbab60298ed7bb6bfded87bbc79cf1e9b710e94ee78be2e8"
+              },
+              "table": "enriched"
+            }
+          },
+          {
+            "NoData": {
+              "table": "untouched"
+            }
+          }
+        ]
+      },
       "start": "<masked>",
       "status": "Done"
     }

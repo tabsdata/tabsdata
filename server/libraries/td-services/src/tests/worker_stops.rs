@@ -16,7 +16,6 @@ use td_bridge::messaging::{CronRequest, OrchestratorMessagePayload};
 use td_bridge::test::TestBridgeProvider;
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::status::ExitStatus;
-use td_common::worker::{MessageAction, ResponseMessagePayload};
 use td_database::access::Attempt;
 use td_database::access::{AcrossProjects, DbPool, GatedConnection, Grant, InProject, RW};
 use td_database::connection::PgConnectionExt;
@@ -24,10 +23,11 @@ use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
+use td_objects::dxo::callback::CallbackRequest;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{FunctionParam, FunctionRegister, FunctionUpdate};
-use td_objects::dxo::worker::{CallbackRequest, WorkerDB, WorkerParam, WorkerUpdateDB};
+use td_objects::dxo::worker::{WorkerDB, WorkerParam, WorkerUpdateDB};
 use td_objects::types::basic::{
     AccessTokenId, AtTime, CollectionIdName, CollectionName, Description, Enabled, FunctionIdName,
     ProjectId, UserId, WorkerConfig, WorkerStatus, WorkerType, WorkerTypeDto,
@@ -37,14 +37,13 @@ use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
 fn running_report() -> CallbackRequest {
-    ResponseMessagePayload {
-        action: MessageAction::Notify,
-        start: Some(AtTime::now().timestamp_millis()),
+    CallbackRequest {
+        start: Some(AtTime::now()),
         end: None,
         status: WorkerCallbackStatus::Running,
         error_message: None,
         exit_status: ExitStatus::Success.code(),
-        context: None,
+        output: None,
     }
 }
 

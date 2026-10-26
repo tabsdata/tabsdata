@@ -110,8 +110,8 @@ class Response(DocumentModel):
             encoding="utf-8",
         )
 
-    def worker_output(self) -> WorkerOutput:
-        return WorkerOutput(Function=FunctionOutput.of(self.output))
+    def function_output(self) -> FunctionOutput:
+        return FunctionOutput.of(self.output)
 
 
 class WrittenNoData(DocumentModel):
@@ -146,10 +146,6 @@ class FunctionOutput(DocumentModel):
     @classmethod
     def of(cls, entries: tuple[TableEntry, ...]) -> FunctionOutput:
         return cls(output=tuple(WrittenTable.of(entry) for entry in entries))
-
-
-class WorkerOutput(DocumentModel):
-    Function: FunctionOutput
 
     def document(self) -> dict:
         return self.model_dump(mode=JSON_MODE, exclude_none=True)

@@ -11,17 +11,19 @@ use crate::execution::update_status::tests::{
     TestExecution, TestFunction, TestTransaction, test_status_update,
 };
 use crate::tests::fixtures::register;
-use td_common::execution_status::{CallbackOutcome, WorkerCallbackStatus};
+use td_common::datetime::Timestamp;
+use td_common::execution_status::WorkerCallbackStatus;
 use td_common::status::ExitStatus;
-use td_common::worker::{MessageAction, ResponseMessagePayload};
 use td_database::pool::TdPool;
 use td_error::{ApiError, TdError};
+use td_objects::dxo::callback::CallbackOutcome;
+use td_objects::dxo::callback::CallbackRequest;
+use td_objects::dxo::callback::ExecutionCallbackRequest;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::execution_callback::ExecutionCallbackRequest;
 use td_objects::dxo::physical_function_run::{FunctionRunParam, PhysicalFunctionRunDB};
-use td_objects::dxo::worker::{CallbackRequest, WorkerDB, WorkerParam};
+use td_objects::dxo::worker::{WorkerDB, WorkerParam};
 use td_objects::types::basic::{
-    AccessTokenId, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
+    AccessTokenId, AtTime, CollectionName, ExecutionStatus, FunctionName, LogicalFunctionRunStatus,
     PhysicalFunctionRunId, TableNameDto, TransactionStatus, UserId, WorkerId, WorkerStatus,
     WorkerType,
 };
@@ -33,14 +35,13 @@ fn report(status: WorkerCallbackStatus) -> CallbackRequest {
 }
 
 fn report_between(status: WorkerCallbackStatus, start: i64, end: i64) -> CallbackRequest {
-    ResponseMessagePayload {
-        action: MessageAction::Notify,
-        start: Some(start),
-        end: Some(end),
+    CallbackRequest {
+        start: Some(AtTime::from(Timestamp::try_from(start).unwrap())),
+        end: Some(AtTime::from(Timestamp::try_from(end).unwrap())),
         status,
         error_message: None,
         exit_status: ExitStatus::Success.code(),
-        context: None,
+        output: None,
     }
 }
 

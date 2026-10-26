@@ -23,7 +23,6 @@ use td_bridge::test::{StaticWorkloadObserver, TestBridgeProvider};
 use td_common::execution_status::WorkerCallbackStatus;
 use td_common::status::ExitStatus;
 use td_common::worker::Decorator as WorkloadDecorator;
-use td_common::worker::{MessageAction, ResponseMessagePayload};
 use td_database::access::Attempt as DbAttempt;
 use td_database::access::{AcrossProjects, DbPool, GatedConnection, Grant, InProject, RW};
 use td_database::connection::PgConnectionExt;
@@ -33,16 +32,17 @@ use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
 use td_execution::{DispatchGrace, MaxRunningTime, RecoveryConfig};
 use td_objects::and;
+use td_objects::dxo::callback::CallbackRequest;
+use td_objects::dxo::callback::ExecutionCallbackRequest;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{ExecutionParam, ExecutionRequest, ExecutionResponse};
-use td_objects::dxo::execution_callback::ExecutionCallbackRequest;
 use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionRegister};
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunStatusUpdateDB};
 use td_objects::dxo::physical_function_run::{
     FunctionRunParam, PhysicalFunctionRunDB, PhysicalFunctionRunUpdateDB,
 };
-use td_objects::dxo::worker::{CallbackRequest, WorkerDB, WorkerParam, WorkerUpdateDB};
+use td_objects::dxo::worker::{WorkerDB, WorkerParam, WorkerUpdateDB};
 use td_objects::types::basic::{
     AccessTokenId, AtTime, CollectionIdName, CollectionName, Decorator, FunctionIdName,
     FunctionName, LogicalFunctionRunStatus, PhysicalFunctionRunStatus, ProjectId, UserId,
@@ -292,14 +292,13 @@ async fn test_a_transiently_failed_streamer_is_started_again(db: TdPool) -> Resu
     )
     .await?;
     let hour = chrono::Duration::hours(1);
-    let failed: CallbackRequest = ResponseMessagePayload {
-        action: MessageAction::Notify,
-        start: Some(ago(hour * 2).timestamp_millis()),
-        end: Some(ago(hour).timestamp_millis()),
+    let failed: CallbackRequest = CallbackRequest {
+        start: Some(ago(hour * 2)),
+        end: Some(ago(hour)),
         status: WorkerCallbackStatus::Failed,
         error_message: Some("listing the stage failed: throttled".to_string()),
         exit_status: ExitStatus::GeneralError.code(),
-        context: None,
+        output: None,
     };
     let callback = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
         WorkerParam {
@@ -631,14 +630,13 @@ async fn test_recovery_does_not_start_a_trigger_stopped_since_its_snapshot(
 }
 
 async fn report_running(db: &TdPool, attempt: &Attempt) -> Result<(), TdError> {
-    let running: CallbackRequest = ResponseMessagePayload {
-        action: MessageAction::Notify,
-        start: Some(ago(chrono::Duration::minutes(10)).timestamp_millis()),
+    let running: CallbackRequest = CallbackRequest {
+        start: Some(ago(chrono::Duration::minutes(10))),
         end: None,
         status: WorkerCallbackStatus::Running,
         error_message: None,
         exit_status: ExitStatus::Success.code(),
-        context: None,
+        output: None,
     };
     call_back(db, attempt, ExecutionCallbackRequest::report(running)).await
 }

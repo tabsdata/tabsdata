@@ -69,8 +69,3 @@ impl Locations for WorkerInput {
         }
     }
 }
-
-#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
-pub enum WorkerOutput {
-    Function(function::FunctionOutput),
-}

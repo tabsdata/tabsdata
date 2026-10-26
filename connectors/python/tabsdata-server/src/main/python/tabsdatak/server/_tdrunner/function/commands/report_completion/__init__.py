@@ -9,7 +9,7 @@ response.yaml from the outputs manifest produced by `run-function`
 (for `request.output`) and the `--state-dir` parquets (for
 `request.system_output`), writes a copy to `--out`, stamps the run's
 end time into the journal, and posts a `Done` callback to the responder
-carrying the response as the `WorkerOutput` context.
+carrying the response as the function `output`.
 
 For each declared `request.output` table the response includes a
 `Data` entry with column_count / row_count / schema_hash if the

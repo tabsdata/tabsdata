@@ -36,8 +36,8 @@ from tabsdatak.server._tdrunner.function._lib.journal import Journal
 from tabsdatak.server._tdrunner.function._lib.liveness import install_liveness_handler
 from tabsdatak.server._tdrunner.function._lib.message import (
     EXIT_STATUS_SUCCESS,
+    CallbackRequest,
     DestinationWriteMessage,
-    ResponseMessagePayload,
 )
 
 logger = logging.getLogger(__name__)
@@ -212,7 +212,7 @@ def outcome(answer: bytes) -> str | None:
 
 def notify_status(
     arguments: argparse.Namespace,
-    payload: ResponseMessagePayload,
+    payload: CallbackRequest,
 ) -> None:
     status = payload.status
     logger.info(f"Reporting {status}: exit_status={payload.exit_status}")
@@ -226,7 +226,7 @@ def notify_status_running(arguments: argparse.Namespace) -> None:
     )
     notify_status(
         arguments,
-        ResponseMessagePayload(
+        CallbackRequest(
             status=WorkerCallbackStatus.RUNNING,
             start=journal.start,
         ),
@@ -236,21 +236,21 @@ def notify_status_running(arguments: argparse.Namespace) -> None:
 def notify_status_done(
     arguments: argparse.Namespace,
     *,
-    context: Any | None = None,
+    output: dict[str, Any] | None = None,
     exit_code: int = EXIT_STATUS_SUCCESS,
 ) -> None:
     journal = Journal.load(
         Path(arguments.journal_file),
         strict=True,
     )
-    logger.debug(f"notify_status_done context: {context}")
+    logger.debug(f"notify_status_done output: {output}")
     notify_status(
         arguments,
-        ResponseMessagePayload(
+        CallbackRequest(
             status=WorkerCallbackStatus.DONE,
             start=journal.start,
             end=journal.end,
-            context=context,
+            output=output,
             exit_status=exit_code,
         ),
     )
@@ -277,7 +277,7 @@ def notify_status_failed(
         start = journal.start if journal.start is not None else end
         notify_status(
             arguments,
-            ResponseMessagePayload(
+            CallbackRequest(
                 status=WorkerCallbackStatus.FAILED,
                 start=start,
                 end=end,

@@ -8,28 +8,23 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from tabsdatak.common._enums import (
-    DestinationWriteOp,
-    MessageAction,
-    WorkerCallbackStatus,
-)
+from tabsdatak.common._enums import DestinationWriteOp, WorkerCallbackStatus
 
 EXIT_STATUS_SUCCESS = 0
 
 
-class ResponseMessagePayload(BaseModel):
+class CallbackRequest(BaseModel):
     model_config = ConfigDict(
         frozen=True,
         extra="forbid",
         use_enum_values=True,
     )
-    action: MessageAction = MessageAction.NOTIFY
     start: int | None = None
     end: int | None = None
     status: WorkerCallbackStatus
     error_message: str | None = None
     exit_status: int = EXIT_STATUS_SUCCESS
-    context: Any | None = None
+    output: dict[str, Any] | None = None
 
     def to_body(self) -> dict[str, Any]:
         return self.model_dump(
