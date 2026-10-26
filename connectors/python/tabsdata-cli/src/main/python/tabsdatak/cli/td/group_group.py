@@ -109,8 +109,8 @@ def get(ctx: click.Context, name: str):
                     ("Name", grp.name),
                     ("Description", present(grp.description)),
                     ("System", "Yes" if grp.system else "No"),
-                    ("Created by", present(grp.created_by)),
-                    ("Created on", present(grp.created_on_str)),
+                    ("Defined by", present(grp.defined_by)),
+                    ("Defined on", present(grp.defined_on_str)),
                     ("Collections", present(", ".join(collection_names))),
                 ],
             )
@@ -141,15 +141,15 @@ def list_groups(ctx: click.Context):
                 columns=[
                     Column("Name", Kind.ID),
                     Column("Description"),
-                    Column("Created by"),
-                    Column("Created on", Kind.TIME),
+                    Column("Defined by"),
+                    Column("Defined on", Kind.TIME),
                 ],
                 rows=[
                     [
                         grp.name,
                         present(grp.description),
-                        present(grp.created_by),
-                        present(grp.created_on_str),
+                        present(grp.defined_by),
+                        present(grp.defined_on_str),
                     ]
                     for grp in list_of_groups
                 ],

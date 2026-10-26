@@ -650,6 +650,31 @@ def test_collection_base_path_from_server_data_dict_splat():
     assert coll._base_path == "/server/resolved"
 
 
+@pytest.mark.parametrize(
+    "entity,stable_key",
+    [
+        (ts.Collection, "collection_id"),
+        (ts.Group, "group_id"),
+        (ts.Project, "project_id"),
+    ],
+)
+def test_versioned_entity_exposes_stable_id_and_defined_stamps(entity, stable_key):
+    raw = {
+        "name": "n",
+        "id": "version-1",
+        stable_key: "stable-1",
+        "defined_on": 1704067200000,
+        "defined_by": "admin",
+    }
+    built = entity(None, **raw)
+    built._data = raw
+    assert built.id == "version-1"
+    assert getattr(built, stable_key) == "stable-1"
+    assert built.defined_by == "admin"
+    assert built.defined_on == 1704067200000
+    assert built.defined_on_str == ts._convert_timestamp_to_string(1704067200000)
+
+
 # ---------------------------------------------------------------------------
 # Collection.update_function: forwards base_path / reset_state /
 # reset_stage into the apiserver ``function_update`` call. The bundle

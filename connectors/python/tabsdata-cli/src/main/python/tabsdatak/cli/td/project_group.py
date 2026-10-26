@@ -179,8 +179,8 @@ def get(ctx: click.Context, name: str):
                 fields=[
                     ("Name", prj.name),
                     ("Description", present(prj.description)),
-                    ("Created by", present(prj.created_by)),
-                    ("Created on", present(prj.created_on_str)),
+                    ("Defined by", present(prj.defined_by)),
+                    ("Defined on", present(prj.defined_on_str)),
                 ],
             )
 
@@ -208,15 +208,15 @@ def list_projects(ctx: click.Context):
                 columns=[
                     Column("Name", Kind.ID),
                     Column("Description"),
-                    Column("Created by"),
-                    Column("Created on", Kind.TIME),
+                    Column("Defined by"),
+                    Column("Defined on", Kind.TIME),
                 ],
                 rows=[
                     [
                         prj.name,
                         present(prj.description),
-                        present(prj.created_by),
-                        present(prj.created_on_str),
+                        present(prj.defined_by),
+                        present(prj.defined_on_str),
                     ]
                     for prj in list_of_projects
                 ],

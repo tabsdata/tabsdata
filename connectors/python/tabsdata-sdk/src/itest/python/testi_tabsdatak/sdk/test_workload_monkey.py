@@ -324,7 +324,7 @@ def run_fleet(
             name=collection_name(namespace, spec.name),
         )
     project = server.connection.project
-    project_id = server.get_project(project).id
+    project_id = server.get_project(project).project_id
     progress(f"Namespace {namespace} in project {project} ({project_id})", SETUP)
     kafka = broker(domain)
     topics = [

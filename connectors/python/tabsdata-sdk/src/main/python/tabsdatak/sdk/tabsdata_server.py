@@ -134,14 +134,21 @@ class Collection:
         **kwargs: Additional keyword
 
     Attributes:
-        created_on_str (str): The timestamp when the collection was created as a
-            string.
+        id (str): The ID of this version of the collection.
+        collection_id (str): The ID of the collection, stable across versions.
+        defined_on (int): The timestamp when this version of the collection was
+            defined.
+        defined_by (str): The user that defined this version of the collection.
+        defined_on_str (str): The timestamp when this version of the collection
+            was defined as a string.
     """
 
-    created_by = _LazyProperty("created_by")
-    created_on = _LazyProperty("created_on")
-    created_on_str = _LazyProperty("created_on_str", subordinate_time_string=True)
+    collection_id = _LazyProperty("collection_id")
+    defined_by = _LazyProperty("defined_by")
+    defined_on = _LazyProperty("defined_on")
+    defined_on_str = _LazyProperty("defined_on_str", subordinate_time_string=True)
     description = _LazyProperty("description")
+    id = _LazyProperty("id")
 
     def __init__(
         self,
@@ -165,8 +172,6 @@ class Collection:
                 creation time. Ignored when reading an existing collection.
             **kwargs: Additional keyword arguments.
         """
-        created_on = kwargs.get("created_on")
-        created_by = kwargs.get("created_by")
         self.connection = connection
         self.name = name
         self.description = description
@@ -179,12 +184,11 @@ class Collection:
         # falls back to the server value via the data dict / kwargs.
         self._base_path = base_path
         self.base_path = base_path if base_path is not None else kwargs.get("base_path")
-        self.created_on = created_on
-        if created_on:
-            self.created_on_str = _convert_timestamp_to_string(created_on)
-        else:
-            self.created_on_str = None
-        self.created_by = created_by
+        self.id = kwargs.get("id")
+        self.collection_id = kwargs.get("collection_id")
+        self.defined_on = kwargs.get("defined_on")
+        self.defined_on_str = None
+        self.defined_by = kwargs.get("defined_by")
         # Owning project's name — populated on cross-project (wildcard) listings so
         # the CLI can show which project each collection belongs to.
         self.project = kwargs.get("project")
@@ -382,9 +386,11 @@ class Collection:
     def refresh(self) -> Collection:
         self.description = None
         self._data = None
-        self.created_by = None
-        self.created_on = None
-        self.created_on_str = None
+        self.id = None
+        self.collection_id = None
+        self.defined_by = None
+        self.defined_on = None
+        self.defined_on_str = None
         self.kwargs = None
         return self
 
@@ -2218,15 +2224,13 @@ class Group:
     and reject update / delete.
     """
 
-    created_by = _LazyProperty("created_by")
-    created_on = _LazyProperty("created_on")
-    created_on_str = _LazyProperty("created_on_str", subordinate_time_string=True)
+    defined_by = _LazyProperty("defined_by")
+    defined_by_id = _LazyProperty("defined_by_id")
+    defined_on = _LazyProperty("defined_on")
+    defined_on_str = _LazyProperty("defined_on_str", subordinate_time_string=True)
     description = _LazyProperty("description")
+    group_id = _LazyProperty("group_id")
     id = _LazyProperty("id")
-    modified_by = _LazyProperty("modified_by")
-    modified_by_id = _LazyProperty("modified_by_id")
-    modified_on = _LazyProperty("modified_on")
-    modified_on_str = _LazyProperty("modified_on_str", subordinate_time_string=True)
     system = _LazyProperty("system")
 
     def __init__(
@@ -2238,15 +2242,13 @@ class Group:
         self.connection = connection
         self.name = name
 
-        self.created_by = kwargs.get("created_by")
-        self.created_on = kwargs.get("created_on")
-        self.created_on_str = None
+        self.defined_by = kwargs.get("defined_by")
+        self.defined_by_id = kwargs.get("defined_by_id")
+        self.defined_on = kwargs.get("defined_on")
+        self.defined_on_str = None
         self.description = kwargs.get("description")
+        self.group_id = kwargs.get("group_id")
         self.id = kwargs.get("id")
-        self.modified_by = kwargs.get("modified_by")
-        self.modified_by_id = kwargs.get("modified_by_id")
-        self.modified_on = kwargs.get("modified_on")
-        self.modified_on_str = None
         self.system = kwargs.get("system")
 
         self.kwargs = kwargs
@@ -2278,15 +2280,13 @@ class Group:
         self.connection.group_delete(self.name, raise_for_status=raise_for_status)
 
     def refresh(self) -> Group:
-        self.created_by = None
-        self.created_on = None
-        self.created_on_str = None
+        self.defined_by = None
+        self.defined_by_id = None
+        self.defined_on = None
+        self.defined_on_str = None
         self.description = None
+        self.group_id = None
         self.id = None
-        self.modified_by = None
-        self.modified_by_id = None
-        self.modified_on = None
-        self.modified_on_str = None
         self.system = None
         self.kwargs = None
         self._data = None
@@ -2330,15 +2330,13 @@ class Project:
     they are supported you can create and delete them freely.
     """
 
-    created_by = _LazyProperty("created_by")
-    created_on = _LazyProperty("created_on")
-    created_on_str = _LazyProperty("created_on_str", subordinate_time_string=True)
+    defined_by = _LazyProperty("defined_by")
+    defined_by_id = _LazyProperty("defined_by_id")
+    defined_on = _LazyProperty("defined_on")
+    defined_on_str = _LazyProperty("defined_on_str", subordinate_time_string=True)
     description = _LazyProperty("description")
     id = _LazyProperty("id")
-    modified_by = _LazyProperty("modified_by")
-    modified_by_id = _LazyProperty("modified_by_id")
-    modified_on = _LazyProperty("modified_on")
-    modified_on_str = _LazyProperty("modified_on_str", subordinate_time_string=True)
+    project_id = _LazyProperty("project_id")
 
     def __init__(
         self,
@@ -2349,15 +2347,13 @@ class Project:
         self.connection = connection
         self.name = name
 
-        self.created_by = kwargs.get("created_by")
-        self.created_on = kwargs.get("created_on")
-        self.created_on_str = None
+        self.defined_by = kwargs.get("defined_by")
+        self.defined_by_id = kwargs.get("defined_by_id")
+        self.defined_on = kwargs.get("defined_on")
+        self.defined_on_str = None
         self.description = kwargs.get("description")
         self.id = kwargs.get("id")
-        self.modified_by = kwargs.get("modified_by")
-        self.modified_by_id = kwargs.get("modified_by_id")
-        self.modified_on = kwargs.get("modified_on")
-        self.modified_on_str = None
+        self.project_id = kwargs.get("project_id")
 
         self.kwargs = kwargs
         self._data = None
@@ -2391,15 +2387,13 @@ class Project:
         self.connection.project_delete(self.name, raise_for_status=raise_for_status)
 
     def refresh(self) -> Project:
-        self.created_by = None
-        self.created_on = None
-        self.created_on_str = None
+        self.defined_by = None
+        self.defined_by_id = None
+        self.defined_on = None
+        self.defined_on_str = None
         self.description = None
         self.id = None
-        self.modified_by = None
-        self.modified_by_id = None
-        self.modified_on = None
-        self.modified_on_str = None
+        self.project_id = None
         self.kwargs = None
         self._data = None
         return self

@@ -139,6 +139,12 @@ def set_up(
     return module
 
 
+def entity_id(project) -> str:
+    """The project's stable id: ``project_id`` since projects became
+    versioned, ``id`` in the releases before, which this half may run on."""
+    return getattr(project, "project_id", None) or project.id
+
+
 def before(directory: Path, instance_folder: Path) -> None:
     """The part before the upgrade, run by a release's Python. Reads the plan
     and the setup the test wrote, and writes what the lanes did."""
@@ -156,7 +162,7 @@ def before(directory: Path, instance_folder: Path) -> None:
         Path(setup["fleet_module"]),
     )
     project = setup["project"]
-    project_id = connect(port).get_project(project).id
+    project_id = entity_id(connect(port).get_project(project))
     report = MonkeyRun(
         plan=plan,
         namespace=setup["namespace"],

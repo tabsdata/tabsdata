@@ -286,8 +286,8 @@ def get(ctx: click.Context, name: str):
                         _COLLECTION_TYPE_LABELS.get(collection_type, collection_type)
                     ),
                 ),
-                ("Created by", present(collection.created_by)),
-                ("Created on", present(collection.created_on_str)),
+                ("Defined by", present(collection.defined_by)),
+                ("Defined on", present(collection.defined_on_str)),
             ]
             if conn_read is not None:
                 doc = conn_read.get("connection") or {}
@@ -361,15 +361,15 @@ def list_collections(ctx: click.Context, all_projects: bool):
             columns = [Column("Name", Kind.ID), Column("Description")]
             if spanning:
                 columns.append(Column("Project"))
-            columns += [Column("Created by"), Column("Created on", Kind.TIME)]
+            columns += [Column("Defined by"), Column("Defined on", Kind.TIME)]
             rows = []
             for collection in list_of_collections:
                 row = [collection.name, present(collection.description)]
                 if spanning:
                     row.append(present(collection.project))
                 row += [
-                    present(collection.created_by),
-                    present(collection.created_on_str),
+                    present(collection.defined_by),
+                    present(collection.defined_on_str),
                 ]
                 rows.append(row)
             return TableView(

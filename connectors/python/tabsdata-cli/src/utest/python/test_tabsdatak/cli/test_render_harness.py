@@ -58,7 +58,7 @@ class _DTO:
 
     ``_data`` is the raw payload the machine formats serialize; every key is
     also exposed as an attribute, which is what the rich-table view reads
-    (e.g. ``user.name``, ``grp.created_on_str``). One dict therefore drives
+    (e.g. ``user.name``, ``grp.defined_on_str``). One dict therefore drives
     both output paths, so the JSON/YAML assertions and the table view can never
     silently disagree about the same record.
 
@@ -109,38 +109,43 @@ _USERS = [
 _GROUPS = [
     {
         "name": "grp-a",
-        "id": "GID_A",
+        "id": "GVID_A",
+        "group_id": "GID_A",
         "description": "first group",
-        "created_on_str": "2026-01-01",
-        "created_by": "admin",
+        "defined_on_str": "2026-01-01",
+        "defined_by": "admin",
     },
 ]
 
 _GROUP_INFO = {
     "name": "grp-a",
-    "id": "GID_A",
+    "id": "GVID_A",
+    "group_id": "GID_A",
     "system": False,
     "description": "first group",
-    "created_on_str": "2026-01-01",
-    "created_by": "admin",
+    "defined_on_str": "2026-01-01",
+    "defined_by": "admin",
 }
 
 _PROJECTS = [
     {
         "name": "proj-a",
-        "id": "PID_A",
+        "id": "PVID_A",
+        "project_id": "PID_A",
         "description": "first project",
-        "created_on_str": "2026-01-02",
-        "created_by": "admin",
+        "defined_on_str": "2026-01-02",
+        "defined_by": "admin",
     },
 ]
 
 _COLLECTIONS = [
     {
         "name": "coll-a",
+        "id": "CVID_A",
+        "collection_id": "CID_A",
         "description": "first collection",
-        "created_on_str": "2026-01-03",
-        "created_by": "admin",
+        "defined_on_str": "2026-01-03",
+        "defined_by": "admin",
     },
 ]
 
