@@ -26,6 +26,7 @@ mod sessions;
 mod system;
 mod table_partitions;
 mod tables;
+mod tags;
 mod transactions;
 mod triggers;
 mod users;
@@ -42,7 +43,7 @@ use sea_query::{DynIden, IntoIden};
 /// Schema revision within the current major; resets to 1 at each major bump
 /// (cross-major upgrade is refused via `tabsdata_version`). To evolve the
 /// schema, follow the README runbook; `test_schema_ddl_snapshot` gates the DDL.
-pub const VERSION: usize = 18;
+pub const VERSION: usize = 19;
 
 pub use crate::schema::sql::{Changed, Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
 pub use executions::rollup as execution_rollup;
@@ -63,6 +64,7 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
     &groups::Defs,
     &projects::Defs,
     &project_topologies::Defs,
+    &tags::Defs,
     &connections::Defs,
     &collections::Defs,
     &roles::Defs,
@@ -102,6 +104,7 @@ pub(crate) fn project_scoped_tables() -> Vec<DynIden> {
     vec![
         groups::Groups::Table.into_iden(),
         project_topologies::ProjectTopologies::Table.into_iden(),
+        tags::Tags::Table.into_iden(),
         connections::Connections::Table.into_iden(),
         collections::Collections::Table.into_iden(),
         bundles::Bundles::Table.into_iden(),

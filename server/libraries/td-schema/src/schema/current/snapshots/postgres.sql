@@ -11,6 +11,8 @@ CREATE TABLE "projects" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_i
 
 CREATE TABLE "project_topologies" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "valid_from" timestamp with time zone NOT NULL, "valid_to" timestamp with time zone NOT NULL )
 
+CREATE TABLE "tags" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "tag_id" text NOT NULL COLLATE "C", "project_id" text NOT NULL COLLATE "C", "entity_type" text NOT NULL, "entity_id" text NOT NULL COLLATE "C", "kind" text NOT NULL, "key" text NOT NULL, "value" text NOT NULL, "valid_from" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", "valid_to" timestamp with time zone NOT NULL )
+
 CREATE TABLE "connections" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "kind" text NOT NULL, "created_on" timestamp with time zone NOT NULL, "created_by_id" text NOT NULL COLLATE "C", "modified_on" timestamp with time zone NOT NULL, "modified_by_id" text NOT NULL COLLATE "C" )
 
 CREATE TABLE "collections" ( "id" text NOT NULL PRIMARY KEY COLLATE "C", "project_id" text NOT NULL COLLATE "C", "collection_id" text NOT NULL COLLATE "C", "name" text NOT NULL, "description" text NOT NULL, "base_path" text NULL, "group_id" text NOT NULL COLLATE "C", "collection_type" text NOT NULL, "connection_id" text NULL COLLATE "C", "valid_from" timestamp with time zone NOT NULL, "valid_to" timestamp with time zone NOT NULL, "defined_by_id" text NOT NULL COLLATE "C", FOREIGN KEY ("connection_id") REFERENCES "connections" ("id") ON DELETE RESTRICT ON UPDATE RESTRICT )
@@ -132,6 +134,36 @@ $$ LANGUAGE plpgsql
 
 CREATE TRIGGER project_topologies__scd2_close BEFORE INSERT ON project_topologies
 FOR EACH ROW EXECUTE FUNCTION project_topologies__scd2_close_fn()
+
+CREATE OR REPLACE FUNCTION tags__immutable_fn() RETURNS TRIGGER AS $$
+BEGIN
+  RAISE EXCEPTION 'tags is insert-only';
+END;
+$$ LANGUAGE plpgsql
+
+CREATE TRIGGER tags__immutable_no_update BEFORE UPDATE OF id, tag_id, project_id, entity_type, entity_id, kind, key, value, valid_from, defined_by_id ON tags
+FOR EACH ROW EXECUTE FUNCTION tags__immutable_fn()
+
+CREATE TRIGGER tags__immutable_no_delete BEFORE DELETE ON tags
+FOR EACH ROW EXECUTE FUNCTION tags__immutable_fn()
+
+CREATE OR REPLACE FUNCTION tags__scd2_close_fn() RETURNS TRIGGER AS $$
+BEGIN
+  PERFORM pg_advisory_xact_lock(hashtextextended('tags:' || NEW.tag_id, 0));
+  SELECT COALESCE(MIN(valid_from), 'infinity') INTO NEW.valid_to
+  FROM tags
+  WHERE tag_id = NEW.tag_id
+    AND (valid_from, id) > (NEW.valid_from, NEW.id);
+  UPDATE tags SET valid_to = NEW.valid_from
+  WHERE tag_id = NEW.tag_id
+    AND (valid_from, id) < (NEW.valid_from, NEW.id)
+    AND valid_to > NEW.valid_from;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql
+
+CREATE TRIGGER tags__scd2_close BEFORE INSERT ON tags
+FOR EACH ROW EXECUTE FUNCTION tags__scd2_close_fn()
 
 CREATE OR REPLACE FUNCTION collections__immutable_fn() RETURNS TRIGGER AS $$
 BEGIN
@@ -472,6 +504,12 @@ CREATE UNIQUE INDEX "project_topologies___project_id__valid_from___uidx" ON "pro
 
 CREATE UNIQUE INDEX "project_topologies___project_id___current_uidx" ON "project_topologies" ("project_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
+CREATE INDEX "tags___tag_id__valid_from__id___idx" ON "tags" ("tag_id", "valid_from", "id")
+
+CREATE UNIQUE INDEX "tags___tag_id___current_uidx" ON "tags" ("tag_id") WHERE "valid_to" = ('infinity'::timestamptz)
+
+CREATE UNIQUE INDEX "tags___entity_type__entity_id__key___current_uidx" ON "tags" ("entity_type", "entity_id", "key") WHERE "valid_to" = ('infinity'::timestamptz)
+
 CREATE UNIQUE INDEX "collections___collection_id___current_uidx" ON "collections" ("collection_id") WHERE "valid_to" = ('infinity'::timestamptz)
 
 CREATE UNIQUE INDEX "collections___project_id__name___current_uidx" ON "collections" ("project_id", "name") WHERE "valid_to" = ('infinity'::timestamptz)
@@ -737,6 +775,16 @@ ALTER TABLE project_topologies FORCE ROW LEVEL SECURITY
 CREATE POLICY project_isolation ON project_topologies USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
 
 CREATE POLICY across_projects ON project_topologies TO td_across_projects USING (true) WITH CHECK (true)
+
+ALTER TABLE tags ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
+
+ALTER TABLE tags ENABLE ROW LEVEL SECURITY
+
+ALTER TABLE tags FORCE ROW LEVEL SECURITY
+
+CREATE POLICY project_isolation ON tags USING (project_id = current_setting('app.project_id', true)) WITH CHECK (project_id = current_setting('app.project_id', true))
+
+CREATE POLICY across_projects ON tags TO td_across_projects USING (true) WITH CHECK (true)
 
 ALTER TABLE connections ALTER COLUMN project_id SET DEFAULT NULLIF(current_setting('app.project_id', true), '')
 

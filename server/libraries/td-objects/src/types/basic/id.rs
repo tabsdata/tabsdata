@@ -86,6 +86,7 @@ pub struct ExecutionId(IdL<EP>);
 pub struct FromCollectionId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(try_from = TagEntityId)]
 pub struct FunctionId(Id);
 
 /// Identity of a function's stage/checkpoint directory. Stable across function
@@ -145,7 +146,24 @@ impl RoleId {
 }
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(try_from = TagEntityId)]
 pub struct TableId(Id);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct TagId(Id);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(
+    try_from = ProjectId,
+    try_from = GroupId,
+    try_from = CollectionId,
+    try_from = FunctionId,
+    try_from = TableId
+)]
+pub struct TagEntityId(Id);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct TagVersionId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct TopologyVersionId(Id);

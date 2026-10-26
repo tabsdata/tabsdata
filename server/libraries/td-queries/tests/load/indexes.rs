@@ -410,6 +410,18 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Constraint,
     },
     IndexCase {
+        index: "tags___entity_type__entity_id__key___current_uidx",
+        served_by: Constraint,
+    },
+    IndexCase {
+        index: "tags___tag_id__valid_from__id___idx",
+        served_by: Path("the scd2 close trigger's next-version lookup, as on every interval table"),
+    },
+    IndexCase {
+        index: "tags___tag_id___current_uidx",
+        served_by: Constraint,
+    },
+    IndexCase {
         index: "projects___name___current_uidx",
         served_by: Constraint,
     },
