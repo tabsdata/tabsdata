@@ -6,6 +6,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import TYPE_CHECKING
+
 import polars as pl
 from tabsdatax.itest.fixture.backends.snowflake import SnowflakeDomain
 from tabsdatax.itest.fixture.functions.sql import SqlStore
@@ -13,6 +17,9 @@ from tabsdatax.itest.fixture.functions.sql import SqlStore
 from tabsdatak.api import Secret
 from tabsdatak.conn.common.types import UserPassword
 from tabsdatak.conn.snowflake import SnowflakeDestConn
+
+if TYPE_CHECKING:
+    from snowflake.connector.cursor import SnowflakeCursor
 
 # Snowflake quotes identifiers with double quotes.
 DELIMITERS = ('"', '"')
@@ -47,21 +54,15 @@ def store(domain: SnowflakeDomain) -> SnowflakeStore:
 
 class SnowflakeStore(SqlStore):
     """A snowflake.connector-backed :class:`SqlStore`. The connector only ever
-    writes, so every verification goes through this rather than through it."""
+    writes, so every verification goes through this rather than through it.
+
+    Each operation opens and closes its own connection, so no session outlives
+    the call that needed it."""
 
     def __init__(self, domain: SnowflakeDomain) -> None:
-        import snowflake.connector
-
+        self._domain = domain
         self._database = domain.database
         self._schema = domain.schema
-        self._conn = snowflake.connector.connect(
-            account=domain.account,
-            user=domain.username,
-            password=domain.pat,
-            warehouse=domain.warehouse,
-            database=domain.database,
-            schema=domain.schema,
-        )
 
     def quote(self, identifier: str) -> str:
         open_, close = DELIMITERS
@@ -149,19 +150,30 @@ class SnowflakeStore(SqlStore):
         return f"{self._database}.{self._schema}.{table}"
 
     def _query(self, sql: str) -> tuple[list[tuple], list[str]]:
-        cursor = self._conn.cursor()
-        try:
+        with self._cursor() as cursor:
             cursor.execute(sql)
             return cursor.fetchall(), [c[0] for c in cursor.description]
-        finally:
-            cursor.close()
 
     def _execute(self, sql: str, params: list[tuple] | None = None) -> None:
-        cursor = self._conn.cursor()
-        try:
+        with self._cursor() as cursor:
             if params is None:
                 cursor.execute(sql)
             else:
                 cursor.executemany(sql, params)
-        finally:
-            cursor.close()
+
+    @contextmanager
+    def _cursor(self) -> Iterator[SnowflakeCursor]:
+        import snowflake.connector
+
+        with (
+            snowflake.connector.connect(
+                account=self._domain.account,
+                user=self._domain.username,
+                password=self._domain.pat,
+                warehouse=self._domain.warehouse,
+                database=self._database,
+                schema=self._schema,
+            ) as connection,
+            connection.cursor() as cursor,
+        ):
+            yield cursor
