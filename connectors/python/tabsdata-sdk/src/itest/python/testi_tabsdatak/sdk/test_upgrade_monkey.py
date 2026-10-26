@@ -512,7 +512,17 @@ def test_a_monkey_run_holds_across_an_upgrade(
         before = run_before(tmp_path, folder, owner)
         problems += [f"Before the upgrade: {problem}" for problem in before["problems"]]
         progress(f"Stopping {name} with work in flight", SETUP)
-        tdkserver(owner, command("stop", name), release_side=True)
+        try:
+            tdkserver(owner, command("stop", name), release_side=True)
+        except AssertionError as error:
+            tolerated = release.tolerated_stop_errors(rulebook, version)
+            if not any(code in str(error) for code in tolerated):
+                raise
+            progress(
+                f"Release {version} did not fully stop {name}; the upgrade must "
+                "stop what it left running",
+                SETUP,
+            )
         head = importlib.metadata.version("tabsdata")
         progress(f"Upgrading {name} from {version} to {head}", SETUP)
         tdkserver(

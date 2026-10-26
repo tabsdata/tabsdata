@@ -23,6 +23,8 @@ releases:
           - --yes
         environment:
           UV_INDEX: "{uv_index}"
+    tolerated_stop_errors:
+      - "ProviderError::5114"
   - versions: ">=2.0.1,<2.2.0"
     commands:
       - arguments:

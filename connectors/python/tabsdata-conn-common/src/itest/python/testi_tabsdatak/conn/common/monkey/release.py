@@ -29,6 +29,7 @@ RELEASE_PACKAGES = (
 EXTRA_PACKAGES = ("kubernetes",)
 INSTALL_TIMEOUT = 1800
 INSTANCE_ROLE = "upgrade"
+TOLERATED_STOP_ERRORS = "tolerated_stop_errors"
 ENCODING = "utf-8"
 DECODING_ERRORS = "replace"
 ISOLATED_VARIABLES = (
@@ -164,35 +165,43 @@ class LaunchCommand:
     environment: dict[str, str]
 
 
+def release_entry(rulebook: Path, version: str) -> dict:
+    releases = yaml.safe_load(rulebook.read_text(encoding=ENCODING))["releases"]
+    for entry in releases:
+        if Version(version) in SpecifierSet(entry["versions"]):
+            return entry
+    raise RuntimeError(
+        f"No entry of {rulebook} covers release {version}; add one.",
+    )
+
+
 def launch_commands(
     rulebook: Path,
     version: str,
     values: dict[str, object],
 ) -> list[LaunchCommand]:
-    releases = yaml.safe_load(rulebook.read_text(encoding=ENCODING))["releases"]
-    for entry in releases:
-        if Version(version) in SpecifierSet(entry["versions"]):
-            try:
-                return [
-                    LaunchCommand(
-                        arguments=[
-                            argument.format(**values)
-                            for argument in command["arguments"]
-                        ],
-                        environment={
-                            name: value.format(**values)
-                            for name, value in command.get("environment", {}).items()
-                        },
-                    )
-                    for command in entry["commands"]
-                ]
-            except KeyError as missing:
-                raise RuntimeError(
-                    f"Starting release {version} needs {missing}, which is not set.",
-                ) from missing
-    raise RuntimeError(
-        f"No entry of {rulebook} covers release {version}; add one.",
-    )
+    entry = release_entry(rulebook, version)
+    try:
+        return [
+            LaunchCommand(
+                arguments=[
+                    argument.format(**values) for argument in command["arguments"]
+                ],
+                environment={
+                    name: value.format(**values)
+                    for name, value in command.get("environment", {}).items()
+                },
+            )
+            for command in entry["commands"]
+        ]
+    except KeyError as missing:
+        raise RuntimeError(
+            f"Starting release {version} needs {missing}, which is not set.",
+        ) from missing
+
+
+def tolerated_stop_errors(rulebook: Path, version: str) -> list[str]:
+    return list(release_entry(rulebook, version).get(TOLERATED_STOP_ERRORS, []))
 
 
 def toolkit(*arguments: str) -> str:
