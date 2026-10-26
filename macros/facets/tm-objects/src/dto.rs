@@ -3,6 +3,7 @@
 //
 
 use crate::dao_marks::option_inner_type;
+use crate::dto_tuples::reject_tuples;
 use crate::dxo_fields::dlo_dto_flat_machinery;
 use crate::type_builder::parse_input_item_struct;
 use darling::{FromDeriveInput, FromField, FromMeta};
@@ -14,6 +15,9 @@ use syn::{DeriveInput, ItemStruct, parse_macro_input};
 /// Attribute macro that wraps a struct with DTO derives (DtoType, Builder, Serialize, etc.).
 pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemStruct);
+    if let Err(e) = reject_tuples(&input.fields) {
+        return e.to_compile_error().into();
+    }
 
     let vis = &input.vis;
     let struct_token = &input.struct_token;

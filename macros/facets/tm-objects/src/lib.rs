@@ -63,6 +63,7 @@ mod dao_marks;
 mod dao_unique;
 mod dlo;
 mod dto;
+mod dto_tuples;
 mod dxo_fields;
 mod type_builder;
 mod typed_types;
