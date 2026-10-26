@@ -12,7 +12,6 @@ use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::group::{GroupDB, GroupParam};
-use td_objects::types::basic::{TagEntityId, TagEntityType};
 use td_queries::Queries;
 
 #[service_factory]
@@ -34,16 +33,8 @@ async fn delete_group(
         let current: GroupDB = conn.scd2().fetch_one(&param.group).await?;
         assert_not_system(&current)?;
         assert_group_unused(conn, &current).await?;
-        close_user_tags_of(
-            conn,
-            TagEntityType::Group,
-            &[TagEntityId::try_from(current.group_id)?],
-            at,
-        )
-        .await?;
-        conn.scd2()
-            .close::<GroupDB>(&current.group_id, at)
-            .await?;
+        close_user_tags_of(conn, &[current.group_id], at).await?;
+        conn.scd2().close::<GroupDB>(&current.group_id, at).await?;
         gated_trx.commit().await?;
         Ok(())
     })

@@ -13,15 +13,15 @@ use td_error::TdError;
 use td_objects::dxo::collection::{CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{CreateRequest, DeleteRequest, ReadRequest, WithinProject};
 use td_objects::dxo::tag::{Tag, TagParam, TagSet};
-use td_objects::types::basic::{TagEntityId, TagEntityType};
+use td_objects::types::basic::TagEntity;
 use td_queries::Queries;
 
 async fn collection<M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     collection: &CollectionParam,
-) -> Result<TagEntityId, TdError> {
-    let collection: ActiveCollectionDB = conn.fetch_one(&collection.collection).await?;
-    TagEntityId::try_from(collection.id)
+) -> Result<TagEntity, TdError> {
+    let collection: CollectionDB = conn.scd2().fetch_one(&collection.collection).await?;
+    Ok(TagEntity::from(collection.collection_id))
 }
 
 #[service_factory]
@@ -36,8 +36,8 @@ async fn list_collection_tags(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let entity_id = collection(conn, &collection_param).await?;
-    entity_tags(conn, TagEntityType::Collection, entity_id).await
+    let entity = collection(conn, &collection_param).await?;
+    entity_tags(conn, entity).await
 }
 
 #[service_factory]
@@ -53,8 +53,8 @@ async fn set_collection_tag(
         .await?;
     let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
-    let entity_id = collection(conn, &collection_param).await?;
-    set_user_tag(conn, &ctx, TagEntityType::Collection, entity_id, set, at).await
+    let entity = collection(conn, &collection_param).await?;
+    set_user_tag(conn, &ctx, entity, set, at).await
 }
 
 #[service_factory]
@@ -70,6 +70,6 @@ async fn delete_collection_tag(
         .await?;
     let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
-    let entity_id = collection(conn, &collection_param).await?;
-    delete_user_tag(conn, TagEntityType::Collection, entity_id, tag.key, at).await
+    let entity = collection(conn, &collection_param).await?;
+    delete_user_tag(conn, entity, tag.key, at).await
 }

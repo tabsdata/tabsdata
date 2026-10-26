@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use crate::types::basic::{CollectionId, FunctionId, GroupId, ProjectId, TableId, TagEntityId};
 use std::collections::BTreeMap;
 use std::str::FromStr;
 use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
@@ -26,6 +27,55 @@ pub enum TagEntityType {
     Function,
     #[typed_enum(rename = "T")]
     Table,
+}
+
+/// The ids of the entities that carry tags; each names its entity type, so a
+/// tag read or write is addressed from the id alone.
+pub trait Taggable:
+    Typed<Inner = Id> + Copy + for<'a> TryFrom<&'a TagEntityId, Error = TdError>
+{
+    const ENTITY_TYPE: TagEntityType;
+
+    fn tag_entity_id(self) -> TagEntityId {
+        TagEntityId::try_new(self.into_inner()).expect("an id is a valid tag entity id")
+    }
+}
+
+impl Taggable for ProjectId {
+    const ENTITY_TYPE: TagEntityType = TagEntityType::Project;
+}
+
+impl Taggable for GroupId {
+    const ENTITY_TYPE: TagEntityType = TagEntityType::Group;
+}
+
+impl Taggable for CollectionId {
+    const ENTITY_TYPE: TagEntityType = TagEntityType::Collection;
+}
+
+impl Taggable for FunctionId {
+    const ENTITY_TYPE: TagEntityType = TagEntityType::Function;
+}
+
+impl Taggable for TableId {
+    const ENTITY_TYPE: TagEntityType = TagEntityType::Table;
+}
+
+/// One tagged entity: the pair every tag row addresses, built from a typed id
+/// so the type and the id cannot disagree.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TagEntity {
+    pub entity_type: TagEntityType,
+    pub entity_id: TagEntityId,
+}
+
+impl<T: Taggable> From<T> for TagEntity {
+    fn from(id: T) -> Self {
+        Self {
+            entity_type: T::ENTITY_TYPE,
+            entity_id: id.tag_entity_id(),
+        }
+    }
 }
 
 /// How a tag is written, which says when it may change.

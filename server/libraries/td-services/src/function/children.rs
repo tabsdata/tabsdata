@@ -4,7 +4,7 @@
 
 use crate::function::lifecycle::{ChildOf, delete_one, register_one, update_one};
 use crate::function::workers::register_workers;
-use crate::tag::parent::{child_functions, parent_function};
+use crate::tag::parent::{children_of, parent_of};
 use std::collections::{HashMap, HashSet};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
@@ -31,10 +31,7 @@ pub async fn ensure_user_managed<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     function: &FunctionInsertDB,
 ) -> Result<(), TdError> {
-    if parent_function(conn, &function.function_id)
-        .await?
-        .is_some()
-    {
+    if parent_of(conn, function.function_id).await?.is_some() {
         Err(ChildFunctionError::NotUserManaged(function.name.clone()))?
     }
     Ok(())
@@ -65,7 +62,7 @@ pub async fn reconcile_children(
         return cascade_enabled(conn, ctx, &parent.function_id, parent.enabled, topology_at).await;
     };
 
-    let children = child_functions(conn, &parent.function_id).await?;
+    let children: Vec<FunctionId> = children_of(conn, parent.function_id).await?;
     let existing: Vec<FunctionDBWithNames> = conn
         .scd2()
         .chunked()
@@ -135,7 +132,7 @@ pub async fn cascade_enabled(
     enabled: Enabled,
     topology_at: TopologyInstant,
 ) -> Result<(), TdError> {
-    let children = child_functions(conn, parent).await?;
+    let children: Vec<FunctionId> = children_of(conn, *parent).await?;
     let children: Vec<FunctionDB> = conn.scd2().chunked().fetch_all(&children, ()).await?;
     let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
     for child in children {

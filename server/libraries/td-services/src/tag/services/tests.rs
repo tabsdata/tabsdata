@@ -9,7 +9,6 @@ use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt as _;
 use td_error::{TdError, assert_service_error};
 use td_objects::Typed;
-use td_objects::and;
 use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{ListParams, RequestContext};
 use td_objects::dxo::project::ProjectParam;
@@ -18,9 +17,8 @@ use td_objects::dxo::group::{GroupDB, GroupParam};
 use td_objects::dxo::tag::{Tag, TagDB, TagParam, TagSet};
 use td_objects::types::basic::{
     AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description,
-    FunctionIdName, GroupIdName, GroupName, ProjectId, ProjectIdName, ReuseFrozen, TagEntityId,
-    TagEntityType,
-    TagKind, TagValue, TopologyTagKey, UserId, UserTagKey,
+    FunctionIdName, GroupIdName, GroupName, ProjectId, ProjectIdName, ReuseFrozen, TagEntity, TagKind,
+    TagValue, TopologyTagKey, UserId, UserTagKey,
 };
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
@@ -308,10 +306,7 @@ async fn test_deleting_a_collection_closes_its_tags(db: TdPool) -> Result<(), Td
         .await?;
     let open: Vec<TagDB> = db
         .scd2()
-        .fetch_all(and!(
-            &TagEntityType::Collection,
-            &TagEntityId::try_from(f.collection.id)?
-        ))
+        .fetch_all(TagEntity::from(f.collection.base.collection_id).rows())
         .await?;
     assert!(open.is_empty());
     Ok(())
@@ -341,10 +336,7 @@ async fn test_deleting_a_group_closes_its_tags(db: TdPool) -> Result<(), TdError
         .await?;
     let open: Vec<TagDB> = db
         .scd2()
-        .fetch_all(and!(
-            &TagEntityType::Group,
-            &TagEntityId::try_from(group.base.group_id)?
-        ))
+        .fetch_all(TagEntity::from(group.base.group_id).rows())
         .await?;
     assert!(open.is_empty());
     Ok(())

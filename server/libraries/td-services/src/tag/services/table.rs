@@ -16,19 +16,20 @@ use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{CreateRequest, DeleteRequest, ReadRequest, WithinProject};
 use td_objects::dxo::table::{TableDBWithNames, TableParam};
 use td_objects::dxo::tag::{Tag, TagParam, TagSet};
-use td_objects::types::basic::{TagEntityId, TagEntityType};
+use td_objects::types::basic::TagEntity;
 use td_queries::Queries;
 
 async fn table<M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     collection: &CollectionParam,
     table: &TableParam,
-) -> Result<TagEntityId, TdError> {
+) -> Result<TagEntity, TdError> {
+    let collection_id = resolve_collection_id(conn, &collection.collection).await?;
     let table: TableDBWithNames = conn
         .scd2()
         .fetch_one(and!(&collection_id, &table.table))
         .await?;
-    TagEntityId::try_from(table.base.base.table_id)
+    Ok(TagEntity::from(table.table_id))
 }
 
 #[service_factory]
@@ -43,8 +44,8 @@ async fn list_table_tags(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let entity_id = table(conn, &collection, &table_param).await?;
-    entity_tags(conn, TagEntityType::Table, entity_id).await
+    let entity = table(conn, &collection, &table_param).await?;
+    entity_tags(conn, entity).await
 }
 
 #[service_factory]
@@ -60,8 +61,8 @@ async fn set_table_tag(
         .await?;
     let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
-    let entity_id = table(conn, &collection, &table_param).await?;
-    set_user_tag(conn, &ctx, TagEntityType::Table, entity_id, set, at).await
+    let entity = table(conn, &collection, &table_param).await?;
+    set_user_tag(conn, &ctx, entity, set, at).await
 }
 
 #[service_factory]
@@ -77,6 +78,6 @@ async fn delete_table_tag(
         .await?;
     let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
-    let entity_id = table(conn, &collection, &table_param).await?;
-    delete_user_tag(conn, TagEntityType::Table, entity_id, tag.key, at).await
+    let entity = table(conn, &collection, &table_param).await?;
+    delete_user_tag(conn, entity, tag.key, at).await
 }

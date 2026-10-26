@@ -13,15 +13,15 @@ use td_error::TdError;
 use td_objects::dxo::crudl::{CreateRequest, DeleteRequest, ReadRequest, WithinProject};
 use td_objects::dxo::group::{GroupDB, GroupParam};
 use td_objects::dxo::tag::{Tag, TagParam, TagSet};
-use td_objects::types::basic::{TagEntityId, TagEntityType};
+use td_objects::types::basic::TagEntity;
 use td_queries::Queries;
 
 async fn group<M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, InProject, M>,
     group: &GroupParam,
-) -> Result<TagEntityId, TdError> {
-    let group: GroupDBWithNames = conn.fetch_one(&group.group).await?;
-    TagEntityId::try_from(group.base.base.id)
+) -> Result<TagEntity, TdError> {
+    let group: GroupDB = conn.scd2().fetch_one(&group.group).await?;
+    Ok(TagEntity::from(group.group_id))
 }
 
 #[service_factory]
@@ -36,8 +36,8 @@ async fn list_group_tags(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let entity_id = group(conn, &group_param).await?;
-    entity_tags(conn, TagEntityType::Group, entity_id).await
+    let entity = group(conn, &group_param).await?;
+    entity_tags(conn, entity).await
 }
 
 #[service_factory]
@@ -53,8 +53,8 @@ async fn set_group_tag(
         .await?;
     let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
-    let entity_id = group(conn, &group_param).await?;
-    set_user_tag(conn, &ctx, TagEntityType::Group, entity_id, set, at).await
+    let entity = group(conn, &group_param).await?;
+    set_user_tag(conn, &ctx, entity, set, at).await
 }
 
 #[service_factory]
@@ -70,6 +70,6 @@ async fn delete_group_tag(
         .await?;
     let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
-    let entity_id = group(conn, &group_param).await?;
-    delete_user_tag(conn, TagEntityType::Group, entity_id, tag.key, at).await
+    let entity = group(conn, &group_param).await?;
+    delete_user_tag(conn, entity, tag.key, at).await
 }

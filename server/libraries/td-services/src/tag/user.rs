@@ -9,7 +9,9 @@ use td_objects::FromDao;
 use td_objects::and;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::tag::{Tag, TagDB, TagSet, UserTagDB, UserTagInsertDB};
-use td_objects::types::basic::{TagEntityId, TagEntityType, TagId, TagKey, TagKind, UserTagKey};
+use td_objects::types::basic::{
+    TagEntity, TagEntityId, TagId, TagKey, TagKind, Taggable, UserTagKey,
+};
 use td_queries::Queries;
 
 #[td_error]
@@ -20,42 +22,35 @@ pub enum TagError {
 
 pub async fn entity_tags<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
-    entity_type: TagEntityType,
-    entity_id: TagEntityId,
+    entity: TagEntity,
 ) -> Result<Vec<Tag>, TdError> {
-    let tags: Vec<TagDB> = conn
-        .scd2()
-        .fetch_all(and!(&entity_type, &entity_id))
-        .await?;
+    let tags: Vec<TagDB> = conn.scd2().fetch_all(entity.rows()).await?;
     tags.into_iter().map(Tag::from_dao).collect()
 }
 
 pub async fn set_user_tag(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ctx: &RequestContext,
-    entity_type: TagEntityType,
-    entity_id: TagEntityId,
+    entity: TagEntity,
     set: TagSet,
     at: LockInstant,
 ) -> Result<Tag, TdError> {
     let key: TagKey = set.key.clone().try_into()?;
     let current: Option<TagDB> = conn
         .scd2()
-        .fetch_optional(and!(&entity_type, &entity_id, &key, TagKind::User))
+        .fetch_optional(and!(
+            &entity.entity_type,
+            &entity.entity_id,
+            &key,
+            TagKind::User
+        ))
         .await?;
     let tag_id = match current {
         Some(current) if current.value == set.value => return Tag::from_dao(current),
         Some(current) => current.tag_id,
         None => TagId::default(),
     };
-    let version = UserTagInsertDB::new(
-        tag_id,
-        entity_type,
-        entity_id,
-        set.key,
-        set.value,
-        ctx.user_id,
-    );
+    let version = UserTagInsertDB::new(tag_id, entity, set.key, set.value, ctx.user_id);
     conn.scd2().open(&version, at).await?;
     Ok(Tag {
         id: version.id,
@@ -67,16 +62,15 @@ pub async fn set_user_tag(
     })
 }
 
-pub async fn delete_user_tag(
-    conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
-    entity_type: TagEntityType,
-    entity_id: TagEntityId,
+pub async fn delete_user_tag<S: SeesProjectRows>(
+    conn: &mut DomainConnection<Apiserver, S, impl WriteMode>,
+    entity: TagEntity,
     key: UserTagKey,
     at: LockInstant,
 ) -> Result<(), TdError> {
     let closed = conn
         .scd2()
-        .close::<UserTagDB>(and!(&entity_type, &entity_id, &key, UserTagDB::user()), at)
+        .close::<UserTagDB>(and!(entity.rows(), &key, UserTagDB::user()), at)
         .await?;
     if closed.rows_affected() == 0 {
         Err(TagError::NotFound(key))?
@@ -84,19 +78,19 @@ pub async fn delete_user_tag(
     Ok(())
 }
 
-/// Close the user tags of entities going away outside a topology write.
-pub async fn close_user_tags_of<S: SeesProjectRows>(
+/// The open user tags of the entities, closed with them at the lock instant.
+pub async fn close_user_tags_of<T: Taggable, S: SeesProjectRows>(
     conn: &mut DomainConnection<Apiserver, S, impl WriteMode>,
-    entity_type: TagEntityType,
-    entity_ids: &[TagEntityId],
+    entities: &[T],
     at: LockInstant,
 ) -> Result<(), TdError> {
-    if entity_ids.is_empty() {
+    if entities.is_empty() {
         return Ok(());
     }
+    let entity_ids: Vec<TagEntityId> = entities.iter().map(|id| id.tag_entity_id()).collect();
     conn.scd2()
         .chunked()
-        .close::<UserTagDB>(entity_ids, and!(&entity_type, UserTagDB::user()), at)
+        .close::<UserTagDB>(&entity_ids, and!(&T::ENTITY_TYPE, UserTagDB::user()), at)
         .await?;
     Ok(())
 }

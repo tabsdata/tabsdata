@@ -10,7 +10,7 @@ use crate::function::register::ensure_connection_kind_matches;
 use crate::function::services::update::assert_function_name_not_exists;
 use crate::function::workers::register_workers;
 use crate::tag::close_tags_of;
-use crate::tag::parent::stamp_function_parent;
+use crate::tag::parent::stamp_parent;
 use std::collections::HashMap;
 use td_bridge::BridgeProviderHandle;
 use td_database::access::{InProject, WriteMode};
@@ -25,7 +25,7 @@ use td_objects::dxo::function::{
 };
 use td_objects::dxo::topology::TopologyInstant;
 use td_objects::types::basic::{
-    FunctionId, FunctionType, TableNameDto, TagEntityId, TagEntityType, WorkerConfig, WorkerTypeDto,
+    FunctionId, FunctionType, TableNameDto, WorkerConfig, WorkerTypeDto,
 };
 use td_queries::Queries;
 
@@ -74,10 +74,10 @@ pub async fn register_one(
     let (parent, parent_tables) = child_of
         .map(|child_of| child_of.stamp(&mut function))
         .unzip();
-    ensure_connection_kind_matches(conn, bridge, &function, parent, &collection.base).await?;
+    ensure_connection_kind_matches(conn, bridge, &function, parent, collection).await?;
     conn.scd2().open(&function, topology_at).await?;
     if let Some(parent) = parent {
-        stamp_function_parent(conn, ctx, &function.function_id, parent, topology_at).await?;
+        stamp_parent(conn, ctx, function.function_id, *parent, topology_at).await?;
     }
     claim_bundle(conn, &function).await?;
 
@@ -125,10 +125,10 @@ pub async fn update_one(
     let (parent, parent_tables) = child_of
         .map(|child_of| child_of.stamp(&mut function))
         .unzip();
-    ensure_connection_kind_matches(conn, bridge, &function, parent, &collection.base).await?;
+    ensure_connection_kind_matches(conn, bridge, &function, parent, collection).await?;
     conn.scd2().open(&function, topology_at).await?;
     if let Some(parent) = parent {
-        stamp_function_parent(conn, ctx, &function.function_id, parent, topology_at).await?;
+        stamp_parent(conn, ctx, function.function_id, *parent, topology_at).await?;
     }
     claim_bundle(conn, &function).await?;
 
@@ -181,13 +181,7 @@ pub async fn delete_one(
         topology_at.into(),
     )
     .await?;
-    close_tags_of(
-        conn,
-        TagEntityType::Function,
-        &[TagEntityId::try_from(function.function_id)?],
-        topology_at,
-    )
-    .await?;
+    close_tags_of(conn, &[function.function_id], topology_at).await?;
     conn.scd2()
         .close::<FunctionDB>(&function.function_id, topology_at)
         .await?;

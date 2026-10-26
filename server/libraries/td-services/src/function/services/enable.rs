@@ -106,7 +106,7 @@ mod tests {
     use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
     use td_objects::types::basic::{BundleId, CollectionName, ReuseFrozen};
     use td_objects::types::basic::{FunctionId, FunctionName, FunctionType, ProjectId};
-    use td_objects::types::basic::{TagEntityType, TagValue, TopologyTagKey};
+    use td_objects::types::basic::{TagValue, Taggable, TopologyTagKey};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -505,7 +505,7 @@ mod tests {
         let children: Vec<FunctionId> = db
             .scd2()
             .fetch_all::<TopologyTagDB>(and!(
-                &TagEntityType::Function,
+                &FunctionId::ENTITY_TYPE,
                 &TopologyTagKey::Parent,
                 &TagValue::of_id(*owner),
                 TopologyTagDB::topology(),

@@ -22,8 +22,8 @@ use td_objects::types::basic::{
     AccessTokenId, BasePath, DependencyId, DependencyPos, DependencyVersionId, FunctionId,
     FunctionStatus, FunctionType, FunctionVersionId, Partitioned, Private, Snippet, StageId,
     StorageVersion, System, TableFunctionParamPos, TableId, TableName, TableStatus, TableType,
-    TableVersionId, TagEntityId, TagEntityType, TagId, TagValue, TopologyTagKey, TriggerId,
-    TriggerStatus, TriggerVersionId, UserId, WorkerId, WorkerStatus,
+    TableVersionId, TagEntity, TagId, TagValue, TopologyTagKey, TriggerId, TriggerStatus,
+    TriggerVersionId, UserId, WorkerId, WorkerStatus,
 };
 
 /// Runs every statement on the caller's executor; if it is project-scoped
@@ -206,8 +206,7 @@ pub(crate) async fn seed_child_function(
         seed_function(executor.reuse(), topology_at, collection, function_create).await?;
     let tag = TopologyTagInsertDB::new(
         TagId::default(),
-        TagEntityType::Function,
-        TagEntityId::try_from(function.base.function_id)?,
+        TagEntity::from(function.function_id),
         TopologyTagKey::Parent,
         TagValue::of_id(*parent),
         UserId::admin(),

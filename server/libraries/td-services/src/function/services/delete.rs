@@ -4,7 +4,7 @@
 
 use crate::function::children::ensure_user_managed;
 use crate::function::lifecycle::delete_one;
-use crate::tag::parent::child_functions;
+use crate::tag::parent::children_of;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -17,6 +17,7 @@ use td_objects::dxo::collection::{CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
+use td_objects::types::basic::FunctionId;
 use td_queries::Queries;
 
 #[service_factory]
@@ -47,7 +48,7 @@ async fn delete_function(
 
         ensure_user_managed(conn, &current).await?;
 
-        let children = child_functions(conn, &current.function_id).await?;
+        let children: Vec<FunctionId> = children_of(conn, current.function_id).await?;
         let children: Vec<FunctionDB> = conn.scd2().chunked().fetch_all(&children, ()).await?;
         for child in &children {
             delete_one(conn, &ctx, child, topology_at).await?;

@@ -21,7 +21,7 @@ pub use spec::{FunctionSpec, PrivateTableError, ResolvedSpec, requested_parents,
 pub use state::FunctionState;
 
 use crate::function::workers::register_workers;
-use crate::tag::parent::table_parents;
+use crate::tag::parent::parents_of;
 use std::collections::HashMap;
 use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
@@ -56,7 +56,7 @@ pub async fn register_version(
     )
     .await?;
     let table_ids: Vec<TableId> = resolved.tables.iter().map(|t| t.table_id).collect();
-    let parents = table_parents(conn, &table_ids).await?;
+    let parents = parents_of(conn, &table_ids).await?;
     let changes = Changes::for_spec(state, &resolved, &parents, function, ctx)?;
     apply(conn, &changes, topology_at).await?;
     register_workers(

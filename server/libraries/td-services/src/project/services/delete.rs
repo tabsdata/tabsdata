@@ -15,7 +15,7 @@ use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::DeleteRequest;
 use td_objects::dxo::group::GroupDB;
 use td_objects::dxo::project::{ProjectDB, ProjectParam};
-use td_objects::types::basic::{GroupId, ProjectId, TagEntityId, TagEntityType};
+use td_objects::types::basic::{GroupId, ProjectId};
 use td_queries::Queries;
 
 #[service_factory]
@@ -44,26 +44,16 @@ async fn delete_project(
         let mut trx = trx.enter_project(&current.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(authz.none());
-        let groups: Vec<GroupDB> = conn.scd2().fetch_all(&current.base.project_id).await?;
-        let group_ids: Vec<GroupId> = groups.iter().map(|g| g.base.group_id).collect();
+        let groups: Vec<GroupDB> = conn.scd2().fetch_all(&current.project_id).await?;
+        let group_ids: Vec<GroupId> = groups.iter().map(|g| g.group_id).collect();
         conn.scd2()
             .close::<ProjectDB>(&current.project_id, at)
             .await?;
         conn.scd2()
             .close::<GroupDB>(&current.project_id, at)
             .await?;
-        close_user_tags_of(
-            conn,
-            TagEntityType::Project,
-            &[TagEntityId::try_from(current.base.project_id)?],
-            at,
-        )
-        .await?;
-        let group_ids = group_ids
-            .iter()
-            .map(|id| TagEntityId::try_from(*id))
-            .collect::<Result<Vec<_>, _>>()?;
-        close_user_tags_of(conn, TagEntityType::Group, &group_ids, at).await?;
+        close_user_tags_of(conn, &[current.project_id], at).await?;
+        close_user_tags_of(conn, &group_ids, at).await?;
         // System cascade: drop the project's three per-project roles together
         // with their permission + membership rows (bypasses the `fixed` guard;
         // see `delete_project_roles`).

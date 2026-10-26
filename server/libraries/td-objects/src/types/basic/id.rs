@@ -27,7 +27,12 @@ impl AccessTokenId {
 pub struct BundleId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-#[typed(try_from = EntityId, try_from = FromCollectionId, try_from = ToCollectionId)]
+#[typed(
+    try_from = EntityId,
+    try_from = FromCollectionId,
+    try_from = ToCollectionId,
+    try_from = TagEntityId
+)]
 pub struct CollectionId(Id);
 
 impl CollectionId {
@@ -44,7 +49,7 @@ impl CollectionId {
 pub struct ConnectionId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-#[typed(try_from = EntityId)]
+#[typed(try_from = EntityId, try_from = TagEntityId)]
 pub struct ProjectId(Id);
 
 impl ProjectKey for ProjectId {}
@@ -99,6 +104,7 @@ pub struct StageId(Id);
 pub struct FunctionVersionId(IdL<FV>);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[typed(try_from = TagEntityId)]
 pub struct GroupId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]

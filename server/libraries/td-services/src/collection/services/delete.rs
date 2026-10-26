@@ -37,7 +37,7 @@ use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::TriggerDB;
 use td_objects::dxo::worker::WorkerDB;
 use td_objects::types::basic::{CollectionId, WorkerType};
-use td_objects::types::basic::{TableId, TagEntityId, TagEntityType};
+use td_objects::types::basic::{FunctionId, TableId};
 use td_objects::{and, or};
 use td_queries::Queries;
 use tracing::debug;
@@ -106,27 +106,14 @@ async fn delete_collection(
             conn.scd2()
                 .close::<FunctionDB>(&collection.collection_id, topology_at)
                 .await?;
-            let table_tags = table_ids
-                .iter()
-                .map(|id| TagEntityId::try_from(*id))
-                .collect::<Result<Vec<_>, _>>()?;
-            close_tags_of(conn, TagEntityType::Table, &table_tags, topology_at).await?;
-            let function_tags = functions
-                .iter()
-                .map(|f| TagEntityId::try_from(f.base.function_id))
-                .collect::<Result<Vec<_>, _>>()?;
-            close_tags_of(conn, TagEntityType::Function, &function_tags, topology_at).await?;
+            close_tags_of(conn, &table_ids, topology_at).await?;
+            let function_ids: Vec<FunctionId> = functions.iter().map(|f| f.function_id).collect();
+            close_tags_of(conn, &function_ids, topology_at).await?;
         }
         conn.scd2()
             .close::<CollectionDB>(&collection.collection_id, at)
             .await?;
-        close_user_tags_of(
-            conn,
-            TagEntityType::Collection,
-            &[TagEntityId::try_from(collection.collection_id)?],
-            at,
-        )
-        .await?;
+        close_user_tags_of(conn, &[collection.collection_id], at).await?;
         update_deleted_workers(conn, &collection.collection_id, at).await?;
         trx.commit().await?;
         Ok(collection.connection_id)
@@ -313,7 +300,7 @@ mod tests {
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("c")?, &UserId::admin())
             .await?;
@@ -340,21 +327,21 @@ mod tests {
             })
         };
         let owner = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &register("owner")?)
             .await?;
         let child = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
-            .child_function(&collection, &register("child")?, &owner.base.function_id)
+            .child_function(&collection, &register("child")?, &owner.function_id)
             .await?;
 
         Services::with_defaults(db.clone())
-            .delete_collection(delete_request(p.base.project_id, "c"))
+            .delete_collection(delete_request(p.project_id, "c"))
             .await?;
 
-        assert_eq!(function_parent(&db, &child.base.function_id).await?, None);
+        assert_eq!(function_parent(&db, &child.function_id).await?, None);
         Ok(())
     }
 

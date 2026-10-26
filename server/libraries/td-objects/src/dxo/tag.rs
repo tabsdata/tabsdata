@@ -8,12 +8,23 @@
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
-    ProjectId, TagEntityId, TagEntityType, TagId, TagKey, TagKind, TagValue, TagVersionId,
-    TopologyTagKey, UserId, UserTagKey,
+    ProjectId, TagEntity, TagEntityId, TagEntityType, TagId, TagKey, TagKind, TagValue,
+    TagVersionId, TopologyTagKey, UserId, UserTagKey,
 };
-use ta_objects::FromDao;
+use ta_objects::and;
 use ta_objects::sql_condition::SqlCondition;
+use ta_objects::{FromDao, HasColumn};
 use td_error::TdError;
+
+impl TagEntity {
+    /// The rows of one entity.
+    pub fn rows<D>(&self) -> impl SqlCondition<D> + '_
+    where
+        D: HasColumn<TagEntityType> + HasColumn<TagEntityId>,
+    {
+        and!(&self.entity_type, &self.entity_id)
+    }
+}
 
 #[ta_objects::Dao]
 #[dao(table = "tags", ops(insert), scd2(at = TopologyInstant), project_scoped)]
@@ -33,18 +44,17 @@ pub struct TopologyTagInsertDB {
 impl TopologyTagInsertDB {
     pub fn new(
         tag_id: TagId,
-        entity_type: TagEntityType,
-        entity_id: TagEntityId,
+        entity: TagEntity,
         key: TopologyTagKey,
         value: TagValue,
         defined_by_id: UserId,
     ) -> Result<Self, TdError> {
-        key.check_applies_to(&entity_type)?;
+        key.check_applies_to(&entity.entity_type)?;
         Ok(Self {
             id: TagVersionId::default(),
             tag_id,
-            entity_type,
-            entity_id,
+            entity_type: entity.entity_type,
+            entity_id: entity.entity_id,
             kind: TagKind::Topology,
             key,
             value,
@@ -93,8 +103,7 @@ pub struct UserTagInsertDB {
 impl UserTagInsertDB {
     pub fn new(
         tag_id: TagId,
-        entity_type: TagEntityType,
-        entity_id: TagEntityId,
+        entity: TagEntity,
         key: UserTagKey,
         value: TagValue,
         defined_by_id: UserId,
@@ -102,8 +111,8 @@ impl UserTagInsertDB {
         Self {
             id: TagVersionId::default(),
             tag_id,
-            entity_type,
-            entity_id,
+            entity_type: entity.entity_type,
+            entity_id: entity.entity_id,
             kind: TagKind::User,
             key,
             value,

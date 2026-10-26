@@ -11,7 +11,7 @@ use td_database::access::{GatedConnection, InProject, RW};
 use td_error::TdError;
 use td_objects::dxo::crudl::{CreateRequest, DeleteRequest, WithinProject};
 use td_objects::dxo::tag::{Tag, TagParam, TagSet};
-use td_objects::types::basic::{TagEntityId, TagEntityType};
+use td_objects::types::basic::TagEntity;
 
 #[service_factory]
 async fn set_project_tag(
@@ -26,8 +26,7 @@ async fn set_project_tag(
         .await?;
     let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
-    let entity_id = TagEntityId::try_from(project)?;
-    set_user_tag(conn, &ctx, TagEntityType::Project, entity_id, set, at).await
+    set_user_tag(conn, &ctx, TagEntity::from(project), set, at).await
 }
 
 #[service_factory]
@@ -43,6 +42,5 @@ async fn delete_project_tag(
         .await?;
     let at = gated_trx.locked_at();
     let conn = gated_trx.get(grant);
-    let entity_id = TagEntityId::try_from(project)?;
-    delete_user_tag(conn, TagEntityType::Project, entity_id, tag.key, at).await
+    delete_user_tag(conn, TagEntity::from(project), tag.key, at).await
 }

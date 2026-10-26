@@ -17,8 +17,8 @@ use td_objects::dxo::trigger::TriggerInsertDB;
 use td_objects::system::SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES;
 use td_objects::types::basic::{
     DependencyId, DependencyPos, DependencyVersionId, FunctionId, Partitioned, Private, System,
-    TableFunctionParamPos, TableId, TableStatus, TableVersionId, TagEntityId, TagEntityType, TagId,
-    TagValue, TriggerId, TriggerStatus, TriggerVersionId,
+    TableFunctionParamPos, TableId, TableStatus, TableVersionId, TagEntity, TagId, TagValue,
+    TriggerId, TriggerStatus, TriggerVersionId,
 };
 
 /// A table whose status changed, so the triggers reading it follow.
@@ -144,8 +144,7 @@ impl Changes {
             match table.parent {
                 Some(parent) => self.tags.extend(parent_version(
                     ctx,
-                    TagEntityType::Table,
-                    TagEntityId::try_from(table.table_id)?,
+                    TagEntity::from(table.table_id),
                     TagValue::of_id(parent),
                     current,
                 )?),
