@@ -70,6 +70,19 @@ configs:
           leaf: pods.global.envs
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
+        - op: insert-sibling-if-existing
+          leaf: pods.function.placement
+          sibling: dataflow
+          placement: after
+          value:
+            temporary_folder: /tabsdata/dataflow/temporary
+            spill:
+              enabled: true
+              folder: /tabsdata/dataflow/spill
+              memory_threshold_percent: 40
+              disk_limit_percent: 80
+            abort:
+              memory_threshold_percent: 95
     tabsdata_docker.yaml:
       action: modify
       changes:
@@ -85,6 +98,19 @@ configs:
           leaf: pods.global.envs
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
+        - op: insert-sibling-if-existing
+          leaf: pods.function.placement
+          sibling: dataflow
+          placement: after
+          value:
+            temporary_folder: /tabsdata/dataflow/temporary
+            spill:
+              enabled: true
+              folder: /tabsdata/dataflow/spill
+              memory_threshold_percent: 40
+              disk_limit_percent: 80
+            abort:
+              memory_threshold_percent: 95
     tabsdata_eks.yaml:
       action: modify
       changes:
@@ -100,6 +126,19 @@ configs:
           leaf: pods.global.envs
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
+        - op: insert-sibling-if-existing
+          leaf: pods.function.placement
+          sibling: dataflow
+          placement: after
+          value:
+            temporary_folder: /tabsdata/dataflow/temporary
+            spill:
+              enabled: true
+              folder: /tabsdata/dataflow/spill
+              memory_threshold_percent: 40
+              disk_limit_percent: 80
+            abort:
+              memory_threshold_percent: 95
     tabsdata_fargate.yaml:
       action: modify
       changes:
@@ -127,6 +166,19 @@ configs:
           leaf: pods.global.envs
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
+        - op: insert-sibling-if-existing
+          leaf: pods.function.placement
+          sibling: dataflow
+          placement: after
+          value:
+            temporary_folder: /tabsdata/dataflow/temporary
+            spill:
+              enabled: true
+              folder: /tabsdata/dataflow/spill
+              memory_threshold_percent: 40
+              disk_limit_percent: 80
+            abort:
+              memory_threshold_percent: 95
     tabsdata_gke.yaml:
       action: modify
       changes:
@@ -142,6 +194,19 @@ configs:
           leaf: pods.global.envs
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
+        - op: insert-sibling-if-existing
+          leaf: pods.function.placement
+          sibling: dataflow
+          placement: after
+          value:
+            temporary_folder: /tabsdata/dataflow/temporary
+            spill:
+              enabled: true
+              folder: /tabsdata/dataflow/spill
+              memory_threshold_percent: 40
+              disk_limit_percent: 80
+            abort:
+              memory_threshold_percent: 95
     tabsdata_kminus.yaml:
       action: modify
       changes:
@@ -157,6 +222,19 @@ configs:
           leaf: pods.global.envs
           child: UV_HTTP_CONNECT_TIMEOUT
           value: 60
+        - op: insert-sibling-if-existing
+          leaf: pods.function.placement
+          sibling: dataflow
+          placement: after
+          value:
+            temporary_folder: /tabsdata/dataflow/temporary
+            spill:
+              enabled: true
+              folder: /tabsdata/dataflow/spill
+              memory_threshold_percent: 40
+              disk_limit_percent: 80
+            abort:
+              memory_threshold_percent: 95
 pods:
   apiserver.yaml:
     apiserver_aks.yaml:

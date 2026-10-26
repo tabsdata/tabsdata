@@ -159,7 +159,10 @@ fn the_empty_envs_mapping_takes_both_entries() {
 fn the_rest_of_the_file_survives() {
     let updated = rewrite(REWRITE_TEMPLATE, REWRITE_INDEX);
     let config = TabsdataConfig::parse(&updated).expect("valid config");
-    assert_eq!(config.pods.function.resources.cpu.as_deref(), Some("2"));
+    assert_eq!(
+        config.pods.function.component.resources.cpu.as_deref(),
+        Some("2")
+    );
 }
 
 #[test]

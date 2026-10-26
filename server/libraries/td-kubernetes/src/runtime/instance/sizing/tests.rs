@@ -139,7 +139,7 @@ fn named_components_take_their_own_entry() {
     let mut config = TabsdataConfig::default();
     config.pods.service.apiserver.resources.cpu = Some("8".to_owned());
     config.pods.service.defaults.resources.cpu = Some("1".to_owned());
-    config.pods.function.resources.cpu = Some("4".to_owned());
+    config.pods.function.component.resources.cpu = Some("4".to_owned());
 
     assert_eq!(
         config.component("apiserver", Some("regular")).resources.cpu,
@@ -151,7 +151,7 @@ fn named_components_take_their_own_entry() {
 fn ephemeral_tier_falls_back_to_function() {
     let mut config = TabsdataConfig::default();
     config.pods.service.defaults.resources.cpu = Some("1".to_owned());
-    config.pods.function.resources.cpu = Some("4".to_owned());
+    config.pods.function.component.resources.cpu = Some("4".to_owned());
 
     assert_eq!(
         config
@@ -173,7 +173,7 @@ fn ephemeral_tier_falls_back_to_function() {
 fn every_other_tier_falls_back_to_service_defaults() {
     let mut config = TabsdataConfig::default();
     config.pods.service.defaults.resources.cpu = Some("1".to_owned());
-    config.pods.function.resources.cpu = Some("4".to_owned());
+    config.pods.function.component.resources.cpu = Some("4".to_owned());
 
     for (component, tier) in [
         ("venvloader", Some("init")),

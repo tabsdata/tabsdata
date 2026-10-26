@@ -10,7 +10,12 @@ use k8s_openapi::api::core::v1::{
     Container, EnvVar, EnvVarSource, Pod, PodSpec, SecretKeySelector,
 };
 
-use crate::base::constants::{KPROFILE_CONFIGS_FAMILY, SECRET_FAMILY_CONFIG, SECRET_FAMILY_LABEL};
+use crate::base::constants::{
+    ENV_TD_DATAFLOW__ABORT__MEMORY_THRESHOLD_PERCENT, ENV_TD_DATAFLOW__SPILL__DISK_LIMIT_PERCENT,
+    ENV_TD_DATAFLOW__SPILL__ENABLED, ENV_TD_DATAFLOW__SPILL__FOLDER,
+    ENV_TD_DATAFLOW__SPILL__MEMORY_THRESHOLD_PERCENT, ENV_TD_DATAFLOW__TEMPORARY_FOLDER,
+    KPROFILE_CONFIGS_FAMILY, SECRET_FAMILY_CONFIG, SECRET_FAMILY_LABEL,
+};
 use crate::base::error::kubernetes::KubernetesError;
 use crate::base::error::launcher::LauncherError;
 use crate::base::error::secret::SecretError;
@@ -20,7 +25,7 @@ use crate::kube::api::entity::secret::list_secrets;
 use crate::kube::context::KubeContext;
 use crate::runtime::instance::profile::Profile;
 use crate::runtime::instance::sizing::{PodPlacement, inject_sizing};
-use crate::runtime::instance::tabsdata::{TABSDATA_FILE, TabsdataConfig};
+use crate::runtime::instance::tabsdata::{DataflowConfig, Percent, TABSDATA_FILE, TabsdataConfig};
 use crate::runtime::secrets::discovery::{SecretLeaf, extract_secret_leaves};
 use crate::runtime::secrets::source::to_secret_name;
 
@@ -142,6 +147,25 @@ pub fn apply_global_envs(config_yaml: &str, spec: &mut PodSpec) -> Result<(), se
     Ok(())
 }
 
+pub fn apply_dataflow_envs(
+    config_yaml: &str,
+    placement: &PodPlacement,
+    spec: &mut PodSpec,
+) -> Result<(), serde_yaml::Error> {
+    let config = TabsdataConfig::parse(config_yaml)?;
+    let Some(dataflow) = config.dataflow(
+        placement.component.as_deref().unwrap_or_default(),
+        placement.tier.as_deref(),
+    ) else {
+        return Ok(());
+    };
+    let entries = dataflow_env_entries(dataflow);
+    if !entries.is_empty() {
+        override_env_entries(spec, &entries);
+    }
+    Ok(())
+}
+
 pub fn host_global_envs(config_yaml: &str) -> Result<Vec<(String, String)>, serde_yaml::Error> {
     Ok(global_env_entries(config_yaml)?
         .into_iter()
@@ -169,6 +193,43 @@ fn global_env_entries(config_yaml: &str) -> Result<Vec<EnvVar>, serde_yaml::Erro
             })
         })
         .collect())
+}
+
+fn dataflow_env_entries(dataflow: &DataflowConfig) -> Vec<EnvVar> {
+    let spill = &dataflow.spill;
+    let rendered = |percent: Option<Percent>| percent.map(|percent| u8::from(percent).to_string());
+    [
+        (
+            ENV_TD_DATAFLOW__TEMPORARY_FOLDER,
+            dataflow.temporary_folder.clone(),
+        ),
+        (
+            ENV_TD_DATAFLOW__SPILL__ENABLED,
+            spill.enabled.map(|enabled| enabled.to_string()),
+        ),
+        (ENV_TD_DATAFLOW__SPILL__FOLDER, spill.folder.clone()),
+        (
+            ENV_TD_DATAFLOW__SPILL__MEMORY_THRESHOLD_PERCENT,
+            rendered(spill.memory_threshold_percent),
+        ),
+        (
+            ENV_TD_DATAFLOW__SPILL__DISK_LIMIT_PERCENT,
+            rendered(spill.disk_limit_percent),
+        ),
+        (
+            ENV_TD_DATAFLOW__ABORT__MEMORY_THRESHOLD_PERCENT,
+            rendered(dataflow.abort.memory_threshold_percent),
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(name, value)| {
+        value.map(|value| EnvVar {
+            name: name.to_owned(),
+            value: Some(value),
+            value_from: None,
+        })
+    })
+    .collect()
 }
 
 fn mounted_config_files(spec: &PodSpec) -> BTreeSet<String> {

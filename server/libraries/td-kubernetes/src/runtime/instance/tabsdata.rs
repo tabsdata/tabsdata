@@ -23,7 +23,7 @@ pub struct TabsdataConfig {
 pub struct PodsConfig {
     pub global: GlobalPodConfig,
     pub service: ServiceConfig,
-    pub function: ComponentConfig,
+    pub function: FunctionConfig,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -60,6 +60,59 @@ pub struct ComponentConfig {
     pub resources: ResourcesConfig,
     pub placement: PlacementConfig,
     pub priority: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FunctionConfig {
+    #[serde(flatten)]
+    pub component: ComponentConfig,
+    pub dataflow: DataflowConfig,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DataflowConfig {
+    pub temporary_folder: Option<String>,
+    pub spill: SpillConfig,
+    pub abort: AbortConfig,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SpillConfig {
+    pub enabled: Option<bool>,
+    pub folder: Option<String>,
+    pub memory_threshold_percent: Option<Percent>,
+    pub disk_limit_percent: Option<Percent>,
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AbortConfig {
+    pub memory_threshold_percent: Option<Percent>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+pub struct Percent(u8);
+
+impl TryFrom<u8> for Percent {
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        if (1..=100).contains(&value) {
+            Ok(Self(value))
+        } else {
+            Err(format!("A percentage must be from 1 to 100, not {value}"))
+        }
+    }
+}
+
+impl From<Percent> for u8 {
+    fn from(percent: Percent) -> Self {
+        percent.0
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -139,8 +192,15 @@ impl TabsdataConfig {
     pub fn component(&self, component_label: &str, tier: Option<&str>) -> &ComponentConfig {
         match Component::from_str(component_label) {
             Ok(component) => self.pods.service.of(component),
-            Err(_) if tier == Some(TIER_EPHEMERAL) => &self.pods.function,
+            Err(_) if tier == Some(TIER_EPHEMERAL) => &self.pods.function.component,
             Err(_) => &self.pods.service.defaults,
+        }
+    }
+
+    pub fn dataflow(&self, component_label: &str, tier: Option<&str>) -> Option<&DataflowConfig> {
+        match Component::from_str(component_label) {
+            Err(_) if tier == Some(TIER_EPHEMERAL) => Some(&self.pods.function.dataflow),
+            _ => None,
         }
     }
 }

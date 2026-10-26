@@ -30,7 +30,7 @@ use crate::runtime::gateway::messaging::messenger::template::{
     PodTemplate, PodTemplateIndex, TemplateKind,
 };
 use crate::runtime::gateway::resolver::{ConfigurationResolver, SystemValues, WorkerSettings};
-use crate::runtime::instance::injection::apply_global_envs;
+use crate::runtime::instance::injection::{apply_dataflow_envs, apply_global_envs};
 use crate::runtime::instance::ports::apply_ports;
 use crate::runtime::instance::sizing::{PodPlacement, apply_sizing};
 use crate::runtime::provider::ClusterProvider;
@@ -198,6 +198,7 @@ impl WorkloadFactory {
             return Ok(());
         };
         apply_sizing(config_yaml, placement, spec)
+            .and_then(|()| apply_dataflow_envs(config_yaml, placement, spec))
             .and_then(|()| apply_global_envs(config_yaml, spec))
             .map_err(|error| QueueError::BackendError {
                 cause: error.to_string(),

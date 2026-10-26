@@ -54,3 +54,12 @@ pods:
     placement:
       selectors: {}
       tolerations: []
+    dataflow:
+      temporary_folder: /tabsdata/dataflow/temporary
+      spill:
+        enabled: true
+        folder: /tabsdata/dataflow/spill
+        memory_threshold_percent: 40
+        disk_limit_percent: 80
+      abort:
+        memory_threshold_percent: 95

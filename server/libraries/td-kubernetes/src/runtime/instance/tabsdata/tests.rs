@@ -154,7 +154,7 @@ fn shipped_configs_parse() {
             .unwrap_or_else(|error| panic!("{}: {error}", path.display()));
 
         assert!(
-            !config.pods.function.resources.is_empty(),
+            !config.pods.function.component.resources.is_empty(),
             "{provider} function has no resources"
         );
         assert!(
@@ -182,5 +182,90 @@ fn shipped_configs_parse() {
                 .is_empty(),
             "{provider} service fallback"
         );
+        let dataflow = config
+            .dataflow("function-publisher", Some("ephemeral"))
+            .expect("function dataflow");
+        assert!(
+            dataflow.temporary_folder.is_some(),
+            "{provider} temporary folder"
+        );
+        assert_eq!(dataflow.spill.enabled, Some(true), "{provider} spill");
+        assert!(dataflow.spill.folder.is_some(), "{provider} spill folder");
+        assert!(
+            dataflow.spill.memory_threshold_percent.is_some(),
+            "{provider} memory threshold"
+        );
+        assert!(
+            dataflow.spill.disk_limit_percent.is_some(),
+            "{provider} disk limit"
+        );
+        assert!(
+            dataflow.abort.memory_threshold_percent.is_some(),
+            "{provider} abort threshold"
+        );
     }
+}
+
+#[test]
+fn the_function_dataflow_sits_beside_its_resources() {
+    let config = TabsdataConfig::parse(indoc! {"
+        pods:
+          function:
+            resources:
+              cpu: '2'
+            dataflow:
+              temporary_folder: /tabsdata/dataflow/temporary
+              spill:
+                enabled: false
+                folder: /tabsdata/dataflow/spill
+                memory_threshold_percent: 40
+                disk_limit_percent: 80
+              abort:
+                memory_threshold_percent: 95
+    "})
+    .expect("parses");
+    let function = &config.pods.function;
+    assert_eq!(function.component.resources.cpu.as_deref(), Some("2"));
+    let dataflow = &function.dataflow;
+    assert_eq!(
+        dataflow.temporary_folder.as_deref(),
+        Some("/tabsdata/dataflow/temporary")
+    );
+    assert_eq!(dataflow.spill.enabled, Some(false));
+    assert_eq!(
+        dataflow.spill.folder.as_deref(),
+        Some("/tabsdata/dataflow/spill")
+    );
+    assert_eq!(
+        dataflow.spill.memory_threshold_percent.map(u8::from),
+        Some(40)
+    );
+    assert_eq!(dataflow.spill.disk_limit_percent.map(u8::from), Some(80));
+    assert_eq!(
+        dataflow.abort.memory_threshold_percent.map(u8::from),
+        Some(95)
+    );
+}
+
+#[test]
+fn a_dataflow_percentage_outside_1_to_100_fails_to_parse() {
+    for value in ["0", "101", "-5"] {
+        let yaml = format!(
+            "pods:\n  function:\n    dataflow:\n      spill:\n        disk_limit_percent: {value}\n"
+        );
+        assert!(TabsdataConfig::parse(&yaml).is_err(), "{value}");
+    }
+}
+
+#[test]
+fn only_function_pods_have_a_dataflow() {
+    let config = TabsdataConfig::parse("").expect("parses");
+    assert!(
+        config
+            .dataflow("function-publisher", Some("ephemeral"))
+            .is_some()
+    );
+    assert!(config.dataflow("apiserver", Some("ephemeral")).is_none());
+    assert!(config.dataflow("venvloader", Some("init")).is_none());
+    assert!(config.dataflow("", None).is_none());
 }

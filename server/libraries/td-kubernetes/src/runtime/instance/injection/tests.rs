@@ -521,3 +521,117 @@ fn options_a_user_added_are_injected_one_env_each() {
         ]
     );
 }
+
+const DATAFLOW_CONFIG: &str = indoc! {"
+    pods:
+      function:
+        dataflow:
+          temporary_folder: /tabsdata/dataflow/temporary
+          spill:
+            enabled: true
+            folder: /tabsdata/dataflow/spill
+            memory_threshold_percent: 40
+            disk_limit_percent: 80
+          abort:
+            memory_threshold_percent: 95
+"};
+
+fn function_placement() -> PodPlacement {
+    PodPlacement {
+        component: Some("function-transformer".to_owned()),
+        tier: Some("ephemeral".to_owned()),
+    }
+}
+
+fn value(spec: &PodSpec, container: &str, name: &str) -> Option<String> {
+    spec.containers
+        .iter()
+        .chain(spec.init_containers.iter().flatten())
+        .find(|candidate| candidate.name == container)
+        .and_then(|candidate| candidate.env.as_ref())
+        .and_then(|env| env.iter().find(|entry| entry.name == name))
+        .and_then(|entry| entry.value.clone())
+}
+
+#[test]
+fn dataflow_envs_reach_every_container_of_a_function_pod() {
+    let mut spec = build_pod_spec_with(&["run-function", "prep-upload-tables"]);
+    apply_dataflow_envs(DATAFLOW_CONFIG, &function_placement(), &mut spec).expect("ok");
+    for container in ["run-function", "prep-upload-tables"] {
+        for (name, expected) in [
+            (
+                ENV_TD_DATAFLOW__TEMPORARY_FOLDER,
+                "/tabsdata/dataflow/temporary",
+            ),
+            (ENV_TD_DATAFLOW__SPILL__ENABLED, "true"),
+            (ENV_TD_DATAFLOW__SPILL__FOLDER, "/tabsdata/dataflow/spill"),
+            (ENV_TD_DATAFLOW__SPILL__MEMORY_THRESHOLD_PERCENT, "40"),
+            (ENV_TD_DATAFLOW__SPILL__DISK_LIMIT_PERCENT, "80"),
+            (ENV_TD_DATAFLOW__ABORT__MEMORY_THRESHOLD_PERCENT, "95"),
+        ] {
+            assert_eq!(
+                value(&spec, container, name).as_deref(),
+                Some(expected),
+                "{container} {name}"
+            );
+        }
+    }
+}
+
+#[test]
+fn dataflow_envs_stay_out_of_service_pods() {
+    let mut spec = build_pod_spec_with(&["apiserver"]);
+    let placement = PodPlacement {
+        component: Some("apiserver".to_owned()),
+        tier: Some("regular".to_owned()),
+    };
+    apply_dataflow_envs(DATAFLOW_CONFIG, &placement, &mut spec).expect("ok");
+    assert!(names(&spec, "apiserver").is_empty());
+}
+
+#[test]
+fn unset_dataflow_keys_inject_nothing() {
+    let mut spec = build_pod_spec_with(&["run-function"]);
+    apply_dataflow_envs(
+        indoc! {"
+            pods:
+              function:
+                dataflow:
+                  spill:
+                    enabled: false
+        "},
+        &function_placement(),
+        &mut spec,
+    )
+    .expect("ok");
+    assert_eq!(
+        names(&spec, "run-function"),
+        [ENV_TD_DATAFLOW__SPILL__ENABLED]
+    );
+}
+
+#[test]
+fn a_global_env_overrides_a_dataflow_env() {
+    let config = indoc! {"
+        pods:
+          global:
+            envs:
+              TD_DATAFLOW__ABORT__MEMORY_THRESHOLD_PERCENT: 90
+          function:
+            dataflow:
+              abort:
+                memory_threshold_percent: 95
+    "};
+    let mut spec = build_pod_spec_with(&["run-function"]);
+    apply_dataflow_envs(config, &function_placement(), &mut spec).expect("ok");
+    apply_global_envs(config, &mut spec).expect("ok");
+    assert_eq!(
+        value(
+            &spec,
+            "run-function",
+            ENV_TD_DATAFLOW__ABORT__MEMORY_THRESHOLD_PERCENT
+        )
+        .as_deref(),
+        Some("90")
+    );
+}
