@@ -61,6 +61,8 @@ spec:
           volumeMounts:
           - name: certs
             mountPath: /tabsdata/certs
+          - name: dataflow
+            mountPath: /tabsdata/dataflow
         - name: 0010-venvloader
           image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
           imagePullPolicy: IfNotPresent
@@ -93,6 +95,8 @@ spec:
             - name: config-storage
               mountPath: /tabsdata/config-storage
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: runtimes
               mountPath: /tabsdata/runtimes
             - name: storage
@@ -150,6 +154,8 @@ spec:
             - name: config-inspect-function
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -204,6 +210,8 @@ spec:
             - name: config-apiready
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: runtimes
               mountPath: /tabsdata/runtimes
               readOnly: true
@@ -260,6 +268,8 @@ spec:
             - name: config-begin-execution
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -330,6 +340,8 @@ spec:
             - name: config-fetch-request
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -402,6 +414,8 @@ spec:
             - name: config-get-bundle
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -480,6 +494,8 @@ spec:
             - name: config-prep-localize-state
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -552,6 +568,8 @@ spec:
             - name: config-run-transporter-state-download
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -637,6 +655,8 @@ spec:
             - name: connection
               mountPath: /tabsdata/connection
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -709,6 +729,8 @@ spec:
             - name: config-stamp-inputs
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -778,6 +800,8 @@ spec:
               readOnly: true
             - name: config-prep-upload-raw
               mountPath: /tabsdata/config
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -849,6 +873,8 @@ spec:
               readOnly: true
             - name: config-run-transporter-raw-upload
               mountPath: /tabsdata/config
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -929,6 +955,8 @@ spec:
             - name: config-run-function
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -999,6 +1027,8 @@ spec:
             - name: config-prep-upload-state
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -1071,6 +1101,8 @@ spec:
             - name: config-run-transporter-state-upload
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -1143,6 +1175,8 @@ spec:
             - name: config-prep-upload-tables
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -1215,6 +1249,8 @@ spec:
             - name: config-run-transporter-tables-upload
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -1288,6 +1324,8 @@ spec:
             - name: config-report-completion
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -1468,6 +1506,8 @@ spec:
                   items:
                     - key: connection.yaml
                       path: connection.yaml
+        - name: dataflow
+          emptyDir: {}
         - name: liveness
           emptyDir: {}
         - name: runtimes

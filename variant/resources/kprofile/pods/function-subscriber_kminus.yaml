@@ -95,6 +95,8 @@ spec:
             - name: config-inspect-function
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -138,6 +140,8 @@ spec:
             - name: config-apiready
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -189,6 +193,8 @@ spec:
             - name: config-begin-execution
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -250,6 +256,8 @@ spec:
             - name: config-fetch-request
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -313,6 +321,8 @@ spec:
             - name: config-get-bundle
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -380,6 +390,8 @@ spec:
             - name: config-prep-localize-state
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -441,6 +453,8 @@ spec:
             - name: config-run-transporter-localize
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -510,6 +524,8 @@ spec:
             - name: config-run-function
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -577,6 +593,8 @@ spec:
             - name: connection
               mountPath: /tabsdata/connection
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -638,6 +656,8 @@ spec:
             - name: config-prep-upload-state
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -699,6 +719,8 @@ spec:
             - name: config-run-transporter-state-upload
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -761,6 +783,8 @@ spec:
             - name: config-report-completion
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -867,6 +891,8 @@ spec:
                   items:
                     - key: connection.yaml
                       path: connection.yaml
+        - name: dataflow
+          emptyDir: {}
         - name: pyenv
           hostPath:
             path: "${{system:tdk_pyenv_fn_root}}"

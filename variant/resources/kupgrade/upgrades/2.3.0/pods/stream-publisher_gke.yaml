@@ -63,6 +63,8 @@ spec:
           volumeMounts:
           - name: certs
             mountPath: /tabsdata/certs
+          - name: dataflow
+            mountPath: /tabsdata/dataflow
         - name: 0010-venvloader
           image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
           imagePullPolicy: IfNotPresent
@@ -97,6 +99,8 @@ spec:
             - name: config-storage
               mountPath: /tabsdata/config-storage
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: runtimes
               mountPath: /tabsdata/runtimes
         - name: 0020-begin-execution
@@ -152,6 +156,8 @@ spec:
             - name: config-begin-execution
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -222,6 +228,8 @@ spec:
             - name: config-fetch-request
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -294,6 +302,8 @@ spec:
             - name: config-get-bundle
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -371,6 +381,8 @@ spec:
             - name: config-manifest-trigger
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -451,6 +463,8 @@ spec:
             - name: connection
               mountPath: /tabsdata/connection
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: liveness
               mountPath: /tabsdata/liveness
             - name: runtimes
@@ -531,6 +545,8 @@ spec:
                   items:
                     - key: connection.yaml
                       path: connection.yaml
+        - name: dataflow
+          emptyDir: {}
         - name: liveness
           emptyDir: {}
         - name: runtimes

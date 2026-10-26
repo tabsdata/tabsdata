@@ -95,6 +95,8 @@ spec:
             - name: config-begin-execution
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -156,6 +158,8 @@ spec:
             - name: config-fetch-request
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -219,6 +223,8 @@ spec:
             - name: config-get-bundle
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -287,6 +293,8 @@ spec:
             - name: config-manifest-trigger
               mountPath: /tabsdata/config
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -358,6 +366,8 @@ spec:
             - name: connection
               mountPath: /tabsdata/connection
               readOnly: true
+            - name: dataflow
+              mountPath: /tabsdata/dataflow
             - name: pyenv
               mountPath: /tabsdata/pyenv
               readOnly: true
@@ -407,6 +417,8 @@ spec:
                   items:
                     - key: connection.yaml
                       path: connection.yaml
+        - name: dataflow
+          emptyDir: {}
         - name: pyenv
           hostPath:
             path: "${{system:tdk_pyenv_fn_root}}"
