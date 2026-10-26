@@ -2,11 +2,11 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use crate::topology::tags::TagIndex;
 use std::collections::HashMap;
 use td_database::access::{AccessMode, InProject};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::and;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::group::GroupDB;
 use td_objects::dxo::topology::{
@@ -15,13 +15,14 @@ use td_objects::dxo::topology::{
 };
 use td_objects::types::basic::{
     CollectionId, CollectionLabel, FunctionId, FunctionStatus, GroupId, GroupLabel, ProjectId,
-    TableId, TagEntityType, TagKind, TopologyTagKey,
+    TableId, TagKind,
 };
 use td_objects::types::label::Label;
 use td_queries::Queries;
 
 mod graph;
 mod plan;
+pub(crate) mod tags;
 mod walk;
 #[cfg(test)]
 mod walk_tests;
@@ -32,7 +33,7 @@ pub struct ProjectTopology {
     collections: HashMap<CollectionId, CollectionDB>,
     groups: HashMap<GroupId, GroupDB>,
     functions: HashMap<FunctionId, TopologyFunction>,
-    parents: HashMap<FunctionId, FunctionId>,
+    tags: TagIndex,
     tables: HashMap<TableId, TopologyTable>,
     table_order: Vec<TableId>,
     triggers: Vec<TopologyTrigger>,
@@ -82,24 +83,13 @@ impl ProjectTopology {
         let tables: Vec<TopologyTable> = conn.scd2().as_of(at).fetch_all(()).await?;
         let triggers: Vec<TopologyTrigger> = conn.scd2().as_of(at).fetch_all(()).await?;
         let dependencies: Vec<TopologyDependency> = conn.scd2().as_of(at).fetch_all(()).await?;
-        let parents: Vec<TopologyTag> = conn
-            .scd2()
-            .as_of(at)
-            .fetch_all(and!(
-                TagKind::Topology,
-                TagEntityType::Function,
-                TopologyTagKey::Parent
-            ))
-            .await?;
+        let tags: Vec<TopologyTag> = conn.scd2().as_of(at).fetch_all(TagKind::Topology).await?;
         Ok(Self::new(
             version,
             collections,
             groups,
             functions,
-            parents
-                .iter()
-                .map(|t| Ok((FunctionId::try_from(&t.entity_id)?, t.value.id()?)))
-                .collect::<Result<_, TdError>>()?,
+            TagIndex::of(tags)?,
             tables,
             triggers,
             dependencies,
@@ -112,7 +102,7 @@ impl ProjectTopology {
         collections: Vec<CollectionDB>,
         groups: Vec<GroupDB>,
         functions: Vec<TopologyFunction>,
-        parents: HashMap<FunctionId, FunctionId>,
+        tags: TagIndex,
         mut tables: Vec<TopologyTable>,
         mut triggers: Vec<TopologyTrigger>,
         mut dependencies: Vec<TopologyDependency>,
@@ -135,7 +125,7 @@ impl ProjectTopology {
             groups: groups.into_iter().map(|g| (g.group_id, g)).collect(),
             tables: tables.into_iter().map(|t| (t.table_id, t)).collect(),
             functions: functions.into_iter().map(|f| (f.function_id, f)).collect(),
-            parents,
+            tags,
             triggers,
             dependencies,
             version,

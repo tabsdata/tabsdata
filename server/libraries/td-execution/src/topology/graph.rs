@@ -89,10 +89,11 @@ impl ProjectTopology {
             enabled: function.enabled,
             group_id: self.group_of(&function.collection_id)?,
             parent_function_id: self
-                .parents
-                .get(&function.function_id)
+                .tags
+                .parent(&function.function_id)
                 .copied()
                 .map(Parent::from),
+            tags: self.tags.function(&function.function_id),
         })
     }
 
@@ -107,6 +108,7 @@ impl ProjectTopology {
             name: table.name.clone(),
             system: table.system(),
             private: table.private,
+            tags: self.tags.table(&table.table_id),
         })
     }
 

@@ -16,7 +16,8 @@ use crate::types::basic::{
     TriggerVersionId, UserId,
 };
 use crate::types::basic::{
-    CollectionLabel, CollectionType, CollectionVersionId, Scd2ValidFrom, TopologyVersionId,
+    CollectionLabel, CollectionType, CollectionVersionId, Scd2ValidFrom, TopologyTags,
+    TopologyVersionId,
 };
 use crate::types::composed::TableVersions;
 use std::collections::HashMap;
@@ -106,6 +107,7 @@ pub fn function_node(function: &FunctionName) -> FunctionNode {
         enabled: Enabled::TRUE,
         group_id: *GROUP_ID,
         parent_function_id: None,
+        tags: TopologyTags::new(),
     }
 }
 
@@ -121,6 +123,7 @@ pub fn table_node(table: &TableName) -> TableNode {
         name: table.clone(),
         system: System::FALSE,
         private: Private::FALSE,
+        tags: TopologyTags::new(),
     }
 }
 

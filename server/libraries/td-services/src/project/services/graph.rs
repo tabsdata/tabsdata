@@ -44,22 +44,30 @@ mod tests {
     use crate::Services;
     use crate::tests::catalog_races::admin;
     use crate::tests::fixtures::register;
+    use std::collections::HashMap;
     use std::str::FromStr;
+    use td_common::id::Id;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_error::TdError;
+    use td_objects::Typed;
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::ListParams;
-    use td_objects::dxo::function::{FunctionParam, FunctionRegister, FunctionUpdate};
+    use td_objects::dxo::function::{
+        ChildFunction, FunctionParam, FunctionRegister, FunctionUpdate,
+    };
     use td_objects::dxo::graph::{GraphEdge, ProjectGraphResponse};
+    use td_objects::dxo::table::TableDB;
     use td_objects::dxo::topology::TopologyReadParam;
     use td_objects::types::basic::{
-        CollectionIdName, CollectionName, FunctionIdName, GroupName, ProjectId, TableNameDto,
+        BundleId, CollectionIdName, CollectionName, FunctionIdName, FunctionType, GroupName,
+        ProjectId, TableNameDto, TableType, TagValue, TopologyTagKey, TopologyTags,
         TopologyVersionId, UserId,
     };
     use td_objects::types::basic::{CollectionLabel, GroupLabel};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_objects::types::label::Label;
+    use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
     async fn graph(
@@ -293,6 +301,75 @@ mod tests {
         let p = db.seed().test_project().await?;
         let graph = graph(&db, p.project_id, None).await?;
         assert!(graph.graph.all_functions.is_empty() && graph.graph.relations.is_empty());
+        Ok(())
+    }
+
+    #[td_test::test(db)]
+    async fn test_project_graph_nodes_carry_their_system_tags(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        db.scoped(p.project_id)
+            .seed()
+            .collection(&CollectionName::try_from("c")?, &UserId::admin())
+            .await?;
+        let trend = TableNameDto::try_from("owner_trends")?;
+        let owner = FunctionRegister {
+            parent_tables: Some(HashMap::from([(
+                trend.clone(),
+                TableNameDto::try_from("owner_t0")?,
+            )])),
+            child_functions: Some(vec![ChildFunction {
+                name: "owner_trend".try_into()?,
+                function_type: FunctionType::DQSummaryTrends,
+                bundle_id: BundleId::default(),
+                snippet: "s".try_into()?,
+                dependencies: Some(vec![TableDependencyDto::try_from("owner_t0")?]),
+                tables: Some(vec![trend.clone()]),
+                table_types: Some(HashMap::from([(trend, TableType::DQSummaryTrends)])),
+            }]),
+            ..register("owner", None)
+        };
+        let request = admin()
+            .create(
+                CollectionParam {
+                    collection: CollectionIdName::from_str("c")?,
+                },
+                owner,
+            )
+            .in_project(p.project_id);
+        let owner = Services::with_defaults(db.clone())
+            .register_function(request)
+            .await?
+            .data;
+
+        let graph = graph(&db, p.project_id, None).await?;
+        let function = |name: &str| {
+            graph
+                .graph
+                .all_functions
+                .values()
+                .find(|f| f.name.to_string() == name)
+                .unwrap()
+        };
+        let table = |name: &str| {
+            graph
+                .graph
+                .all_tables
+                .values()
+                .find(|t| t.name.to_string() == name)
+                .unwrap()
+        };
+        fn parent<T: Typed<Inner = Id>>(id: T) -> TopologyTags {
+            TopologyTags::from([(TopologyTagKey::Parent, TagValue::of_id(id))])
+        }
+        assert_eq!(function("owner").tags, TopologyTags::new());
+        assert_eq!(function("owner_trend").tags, parent(owner.function_id));
+        let owner_tables: Vec<TableDB> = db.scd2().fetch_all(&owner.id).await?;
+        let owner_table = owner_tables
+            .iter()
+            .find(|t| t.name.to_string() == "owner_t0")
+            .expect("the owner's table");
+        assert_eq!(table("owner_t0").tags, TopologyTags::new());
+        assert_eq!(table("owner_trends").tags, parent(owner_table.table_id));
         Ok(())
     }
 }

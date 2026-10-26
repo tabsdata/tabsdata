@@ -7,7 +7,7 @@ use crate::types::basic::{
     AtTime, CollectionId, CollectionLabel, DependencyPos, Enabled, FunctionId, FunctionName,
     FunctionVersionId, GroupId, GroupLabel, LogicalTableDataVersionId, Parent, Private,
     SelfDependency, System, TableFunctionParamPos, TableId, TableName, TableVersionId,
-    TopologyVersionId,
+    TopologyTags, TopologyVersionId,
 };
 use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
@@ -28,6 +28,8 @@ pub struct FunctionNode {
     pub group_id: GroupId,
     #[serde(default)]
     pub parent_function_id: Option<Parent<FunctionId>>,
+    #[serde(default)]
+    pub tags: TopologyTags,
 }
 
 impl Display for FunctionNode {
@@ -48,6 +50,8 @@ pub struct TableNode {
     pub name: TableName,
     pub system: System,
     pub private: Private,
+    #[serde(default)]
+    pub tags: TopologyTags,
 }
 
 impl Display for TableNode {

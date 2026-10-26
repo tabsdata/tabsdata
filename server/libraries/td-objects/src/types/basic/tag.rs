@@ -2,6 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_common::id::Id;
@@ -42,7 +43,7 @@ pub enum TagKind {
 
 /// The keys of [`TagKind::Topology`] tags. They start with `_`, which no
 /// [`UserTagKey`] can, so system and user keys never collide.
-#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum TopologyTagKey {
     /// Value: the parent's stable id, of the tagged entity's type.
     #[typed_enum(rename = "_parent")]
@@ -96,9 +97,12 @@ impl From<TopologyTagKey> for TagKey {
     }
 }
 
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 #[typed(max_len = 256, default = "")]
 pub struct TagValue(String);
+
+/// An entity's topology tags at one topology version.
+pub type TopologyTags = BTreeMap<TopologyTagKey, TagValue>;
 
 impl TagValue {
     pub fn of_id<T: Typed<Inner = Id>>(id: T) -> Self {

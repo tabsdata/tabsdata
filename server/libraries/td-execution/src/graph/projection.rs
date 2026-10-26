@@ -166,6 +166,7 @@ mod tests {
         TestTransactionBy, expected_function_nodes, expected_table_nodes, test_graph,
     };
     use crate::topology::ProjectTopology;
+    use crate::topology::tags::TagIndex;
     use itertools::Itertools;
     use td_objects::test_utils::graph::{
         FUNCTION_NAMES, TABLE_NAMES, collection, dependency, function, table, version,
@@ -253,7 +254,7 @@ mod tests {
             vec![collection()],
             vec![],
             vec![updated],
-            HashMap::new(),
+            TagIndex::default(),
             vec![table(&FUNCTION_NAMES[0], &TABLE_NAMES[0])],
             vec![],
             vec![dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0])],

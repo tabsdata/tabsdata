@@ -35,7 +35,7 @@ mod tests {
     use td_objects::dxo::graph::FunctionNode;
     use td_objects::types::basic::{
         CollectionId, CollectionLabel, Enabled, FunctionId, FunctionName, FunctionVersionId,
-        GroupId, TransactionKey,
+        GroupId, TopologyTags, TransactionKey,
     };
 
     #[test]
@@ -57,6 +57,7 @@ mod tests {
             enabled: Enabled::TRUE,
             group_id: GroupId::default(),
             parent_function_id: None,
+            tags: TopologyTags::new(),
         };
 
         assert_eq!(

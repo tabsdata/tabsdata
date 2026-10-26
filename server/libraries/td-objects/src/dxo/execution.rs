@@ -10,8 +10,8 @@ use crate::types::basic::{
     ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName, FunctionOnly,
     FunctionVersionId, GroupId, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
     OverrideDisabledTrigger, ProjectId, ProjectLabel, SkipIfRunning, Started, StatusCount, System,
-    TableName, TableVersionId, TopologyVersionId, TransactionId, TriggerOutcome, TriggerType,
-    TriggeredOn, UserId, UserLabel,
+    TableName, TableVersionId, TopologyTags, TopologyVersionId, TransactionId, TriggerOutcome,
+    TriggerType, TriggeredOn, UserId, UserLabel,
 };
 use crate::types::composed::TableVersions;
 use crate::types::json::Json;
@@ -247,6 +247,8 @@ pub struct FunctionNodeResponse {
     pub function_version_id: FunctionVersionId,
     pub name: FunctionName,
     pub enabled: Enabled,
+    /// Topology tags at the graph's topology version.
+    pub tags: TopologyTags,
 }
 
 #[ta_objects::Dto]
@@ -259,6 +261,8 @@ pub struct TableNodeResponse {
     pub table_version_id: TableVersionId,
     pub name: TableName,
     pub system: System,
+    /// Topology tags at the graph's topology version.
+    pub tags: TopologyTags,
 }
 
 #[ta_objects::Dto]
@@ -309,6 +313,7 @@ impl From<&FunctionNode> for FunctionNodeResponse {
             function_version_id: src.function_version_id.clone(),
             name: src.name.clone(),
             enabled: src.enabled,
+            tags: src.tags.clone(),
         }
     }
 }
@@ -323,6 +328,7 @@ impl From<&TableNode> for TableNodeResponse {
             table_version_id: src.table_version_id,
             name: src.name.clone(),
             system: src.system,
+            tags: src.tags.clone(),
         }
     }
 }
