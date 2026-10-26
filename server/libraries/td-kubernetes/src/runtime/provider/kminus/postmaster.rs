@@ -96,3 +96,6 @@ fn same_path(left: &Path, right: &Path) -> bool {
         _ => left == right,
     }
 }
+
+#[cfg(test)]
+mod tests;
