@@ -785,6 +785,9 @@ spec:
             - secretRef:
                 name: ${{system:tdk_project_secret_name}}
               prefix: SECRET_PRJ__
+            - secretRef:
+                name: td-app-apiserver-secret-config-apiserver.storage.yaml
+              prefix: SECRETS__
           volumeMounts:
             - name: config-run-function
               mountPath: /tabsdata/config
