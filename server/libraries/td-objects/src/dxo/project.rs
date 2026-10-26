@@ -14,7 +14,7 @@ use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::secret::SecretUpsert;
 use crate::types::basic::{
     AtTime, BasePath, Description, ProjectId, ProjectIdName, ProjectName, ProjectVersionId,
-    Scd2ValidFrom, UserId, UserLabel,
+    Scd2ValidFrom, TagEntityType, UserId, UserLabel,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -70,6 +70,7 @@ impl ProjectDB {
 #[dao(
     view = "projects__with_names",
     scd2,
+    tagged = TagEntityType::Project,
     unique_at(ProjectName),
     unique_at(ProjectIdName)
 )]

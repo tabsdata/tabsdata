@@ -11,6 +11,7 @@ use td_objects::dxo::collection::CollectionRead;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
+use td_objects::types::tag_selector::TagSelector;
 use td_queries::Queries;
 
 #[service_factory]
@@ -21,7 +22,7 @@ async fn list_collections(
 ) -> Result<ListResponse<CollectionRead>, TdError> {
     let (ctx, _, list_params) = request.into_parts();
     let (grant, visible_projects) = authz.visible_projects(gated_conn, &ctx).await?;
-    let query_params = ListQueryParams::try_from(&list_params)?;
+    let query_params = ListQueryParams::<CollectionRead, TagSelector>::try_from(&list_params)?;
     let rows = gated_conn
         .get(grant)
         .scd2()

@@ -17,7 +17,7 @@ use crate::dxo::crudl::RequestContext;
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::types::basic::{
     AtTime, Description, GroupId, GroupIdName, GroupKind, GroupName, GroupVersionId, ProjectId,
-    Scd2ValidFrom, System, UserId, UserLabel,
+    Scd2ValidFrom, System, TagEntityType, UserId, UserLabel,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -93,6 +93,7 @@ impl GroupDB {
 #[dao(
     view = "groups__with_names",
     scd2,
+    tagged = TagEntityType::Group,
     project_scoped(unique_at(GroupName), unique_at(GroupIdName))
 )]
 pub struct GroupDBWithNames {

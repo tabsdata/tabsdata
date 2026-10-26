@@ -572,6 +572,18 @@ async fn time_chain_queries(
             .list::<Table>((), &team_a.params)
             .await?
     );
+    let team_a_collections = TaggedListQuery::<CollectionRead>::try_from(&ListParams {
+        filter: vec!["tag.team:eq:a".to_string()],
+        ..ListParams::default()
+    })?;
+    let _ = timed!(
+        out,
+        "latest::tagged::collections",
+        (db).scd2()
+            .tagged(&team_a_collections.selector)
+            .list::<CollectionRead>((), &team_a_collections.params)
+            .await?
+    );
 
     let _ = timed!(
         out,

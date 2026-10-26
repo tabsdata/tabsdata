@@ -270,9 +270,10 @@ table delete   --name NAME  [--proj PROJECT] [--coll COLLECTION] [--confirm dele
                     #   entity type (P/G/C/F/T) and id of each. `set` / `delete` act on user tags only.
 ```
 
-The `fn` and `table` listings also take tag filters beside their column
-filters: `tag.<key>:eq:<value>`, `:ne:<value>`, `:lk:<pattern>` and
-`:is:null` / `:is:not_null`. The same key repeated is OR, different keys AND.
+Every entity listing (`project`, `group`, `collection`, `fn`, `table` list)
+also takes tag filters beside its column filters: `tag.<key>:eq:<value>`,
+`:ne:<value>`, `:lk:<pattern>` and `:is:null` / `:is:not_null`. The same key
+repeated is OR, different keys AND.
 
 ## Execution
 

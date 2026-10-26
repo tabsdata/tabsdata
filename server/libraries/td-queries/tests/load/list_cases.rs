@@ -88,6 +88,27 @@ async fn load_tagged_list(db: TdPool) -> Result<(), TdError> {
     Ok(())
 }
 
+#[td_test::test(db)]
+async fn load_tagged_collections_list(db: TdPool) -> Result<(), TdError> {
+    let (_h, profile, seeded) = seed(&db).await?;
+    let team_a: TaggedListQuery<CollectionRead> = team_a()?;
+    let t = Instant::now();
+    let rows = db
+        .scd2()
+        .tagged(&team_a.selector)
+        .list::<CollectionRead>((), &team_a.params)
+        .await?;
+    record(
+        "latest::tagged::collections",
+        profile,
+        t,
+        rows.len(),
+        seeded,
+    );
+    assert!(!rows.is_empty());
+    Ok(())
+}
+
 fn team_a<T: ListDto>() -> Result<TaggedListQuery<T>, TdError>
 where
     <T as FromDao>::Dao: TaggedDao,
