@@ -682,6 +682,10 @@ script = [
     set_env TD_TESTS_CHAIN_PY "true"
     set_env TD_TESTS_CODE_PY 0
 
+    with_server_start_before = get_env TD_WITH_SERVER_START
+    with_server_stop_before = get_env TD_WITH_SERVER_STOP
+    with_server_status_before = get_env TD_WITH_SERVER_STATUS
+
     unset_env TD_UMBRELLA_BUILD
     unset_env TD_UMBRELLA_SERVER_START
     unset_env TD_UMBRELLA_SERVER_STATUS
@@ -700,6 +704,21 @@ script = [
     unset_env TD_UMBRELLA_SERVER_START
     unset_env TD_UMBRELLA_SERVER_STATUS
     unset_env TD_UMBRELLA_SERVER_STOP
+    if is_empty ${with_server_start_before}
+        unset_env TD_WITH_SERVER_START
+    else
+        set_env TD_WITH_SERVER_START ${with_server_start_before}
+    end
+    if is_empty ${with_server_stop_before}
+        unset_env TD_WITH_SERVER_STOP
+    else
+        set_env TD_WITH_SERVER_STOP ${with_server_stop_before}
+    end
+    if is_empty ${with_server_status_before}
+        unset_env TD_WITH_SERVER_STATUS
+    else
+        set_env TD_WITH_SERVER_STATUS ${with_server_status_before}
+    end
 
     exit_code = get_env TD_TESTS_CODE_PY
     unset_env TD_TESTS_CHAIN_PY

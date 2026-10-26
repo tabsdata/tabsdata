@@ -8,6 +8,8 @@ import rich_click as click
 import yaml
 
 KEY_INSTANCES = "instances"
+TABSDATA_HOME_FOLDER = ".tabsdata"
+INSTANCES_FOLDER = "instances"
 
 
 def load_names(registry_file: Path) -> list[str]:
@@ -73,3 +75,17 @@ def clear_names(registry_file: Path):
     """Remove the registry file."""
     if registry_file.exists():
         registry_file.unlink()
+
+
+@registry.command(name="prune")
+@click.argument("registry_file", type=click.Path(path_type=Path))
+def prune_names(registry_file: Path):
+    """Delete the names whose instance folder no longer exists."""
+    names = load_names(registry_file)
+    instances = Path.home() / TABSDATA_HOME_FOLDER / INSTANCES_FOLDER
+    alive = [name for name in names if (instances / name).is_dir()]
+    if alive != names:
+        save_names(registry_file, alive)
+        for name in names:
+            if name not in alive:
+                click.echo(name)
