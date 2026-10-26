@@ -175,6 +175,22 @@ def release_entry(rulebook: Path, version: str) -> dict:
     )
 
 
+def launch_arguments(
+    arguments: list[str | dict],
+    values: dict[str, object],
+) -> list[str]:
+    """Rulebook arguments, formatted; a ``{when_set: NAME, arguments: [...]}``
+    entry contributes its arguments only when the environment sets NAME."""
+    formatted = []
+    for argument in arguments:
+        if isinstance(argument, dict):
+            if values["environment"].get(argument["when_set"]):
+                formatted += launch_arguments(argument["arguments"], values)
+        else:
+            formatted.append(argument.format(**values))
+    return formatted
+
+
 def launch_commands(
     rulebook: Path,
     version: str,
@@ -184,9 +200,7 @@ def launch_commands(
     try:
         return [
             LaunchCommand(
-                arguments=[
-                    argument.format(**values) for argument in command["arguments"]
-                ],
+                arguments=launch_arguments(command["arguments"], values),
                 environment={
                     name: value.format(**values)
                     for name, value in command.get("environment", {}).items()
