@@ -955,3 +955,17 @@ def test_download_table_forwards_what_the_table_download_returns(tmp_path):
     server.connection = connection
     destination = tmp_path / "orders.parquet"
     assert server.download_table("coll", "orders", str(destination)) is None
+
+
+def test_a_worker_loads_its_own_status(monkeypatch):
+    from unittest.mock import MagicMock
+
+    connection = MagicMock()
+    payload = {"status": "R", "function_run_status": "D", "worker_type": "F"}
+    monkeypatch.setattr(
+        ts.TabsdataServer,
+        "list_workers",
+        lambda self, filter=None: [ts.Worker(connection, "w1", **payload)],
+    )
+    worker = ts.Worker(connection, "w1")
+    assert worker.status == "Running"
