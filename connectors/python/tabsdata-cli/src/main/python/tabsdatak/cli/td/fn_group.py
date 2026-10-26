@@ -150,8 +150,8 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
                         Column("Name"),
                         Column("Description"),
                         Column("Status", Kind.STATUS),
-                        Column("Created by"),
-                        Column("Created on", Kind.TIME),
+                        Column("Defined by"),
+                        Column("Defined on", Kind.TIME),
                     ],
                     rows=rows,
                     count="versions",
@@ -174,8 +174,8 @@ def get(ctx: click.Context, name: str, coll: str, show_history: bool):
                         ("Description", present(function.description)),
                         ("Project", present(server.connection.project)),
                         ("Collection", coll),
-                        ("Created by", present(function.defined_by)),
-                        ("Created on", present(function.defined_on_str)),
+                        ("Defined by", present(function.defined_by)),
+                        ("Defined on", present(function.defined_on_str)),
                         (
                             "Status",
                             present(_FUNCTION_STATUS_LABELS.get(status, status)),
@@ -281,8 +281,8 @@ def list_functions(ctx: click.Context, coll: str):
                     Column("Name", Kind.ID),
                     Column("Type"),
                     Column("Description"),
-                    Column("Created by"),
-                    Column("Created on", Kind.TIME),
+                    Column("Defined by"),
+                    Column("Defined on", Kind.TIME),
                 ],
                 rows=[
                     [
