@@ -771,6 +771,16 @@ fn expand_composed(name: &Ident, inner: &Type) -> proc_macro2::TokenStream {
             fn deref(&self) -> &Self::Target { &self.0 }
         }
 
+        impl ta_objects::ListFilterStr for #name {
+            fn parse_filter_str(s: &str) -> Result<Self, td_error::TdError> {
+                ta_objects::ComposedString::parse(s)
+            }
+            fn as_string(&self) -> String {
+                use ta_objects::ComposedString;
+                self.compose()
+            }
+        }
+
         #try_from_str
     }
 }
