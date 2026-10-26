@@ -18,7 +18,7 @@ use sqlx::postgres::PgConnection;
 use sqlx::{Postgres, Transaction};
 use std::time::Instant;
 use td_schema::SchemaSource;
-use td_schema::schema::{derived_scripts, install_script};
+use td_schema::schema::{derived_scripts, fold_view_drops, install_script};
 use td_schema::{DB_EDITION_NAME, DB_VERSION_NAME, TabsdataSystem, tabsdata_system_ddl};
 use te_system::edition::{Compatible, Edition, TabsdataEdition};
 use tracing::{debug, info, warn};
@@ -141,14 +141,16 @@ impl UpgradeTransaction<'_> {
                 info!(schema, from, to, deltas = targets.len(), "Upgrading schema");
                 let rungs: Vec<_> = targets.iter().map(|target| source.delta(*target)).collect();
                 let (own, create) = derived_scripts(source);
-                // Retirements first, newest rung first: a retired view can
-                // depend on one the target keeps, and on an earlier rung's.
+                // Retirements first, newest rung first, then the target's own;
+                // the views among them go in one statement, so a view standing
+                // on another drops whichever of the two is retired.
                 let mut drop: Vec<String> = rungs
                     .iter()
                     .rev()
                     .flat_map(|rung| rung.retired.clone())
                     .collect();
                 drop.extend(own);
+                let drop = fold_view_drops(drop);
                 if !drop.is_empty() {
                     self.execute_batch(&drop).await?;
                     debug!(count = drop.len(), "Derived objects dropped");

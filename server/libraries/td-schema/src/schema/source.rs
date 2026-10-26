@@ -10,6 +10,7 @@
 
 use crate::TabsdataSystem;
 use crate::schema::render::render_schema;
+use crate::schema::sql::view::DROP_VIEW;
 use sea_query::{ColumnDef, Index, IndexCreateStatement, Table};
 use tracing::debug;
 
@@ -115,6 +116,27 @@ pub fn derived_scripts(source: &dyn SchemaSource) -> (Vec<String>, Vec<String>) 
     create.extend(triggers.into_iter().flat_map(|d| d.create));
     create.extend(views.into_iter().flat_map(|d| d.create));
     (drop, create)
+}
+
+/// `drops` with every view drop folded into one statement, ahead of the rest.
+/// PostgreSQL resolves the dependencies among the views a single `DROP VIEW`
+/// names, so a retired view may stand on a kept one and a kept one on a
+/// retired one; a dependent outside the set still fails the drop.
+pub fn fold_view_drops(drops: Vec<String>) -> Vec<String> {
+    let (views, rest): (Vec<String>, Vec<String>) = drops.into_iter().partition(|d| d.starts_with(DROP_VIEW));
+    let mut names: Vec<&str> = Vec::with_capacity(views.len());
+    for view in &views {
+        let name = &view[DROP_VIEW.len()..];
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    let mut folded = Vec::with_capacity(rest.len() + 1);
+    if !names.is_empty() {
+        folded.push(format!("{DROP_VIEW}{}", names.join(", ")));
+    }
+    folded.extend(rest);
+    folded
 }
 
 /// An index as a derived object: the create statement and the matching

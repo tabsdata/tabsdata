@@ -5,6 +5,8 @@
 use crate::schema::render::render_query;
 use sea_query::{DynIden, IntoIden, SelectStatement};
 
+pub(crate) const DROP_VIEW: &str = "DROP VIEW IF EXISTS ";
+
 /// A view definition: name (typed via [`Iden`](sea_query::Iden)) + SELECT
 /// statement. Names are passed in as `Iden` structs so the view's identifier
 /// lives in one place — the struct definition — and can be referenced from
@@ -35,7 +37,7 @@ impl ViewDef {
 
     /// No `CASCADE`: an unexpected dependent must fail loudly, not vanish.
     pub(crate) fn render_drop(&self) -> String {
-        format!("DROP VIEW IF EXISTS {}", self.name)
+        format!("{DROP_VIEW}{}", self.name)
     }
 }
 
