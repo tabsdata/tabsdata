@@ -179,11 +179,13 @@ mod tests {
 
         let relations = response.graph.relations;
         assert_eq!(relations.len(), 2);
-        for (f, t, edge) in relations {
+        for relation in relations {
+            let f = relation.function_version_id;
+            let edge = relation.edge;
             let t = response
                 .graph
                 .all_tables
-                .get(&t)
+                .get(&relation.table_version_id)
                 .map(|t| t.name.clone())
                 .unwrap();
             if f == function_0.base.id && t == expected_tables[0] {
@@ -350,11 +352,13 @@ mod tests {
 
         let relations = response.graph.relations;
         assert_eq!(relations.len(), 8);
-        for (f, t, edge) in relations {
+        for relation in relations {
+            let f = relation.function_version_id;
+            let edge = relation.edge;
             let t = response
                 .graph
                 .all_tables
-                .get(&t)
+                .get(&relation.table_version_id)
                 .map(|t| t.name.clone())
                 .unwrap();
             if f == function_0.base.id && t == expected_tables[0] {
@@ -535,11 +539,13 @@ mod tests {
 
         let relations = response.graph.relations;
         assert_eq!(relations.len(), 4);
-        for (f, t, edge) in relations {
+        for relation in relations {
+            let f = relation.function_version_id;
+            let edge = relation.edge;
             let t = response
                 .graph
                 .all_tables
-                .get(&t)
+                .get(&relation.table_version_id)
                 .map(|t| t.name.clone())
                 .unwrap();
             if f == function_0.base.id && t == expected_tables[0] {

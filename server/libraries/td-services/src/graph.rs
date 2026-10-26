@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use td_error::TdError;
 use td_execution::graph::TopologyGraph;
 use td_objects::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
-use td_objects::dxo::graph::{GraphNode, GraphResponse};
+use td_objects::dxo::graph::{GraphNode, GraphRelation, GraphResponse};
 use td_objects::types::composed::TableVersions;
 
 /// A graph as the API serves it: nodes keyed by version, system tables told
@@ -34,7 +34,11 @@ pub async fn graph_response(graph: &TopologyGraph) -> Result<GraphResponse, TdEr
     let relations = graph
         .relations()
         .into_iter()
-        .map(|(f, t, e)| (f.function_version_id.clone(), t.table_version_id, e.clone()))
+        .map(|(f, t, e)| GraphRelation {
+            function_version_id: f.function_version_id.clone(),
+            table_version_id: t.table_version_id,
+            edge: e.clone(),
+        })
         .sorted()
         .collect();
 

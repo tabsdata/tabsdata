@@ -148,7 +148,9 @@ mod tests {
                 .graph
                 .relations
                 .iter()
-                .filter(|(_, t, e)| !*graph.graph.all_tables[t].system == user && kind(e))
+                .filter(|r| {
+                    !*graph.graph.all_tables[&r.table_version_id].system == user && kind(&r.edge)
+                })
                 .count()
         };
         assert_eq!(count(true, |e| matches!(e, GraphEdge::Output { .. })), 3);

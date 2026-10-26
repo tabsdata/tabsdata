@@ -196,6 +196,14 @@ impl Display for ResolvedVersion {
     }
 }
 
+#[ta_objects::Dto]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct GraphRelation<V> {
+    pub function_version_id: FunctionVersionId,
+    pub table_version_id: TableVersionId,
+    pub edge: GraphEdge<V>,
+}
+
 /// A graph of functions and tables, keyed by version.
 #[ta_objects::Dto]
 pub struct GraphResponse {
@@ -203,7 +211,7 @@ pub struct GraphResponse {
     pub all_tables: HashMap<TableVersionId, TableNodeResponse>,
     pub system_tables: HashSet<TableVersionId>,
     pub user_tables: HashSet<TableVersionId>,
-    pub relations: Vec<(FunctionVersionId, TableVersionId, GraphEdge<TableVersions>)>,
+    pub relations: Vec<GraphRelation<TableVersions>>,
 }
 
 #[ta_objects::Dto]

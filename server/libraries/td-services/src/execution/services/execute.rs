@@ -102,7 +102,7 @@ pub(crate) mod tests {
     use td_objects::dxo::function::{
         ChildFunction, FunctionDB, FunctionDBWithNames, FunctionRegister, FunctionUpdate,
     };
-    use td_objects::dxo::graph::GraphEdge;
+    use td_objects::dxo::graph::{GraphEdge, GraphRelation};
     use td_objects::dxo::group::GroupDB;
     use td_objects::dxo::logical::{
         LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunStatusUpdateDB,
@@ -592,7 +592,7 @@ pub(crate) mod tests {
         response
             .relations
             .iter()
-            .find_map(|(_, _, e)| match e {
+            .find_map(|r| match &r.edge {
                 GraphEdge::Dependency {
                     versions,
                     dependency,
@@ -670,7 +670,7 @@ pub(crate) mod tests {
         assert_eq!(idxs(dep_edge(&response, 0)), vec![0, 1, 2]);
         assert!(dep_edge(&response, 0).inner.iter().all(|v| v.is_some()));
         assert_eq!(idxs(dep_edge(&response, 1)), vec![3]);
-        for (_, _, e) in &response.relations {
+        for e in response.relations.iter().map(|r| &r.edge) {
             if let GraphEdge::Trigger { versions } = e {
                 assert!(
                     versions.input_idxs.is_empty(),
@@ -792,7 +792,7 @@ pub(crate) mod tests {
         response
             .relations
             .iter()
-            .flat_map(|(_, _, e)| e.versions().inner.iter().flatten().cloned())
+            .flat_map(|r| r.edge.versions().inner.iter().flatten().cloned())
             .collect()
     }
 
@@ -803,9 +803,9 @@ pub(crate) mod tests {
         response
             .relations
             .iter()
-            .find_map(|(_, t, e)| match e {
+            .find_map(|r| match &r.edge {
                 GraphEdge::Output { versions, .. }
-                    if response.all_tables[t].name.to_string() == table =>
+                    if response.all_tables[&r.table_version_id].name.to_string() == table =>
                 {
                     Some(versions)
                 }
@@ -1184,7 +1184,12 @@ pub(crate) mod tests {
             );
             assert_eq!(response.user_tables.len(), tables.len());
             assert_eq!(response.system_tables.len(), 0);
-            for (function, table, _) in &response.relations {
+            for GraphRelation {
+                function_version_id: function,
+                table_version_id: table,
+                ..
+            } in &response.relations
+            {
                 assert!(response.all_functions.contains_key(function));
                 assert!(response.all_tables.contains_key(table));
             }

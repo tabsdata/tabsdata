@@ -14,7 +14,7 @@ use td_objects::dxo::execution::{
     ExecutionInsertDB, ExecutionResponse, FunctionNodeResponse, ResolvedVersionResponse,
     TableNodeResponse,
 };
-use td_objects::dxo::graph::GraphNode;
+use td_objects::dxo::graph::{GraphNode, GraphRelation};
 use td_objects::dxo::logical::{
     LogicalFunctionRunInputInsertDB, LogicalFunctionRunInsertDB, TableDataVersion,
     TableDataVersionDBWithNames,
@@ -143,13 +143,10 @@ pub async fn build_response(
     let relations = execution_plan
         .relations()
         .into_iter()
-        .map(|(f, t, e)| {
-            let resolved_version = e.versioned(e.versions().clone());
-            (
-                f.function_version_id.clone(),
-                t.table_version_id,
-                resolved_version,
-            )
+        .map(|(f, t, e)| GraphRelation {
+            function_version_id: f.function_version_id.clone(),
+            table_version_id: t.table_version_id,
+            edge: e.versioned(e.versions().clone()),
         })
         .sorted()
         .collect();

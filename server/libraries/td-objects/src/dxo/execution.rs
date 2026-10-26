@@ -3,7 +3,7 @@
 //
 
 use crate::dxo::function::Function;
-use crate::dxo::graph::{FunctionNode, GraphEdge, TableNode};
+use crate::dxo::graph::{FunctionNode, GraphRelation, TableNode};
 use crate::dxo::logical::TableDataVersion;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionName, CollectionWhenDeleted, Dot, Enabled, Ended, ExecutionId,
@@ -266,11 +266,7 @@ pub struct ExecutionResponse {
     pub created_tables: HashSet<TableVersionId>,
     pub system_tables: HashSet<TableVersionId>,
     pub user_tables: HashSet<TableVersionId>,
-    pub relations: Vec<(
-        FunctionVersionId,
-        TableVersionId,
-        GraphEdge<ResolvedVersionResponse>,
-    )>,
+    pub relations: Vec<GraphRelation<ResolvedVersionResponse>>,
     pub relations_info: HashMap<LogicalTableDataVersionId, TableDataVersion>,
 }
 impl From<&FunctionNode> for FunctionNodeResponse {
