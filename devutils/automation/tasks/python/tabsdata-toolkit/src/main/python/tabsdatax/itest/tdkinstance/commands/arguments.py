@@ -9,66 +9,89 @@ from pathlib import Path
 import rich_click as click
 import yaml
 
-KEY_CONFIGS = "configs"
+KEY_STUBS = "stubs"
 CONFIG_OPTION = "--config"
+FILE_PREFIX = "@"
 ENV_PREFIX = "env:"
 ENV_REFERENCE = re.compile(r"\$\{([^}]+)\}")
 
 
-def config_text(value) -> str:
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    return str(value)
+def read_yaml(path: Path, role: str):
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return yaml.safe_load(handle)
+    except OSError as error:
+        raise click.ClickException(f"Could not read {role} '{path}': {error}")
+
+
+def declared_stubs(data, instance_type: str) -> list[str]:
+    options = data.get(instance_type) if isinstance(data, dict) else None
+    declared = options.get(KEY_STUBS) if isinstance(options, dict) else None
+    if declared is None:
+        stubs = []
+    elif isinstance(declared, list) and all(isinstance(stub, str) for stub in declared):
+        stubs = declared
+    else:
+        raise click.ClickException(
+            f"Field '{KEY_STUBS}' for instance type '{instance_type}' must be a "
+            "list of stub file paths."
+        )
+    return stubs
+
+
+def scalars(node) -> list[str]:
+    if isinstance(node, dict):
+        found = [text for value in node.values() for text in scalars(value)]
+    elif isinstance(node, list):
+        found = [text for item in node for text in scalars(item)]
+    elif isinstance(node, str):
+        found = [node]
+    else:
+        found = []
+    return found
 
 
 def env_variables(value: str) -> list[str]:
     """The environment variables an 'env:' value reads: each '${NAME}' in it,
     or the whole rest when it has none."""
-    if not value.startswith(ENV_PREFIX):
-        return []
-    rest = value[len(ENV_PREFIX) :]
-    return ENV_REFERENCE.findall(rest) or [rest]
+    if value.startswith(ENV_PREFIX):
+        rest = value[len(ENV_PREFIX) :].strip()
+        variables = ENV_REFERENCE.findall(rest) or [rest]
+    else:
+        variables = []
+    return variables
+
+
+def check_variables(stub: Path, instance_type: str):
+    for value in scalars(read_yaml(stub, "stub")):
+        for variable in env_variables(value):
+            if os.environ.get(variable, "").strip() == "":
+                raise click.ClickException(
+                    f"Environment variable '{variable}' required by stub '{stub}' "
+                    f"of instance type '{instance_type}' is not defined or is empty."
+                )
 
 
 @click.command(name="arguments")
 @click.argument("config", type=click.Path(path_type=Path))
 @click.argument("instance_type")
 def arguments(config: Path, instance_type: str):
-    """Emit the '--config KEY=VALUE' tokens of an instance type.
+    """Emit the '--config @STUB' tokens of an instance type.
 
-    Each entry under the instance type's 'configs' is a tdkserver setting and
-    its value, passed as written: tdkserver itself reads an 'env:' value from
-    the environment, so a secret never appears on the command line. The run
-    fails here, before tdkserver starts, if a variable an 'env:' value reads is
-    undefined or empty.
+    Each entry under the instance type's 'stubs' is a tdkserver stub file,
+    relative to the config's folder. tdkserver reads their 'env:' values from
+    the environment itself, so a secret never appears on the command line, and
+    it rejects a setting declared by more than one stub. The run fails here,
+    before tdkserver starts, if a variable an 'env:' value reads is undefined or
+    empty.
     """
-    try:
-        with open(config, "r", encoding="utf-8") as handle:
-            data = yaml.safe_load(handle)
-    except OSError as error:
-        raise click.ClickException(f"Could not read config '{config}': {error}")
-
-    if not isinstance(data, dict) or instance_type not in data:
-        return
-    options = data[instance_type]
-    if not isinstance(options, dict):
-        return
-    declared = options.get(KEY_CONFIGS)
-    if declared is None:
-        return
-    if not isinstance(declared, dict):
-        raise click.ClickException(
-            f"Field '{KEY_CONFIGS}' for instance type '{instance_type}' must be a "
-            "mapping of tdkserver setting to value."
-        )
-
-    for key, value in declared.items():
-        value = config_text(value)
-        for variable in env_variables(value):
-            if os.environ.get(variable, "").strip() == "":
-                raise click.ClickException(
-                    f"Environment variable '{variable}' required by setting '{key}' "
-                    f"of instance type '{instance_type}' is not defined or is empty."
-                )
+    folder = config.resolve().parent
+    stubs = [
+        (folder / declared).resolve()
+        for declared in declared_stubs(read_yaml(config, "config"), instance_type)
+    ]
+    for stub in stubs:
+        check_variables(stub, instance_type)
+    for stub in stubs:
         click.echo(CONFIG_OPTION)
-        click.echo(f"{key}={value}")
+        click.echo(f"{FILE_PREFIX}{stub}")

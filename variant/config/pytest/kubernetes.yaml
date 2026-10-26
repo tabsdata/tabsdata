@@ -3,5 +3,5 @@
 #
 
 tdtest:
-  configs:
-    apiserver.service:jwt.access_token_expiration: 31622400
+  stubs:
+    - stubs/commons.yaml
