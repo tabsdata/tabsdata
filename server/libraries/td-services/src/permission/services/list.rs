@@ -12,8 +12,6 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::permission::Permission;
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::role::RoleParam;
-use td_objects::list::params::ListQueryParams;
-use td_objects::list::response::build_list_response;
 use td_queries::Queries;
 
 #[service_factory]
@@ -28,9 +26,7 @@ async fn list_permission(
         .await?;
     let conn = gated_conn.get(grant);
     let role: RoleDB = conn.fetch_one(&param.role).await?;
-    let query_params = ListQueryParams::<Permission>::try_from(&list_params)?;
-    let rows = conn.list(&role.id, &query_params).await?;
-    build_list_response(&list_params, &query_params, rows)
+    conn.list(&role.id, list_params).await
 }
 
 #[cfg(test)]

@@ -10,12 +10,15 @@
 use crate::generic::chunked::Chunked;
 use crate::generic::grain::{Grain, OneRow, select_in};
 use crate::generic::tagged::TagFilter;
+use crate::primitives::listing::listing;
 use crate::{QueryExecutor, Serves};
 use sea_query::{Order, SelectStatement};
 use ta_objects::errors::{SqlError, format_hint};
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{ListDto, SelectDao, single_row};
 use td_database::sea_query::builder::SeaQueryExt;
+use td_error::TdError;
+use td_objects::dxo::crudl::{ListParams, ListResponse};
 use td_objects::list::params::ListQueryParams;
 
 pub struct Reader<E, G> {
@@ -157,28 +160,29 @@ impl<E, G> Reader<E, G> {
         }
     }
 
-    /// The list surface: a cross-project caller narrows by its viewable
-    /// projects in `condition`. Bounded like every other read, so a `Global`
-    /// handle cannot list a project-partitioned relation; that is
-    /// `AcrossProjects` work.
+    /// The list surface: the page of `T` a request asks for. A cross-project
+    /// caller narrows by its viewable projects in `condition`. Bounded like
+    /// every other read, so a `Global` handle cannot list a
+    /// project-partitioned relation; that is `AcrossProjects` work.
     pub async fn list<T>(
         self,
         condition: impl SqlCondition<T::Dao>,
-        params: &ListQueryParams<T>,
-    ) -> Result<Vec<T>, SqlError>
+        request: ListParams,
+    ) -> Result<ListResponse<T>, TdError>
     where
         T: ListDto,
         G: Grain<T::Dao>,
         E: Serves<T::Dao>,
-        T::Tags: TagFilter<T::Dao, G, E>,
+        T::Tags: TagFilter<E>,
     {
-        let mut base = select_in::<T::Dao, G>(&self.grain, condition);
-        <T::Tags as TagFilter<T::Dao, G, E>>::restrict(&self.grain, &params.tags, &mut base);
-        rows::<T::Dao>(params.apply_to(base), self.executor)
+        let params = ListQueryParams::try_from(request)?;
+        let base = select_in::<T::Dao, G>(&self.grain, condition);
+        let rows = rows::<T::Dao>(listing(&self.grain, base, &params), self.executor)
             .await?
             .into_iter()
             .map(|dao| T::from_dao(dao).map_err(SqlError::DtoConversionError))
-            .collect()
+            .collect::<Result<_, _>>()?;
+        params.respond(rows)
     }
 }
 

@@ -28,7 +28,6 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::CollectionRead;
 use td_objects::dxo::crudl::ListParams;
-use td_objects::dxo::execution::Execution;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::{Function, FunctionDB};
 use td_objects::dxo::logical::{
@@ -41,7 +40,6 @@ use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
 use td_objects::dxo::table::{Table, TableDB};
 use td_objects::dxo::tag::TagFacetParams;
 use td_objects::dxo::topology::ProjectTopologyDB;
-use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{
     AtTime, DependencyPos, EpochMs, FactSide, IncludePrivate, IncludeReplaced, InputIdx,
     LogicalFunctionRunInputId, LogicalFunctionRunStatus, PhysicalFunctionRunStatus, TagKey,
@@ -152,7 +150,7 @@ async fn time_chain_queries(
         .scd2()
         .fetch_one::<ProjectTopologyDB>(&h.project_id)
         .await?;
-    let exec_params = ListQueryParams::<Execution>::try_from(&ListParams::default())?;
+    let exec_params = ListParams::default();
 
     let _ = timed!(
         out,
@@ -222,15 +220,17 @@ async fn time_chain_queries(
         out,
         "executions::list_by_table_data_version",
         (db).executions()
-            .list_by_table_data_version(&h.ltdv_ids[0], &exec_params)
+            .list_by_table_data_version(&h.ltdv_ids[0], exec_params.clone())
             .await?
+            .data
     );
     let _ = timed!(
         out,
         "executions::list_by_function_version",
         (db).executions()
-            .list_by_function_version(&h.producer_function_version_id, &exec_params)
+            .list_by_function_version(&h.producer_function_version_id, exec_params.clone())
             .await?
+            .data
     );
     let _ = timed!(
         out,
@@ -541,46 +541,54 @@ async fn time_chain_queries(
         (db).fetch_nth_last::<ExecutionDB>((), 0).await?
     );
 
-    let coll_params = ListQueryParams::<CollectionRead>::try_from(&ListParams::default())?;
-    let table_params = ListQueryParams::<Table>::try_from(&ListParams::default())?;
-    let fn_params = ListQueryParams::<Function>::try_from(&ListParams::default())?;
+    let coll_params = ListParams::default();
+    let table_params = ListParams::default();
+    let fn_params = ListParams::default();
     let _ = timed!(
         out,
         "default::list",
-        (db).scd2().list((), &coll_params).await?
+        (db).scd2()
+            .list::<CollectionRead>((), coll_params.clone())
+            .await?
+            .data
     );
     let _ = timed!(
         out,
         "latest::list",
-        (db).scd2().list::<Table>((), &table_params).await?
+        (db).scd2()
+            .list::<Table>((), table_params.clone())
+            .await?
+            .data
     );
     let _ = timed!(
         out,
         "as_of::list",
         (db).scd2()
             .as_of(&version.interval.valid_from)
-            .list::<Function>((), &fn_params)
+            .list::<Function>((), fn_params.clone())
             .await?
+            .data
     );
-    let team_a = ListQueryParams::<Table>::try_from(&ListParams {
+    let team_a = ListParams {
         filter: vec!["table.team:eq:a".to_string()],
         ..ListParams::default()
-    })?;
+    };
     let _ = timed!(
         out,
         "tagged::list",
-        (db).scd2().list::<Table>((), &team_a).await?
+        (db).scd2().list::<Table>((), team_a.clone()).await?.data
     );
-    let team_a_collections = ListQueryParams::<CollectionRead>::try_from(&ListParams {
+    let team_a_collections = ListParams {
         filter: vec!["collection.team:eq:a".to_string()],
         ..ListParams::default()
-    })?;
+    };
     let _ = timed!(
         out,
         "latest::tagged::collections",
         (db).scd2()
-            .list::<CollectionRead>((), &team_a_collections)
+            .list::<CollectionRead>((), team_a_collections.clone())
             .await?
+            .data
     );
     let team = TagKey::try_new("team")?;
     let _ = timed!(
@@ -632,15 +640,19 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "history::list",
-        (db).timeline().list::<Table>((), &table_params).await?
+        (db).timeline()
+            .list::<Table>((), table_params.clone())
+            .await?
+            .data
     );
     let _ = timed!(
         out,
         "history::list_until",
         (db).timeline()
             .until(&now)
-            .list::<Table>((), &table_params)
+            .list::<Table>((), table_params.clone())
             .await?
+            .data
     );
     let _ = timed!(
         out,
@@ -655,7 +667,11 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "last::list",
-        (db).scd2().last().list::<Table>((), &table_params).await?
+        (db).scd2()
+            .last()
+            .list::<Table>((), table_params.clone())
+            .await?
+            .data
     );
     let _ = timed!(
         out,

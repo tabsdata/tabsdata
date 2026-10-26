@@ -44,7 +44,8 @@ use ta_objects::{
     UpdateDao, UpsertDao,
 };
 use td_database::sea_query::builder::SeaQueryExt;
-use td_objects::list::params::ListQueryParams;
+use td_error::TdError;
+use td_objects::dxo::crudl::{ListParams, ListResponse};
 
 pub trait Queries: QueryExecutor {
     fn insert<D: InsertDao + InsertableFrom<Self::Scope>>(
@@ -220,15 +221,15 @@ pub trait Queries: QueryExecutor {
     fn list<T>(
         self,
         condition: impl SqlCondition<T::Dao>,
-        params: &ListQueryParams<T>,
-    ) -> impl Future<Output = Result<Vec<T>, SqlError>> + Send
+        request: ListParams,
+    ) -> impl Future<Output = Result<ListResponse<T>, TdError>> + Send
     where
         T: ListDto,
         T::Dao: UnversionedDao,
         Self: Serves<T::Dao>,
-        T::Tags: TagFilter<T::Dao, Unversioned, Self>,
+        T::Tags: TagFilter<Self>,
     {
-        unversioned(self).list(condition, params)
+        unversioned(self).list(condition, request)
     }
 
     /// The interval-table door: the open SCD2 intervals

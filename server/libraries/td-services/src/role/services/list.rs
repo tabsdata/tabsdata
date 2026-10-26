@@ -10,8 +10,6 @@ use td_database::access::{GatedConnection, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::role::Role;
-use td_objects::list::params::ListQueryParams;
-use td_objects::list::response::build_list_response;
 use td_queries::Queries;
 
 #[service_factory]
@@ -29,9 +27,7 @@ async fn list_role(
         )
         .await?;
     let conn = gated_conn.get(grant);
-    let query_params = ListQueryParams::<Role>::try_from(&list_params)?;
-    let rows = conn.list(&(), &query_params).await?;
-    build_list_response(&list_params, &query_params, rows)
+    conn.list(&(), list_params).await
 }
 
 #[cfg(test)]

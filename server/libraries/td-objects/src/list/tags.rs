@@ -8,12 +8,10 @@
 //! tests the tags of each run's function. Same entity and key → OR, otherwise
 //! AND, as for columns.
 
-use crate::list::params::{IsFilter, convert_to_like_pattern};
+use crate::list::filter::{FilterOp, IsFilter, convert_to_like_pattern};
 use crate::types::basic::{LikeFilter, TagKey, TagValue};
-use regex::Regex;
 use sea_query::Expr;
 use std::str::FromStr;
-use std::sync::LazyLock;
 use ta_objects::{Dao, ListDto, Typed};
 use td_error::{TdError, td_error};
 
@@ -43,6 +41,7 @@ pub enum TagTest {
 
 /// One entity's key and its tests, any one of which holds.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct TagTerm<I> {
     pub column: I,
     pub entity_type: Expr,
@@ -53,6 +52,7 @@ pub struct TagTerm<I> {
 
 /// Every term holds.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct TagSelector<I>(pub Vec<TagTerm<I>>);
 
 impl<I> Default for TagSelector<I> {
@@ -67,91 +67,78 @@ impl<I> TagSelector<I> {
     }
 }
 
-/// A filter whose field is dotted, `<entity>.<key>`, tests tags: column
-/// fields never contain a dot.
-pub fn is_tag_filter(filter: &str) -> bool {
-    filter
-        .split(':')
-        .next()
-        .is_some_and(|field| field.contains('.'))
-}
-
 impl<I: Clone> TagSelector<I> {
-    pub fn parse<T, S>(filters: &[S]) -> Result<Self, TdError>
+    pub(crate) fn add<T>(
+        &mut self,
+        filter: &str,
+        entity: &str,
+        key: &str,
+        operator: FilterOp,
+        value: &str,
+    ) -> Result<(), TdError>
     where
         T: ListDto,
         T::Dao: Dao<Iden = I>,
-        S: AsRef<str>,
     {
-        let mut selector = Self::default();
-        for filter in filters {
-            let filter = filter.as_ref();
-            let (entity, key, test) = parse_tag_filter(filter)?;
-            let Some((column, entity_type)) = T::tag_col(&entity) else {
-                Err(match T::tag_entities() {
-                    [] => TagFilterError::NotTagged(filter.to_string()),
-                    entities => {
-                        TagFilterError::UnknownEntity(filter.to_string(), entities.join(", "))
-                    }
-                })?
-            };
-            match selector
-                .0
-                .iter_mut()
-                .find(|term| term.entity == entity && term.key == key)
-            {
-                Some(term) => term.tests.push(test),
-                None => selector.0.push(TagTerm {
-                    column,
-                    entity_type,
-                    entity,
-                    key,
-                    tests: vec![test],
-                }),
-            }
+        let invalid = || TdError::from(TagFilterError::InvalidTagFilter(filter.to_string()));
+        if key.is_empty() {
+            return Err(invalid());
         }
-        Ok(selector)
+        let key = TagKey::try_new(key)?;
+        let test = match operator {
+            FilterOp::Eq => TagTest::Equals(TagValue::try_new(value)?),
+            FilterOp::Ne => TagTest::NotEquals(TagValue::try_new(value)?),
+            FilterOp::Like => TagTest::Like(convert_to_like_pattern(value)?),
+            FilterOp::Is => match IsFilter::from_str(value).map_err(|_| invalid())? {
+                IsFilter::NotNull => TagTest::Present,
+                IsFilter::Null => TagTest::Absent,
+            },
+            _ => Err(invalid())?,
+        };
+        let Some((column, entity_type)) = T::tag_col(entity) else {
+            Err(match T::tag_entities()[..] {
+                [] => TagFilterError::NotTagged(filter.to_string()),
+                ref entities => {
+                    TagFilterError::UnknownEntity(filter.to_string(), entities.join(", "))
+                }
+            })?
+        };
+        match self
+            .0
+            .iter_mut()
+            .find(|term| term.entity == entity && term.key == key)
+        {
+            Some(term) => term.tests.push(test),
+            None => self.0.push(TagTerm {
+                column,
+                entity_type,
+                entity: entity.to_string(),
+                key,
+                tests: vec![test],
+            }),
+        }
+        Ok(())
     }
-}
-
-fn parse_tag_filter(s: &str) -> Result<(String, TagKey, TagTest), TdError> {
-    static TAG_FILTER_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
-            "^(?<entity>[a-z]+)\\.(?<key>[^:]+)(?<operator>:eq:|:ne:|:lk:|:is:)(?<value>.*)$",
-        )
-        .unwrap()
-    });
-    let invalid = || TdError::from(TagFilterError::InvalidTagFilter(s.to_string()));
-    let caps = TAG_FILTER_REGEX.captures(s).ok_or_else(invalid)?;
-    let entity = caps.name("entity").unwrap().as_str().to_string();
-    let key = TagKey::try_new(caps.name("key").unwrap().as_str())?;
-    let value = caps.name("value").unwrap().as_str();
-    let test = match caps.name("operator").unwrap().as_str() {
-        ":eq:" => TagTest::Equals(TagValue::try_new(value)?),
-        ":ne:" => TagTest::NotEquals(TagValue::try_new(value)?),
-        ":lk:" => TagTest::Like(convert_to_like_pattern(value)?),
-        _ => match IsFilter::from_str(value).map_err(|_| invalid())? {
-            IsFilter::NotNull => TagTest::Present,
-            IsFilter::Null => TagTest::Absent,
-        },
-    };
-    Ok((entity, key, test))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dxo::crudl::ListParams;
     use crate::dxo::service_token::TokenRead;
     use crate::dxo::table::Table;
+    use crate::list::params::{ListIden, ListQueryParams};
 
-    fn parse(
-        filters: &[&str],
-    ) -> Result<TagSelector<<<Table as ta_objects::FromDao>::Dao as Dao>::Iden>, TdError> {
-        TagSelector::parse::<Table, _>(filters)
+    fn parse<T: ListDto>(filters: &[&str]) -> Result<TagSelector<ListIden<T>>, TdError> {
+        let params = ListParams {
+            filter: filters.iter().map(|f| f.to_string()).collect(),
+            ..ListParams::default()
+        };
+        Ok(ListQueryParams::<T>::try_from(params)?.tags)
     }
 
     fn terms(filters: &[&str]) -> Vec<(String, String, Vec<TagTest>)> {
-        parse(filters)
+        parse::<Table>(filters)
             .unwrap()
             .0
             .into_iter()
@@ -215,29 +202,24 @@ mod tests {
         for bad in [
             "table.:eq:a",
             "table.team:gt:a",
+            "table.team:btw:a::b",
             "table.team:is:empty",
             "table.team",
             "table.team:eq",
         ] {
-            assert!(parse(&[bad]).is_err(), "{bad}");
+            assert!(parse::<Table>(&[bad]).is_err(), "{bad}");
         }
     }
 
     #[test]
     fn test_an_entity_the_list_does_not_mark_is_rejected() {
-        let err = parse(&["group.team:eq:a"]).unwrap_err().to_string();
+        let err = parse::<Table>(&["group.team:eq:a"])
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("can filter by the tags of"), "{err}");
         for entity in ["collection", "table", "function"] {
             assert!(err.contains(entity), "{err}");
         }
-        assert!(TagSelector::parse::<TokenRead, _>(&["function.team:eq:a"]).is_err());
-    }
-
-    #[test]
-    fn test_only_dotted_fields_are_tag_filters() {
-        assert!(is_tag_filter("function.team:eq:a"));
-        assert!(is_tag_filter("table._parent:is:null"));
-        assert!(!is_tag_filter("name:eq:a.b"));
-        assert!(!is_tag_filter("name:lk:*.csv"));
+        assert!(parse::<TokenRead>(&["function.team:eq:a"]).is_err());
     }
 }

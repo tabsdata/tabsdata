@@ -9,8 +9,6 @@ use td_database::access::{GatedConnection, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::user::UserRead;
-use td_objects::list::params::ListQueryParams;
-use td_objects::list::response::build_list_response;
 use td_objects::types::basic::UserSystem;
 use td_queries::Queries;
 
@@ -24,9 +22,7 @@ async fn list_users(
     let conn = gated_conn.get(authz.none());
     // Excludes system users (the built-in `system` user and other service
     // users) from listings by filtering on `system = false`.
-    let query_params = ListQueryParams::<UserRead>::try_from(&list_params)?;
-    let rows = conn.list(&UserSystem::FALSE, &query_params).await?;
-    build_list_response(&list_params, &query_params, rows)
+    conn.list(&UserSystem::FALSE, list_params).await
 }
 
 #[cfg(test)]

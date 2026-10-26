@@ -9,8 +9,6 @@ use td_database::access::{AcrossProjects, GatedConnection, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::transaction::Transaction;
-use td_objects::list::params::ListQueryParams;
-use td_objects::list::response::build_list_response;
 use td_queries::Queries;
 
 #[service_factory]
@@ -22,9 +20,7 @@ async fn transaction_list(
     let (ctx, _, list_params) = request.into_parts();
     let (grant, visible_projects) = authz.visible_projects(gated_conn, &ctx).await?;
     let conn = gated_conn.get(grant);
-    let query_params = ListQueryParams::<Transaction>::try_from(&list_params)?;
-    let rows = conn.list(&visible_projects, &query_params).await?;
-    build_list_response(&list_params, &query_params, rows)
+    conn.list(&visible_projects, list_params).await
 }
 
 #[cfg(test)]
@@ -34,11 +30,11 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::types::basic::ProjectLabel;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, ProjectName, TransactionKey, UserId,
     };
+    use td_objects::types::basic::{PageLen, ProjectLabel};
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
 
     #[td_test::test(db)]
@@ -189,13 +185,13 @@ mod tests {
                     .map(|response| response.data)
             }
         };
-        let walk = |order_by: Option<String>, len: usize| async move {
+        let walk = |order_by: Option<String>, len: i32| async move {
             let mut walked = Vec::new();
             let mut next = None;
             let mut pagination_id = None;
             loop {
                 let page = list(ListParams {
-                    len,
+                    len: PageLen::try_from(len)?,
                     order_by: order_by.clone(),
                     next: next.clone(),
                     pagination_id: pagination_id.clone(),
@@ -223,7 +219,7 @@ mod tests {
             Some("started_on".to_string()),
         ] {
             let full = list(ListParams {
-                len: 1000,
+                len: PageLen::try_from(1000)?,
                 order_by: order_by.clone(),
                 ..ListParams::default()
             })
@@ -231,7 +227,7 @@ mod tests {
             assert_eq!(full.len, seeded);
             let full_ids: Vec<_> = full.data.iter().map(|t| t.id.clone()).collect();
 
-            for len in [1usize, 5, 7] {
+            for len in [1, 5, 7] {
                 let walked = walk(order_by.clone(), len).await?;
                 assert_eq!(walked, full_ids, "order_by={order_by:?} len={len}");
             }

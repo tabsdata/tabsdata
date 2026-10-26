@@ -10,8 +10,6 @@ use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::table::{Table, TableDBWithNames};
-use td_objects::list::params::ListQueryParams;
-use td_objects::list::response::build_list_response;
 use td_queries::Queries;
 
 #[service_factory]
@@ -27,12 +25,9 @@ async fn table_list(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let query_params = ListQueryParams::<Table>::try_from(&list_params)?;
-    let rows = conn
-        .scd2()
-        .list(TableDBWithNames::user(), &query_params)
-        .await?;
-    build_list_response(&list_params, &query_params, rows)
+    conn.scd2()
+        .list(TableDBWithNames::user(), list_params)
+        .await
 }
 
 #[cfg(test)]

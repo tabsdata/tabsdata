@@ -5,8 +5,8 @@
 use sea_query::{Condition, Expr, ExprTrait, LikeExpr, Query, SelectStatement};
 use ta_objects::{Dao, HasColumn, SeaValue};
 use td_objects::dxo::tag::TagDB;
+use td_objects::list::tags::{TagSelector, TagTerm, TagTest};
 use td_objects::types::basic::{TagEntityId, TagEntityType, TagKey, TagValue};
-use td_objects::types::tag_selector::{TagSelector, TagTerm, TagTest};
 
 /// The rows of `D` meeting the selector, over the tag versions `visible`
 /// admits.
@@ -52,10 +52,16 @@ fn test_holds<D: Dao>(term: &TagTerm<D::Iden>, test: &TagTest, visible: &Conditi
 mod tests {
     use super::*;
     use sea_query::PostgresQueryBuilder;
+    use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::table::{Table, TableDBWithNames};
+    use td_objects::list::params::ListQueryParams;
 
     fn tables_where(filters: &[&str]) -> String {
-        let selector = TagSelector::parse::<Table, _>(filters).unwrap();
+        let params = ListParams {
+            filter: filters.iter().map(|f| f.to_string()).collect(),
+            ..ListParams::default()
+        };
+        let selector = ListQueryParams::<Table>::try_from(params).unwrap().tags;
         Query::select()
             .expr(Expr::val(1))
             .from(TableDBWithNames::TABLE)

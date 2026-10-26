@@ -61,7 +61,7 @@ fn list<T: ListDto>(filter: &[&str], order_by: Option<&str>) -> Result<(), Strin
         order_by: order_by.map(str::to_string),
         ..ListParams::default()
     };
-    ListQueryParams::<T>::try_from(&params)
+    ListQueryParams::<T>::try_from(params)
         .map(drop)
         .map_err(|e| format!("{e:?}"))
 }

@@ -2,18 +2,17 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+//! A listing request parsed against its DTO: what to filter, how to sort and
+//! where the page starts, as data. td-queries renders it.
+
 use crate::dxo::crudl::ListParams;
-use crate::parse::IDENTIFIER_PATTERN;
-use crate::types::basic::LikeFilter;
-use crate::types::tag_selector::{TagSelector, is_tag_filter};
-use itertools::Itertools;
-use regex::Regex;
-use sea_query::{
-    Condition, Expr, ExprTrait, Iden, LikeExpr, NullOrdering, Order as SeaOrder, SelectStatement,
-};
-use std::str::FromStr;
-use std::sync::LazyLock;
-use ta_objects::{Dao, FromDao, ListDto, SeaValue, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
+use crate::list::columns::ColumnSelector;
+use crate::list::filter::{Field, Filter};
+use crate::list::sort::Sort;
+use crate::list::tags::TagSelector;
+use crate::types::basic::PageLen;
+use sea_query::Iden as _;
+use ta_objects::{Dao, FromDao, ListDto, ListRole, SeaValue};
 use td_error::{TdError, td_error};
 
 #[td_error]
@@ -22,17 +21,15 @@ pub enum ListError {
     InvalidOrderBy(String) = 0,
     #[error("Invalid condition value, it must be <NAME><OPERATOR><VALUE> (operators are {0}): {1}")]
     InvalidCondition(String, String) = 1,
-    #[error("Undefined field: {0}")]
-    UndefinedField(String) = 2,
-    #[error("Undefined filter: {0}")]
-    UndefinedFilter(String) = 3,
-    #[error("Undefined like filter: {0}")]
-    UndefinedLikeFilter(String) = 4,
-    #[error("Undefined order by: {0}")]
-    UndefinedOrderBy(String) = 5,
+    #[error("Undefined filter field '{0}'; this list filters by: {1}")]
+    UndefinedField(String, String) = 2,
+    #[error("Undefined like filter field '{0}'; this list like-filters by: {1}")]
+    UndefinedLikeFilter(String, String) = 4,
+    #[error("Undefined order-by field '{0}'; this list orders by: {1}")]
+    UndefinedOrderBy(String, String) = 5,
     #[error("Previous and Next parameters cannot be used together")]
     PreviousAndNext = 6,
-    #[error("Natural Id must be use in pagination with Previous or Next parameters")]
+    #[error("Previous and Next need a pagination id, and a pagination id needs one of them")]
     MissingPaginationParams = 7,
     #[error("Invalid between condition '{0}', it must be <NAME>:btw:<min>::<max>")]
     InvalidBetweenCondition(String) = 8,
@@ -48,532 +45,62 @@ pub enum ListError {
     NonUniquePaginationKey(String, String) = 5000,
 }
 
-/// Parse a typed column value string for this order's field.
-fn parse_val<D: ListDto>(
-    field: &<<D as FromDao>::Dao as Dao>::Iden,
+/// The column identifiers of a list DTO's DAO.
+pub type ListIden<D> = <<D as FromDao>::Dao as Dao>::Iden;
+
+/// The fields a listing accepts in `role`, for an error.
+pub(crate) fn accepted<D: ListDto>(role: ListRole) -> String {
+    match D::fields(role)[..] {
+        [] => "none".to_string(),
+        ref fields => fields.join(", "),
+    }
+}
+
+/// A value of `column`, a filter or order-by column of `D`.
+pub(crate) fn parse_value<D: ListDto>(
+    column: &ListIden<D>,
     value: &str,
 ) -> Result<Box<dyn SeaValue>, ListError> {
-    D::parse_filter_value(field, value)
-        .map_err(ListError::InvalidFieldValue)?
-        .ok_or_else(|| ListError::UndefinedField(field.to_string()))
+    D::parse_value(column, value)
+        .ok_or_else(|| {
+            ListError::UndefinedField(column.to_string(), accepted::<D>(ListRole::Filter))
+        })?
+        .map_err(ListError::InvalidFieldValue)
 }
 
-/// Parse a filter-condition value, rejecting the empty NULL marker — in a
-/// comparison it would build a never-true `col = NULL` predicate.
-fn parse_cond_val<D: ListDto>(
-    field: &<<D as FromDao>::Dao as Dao>::Iden,
-    value: &str,
-) -> Result<Box<dyn SeaValue>, ListError> {
-    let val = parse_val::<D>(field, value)?;
-    if val.is_sql_null() {
-        return Err(ListError::EmptyFilterValue(field.to_string()));
-    }
-    Ok(val)
+/// Built only by parsing a request against `D`, as are its parts
+/// (`#[non_exhaustive]`).
+pub struct ListQueryParams<D: ListDto> {
+    pub len: PageLen,
+    pub columns: ColumnSelector<ListIden<D>>,
+    pub tags: TagSelector<ListIden<D>>,
+    pub sort: Sort<ListIden<D>>,
+    /// Echoed by the response.
+    pub(crate) request: ListParams,
 }
 
-#[derive(Debug)]
-pub enum Order<D>
-where
-    D: ListDto,
-{
-    Asc(<<D as FromDao>::Dao as Dao>::Iden),
-    Desc(<<D as FromDao>::Dao as Dao>::Iden),
-}
-
-impl<D> Clone for Order<D>
-where
-    D: ListDto,
-{
-    fn clone(&self) -> Self {
-        match self {
-            Order::Asc(f) => Order::Asc(*f),
-            Order::Desc(f) => Order::Desc(*f),
-        }
-    }
-}
-
-impl<D> Order<D>
-where
-    D: ListDto,
-{
-    pub fn invert(&self) -> Self {
-        match self {
-            Order::Asc(f) => Order::Desc(*f),
-            Order::Desc(f) => Order::Asc(*f),
-        }
-    }
-
-    pub fn field(&self) -> &<<D as FromDao>::Dao as Dao>::Iden {
-        match self {
-            Order::Asc(f) | Order::Desc(f) => f,
-        }
-    }
-
-    pub fn sea_order(&self) -> SeaOrder {
-        match self {
-            Order::Asc(_) => SeaOrder::Asc,
-            Order::Desc(_) => SeaOrder::Desc,
-        }
-    }
-
-    pub(crate) fn parse(s: &str) -> Result<Order<D>, ListError> {
-        const ORDER_BY_PATTERN: &str = constcat::concat!(
-            "^(?<field>",
-            IDENTIFIER_PATTERN,
-            ")(?<direction>(\\+|\\-))?$"
-        );
-        static ORDER_BY_REGEX: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(ORDER_BY_PATTERN).unwrap());
-
-        if let Some(caps) = ORDER_BY_REGEX.captures(s) {
-            let field = caps.name("field").unwrap().as_str();
-            let field = D::order_by_col(field)
-                .ok_or_else(|| ListError::UndefinedOrderBy(field.to_string()))?;
-            let asc = caps.name("direction").map_or("+", |m| m.as_str()) == "+";
-            Ok(if asc {
-                Order::Asc(field)
-            } else {
-                Order::Desc(field)
-            })
-        } else {
-            Err(ListError::InvalidOrderBy(s.to_string()))
-        }
-    }
-}
-
-impl<D> FromStr for Order<D>
-where
-    D: ListDto,
-{
-    type Err = ListError;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::parse(s)
-    }
-}
-
-#[derive(TypedEnum, TypedSerde, TypedSqlx, TypedOpenApi)]
-pub enum IsFilter {
-    #[typed_enum(rename = "null")]
-    Null,
-    #[typed_enum(rename = "not_null")]
-    NotNull,
-}
-
-/// Keyset cursor expressed as typed Sea Query values.
-///
-/// For a query ordered by `(order_col ASC, id_col ASC)` the predicates are:
-/// - **Next**:     `(order_col > val) OR (order_col = val AND id_col > id)`
-/// - **Previous**: `(order_col < val) OR (order_col = val AND id_col < id)`
-///   (the caller must also invert ORDER BY and reverse the result set)
-///
-/// `id_col` is the DTO's `pagination_by` field: it MUST be unique within the
-/// listing, or page boundaries inside a tie group silently skip rows.
-#[derive(Debug)]
-pub enum Pagination<D>
-where
-    D: ListDto,
-{
-    Previous {
-        order_col: <<D as FromDao>::Dao as Dao>::Iden,
-        order_val: Box<dyn SeaValue>,
-        id_col: <<D as FromDao>::Dao as Dao>::Iden,
-        id_val: Box<dyn SeaValue>,
-    },
-    Next {
-        order_col: <<D as FromDao>::Dao as Dao>::Iden,
-        order_val: Box<dyn SeaValue>,
-        id_col: <<D as FromDao>::Dao as Dao>::Iden,
-        id_val: Box<dyn SeaValue>,
-    },
-}
-
-impl<D> Pagination<D>
-where
-    D: ListDto,
-{
-    /// Emit the keyset predicate as a Sea Query `Expr`.
-    pub fn to_expr(&self, natural_order: &Order<D>) -> Expr {
-        let (order_col, order_val, id_col, id_val, forward) = match self {
-            Pagination::Next {
-                order_col,
-                order_val,
-                id_col,
-                id_val,
-            } => (order_col, order_val, id_col, id_val, true),
-            Pagination::Previous {
-                order_col,
-                order_val,
-                id_col,
-                id_val,
-            } => (order_col, order_val, id_col, id_val, false),
-        };
-
-        // Cursor-based pagination: select rows "past" the current cursor (order_val, id_val).
-        // "Past" means greater-than when sorting ascending, less-than when descending.
-        let towards_end = matches!(
-            (forward, natural_order.sea_order()),
-            (true, SeaOrder::Asc) | (false, SeaOrder::Desc)
-        );
-        let past = if towards_end { Expr::gt } else { Expr::lt };
-        let past_id = past(Expr::col(*id_col), id_val.as_sea_expr());
-
-        // Same column: the composite degenerates to the single comparison.
-        if order_col.to_string() == id_col.to_string() {
-            return past_id;
-        }
-
-        // NULLs sort as the largest values (see `apply_to`), a run plain
-        // comparisons never reach — walk it with IS NULL predicates.
-        if order_val.is_sql_null() {
-            let in_null_run = Expr::col(*order_col).is_null().and(past_id);
-            if towards_end {
-                in_null_run
-            } else {
-                in_null_run.or(Expr::col(*order_col).is_not_null())
-            }
-        } else {
-            // WHERE order_col > order_val
-            //    OR (order_col = order_val AND id_col > id_val)
-            let composite =
-                past(Expr::col(*order_col), order_val.as_sea_expr()).or(Expr::col(*order_col)
-                    .eq(order_val.as_sea_expr())
-                    .and(past_id));
-            if order_val.is_nullable() && towards_end {
-                composite.or(Expr::col(*order_col).is_null())
-            } else {
-                composite
-            }
-        }
-    }
-
-    /// Emit the ORDER BY columns for this pagination direction.
-    pub fn order_exprs(
-        &self,
-        natural_order: &Order<D>,
-    ) -> Vec<(<<D as FromDao>::Dao as Dao>::Iden, SeaOrder)> {
-        let (order_col, id_col, forward) = match self {
-            Pagination::Next {
-                order_col, id_col, ..
-            } => (order_col, id_col, true),
-            Pagination::Previous {
-                order_col, id_col, ..
-            } => (order_col, id_col, false),
-        };
-        let dir = if forward {
-            natural_order.sea_order()
-        } else {
-            natural_order.invert().sea_order()
-        };
-        if order_col.to_string() == id_col.to_string() {
-            return vec![(*id_col, dir)];
-        }
-        vec![(*order_col, dir.clone()), (*id_col, dir)]
-    }
-}
-
-pub struct ListQueryParams<D>
-where
-    D: ListDto,
-{
-    pub len: usize,
-    pub filter: Condition,
-    pub natural_order: Order<D>,
-    pub order: Option<Order<D>>,
-    pub pagination: Option<Pagination<D>>,
-    pub tags: TagSelector<<D::Dao as Dao>::Iden>,
-}
-
-impl<D> ListQueryParams<D>
-where
-    D: ListDto,
-{
-    /// Build a complete `SelectStatement` from the parsed parameters.
-    ///
-    /// `base` should be a `SelectStatement` that already has the correct
-    /// columns and FROM clause — this method appends WHERE, ORDER BY and LIMIT.
-    /// It leaves `tags` out: the read renders them at its grain first.
-    pub fn apply_to(&self, mut base: SelectStatement) -> SelectStatement {
-        base.cond_where(self.filter.clone());
-
-        let effective_order = self.order.as_ref().unwrap_or(&self.natural_order);
-        if let Some(pag) = &self.pagination {
-            base.and_where(pag.to_expr(effective_order));
-        }
-
-        // Client-chosen order columns may be nullable: pin NULLs to the large
-        // end (the Postgres default) — `Pagination::to_expr` relies on it.
-        let pin_nulls = |dir: &SeaOrder| match dir {
-            SeaOrder::Asc => NullOrdering::Last,
-            _ => NullOrdering::First,
-        };
-        match &self.pagination {
-            Some(pag) => {
-                let mut exprs = pag.order_exprs(effective_order).into_iter();
-                if let Some((col, dir)) = exprs.next() {
-                    if self.order.is_some() {
-                        let nulls = pin_nulls(&dir);
-                        base.order_by_with_nulls(col, dir, nulls);
-                    } else {
-                        base.order_by(col, dir);
-                    }
-                }
-                for (col, dir) in exprs {
-                    base.order_by(col, dir);
-                }
-            }
-            None => {
-                if let Some(o) = &self.order {
-                    let (id_col, _) = D::pagination_col();
-                    let dir = o.sea_order();
-                    let nulls = pin_nulls(&dir);
-                    base.order_by_with_nulls(*o.field(), dir, nulls);
-                    base.order_by(id_col, self.natural_order.sea_order());
-                } else {
-                    let (id_col, id_dir) = D::pagination_col();
-                    base.order_by(id_col, id_dir);
-                }
-            }
-        }
-
-        // fetch one extra row to detect "has more pages"
-        base.limit(self.len as u64 + 1);
-
-        base
-    }
-}
-
-/// Parse a single filter string into a `(column_key, Expr)` pair.
-///
-/// The `column_key` is the string representation of the resolved column and is
-/// used to group multiple filters on the same column with OR.
-pub(crate) fn parse_condition<D: ListDto>(
-    s: &str,
-) -> Result<(<<D as FromDao>::Dao as Dao>::Iden, Expr), TdError> {
-    const EQ: &str = ":eq:";
-    const NE: &str = ":ne:";
-    const GT: &str = ":gt:";
-    const GE: &str = ":ge:";
-    const LT: &str = ":lt:";
-    const LE: &str = ":le:";
-    const LK: &str = ":lk:";
-    const BTW: &str = ":btw:";
-    const IS: &str = ":is:";
-
-    const OPERATORS: &str = constcat::concat!(
-        EQ, "|", NE, "|", GT, "|", GE, "|", LT, "|", LE, "|", LK, "|", BTW, "|", IS
-    );
-    const CONDITION_PATTERN: &str = constcat::concat!(
-        "^(?<field>",
-        IDENTIFIER_PATTERN,
-        ")(?<operator>(",
-        OPERATORS,
-        "))(?<value>(.*))$"
-    );
-
-    static CONDITION_REGEX: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(CONDITION_PATTERN).unwrap());
-
-    let caps = CONDITION_REGEX
-        .captures(s)
-        .ok_or_else(|| ListError::InvalidCondition(OPERATORS.to_string(), s.to_string()))?;
-
-    let field = caps.name("field").unwrap().as_str();
-    let operator = caps.name("operator").unwrap().as_str();
-    let value = caps.name("value").unwrap().as_str();
-
-    let resolve_col = |f: &str| -> Result<_, TdError> {
-        D::filter_col(f).ok_or_else(|| ListError::UndefinedField(f.to_string()).into())
-    };
-
-    let (col, expr) = match operator {
-        EQ => {
-            let col = resolve_col(field)?;
-            (
-                col,
-                Expr::col(col).eq(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
-            )
-        }
-        NE => {
-            let col = resolve_col(field)?;
-            (
-                col,
-                Expr::col(col).ne(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
-            )
-        }
-        GT => {
-            let col = resolve_col(field)?;
-            (
-                col,
-                Expr::col(col).gt(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
-            )
-        }
-        GE => {
-            let col = resolve_col(field)?;
-            (
-                col,
-                Expr::col(col).gte(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
-            )
-        }
-        LT => {
-            let col = resolve_col(field)?;
-            (
-                col,
-                Expr::col(col).lt(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
-            )
-        }
-        LE => {
-            let col = resolve_col(field)?;
-            (
-                col,
-                Expr::col(col).lte(parse_cond_val::<D>(&col, value)?.as_sea_expr()),
-            )
-        }
-        LK => {
-            let col = D::filter_like_col(field)
-                .ok_or_else(|| ListError::UndefinedLikeFilter(field.to_string()))?;
-            let pat = convert_to_like_pattern(value)?;
-            (
-                col,
-                Expr::col(col).like(LikeExpr::new(pat.as_str()).escape('\\')),
-            )
-        }
-        BTW => {
-            let parts = value.split("::").collect::<Vec<_>>();
-            if parts.len() != 2 {
-                Err(ListError::InvalidBetweenCondition(s.to_string()))?
-            }
-            let col = resolve_col(field)?;
-            (
-                col,
-                Expr::col(col).between(
-                    parse_cond_val::<D>(&col, parts[0])?.as_sea_expr(),
-                    parse_cond_val::<D>(&col, parts[1])?.as_sea_expr(),
-                ),
-            )
-        }
-        IS => {
-            let col = resolve_col(field)?;
-            let f = IsFilter::from_str(value)
-                .map_err(|_| ListError::UndefinedIsFilter(value.to_string()))?;
-            (
-                col,
-                match f {
-                    IsFilter::Null => Expr::col(col).is_null(),
-                    IsFilter::NotNull => Expr::col(col).is_not_null(),
-                },
-            )
-        }
-        _ => Err(ListError::InvalidCondition(
-            OPERATORS.to_string(),
-            s.to_string(),
-        ))?,
-    };
-
-    Ok((col, expr))
-}
-
-pub(crate) fn convert_to_like_pattern(value: &str) -> Result<LikeFilter, TdError> {
-    let mut out = String::with_capacity(value.len() * 2);
-    let mut escaped = false;
-    for c in value.chars() {
-        let mut buf = String::with_capacity(4);
-        let (fragment, next_escaped) = match (c, escaped) {
-            ('\\', false) => ("", true),
-            ('\\', true) => ("\\\\", false),
-            ('%', _) => ("\\%", false),
-            ('_', _) => ("\\_", false),
-            ('*', true) => ("*", false),
-            ('.', true) => (".", false),
-            ('*', false) => ("%", false),
-            ('.', false) => ("_", false),
-            (other, _) => {
-                buf.push(other);
-                (buf.as_str(), false)
-            }
-        };
-        out += fragment;
-        escaped = next_escaped;
-    }
-    out.try_into()
-}
-
-// ---------------------------------------------------------------------------
-// TryFrom<&ListParams>
-// ---------------------------------------------------------------------------
-
-impl<D: ListDto> TryFrom<&ListParams> for ListQueryParams<D> {
+impl<D: ListDto> TryFrom<ListParams> for ListQueryParams<D> {
     type Error = TdError;
 
-    fn try_from(value: &ListParams) -> Result<Self, Self::Error> {
-        let (tags, columns): (Vec<&String>, Vec<&String>) =
-            value.filter.iter().partition(|f| is_tag_filter(f));
-        let tags = TagSelector::parse::<D, _>(&tags)?;
-        let parsed: Vec<_> = columns
-            .into_iter()
-            .map(String::as_str)
-            .map(parse_condition::<D>)
-            .collect::<Result<_, _>>()?;
-
-        // Group by column key: same column → OR, different columns → AND.
-        let filter = parsed
-            .into_iter()
-            .map(|(col, expr)| (col.to_string(), expr))
-            .into_group_map()
-            .into_values()
-            .fold(Condition::all(), |and_cond, exprs| {
-                let or_cond = exprs
-                    .into_iter()
-                    .fold(Condition::any(), |c, expr| c.add(expr));
-                and_cond.add(or_cond)
-            });
-
-        let order = value.order_by.as_ref().map(|o| o.parse()).transpose()?;
-
-        // Natural (pagination) order — always the pagination column.
-        let (id_col, id_dir) = D::pagination_col();
-        let natural_order = match &order {
-            Some(Order::Asc(_)) => Order::Asc(id_col),
-            Some(Order::Desc(_)) => Order::Desc(id_col),
-            None => match id_dir {
-                SeaOrder::Asc => Order::Asc(id_col),
-                _ => Order::Desc(id_col),
-            },
-        };
-
-        let effective_order = order.as_ref().unwrap_or(&natural_order);
-        let pagination = match (&value.previous, &value.next, &value.pagination_id) {
-            (Some(_), Some(_), _) => Err(ListError::PreviousAndNext),
-            (Some(_), _, None) => Err(ListError::MissingPaginationParams),
-            (_, Some(_), None) => Err(ListError::MissingPaginationParams),
-            (None, None, Some(_)) => Err(ListError::MissingPaginationParams),
-            (Some(col_val), None, Some(id_val)) => {
-                let (id_col, _) = D::pagination_col();
-                Ok(Some(Pagination::Previous {
-                    order_col: *effective_order.field(),
-                    order_val: parse_val::<D>(effective_order.field(), col_val)?,
-                    id_col,
-                    id_val: parse_val::<D>(natural_order.field(), id_val)?,
-                }))
+    fn try_from(params: ListParams) -> Result<Self, Self::Error> {
+        let mut columns = ColumnSelector::default();
+        let mut tags = TagSelector::default();
+        for filter in &params.filter {
+            let parsed = Filter::parse(filter)?;
+            match parsed.field {
+                Field::Column(field) => columns.add::<D>(filter, field, parsed.op, parsed.value)?,
+                Field::Tag { entity, key } => {
+                    tags.add::<D>(filter, entity, key, parsed.op, parsed.value)?
+                }
             }
-            (None, Some(col_val), Some(id_val)) => {
-                let (id_col, _) = D::pagination_col();
-                Ok(Some(Pagination::Next {
-                    order_col: *effective_order.field(),
-                    order_val: parse_val::<D>(effective_order.field(), col_val)?,
-                    id_col,
-                    id_val: parse_val::<D>(natural_order.field(), id_val)?,
-                }))
-            }
-            _ => Ok(None),
-        }?;
-
-        Ok(ListQueryParams {
-            len: value.len,
-            filter,
-            natural_order,
-            order,
-            pagination,
+        }
+        let sort = Sort::parse::<D>(&params)?;
+        Ok(Self {
+            len: params.len,
+            columns,
             tags,
+            sort,
+            request: params,
         })
     }
 }
@@ -581,253 +108,19 @@ impl<D: ListDto> TryFrom<&ListParams> for ListQueryParams<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ta_objects::Dao;
-    use ta_objects::FromDao;
+    use crate::list::columns::{ColumnTest, Comparison};
+    use crate::list::sort::{SortKeys, Toward};
+    use ta_objects::SortDir;
     use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
-    use td_error::TdError;
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-    pub struct StringType(String);
+    struct StringType(String);
 
-    #[ta_objects::Dao]
-    #[dao(table = "testdao", ops(select, insert, delete))]
-    struct TestDao {
-        #[dao(pk)]
-        a: StringType,
-    }
-
-    #[ta_objects::Dto]
-    #[dto(list(on = TestDao))]
-    struct TestDto {
-        #[dto(list(pagination_by = "+", filter_like))]
-        a: StringType,
-    }
-
-    impl FromDao for TestDto {
-        type Dao = TestDao;
-
-        fn from_dao(dao: TestDao) -> Result<Self, TdError> {
-            Ok(Self { a: dao.a })
-        }
-    }
-
-    #[test]
-    fn test_order_parse() {
-        assert!(Order::<TestDto>::parse("").is_err());
-        assert!(Order::<TestDto>::parse("-").is_err());
-        assert!(Order::<TestDto>::parse("a=").is_err());
-        assert!(matches!(
-            Order::<TestDto>::parse("a").unwrap(),
-            Order::<TestDto>::Asc(<TestDao as Dao>::Iden::A)
-        ));
-        assert!(matches!(
-            Order::<TestDto>::parse("a+").unwrap(),
-            Order::<TestDto>::Asc(<TestDao as Dao>::Iden::A)
-        ));
-        assert!(matches!(
-            Order::<TestDto>::parse("a-").unwrap(),
-            Order::<TestDto>::Desc(<TestDao as Dao>::Iden::A)
-        ));
-    }
-
-    #[test]
-    fn test_condition_parse_errors() {
-        assert!(parse_condition::<TestDto>("").is_err());
-        assert!(parse_condition::<TestDto>("a").is_err());
-        assert!(parse_condition::<TestDto>(":eq:").is_err());
-        assert!(parse_condition::<TestDto>("a:ff:b").is_err());
-        // `a` is only a like-filter field, not a regular filter field
-        assert!(parse_condition::<TestDto>("a:eq:A").is_err());
-    }
-
-    #[test]
-    fn test_condition_parse_ok() {
-        assert!(parse_condition::<TestDto>("a:lk:A").is_ok());
-        assert!(parse_condition::<TestDto>("a:lk:").is_ok());
-    }
-
-    #[test]
-    fn test_list_query() {
-        #[ta_objects::Dao]
-        #[dao(table = "daodef", ops(select, insert, delete))]
-        struct DaoDef {
-            #[dao(pk)]
-            id: StringType,
-        }
-
-        #[ta_objects::Dto]
-        #[dto(list(on = DaoDef))]
-        struct Def {
-            #[dto(list(pagination_by = "+"))]
-            order: StringType,
-            #[dto(list(filter))]
-            filter: StringType,
-            #[dto(list(filter_like))]
-            like: StringType,
-        }
-
-        impl FromDao for Def {
-            type Dao = DaoDef;
-
-            fn from_dao(dao: DaoDef) -> Result<Self, TdError> {
-                Ok(Self {
-                    order: dao.id.clone(),
-                    filter: dao.id.clone(),
-                    like: dao.id,
-                })
-            }
-        }
-
-        let list_params = ListParams {
-            len: 0usize,
-            filter: vec!["filter:eq:FILTER".to_string(), "like:lk:LIKE".to_string()],
-            order_by: Some("order".to_string()),
-            previous: None,
-            next: None,
-            pagination_id: None,
-        };
-        let list_query: ListQueryParams<Def> = (&list_params).try_into().unwrap();
-        // two distinct columns → two OR-groups AND'd together
-        assert!(!list_query.filter.is_empty());
-
-        let list_params = ListParams {
-            len: 0usize,
-            filter: vec!["filterx:eq:FILTER".to_string(), "like:lk:LIKE".to_string()],
-            order_by: Some("order".to_string()),
-            previous: None,
-            next: None,
-            pagination_id: None,
-        };
-        let res: Result<ListQueryParams<Def>, TdError> = (&list_params).try_into();
-        let err = res.err().unwrap();
-        let err = err.domain_err::<ListError>();
-        assert!(matches!(err, ListError::UndefinedField(_)));
-
-        let list_params = ListParams {
-            len: 0usize,
-            filter: vec!["likex:lk:LIKE".to_string()],
-            order_by: Some("order".to_string()),
-            previous: None,
-            next: None,
-            pagination_id: None,
-        };
-        let res: Result<ListQueryParams<Def>, TdError> = (&list_params).try_into();
-        let err = res.err().unwrap();
-        let err = err.domain_err::<ListError>();
-        assert!(matches!(err, ListError::UndefinedLikeFilter(_)));
-
-        let list_params = ListParams {
-            len: 0usize,
-            filter: Default::default(),
-            order_by: Some("orderx".to_string()),
-            previous: None,
-            next: None,
-            pagination_id: None,
-        };
-        let res: Result<ListQueryParams<Def>, TdError> = (&list_params).try_into();
-        let err = res.err().unwrap();
-        let err = err.domain_err::<ListError>();
-        assert!(matches!(err, ListError::UndefinedOrderBy(_)));
-    }
-
-    #[test]
-    fn test_pagination_previous_and_next_error() {
-        let list_params = ListParams {
-            len: 10usize,
-            filter: Default::default(),
-            order_by: None,
-            previous: Some("prev".to_string()),
-            next: Some("next".to_string()),
-            pagination_id: Some("id".to_string()),
-        };
-        let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
-        let err = res.err().unwrap();
-        let err = err.domain_err::<ListError>();
-        assert!(matches!(err, ListError::PreviousAndNext));
-    }
-
-    #[test]
-    fn test_pagination_previous_missing_id() {
-        let list_params = ListParams {
-            len: 10usize,
-            filter: Default::default(),
-            order_by: None,
-            previous: Some("prev".to_string()),
-            next: None,
-            pagination_id: None,
-        };
-        let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
-        let err = res.err().unwrap();
-        let err = err.domain_err::<ListError>();
-        assert!(matches!(err, ListError::MissingPaginationParams));
-    }
-
-    #[test]
-    fn test_pagination_next_missing_id() {
-        let list_params = ListParams {
-            len: 10usize,
-            filter: Default::default(),
-            order_by: None,
-            previous: None,
-            next: Some("next".to_string()),
-            pagination_id: None,
-        };
-        let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
-        let err = res.err().unwrap();
-        let err = err.domain_err::<ListError>();
-        assert!(matches!(err, ListError::MissingPaginationParams));
-    }
-
-    #[test]
-    fn test_pagination_id_without_cursor() {
-        let list_params = ListParams {
-            len: 10usize,
-            filter: Default::default(),
-            order_by: None,
-            previous: None,
-            next: None,
-            pagination_id: Some("id".to_string()),
-        };
-        let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
-        let err = res.err().unwrap();
-        let err = err.domain_err::<ListError>();
-        assert!(matches!(err, ListError::MissingPaginationParams));
-    }
-
-    #[test]
-    fn test_pagination_next_ok() {
-        let list_params = ListParams {
-            len: 10usize,
-            filter: Default::default(),
-            order_by: None,
-            previous: None,
-            next: Some("cursor_val".to_string()),
-            pagination_id: Some("id_val".to_string()),
-        };
-        let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
-        assert!(res.is_ok());
-        let qp = res.unwrap();
-        assert!(qp.pagination.is_some());
-    }
-
-    #[test]
-    fn test_pagination_previous_ok() {
-        let list_params = ListParams {
-            len: 10usize,
-            filter: Default::default(),
-            order_by: None,
-            previous: Some("cursor_val".to_string()),
-            next: None,
-            pagination_id: Some("id_val".to_string()),
-        };
-        let res: Result<ListQueryParams<TestDto>, TdError> = (&list_params).try_into();
-        assert!(res.is_ok());
-        let qp = res.unwrap();
-        assert!(qp.pagination.is_some());
-    }
-
-    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Ord, PartialOrd, Hash)]
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
     struct RunName(String);
+
+    #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+    struct RunEnded(String);
 
     #[ta_objects::Dao]
     #[dao(table = "rundao", ops(select, insert, delete))]
@@ -835,6 +128,7 @@ mod tests {
         #[dao(pk)]
         id: StringType,
         name: RunName,
+        ended: Option<RunEnded>,
     }
 
     #[ta_objects::Dto]
@@ -842,8 +136,10 @@ mod tests {
     struct RunDto {
         #[dto(list(pagination_by = "+", filter))]
         id: StringType,
-        #[dto(list(filter, order_by))]
+        #[dto(list(filter, filter_like, order_by))]
         name: RunName,
+        #[dto(list(filter))]
+        ended: Option<RunEnded>,
     }
 
     impl FromDao for RunDto {
@@ -853,327 +149,181 @@ mod tests {
             Ok(Self {
                 id: dao.id,
                 name: dao.name,
-            })
-        }
-    }
-
-    fn run_sql(list_params: &ListParams) -> String {
-        use sea_query::{PostgresQueryBuilder, Query};
-
-        let qp: ListQueryParams<RunDto> = list_params.try_into().unwrap();
-        qp.apply_to(
-            Query::select()
-                .column(<RunDao as Dao>::Iden::Id)
-                .from(<RunDao as Dao>::Iden::Table)
-                .to_owned(),
-        )
-        .to_string(PostgresQueryBuilder)
-    }
-
-    #[test]
-    fn test_cursor_sql_default_order_next() {
-        let list_params = ListParams {
-            len: 2usize,
-            filter: Default::default(),
-            order_by: None,
-            previous: None,
-            next: Some("i2".to_string()),
-            pagination_id: Some("i2".to_string()),
-        };
-        assert_eq!(
-            run_sql(&list_params),
-            r#"SELECT "id" FROM "rundao" WHERE "id" > 'i2' ORDER BY "id" ASC LIMIT 3"#
-        );
-    }
-
-    #[test]
-    fn test_cursor_sql_desc_order_next() {
-        // The id tiebreak follows the primary direction.
-        let list_params = ListParams {
-            len: 2usize,
-            filter: Default::default(),
-            order_by: Some("name-".to_string()),
-            previous: None,
-            next: Some("n2".to_string()),
-            pagination_id: Some("i2".to_string()),
-        };
-        assert_eq!(
-            run_sql(&list_params),
-            r#"SELECT "id" FROM "rundao" WHERE "name" < 'n2' OR ("name" = 'n2' AND "id" < 'i2') ORDER BY "name" DESC NULLS FIRST, "id" DESC LIMIT 3"#
-        );
-    }
-
-    #[test]
-    fn test_cursor_sql_desc_order_previous() {
-        // Previous inverts both columns.
-        let list_params = ListParams {
-            len: 2usize,
-            filter: Default::default(),
-            order_by: Some("name-".to_string()),
-            previous: Some("n2".to_string()),
-            next: None,
-            pagination_id: Some("i2".to_string()),
-        };
-        assert_eq!(
-            run_sql(&list_params),
-            r#"SELECT "id" FROM "rundao" WHERE "name" > 'n2' OR ("name" = 'n2' AND "id" > 'i2') ORDER BY "name" ASC NULLS LAST, "id" ASC LIMIT 3"#
-        );
-    }
-
-    #[ta_objects::Dao]
-    #[dao(table = "nullabledao", ops(select, insert, delete))]
-    struct NullableDao {
-        #[dao(pk)]
-        id: StringType,
-        ended: Option<StringType>,
-    }
-
-    #[ta_objects::Dto]
-    #[dto(list(on = NullableDao))]
-    struct NullableDto {
-        #[dto(list(pagination_by = "+", filter))]
-        id: StringType,
-        #[dto(list(filter, order_by))]
-        ended: Option<StringType>,
-    }
-
-    impl FromDao for NullableDto {
-        type Dao = NullableDao;
-
-        fn from_dao(dao: NullableDao) -> Result<Self, TdError> {
-            Ok(Self {
-                id: dao.id,
                 ended: dao.ended,
             })
         }
     }
 
-    fn nullable_sql(list_params: &ListParams) -> String {
-        use sea_query::{PostgresQueryBuilder, Query};
+    type Iden = <RunDao as Dao>::Iden;
 
-        let qp: ListQueryParams<NullableDto> = list_params.try_into().unwrap();
-        qp.apply_to(
-            Query::select()
-                .column(<NullableDao as Dao>::Iden::Id)
-                .from(<NullableDao as Dao>::Iden::Table)
-                .to_owned(),
-        )
-        .to_string(PostgresQueryBuilder)
+    fn parse(params: ListParams) -> Result<ListQueryParams<RunDto>, TdError> {
+        ListQueryParams::try_from(params)
+    }
+
+    fn filtered(filters: &[&str]) -> Result<ListQueryParams<RunDto>, TdError> {
+        parse(ListParams {
+            filter: filters.iter().map(|f| String::from(*f)).collect(),
+            ..ListParams::default()
+        })
+    }
+
+    fn err(result: Result<ListQueryParams<RunDto>, TdError>) -> TdError {
+        result.err().unwrap()
     }
 
     #[test]
-    fn test_empty_filter_value_on_nullable_column_rejected() {
-        let err = parse_condition::<NullableDto>("ended:eq:").unwrap_err();
-        let err = err.domain_err::<ListError>();
-        assert!(matches!(err, ListError::EmptyFilterValue(_)));
+    fn test_one_column_groups_its_tests() {
+        let params = filtered(&["name:eq:a", "id:eq:x", "name:lk:b*"]).unwrap();
+        let terms: Vec<_> = params
+            .columns
+            .0
+            .iter()
+            .map(|term| (term.column, term.tests.len()))
+            .collect();
+        assert_eq!(terms, [(Iden::Name, 2), (Iden::Id, 1)]);
+        assert!(matches!(
+            params.columns.0[0].tests[0],
+            ColumnTest::Compare(Comparison::Eq, _)
+        ));
+        assert!(matches!(params.columns.0[0].tests[1], ColumnTest::Like(_)));
     }
 
     #[test]
-    fn test_nullable_order_next_reaches_null_run() {
-        // A non-NULL forward cursor must still reach the NULL run at the tail.
-        let list_params = ListParams {
-            len: 2usize,
-            filter: Default::default(),
-            order_by: Some("ended".to_string()),
-            previous: None,
-            next: Some("e2".to_string()),
-            pagination_id: Some("i2".to_string()),
-        };
+    fn test_unknown_fields_name_what_the_list_accepts() {
+        assert!(matches!(
+            err(filtered(&["nope:eq:a"])).domain_err::<ListError>(),
+            ListError::UndefinedField(field, accepted) if field == "nope" && accepted == "id, name, ended"
+        ));
+        assert!(matches!(
+            err(filtered(&["id:lk:a"])).domain_err::<ListError>(),
+            ListError::UndefinedLikeFilter(_, accepted) if accepted == "name"
+        ));
+        assert!(matches!(
+            err(parse(ListParams {
+                order_by: Some("nope".to_string()),
+                ..ListParams::default()
+            })).domain_err::<ListError>(),
+            ListError::UndefinedOrderBy(_, accepted) if accepted == "id, name"
+        ));
+    }
+
+    #[test]
+    fn test_malformed_filters_are_rejected() {
+        assert!(matches!(
+            err(filtered(&["name:ff:a"])).domain_err::<ListError>(),
+            ListError::InvalidCondition(..)
+        ));
+        assert!(matches!(
+            err(filtered(&["ended:eq:"])).domain_err::<ListError>(),
+            ListError::EmptyFilterValue(_)
+        ));
+        assert!(filtered(&["name:btw:a"]).is_err());
+        assert!(filtered(&["name:btw:a::b::c"]).is_err());
+        assert!(filtered(&["name:is:maybe"]).is_err());
+        assert!(filtered(&["name:btw:a::b", "name:is:not_null", "name:lk:"]).is_ok());
+    }
+
+    /// The sort's columns and direction, and the cursor's direction.
+    fn sorted(params: ListParams) -> (Option<Iden>, Iden, SortDir, Option<Toward>) {
+        let sort = parse(params).unwrap().sort;
+        let toward = sort.toward();
+        match sort.keys {
+            SortKeys::Tiebreak { tiebreak, .. } => (None, tiebreak, sort.dir, toward),
+            SortKeys::By { by, tiebreak, .. } => (Some(by), tiebreak, sort.dir, toward),
+        }
+    }
+
+    fn ordered(order_by: &str) -> ListParams {
+        ListParams {
+            order_by: Some(order_by.to_string()),
+            ..ListParams::default()
+        }
+    }
+
+    #[test]
+    fn test_sort_defaults_to_the_pagination_column() {
         assert_eq!(
-            nullable_sql(&list_params),
-            r#"SELECT "id" FROM "nullabledao" WHERE "ended" > 'e2' OR ("ended" = 'e2' AND "id" > 'i2') OR "ended" IS NULL ORDER BY "ended" ASC NULLS LAST, "id" ASC LIMIT 3"#
+            sorted(ListParams::default()),
+            (None, Iden::Id, SortDir::Asc, None)
         );
     }
 
     #[test]
-    fn test_nullable_order_next_inside_null_run() {
-        // The `~` marker is the NULL cursor: walk the run by id alone.
-        let list_params = ListParams {
-            len: 2usize,
-            filter: Default::default(),
-            order_by: Some("ended".to_string()),
-            previous: None,
-            next: Some("~".to_string()),
-            pagination_id: Some("i2".to_string()),
-        };
+    fn test_sort_by_a_column_tiebreaks_in_its_direction() {
         assert_eq!(
-            nullable_sql(&list_params),
-            r#"SELECT "id" FROM "nullabledao" WHERE "ended" IS NULL AND "id" > 'i2' ORDER BY "ended" ASC NULLS LAST, "id" ASC LIMIT 3"#
+            sorted(ordered("name-")),
+            (Some(Iden::Name), Iden::Id, SortDir::Desc, None)
         );
     }
 
     #[test]
-    fn test_nullable_order_previous_from_null_run() {
-        // Backing out of the NULL run re-enters the non-NULL rows.
-        let list_params = ListParams {
-            len: 2usize,
-            filter: Default::default(),
-            order_by: Some("ended".to_string()),
-            previous: Some("~".to_string()),
-            next: None,
-            pagination_id: Some("i2".to_string()),
-        };
+    fn test_sort_by_the_pagination_column_is_the_tiebreak() {
         assert_eq!(
-            nullable_sql(&list_params),
-            r#"SELECT "id" FROM "nullabledao" WHERE ("ended" IS NULL AND "id" < 'i2') OR "ended" IS NOT NULL ORDER BY "ended" DESC NULLS FIRST, "id" DESC LIMIT 3"#
+            sorted(ordered("id-")),
+            (None, Iden::Id, SortDir::Desc, None)
         );
+        for bad in ["", "-", "name="] {
+            assert!(
+                matches!(
+                    err(parse(ordered(bad))).domain_err::<ListError>(),
+                    ListError::InvalidOrderBy(_)
+                ),
+                "{bad}"
+            );
+        }
+    }
+
+    fn paged(previous: Option<&str>, next: Option<&str>, id: Option<&str>) -> ListParams {
+        ListParams {
+            previous: previous.map(str::to_string),
+            next: next.map(str::to_string),
+            pagination_id: id.map(str::to_string),
+            ..ordered("name")
+        }
     }
 
     #[test]
-    fn test_nullable_order_desc_next_leaves_null_run() {
-        // Descending puts NULLs first; a non-NULL cursor never re-enters them.
-        let list_params = ListParams {
-            len: 2usize,
-            filter: Default::default(),
-            order_by: Some("ended-".to_string()),
-            previous: None,
-            next: Some("e2".to_string()),
-            pagination_id: Some("i2".to_string()),
+    fn test_a_cursor_holds_a_value_per_sort_key() {
+        let sort = parse(paged(None, Some("n"), Some("i"))).unwrap().sort;
+        assert!(matches!(
+            sort.keys,
+            SortKeys::By {
+                after: Some((Toward::Next, _, _)),
+                ..
+            }
+        ));
+        let sort = parse(paged(Some("n"), None, Some("i"))).unwrap().sort;
+        assert_eq!(sort.toward(), Some(Toward::Previous));
+        assert_eq!(sorted(paged(None, None, None)).3, None);
+        let unsorted = ListParams {
+            next: Some("i".to_string()),
+            pagination_id: Some("i".to_string()),
+            ..ListParams::default()
         };
-        assert_eq!(
-            nullable_sql(&list_params),
-            r#"SELECT "id" FROM "nullabledao" WHERE "ended" < 'e2' OR ("ended" = 'e2' AND "id" < 'i2') ORDER BY "ended" DESC NULLS FIRST, "id" DESC LIMIT 3"#
-        );
+        assert!(matches!(
+            parse(unsorted).unwrap().sort.keys,
+            SortKeys::Tiebreak {
+                after: Some((Toward::Next, _)),
+                ..
+            }
+        ));
     }
 
     #[test]
-    fn test_like_filter_generates_escape_clause() {
-        use sea_query::{PostgresQueryBuilder, Query};
-
-        let list_params = ListParams {
-            len: 10usize,
-            filter: vec!["a:lk:test*".to_string()],
-            order_by: None,
-            previous: None,
-            next: None,
-            pagination_id: None,
-        };
-        let qp: ListQueryParams<TestDto> = (&list_params).try_into().unwrap();
-
-        let sql = qp
-            .apply_to(
-                Query::select()
-                    .column(<TestDao as Dao>::Iden::A)
-                    .from(<TestDao as Dao>::Iden::Table)
-                    .to_owned(),
-            )
-            .to_string(PostgresQueryBuilder);
-
-        assert!(
-            sql.contains(r"ESCAPE E'\\'"),
-            "LIKE filter must include ESCAPE clause: {sql}"
-        );
-        assert!(
-            sql.contains("LIKE 'test%'"),
-            "* should be converted to SQL %: {sql}"
-        );
-    }
-
-    #[test]
-    fn test_like_filter_escapes_sql_wildcards() {
-        use sea_query::{PostgresQueryBuilder, Query};
-
-        // SQL % in user input should be escaped
-        let list_params = ListParams {
-            len: 10usize,
-            filter: vec!["a:lk:100%".to_string()],
-            order_by: None,
-            previous: None,
-            next: None,
-            pagination_id: None,
-        };
-        let qp: ListQueryParams<TestDto> = (&list_params).try_into().unwrap();
-
-        let sql = qp
-            .apply_to(
-                Query::select()
-                    .column(<TestDao as Dao>::Iden::A)
-                    .from(<TestDao as Dao>::Iden::Table)
-                    .to_owned(),
-            )
-            .to_string(PostgresQueryBuilder);
-
-        assert!(
-            sql.contains(r"LIKE E'100\\%'"),
-            "SQL % must be escaped in LIKE pattern: {sql}"
-        );
-        assert!(
-            sql.contains(r"ESCAPE E'\\'"),
-            "ESCAPE clause required for escaped wildcards: {sql}"
-        );
-    }
-
-    #[test]
-    fn test_like_filter_wildcard_and_escape_combined() {
-        use sea_query::{PostgresQueryBuilder, Query};
-
-        // Mix: * wildcard + escaped \* literal + SQL _ escaped
-        let list_params = ListParams {
-            len: 10usize,
-            filter: vec![r"a:lk:*foo\_bar\*".to_string()],
-            order_by: None,
-            previous: None,
-            next: None,
-            pagination_id: None,
-        };
-        let qp: ListQueryParams<TestDto> = (&list_params).try_into().unwrap();
-
-        let sql = qp
-            .apply_to(
-                Query::select()
-                    .column(<TestDao as Dao>::Iden::A)
-                    .from(<TestDao as Dao>::Iden::Table)
-                    .to_owned(),
-            )
-            .to_string(PostgresQueryBuilder);
-
-        // *     → %
-        // foo   → foo
-        // \_    → \_  (SQL _ always escaped)
-        // bar   → bar
-        // \*    → *   (escaped user wildcard → literal *)
-        assert!(
-            sql.contains(r"LIKE E'%foo\\_bar*'"),
-            "Combined wildcards and escapes must be correct: {sql}"
-        );
-    }
-
-    #[test]
-    fn test_convert_to_like_pattern() {
-        let test_cases = vec![
-            ("abc", "abc"),
-            ("\\abc", "abc"),
-            ("a\\bc", "abc"),
-            ("abc\\\\", "abc\\\\"),
-            ("*abc", "%abc"),
-            ("a*bc", "a%bc"),
-            ("abc*", "abc%"),
-            (".abc", "_abc"),
-            ("a.bc", "a_bc"),
-            ("abc.", "abc_"),
-            ("\\*abc", "*abc"),
-            ("a\\*bc", "a*bc"),
-            ("abc\\*", "abc*"),
-            ("\\.abc", ".abc"),
-            ("a\\.bc", "a.bc"),
-            ("abc\\.", "abc."),
-            ("%abc", "\\%abc"),
-            ("a%bc", "a\\%bc"),
-            ("abc%", "abc\\%"),
-            ("_abc", "\\_abc"),
-            ("a_bc", "a\\_bc"),
-            ("abc_", "abc\\_"),
-            ("\\\\", "\\\\"),
-            ("\\*", "*"),
-            ("\\%", "\\%"),
-            ("\\.", "."),
-            ("\\_", "\\_"),
-            ("_a%b*\\%c\\*d.e\\.\\_", "\\_a\\%b%\\%c*d_e.\\_"),
-        ];
-
-        for (input, expected) in test_cases {
-            let result = convert_to_like_pattern(input).unwrap();
-            assert_eq!(*result, expected);
+    fn test_cursor_needs_one_direction_and_an_id() {
+        assert!(matches!(
+            err(parse(paged(Some("p"), Some("n"), Some("i")))).domain_err::<ListError>(),
+            ListError::PreviousAndNext
+        ));
+        for params in [
+            paged(Some("p"), None, None),
+            paged(None, Some("n"), None),
+            paged(None, None, Some("i")),
+        ] {
+            assert!(matches!(
+                err(parse(params)).domain_err::<ListError>(),
+                ListError::MissingPaginationParams
+            ));
         }
     }
 }

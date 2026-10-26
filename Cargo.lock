@@ -9077,46 +9077,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_valid"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a812672d5d6c94c0fa540e62dc318728410c78f40d60ae6c07afc845616da5f6"
-dependencies = [
- "indexmap 2.14.2",
- "itertools 0.14.0",
- "num-traits",
- "regex",
- "serde",
- "serde_json",
- "serde_valid_derive",
- "serde_valid_literal",
- "thiserror 1.0.69",
- "unicode-segmentation",
-]
-
-[[package]]
-name = "serde_valid_derive"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "539cd22aaf48cb9a8932c8b7f5d54f51719b2f826564f9da1a9902ee411d753c"
-dependencies = [
- "itertools 0.14.0",
- "proc-macro2",
- "quote",
- "strsim 0.11.1",
- "syn 3.0.9",
-]
-
-[[package]]
-name = "serde_valid_literal"
-version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "433e602b939d2e8e8b47f30f919b27a984183974079de2262ca876c2162657c8"
-dependencies = [
- "regex",
-]
-
-[[package]]
 name = "serde_with"
 version = "3.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10440,7 +10400,6 @@ dependencies = [
  "sea-query",
  "serde",
  "serde_json",
- "serde_valid",
  "serde_yaml 0.9.34+deprecated",
  "sqlx",
  "strum 0.28.0",

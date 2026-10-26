@@ -2,7 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::list::list_executions_by_tdv;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -12,7 +11,6 @@ use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
 use td_objects::dxo::logical::{LogicalTableDataVersionDB, TableDataVersionParam};
-use td_objects::list::params::ListQueryParams;
 use td_queries::Queries;
 
 #[service_factory]
@@ -32,8 +30,10 @@ async fn execution_list_by_table_data_version(
         .require::<Project, ViewProject>(&mut trx, &ctx, &tdv.project_id)
         .await?;
 
-    let query_params = ListQueryParams::<Execution>::try_from(&list_params)?;
-    list_executions_by_tdv(trx.get(grant), &tdv_id, &list_params, &query_params).await
+    trx.get(grant)
+        .executions()
+        .list_by_table_data_version(&tdv_id, list_params)
+        .await
 }
 
 #[cfg(test)]

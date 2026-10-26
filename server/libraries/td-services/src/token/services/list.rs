@@ -10,8 +10,6 @@ use td_database::access::{GatedConnection, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::service_token::TokenRead;
-use td_objects::list::params::ListQueryParams;
-use td_objects::list::response::build_list_response;
 use td_queries::Queries;
 
 #[service_factory]
@@ -25,9 +23,7 @@ async fn list_service_tokens(
         .require::<User, SelfUser>(gated_conn, &ctx, &ctx.user_id)
         .await?;
     let conn = gated_conn.get(grant);
-    let query_params = ListQueryParams::<TokenRead>::try_from(&list_params)?;
-    let rows = conn.list(&ctx.user_id, &query_params).await?;
-    build_list_response(&list_params, &query_params, rows)
+    conn.list(&ctx.user_id, list_params).await
 }
 
 #[cfg(test)]

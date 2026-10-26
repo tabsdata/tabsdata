@@ -7,7 +7,7 @@
 
 use std::time::Instant;
 
-use ta_objects::{ListDto, Typed};
+use ta_objects::Typed;
 use td_database::connection::PgConnectionExt;
 use td_database::pool::TdPool;
 use td_error::TdError;
@@ -17,7 +17,6 @@ use td_objects::dxo::function::Function;
 use td_objects::dxo::logical::FunctionRun;
 use td_objects::dxo::table::Table;
 use td_objects::dxo::tag::TagFacetParams;
-use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::TagKey;
 
 use td_queries::{Queries, Unversioned, list_plan_sql};
@@ -29,9 +28,9 @@ use td_objects::dxo::topology::ProjectTopologyDB;
 #[td_test::test(db)]
 async fn load_default_list(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
-    let params = ListQueryParams::<CollectionRead>::try_from(&ListParams::default())?;
+    let params = ListParams::default();
     let t = Instant::now();
-    let rows = db.scd2().list((), &params).await?;
+    let rows = db.scd2().list::<CollectionRead>((), params).await?.data;
     record("default::list", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -40,9 +39,9 @@ async fn load_default_list(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_current_list(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
-    let params = ListQueryParams::<Table>::try_from(&ListParams::default())?;
+    let params = ListParams::default();
     let t = Instant::now();
-    let rows = db.scd2().list::<Table>((), &params).await?;
+    let rows = db.scd2().list::<Table>((), params).await?.data;
     record("latest::list", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -55,13 +54,14 @@ async fn load_find_at_list_full(db: TdPool) -> Result<(), TdError> {
         .scd2()
         .fetch_one::<ProjectTopologyDB>(&h.project_id)
         .await?;
-    let params = ListQueryParams::<Function>::try_from(&ListParams::default())?;
+    let params = ListParams::default();
     let t = Instant::now();
     let rows = db
         .scd2()
         .as_of(&version.interval.valid_from)
-        .list::<Function>((), &params)
-        .await?;
+        .list::<Function>((), params)
+        .await?
+        .data;
     record("as_of::list", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -70,9 +70,9 @@ async fn load_find_at_list_full(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_last_list(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
-    let params = ListQueryParams::<Table>::try_from(&ListParams::default())?;
+    let params = ListParams::default();
     let t = Instant::now();
-    let rows = db.scd2().last().list::<Table>((), &params).await?;
+    let rows = db.scd2().last().list::<Table>((), params).await?.data;
     record("last::list", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -81,9 +81,9 @@ async fn load_last_list(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_tagged_list(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
-    let team_a: ListQueryParams<Table> = team_a("table")?;
+    let team_a = team_a("table");
     let t = Instant::now();
-    let rows = db.scd2().list::<Table>((), &team_a).await?;
+    let rows = db.scd2().list::<Table>((), team_a).await?.data;
     record("tagged::list", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -92,9 +92,9 @@ async fn load_tagged_list(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_tagged_collections_list(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
-    let team_a: ListQueryParams<CollectionRead> = team_a("collection")?;
+    let team_a = team_a("collection");
     let t = Instant::now();
-    let rows = db.scd2().list::<CollectionRead>((), &team_a).await?;
+    let rows = db.scd2().list::<CollectionRead>((), team_a).await?.data;
     record(
         "latest::tagged::collections",
         profile,
@@ -127,11 +127,11 @@ async fn load_tag_values(db: TdPool) -> Result<(), TdError> {
     Ok(())
 }
 
-fn team_a<T: ListDto>(entity: &str) -> Result<ListQueryParams<T>, TdError> {
-    ListQueryParams::try_from(&ListParams {
+fn team_a(entity: &str) -> ListParams {
+    ListParams {
         filter: vec![format!("{entity}.team:eq:a")],
         ..ListParams::default()
-    })
+    }
 }
 
 /// Runs listed by their function's tags at three selectivities. The tags
@@ -145,16 +145,16 @@ async fn load_function_runs_by_function_tag(db: TdPool) -> Result<(), TdError> {
         ("tagged::runs::rare", "function.team:eq:nobody"),
         ("tagged::runs::untagged", "function.team:is:null"),
     ] {
-        let params = ListQueryParams::<FunctionRun>::try_from(&ListParams {
+        let params = ListParams {
             filter: vec![filter.to_string()],
             ..ListParams::default()
-        })?;
+        };
         let t = Instant::now();
-        let rows = db.list::<FunctionRun>((), &params).await?;
+        let rows = db.list::<FunctionRun>((), params.clone()).await?.data;
         record(case, profile, t, rows.len(), seeded);
         let mut conn = db.begin_ro().await.expect("read-only connection");
         let plan = conn
-            .explain(&list_plan_sql(&Unversioned, &params))
+            .explain(&list_plan_sql::<FunctionRun, _>(&Unversioned, params)?)
             .await
             .expect("explain")
             .join("\n");

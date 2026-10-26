@@ -4,12 +4,14 @@
 
 use crate::Serves;
 use crate::generic::grain::Unversioned;
-use crate::generic::tagged::TagFilter;
+use crate::primitives::listing::listing;
 use sea_query::{Expr, ExprTrait, Query, SelectStatement};
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
-use ta_objects::{Dao, FromDao, ListDto};
+use ta_objects::{Dao, FromDao};
 use td_database::sea_query::builder::SeaQueryExt;
+use td_error::TdError;
+use td_objects::dxo::crudl::{ListParams, ListResponse};
 use td_objects::dxo::execution::{Execution, ExecutionDBIden};
 use td_objects::dxo::logical::{LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
@@ -34,39 +36,36 @@ where
     pub async fn list_by_table_data_version(
         self,
         tdv_id: &LogicalTableDataVersionId,
-        params: &ListQueryParams<Execution>,
-    ) -> Result<Vec<Execution>, SqlError> {
-        self.list(params, list_by_tdv_query(tdv_id)).await
+        request: ListParams,
+    ) -> Result<ListResponse<Execution>, TdError> {
+        self.list(request, list_by_tdv_query(tdv_id)).await
     }
 
     /// Executions that ran `fv_id`, as a head version or as a patch.
     pub async fn list_by_function_version(
         self,
         fv_id: &FunctionVersionId,
-        params: &ListQueryParams<Execution>,
-    ) -> Result<Vec<Execution>, SqlError> {
-        self.list(params, list_by_fv_query(fv_id)).await
+        request: ListParams,
+    ) -> Result<ListResponse<Execution>, TdError> {
+        self.list(request, list_by_fv_query(fv_id)).await
     }
 
     async fn list(
         self,
-        params: &ListQueryParams<Execution>,
-        mut base: SelectStatement,
-    ) -> Result<Vec<Execution>, SqlError> {
-        <<Execution as ListDto>::Tags as TagFilter<DaoOf, Unversioned, E>>::restrict(
-            &Unversioned,
-            &params.tags,
-            &mut base,
-        );
-        let daos: Vec<DaoOf> = params
-            .apply_to(base)
+        request: ListParams,
+        base: SelectStatement,
+    ) -> Result<ListResponse<Execution>, TdError> {
+        let params = ListQueryParams::try_from(request)?;
+        let daos: Vec<DaoOf> = listing(&Unversioned, base, &params)
             .build_query_as()
             .fetch_all(self.executor)
             .await
             .map_err(SqlError::on_read::<DaoOf>)?;
-        daos.into_iter()
+        let rows = daos
+            .into_iter()
             .map(|dao| Execution::from_dao(dao).map_err(SqlError::DtoConversionError))
-            .collect()
+            .collect::<Result<_, _>>()?;
+        params.respond(rows)
     }
 }
 

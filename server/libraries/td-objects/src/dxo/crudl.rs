@@ -2,8 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::types::basic::{AccessTokenId, AtTime, ProjectId, TokenScope, UserId};
-use serde_valid::Validate;
+use crate::types::basic::{AccessTokenId, AtTime, PageLen, ProjectId, TokenScope, UserId};
 use std::fmt::Debug;
 
 /// How the requester was authenticated.
@@ -120,20 +119,12 @@ impl<N> ReadRequest<N> {
     }
 }
 
-const DEFAULT_PAGE_LEN: usize = 50;
-
-fn default_page_len() -> usize {
-    DEFAULT_PAGE_LEN
-}
-
 #[ta_objects::QueryParam]
-#[derive(Validate)]
+#[derive(Default)]
 pub struct ListParams {
-    /// The desired length for the result list (for now, default is 50).
-    #[validate(minimum = 0)]
-    #[validate(maximum = 1000)]
-    #[serde(default = "default_page_len")]
-    pub len: usize,
+    /// The page length, up to 1000; 50 by default.
+    #[serde(default)]
+    pub len: PageLen,
     /// `<field>:<op>:<value>` on the fields marked `filter`, or
     /// `<entity>.<key>:<op>:<value>` on the tags of the entities whose id
     /// fields are marked `tags`: current ones, or as of the instant of an as-of
@@ -149,19 +140,6 @@ pub struct ListParams {
     /// The natural ID of the entity used in pagination.
     #[serde(default)]
     pub pagination_id: Option<String>,
-}
-
-impl Default for ListParams {
-    fn default() -> Self {
-        ListParams {
-            len: DEFAULT_PAGE_LEN,
-            filter: Vec::new(),
-            order_by: None,
-            previous: None,
-            next: None,
-            pagination_id: None,
-        }
-    }
 }
 
 /// A request paired with the project it targets — what a project-scoped

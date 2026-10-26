@@ -16,8 +16,6 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::logical::TableDataVersion;
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::table::TableParam;
-use td_objects::list::params::ListQueryParams;
-use td_objects::list::response::build_list_response;
 use td_queries::Queries;
 
 #[service_factory]
@@ -43,13 +41,10 @@ async fn table_list_data_versions(
         .fetch_one(and!(&collection_id, &table_id_name))
         .await?;
 
-    let query_params = ListQueryParams::<TableDataVersion>::try_from(&list_params)?;
-    let rows = conn
-        .timeline()
+    conn.timeline()
         .until(&at)
-        .list(&table.table_id, &query_params)
-        .await?;
-    build_list_response(&list_params, &query_params, rows)
+        .list(&table.table_id, list_params)
+        .await
 }
 
 #[cfg(test)]

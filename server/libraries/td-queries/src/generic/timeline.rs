@@ -43,11 +43,13 @@ impl<E> Reader<E, AllVersions> {
 mod tests {
     use super::*;
     use crate::generic::grain::select_in;
+    use crate::primitives::listing::listing;
     use sea_query::PostgresQueryBuilder;
     use ta_objects::{Dao, Dto, FromDao, Typed, TypedOpenApi, TypedSerde, TypedSqlx};
     use td_error::TdError;
     use td_objects::dxo::crudl::ListParams;
     use td_objects::list::params::ListQueryParams;
+    use td_objects::types::basic::PageLen;
 
     #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
     struct TestId(String);
@@ -90,25 +92,22 @@ mod tests {
         }
     }
 
-    /// The listing base carries no ordering of its own: `apply_to` only
+    /// The listing base carries no ordering of its own: `listing` only
     /// appends, so a DAO default order left in front would outrank the
     /// keyset predicate's column and break paging.
     #[test]
     fn test_list_base_orders_by_the_pagination_column() {
         let partition = TestPartition::try_from("p1").unwrap();
-        let params: ListQueryParams<TestVersionDto> = (&ListParams {
-            len: 2,
-            filter: Default::default(),
-            order_by: None,
-            previous: None,
+        let params: ListQueryParams<TestVersionDto> = (ListParams {
+            len: PageLen::try_from(2).unwrap(),
             next: Some("i2".to_string()),
             pagination_id: Some("i2".to_string()),
+            ..ListParams::default()
         })
-            .try_into()
-            .unwrap();
-        let sql = params
-            .apply_to(select_in::<TestVersionDao, _>(&AllVersions, &partition))
-            .to_string(PostgresQueryBuilder);
+        .try_into()
+        .unwrap();
+        let base = select_in::<TestVersionDao, _>(&AllVersions, &partition);
+        let sql = listing(&AllVersions, base, &params).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
             r#"SELECT "id", "partition_id", "defined_on" FROM "test_versions_table" WHERE "partition_id" = 'p1' AND "id" > 'i2' ORDER BY "id" ASC LIMIT 3"#

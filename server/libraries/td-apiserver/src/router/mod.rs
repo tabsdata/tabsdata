@@ -234,6 +234,23 @@ mod tests {
         );
     }
 
+    #[td_test::test(db)]
+    async fn test_a_page_longer_than_the_cap_is_a_bad_request(db: TdPool) {
+        let states = RouterStates::default()
+            .with(Services::with_defaults(db))
+            .with(ExtendedServices::default());
+        let (router, _) = flat(SecurityMode::Rbac, &states);
+        for (len, status) in [
+            ("0", StatusCode::OK),
+            ("1000", StatusCode::OK),
+            ("1001", StatusCode::BAD_REQUEST),
+            ("-1", StatusCode::BAD_REQUEST),
+        ] {
+            let uri = format!("{LIST_ROLE_PATH}?len={len}");
+            assert_eq!(get_status(router.clone(), &uri).await, status, "{uri}");
+        }
+    }
+
     /// Route names double as OpenAPI operation ids; a duplicate breaks
     /// generated clients. Rename the offending handler fn.
     #[test]

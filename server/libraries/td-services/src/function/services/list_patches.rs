@@ -14,8 +14,6 @@ use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{AtTimeParam, ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionPatchRecord};
-use td_objects::list::params::ListQueryParams;
-use td_objects::list::response::build_list_response;
 use td_queries::Queries;
 
 #[service_factory]
@@ -41,13 +39,10 @@ async fn list_function_patches(
         .fetch_one(and!(&collection_id, &function_id_name))
         .await?;
 
-    let query_params = ListQueryParams::<FunctionPatchRecord>::try_from(&list_params)?;
-    let rows = conn
-        .timeline()
+    conn.timeline()
         .until(&at)
-        .list(&function.function_id, &query_params)
-        .await?;
-    build_list_response(&list_params, &query_params, rows)
+        .list(&function.function_id, list_params)
+        .await
 }
 
 #[cfg(test)]

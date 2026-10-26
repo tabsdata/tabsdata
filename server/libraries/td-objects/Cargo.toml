@@ -82,7 +82,6 @@ sea-query = { workspace = true, features = ["sqlx-utils"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
-serde_valid = { workspace = true }
 sqlx = { workspace = true, features = ["json"] }
 strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }

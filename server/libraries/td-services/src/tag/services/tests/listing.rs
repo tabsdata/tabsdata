@@ -15,7 +15,6 @@ use td_objects::dxo::crudl::ListParams;
 use td_objects::dxo::function::Function;
 use td_objects::dxo::group::GroupParam;
 use td_objects::dxo::tag::TagDB;
-use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{
     CollectionIdName, CollectionName, Description, GroupIdName, GroupName, TagEntityId,
     TagEntityType, TagKey, UserId,
@@ -200,14 +199,13 @@ async fn test_an_as_of_listing_reads_the_tags_of_its_instant(db: TdPool) -> Resu
     tag_team("b").await?;
 
     let as_of = async |filter: &str| -> Result<Vec<String>, TdError> {
-        let params = ListQueryParams::<Function>::try_from(&list(&[filter]))?;
-        let rows = db
+        let page = db
             .scoped(f.project)
             .scd2()
             .as_of(&then)
-            .list::<Function>((), &params)
+            .list::<Function>((), list(&[filter]))
             .await?;
-        Ok(rows.into_iter().map(|f| f.name.to_string()).collect())
+        Ok(page.data.into_iter().map(|f| f.name.to_string()).collect())
     };
     assert_eq!(as_of("function.team:eq:a").await?, ["owner"]);
     assert!(as_of("function.team:eq:b").await?.is_empty());

@@ -13,7 +13,6 @@ use td_error::TdError;
 use td_objects::dxo::crudl::ListParams;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::{Table, TableDB};
-use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::AtTime;
 use td_queries::Queries;
 
@@ -110,9 +109,9 @@ async fn load_history_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn load_history_list(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
-    let params = ListQueryParams::<Table>::try_from(&ListParams::default())?;
+    let params = ListParams::default();
     let t = Instant::now();
-    let rows = db.timeline().list::<Table>((), &params).await?;
+    let rows = db.timeline().list::<Table>((), params).await?.data;
     record("history::list", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -122,9 +121,14 @@ async fn load_history_list(db: TdPool) -> Result<(), TdError> {
 async fn load_history_list_until(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let now = AtTime::now();
-    let params = ListQueryParams::<Table>::try_from(&ListParams::default())?;
+    let params = ListParams::default();
     let t = Instant::now();
-    let rows = db.timeline().until(&now).list::<Table>((), &params).await?;
+    let rows = db
+        .timeline()
+        .until(&now)
+        .list::<Table>((), params)
+        .await?
+        .data;
     record("history::list_until", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())

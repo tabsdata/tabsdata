@@ -11,6 +11,7 @@ mod dxo;
 mod entity_tags;
 pub mod errors;
 mod list_cursor;
+mod list_dto;
 mod path_params;
 mod relation;
 mod sea_value;
@@ -29,6 +30,7 @@ pub use {
     dxo::*,
     entity_tags::{NoTags, SomeTags, Taggable},
     list_cursor::ListFilterStr,
+    list_dto::{ListDto, ListField, ListRole, ListTags, SortDir},
     path_params::{PathParams, Route},
     relation::{
         DeleteDao, InsertableFrom, ProjectScoped, ReachableFrom, TableDao, relations_match,

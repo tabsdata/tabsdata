@@ -253,159 +253,77 @@ fn gen_list_query(
         metas.push(meta);
     }
 
-    let pag_field = pagination_field.ok_or_else(|| {
-        syn::Error::new_spanned(
+    if pagination_field.is_none() {
+        return Err(syn::Error::new_spanned(
             ident,
             "#[dto(list(on = ...))] requires exactly one pagination_by field \
              naming a column unique within the listing",
-        )
-    })?;
+        ));
+    }
 
-    let dao_col_ty = |f: &FieldMeta| -> proc_macro2::TokenStream {
-        match &f.dao_col_ty {
-            Some(path) => quote! { #path },
-            None => {
-                let ty = f.ty;
-                quote! { #ty }
-            }
-        }
-    };
-    let dao_col_expr = |f: &FieldMeta| -> proc_macro2::TokenStream {
-        let ty = dao_col_ty(f);
-        quote! { <#dao_ident as ta_objects::HasColumn<#ty>>::COL }
-    };
-
-    let filter_arms = metas.iter().filter(|m| m.is_filter).map(|m| {
-        let name = m.ident.to_string();
-        let col = dao_col_expr(m);
-        quote! { #name => Some(#col), }
-    });
-
-    let filter_like_arms = metas.iter().filter(|m| m.is_filter_like).map(|m| {
-        let name = m.ident.to_string();
-        let col = dao_col_expr(m);
-        quote! { #name => Some(#col), }
-    });
-
-    let order_by_arms = metas.iter().filter(|m| m.is_order_by).map(|m| {
-        let name = m.ident.to_string();
-        let col = dao_col_expr(m);
-        quote! { #name => Some(#col), }
-    });
-
-    let tag_metas: Vec<_> = metas.iter().filter(|m| m.is_tags).collect();
-    let tags_marker = match tag_metas.is_empty() {
-        true => quote! { ta_objects::NoTags },
-        false => quote! { ta_objects::SomeTags },
-    };
-    let tag_col_arms = tag_metas.iter().map(|m| {
-        let ty = m.ty;
-        let col = dao_col_expr(m);
-        quote! {
-            if entity == <#ty as ta_objects::Taggable>::ENTITY {
-                return Some((
-                    #col,
-                    ta_objects::SeaValue::as_sea_expr(&<#ty as ta_objects::Taggable>::ENTITY_TYPE),
-                ));
-            }
-        }
-    });
-    let tag_entities = tag_metas.iter().map(|m| {
-        let ty = m.ty;
-        quote! { <#ty as ta_objects::Taggable>::ENTITY }
-    });
-
-    let pag_meta = metas.iter().find(|m| m.is_pagination).unwrap();
-    let pag_col = dao_col_expr(pag_meta);
-    let pag_dir = match pag_meta.pagination_dir {
-        PaginationDirection::Desc => quote! { sea_query::Order::Desc },
-        PaginationDirection::Asc => quote! { sea_query::Order::Asc },
-    };
-
-    let filterable_fields: Vec<_> = metas
+    let listed: Vec<_> = metas
         .iter()
-        .filter(|m| m.is_filter || m.is_order_by)
+        .filter(|m| m.is_filter || m.is_filter_like || m.is_order_by || m.is_tags)
         .collect();
-    let parse_arms = filterable_fields.iter().map(|m| {
-        let col = dao_col_expr(m);
-        let ty = m.ty;
-        quote! {
-            if *field == #col {
-                return <#ty as ta_objects::ListFilterStr>::parse_filter_str(value)
-                    .map(|v: #ty| Box::new(v) as Box<dyn ta_objects::SeaValue>)
-                    .map(Some);
-            }
-        }
-    });
-
-    let order_by_value_arms = metas.iter().filter(|m| m.is_order_by).map(|m| {
-        let col = dao_col_expr(m);
+    let fields = listed.iter().map(|m| {
+        let name = m.ident.to_string();
         let f_ident = m.ident;
+        let ty = m.ty;
+        let col_ty = match &m.dao_col_ty {
+            Some(path) => quote! { #path },
+            None => quote! { #ty },
+        };
+        let roles = [
+            (m.is_filter, quote! { Filter }),
+            (m.is_filter_like, quote! { Like }),
+            (m.is_order_by, quote! { Order }),
+        ]
+        .into_iter()
+        .filter(|(marked, _)| *marked)
+        .map(|(_, role)| quote! { ta_objects::ListRole::#role });
+        let tags = match m.is_tags {
+            true => quote! {
+                Some(ta_objects::ListTags {
+                    entity: <#ty as ta_objects::Taggable>::ENTITY,
+                    entity_type: || {
+                        ta_objects::SeaValue::as_sea_expr(&<#ty as ta_objects::Taggable>::ENTITY_TYPE)
+                    },
+                })
+            },
+            false => quote! { None },
+        };
         quote! {
-            if *field == #col {
-                return Some(self.#f_ident.as_string());
-            }
+            ta_objects::ListField {
+                name: #name,
+                column: <#dao_ident as ta_objects::HasColumn<#col_ty>>::COL,
+                roles: &[#(#roles),*],
+                parse: |value| {
+                    <#ty as ta_objects::ListFilterStr>::parse_filter_str(value)
+                        .map(|value| Box::new(value) as Box<dyn ta_objects::SeaValue>)
+                },
+                value: |dto: &Self| ta_objects::ListFilterStr::as_string(&dto.#f_ident),
+                tags: #tags,
+            },
         }
     });
+    let pag_index = listed.iter().position(|m| m.is_pagination).unwrap();
+    let pag_dir = match listed[pag_index].pagination_dir {
+        PaginationDirection::Desc => quote! { ta_objects::SortDir::Desc },
+        PaginationDirection::Asc => quote! { ta_objects::SortDir::Asc },
+    };
+    let tags_marker = match listed.iter().any(|m| m.is_tags) {
+        true => quote! { ta_objects::SomeTags },
+        false => quote! { ta_objects::NoTags },
+    };
 
     Ok(quote! {
-
         impl #impl_generics ta_objects::ListDto for #ident #ty_generics #where_clause {
-
-            fn filter_col(field: &str) -> Option<<Self::Dao as ta_objects::Dao>::Iden> {
-                match field {
-                    #(#filter_arms)*
-                    _ => None,
-                }
-            }
-
-            fn filter_like_col(field: &str) -> Option<<Self::Dao as ta_objects::Dao>::Iden> {
-                match field {
-                    #(#filter_like_arms)*
-                    _ => None,
-                }
-            }
-
-            fn order_by_col(field: &str) -> Option<<Self::Dao as ta_objects::Dao>::Iden> {
-                match field {
-                    #(#order_by_arms)*
-                    _ => None,
-                }
-            }
-
             type Tags = #tags_marker;
 
-            fn tag_col(entity: &str) -> Option<(<Self::Dao as ta_objects::Dao>::Iden, sea_query::Expr)> {
-                #(#tag_col_arms)*
-                None
-            }
+            const LIST_FIELDS: &'static [ta_objects::ListField<Self>] = &[#(#fields)*];
 
-            fn tag_entities() -> &'static [&'static str] {
-                &[#(#tag_entities),*]
-            }
-
-            fn pagination_col() -> (<Self::Dao as ta_objects::Dao>::Iden, sea_query::Order) {
-                (#pag_col, #pag_dir)
-            }
-
-            fn parse_filter_value(
-                field: &<Self::Dao as ta_objects::Dao>::Iden,
-                value: &str,
-            ) -> Result<Option<Box<dyn ta_objects::SeaValue>>, td_error::TdError> {
-                #(#parse_arms)*
-                Ok(None)
-            }
-
-            fn pagination_value(&self) -> String {
-                self.#pag_field.to_string()
-            }
-
-            fn order_by_value(&self, field: &<Self::Dao as ta_objects::Dao>::Iden) -> Option<String> {
-                use ta_objects::ListFilterStr;
-                #(#order_by_value_arms)*
-                None
-            }
-
+            const PAGINATION_BY: (&'static ta_objects::ListField<Self>, ta_objects::SortDir) =
+                (&Self::LIST_FIELDS[#pag_index], #pag_dir);
         }
     })
 }

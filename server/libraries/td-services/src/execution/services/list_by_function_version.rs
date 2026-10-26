@@ -2,7 +2,6 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::execution::list::list_executions_by_fv;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -13,7 +12,6 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
 use td_objects::dxo::function::FunctionVersionDBWithNames;
 use td_objects::dxo::function::FunctionVersionParam;
-use td_objects::list::params::ListQueryParams;
 use td_queries::Queries;
 
 #[service_factory]
@@ -38,14 +36,10 @@ async fn execution_list_by_function_version(
         .require::<Project, ViewProject>(&mut trx, &ctx, &project)
         .await?;
 
-    let query_params = ListQueryParams::<Execution>::try_from(&list_params)?;
-    list_executions_by_fv(
-        trx.get(grant),
-        &function_version_id,
-        &list_params,
-        &query_params,
-    )
-    .await
+    trx.get(grant)
+        .executions()
+        .list_by_function_version(&function_version_id, list_params)
+        .await
 }
 
 #[cfg(test)]

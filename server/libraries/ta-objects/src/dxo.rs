@@ -13,7 +13,7 @@ use td_database::access::LockInstant;
     note = "declare it with `#[ta_objects::Dao]` and a `table = \"...\"` / `view = \"...\"`"
 )]
 pub trait Dao: Send + Sync {
-    type Iden: sea_query::Iden + Copy + Sync + std::fmt::Debug + 'static;
+    type Iden: sea_query::Iden + Copy + Eq + Send + Sync + std::fmt::Debug + 'static;
 
     type Db: td_database::domain::DbDomain;
 
@@ -207,40 +207,4 @@ pub trait FromDao: Sized {
     type Dao: SelectDao;
 
     fn from_dao(dao: Self::Dao) -> Result<Self, td_error::TdError>;
-}
-
-/// List and filter endpoint support. `None` from a `*_col` means the field is
-/// not usable that way in this role.
-#[diagnostic::on_unimplemented(
-    message = "`{Self}` cannot back a list endpoint",
-    note = "declare `#[dto(list(on = SomeDao))]` on the DTO"
-)]
-pub trait ListDto: Dto + Send + FromDao {
-    /// Resolves an `eq`/`ne`/`gt`/`ge`/`lt`/`le`/`btw`/`is` field to a column.
-    fn filter_col(field: &str) -> Option<<Self::Dao as Dao>::Iden>;
-
-    fn filter_like_col(field: &str) -> Option<<Self::Dao as Dao>::Iden>;
-
-    fn order_by_col(field: &str) -> Option<<Self::Dao as Dao>::Iden>;
-
-    /// [`SomeTags`](crate::SomeTags) when a field is marked `tags`, else
-    /// [`NoTags`](crate::NoTags).
-    type Tags;
-
-    /// Resolves the entity of an `<entity>.<key>` tag filter to the column
-    /// holding its id and the entity type its tag rows store.
-    fn tag_col(entity: &str) -> Option<(<Self::Dao as Dao>::Iden, sea_query::Expr)>;
-
-    fn tag_entities() -> &'static [&'static str];
-
-    /// The natural pagination column and its default direction.
-    fn pagination_col() -> (<Self::Dao as Dao>::Iden, sea_query::Order);
-
-    fn parse_filter_value(
-        field: &<Self::Dao as Dao>::Iden,
-        value: &str,
-    ) -> Result<Option<Box<dyn SeaValue>>, td_error::TdError>;
-
-    fn pagination_value(&self) -> String;
-    fn order_by_value(&self, field: &<Self::Dao as Dao>::Iden) -> Option<String>;
 }

@@ -12,6 +12,11 @@ pub struct DependencyPos(i32);
 #[typed(min = 1, default = 1)]
 pub struct WindowSpan(i32);
 
+/// The rows a listing page holds.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(min = 0, max = 1000, default = 50)]
+pub struct PageLen(i32);
+
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct StatusCount(i32);
 
