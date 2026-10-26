@@ -3441,7 +3441,7 @@ class Worker:
         transaction_id (str): The ID of the transaction of the worker.
         execution (str): The execution of the worker.
         execution_id (str): The ID of the execution of the worker.
-        status (str): The status of the associated data version.
+        status (str): The status of the worker.
         **kwargs: Additional keyword arguments.
     """
 
@@ -3578,7 +3578,7 @@ class Worker:
     @property
     def status(self) -> str:
         if self._status is None:
-            self.status = self._data.get("function_run_status")
+            self.status = self._data.get("status")
         return self._status
 
     @status.setter
