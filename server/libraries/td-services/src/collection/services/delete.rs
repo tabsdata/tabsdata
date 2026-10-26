@@ -18,6 +18,7 @@ use crate::function::freeze::freeze_functions;
 use crate::function::on_top::ensure_freezes_on_top;
 use crate::function::workers::stop_triggers;
 use crate::tag::close_tags_of;
+use crate::tag::user::close_user_tags_of;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -119,6 +120,13 @@ async fn delete_collection(
         conn.scd2()
             .close::<CollectionDB>(&collection.collection_id, at)
             .await?;
+        close_user_tags_of(
+            conn,
+            TagEntityType::Collection,
+            &[TagEntityId::try_from(collection.collection_id)?],
+            at,
+        )
+        .await?;
         update_deleted_workers(conn, &collection.collection_id, at).await?;
         trx.commit().await?;
         Ok(collection.connection_id)

@@ -4,6 +4,7 @@
 
 pub mod parent;
 pub mod services;
+pub mod user;
 
 use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};

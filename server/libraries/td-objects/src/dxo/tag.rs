@@ -5,13 +5,13 @@
 //! Topology tags open and close at topology instants; system and user tags at
 //! the lock instant, and planning never reads them.
 
-use crate::FromDao;
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
     ProjectId, TagEntityId, TagEntityType, TagId, TagKey, TagKind, TagValue, TagVersionId,
     TopologyTagKey, UserId, UserTagKey,
 };
+use ta_objects::FromDao;
 use ta_objects::sql_condition::SqlCondition;
 use td_error::TdError;
 
@@ -185,4 +185,15 @@ impl FromDao for Tag {
             value: dao.value,
         })
     }
+}
+
+#[ta_objects::Dto]
+pub struct TagSet {
+    pub key: UserTagKey,
+    pub value: TagValue,
+}
+
+#[ta_objects::UrlParam]
+pub struct TagParam {
+    pub key: UserTagKey,
 }
