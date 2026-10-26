@@ -49,7 +49,7 @@ mod tests {
     async fn test_synchrotron(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -79,30 +79,34 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function_version).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function_version)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transactions = [
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
@@ -111,7 +115,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let response = service.synchrotron(request).await?.data;
         assert_eq!(response.len, transactions.len());

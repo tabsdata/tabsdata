@@ -57,20 +57,23 @@ pub(crate) async fn build_streamer_input<S: DbScope, M: AccessMode>(
         .build()?;
     let (function_stage, _) = build_external_location(storage, &path)?;
 
-    let project = worker.project.ok_or_else(|| {
-        api_error!(
-            ApiError::InternalError,
-            "stage trigger worker [{}] references unknown project {}",
-            worker.base.base.id,
-            worker.base.project_id
-        )
-    })?;
+    let project = worker
+        .project
+        .ok_or_else(|| {
+            api_error!(
+                ApiError::InternalError,
+                "stage trigger worker [{}] references unknown project {}",
+                worker.base.base.id,
+                worker.base.project_id
+            )
+        })?
+        .name()?;
 
     let info = StreamerInfo {
         project_id: worker.base.project_id,
         project,
         collection_id: worker.base.base.collection_id,
-        collection: worker.collection,
+        collection: worker.collection.name()?,
         function_id: worker.function_id,
         function: worker.function,
         function_version_id: worker.base.base.function_version_id,

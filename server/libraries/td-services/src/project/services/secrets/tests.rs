@@ -63,7 +63,7 @@ async fn create(
 
 async fn keys(services: &Services, project: &ProjectRead) -> Result<Vec<String>, TdError> {
     let read = services
-        .read_project_secrets(admin_ctx().read(()).in_project(project.id))
+        .read_project_secrets(admin_ctx().read(()).in_project(project.project_id))
         .await?
         .data;
     Ok(read
@@ -85,7 +85,7 @@ async fn values(
     let hydrated = services
         .bridge
         .project_secrets()
-        .fetch_hydrated(&project.id)
+        .fetch_hydrated(&project.project_id)
         .await?;
     Ok(hydrated
         .iter()

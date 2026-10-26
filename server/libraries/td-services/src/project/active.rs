@@ -7,7 +7,7 @@
 use td_database::access::{DbPool, DbScope, Grant, RO};
 use td_database::domain::{Apiserver, ScopedBy, Supports};
 use td_error::TdError;
-use td_objects::dxo::project::ActiveProjectDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::types::basic::ProjectId;
 use td_queries::Queries;
 
@@ -19,6 +19,6 @@ where
     Apiserver: ScopedBy<S> + Supports<RO>,
 {
     let mut conn = db.read().await?;
-    let projects: Vec<ActiveProjectDB> = conn.get(grant).fetch_all(&()).await?;
-    Ok(projects.into_iter().map(|p| p.id).collect())
+    let projects: Vec<ProjectDB> = conn.get(grant).scd2().fetch_all(&()).await?;
+    Ok(projects.into_iter().map(|p| p.base.project_id).collect())
 }

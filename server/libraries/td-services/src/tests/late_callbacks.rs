@@ -96,22 +96,27 @@ async fn test_trailing_failed_after_commit_leaves_attempt_and_worker_done(
             }],
         }],
     }];
-    test_status_update(db.clone(), p.id, &test_executions, |_, _, _, f, w| {
-        let db = db.clone();
-        let test_function = &test_executions[0].transactions[0].functions[0];
-        let function_run = f[test_function].base.id.clone();
-        let worker = w[test_function].base.id.clone();
-        async move {
-            post_callback(&db, &function_run, &worker, WorkerCallbackStatus::Done).await?;
-            post_callback(&db, &function_run, &worker, WorkerCallbackStatus::Failed).await?;
+    test_status_update(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, _, _, f, w| {
+            let db = db.clone();
+            let test_function = &test_executions[0].transactions[0].functions[0];
+            let function_run = f[test_function].base.id.clone();
+            let worker = w[test_function].base.id.clone();
+            async move {
+                post_callback(&db, &function_run, &worker, WorkerCallbackStatus::Done).await?;
+                post_callback(&db, &function_run, &worker, WorkerCallbackStatus::Failed).await?;
 
-            let attempt: PhysicalFunctionRunDB = db.timeline().fetch_one(&function_run).await?;
-            assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Done);
-            let worker: WorkerDB = db.fetch_one(&worker).await?;
-            assert_eq!(worker.base.status, WorkerStatus::Done);
-            Ok(())
-        }
-    })
+                let attempt: PhysicalFunctionRunDB = db.timeline().fetch_one(&function_run).await?;
+                assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Done);
+                let worker: WorkerDB = db.fetch_one(&worker).await?;
+                assert_eq!(worker.base.status, WorkerStatus::Done);
+                Ok(())
+            }
+        },
+    )
     .await
 }
 
@@ -124,11 +129,11 @@ async fn test_late_callbacks_of_an_abandoned_attempt_do_not_revive_it(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_late")?, &UserId::admin())
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .function(&collection, &register("f_late", None))
         .await?;
@@ -150,7 +155,7 @@ async fn test_late_callbacks_of_an_abandoned_attempt_do_not_revive_it(
                 external_uid: None,
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let execution = dispatch_services(&db).execute_function(request).await?.data;
     dispatch_services(&db).request(()).await?;
 

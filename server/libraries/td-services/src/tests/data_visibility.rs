@@ -110,74 +110,80 @@ async fn test_replay_in_flight_keeps_committed_data_visible(db: TdPool) -> Resul
             }],
         }],
     }];
-    test_status_update(db.clone(), p.id, &test_executions, |_, _, _, f, w| {
-        let db = db.clone();
-        let test_function = &test_executions[0].transactions[0].functions[0];
-        let attempt = f[test_function].clone();
-        let worker = w[test_function].base.id.clone();
-        async move {
-            post_callback(&db, &attempt.base.id, &worker, done_with_data("t_0")?).await?;
+    test_status_update(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, _, _, f, w| {
+            let db = db.clone();
+            let test_function = &test_executions[0].transactions[0].functions[0];
+            let attempt = f[test_function].clone();
+            let worker = w[test_function].base.id.clone();
+            async move {
+                post_callback(&db, &attempt.base.id, &worker, done_with_data("t_0")?).await?;
 
-            let written: Vec<PhysicalTableDataVersionDBWithNames> =
-                db.timeline().fetch_all(&attempt.base.id).await?;
-            let table_id = written
-                .iter()
-                .find(|v| v.base.base.base.name.as_str() == "t_0")
-                .expect("the attempt wrote t_0")
-                .base
-                .base
-                .base
-                .table_id;
-            let committed = db
-                .table_data_versions()
-                .committed_data_at(&table_id, &AtTime::now())
-                .await?
-                .expect("the committed run's data is visible")
-                .base
-                .base
-                .base
-                .id;
-            let visible = || async {
-                Ok::<_, TdError>(
-                    db.table_data_versions()
-                        .committed_data_at(&table_id, &AtTime::now())
-                        .await?
-                        .map(|v| v.base.base.base.id),
-                )
-            };
+                let written: Vec<PhysicalTableDataVersionDBWithNames> =
+                    db.timeline().fetch_all(&attempt.base.id).await?;
+                let table_id = written
+                    .iter()
+                    .find(|v| v.base.base.base.name.as_str() == "t_0")
+                    .expect("the attempt wrote t_0")
+                    .base
+                    .base
+                    .base
+                    .table_id;
+                let committed = db
+                    .table_data_versions()
+                    .committed_data_at(&table_id, &AtTime::now())
+                    .await?
+                    .expect("the committed run's data is visible")
+                    .base
+                    .base
+                    .base
+                    .id;
+                let visible = || async {
+                    Ok::<_, TdError>(
+                        db.table_data_versions()
+                            .committed_data_at(&table_id, &AtTime::now())
+                            .await?
+                            .map(|v| v.base.base.base.id),
+                    )
+                };
 
-            let replay = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-                LogicalFunctionRunParam {
-                    logical_function_run: attempt.base.logical_function_run_id.clone(),
-                },
-                (),
-            );
-            let replayed = Services::with_defaults(db.clone())
-                .replay_logical_function_run(replay)
-                .await?
-                .data
-                .new_function_run_id;
-            assert_eq!(
-                visible().await?,
-                Some(committed.clone()),
-                "an in-flight replay must not hide the committed data"
-            );
+                let replay = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(
+                        LogicalFunctionRunParam {
+                            logical_function_run: attempt.base.logical_function_run_id.clone(),
+                        },
+                        (),
+                    );
+                let replayed = Services::with_defaults(db.clone())
+                    .replay_logical_function_run(replay)
+                    .await?
+                    .data
+                    .new_function_run_id;
+                assert_eq!(
+                    visible().await?,
+                    Some(committed.clone()),
+                    "an in-flight replay must not hide the committed data"
+                );
 
-            let mut trx = begin_exclusive(&db, p.id).await?;
-            let at = trx.locked_at();
-            trx.get(Grant::asserted("a replay attempt fails"))
-                .physical_runs()
-                .end(&[replayed], at)
-                .await?;
-            trx.commit().await?;
-            assert_eq!(
-                visible().await?,
-                Some(committed),
-                "a failed replay must leave the committed data current"
-            );
-            Ok(())
-        }
-    })
+                let mut trx = begin_exclusive(&db, p.base.project_id).await?;
+                let at = trx.locked_at();
+                trx.get(Grant::asserted("a replay attempt fails"))
+                    .physical_runs()
+                    .end(&[replayed], at)
+                    .await?;
+                trx.commit().await?;
+                assert_eq!(
+                    visible().await?,
+                    Some(committed),
+                    "a failed replay must leave the committed data current"
+                );
+                Ok(())
+            }
+        },
+    )
     .await
 }
 
@@ -212,22 +218,27 @@ async fn test_no_data_version_does_not_chase_into_canceled_data(db: TdPool) -> R
             ],
         }],
     }];
-    test_status_update(db.clone(), p.id, &canceled_execution, |_, e, _, f, w| {
-        let db = db.clone();
-        let test_function = &canceled_execution[0].transactions[0].functions[0];
-        let attempt = f[test_function].base.id.clone();
-        let worker = w[test_function].base.id.clone();
-        let execution = e[&canceled_execution[0]].base.id.clone();
-        async move {
-            post_callback(&db, &attempt, &worker, done_with_data("t_0")?).await?;
-            let cancel = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(ExecutionParam { execution }, ());
-            Services::with_defaults(db.clone())
-                .execution_cancel(cancel)
-                .await?;
-            Ok(())
-        }
-    })
+    test_status_update(
+        db.clone(),
+        p.base.project_id,
+        &canceled_execution,
+        |_, e, _, f, w| {
+            let db = db.clone();
+            let test_function = &canceled_execution[0].transactions[0].functions[0];
+            let attempt = f[test_function].base.id.clone();
+            let worker = w[test_function].base.id.clone();
+            let execution = e[&canceled_execution[0]].base.id.clone();
+            async move {
+                post_callback(&db, &attempt, &worker, done_with_data("t_0")?).await?;
+                let cancel = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(ExecutionParam { execution }, ());
+                Services::with_defaults(db.clone())
+                    .execution_cancel(cancel)
+                    .await?;
+                Ok(())
+            }
+        },
+    )
     .await?;
 
     let later_execution = vec![TestExecution {
@@ -244,25 +255,30 @@ async fn test_no_data_version_does_not_chase_into_canceled_data(db: TdPool) -> R
             }],
         }],
     }];
-    test_status_update(db.clone(), p.id, &later_execution, |_, _, _, f, w| {
-        let db = db.clone();
-        let test_function = &later_execution[0].transactions[0].functions[0];
-        let attempt = f[test_function].base.id.clone();
-        let worker = w[test_function].base.id.clone();
-        async move {
-            post_callback(&db, &attempt, &worker, done_without_data("t_0")?).await?;
-            let written: Vec<PhysicalTableDataVersionDBWithNames> =
-                db.timeline().fetch_all(&attempt).await?;
-            let t_0 = written
-                .iter()
-                .find(|v| v.base.base.base.name.as_str() == "t_0")
-                .expect("the attempt wrote t_0");
-            assert_eq!(
-                t_0.base.base.base.with_data_table_data_version_id, None,
-                "no committed run ever wrote t_0 with data"
-            );
-            Ok(())
-        }
-    })
+    test_status_update(
+        db.clone(),
+        p.base.project_id,
+        &later_execution,
+        |_, _, _, f, w| {
+            let db = db.clone();
+            let test_function = &later_execution[0].transactions[0].functions[0];
+            let attempt = f[test_function].base.id.clone();
+            let worker = w[test_function].base.id.clone();
+            async move {
+                post_callback(&db, &attempt, &worker, done_without_data("t_0")?).await?;
+                let written: Vec<PhysicalTableDataVersionDBWithNames> =
+                    db.timeline().fetch_all(&attempt).await?;
+                let t_0 = written
+                    .iter()
+                    .find(|v| v.base.base.base.name.as_str() == "t_0")
+                    .expect("the attempt wrote t_0");
+                assert_eq!(
+                    t_0.base.base.base.with_data_table_data_version_id, None,
+                    "no committed run ever wrote t_0 with data"
+                );
+                Ok(())
+            }
+        },
+    )
     .await
 }

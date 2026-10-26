@@ -17,7 +17,7 @@ pub(crate) mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::and;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::dependency::DependencyDB;
     use td_objects::dxo::function::FunctionDB;
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
@@ -26,7 +26,7 @@ pub(crate) mod tests {
     pub async fn assert_delete(
         db: &TdPool,
         user_id: &UserId,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         table_name: &TableName,
     ) -> Result<(), TdError> {
         let live: Vec<TableDB> = db.scd2().fetch_all(&table_name).await?;
@@ -36,7 +36,10 @@ pub(crate) mod tests {
         assert_eq!(table_versions.len(), 2);
         for table_version in &table_versions {
             assert_eq!(table_version.base.name, *table_name);
-            assert_eq!(table_version.base.collection_id, collection.id);
+            assert_eq!(
+                table_version.base.collection_id,
+                collection.base.collection_id
+            );
             assert_eq!(table_version.base.defined_by_id, *user_id);
             assert!(!table_version.interval.valid_to.is_infinity());
         }
@@ -77,19 +80,25 @@ pub(crate) mod tests {
     pub async fn assert_not_deleted(
         db: &TdPool,
         user_id: &UserId,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         table_name: &TableName,
     ) -> Result<(), TdError> {
         let table: Option<TableDBWithNames> = db
             .scd2()
-            .fetch_optional(and!(&collection.id, &TableIdName::Name(table_name.clone())))
+            .fetch_optional(and!(
+                &collection.base.collection_id,
+                &TableIdName::Name(table_name.clone())
+            ))
             .await?;
         assert!(table.is_some());
 
         let table_versions: Vec<TableDB> = db.timeline().fetch_all(&table_name).await?;
         for table_version in &table_versions {
             assert_eq!(table_version.base.name, *table_name);
-            assert_eq!(table_version.base.collection_id, collection.id);
+            assert_eq!(
+                table_version.base.collection_id,
+                collection.base.collection_id
+            );
             assert_eq!(table_version.base.defined_by_id, *user_id);
             assert_eq!(table_version.base.status, TableStatus::Active);
         }

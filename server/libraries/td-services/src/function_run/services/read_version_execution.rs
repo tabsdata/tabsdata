@@ -9,7 +9,6 @@ use td_authz::AuthzContext;
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_objects::FromDao;
-use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionParam};
 use td_objects::dxo::function::{FunctionDB, FunctionVersionParam};
@@ -29,8 +28,7 @@ async fn function_version_execution_read(
     let mut trx = db.read().await?;
     let conn = trx.get(authz.none());
     let execution: ExecutionDB = conn.fetch_one(&execution_id).await?;
-    let collection: ResolvedCollectionDB = conn.fetch_one(&execution.base.collection_id).await?;
-    let mut trx = trx.enter_project(&collection.base.project_id).await?;
+    let mut trx = trx.enter_project(&execution.project_id).await?;
     let conn = trx.get(authz.none());
 
     // Replays mint several attempts under one LFR; the current one is canonical.
@@ -46,6 +44,7 @@ mod tests {
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionParam;
     use td_objects::dxo::function::{FunctionRegister, FunctionVersionParam};
+    use td_objects::types::basic::CollectionLabel;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionName, LogicalFunctionRunStatus,
         PhysicalFunctionRunStatus, TableNameDto, TransactionKey, UserId, UserLabel, UserName,
@@ -57,7 +56,7 @@ mod tests {
     async fn test_read_function_version_execution_run(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -86,20 +85,24 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
-        let execution = db.scoped(p.id).seed().execution(&function_version).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function_version)
+            .await?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -149,7 +152,10 @@ mod tests {
         // Status lives on the LFR; the read endpoint joins it in.
         assert_eq!(response.status, PhysicalFunctionRunStatus::Done);
         assert_eq!(response.name, FunctionName::try_from("joaquin")?);
-        assert_eq!(response.collection, collection.name);
+        assert_eq!(
+            response.collection,
+            CollectionLabel::new(collection.base.name)
+        );
         assert_eq!(response.execution, execution.base.name);
         assert_eq!(response.triggered_by, UserLabel::from(UserName::admin()));
         Ok(())

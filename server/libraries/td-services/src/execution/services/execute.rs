@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::collection::resolve_collection_id;
 use crate::execution::execution_version::refusal;
 use crate::execution::{execute, trigger_gate};
 use crate::function::children::ensure_user_managed;
@@ -47,9 +48,10 @@ async fn execute_function(
         let mut trx = db.begin_exclusive(attempt).await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
+        let collection_id = resolve_collection_id(conn, &collection_param.collection).await?;
         let function: FunctionDBWithNames = conn
             .scd2()
-            .fetch_one(and!(&collection_param.collection, &function_param.function))
+            .fetch_one(and!(&collection_id, &function_param.function))
             .await?;
 
         ensure_user_managed(&function.base.base)?;
@@ -93,7 +95,7 @@ pub(crate) mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_error::{ApiError, TdError};
-    use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
+    use td_objects::dxo::collection::{CollectionCreate, CollectionDB};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionParam;
     use td_objects::dxo::execution::{
@@ -117,6 +119,7 @@ pub(crate) mod tests {
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::dxo::transaction::TransactionDBWithNames;
     use td_objects::types::basic::AtTime;
+    use td_objects::types::basic::CollectionLabel;
     use td_objects::types::basic::FunctionType;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::TableType;
@@ -139,21 +142,21 @@ pub(crate) mod tests {
     #[td_test::test(db)]
     async fn test_execute_dependencies_different_collections(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let _ = test_execute(db, p.id, true, false, false).await?;
+        let _ = test_execute(db, p.base.project_id, true, false, false).await?;
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_execute_trigger_different_collections(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let _ = test_execute(db, p.id, false, true, false).await?;
+        let _ = test_execute(db, p.base.project_id, false, true, false).await?;
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_execute_single_function(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let _ = test_execute(db, p.id, true, false, true).await?;
+        let _ = test_execute(db, p.base.project_id, true, false, true).await?;
         Ok(())
     }
 
@@ -185,21 +188,23 @@ pub(crate) mod tests {
                             secrets: None,
                         },
                     )
-                    .in_project(project.id),
+                    .in_project(project.base.project_id),
             )
             .await?;
 
-        let collection: ActiveCollectionDB = db
-            .scoped(project.id)
-            .fetch_one::<ActiveCollectionDB>(&collection_name)
+        let collection: CollectionDB = db
+            .scoped(project.base.project_id)
+            .scd2()
+            .fetch_one::<CollectionDB>(&collection_name)
             .await?;
-        assert_eq!(collection.project_id, project.id);
+        assert_eq!(collection.project_id, project.base.project_id);
         let default_group: GroupDB = db
-            .scoped(project.id)
+            .scoped(project.base.project_id)
+            .scd2()
             .fetch_one::<GroupDB>(&GroupName::default_group())
             .await?;
         assert_eq!(
-            collection.group_id, default_group.base.id,
+            collection.base.group_id, default_group.base.group_id,
             "the collection lands in its own project's default group",
         );
 
@@ -224,7 +229,7 @@ pub(crate) mod tests {
             enabled: None,
             workers: None,
         };
-        let p = &project.id;
+        let p = &project.base.project_id;
         let function = db.scoped(p).seed().function(&collection, &create).await?;
         let execution = db.scoped(p).seed().execution(&function).await?;
         let transaction = db
@@ -243,15 +248,15 @@ pub(crate) mod tests {
             )
             .await?;
 
-        assert_eq!(transaction.base.group_id, collection.group_id);
+        assert_eq!(transaction.base.group_id, collection.base.group_id);
 
         let lfrs: Vec<LogicalFunctionRunDB> = db
             .scoped(p)
             .fetch_all::<LogicalFunctionRunDB>(&function.base.function_id)
             .await?;
         assert_eq!(lfrs.len(), 1);
-        assert_eq!(lfrs[0].project_id, project.id);
-        assert_eq!(lfrs[0].base.group_id, collection.group_id);
+        assert_eq!(lfrs[0].project_id, project.base.project_id);
+        assert_eq!(lfrs[0].base.group_id, collection.base.group_id);
 
         Ok(())
     }
@@ -264,7 +269,7 @@ pub(crate) mod tests {
         p: ProjectId,
         tables: &[&str],
         versions: usize,
-    ) -> Result<(ActiveCollectionDB, FunctionDB, Vec<ExecutionDB>), TdError> {
+    ) -> Result<(CollectionDB, FunctionDB, Vec<ExecutionDB>), TdError> {
         let collection = db
             .scoped(p)
             .seed()
@@ -299,7 +304,10 @@ pub(crate) mod tests {
         let producer = db.scoped(p).seed().function(&collection, &create).await?;
         let table: TableDB = db
             .scd2()
-            .fetch_one::<TableDBWithNames>(and!(&collection.id, &TableIdName::from_str(tables[0])?))
+            .fetch_one::<TableDBWithNames>(and!(
+                &collection.base.collection_id,
+                &TableIdName::from_str(tables[0])?
+            ))
             .await?
             .base;
 
@@ -342,7 +350,7 @@ pub(crate) mod tests {
     async fn execute_consumer(
         db: &TdPool,
         p: ProjectId,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         dependencies: &[&str],
         trigger: Option<&str>,
     ) -> Result<ExecutionResponse, TdError> {
@@ -380,14 +388,14 @@ pub(crate) mod tests {
     async fn execute_named(
         db: &TdPool,
         p: ProjectId,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         function: &str,
     ) -> Result<ExecutionResponse, TdError> {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str(&collection.base.name.to_string())?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str(function)?,
@@ -416,7 +424,7 @@ pub(crate) mod tests {
     async fn test_a_table_written_later_in_the_plan_reads_its_committed_version(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?.id;
+        let p = db.seed().test_project().await?.base.project_id;
         let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 1).await?;
         let writer = FunctionRegister {
             name: FunctionName::try_from("writer")?,
@@ -458,7 +466,7 @@ pub(crate) mod tests {
     /// functions that would plan it differently today leave it unchanged.
     #[td_test::test(db)]
     async fn test_reading_an_execution_ignores_later_topology(db: TdPool) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?.id;
+        let p = db.seed().test_project().await?.base.project_id;
         let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 2).await?;
         let executed = execute_consumer(
             &db,
@@ -529,7 +537,7 @@ pub(crate) mod tests {
     async fn update_named(
         db: &TdPool,
         p: ProjectId,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         function: &str,
         update: FunctionUpdate,
     ) -> Result<(), TdError> {
@@ -537,7 +545,7 @@ pub(crate) mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str(&collection.base.name.to_string())?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str(function)?,
@@ -612,7 +620,7 @@ pub(crate) mod tests {
     /// would resolve differently.
     #[td_test::test(db)]
     async fn test_execute_range_dep_input_idx(db: TdPool) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?.id;
+        let p = db.seed().test_project().await?.base.project_id;
         let (collection, producer, producer_executions) =
             seed_producer_with_versions(&db, p, &["table_p"], 3).await?;
 
@@ -719,7 +727,7 @@ pub(crate) mod tests {
     /// own sequential idxs.
     #[td_test::test(db)]
     async fn test_execute_range_dep_input_idx_partial(db: TdPool) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?.id;
+        let p = db.seed().test_project().await?.base.project_id;
         let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 1).await?;
 
         // `table_q` belongs to a publisher that never ran: no LTDV timeline.
@@ -819,7 +827,7 @@ pub(crate) mod tests {
     /// the edges reference, keyed by logical id.
     #[td_test::test(db)]
     async fn test_execute_relations_are_logical(db: TdPool) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?.id;
+        let p = db.seed().test_project().await?.base.project_id;
         let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 2).await?;
 
         let response =
@@ -861,7 +869,7 @@ pub(crate) mod tests {
     async fn test_execute_output_relation_before_materialization(
         db: TdPool,
     ) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?.id;
+        let p = db.seed().test_project().await?.base.project_id;
         let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 1).await?;
 
         let response = execute_consumer(&db, p, &collection, &["table_p"], None).await?;
@@ -885,7 +893,7 @@ pub(crate) mod tests {
     /// physical version.
     #[td_test::test(db)]
     async fn test_read_relations_follow_rematerialization(db: TdPool) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?.id;
+        let p = db.seed().test_project().await?.base.project_id;
         let (collection, _, _) = seed_producer_with_versions(&db, p, &["table_p"], 1).await?;
 
         let response = execute_consumer(&db, p, &collection, &["table_p"], None).await?;
@@ -1130,7 +1138,9 @@ pub(crate) mod tests {
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection_0.name.to_string())?,
+                        collection: CollectionIdName::from_str(
+                            &collection_0.base.name.to_string(),
+                        )?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?,
@@ -1178,7 +1188,7 @@ pub(crate) mod tests {
                 response
                     .all_tables
                     .values()
-                    .filter(|t| t.collection == COLLECTION_NAMES[0])
+                    .filter(|t| t.collection == CollectionLabel::new(COLLECTION_NAMES[0].clone()))
                     .any(|t| t.name.to_string() == "table_0"),
                 "the trigger's own table is in the plan"
             );
@@ -1199,7 +1209,10 @@ pub(crate) mod tests {
             assert_eq!(executions.len(), 1);
             assert_eq!(executions[0].base.base.id, response.id);
             assert_eq!(executions[0].base.base.name, response.name);
-            assert_eq!(executions[0].base.base.collection_id, collection_0.id);
+            assert_eq!(
+                executions[0].base.base.collection_id,
+                collection_0.base.collection_id
+            );
             // The status views aggregate the plan's runs; the plan's shape is
             // the edition's business and asserted in its te-execution tests.
             let runs: Vec<LogicalFunctionRunDB> = db.fetch_all::<LogicalFunctionRunDB>(()).await?;
@@ -1236,7 +1249,7 @@ pub(crate) mod tests {
             let function: FunctionDBWithNames = db
                 .scd2()
                 .fetch_one::<FunctionDBWithNames>(and!(
-                    &collection_0.id,
+                    &collection_0.base.collection_id,
                     &FunctionIdName::Name(FUNCTION_NAMES[0].clone())
                 ))
                 .await?;
@@ -1244,14 +1257,14 @@ pub(crate) mod tests {
                 .fetch_all::<LogicalFunctionRunDB>(&function.base.base.function_id)
                 .await?;
             assert_eq!(lfrs.len(), 1);
-            assert_eq!(lfrs[0].base.collection_id, collection_0.id);
+            assert_eq!(lfrs[0].base.collection_id, collection_0.base.collection_id);
             assert_eq!(lfrs[0].base.execution_id, response.id);
             assert_eq!(lfrs[0].base.status, LogicalFunctionRunStatus::Scheduled);
 
             let function: FunctionDBWithNames = db
                 .scd2()
                 .fetch_one::<FunctionDBWithNames>(and!(
-                    &collection_2.id,
+                    &collection_2.base.collection_id,
                     &FunctionIdName::Name(FUNCTION_NAMES[2].clone())
                 ))
                 .await?;
@@ -1279,7 +1292,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_execute_upstream_initial_status(
             db,
-            p.id,
+            p.base.project_id,
             LogicalFunctionRunStatus::Scheduled,
             LogicalFunctionRunStatus::Scheduled,
         )
@@ -1291,7 +1304,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_execute_upstream_initial_status(
             db,
-            p.id,
+            p.base.project_id,
             LogicalFunctionRunStatus::OnHold,
             LogicalFunctionRunStatus::OnHold,
         )
@@ -1303,7 +1316,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_execute_upstream_initial_status(
             db,
-            p.id,
+            p.base.project_id,
             LogicalFunctionRunStatus::Failed,
             LogicalFunctionRunStatus::OnHold,
         )
@@ -1433,7 +1446,7 @@ pub(crate) mod tests {
         let table = db
             .scd2()
             .fetch_one::<TableDBWithNames>(and!(
-                &collection.id,
+                &collection.base.collection_id,
                 &TableIdName::Name(table_name.clone())
             ))
             .await?
@@ -1472,7 +1485,7 @@ pub(crate) mod tests {
         let table = db
             .scd2()
             .fetch_one::<TableDBWithNames>(and!(
-                &collection.id,
+                &collection.base.collection_id,
                 &TableIdName::Name(table_name.clone())
             ))
             .await?
@@ -1493,7 +1506,7 @@ pub(crate) mod tests {
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str(&collection.base.name.to_string())?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str(&FUNCTION_NAMES[2].to_string())?,
@@ -1515,7 +1528,7 @@ pub(crate) mod tests {
         let function_2: FunctionDBWithNames = db
             .scd2()
             .fetch_one::<FunctionDBWithNames>(and!(
-                &collection.id,
+                &collection.base.collection_id,
                 &FunctionIdName::Name(FUNCTION_NAMES[2].clone())
             ))
             .await?;
@@ -1539,7 +1552,9 @@ pub(crate) mod tests {
     #[td_test::test(db)]
     async fn test_execute_disabled_trigger_err(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let res = test_execute_disabled_trigger(db, p.id, OverrideDisabledTrigger::FALSE).await?;
+        let res =
+            test_execute_disabled_trigger(db, p.base.project_id, OverrideDisabledTrigger::FALSE)
+                .await?;
         let err = res.unwrap_err();
         assert_eq!(
             "Function 'function_0' must be enabled to be executed".to_string(),
@@ -1552,7 +1567,8 @@ pub(crate) mod tests {
     async fn test_execute_disabled_trigger_override(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let response =
-            test_execute_disabled_trigger(db, p.id, OverrideDisabledTrigger::TRUE).await?;
+            test_execute_disabled_trigger(db, p.base.project_id, OverrideDisabledTrigger::TRUE)
+                .await?;
         let response = response?;
 
         assert_eq!(
@@ -1646,7 +1662,7 @@ pub(crate) mod tests {
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str(&collection.base.name.to_string())?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())?,
@@ -1672,7 +1688,7 @@ pub(crate) mod tests {
 
     #[td_test::test(db)]
     async fn test_execute_public_external_uid_conflicts(db: TdPool) -> Result<(), TdError> {
-        let p = db.seed().test_project().await?.id;
+        let p = db.seed().test_project().await?.base.project_id;
         let collection = db
             .scoped(p)
             .seed()
@@ -1705,8 +1721,10 @@ pub(crate) mod tests {
                 .create(
                     (
                         CollectionParam {
-                            collection: CollectionIdName::from_str(&collection.name.to_string())
-                                .unwrap(),
+                            collection: CollectionIdName::from_str(
+                                &collection.base.name.to_string(),
+                            )
+                            .unwrap(),
                         },
                         FunctionParam {
                             function: FunctionIdName::from_str(&FUNCTION_NAMES[0].to_string())
@@ -1846,11 +1864,11 @@ pub(crate) mod tests {
     #[td_test::test(db)]
     async fn test_executing_the_parent_plans_its_children(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        register_parent_with_child(&db, p.id, "plan_children").await?;
+        register_parent_with_child(&db, p.base.project_id, "plan_children").await?;
 
         let response = execute_by_name(
             &db,
-            p.id,
+            p.base.project_id,
             "plan_children",
             "parent_fn",
             FunctionOnly::FALSE,
@@ -1869,10 +1887,10 @@ pub(crate) mod tests {
     #[td_test::test(db)]
     async fn test_reading_the_execution_shows_its_children(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        register_parent_with_child(&db, p.id, "read_children").await?;
+        register_parent_with_child(&db, p.base.project_id, "read_children").await?;
         let executed = execute_by_name(
             &db,
-            p.id,
+            p.base.project_id,
             "read_children",
             "parent_fn",
             FunctionOnly::FALSE,
@@ -1897,11 +1915,11 @@ pub(crate) mod tests {
     #[td_test::test(db)]
     async fn test_function_only_still_plans_the_children(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        register_parent_with_child(&db, p.id, "plan_only").await?;
+        register_parent_with_child(&db, p.base.project_id, "plan_only").await?;
 
         let response = execute_by_name(
             &db,
-            p.id,
+            p.base.project_id,
             "plan_only",
             "parent_fn",
             FunctionOnly::TRUE,
@@ -1922,7 +1940,7 @@ pub(crate) mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.id, "plan_override", None).await;
+        create_collection(&db, p.base.project_id, "plan_override", None).await;
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 CollectionParam {
@@ -1933,14 +1951,14 @@ pub(crate) mod tests {
                     ..parent_with_child()?
                 },
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .register_function(request)
             .await?;
 
         let response = execute_by_name(
             &db,
-            p.id,
+            p.base.project_id,
             "plan_override",
             "parent_fn",
             FunctionOnly::FALSE,
@@ -1960,7 +1978,7 @@ pub(crate) mod tests {
     async fn test_a_disabled_child_is_not_planned(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("plan_disabled")?,
@@ -1970,7 +1988,7 @@ pub(crate) mod tests {
         let mut parent = parent_with_child()?;
         let declared = parent.child_functions.take().expect("child").remove(0);
         let parent = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &parent)
             .await?;
@@ -1982,7 +2000,7 @@ pub(crate) mod tests {
             enabled: Some(Enabled::FALSE),
             ..parent_with_child()?
         };
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .seed()
             .child_function(
                 &collection,
@@ -1996,7 +2014,7 @@ pub(crate) mod tests {
 
         let response = execute_by_name(
             &db,
-            p.id,
+            p.base.project_id,
             "plan_disabled",
             "parent_fn",
             FunctionOnly::FALSE,
@@ -2014,11 +2032,11 @@ pub(crate) mod tests {
     #[td_test::test(db)]
     async fn test_triggering_a_child_function_is_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        register_parent_with_child(&db, p.id, "trigger_guard").await?;
+        register_parent_with_child(&db, p.base.project_id, "trigger_guard").await?;
 
         let err = execute_by_name(
             &db,
-            p.id,
+            p.base.project_id,
             "trigger_guard",
             "child_fn",
             FunctionOnly::FALSE,

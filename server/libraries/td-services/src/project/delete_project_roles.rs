@@ -12,12 +12,12 @@
 //! services), so it deliberately bypasses the `fixed` guard: the role rows and
 //! their permission rows are created `fixed = true`, yet must be removable here.
 //!
-//! Project delete is *soft* (the `projects` row is renamed to `deleted_<id>`
-//! and kept), but the per-project role rows are **hard-deleted**: they are
-//! meaningless without a live project, and their names (`<name>_admin`, …) must
-//! be freed so the project name can be re-created later. The `roles.project_id`
-//! FK to `projects` is `ON DELETE RESTRICT`, but soft delete keeps the project
-//! row, so dropping the roles first is unconstrained; `permissions.role_id` and
+//! Project delete closes the project's timeline and keeps its `projects` row,
+//! but the per-project role rows are **hard-deleted**: they are meaningless
+//! without a live project, and their names (`<name>_admin`, …) must be freed
+//! so the project name can be re-created later. The `roles.project_id` FK to
+//! `projects` is `ON DELETE RESTRICT`, but the project row stays, so dropping
+//! the roles is unconstrained; `permissions.role_id` and
 //! `users_roles.role_id` are likewise `ON DELETE RESTRICT`, so those rows are
 //! deleted before the role rows.
 

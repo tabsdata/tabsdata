@@ -29,12 +29,12 @@ const BLOCKED_WITHIN: Duration = Duration::from_secs(10);
 async fn test_close_racing_an_open_closes_the_new_version(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_scd2")?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .function(&c, &register("f_scd2", None))
         .await?;
@@ -42,7 +42,7 @@ async fn test_close_racing_an_open_closes_the_new_version(db: TdPool) -> Result<
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut opening = DbPool::in_project(&pools, &p.id)
+    let mut opening = DbPool::in_project(&pools, &p.base.project_id)
         .begin(Attempt::unretried())
         .await?;
     let conn = opening.get(Grant::asserted("open held uncommitted"));
@@ -53,12 +53,12 @@ async fn test_close_racing_an_open_closes_the_new_version(db: TdPool) -> Result<
     );
     let topology_at = conn
         .topology()
-        .bump(&p.id, LockInstant::asserted(*AtTime::now()))
+        .bump(&p.base.project_id, LockInstant::asserted(*AtTime::now()))
         .await?;
     conn.scd2().open(&next, topology_at).await?;
 
     let closing_pools = pools.clone();
-    let project = p.id;
+    let project = p.base.project_id;
     let racing = tokio::spawn(async move {
         let closing_pools = DbPool::in_project(&closing_pools, &project);
         retrying(|attempt| async {

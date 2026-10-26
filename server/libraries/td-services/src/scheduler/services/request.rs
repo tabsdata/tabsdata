@@ -492,7 +492,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -523,7 +523,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -532,7 +532,10 @@ mod tests {
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
@@ -546,7 +549,7 @@ mod tests {
                     external_uid: None,
                 },
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = dispatch_services(&db);
         let execution = service.execute_function(request).await?.data;
@@ -585,8 +588,8 @@ mod tests {
         assert_eq!(physical_function_runs.len(), 1);
         let physical_function_run = &physical_function_runs[0];
 
-        assert_eq!(info.collection_id, collection.id);
-        assert_eq!(info.collection, collection.name);
+        assert_eq!(info.collection_id, collection.base.collection_id);
+        assert_eq!(info.collection, collection.base.name);
         assert_eq!(
             info.function_version_id,
             physical_function_run.base.function_version_id
@@ -596,7 +599,7 @@ mod tests {
 
         let function_path = SPath::parse(format!(
             "/bundles/c/{}/f/{}.tar.zst",
-            collection.id, create.bundle_id
+            collection.base.collection_id, create.bundle_id
         ))?;
         let (uri, mount_def) = context.storage.to_external_uri(&function_path)?;
         assert_eq!(info.function_bundle.uri, uri);
@@ -617,7 +620,7 @@ mod tests {
 
         let function_data_path = SPath::parse(format!(
             "/c/{}/x/{}/f/{}",
-            collection.id,
+            collection.base.collection_id,
             physical_function_run.base.transaction_id,
             physical_function_run.base.function_version_id
         ))?;
@@ -634,8 +637,8 @@ mod tests {
             InputTable::Table(input) => {
                 assert!(input.physical_table_data_version_id.is_none());
                 assert_eq!(input.table, TableName::try_from("table_1")?);
-                assert_eq!(input.collection_id, collection.id);
-                assert_eq!(input.collection, collection.name);
+                assert_eq!(input.collection_id, collection.base.collection_id);
+                assert_eq!(input.collection, collection.base.name);
                 assert!(input.location.is_none());
                 assert_eq!(*input.table_pos, 0);
                 assert_eq!(*input.version_pos, -1);
@@ -658,8 +661,8 @@ mod tests {
                         output.table,
                         physical_table_data_version.base.base.base.name
                     );
-                    assert_eq!(output.collection_id, collection.id);
-                    assert_eq!(output.collection, collection.name);
+                    assert_eq!(output.collection_id, collection.base.collection_id);
+                    assert_eq!(output.collection, collection.base.name);
                     assert_eq!(
                         output.table_id,
                         physical_table_data_version.base.base.base.table_id
@@ -675,7 +678,7 @@ mod tests {
 
                     let table_path = SPath::parse(format!(
                         "/c/{}/d/{}/t/{}/{}.t",
-                        collection.id,
+                        collection.base.collection_id,
                         physical_table_data_version.base.base.base.id,
                         physical_table_data_version.base.base.base.table_id,
                         physical_table_data_version.base.base.base.table_version_id,
@@ -697,7 +700,7 @@ mod tests {
             .fetch_first::<WorkerDB>(&Some(physical_function_run.base.id.clone()))
             .await?
             .expect("worker for the run");
-        assert_eq!(message.base.collection_id, collection.id);
+        assert_eq!(message.base.collection_id, collection.base.collection_id);
         assert_eq!(message.base.execution_id, Some(execution.id));
         assert_eq!(
             message.base.physical_function_run_id,
@@ -727,7 +730,7 @@ mod tests {
 
         // seed_physical_function_run also seeds the LTDV identity rows.
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_replay")?, &UserId::admin())
             .await?;
@@ -752,18 +755,22 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await?;
         let trx = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let fr_old = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -871,7 +878,7 @@ mod tests {
     async fn test_schedule_request_kubernetes(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_k8s")?, &UserId::admin())
             .await?;
@@ -896,7 +903,7 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -905,7 +912,10 @@ mod tests {
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
@@ -919,7 +929,7 @@ mod tests {
                     external_uid: None,
                 },
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         dispatch_services(&db).execute_function(request).await?;
 
         let (context, sent) = kubernetes_scheduler_context(&db);
@@ -976,7 +986,7 @@ mod tests {
         ] {
             let p = db.seed().project(ProjectName::try_from(project)?).await?;
             let collection = db
-                .scoped(p.id)
+                .scoped(p.base.project_id)
                 .seed()
                 .collection(
                     &CollectionName::try_from(collection_name)?,
@@ -1003,7 +1013,7 @@ mod tests {
                 enabled: None,
                 workers: None,
             };
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .function(&collection, &create)
                 .await?;
@@ -1025,7 +1035,7 @@ mod tests {
                         external_uid: None,
                     },
                 )
-                .in_project(p.id);
+                .in_project(p.base.project_id);
             executions.push(dispatch_services(&db).execute_function(request).await?.data);
         }
 
@@ -1216,7 +1226,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let poisoned = seed_trigger_worker(
             &db,
-            p.id,
+            p.base.project_id,
             "c_stop_iso_1",
             WorkerType::StageTrigger,
             WorkerStatus::StopScheduled,
@@ -1224,7 +1234,7 @@ mod tests {
         .await?;
         let healthy = seed_trigger_worker(
             &db,
-            p.id,
+            p.base.project_id,
             "c_stop_iso_2",
             WorkerType::StageTrigger,
             WorkerStatus::StopScheduled,
@@ -1256,7 +1266,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let worker = seed_trigger_worker(
             &db,
-            p.id,
+            p.base.project_id,
             "c_stop_sup",
             WorkerType::StageTrigger,
             WorkerStatus::StopScheduled,
@@ -1284,7 +1294,7 @@ mod tests {
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("c_dispatch_iso")?,
@@ -1313,7 +1323,7 @@ mod tests {
                 enabled: None,
                 workers: None,
             };
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .function(&collection, &create)
                 .await?;
@@ -1323,7 +1333,7 @@ mod tests {
                         CollectionParam {
                             collection: CollectionIdName::from_str(&format!(
                                 "{}",
-                                collection.name
+                                collection.base.name
                             ))?,
                         },
                         FunctionParam {
@@ -1338,7 +1348,7 @@ mod tests {
                         external_uid: None,
                     },
                 )
-                .in_project(p.id);
+                .in_project(p.base.project_id);
             let execution = dispatch_services(&db).execute_function(request).await?.data;
             executions.push(execution);
         }
@@ -1409,7 +1419,7 @@ mod tests {
     async fn test_dispatch_cap_oldest_first_and_self_notify(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_cap")?, &UserId::admin())
             .await?;
@@ -1435,7 +1445,7 @@ mod tests {
                 enabled: None,
                 workers: None,
             };
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .function(&collection, &create)
                 .await?;
@@ -1445,7 +1455,7 @@ mod tests {
                         CollectionParam {
                             collection: CollectionIdName::from_str(&format!(
                                 "{}",
-                                collection.name
+                                collection.base.name
                             ))?,
                         },
                         FunctionParam {
@@ -1460,7 +1470,7 @@ mod tests {
                         external_uid: None,
                     },
                 )
-                .in_project(p.id);
+                .in_project(p.base.project_id);
             let execution = dispatch_services(&db).execute_function(request).await?.data;
             executions.push(execution);
         }
@@ -1537,7 +1547,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (payload, _id, worker) = schedule_trigger_kubernetes(
             &db,
-            p.id,
+            p.base.project_id,
             "c_stage_start",
             WorkerType::StageTrigger,
             WorkerStatus::Scheduled,
@@ -1573,7 +1583,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (payload, id, worker) = schedule_trigger_kubernetes(
             &db,
-            p.id,
+            p.base.project_id,
             "c_stage_stop",
             WorkerType::StageTrigger,
             WorkerStatus::StopScheduled,
@@ -1600,7 +1610,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (payload, _id, worker) = schedule_trigger_kubernetes(
             &db,
-            p.id,
+            p.base.project_id,
             "c_cron_start",
             WorkerType::CronTrigger,
             WorkerStatus::Scheduled,
@@ -1633,7 +1643,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (payload, id, worker) = schedule_trigger_kubernetes(
             &db,
-            p.id,
+            p.base.project_id,
             "c_cron_stop",
             WorkerType::CronTrigger,
             WorkerStatus::StopScheduled,

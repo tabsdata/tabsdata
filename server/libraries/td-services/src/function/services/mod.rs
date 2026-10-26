@@ -17,11 +17,12 @@ pub(crate) mod upload;
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use crate::tests::fixtures::collection_named;
     use chrono::DateTime;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::and;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::dependency::DependencyDBWithNames;
     use td_objects::dxo::function::{Function, FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
@@ -29,9 +30,9 @@ pub(crate) mod tests {
     use td_objects::system::{
         SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES,
     };
+    use td_objects::types::basic::CollectionLabel;
     use td_objects::types::basic::{
-        AtTime, CollectionIdName, Enabled, FunctionStatus, TableIdName, TableName, TableStatus,
-        TriggerStatus, UserId,
+        AtTime, Enabled, FunctionStatus, TableIdName, TableName, TableStatus, TriggerStatus, UserId,
     };
     use td_objects::types::composed::{TableDependency, TableTrigger, TableTriggerDto};
     use td_objects::types::table_ref::TableRef;
@@ -39,7 +40,7 @@ pub(crate) mod tests {
     pub async fn assert_register(
         db: &TdPool,
         user_id: &UserId,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         create: &FunctionRegister,
         response: &Function,
     ) -> Result<(), TdError> {
@@ -55,7 +56,7 @@ pub(crate) mod tests {
                     !((t.collection.is_none()
                         || t.collection
                             .as_ref()
-                            .map(|c| c == &collection.name)
+                            .map(|c| c == &collection.base.name)
                             .unwrap_or(false))
                         && req_tables.contains(&t.table))
                 })
@@ -63,7 +64,7 @@ pub(crate) mod tests {
                 .collect()
         };
 
-        assert_eq!(response.collection_id, collection.id);
+        assert_eq!(response.collection_id, collection.base.collection_id);
         assert_eq!(response.name, create.name);
         assert_eq!(response.description, create.description);
         assert_eq!(response.status, FunctionStatus::Active);
@@ -71,7 +72,10 @@ pub(crate) mod tests {
         assert_eq!(response.bundle_id, create.bundle_id);
         assert_eq!(*response.snippet, *create.snippet);
         assert_eq!(response.defined_by_id, *user_id);
-        assert_eq!(response.collection, collection.name);
+        assert_eq!(
+            response.collection,
+            CollectionLabel::new(collection.base.name.clone())
+        );
         assert_eq!(response.enabled, Enabled::TRUE);
 
         let function_version_id = response.id.clone();
@@ -125,12 +129,14 @@ pub(crate) mod tests {
             let dependency_table = db
                 .scd2()
                 .fetch_one::<TableDBWithNames>(and!(
-                    &CollectionIdName::Name(
-                        dependency
+                    &collection_named(
+                        db,
+                        &(dependency
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.name.clone())
-                    ),
+                            .unwrap_or_else(|| collection.base.name.clone()))
+                    )
+                    .await?,
                     &TableIdName::Name(dependency.table.clone())
                 ))
                 .await?;
@@ -142,7 +148,12 @@ pub(crate) mod tests {
             assert_eq!(found.base.base.function_id, function.base.function_id);
             assert_eq!(
                 *found.table_collection,
-                *dependency.collection.as_ref().unwrap_or(&collection.name)
+                CollectionLabel::new(
+                    dependency
+                        .collection
+                        .clone()
+                        .unwrap_or_else(|| collection.base.name.clone())
+                )
             );
             assert_eq!(*found.base.base.table_versions, dependency.versions);
             assert!(found.base.interval.valid_from <= function.interval.valid_from);
@@ -159,12 +170,14 @@ pub(crate) mod tests {
             let trigger_table = db
                 .scd2()
                 .fetch_one::<TableDBWithNames>(and!(
-                    &CollectionIdName::Name(
-                        trigger
+                    &collection_named(
+                        db,
+                        &(trigger
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.name.clone())
-                    ),
+                            .unwrap_or_else(|| collection.base.name.clone()))
+                    )
+                    .await?,
                     &TableIdName::Name(trigger.table.clone())
                 ))
                 .await?;
@@ -176,7 +189,12 @@ pub(crate) mod tests {
             assert_eq!(found.base.base.function_id, function.base.function_id);
             assert_eq!(
                 *found.trigger_by_collection,
-                *trigger.collection.as_ref().unwrap_or(&collection.name)
+                CollectionLabel::new(
+                    trigger
+                        .collection
+                        .clone()
+                        .unwrap_or_else(|| collection.base.name.clone())
+                )
             );
             assert_eq!(found.base.base.status, TriggerStatus::Active);
         }
@@ -188,7 +206,7 @@ pub(crate) mod tests {
     pub async fn assert_update(
         db: &TdPool,
         user_id: &UserId,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         create: &FunctionRegister,
         created_function: &FunctionDB,
         update: &FunctionUpdate,
@@ -220,7 +238,7 @@ pub(crate) mod tests {
             let table = &TableName::try_from(table_dto)?;
             let versions = db
                 .timeline()
-                .fetch_all::<TableDB>(and!(collection.id, table))
+                .fetch_all::<TableDB>(and!(collection.base.collection_id, table))
                 .await?;
             let created = versions
                 .iter()
@@ -255,12 +273,14 @@ pub(crate) mod tests {
                 .scd2()
                 .as_of(&before_at_time)
                 .fetch_one::<TableDBWithNames>(and!(
-                    &CollectionIdName::Name(
-                        dependency
+                    &collection_named(
+                        db,
+                        &(dependency
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.name.clone())
-                    ),
+                            .unwrap_or_else(|| collection.base.name.clone()))
+                    )
+                    .await?,
                     &TableIdName::Name(dependency.table.clone())
                 ))
                 .await?;
@@ -277,12 +297,14 @@ pub(crate) mod tests {
             let dependency_table = db
                 .scd2()
                 .fetch_one::<TableDBWithNames>(and!(
-                    &CollectionIdName::Name(
-                        dependency
+                    &collection_named(
+                        db,
+                        &(dependency
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.name.clone())
-                    ),
+                            .unwrap_or_else(|| collection.base.name.clone()))
+                    )
+                    .await?,
                     &TableIdName::Name(dependency.table.clone())
                 ))
                 .await?;
@@ -314,12 +336,14 @@ pub(crate) mod tests {
             let trigger_table: TableDBWithNames = db
                 .scd2()
                 .fetch_one::<TableDBWithNames>(and!(
-                    &CollectionIdName::Name(
-                        trigger
+                    &collection_named(
+                        db,
+                        &(trigger
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.name.clone())
-                    ),
+                            .unwrap_or_else(|| collection.base.name.clone()))
+                    )
+                    .await?,
                     &TableIdName::Name(trigger.table.clone())
                 ))
                 .await?;
@@ -387,7 +411,7 @@ pub(crate) mod tests {
     pub async fn assert_delete(
         db: &TdPool,
         _user_id: &UserId,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         create: &FunctionRegister,
         created_function: &FunctionDB,
     ) -> Result<(), TdError> {
@@ -435,7 +459,11 @@ pub(crate) mod tests {
             let table = &TableName::try_from(table_dto)?;
             let versions = db
                 .timeline()
-                .fetch_all::<TableDB>(and!(collection.id, table, &created_function.base.id))
+                .fetch_all::<TableDB>(and!(
+                    collection.base.collection_id,
+                    table,
+                    &created_function.base.id
+                ))
                 .await?;
             assert_eq!(versions.len(), 2);
             let active = versions
@@ -466,12 +494,14 @@ pub(crate) mod tests {
                 .scd2()
                 .as_of(&AtTime::from(created_function.interval.valid_from))
                 .fetch_one::<TableDBWithNames>(and!(
-                    &CollectionIdName::Name(
-                        dependency
+                    &collection_named(
+                        db,
+                        &(dependency
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.name.clone())
-                    ),
+                            .unwrap_or_else(|| collection.base.name.clone()))
+                    )
+                    .await?,
                     &TableIdName::Name(dependency.table.clone())
                 ))
                 .await?;
@@ -492,12 +522,14 @@ pub(crate) mod tests {
                 .scd2()
                 .as_of(&AtTime::from(created_function.interval.valid_from))
                 .fetch_one::<TableDBWithNames>(and!(
-                    &CollectionIdName::Name(
-                        trigger
+                    &collection_named(
+                        db,
+                        &(trigger
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.name.clone())
-                    ),
+                            .unwrap_or_else(|| collection.base.name.clone()))
+                    )
+                    .await?,
                     &TableIdName::Name(trigger.table.clone())
                 ))
                 .await?;

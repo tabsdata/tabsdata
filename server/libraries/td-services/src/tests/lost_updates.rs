@@ -19,13 +19,9 @@ use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
-use td_objects::dxo::collection::{
-    ActiveCollectionDB, CollectionParam, CollectionUpdate, CollectionUpdateDB,
-};
+use td_objects::dxo::collection::{CollectionDB, CollectionParam, CollectionUpdate};
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::project::{
-    ActiveProjectDB, ProjectCreate, ProjectDeleteDB, ProjectParam, ProjectUpdate, ProjectUpdateDB,
-};
+use td_objects::dxo::project::{ProjectCreate, ProjectDB, ProjectParam, ProjectUpdate};
 use td_objects::dxo::user::{UserDB, UserParam, UserUpdate, UserUpdateDB};
 use td_objects::types::basic::{
     AccessTokenId, BasePath, CollectionIdName, CollectionName, Description, FullName,
@@ -41,10 +37,9 @@ fn admin() -> RequestContext {
     RequestContext::with(AccessTokenId::default(), UserId::admin())
 }
 
-/// A description-only update of P reads P, then waits on the row
-/// a concurrent delete of P holds. Once the delete commits, the update must
-/// not write P's old name back over the deleted row: the name must be free
-/// for a new project.
+/// A description-only update of P waits on the topology version a concurrent
+/// delete of P holds. Once the delete commits, the update must not reopen P's
+/// closed timeline: the name must be free for a new project.
 #[td_test::test(db)]
 async fn test_description_update_racing_delete_keeps_the_project_deleted(
     db: TdPool,
@@ -65,15 +60,19 @@ async fn test_description_update_racing_delete_keeps_the_project_deleted(
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut gate = pools.begin(Attempt::unretried()).await?;
+    delete_project_roles(
+        gate.get(Grant::asserted("project delete held open")),
+        &p.project_id,
+    )
+    .await?;
+    let mut gate = gate.enter_project(&p.project_id).await?;
+    let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("project delete held open"));
-    let current: ActiveProjectDB = conn.for_update().fetch_one(&p.id).await?;
-    conn.update::<ProjectDeleteDB>(&current.to_delete_dao(&admin()), p.id)
-        .await?;
-    delete_project_roles(conn, &p.id).await?;
+    conn.scd2().close::<ProjectDB>(&p.project_id, at).await?;
 
     let update = admin().update(
         ProjectParam {
-            project: ProjectIdName::from_str(&format!("~{}", p.id))?,
+            project: ProjectIdName::from_str(&format!("~{}", p.project_id))?,
         },
         ProjectUpdate {
             name: None,
@@ -100,9 +99,9 @@ async fn test_description_update_racing_delete_keeps_the_project_deleted(
         .map(|_| ())
 }
 
-/// A description-only update of P reads P, then waits on the row a
-/// concurrent rename of P holds. Once the rename commits, the update must
-/// not revert P's name.
+/// A description-only update of P waits on the topology version a concurrent
+/// rename of P holds. Once the rename commits, the update must not revert P's
+/// name.
 #[td_test::test(db)]
 async fn test_description_update_racing_rename_keeps_the_new_name(
     db: TdPool,
@@ -124,24 +123,23 @@ async fn test_description_update_racing_rename_keeps_the_new_name(
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
     let mut gate = pools.begin(Attempt::unretried()).await?;
     let conn = gate.get(Grant::asserted("project rename held open"));
-    let current: ActiveProjectDB = conn.fetch_one(&p.id).await?;
+    let current: ProjectDB = conn.scd2().fetch_one(&p.project_id).await?;
     let rename = ProjectUpdate {
         name: Some(ProjectName::try_from("p_after")?),
         description: None,
         secrets: None,
     };
-    rename_project_roles(conn, &admin(), &p.id, &rename, &current).await?;
-    let renamed = ProjectUpdateDB {
-        name: Some(ProjectName::try_from("p_after")?),
-        description: None,
-        modified_on: admin().time.into(),
-        modified_by_id: admin().user_id.into(),
-    };
-    conn.update::<ProjectUpdateDB>(&renamed, p.id).await?;
+    rename_project_roles(conn, &admin(), &p.project_id, &rename, &current).await?;
+    let mut gate = gate.enter_project(&p.project_id).await?;
+    let at = gate.locked_at();
+    let conn = gate.get(Grant::asserted("project rename held open"));
+    conn.scd2()
+        .open(&current.updated(&rename, &admin()), at)
+        .await?;
 
     let update = admin().update(
         ProjectParam {
-            project: ProjectIdName::from_str(&format!("~{}", p.id))?,
+            project: ProjectIdName::from_str(&format!("~{}", p.project_id))?,
         },
         ProjectUpdate {
             name: None,
@@ -161,8 +159,8 @@ async fn test_description_update_racing_rename_keeps_the_new_name(
     gate.commit().await?;
     let _ = racing.await.expect("update task");
 
-    let after: ActiveProjectDB = db.fetch_one(&p.id).await?;
-    assert_eq!(after.name, ProjectName::try_from("p_after")?);
+    let after: ProjectDB = db.scd2().fetch_one(&p.project_id).await?;
+    assert_eq!(after.base.name, ProjectName::try_from("p_after")?);
     Ok(())
 }
 
@@ -218,38 +216,37 @@ async fn test_self_edit_racing_disable_keeps_the_user_disabled(db: TdPool) -> Re
 }
 
 /// A description update of collection C resolves C, then waits on the
-/// row a concurrent rename of C holds. Once the rename commits, the update
-/// must not revert C's name.
+/// topology version a concurrent rename of C holds. Once the rename commits,
+/// the update must not revert C's name.
 #[td_test::test(db)]
 async fn test_collection_description_update_racing_rename_keeps_the_new_name(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_before")?, &UserId::admin())
         .await?;
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = DbPool::in_project(&pools, &p.id)
+    let mut gate = DbPool::in_project(&pools, &p.base.project_id)
         .begin(Attempt::unretried())
         .await?;
+    let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("collection rename held open"));
-    let renamed = CollectionUpdateDB {
+    let renamed = CollectionUpdate {
         name: Some(CollectionName::try_from("c_after")?),
         description: None,
-        modified_on: admin().time.into(),
-        modified_by_id: admin().user_id.into(),
         base_path: None,
     };
-    conn.update::<CollectionUpdateDB>(&renamed, c.id).await?;
+    conn.scd2().open(&c.updated(&renamed, &admin()), at).await?;
 
     let update = admin()
         .update(
             CollectionParam {
-                collection: CollectionIdName::from_str(&format!("~{}", c.id))?,
+                collection: CollectionIdName::from_str(&format!("~{}", c.base.collection_id))?,
             },
             CollectionUpdate {
                 name: None,
@@ -257,7 +254,7 @@ async fn test_collection_description_update_racing_rename_keeps_the_new_name(
                 base_path: None,
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let services = Services::with_defaults(db.clone());
     let racing = tokio::spawn(async move { services.update_collection(update).await });
     assert!(
@@ -270,7 +267,7 @@ async fn test_collection_description_update_racing_rename_keeps_the_new_name(
     gate.commit().await?;
     let _ = racing.await.expect("update task");
 
-    let after: ActiveCollectionDB = db.fetch_one(&c.id).await?;
-    assert_eq!(after.name, CollectionName::try_from("c_after")?);
+    let after: CollectionDB = db.scd2().fetch_one(&c.base.collection_id).await?;
+    assert_eq!(after.base.name, CollectionName::try_from("c_after")?);
     Ok(())
 }

@@ -214,7 +214,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_execution::{DispatchGrace, StuckRequestedTimeout};
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::{ExecutionDB, ExecutionRequest};
@@ -276,7 +276,7 @@ mod tests {
 
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_stuck")?, &UserId::admin())
             .await?;
@@ -301,7 +301,7 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -309,7 +309,10 @@ mod tests {
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("f_stuck")?,
@@ -323,7 +326,7 @@ mod tests {
                     external_uid: None,
                 },
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let execution = dispatch_services(&db).execute_function(request).await?.data;
 
         let (context_1, sent_1) = sending_to(dispatch_services(&db), TestBridgeProvider::default());
@@ -403,7 +406,7 @@ mod tests {
 
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_stuck_rp")?, &UserId::admin())
             .await?;
@@ -428,18 +431,22 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await?;
         let trx = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let fr_old = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -489,7 +496,10 @@ mod tests {
         let lfr_after: LogicalFunctionRunDB =
             db.fetch_one::<LogicalFunctionRunDB>(&lfr.base.id).await?;
         assert_eq!(lfr_after.base.status, LogicalFunctionRunStatus::Committed);
-        let rolled_up: ExecutionDB = db.scoped(p.id).fetch_one(&execution.base.id).await?;
+        let rolled_up: ExecutionDB = db
+            .scoped(p.base.project_id)
+            .fetch_one(&execution.base.id)
+            .await?;
         assert_eq!(rolled_up.status, ExecutionStatus::Finished);
         assert_eq!(rolled_up.ended_on.as_deref(), pfr.base.ended_on.as_deref());
         let current = db
@@ -510,7 +520,7 @@ mod tests {
         collection_name: &str,
         worker_type: WorkerType,
         worker_status: WorkerStatus,
-    ) -> Result<(ActiveCollectionDB, FunctionDB, WorkerDB), TdError> {
+    ) -> Result<(CollectionDB, FunctionDB, WorkerDB), TdError> {
         let collection = db
             .scoped(project_id)
             .seed()
@@ -578,7 +588,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, _, cron) = seed_trigger_worker(
             &db,
-            p.id,
+            p.base.project_id,
             "c_revive_cron",
             WorkerType::CronTrigger,
             WorkerStatus::Requested,
@@ -586,7 +596,7 @@ mod tests {
         .await?;
         let (_, _, stage) = seed_trigger_worker(
             &db,
-            p.id,
+            p.base.project_id,
             "c_revive_stage",
             WorkerType::StageTrigger,
             WorkerStatus::Requested,
@@ -637,7 +647,7 @@ mod tests {
 
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("c_run_missing")?,
@@ -665,7 +675,7 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -673,7 +683,10 @@ mod tests {
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("f_run_missing")?,
@@ -687,7 +700,7 @@ mod tests {
                     external_uid: None,
                 },
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let execution = dispatch_services(&db).execute_function(request).await?.data;
         dispatch_services(&db).request(()).await?;
 
@@ -784,7 +797,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, cron_fn, _) = seed_trigger_worker(
             &db,
-            p.id,
+            p.base.project_id,
             "c_outdated_cron",
             WorkerType::CronTrigger,
             WorkerStatus::Requested,
@@ -792,14 +805,14 @@ mod tests {
         .await?;
         let (_, stage_fn, _) = seed_trigger_worker(
             &db,
-            p.id,
+            p.base.project_id,
             "c_outdated_stage",
             WorkerType::StageTrigger,
             WorkerStatus::Requested,
         )
         .await?;
-        outdate_function_version(&db, p.id, &cron_fn).await?;
-        outdate_function_version(&db, p.id, &stage_fn).await?;
+        outdate_function_version(&db, p.base.project_id, &cron_fn).await?;
+        outdate_function_version(&db, p.base.project_id, &stage_fn).await?;
 
         let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
         services.clone().recovery(()).await?;
@@ -817,7 +830,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, _, cron) = seed_trigger_worker(
             &db,
-            p.id,
+            p.base.project_id,
             "c_failed_cron",
             WorkerType::CronTrigger,
             WorkerStatus::Failed,
@@ -825,7 +838,7 @@ mod tests {
         .await?;
         let (_, _, stage) = seed_trigger_worker(
             &db,
-            p.id,
+            p.base.project_id,
             "c_failed_stage",
             WorkerType::StageTrigger,
             WorkerStatus::Failed,
@@ -863,7 +876,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, _, stage) = seed_trigger_worker(
             &db,
-            p.id,
+            p.base.project_id,
             "c_done_stage",
             WorkerType::StageTrigger,
             WorkerStatus::Done,

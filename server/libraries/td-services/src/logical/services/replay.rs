@@ -201,8 +201,14 @@ mod tests {
     #[td_test::test(db)]
     async fn test_replay_committed_mints_new_fr(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (lfr, fr_old, _head) =
-            seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Committed).await;
+        let (lfr, fr_old, _head) = seed_runnable(
+            &db,
+            p.base.project_id,
+            "c0",
+            "f0",
+            LogicalFunctionRunStatus::Committed,
+        )
+        .await;
 
         let service = Services::with_defaults(db.clone());
         let response = service
@@ -244,8 +250,14 @@ mod tests {
     #[td_test::test(db)]
     async fn test_replay_done_mints_new_fr(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (lfr, fr_old, _head) =
-            seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Done).await;
+        let (lfr, fr_old, _head) = seed_runnable(
+            &db,
+            p.base.project_id,
+            "c0",
+            "f0",
+            LogicalFunctionRunStatus::Done,
+        )
+        .await;
 
         let response = Services::with_defaults(db.clone())
             .replay_logical_function_run(replay_request(&lfr.base.id))
@@ -262,8 +274,14 @@ mod tests {
     #[td_test::test(db)]
     async fn test_replay_in_flight_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (lfr, _fr, _head) =
-            seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Running).await;
+        let (lfr, _fr, _head) = seed_runnable(
+            &db,
+            p.base.project_id,
+            "c0",
+            "f0",
+            LogicalFunctionRunStatus::Running,
+        )
+        .await;
 
         let result = Services::with_defaults(db.clone())
             .replay_logical_function_run(replay_request(&lfr.base.id))
@@ -279,14 +297,20 @@ mod tests {
     #[td_test::test(db)]
     async fn test_replay_dispatched_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (lfr, fr, _head) =
-            seed_runnable(&db, p.id, "c0", "f0", LogicalFunctionRunStatus::Committed).await;
+        let (lfr, fr, _head) = seed_runnable(
+            &db,
+            p.base.project_id,
+            "c0",
+            "f0",
+            LogicalFunctionRunStatus::Committed,
+        )
+        .await;
         let dispatched = PhysicalFunctionRunInsertDB {
             id: PhysicalFunctionRunId::new(),
             status: PhysicalFunctionRunStatus::Dispatched,
             ..fr.base.clone()
         };
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .scd2()
             .open(&dispatched, LockInstant::asserted(*AtTime::now()))
             .await?;
@@ -313,7 +337,7 @@ mod tests {
     async fn test_replay_picks_up_latest_patch(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -337,15 +361,19 @@ mod tests {
             enabled: None,
             workers: None,
         };
-        let head = db.scoped(p.id).seed().function(&coll, &create).await?;
-        let exec = db.scoped(p.id).seed().execution(&head).await?;
+        let head = db
+            .scoped(p.base.project_id)
+            .seed()
+            .function(&coll, &create)
+            .await?;
+        let exec = db.scoped(p.base.project_id).seed().execution(&head).await?;
         let trx = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let fr_old = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &coll,
@@ -363,7 +391,7 @@ mod tests {
             .await?;
         let lfr_id = lfr_old.base.id.clone();
 
-        let patch_id = seed_patch(&db, p.id, &head).await?;
+        let patch_id = seed_patch(&db, p.base.project_id, &head).await?;
 
         let response = Services::with_defaults(db.clone())
             .replay_logical_function_run(replay_request(&lfr_id))
@@ -407,7 +435,7 @@ mod tests {
     async fn test_replay_no_attempt_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -431,10 +459,14 @@ mod tests {
             enabled: None,
             workers: None,
         };
-        let head = db.scoped(p.id).seed().function(&coll, &create).await?;
-        let exec = db.scoped(p.id).seed().execution(&head).await?;
+        let head = db
+            .scoped(p.base.project_id)
+            .seed()
+            .function(&coll, &create)
+            .await?;
+        let exec = db.scoped(p.base.project_id).seed().execution(&head).await?;
         let trx = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
@@ -442,7 +474,7 @@ mod tests {
         // Bound event we don't want here) and append InitialMint Pending.
         let lfr = LogicalFunctionRunInsertDB {
             id: LogicalFunctionRunId::new(),
-            collection_id: coll.id,
+            collection_id: coll.base.collection_id,
             execution_id: exec.base.id,
             transaction_id: trx.base.id,
             function_id: head.base.function_id,
@@ -451,10 +483,10 @@ mod tests {
             triggered_on: trx.base.triggered_on,
             triggered_by_id: trx.base.triggered_by_id,
             status: LogicalFunctionRunStatus::Committed,
-            group_id: coll.group_id,
+            group_id: coll.base.group_id,
         };
         // No attempt at all, so the run has no binding to replay.
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .insert::<LogicalFunctionRunInsertDB>(&lfr)
             .await?;
 

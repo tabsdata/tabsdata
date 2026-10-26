@@ -23,6 +23,6 @@ async fn list_projects(
     let (grant, visible_projects) = authz.visible_projects(gated_conn, &ctx).await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<ProjectRead>::try_from(&list_params)?;
-    let rows = conn.list(&visible_projects, &query_params).await?;
+    let rows = conn.scd2().list(&visible_projects, &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }

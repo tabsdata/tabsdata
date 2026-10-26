@@ -66,20 +66,25 @@ pub(crate) fn build_function_info(
         Decorator::Transformer | Decorator::Subscriber => None,
     };
 
-    let project = f.base.project.clone().ok_or_else(|| {
-        api_error!(
-            ApiError::InternalError,
-            "function run [{}] references unknown project {}",
-            f.base.base.base.id,
-            f.base.base.project_id
-        )
-    })?;
+    let project = f
+        .base
+        .project
+        .clone()
+        .ok_or_else(|| {
+            api_error!(
+                ApiError::InternalError,
+                "function run [{}] references unknown project {}",
+                f.base.base.base.id,
+                f.base.base.project_id
+            )
+        })?
+        .name()?;
 
     let info = FunctionInfo {
         project_id: f.base.base.project_id,
         project,
         collection_id: f.base.base.base.collection_id,
-        collection: f.base.collection.clone(),
+        collection: f.base.collection.name()?,
         function_id: f.base.base.base.function_id,
         function: f.base.name.clone(),
         function_version_id: effective_fvid.clone(),
@@ -113,6 +118,7 @@ mod tests {
         PhysicalFunctionRunStatus, ProjectId, ProjectName, StageId, StorageVersion, TransactionId,
         Trigger, UserId, UserName,
     };
+    use td_objects::types::basic::{CollectionLabel, ProjectLabel};
 
     /// Proves each stamped base_path on `PhysicalFunctionRunToExecute` is routed
     /// to the CORRECT storage location (no cross-wiring): bundle → `bundle_base_path`,
@@ -149,8 +155,8 @@ mod tests {
                     interval: Scd2Interval::open(Scd2ValidFrom::asserted(*AtTime::now())),
                 },
                 name: FunctionName::try_from("fn0").unwrap(),
-                project: Some(ProjectName::try_from("p0").unwrap()),
-                collection: CollectionName::try_from("c0").unwrap(),
+                project: Some(ProjectLabel::new(ProjectName::try_from("p0").unwrap())),
+                collection: CollectionLabel::new(CollectionName::try_from("c0").unwrap()),
                 execution: None,
                 execution_function_version_id: FunctionVersionId::new().into(),
                 storage_version: StorageVersion::V1,

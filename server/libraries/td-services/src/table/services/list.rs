@@ -62,7 +62,7 @@ mod tests {
     async fn test_list_current_tables(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -92,14 +92,14 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.table_list(request).await;
@@ -116,7 +116,7 @@ mod tests {
     async fn test_list_current_tables_reports_the_parent(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("parented")?;
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -167,7 +167,7 @@ mod tests {
                         },
                         create,
                     )
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?;
 
@@ -183,7 +183,7 @@ mod tests {
             .table_list(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .list((), ListParams::default())
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?
             .data
@@ -222,7 +222,7 @@ mod tests {
         let _user_role = db.seed().user_role(&user.id, &role.id).await?;
 
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -252,14 +252,14 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.table_list(request).await;
@@ -272,7 +272,7 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), user.id)
             .list((), ListParams::default())
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         assert_service_error(service.table_list(request).await, |err| match err {

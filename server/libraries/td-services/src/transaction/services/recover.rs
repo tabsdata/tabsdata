@@ -16,7 +16,6 @@ use td_bridge::BridgeProviderHandle;
 use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::transaction::{TransactionDB, TransactionParam};
@@ -39,9 +38,7 @@ async fn transaction_recover(
         let mut trx = db.read().await?;
         let conn = trx.get(authz.none());
         let transaction: TransactionDB = conn.fetch_one(&transaction_id).await?;
-        let collection: ResolvedCollectionDB =
-            conn.fetch_one(&transaction.base.collection_id).await?;
-        let project = collection.base.project_id;
+        let project = transaction.project_id;
         let grant = authz
             .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
             .await?;
@@ -129,7 +126,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -154,7 +151,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -189,7 +186,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![
@@ -227,7 +224,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.id,
+            p.base.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Running,
@@ -268,7 +265,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.id,
+            p.base.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Running,
@@ -309,7 +306,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -347,7 +344,7 @@ mod tests {
                 let db = db.clone();
                 test_recover_transaction(
                     db,
-                    p.id,
+                    p.base.project_id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Running,
                         transactions: vec![TestTransaction {
@@ -404,7 +401,7 @@ mod tests {
                 let db = db.clone();
                 test_recover_transaction(
                     db,
-                    p.id,
+                    p.base.project_id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Running,
                         transactions: vec![TestTransaction {

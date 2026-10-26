@@ -56,16 +56,16 @@ fn kubernetes(db: &TdPool) -> (Services, InMemoryOrchestratorMessageQueue) {
 async fn running(db: &TdPool) -> Result<(ProjectId, ExecutionResponse), TdError> {
     let p = db.seed().test_project().await?;
     let seeded = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from(COLLECTION)?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .function(&seeded, &register(FUNCTION, None))
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .worker(
             &seeded,
@@ -90,10 +90,10 @@ async fn running(db: &TdPool) -> Result<(ProjectId, ExecutionResponse), TdError>
                 external_uid: None,
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let execution = dispatch_services(db).execute_function(execute).await?.data;
     kubernetes(db).0.request(()).await?;
-    Ok((p.id, execution))
+    Ok((p.base.project_id, execution))
 }
 
 async fn delete_collection_and_project(db: &TdPool, project: ProjectId) -> Result<(), TdError> {

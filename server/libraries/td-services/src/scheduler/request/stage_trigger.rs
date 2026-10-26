@@ -130,9 +130,13 @@ pub(crate) fn stage_trigger_start_message(
                 trigger: Callback::Http(fn_trigger),
                 responder: callback,
                 project_id: stage_trigger_worker.base.project_id,
-                project: stage_trigger_worker.project.clone(),
+                project: stage_trigger_worker
+                    .project
+                    .as_ref()
+                    .map(|p| p.name())
+                    .transpose()?,
                 collection_id: stage_trigger_worker.base.base.collection_id,
-                collection: stage_trigger_worker.collection.clone(),
+                collection: stage_trigger_worker.collection.name()?,
                 connection_id: stage_trigger_worker.connection_id,
                 connection: stage_trigger_worker.connection.clone(),
                 function_id: stage_trigger_worker.function_id,
@@ -179,7 +183,7 @@ pub(crate) fn stage_trigger_start_message(
             worker_id: stage_trigger_worker.base.base.id.clone(),
             project_id: stage_trigger_worker.base.project_id,
             collection_id: stage_trigger_worker.base.base.collection_id,
-            collection: stage_trigger_worker.collection.clone(),
+            collection: stage_trigger_worker.collection.name()?,
             function_version_id: stage_trigger_worker.base.base.function_version_id.clone(),
             function: stage_trigger_worker.function.clone(),
             function_defined_on: f.base.interval.valid_from.into(),

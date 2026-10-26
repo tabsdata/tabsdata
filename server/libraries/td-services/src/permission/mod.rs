@@ -33,7 +33,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::{PermissionCreate, PermissionDB, PermissionDBWithNames};
-use td_objects::dxo::project::ActiveProjectDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::types::basic::{
     EntityId, PermissionEntityType, ProjectId, ProjectName, RoleIdName,
@@ -62,9 +62,9 @@ pub async fn build_permission_db<S: DbScope, M: AccessMode>(
 
     let entity_id = if let Some(entity_name) = entity_name {
         let project_name = ProjectName::try_from(entity_name.to_string())?;
-        let project = conn.fetch_one::<ActiveProjectDB>(&project_name).await?;
+        let project = conn.scd2().fetch_one::<ProjectDB>(&project_name).await?;
 
-        EntityId::try_from(project.id)?
+        EntityId::try_from(project.base.project_id)?
     } else {
         EntityId::all_entities()
     };

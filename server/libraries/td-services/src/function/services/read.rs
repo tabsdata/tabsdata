@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::collection::resolve_collection_id;
 use crate::topology::read_version;
 use std::collections::HashMap;
 use std::ops::Deref;
@@ -45,10 +46,11 @@ async fn read_function(
     let function_id_name = function_param.function;
     let version = read_version(conn, &project, &topology_param).await?;
 
+    let collection_id = resolve_collection_id(conn, &collection).await?;
     let function: FunctionDBWithNames = conn
         .scd2()
         .as_of(&version.interval.valid_from)
-        .fetch_one(and!(&collection, &function_id_name))
+        .fetch_one(and!(&collection_id, &function_id_name))
         .await?;
 
     let function_id = function.base.base.function_id;
@@ -128,16 +130,16 @@ pub fn vec_create_table_dependency(
 
     let table_deps = dependencies
         .iter()
-        .filter_map(|d| {
-            let table = tables.get(&d.base.base.table_id)?;
+        .filter_map(|d| tables.get(&d.base.base.table_id).map(|table| (d, table)))
+        .map(|(d, table)| {
             let versions = d.base.base.table_versions.deref().clone();
-            Some(TableDependency::new(VersionedTableRef::new(
-                Some(table.collection.clone()),
+            Ok(TableDependency::new(VersionedTableRef::new(
+                Some(table.collection.name()?),
                 table.base.base.name.clone(),
                 versions,
             )))
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, TdError>>()?;
     Ok(table_deps)
 }
 
@@ -162,10 +164,11 @@ mod tests {
     use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
-    use td_error::TdError;
+    use td_error::{ApiError, TdError};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::topology::ProjectTopologyDB;
+    use td_objects::types::basic::CollectionLabel;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, TableNameDto,
@@ -179,7 +182,7 @@ mod tests {
     async fn test_read(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("cofnig")?, &UserId::admin())
             .await?;
@@ -213,7 +216,7 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -234,7 +237,7 @@ mod tests {
                     at: None,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.read_function(request).await;
@@ -259,7 +262,7 @@ mod tests {
         assert_eq!(function.base.status, response.function.status);
         assert_eq!(
             response.function.collection,
-            CollectionName::try_from("cofnig")?
+            CollectionLabel::try_from("cofnig")?
         );
         assert_eq!(
             response.function.defined_by,
@@ -304,7 +307,7 @@ mod tests {
         let collection_name = CollectionName::try_from("doomed")?;
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -329,7 +332,7 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -342,29 +345,30 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str(&collection_name.to_string())?,
                     })
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?;
 
-        let request = |topology: TopologyReadParam| {
+        let request = |collection: &str, topology: TopologyReadParam| {
             RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read((
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection_name.to_string())
-                            .unwrap(),
+                        collection: CollectionIdName::from_str(collection).unwrap(),
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("publisher").unwrap(),
                     },
                     topology,
                 ))
-                .in_project(p.id)
+                .in_project(p.base.project_id)
         };
+        let by_name = collection_name.to_string();
+        let by_id = format!("~{}", collection.base.collection_id);
 
         let registered = db
             .scd2()
             .as_of(&registered_at)
-            .fetch_one::<ProjectTopologyDB>(&p.id)
+            .fetch_one::<ProjectTopologyDB>(&p.base.project_id)
             .await?;
         for topology in [
             TopologyReadParam {
@@ -376,46 +380,69 @@ mod tests {
                 at: Some(registered_at),
             },
         ] {
-            let read = service.read_function(request(topology)).await?.data;
+            let err = service
+                .read_function(request(&by_name, topology.clone()))
+                .await
+                .map(|_| ())
+                .unwrap_err();
+            assert_eq!(err.api_error(), ApiError::NotFound);
+            let read = service.read_function(request(&by_id, topology)).await?.data;
             assert_eq!(read.function.id, function.base.id);
-            assert_eq!(read.function.collection_id, collection.id);
+            assert_eq!(read.function.collection_id, collection.base.collection_id);
             assert_eq!(read.tables, vec![TableName::try_from("t0")?]);
         }
 
         assert!(
             service
-                .read_function(request(TopologyReadParam {
-                    topology_version: None,
-                    at: None
-                }))
+                .read_function(request(
+                    &by_id,
+                    TopologyReadParam {
+                        topology_version: None,
+                        at: None
+                    }
+                ))
                 .await
                 .is_err()
         );
 
         let recreated = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
-        let refunction = db.scoped(p.id).seed().function(&recreated, &create).await?;
+        let refunction = db
+            .scoped(p.base.project_id)
+            .seed()
+            .function(&recreated, &create)
+            .await?;
 
+        let old_topology = || TopologyReadParam {
+            topology_version: Some(registered.base.id),
+            at: None,
+        };
+        assert!(
+            service
+                .read_function(request(&by_name, old_topology()))
+                .await
+                .is_err()
+        );
         let read = service
-            .read_function(request(TopologyReadParam {
-                topology_version: Some(registered.base.id),
-                at: None,
-            }))
+            .read_function(request(&by_id, old_topology()))
             .await?
             .data;
         assert_eq!(read.function.id, function.base.id);
         let read = service
-            .read_function(request(TopologyReadParam {
-                topology_version: None,
-                at: None,
-            }))
+            .read_function(request(
+                &by_name,
+                TopologyReadParam {
+                    topology_version: None,
+                    at: None,
+                },
+            ))
             .await?
             .data;
         assert_eq!(read.function.id, refunction.base.id);
-        assert_eq!(read.function.collection_id, recreated.id);
+        assert_eq!(read.function.collection_id, recreated.base.collection_id);
         Ok(())
     }
 }

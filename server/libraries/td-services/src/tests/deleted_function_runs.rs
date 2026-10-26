@@ -132,11 +132,11 @@ async fn function_runners(db: &TdPool) -> Result<Vec<WorkerDB>, TdError> {
 
 async fn setup(db: &TdPool) -> Result<ProjectId, TdError> {
     let p = db.seed().test_project().await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from(COLLECTION)?, &UserId::admin())
         .await?;
-    Ok(p.id)
+    Ok(p.base.project_id)
 }
 
 /// A run of a deleted function ends Canceled on the next tick, and its pod

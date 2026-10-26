@@ -70,7 +70,7 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
     use td_objects::and;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::execution::ExecutionDB;
@@ -78,7 +78,7 @@ mod tests {
     use td_objects::dxo::function::{FunctionDB, FunctionRegister, FunctionUpdate};
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-    use td_objects::dxo::project::ActiveProjectDB;
+    use td_objects::dxo::project::ProjectDB;
     use td_objects::dxo::table::{TableDB, TableDBWithNames};
     use td_objects::dxo::transaction::TransactionDB;
     use td_objects::types::basic::AtTime;
@@ -103,7 +103,7 @@ mod tests {
             _setup_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -123,7 +123,7 @@ mod tests {
             _setup_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -145,7 +145,7 @@ mod tests {
             _setup_table(db.clone(), &p).await?;
 
         let previous_with_data = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -162,14 +162,18 @@ mod tests {
             .timeline()
             .fetch_one(&table.base.function_version_id)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -180,7 +184,7 @@ mod tests {
             )
             .await?;
         let current_without_data = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -206,7 +210,7 @@ mod tests {
             _setup_table(db.clone(), &p).await?;
 
         let previous_with_data = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -219,7 +223,7 @@ mod tests {
         let (execution, transaction, physical_function_run, table) =
             _update_table_version(db.clone(), &collection, &p).await?;
         let current_without_data = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -245,7 +249,7 @@ mod tests {
             _setup_table(db.clone(), &p).await?;
 
         let _previous_with_data = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -261,7 +265,7 @@ mod tests {
             .fetch_one(&table.base.function_version_id)
             .await?;
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -272,7 +276,7 @@ mod tests {
             )
             .await?;
         let current_without_data = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -294,7 +298,7 @@ mod tests {
             _setup_table(db.clone(), &p).await?;
 
         let previous_with_data = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -307,7 +311,7 @@ mod tests {
         let (execution, transaction, physical_function_run, table) =
             _update_table_version(db.clone(), &collection, &p).await?;
         let current_without_data = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -326,10 +330,10 @@ mod tests {
 
     async fn _setup_table(
         db: TdPool,
-        p: &ActiveProjectDB,
+        p: &ProjectDB,
     ) -> Result<
         (
-            ActiveCollectionDB,
+            CollectionDB,
             ExecutionDB,
             TransactionDB,
             PhysicalFunctionRunDB,
@@ -338,7 +342,7 @@ mod tests {
         TdError,
     > {
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -365,20 +369,24 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -405,8 +413,8 @@ mod tests {
 
     async fn _update_table_version(
         db: TdPool,
-        collection: &ActiveCollectionDB,
-        p: &ActiveProjectDB,
+        collection: &CollectionDB,
+        p: &ProjectDB,
     ) -> Result<(ExecutionDB, TransactionDB, PhysicalFunctionRunDB, TableDB), TdError> {
         // Change the table's definition, so the update versions it.
         let table_1 = TableNameDto::try_from("table_1")?;
@@ -424,7 +432,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin")?,
@@ -432,22 +443,26 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
         let response = response?;
 
         let function: FunctionDB = db.timeline().fetch_one(&(response.id)).await?;
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 collection,
@@ -517,10 +532,10 @@ mod tests {
 
     async fn _setup_committed_table(
         db: TdPool,
-        p: &ActiveProjectDB,
+        p: &ProjectDB,
     ) -> Result<
         (
-            ActiveCollectionDB,
+            CollectionDB,
             ExecutionDB,
             TransactionDB,
             PhysicalFunctionRunDB,
@@ -529,7 +544,7 @@ mod tests {
         TdError,
     > {
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -556,20 +571,24 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -603,7 +622,7 @@ mod tests {
             _setup_committed_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -628,7 +647,7 @@ mod tests {
             _setup_committed_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -653,7 +672,7 @@ mod tests {
             _setup_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,
@@ -678,7 +697,7 @@ mod tests {
             _setup_table(db.clone(), &p).await?;
 
         let dv = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version_with_data(
                 &collection,

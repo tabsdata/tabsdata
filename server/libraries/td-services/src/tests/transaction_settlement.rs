@@ -112,48 +112,54 @@ async fn assert_discarded(db: &TdPool, transaction: &TransactionId) -> Result<()
 async fn split_transaction_settles(db: TdPool, order: Order) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let test_executions = executions()?;
-    run_status_scenario(db.clone(), p.id, &test_executions, |_, e, t, f, w| {
-        let db = db.clone();
-        let upstream_execution = e[&test_executions[0]].base.id.clone();
-        let split = &test_executions[1].transactions[0];
-        let transaction = t[split].base.id.clone();
-        let sibling = &split.functions[1];
-        let sibling_run = f[sibling].base.id.clone();
-        let sibling_worker = w[sibling].base.id.clone();
-        async move {
-            match order {
-                Order::DoneThenCancel => {
-                    post_callback(
-                        &db,
-                        &sibling_run,
-                        &sibling_worker,
-                        WorkerCallbackStatus::Done,
-                    )
-                    .await?;
-                    cancel_execution(&db, upstream_execution).await?;
+    run_status_scenario(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, e, t, f, w| {
+            let db = db.clone();
+            let upstream_execution = e[&test_executions[0]].base.id.clone();
+            let split = &test_executions[1].transactions[0];
+            let transaction = t[split].base.id.clone();
+            let sibling = &split.functions[1];
+            let sibling_run = f[sibling].base.id.clone();
+            let sibling_worker = w[sibling].base.id.clone();
+            async move {
+                match order {
+                    Order::DoneThenCancel => {
+                        post_callback(
+                            &db,
+                            &sibling_run,
+                            &sibling_worker,
+                            WorkerCallbackStatus::Done,
+                        )
+                        .await?;
+                        cancel_execution(&db, upstream_execution).await?;
+                    }
+                    Order::CancelThenDone => {
+                        cancel_execution(&db, upstream_execution).await?;
+                        post_callback(
+                            &db,
+                            &sibling_run,
+                            &sibling_worker,
+                            WorkerCallbackStatus::Done,
+                        )
+                        .await?;
+                    }
                 }
-                Order::CancelThenDone => {
-                    cancel_execution(&db, upstream_execution).await?;
-                    post_callback(
-                        &db,
-                        &sibling_run,
-                        &sibling_worker,
-                        WorkerCallbackStatus::Done,
-                    )
-                    .await?;
+                dispatch_services(&db).request(()).await?;
+                assert_discarded(&db, &transaction).await?;
+                if matches!(order, Order::CancelThenDone) {
+                    let attempt: PhysicalFunctionRunDB =
+                        db.timeline().fetch_one(&sibling_run).await?;
+                    assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Failed);
+                    let worker: WorkerDB = db.fetch_one(&sibling_worker).await?;
+                    assert_eq!(worker.base.status, WorkerStatus::Failed);
                 }
+                Ok(())
             }
-            dispatch_services(&db).request(()).await?;
-            assert_discarded(&db, &transaction).await?;
-            if matches!(order, Order::CancelThenDone) {
-                let attempt: PhysicalFunctionRunDB = db.timeline().fetch_one(&sibling_run).await?;
-                assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Failed);
-                let worker: WorkerDB = db.fetch_one(&sibling_worker).await?;
-                assert_eq!(worker.base.status, WorkerStatus::Failed);
-            }
-            Ok(())
-        }
-    })
+        },
+    )
     .await
     .map(|_| ())
 }
@@ -198,11 +204,13 @@ async fn seed_transaction(
             functions,
         }],
     }];
-    let (_, transactions, _) =
-        run_status_scenario(db.clone(), p.id, &test_executions, |_, _, _, _, _| async {
-            Ok(())
-        })
-        .await?;
+    let (_, transactions, _) = run_status_scenario(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, _, _, _, _| async { Ok(()) },
+    )
+    .await?;
     Ok(transactions[&test_executions[0].transactions[0]]
         .base
         .id
@@ -304,44 +312,50 @@ async fn test_a_transaction_does_not_commit_before_the_ones_it_read(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let test_executions = chained()?;
-    run_status_scenario(db.clone(), p.id, &test_executions, |_, e, _, f, w| {
-        let db = db.clone();
-        let upstream_execution = e[&test_executions[0]].base.id.clone();
-        let upstream = &test_executions[0].transactions[0].functions[0];
-        let reader = &test_executions[1].transactions[0].functions[0];
-        let (upstream_run, upstream_worker) = (f[upstream].clone(), w[upstream].base.id.clone());
-        let (reader_run, reader_worker) = (f[reader].clone(), w[reader].base.id.clone());
-        async move {
-            post_callback(
-                &db,
-                &upstream_run.base.id,
-                &upstream_worker,
-                WorkerCallbackStatus::Done,
-            )
-            .await?;
-            post_callback(
-                &db,
-                &reader_run.base.id,
-                &reader_worker,
-                WorkerCallbackStatus::Done,
-            )
-            .await?;
-            dispatch_services(&db).request(()).await?;
-            assert_eq!(
-                run_status(&db, &reader_run).await?,
-                LogicalFunctionRunStatus::Done,
-                "reader read upstream, whose transaction has not committed"
-            );
+    run_status_scenario(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, e, _, f, w| {
+            let db = db.clone();
+            let upstream_execution = e[&test_executions[0]].base.id.clone();
+            let upstream = &test_executions[0].transactions[0].functions[0];
+            let reader = &test_executions[1].transactions[0].functions[0];
+            let (upstream_run, upstream_worker) =
+                (f[upstream].clone(), w[upstream].base.id.clone());
+            let (reader_run, reader_worker) = (f[reader].clone(), w[reader].base.id.clone());
+            async move {
+                post_callback(
+                    &db,
+                    &upstream_run.base.id,
+                    &upstream_worker,
+                    WorkerCallbackStatus::Done,
+                )
+                .await?;
+                post_callback(
+                    &db,
+                    &reader_run.base.id,
+                    &reader_worker,
+                    WorkerCallbackStatus::Done,
+                )
+                .await?;
+                dispatch_services(&db).request(()).await?;
+                assert_eq!(
+                    run_status(&db, &reader_run).await?,
+                    LogicalFunctionRunStatus::Done,
+                    "reader read upstream, whose transaction has not committed"
+                );
 
-            cancel_execution(&db, upstream_execution).await?;
-            assert_eq!(
-                run_status(&db, &reader_run).await?,
-                LogicalFunctionRunStatus::Canceled,
-                "the cancel discards what read the canceled data"
-            );
-            Ok(())
-        }
-    })
+                cancel_execution(&db, upstream_execution).await?;
+                assert_eq!(
+                    run_status(&db, &reader_run).await?,
+                    LogicalFunctionRunStatus::Canceled,
+                    "the cancel discards what read the canceled data"
+                );
+                Ok(())
+            }
+        },
+    )
     .await
     .map(|_| ())
 }
@@ -352,30 +366,35 @@ async fn test_a_transaction_does_not_commit_before_the_ones_it_read(
 async fn test_a_transaction_commits_after_the_ones_it_read(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let test_executions = chained()?;
-    run_status_scenario(db.clone(), p.id, &test_executions, |_, _, _, f, w| {
-        let db = db.clone();
-        let runs: Vec<_> = [
-            &test_executions[1].transactions[0].functions[0],
-            &test_executions[0].transactions[0].functions[0],
-            &test_executions[0].transactions[0].functions[1],
-        ]
-        .into_iter()
-        .map(|function| (f[function].clone(), w[function].base.id.clone()))
-        .collect();
-        async move {
-            for (run, worker) in &runs {
-                post_callback(&db, &run.base.id, worker, WorkerCallbackStatus::Done).await?;
+    run_status_scenario(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, _, _, f, w| {
+            let db = db.clone();
+            let runs: Vec<_> = [
+                &test_executions[1].transactions[0].functions[0],
+                &test_executions[0].transactions[0].functions[0],
+                &test_executions[0].transactions[0].functions[1],
+            ]
+            .into_iter()
+            .map(|function| (f[function].clone(), w[function].base.id.clone()))
+            .collect();
+            async move {
+                for (run, worker) in &runs {
+                    post_callback(&db, &run.base.id, worker, WorkerCallbackStatus::Done).await?;
+                }
+                dispatch_services(&db).request(()).await?;
+                for (run, _) in &runs {
+                    assert_eq!(
+                        run_status(&db, run).await?,
+                        LogicalFunctionRunStatus::Committed
+                    );
+                }
+                Ok(())
             }
-            dispatch_services(&db).request(()).await?;
-            for (run, _) in &runs {
-                assert_eq!(
-                    run_status(&db, run).await?,
-                    LogicalFunctionRunStatus::Committed
-                );
-            }
-            Ok(())
-        }
-    })
+        },
+    )
     .await
     .map(|_| ())
 }

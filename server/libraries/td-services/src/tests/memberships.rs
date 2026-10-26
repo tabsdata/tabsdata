@@ -19,9 +19,7 @@ use td_database::pool::TdPool;
 use td_error::{ApiError, TdError};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::PermissionDB;
-use td_objects::dxo::project::{
-    ActiveProjectDB, ProjectCreate, ProjectDeleteDB, ProjectUpdate, ProjectUpdateDB,
-};
+use td_objects::dxo::project::{ProjectCreate, ProjectDB, ProjectUpdate};
 use td_objects::dxo::role::{RoleDB, RoleParam};
 use td_objects::dxo::simple_permission::SimplePermissionGrant;
 use td_objects::dxo::user::{UserDB, UserParam};
@@ -31,8 +29,8 @@ use td_objects::types::basic::{
     RoleName, SimplePermissionType, UserEnabled, UserId, UserIdName, UserName,
 };
 use td_queries::Queries;
-use td_queries::test_utils::SeedEntry;
 use td_queries::test_utils::probes::lock_table_exclusive;
+use td_queries::test_utils::{SeedEntry, seed_instant};
 
 const BLOCKED_WITHIN: Duration = Duration::from_secs(10);
 
@@ -131,7 +129,7 @@ async fn test_a_project_delete_and_a_user_delete_do_not_deadlock(
         .seed()
         .user(&UserName::try_from("u_gone")?, &UserEnabled::TRUE)
         .await?;
-    let roles: Vec<RoleDB> = db.fetch_all(Some(p.id)).await?;
+    let roles: Vec<RoleDB> = db.fetch_all(Some(p.project_id)).await?;
     for kind in [
         RoleKind::ProjectAdmin,
         RoleKind::ProjectDev,
@@ -144,19 +142,16 @@ async fn test_a_project_delete_and_a_user_delete_do_not_deadlock(
         db.seed().user_role(&user.id, &role.id).await?;
     }
 
-    let ctx = admin();
     let mut gate =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects)
             .begin(Attempt::unretried())
             .await?;
     let conn = gate.get(Grant::asserted("project delete held open"));
-    let current: ActiveProjectDB = conn
-        .for_update()
+    let current: ProjectDB = conn
+        .scd2()
         .fetch_one(&ProjectName::try_from("p_gone")?)
         .await?;
-    conn.update::<ProjectDeleteDB>(&current.to_delete_dao(&ctx), current.id)
-        .await?;
-    let roles: Vec<RoleDB> = conn.fetch_all(Some(current.id)).await?;
+    let roles: Vec<RoleDB> = conn.fetch_all(Some(current.base.project_id)).await?;
     conn.delete::<PermissionDB>(roles[0].id).await?;
     conn.delete::<UserRoleDB>(roles[0].id).await?;
 
@@ -184,11 +179,17 @@ async fn test_a_project_delete_and_a_user_delete_do_not_deadlock(
             conn.delete::<PermissionDB>(role.id).await?;
             conn.delete::<UserRoleDB>(role.id).await?;
         }
-        conn.delete::<RoleDB>(Some(current.id)).await?;
+        conn.delete::<RoleDB>(Some(current.base.project_id)).await?;
         Ok(())
     }
     .await;
     if cascade.is_ok() {
+        let mut gate = gate.enter_project(&current.base.project_id).await?;
+        let at = gate.locked_at();
+        let conn = gate.get(Grant::asserted("project delete held open"));
+        conn.scd2()
+            .close::<ProjectDB>(&current.base.project_id, at)
+            .await?;
         gate.commit().await?;
     } else {
         drop(gate);
@@ -258,30 +259,26 @@ async fn test_a_simple_grant_lands_in_the_resolved_projects_role(
 
     let ctx = admin();
     let conn = gate.get(Grant::asserted("rename held open"));
-    let current: ActiveProjectDB = conn.fetch_one(&ProjectName::try_from("a")?).await?;
+    let current: ProjectDB = conn.scd2().fetch_one(&ProjectName::try_from("a")?).await?;
     let rename = ProjectUpdate {
         name: Some(ProjectName::try_from("b")?),
         description: None,
         secrets: None,
     };
-    rename_project_roles(conn, &ctx, &current.id, &rename, &current).await?;
-    let current_id = current.id;
-    let renamed = ProjectUpdateDB {
-        name: Some(ProjectName::try_from("b")?),
-        description: None,
-        modified_on: admin().time.into(),
-        modified_by_id: admin().user_id.into(),
-    };
-    conn.update::<ProjectUpdateDB>(&renamed, current_id).await?;
-
-    let other = create("a")?.to_dao(&ctx);
-    gate.get(Grant::asserted("create held open"))
-        .insert(&other)
+    rename_project_roles(conn, &ctx, &current.base.project_id, &rename, &current).await?;
+    conn.scd2()
+        .open(&current.updated(&rename, &ctx), seed_instant())
         .await?;
-    let mut gate = gate.enter_project(&other.id).await?;
+
+    let other_create = create("a")?;
+    let other = other_create.to_dao(&ctx);
+    let mut gate = gate.enter_project(&other.project_id).await?;
+    let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("create held open"));
-    seed_default_groups(conn, &ctx).await?;
-    seed_project_roles(conn, &ctx, &other.id, &other).await?;
+    conn.topology().bump(&other.project_id, at).await?;
+    conn.scd2().open(&other, at).await?;
+    seed_default_groups(conn, &ctx, at).await?;
+    seed_project_roles(conn, &ctx, &other.project_id, &other_create.name).await?;
     gate.commit().await?;
     let _ = granting.await.expect("grant task");
 
@@ -289,7 +286,7 @@ async fn test_a_simple_grant_lands_in_the_resolved_projects_role(
         let role: RoleDB = db.fetch_one(&membership.role_id).await?;
         assert_eq!(
             role.project_id,
-            Some(granted_on.id),
+            Some(granted_on.project_id),
             "the grant on `a` put the user in {}",
             role.name
         );

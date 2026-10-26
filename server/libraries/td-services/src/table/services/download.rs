@@ -63,12 +63,12 @@ pub(crate) mod tests {
     use td_database::pool::scoped::ScopedExt;
     use td_error::TdError;
     use td_objects::and;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::AtTimeParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
-    use td_objects::dxo::project::ActiveProjectDB;
+    use td_objects::dxo::project::ProjectDB;
     use td_objects::dxo::table::TableDBWithNames;
     use td_objects::dxo::table::{TableParam, UncommittedParam};
     use td_objects::types::basic::{
@@ -87,7 +87,7 @@ pub(crate) mod tests {
         let context = Services::with_defaults(db.clone());
 
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -117,12 +117,13 @@ pub(crate) mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
 
-        let (collection_name, collection_id) = (collection.name.clone(), collection.id);
+        let (collection_name, collection_id) =
+            (collection.base.name.clone(), collection.base.collection_id);
         let get_download = async move |context: &Services,
                                        table: &str,
                                        at_time: &AtTime|
@@ -140,7 +141,7 @@ pub(crate) mod tests {
                         uncommitted: UncommittedStatus::TRUE,
                     },
                 ))
-                .in_project(p.id);
+                .in_project(p.base.project_id);
             let service = context.clone();
             let response = service.table_download(request).await?.data;
             let mut stream = response.into_inner();
@@ -161,7 +162,7 @@ pub(crate) mod tests {
                         uncommitted: UncommittedStatus::TRUE,
                     },
                 ))
-                .in_project(p.id);
+                .in_project(p.base.project_id);
             let service = context.clone();
             let response = service.table_download(request).await?.data;
             let mut stream = response.into_inner();
@@ -192,8 +193,8 @@ pub(crate) mod tests {
     pub async fn test_download_tables(
         db: &TdPool,
         context: &Services,
-        p: &ActiveProjectDB,
-        collection: &ActiveCollectionDB,
+        p: &ProjectDB,
+        collection: &CollectionDB,
         function: &FunctionDB,
         tables: &[TableName],
         get_download: impl AsyncFn(&Services, &str, &AtTime) -> Result<Bytes, TdError>,
@@ -203,17 +204,21 @@ pub(crate) mod tests {
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = db.scoped(p.id).seed().execution(function).await?;
+            let execution = db
+                .scoped(p.base.project_id)
+                .seed()
+                .execution(function)
+                .await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = db
-                .scoped(p.id)
+                .scoped(p.base.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?;
 
             at_times.push(AtTime::now());
             let physical_function_run = db
-                .scoped(p.id)
+                .scoped(p.base.project_id)
                 .seed()
                 .physical_function_run(
                     collection,
@@ -228,7 +233,7 @@ pub(crate) mod tests {
                 let table_version = db
                     .scd2()
                     .fetch_one::<TableDBWithNames>(and!(
-                        &collection.id,
+                        &collection.base.collection_id,
                         &TableIdName::Name(table.clone())
                     ))
                     .await?
@@ -236,7 +241,7 @@ pub(crate) mod tests {
 
                 if i % 2 == 0 {
                     let physical_table_data_version = db
-                        .scoped(p.id)
+                        .scoped(p.base.project_id)
                         .seed()
                         .physical_table_data_version_with_data(
                             collection,
@@ -295,7 +300,7 @@ pub(crate) mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    db.scoped(p.id)
+                    db.scoped(p.base.project_id)
                         .seed()
                         .physical_table_data_version(
                             collection,

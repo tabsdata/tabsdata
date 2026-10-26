@@ -15,7 +15,7 @@ pub(crate) fn build_cron_input(worker: WorkerDBWithNames) -> Result<CronInput, T
     let info = CronInfo {
         worker_id: worker.base.base.id,
         collection_id: worker.base.base.collection_id,
-        collection: worker.collection,
+        collection: worker.collection.name()?,
         function_version_id: worker.base.base.function_version_id,
         function: worker.function,
         scheduled_on: AtTime::now(),

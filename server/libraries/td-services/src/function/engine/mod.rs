@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::dxo::topology::TopologyInstant;
@@ -39,7 +39,7 @@ pub async fn register_version(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ctx: &RequestContext,
     topology_at: TopologyInstant,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     function: &FunctionInsertDB,
     state: &FunctionState,
     spec: &FunctionSpec<'_>,

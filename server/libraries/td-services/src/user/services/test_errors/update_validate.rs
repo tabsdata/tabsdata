@@ -16,7 +16,7 @@ use td_queries::test_utils::SeedEntry;
 async fn test_update_request_has_nothing_to_update(db: TdPool) {
     let p = db.seed().test_project().await.unwrap();
     let _ = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .user(&UserName::try_from("u0").unwrap(), &UserEnabled::FALSE)
         .await;

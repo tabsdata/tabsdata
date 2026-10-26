@@ -9,7 +9,6 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
-use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::{ListRequest, ListResponse};
 use td_objects::dxo::execution::Execution;
 use td_objects::dxo::function::FunctionVersionDBWithNames;
@@ -33,8 +32,7 @@ async fn execution_list_by_function_version(
     let conn = trx.get(authz.none());
     let version: FunctionVersionDBWithNames =
         conn.timeline().fetch_one(&function_version_id).await?;
-    let collection: ResolvedCollectionDB = conn.fetch_one(&version.collection_id).await?;
-    let project = collection.base.project_id;
+    let project = version.project_id;
     let mut trx = trx.enter_project(&project).await?;
     let grant = authz
         .require::<Project, ViewProject>(&mut trx, &ctx, &project)
@@ -77,7 +75,7 @@ mod tests {
     async fn test_list_executions_by_function_version(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -104,7 +102,7 @@ mod tests {
             workers: None,
         };
         let function_version_a = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -112,17 +110,17 @@ mod tests {
 
         // Create an execution with a function run for function_version_a.
         let execution_1 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .execution(&function_version_a)
             .await?;
         let transaction_1 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution_1, &transaction_key)
             .await?;
         let function_run_1 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -136,14 +134,14 @@ mod tests {
         let table: TableDB = db
             .scd2()
             .fetch_one::<TableDBWithNames>(and!(
-                &collection.id,
+                &collection.base.collection_id,
                 &TableIdName::Name(TableName::try_from(tables[0].clone())?)
             ))
             .await?
             .base;
 
         let tdv = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -155,7 +153,7 @@ mod tests {
             .await?;
 
         // Seed a function requirement for function_run_1 (belongs to function_version_a).
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .seed()
             .logical_input(
                 &collection,
@@ -190,23 +188,23 @@ mod tests {
             workers: None,
         };
         let function_version_b = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create_b)
             .await?;
 
         let execution_2 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .execution(&function_version_b)
             .await?;
         let transaction_2 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution_2, &transaction_key)
             .await?;
         let function_run_2 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -217,7 +215,7 @@ mod tests {
             )
             .await?;
 
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .seed()
             .logical_input(
                 &collection,
@@ -243,23 +241,23 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .scd2()
             .open(&patch, LockInstant::asserted(*AtTime::now()))
             .await?;
 
         let execution_3 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .execution(&function_version_a)
             .await?;
         let transaction_3 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution_3, &transaction_key)
             .await?;
         let function_run_3 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -320,7 +318,7 @@ mod tests {
     async fn test_list_executions_by_function_version_empty(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -346,7 +344,7 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;

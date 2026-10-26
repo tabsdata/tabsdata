@@ -264,7 +264,7 @@ mod tests {
     async fn seed_mint_fixture(db: &TdPool) -> Result<MintFixture, TdError> {
         let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -288,8 +288,15 @@ mod tests {
             enabled: None,
             workers: None,
         };
-        let func = db.scoped(p.id).seed().function(&coll, &create).await?;
-        db.scoped(p.id).seed().system_tables(&func).await?;
+        let func = db
+            .scoped(p.base.project_id)
+            .seed()
+            .function(&coll, &create)
+            .await?;
+        db.scoped(p.base.project_id)
+            .seed()
+            .system_tables(&func)
+            .await?;
 
         let request_context =
             td_objects::dxo::crudl::RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -310,19 +317,19 @@ mod tests {
             table_type: TableType::default(),
             parent_table_id: None,
         };
-        let (mut conn, version) = topology_write(db, &p.id).await?;
+        let (mut conn, version) = topology_write(db, &p.base.project_id).await?;
         conn.scd2().open(&private, version).await?;
         commit_topology_write(conn).await?;
 
         let tables: Vec<TableDB> = db.timeline().fetch_all::<TableDB>(&func.base.id).await?;
-        let exec = db.scoped(p.id).seed().execution(&func).await?;
+        let exec = db.scoped(p.base.project_id).seed().execution(&func).await?;
         let trx = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &coll,

@@ -16,10 +16,10 @@ use std::str::FromStr;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
+use td_objects::dxo::collection::{CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{AtTimeParam, RequestContext};
 use td_objects::dxo::physical_function_run::{FunctionRunParam, InputIdxParam};
-use td_objects::dxo::project::ActiveProjectDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::dxo::table::{TableDB, TableParam, UncommittedParam};
 use td_objects::types::basic::{
     AccessTokenId, AtTime, BasePath, CollectionIdName, CollectionName, InputIdx,
@@ -43,15 +43,18 @@ async fn collect(stream: BoxedSyncStream) -> Result<Bytes, TdError> {
 
 async fn get_raw_data(
     services: &Services,
-    p: &ActiveProjectDB,
-    collection: &ActiveCollectionDB,
+    p: &ProjectDB,
+    collection: &CollectionDB,
     run_id: &PhysicalFunctionRunId,
     input_idx: &InputIdx,
 ) -> Result<Bytes, TdError> {
     let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
         .read((
             CollectionParam {
-                collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                collection: CollectionIdName::from_str(&format!(
+                    "~{}",
+                    collection.base.collection_id
+                ))?,
             },
             FunctionRunParam {
                 function_run: run_id.clone(),
@@ -60,21 +63,24 @@ async fn get_raw_data(
                 input_idx: *input_idx,
             },
         ))
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let stream = services.clone().function_run_raw_data(request).await?.data;
     collect(stream).await
 }
 
 async fn get_table_download(
     services: &Services,
-    p: &ActiveProjectDB,
-    collection: &ActiveCollectionDB,
+    p: &ProjectDB,
+    collection: &CollectionDB,
     table: &str,
 ) -> Result<Bytes, TdError> {
     let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
         .read((
             CollectionParam {
-                collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                collection: CollectionIdName::from_str(&format!(
+                    "~{}",
+                    collection.base.collection_id
+                ))?,
             },
             TableParam {
                 table: TableIdName::from_str(table)?,
@@ -84,7 +90,7 @@ async fn get_table_download(
                 uncommitted: UncommittedStatus::TRUE,
             },
         ))
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let stream = services.clone().table_download(request).await?.data;
     collect(stream).await
 }
@@ -96,14 +102,14 @@ async fn test_raw_data_survives_collection_move(db: TdPool) -> Result<(), TdErro
     let p = db.seed().test_project().await?;
     let services = Services::with_defaults(db.clone());
     let coll = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c0")?, &UserId::admin())
         .await?;
     let old = BasePath::try_from("/old")?;
-    let coll = set_collection_base_path(&db, p.id, &coll, Some(&old)).await?;
+    let coll = set_collection_base_path(&db, p.base.project_id, &coll, Some(&old)).await?;
 
-    let pfr = seed_dispatched_run(&db, p.id, &coll, "fa", None).await?;
+    let pfr = seed_dispatched_run(&db, p.base.project_id, &coll, "fa", None).await?;
     assert_eq!(pfr.base.base_path, old);
     let idx = InputIdx::try_from(0)?;
     let run = fetch_run(&db, &pfr.base.id).await?;
@@ -113,8 +119,13 @@ async fn test_raw_data_survives_collection_move(db: TdPool) -> Result<(), TdErro
         .write(&stamped_path, BYTES.to_vec())
         .await?;
 
-    let coll =
-        set_collection_base_path(&db, p.id, &coll, Some(&BasePath::try_from("/new")?)).await?;
+    let coll = set_collection_base_path(
+        &db,
+        p.base.project_id,
+        &coll,
+        Some(&BasePath::try_from("/new")?),
+    )
+    .await?;
 
     let bytes = get_raw_data(&services, &p, &coll, &pfr.base.id, &idx).await?;
     assert_eq!(bytes, Bytes::from_static(BYTES));
@@ -122,7 +133,7 @@ async fn test_raw_data_survives_collection_move(db: TdPool) -> Result<(), TdErro
     // Control: a live-resolved path would look under the moved prefix, where
     // nothing exists — proving the read really came off the stamped one.
     let mut live_run = run;
-    live_run.base.base.base_path = coll.effective_base_path.clone();
+    live_run.base.base.base_path = coll.base.base_path.clone().unwrap();
     let live_path = raw_data_file(&live_run, &idx)?;
     assert_ne!(live_path, stamped_path);
     assert!(!services.storage.exists(&live_path).await?);
@@ -136,26 +147,26 @@ async fn test_table_download_survives_collection_move(db: TdPool) -> Result<(), 
     let p = db.seed().test_project().await?;
     let services = Services::with_defaults(db.clone());
     let coll = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c0")?, &UserId::admin())
         .await?;
     let old = BasePath::try_from("/old")?;
-    let coll = set_collection_base_path(&db, p.id, &coll, Some(&old)).await?;
+    let coll = set_collection_base_path(&db, p.base.project_id, &coll, Some(&old)).await?;
 
     let func = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .function(&coll, &register("fa", None))
         .await?;
-    let exec = db.scoped(p.id).seed().execution(&func).await?;
+    let exec = db.scoped(p.base.project_id).seed().execution(&func).await?;
     let trx = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .transaction(&exec, &TransactionKey::try_from("ANY")?)
         .await?;
     let pfr = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .physical_function_run(
             &coll,
@@ -171,7 +182,7 @@ async fn test_table_download_survives_collection_move(db: TdPool) -> Result<(), 
         .await?
         .expect("row must exist");
     let tdv = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .physical_table_data_version_with_data(&coll, &exec, &trx, &pfr, &table)
         .await?;
@@ -191,8 +202,13 @@ async fn test_table_download_survives_collection_move(db: TdPool) -> Result<(), 
         .write(&stamped_path, BYTES.to_vec())
         .await?;
 
-    let coll =
-        set_collection_base_path(&db, p.id, &coll, Some(&BasePath::try_from("/new")?)).await?;
+    let coll = set_collection_base_path(
+        &db,
+        p.base.project_id,
+        &coll,
+        Some(&BasePath::try_from("/new")?),
+    )
+    .await?;
 
     let bytes = get_table_download(&services, &p, &coll, "fa_t0").await?;
     assert_eq!(bytes, Bytes::from_static(BYTES));

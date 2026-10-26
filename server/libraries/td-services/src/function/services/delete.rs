@@ -12,7 +12,7 @@ use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
 use td_objects::and;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
+use td_objects::dxo::collection::{CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{FunctionDB, FunctionDBWithNames};
@@ -37,11 +37,14 @@ async fn delete_function(
         let topology_at = conn.topology().bump(&project, at).await?;
 
         let collection_id_name = &collection_param.collection;
-        let _: ActiveCollectionDB = conn.fetch_one(collection_id_name).await?;
+        let collection: CollectionDB = conn.scd2().fetch_one(collection_id_name).await?;
 
         let current: FunctionDBWithNames = conn
             .scd2()
-            .fetch_one(and!(collection_id_name, &function_param.function))
+            .fetch_one(and!(
+                &collection.base.collection_id,
+                &function_param.function
+            ))
             .await?;
 
         ensure_user_managed(&current.base.base)?;
@@ -101,7 +104,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -128,7 +131,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -136,13 +139,16 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete((
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    collection: CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection.base.collection_id
+                    ))?,
                 },
                 FunctionParam {
                     function: FunctionIdName::from_str("joaquin_workout")?,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         service.delete_function(request).await?;
@@ -162,7 +168,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -192,7 +198,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -200,13 +206,13 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete((
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                    collection: CollectionIdName::from_str(&format!("{}", collection.base.name))?,
                 },
                 FunctionParam {
                     function: FunctionIdName::from_str("joaquin_workout")?,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         service.delete_function(request).await?;
@@ -226,7 +232,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -253,7 +259,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -280,7 +286,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -288,13 +294,13 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete((
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                    collection: CollectionIdName::from_str(&format!("{}", collection.base.name))?,
                 },
                 FunctionParam {
                     function: FunctionIdName::from_str("joaquin_workout")?,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         service.delete_function(request).await?;
@@ -314,7 +320,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -341,7 +347,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -368,7 +374,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -376,13 +382,13 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete((
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                    collection: CollectionIdName::from_str(&format!("{}", collection.base.name))?,
                 },
                 FunctionParam {
                     function: FunctionIdName::from_str("joaquin_workout")?,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         service.delete_function(request).await?;
@@ -402,7 +408,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -429,7 +435,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -462,7 +468,7 @@ mod tests {
                 },
                 create_1.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await;
@@ -490,7 +496,7 @@ mod tests {
         };
 
         let created_function_2 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create_2)
             .await?;
@@ -498,13 +504,16 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete((
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    collection: CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection.base.collection_id
+                    ))?,
                 },
                 FunctionParam {
                     function: FunctionIdName::from_str("joaquin_workout_2")?,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         service.delete_function(request).await?;
@@ -538,7 +547,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -573,27 +582,30 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let function = service.register_function(request).await?.data;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete((
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    collection: CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection.base.collection_id
+                    ))?,
                 },
                 FunctionParam {
                     function: FunctionIdName::from_str("function_1")?,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         service.delete_function(request).await?;
 
         let workers: Vec<WorkerDB> = db.fetch_all::<WorkerDB>(()).await.unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.collection_id, collection.base.collection_id);
         assert_eq!(worker.base.execution_id, None);
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
@@ -740,7 +752,7 @@ mod tests {
         db: &TdPool,
         project: ProjectId,
         name: &str,
-    ) -> Result<ActiveCollectionDB, TdError> {
+    ) -> Result<CollectionDB, TdError> {
         let name = CollectionName::try_from(name)?;
         db.scoped(project)
             .seed()
@@ -751,24 +763,31 @@ mod tests {
     #[td_test::test(db)]
     async fn test_delete_cascades_to_the_child_function(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = a_collection(&db, p.id, "cascade").await?;
-        seed_parent_and_child(&db, p.id, &collection.name).await?;
-        assert_eq!(live_names(&db, &collection.id).await?, [CHILD, OWNER]);
+        let collection = a_collection(&db, p.base.project_id, "cascade").await?;
+        seed_parent_and_child(&db, p.base.project_id, &collection.base.name).await?;
+        assert_eq!(
+            live_names(&db, &collection.base.collection_id).await?,
+            [CHILD, OWNER]
+        );
 
-        delete(&db, p.id, &collection.name, OWNER).await?;
+        delete(&db, p.base.project_id, &collection.base.name, OWNER).await?;
 
-        assert!(live_names(&db, &collection.id).await?.is_empty());
+        assert!(
+            live_names(&db, &collection.base.collection_id)
+                .await?
+                .is_empty()
+        );
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_delete_cascades_to_every_child_function(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = a_collection(&db, p.id, "cascade_many").await?;
+        let collection = a_collection(&db, p.base.project_id, "cascade_many").await?;
         register(
             &db,
-            p.id,
-            &collection.name,
+            p.base.project_id,
+            &collection.base.name,
             register_dto(
                 OWNER,
                 Some(vec![
@@ -780,19 +799,23 @@ mod tests {
         )
         .await?;
 
-        delete(&db, p.id, &collection.name, OWNER).await?;
+        delete(&db, p.base.project_id, &collection.base.name, OWNER).await?;
 
-        assert!(live_names(&db, &collection.id).await?.is_empty());
+        assert!(
+            live_names(&db, &collection.base.collection_id)
+                .await?
+                .is_empty()
+        );
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_deleting_a_child_function_directly_is_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = a_collection(&db, p.id, "cascade_child").await?;
-        seed_parent_and_child(&db, p.id, &collection.name).await?;
+        let collection = a_collection(&db, p.base.project_id, "cascade_child").await?;
+        seed_parent_and_child(&db, p.base.project_id, &collection.base.name).await?;
 
-        let err = delete(&db, p.id, &collection.name, CHILD)
+        let err = delete(&db, p.base.project_id, &collection.base.name, CHILD)
             .await
             .expect_err("a child function must not be deletable directly");
 
@@ -800,7 +823,10 @@ mod tests {
             err.domain_err::<ChildFunctionError>(),
             ChildFunctionError::NotUserManaged(_)
         ));
-        assert_eq!(live_names(&db, &collection.id).await?, [CHILD, OWNER]);
+        assert_eq!(
+            live_names(&db, &collection.base.collection_id).await?,
+            [CHILD, OWNER]
+        );
         Ok(())
     }
 
@@ -811,10 +837,10 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = a_collection(&db, p.id, "cascade_tables").await?;
-        seed_parent_and_child(&db, p.id, &collection.name).await?;
+        let collection = a_collection(&db, p.base.project_id, "cascade_tables").await?;
+        seed_parent_and_child(&db, p.base.project_id, &collection.base.name).await?;
 
-        delete(&db, p.id, &collection.name, OWNER).await?;
+        delete(&db, p.base.project_id, &collection.base.name, OWNER).await?;
 
         let frozen: Vec<TableDB> = db
             .scd2()

@@ -7,7 +7,7 @@ use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::DisplayVec;
 use td_error::{TdError, td_error};
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::connection::ConnectionDB;
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::types::basic::{
@@ -68,7 +68,7 @@ pub async fn ensure_connection_kind_matches<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     bridge: &BridgeProviderHandle,
     function: &FunctionInsertDB,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
 ) -> Result<(), TdError> {
     // TODO FOR 2.0: drop this guard (see fn doc) -- enforce on every orchestrator.
     if !matches!(bridge.orchestrator(), Orchestrator::Kubernetes) {
@@ -79,15 +79,15 @@ pub async fn ensure_connection_kind_matches<S: SeesProjectRows, M: AccessMode>(
             let function_connection = function.connection.as_ref().ok_or_else(|| {
                 RegisterFunctionError::ConnectionKindRequired(function.decorator.clone())
             })?;
-            let connection_id = collection.connection_id.ok_or_else(|| {
-                RegisterFunctionError::CollectionHasNoConnection(collection.name.clone())
+            let connection_id = collection.base.connection_id.ok_or_else(|| {
+                RegisterFunctionError::CollectionHasNoConnection(collection.base.name.clone())
             })?;
             let connection: ConnectionDB = conn.fetch_one(connection_id).await?;
             if *function_connection != connection.base.kind {
                 Err(RegisterFunctionError::ConnectionKindMismatch(
                     function_connection.clone(),
                     connection.base.kind.clone(),
-                    collection.name.clone(),
+                    collection.base.name.clone(),
                 ))?
             }
         }
@@ -99,11 +99,11 @@ pub async fn ensure_connection_kind_matches<S: SeesProjectRows, M: AccessMode>(
             }
 
             if function.parent_function_id.is_none()
-                && !matches!(collection.collection_type, CollectionType::DataFactory)
+                && !matches!(collection.base.collection_type, CollectionType::DataFactory)
             {
                 Err(RegisterFunctionError::TransformerInConnectedCollection(
-                    collection.name.clone(),
-                    collection.collection_type.clone(),
+                    collection.base.name.clone(),
+                    collection.base.collection_type.clone(),
                 ))?
             }
         }

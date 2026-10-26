@@ -46,6 +46,7 @@ mod table_delete;
 mod tick_retries;
 mod tick_stamps;
 mod topology_bump;
+mod topology_versions;
 mod transaction_settlement;
 mod upload_transaction;
 mod worker_resolve;

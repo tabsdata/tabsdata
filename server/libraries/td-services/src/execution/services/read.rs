@@ -14,7 +14,6 @@ use td_database::access::{AcrossProjects, DbPool};
 use td_error::TdError;
 use td_execution::TransactionBy;
 use td_execution::topology::ProjectTopology;
-use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::ReadRequest;
 use td_objects::dxo::execution::ExecutionParam;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionResponse};
@@ -39,8 +38,7 @@ async fn execution_read(
     let mut trx = db.read().await?;
     let conn = trx.get(authz.none());
     let execution: ExecutionDB = conn.fetch_one(&execution_id).await?;
-    let collection: ResolvedCollectionDB = conn.fetch_one(&execution.base.collection_id).await?;
-    let project = collection.base.project_id;
+    let project = execution.project_id;
     let mut trx = trx.enter_project(&project).await?;
     let grant = authz
         .require::<Project, ViewProject>(&mut trx, &ctx, &project)
@@ -93,11 +91,11 @@ mod tests {
     use super::*;
     use crate::Services;
     use crate::execution::services::execute::tests::test_execute;
+    use crate::tests::fixtures::delete_project;
     use td_database::pool::TdPool;
     use td_error::ApiError;
     use td_error::TdError;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::project::ProjectDeleteDB;
     use td_objects::types::basic::{AccessTokenId, ProjectName, UserId};
     use td_queries::test_utils::SeedEntry;
 
@@ -106,7 +104,8 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let execution = test_execute(db.clone(), alpha.id, false, false, false).await?;
+        let execution =
+            test_execute(db.clone(), alpha.base.project_id, false, false, false).await?;
         let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
         let request = |ctx: &RequestContext| {
             ctx.read(ExecutionParam {
@@ -117,8 +116,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         service.execution_read(request(&ctx)).await?;
 
-        db.update::<ProjectDeleteDB>(&alpha.to_delete_dao(&ctx), alpha.id)
-            .await?;
+        delete_project(&db, alpha.base.project_id).await?;
         let err = service.execution_read(request(&ctx)).await.unwrap_err();
         assert_eq!(err.api_error(), ApiError::NotFound);
         Ok(())
@@ -127,7 +125,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_read_execution(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let execution = test_execute(db.clone(), p.id, false, false, false).await?;
+        let execution = test_execute(db.clone(), p.base.project_id, false, false, false).await?;
 
         let service = Services::with_defaults(db.clone());
         let request =

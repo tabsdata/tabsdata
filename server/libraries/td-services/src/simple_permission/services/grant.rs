@@ -309,7 +309,8 @@ mod tests {
     ) -> Result<(), TdError> {
         create_project(&db, "p0").await?;
         let p0 = db
-            .fetch_one::<td_objects::dxo::project::ActiveProjectDB>(&ProjectName::try_from("p0")?)
+            .scd2()
+            .fetch_one::<td_objects::dxo::project::ProjectDB>(&ProjectName::try_from("p0")?)
             .await?;
         // requester only develops p0 (via a custom role), so cannot manage access.
         let dev_only = db
@@ -319,7 +320,7 @@ mod tests {
                 td_objects::types::basic::Description::try_from("d")?,
             )
             .await?;
-        let entity_id: EntityId = p0.id.try_into()?;
+        let entity_id: EntityId = p0.base.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::develop_project(),

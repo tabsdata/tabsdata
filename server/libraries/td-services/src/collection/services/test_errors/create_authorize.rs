@@ -48,7 +48,7 @@ async fn test_not_allowed_to_create_collection(db: TdPool) {
 
     let request = RequestContext::with(AccessTokenId::default(), user.id)
         .create((), create)
-        .in_project(p.id);
+        .in_project(p.base.project_id);
 
     let service = Services::with_defaults(db.clone());
 

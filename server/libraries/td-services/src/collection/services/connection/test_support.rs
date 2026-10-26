@@ -19,7 +19,7 @@ use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
 use td_error::{TdError, api_error};
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionCreate};
+use td_objects::dxo::collection::{CollectionCreate, CollectionDB};
 use td_objects::dxo::connection::{
     ConnectionDB, ConnectionHydrated, ConnectionRead, ConnectionUpsert, KeyValue,
 };
@@ -213,12 +213,13 @@ pub async fn linked_connection(
     project: ProjectId,
     collection: &str,
 ) -> Option<ConnectionDB> {
-    let collection: ActiveCollectionDB = db
+    let collection: CollectionDB = db
         .scoped(project)
-        .fetch_one::<ActiveCollectionDB>(&CollectionName::try_from(collection).unwrap())
+        .scd2()
+        .fetch_one::<CollectionDB>(&CollectionName::try_from(collection).unwrap())
         .await
         .unwrap();
-    match collection.connection_id {
+    match collection.base.connection_id {
         Some(id) => Some(
             db.scoped(project)
                 .fetch_one::<ConnectionDB>(&id)

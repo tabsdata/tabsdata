@@ -16,7 +16,6 @@ use td_bridge::BridgeProviderHandle;
 use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::execution::ExecutionParam;
@@ -40,9 +39,7 @@ async fn execution_recover(
         let mut trx = db.read().await?;
         let conn = trx.get(authz.none());
         let execution: ExecutionDB = conn.fetch_one(&execution_id).await?;
-        let collection: ResolvedCollectionDB =
-            conn.fetch_one(&execution.base.collection_id).await?;
-        let project = collection.base.project_id;
+        let project = execution.project_id;
         let grant = authz
             .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
             .await?;
@@ -128,7 +125,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -153,7 +150,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -188,7 +185,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![
@@ -229,7 +226,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![
@@ -267,7 +264,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Running,
@@ -308,7 +305,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Running,
@@ -349,7 +346,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -387,7 +384,7 @@ mod tests {
                 let db = db.clone();
                 test_recover_execution(
                     db,
-                    p.id,
+                    p.base.project_id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Running,
                         transactions: vec![TestTransaction {
@@ -444,7 +441,7 @@ mod tests {
                 let db = db.clone();
                 test_recover_execution(
                     db,
-                    p.id,
+                    p.base.project_id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Running,
                         transactions: vec![TestTransaction {
@@ -539,35 +536,40 @@ mod tests {
                 }],
             }],
         }];
-        test_status_update(db.clone(), p.id, &test_executions, |_, e, _, f, _| {
-            let db = db.clone();
-            let execution = e[&test_executions[0]].base.id.to_string();
-            let pfr_id = f[&test_executions[0].transactions[0].functions[0]]
-                .base
-                .id
-                .clone();
+        test_status_update(
+            db.clone(),
+            p.base.project_id,
+            &test_executions,
+            |_, e, _, f, _| {
+                let db = db.clone();
+                let execution = e[&test_executions[0]].base.id.to_string();
+                let pfr_id = f[&test_executions[0].transactions[0].functions[0]]
+                    .base
+                    .id
+                    .clone();
 
-            async move {
-                let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                    .update(
-                        ExecutionParam {
-                            execution: ExecutionId::from_str(&execution)?,
-                        },
-                        (),
-                    );
-                Services::with_defaults(db.clone())
-                    .execution_recover(request)
-                    .await?;
+                async move {
+                    let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                        .update(
+                            ExecutionParam {
+                                execution: ExecutionId::from_str(&execution)?,
+                            },
+                            (),
+                        );
+                    Services::with_defaults(db.clone())
+                        .execution_recover(request)
+                        .await?;
 
-                let pfr: PhysicalFunctionRunDB = db
-                    .timeline()
-                    .fetch_one::<PhysicalFunctionRunDB>(&pfr_id)
-                    .await?;
-                assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Failed);
-                assert!(pfr.base.ended_on.is_some());
-                Ok(())
-            }
-        })
+                    let pfr: PhysicalFunctionRunDB = db
+                        .timeline()
+                        .fetch_one::<PhysicalFunctionRunDB>(&pfr_id)
+                        .await?;
+                    assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Failed);
+                    assert!(pfr.base.ended_on.is_some());
+                    Ok(())
+                }
+            },
+        )
         .await
     }
 }

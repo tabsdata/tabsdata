@@ -92,21 +92,26 @@ async fn test_recovering_a_transaction_ends_the_abandoned_attempts_worker(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let test_executions = requested()?;
-    run_status_scenario(db.clone(), p.id, &test_executions, |_, _, t, f, w| {
-        let db = db.clone();
-        let test_transaction = &test_executions[0].transactions[0];
-        let function = &test_transaction.functions[0];
-        let transaction = t[test_transaction].base.id.clone();
-        let attempt = f[function].base.id.clone();
-        let worker = w[function].base.id.clone();
-        async move {
-            let (services, sent) = recover_services(&db);
-            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(TransactionParam { transaction }, ());
-            services.transaction_recover(request).await?;
-            assert_ended(&db, &sent, &attempt, &worker).await
-        }
-    })
+    run_status_scenario(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, _, t, f, w| {
+            let db = db.clone();
+            let test_transaction = &test_executions[0].transactions[0];
+            let function = &test_transaction.functions[0];
+            let transaction = t[test_transaction].base.id.clone();
+            let attempt = f[function].base.id.clone();
+            let worker = w[function].base.id.clone();
+            async move {
+                let (services, sent) = recover_services(&db);
+                let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(TransactionParam { transaction }, ());
+                services.transaction_recover(request).await?;
+                assert_ended(&db, &sent, &attempt, &worker).await
+            }
+        },
+    )
     .await
     .map(|_| ())
 }
@@ -117,20 +122,25 @@ async fn test_recovering_an_execution_ends_the_abandoned_attempts_worker(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let test_executions = requested()?;
-    run_status_scenario(db.clone(), p.id, &test_executions, |_, e, _, f, w| {
-        let db = db.clone();
-        let function = &test_executions[0].transactions[0].functions[0];
-        let execution = e[&test_executions[0]].base.id.clone();
-        let attempt = f[function].base.id.clone();
-        let worker = w[function].base.id.clone();
-        async move {
-            let (services, sent) = recover_services(&db);
-            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .update(ExecutionParam { execution }, ());
-            services.execution_recover(request).await?;
-            assert_ended(&db, &sent, &attempt, &worker).await
-        }
-    })
+    run_status_scenario(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, e, _, f, w| {
+            let db = db.clone();
+            let function = &test_executions[0].transactions[0].functions[0];
+            let execution = e[&test_executions[0]].base.id.clone();
+            let attempt = f[function].base.id.clone();
+            let worker = w[function].base.id.clone();
+            async move {
+                let (services, sent) = recover_services(&db);
+                let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(ExecutionParam { execution }, ());
+                services.execution_recover(request).await?;
+                assert_ended(&db, &sent, &attempt, &worker).await
+            }
+        },
+    )
     .await
     .map(|_| ())
 }

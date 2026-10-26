@@ -655,7 +655,7 @@ pub(crate) mod tests {
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::and;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::execution::{ExecutionDB, ExecutionDBWithNames};
     use td_objects::dxo::function::{FunctionDBWithNames, FunctionRegister};
     use td_objects::dxo::logical::LogicalFunctionRunDB;
@@ -708,7 +708,7 @@ pub(crate) mod tests {
     ) -> Result<(), TdError>
     where
         F: Fn(
-            &HashMap<&CollectionName, ActiveCollectionDB>,
+            &HashMap<&CollectionName, CollectionDB>,
             &HashMap<&TestExecution, ExecutionDB>,
             &HashMap<&TestTransaction, TransactionDB>,
             &HashMap<&TestFunction, PhysicalFunctionRunDB>,
@@ -797,7 +797,7 @@ pub(crate) mod tests {
     >
     where
         F: Fn(
-            &HashMap<&CollectionName, ActiveCollectionDB>,
+            &HashMap<&CollectionName, CollectionDB>,
             &HashMap<&TestExecution, ExecutionDB>,
             &HashMap<&TestTransaction, TransactionDB>,
             &HashMap<&TestFunction, PhysicalFunctionRunDB>,
@@ -816,7 +816,7 @@ pub(crate) mod tests {
             .map(|c| {
                 let db = db.clone();
                 async move {
-                    let existing = db.fetch_optional::<ActiveCollectionDB>(c).await.unwrap();
+                    let existing = db.scd2().fetch_optional::<CollectionDB>(c).await.unwrap();
 
                     if let Some(existing) = existing {
                         (c, existing)
@@ -850,7 +850,7 @@ pub(crate) mod tests {
             let existing = db
                 .scd2()
                 .fetch_optional::<FunctionDBWithNames>(and!(
-                    &collection.id,
+                    &collection.base.collection_id,
                     &FunctionIdName::Name(test_function.name.clone())
                 ))
                 .await?

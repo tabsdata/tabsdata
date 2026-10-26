@@ -33,15 +33,16 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::crudl::RequestContext;
+    use td_objects::types::basic::ProjectLabel;
     use td_objects::types::basic::{AccessTokenId, ProjectName, UserId};
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
 
     #[td_test::test(db)]
     async fn test_list_function_run_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        seed_run(&db, base.id).await?;
+        seed_run(&db, base.base.project_id).await?;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        seed_run(&db, alpha.id).await?;
+        seed_run(&db, alpha.base.project_id).await?;
 
         let service = Services::with_defaults(db.clone());
         let wildcard = service
@@ -58,8 +59,8 @@ mod tests {
             .iter()
             .filter_map(|r| r.project.clone())
             .collect();
-        assert!(projects.contains(&base.name.clone()));
-        assert!(projects.contains(&ProjectName::try_from("alpha")?));
+        assert!(projects.contains(&ProjectLabel::new(base.base.name.clone())));
+        assert!(projects.contains(&ProjectLabel::try_from("alpha")?));
         Ok(())
     }
 
@@ -68,11 +69,11 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        seed_run(&db, base.id).await?;
+        seed_run(&db, base.base.project_id).await?;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        seed_run(&db, alpha.id).await?;
+        seed_run(&db, alpha.base.project_id).await?;
 
-        let user = seed_project_viewer(&db, base.id).await?;
+        let user = seed_project_viewer(&db, base.base.project_id).await?;
 
         let service = Services::with_defaults(db.clone());
         let response = service
@@ -88,8 +89,8 @@ mod tests {
             .iter()
             .filter_map(|r| r.project.clone())
             .collect();
-        assert!(projects.contains(&base.name.clone()));
-        assert!(!projects.contains(&ProjectName::try_from("alpha")?));
+        assert!(projects.contains(&ProjectLabel::new(base.base.name.clone())));
+        assert!(!projects.contains(&ProjectLabel::try_from("alpha")?));
         Ok(())
     }
 }

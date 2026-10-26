@@ -21,9 +21,7 @@ use td_database::domain::{Apiserver, DomainPools, ScopedBy};
 use td_database::pool::TdPool;
 use td_error::{ApiError, TdError};
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::project::{
-    ActiveProjectDB, ProjectCreate, ProjectDeleteDB, ProjectParam, ProjectUpdate, ProjectUpdateDB,
-};
+use td_objects::dxo::project::{ProjectCreate, ProjectDB, ProjectParam, ProjectUpdate};
 use td_objects::types::basic::{
     AccessTokenId, BasePath, ProjectIdName, ProjectName, UserEnabled, UserId, UserName,
 };
@@ -114,7 +112,7 @@ async fn test_an_unauthorized_delete_does_not_lock_the_project(db: TdPool) -> Re
     let probe = lock_row_nowait(
         gate.get(Grant::asserted("row lock probe")),
         "projects",
-        &p.id.to_string(),
+        &p.base.project_id.to_string(),
     )
     .await;
     drop(gate);
@@ -140,15 +138,16 @@ async fn test_a_rename_racing_a_create_of_its_name_fails_cleanly(
     create_project(&services, "p_old").await?;
 
     let ctx = admin();
-    let mut gate = pools(&db).begin(Attempt::unretried()).await?;
-    let project = create("p_new")?.to_dao(&ctx);
-    gate.get(Grant::asserted("create held open"))
-        .insert(&project)
-        .await?;
-    let mut gate = gate.enter_project(&project.id).await?;
+    let gate = pools(&db).begin(Attempt::unretried()).await?;
+    let project_create = create("p_new")?;
+    let project = project_create.to_dao(&ctx);
+    let mut gate = gate.enter_project(&project.project_id).await?;
+    let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("create held open"));
-    seed_default_groups(conn, &ctx).await?;
-    seed_project_roles(conn, &ctx, &project.id, &project).await?;
+    conn.topology().bump(&project.project_id, at).await?;
+    conn.scd2().open(&project, at).await?;
+    seed_default_groups(conn, &ctx, at).await?;
+    seed_project_roles(conn, &ctx, &project.project_id, &project_create.name).await?;
 
     let renaming = tokio::spawn({
         let services = services.clone();
@@ -191,19 +190,19 @@ async fn test_a_create_racing_a_rename_to_its_name_fails_cleanly(
 
     let ctx = admin();
     let mut gate = pools(&db).begin(Attempt::unretried()).await?;
-    let conn = gate.get(Grant::asserted("rename held open"));
-    let current: ActiveProjectDB = conn.fetch_one(&ProjectName::try_from("p_old")?).await?;
-    let update = rename("p_new")?;
-    rename_project_roles(conn, &ctx, &current.id, &update, &current).await?;
-    let current_id = current.id;
-    let update_db = ProjectUpdateDB {
-        name: Some(ProjectName::try_from("p_new")?),
-        description: None,
-        modified_on: admin().time.into(),
-        modified_by_id: admin().user_id.into(),
-    };
-    conn.update::<ProjectUpdateDB>(&update_db, current_id)
+    let current: ProjectDB = gate
+        .get(Grant::asserted("rename held open"))
+        .scd2()
+        .fetch_one(&ProjectName::try_from("p_old")?)
         .await?;
+    let update = rename("p_new")?;
+    let mut gate = gate.enter_project(&current.base.project_id).await?;
+    let at = gate.locked_at();
+    let conn = gate.get(Grant::asserted("rename held open"));
+    conn.scd2()
+        .open(&current.updated(&update, &ctx), at)
+        .await?;
+    rename_project_roles(conn, &ctx, &current.base.project_id, &update, &current).await?;
 
     let creating = tokio::spawn({
         let services = services.clone();
@@ -227,8 +226,8 @@ async fn test_a_create_racing_a_rename_to_its_name_fails_cleanly(
     Ok(())
 }
 
-/// P is renamed while its delete is in flight (held here after it
-/// locked and soft-deleted P). The rename waits for P; then the delete drops
+/// P is renamed while its delete is in flight (held here after it took P's
+/// topology and closed P). The rename waits for P; then the delete drops
 /// P's roles. Neither may fail with a deadlock: the delete goes through and the
 /// rename either finds P gone or fails with a domain error.
 #[td_test::test(db)]
@@ -236,17 +235,20 @@ async fn test_a_rename_racing_a_delete_does_not_deadlock(db: TdPool) -> Result<(
     let services = Services::with_defaults(db.clone());
     create_project(&services, "p_old").await?;
 
-    let ctx = admin();
     let mut gate =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects)
             .begin(Attempt::unretried())
             .await?;
-    let conn = gate.get(Grant::asserted("delete held open"));
-    let current: ActiveProjectDB = conn
-        .for_update()
+    let current: ProjectDB = gate
+        .get(Grant::asserted("delete held open"))
+        .scd2()
         .fetch_one(&ProjectName::try_from("p_old")?)
         .await?;
-    conn.update::<ProjectDeleteDB>(&current.to_delete_dao(&ctx), current.id)
+    let mut gate = gate.enter_project(&current.base.project_id).await?;
+    let at = gate.locked_at();
+    let conn = gate.get(Grant::asserted("delete held open"));
+    conn.scd2()
+        .close::<ProjectDB>(&current.base.project_id, at)
         .await?;
 
     let renaming = tokio::spawn({
@@ -258,8 +260,11 @@ async fn test_a_rename_racing_a_delete_does_not_deadlock(db: TdPool) -> Result<(
         }
     });
     wait_until_blocking(&mut gate, "the rename").await;
-    let cascade =
-        delete_project_roles(gate.get(Grant::asserted("delete held open")), &current.id).await;
+    let cascade = delete_project_roles(
+        gate.get(Grant::asserted("delete held open")),
+        &current.base.project_id,
+    )
+    .await;
     if cascade.is_ok() {
         gate.commit().await?;
     } else {

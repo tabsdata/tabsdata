@@ -146,12 +146,12 @@ async fn publisher_callback(db: &TdPool, project: ProjectId) -> Result<(), TdErr
 #[td_test::test(db)]
 async fn callback_publishes_the_attempt(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    publisher_callback(&db, p.id).await?;
+    publisher_callback(&db, p.base.project_id).await?;
 
     let written = visible_output_versions(&db).await?;
     let response = metrics(
         &db,
-        p.id,
+        p.base.project_id,
         request(
             vec![LogicalFunctionRunStatus::Committed],
             IncludeReplaced::FALSE,
@@ -192,11 +192,11 @@ async fn callback_publishes_the_attempt(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn the_run_status_filters_the_attempt(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    publisher_callback(&db, p.id).await?;
+    publisher_callback(&db, p.base.project_id).await?;
 
     let done = metrics(
         &db,
-        p.id,
+        p.base.project_id,
         request(vec![LogicalFunctionRunStatus::Done], IncludeReplaced::FALSE),
     )
     .await?;
@@ -204,7 +204,7 @@ async fn the_run_status_filters_the_attempt(db: TdPool) -> Result<(), TdError> {
 
     let committed = metrics(
         &db,
-        p.id,
+        p.base.project_id,
         request(
             vec![LogicalFunctionRunStatus::Committed],
             IncludeReplaced::FALSE,
@@ -220,7 +220,7 @@ async fn a_failed_attempt_counts_as_failed(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     test_callback(
         db.clone(),
-        p.id,
+        p.base.project_id,
         vec![TestExecution {
             expected_status: ExecutionStatus::Stalled,
             transactions: vec![TestTransaction {
@@ -243,7 +243,7 @@ async fn a_failed_attempt_counts_as_failed(db: TdPool) -> Result<(), TdError> {
 
     let response = metrics(
         &db,
-        p.id,
+        p.base.project_id,
         request(
             vec![LogicalFunctionRunStatus::Failed],
             IncludeReplaced::FALSE,
@@ -262,13 +262,13 @@ async fn a_failed_attempt_counts_as_failed(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn a_replaced_attempt_is_filtered_not_deducted(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    publisher_callback(&db, p.id).await?;
+    publisher_callback(&db, p.base.project_id).await?;
     let lfrs: Vec<LogicalFunctionRunDB> = db.fetch_all(()).await?;
     let lfr = lfrs.first().expect("the callback ran one function");
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut trx = DbPool::in_project(&pools, &p.id)
+    let mut trx = DbPool::in_project(&pools, &p.base.project_id)
         .begin_exclusive(Attempt::unretried())
         .await?;
     runs_reattempted(
@@ -280,7 +280,7 @@ async fn a_replaced_attempt_is_filtered_not_deducted(db: TdPool) -> Result<(), T
 
     let default = metrics(
         &db,
-        p.id,
+        p.base.project_id,
         request(
             vec![LogicalFunctionRunStatus::Committed],
             IncludeReplaced::FALSE,
@@ -291,7 +291,7 @@ async fn a_replaced_attempt_is_filtered_not_deducted(db: TdPool) -> Result<(), T
 
     let replayed = metrics(
         &db,
-        p.id,
+        p.base.project_id,
         request(
             vec![LogicalFunctionRunStatus::Committed],
             IncludeReplaced::TRUE,

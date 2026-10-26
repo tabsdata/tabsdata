@@ -77,7 +77,7 @@ mod tests {
     async fn test_worker_callback(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -102,12 +102,12 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let worker = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .worker(
                 &collection,

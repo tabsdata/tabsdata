@@ -16,9 +16,11 @@ use ta_objects::FromDao;
 use td_database::access::LockInstant;
 use td_error::TdError;
 
-/// A version of a project's topology. Project creation opens the first, the
-/// empty topology; every topology write opens the next, and every topology
-/// row it writes opens or closes at that version's instant.
+/// A version of a project's graph: its functions, tables, dependencies and
+/// triggers. Project creation opens the first, the empty graph; every unit of
+/// work that writes graph rows opens the next, and those rows open or close
+/// at that version's instant. Project, collection and group writes version
+/// their own timelines without one.
 #[ta_objects::Dao]
 #[dao(table = "project_topologies", ops(insert), scd2, project_scoped)]
 pub struct ProjectTopologyInsertDB {

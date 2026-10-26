@@ -47,34 +47,39 @@ async fn test_sibling_reports_racing_roll_up_like_a_recompute(db: TdPool) -> Res
             functions: (0..SIBLINGS).map(sibling).collect::<Result<_, _>>()?,
         }],
     }];
-    test_status_update(db.clone(), p.id, &test_executions, |_, e, t, f, w| {
-        let db = db.clone();
-        let test_transaction = &test_executions[0].transactions[0];
-        let execution = e[&test_executions[0]].base.id.clone();
-        let transaction = t[test_transaction].base.id.clone();
-        let reports: Vec<_> = test_transaction
-            .functions
-            .iter()
-            .map(|function| (f[function].base.id.clone(), w[function].base.id.clone()))
-            .collect();
-        async move {
-            let outcomes = try_join_all(reports.iter().map(|(function_run, worker)| {
-                report_attempt(&db, function_run, worker, WorkerCallbackStatus::Done)
-            }))
-            .await?;
-            assert!(outcomes.iter().all(|o| *o == CallbackOutcome::Applied));
+    test_status_update(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, e, t, f, w| {
+            let db = db.clone();
+            let test_transaction = &test_executions[0].transactions[0];
+            let execution = e[&test_executions[0]].base.id.clone();
+            let transaction = t[test_transaction].base.id.clone();
+            let reports: Vec<_> = test_transaction
+                .functions
+                .iter()
+                .map(|function| (f[function].base.id.clone(), w[function].base.id.clone()))
+                .collect();
+            async move {
+                let outcomes = try_join_all(reports.iter().map(|(function_run, worker)| {
+                    report_attempt(&db, function_run, worker, WorkerCallbackStatus::Done)
+                }))
+                .await?;
+                assert!(outcomes.iter().all(|o| *o == CallbackOutcome::Applied));
 
-            let stored: TransactionDB = db.fetch_one(&transaction).await?;
-            let stored_execution: ExecutionDB = db.fetch_one(&execution).await?;
-            derive_status_rollup(&db).await?;
-            let recomputed: TransactionDB = db.fetch_one(&transaction).await?;
-            let recomputed_execution: ExecutionDB = db.fetch_one(&execution).await?;
-            assert_eq!(stored.status, recomputed.status);
-            assert_eq!(stored.ended_on, recomputed.ended_on);
-            assert_eq!(stored_execution.status, recomputed_execution.status);
-            assert_eq!(stored_execution.ended_on, recomputed_execution.ended_on);
-            Ok(())
-        }
-    })
+                let stored: TransactionDB = db.fetch_one(&transaction).await?;
+                let stored_execution: ExecutionDB = db.fetch_one(&execution).await?;
+                derive_status_rollup(&db).await?;
+                let recomputed: TransactionDB = db.fetch_one(&transaction).await?;
+                let recomputed_execution: ExecutionDB = db.fetch_one(&execution).await?;
+                assert_eq!(stored.status, recomputed.status);
+                assert_eq!(stored.ended_on, recomputed.ended_on);
+                assert_eq!(stored_execution.status, recomputed_execution.status);
+                assert_eq!(stored_execution.ended_on, recomputed_execution.ended_on);
+                Ok(())
+            }
+        },
+    )
     .await
 }

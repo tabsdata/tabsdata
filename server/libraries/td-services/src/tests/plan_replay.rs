@@ -33,7 +33,7 @@ async fn test_an_execution_reads_back_the_topology_it_planned_on(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c")?, &UserId::admin())
         .await?;
@@ -58,7 +58,7 @@ async fn test_an_execution_reads_back_the_topology_it_planned_on(
                         ..register("producer", None)
                     },
                 )
-                .in_project(p.id),
+                .in_project(p.base.project_id),
         )
         .await?;
 
@@ -75,7 +75,7 @@ async fn test_an_execution_reads_back_the_topology_it_planned_on(
                         external_uid: None,
                     },
                 )
-                .in_project(p.id),
+                .in_project(p.base.project_id),
         )
         .await?
         .data;
@@ -93,7 +93,7 @@ async fn test_an_execution_reads_back_the_topology_it_planned_on(
                         ..Default::default()
                     },
                 )
-                .in_project(p.id),
+                .in_project(p.base.project_id),
         )
         .await?;
 
@@ -113,7 +113,7 @@ async fn test_an_execution_reads_back_the_topology_it_planned_on(
 #[td_test::test(db)]
 async fn test_an_execution_reads_back_the_versions_it_pinned(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c")?, &UserId::admin())
         .await?;
@@ -140,7 +140,11 @@ async fn test_an_execution_reads_back_the_versions_it_pinned(db: TdPool) -> Resu
         },
     ] {
         services
-            .register_function(admin().create(collection()?, register).in_project(p.id))
+            .register_function(
+                admin()
+                    .create(collection()?, register)
+                    .in_project(p.base.project_id),
+            )
             .await?;
     }
     let execute = |name: &'static str| {
@@ -160,7 +164,7 @@ async fn test_an_execution_reads_back_the_versions_it_pinned(db: TdPool) -> Resu
                                     external_uid: None,
                                 },
                             )
-                            .in_project(p.id),
+                            .in_project(p.base.project_id),
                     )
                     .await?
                     .data,

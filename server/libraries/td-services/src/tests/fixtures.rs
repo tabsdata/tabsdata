@@ -9,21 +9,32 @@ use std::str::FromStr;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt as _;
 use td_error::TdError;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam, CollectionUpdateDB};
+use td_objects::dxo::collection::{CollectionDB, CollectionParam, CollectionUpdate};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::execution::{ExecutionDB, ExecutionRequest};
 use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionRegister};
+use td_objects::dxo::group::GroupDB;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::types::basic::{
-    AccessTokenId, BasePath, BundleId, CollectionIdName, CollectionName, Decorator, FunctionIdName,
-    FunctionOnly, FunctionRuntimeValues, LogicalFunctionRunStatus, OverrideDisabledTrigger,
-    PhysicalFunctionRunStatus, ProjectId, ReuseFrozen, SkipIfRunning, TableNameDto, TransactionKey,
-    UserId,
+    AccessTokenId, BasePath, BundleId, CollectionId, CollectionIdName, CollectionName, Decorator,
+    FunctionIdName, FunctionOnly, FunctionRuntimeValues, LogicalFunctionRunStatus,
+    OverrideDisabledTrigger, PhysicalFunctionRunStatus, ProjectId, ReuseFrozen, SkipIfRunning,
+    TableNameDto, TransactionKey, UserId,
 };
 use td_queries::Queries;
-use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::{SeedEntry, seed_instant};
+
+/// The live collection named `name`.
+pub(crate) async fn collection_named(
+    db: &TdPool,
+    name: &CollectionName,
+) -> Result<CollectionId, TdError> {
+    let collection: CollectionDB = db.scd2().fetch_one(name).await?;
+    Ok(collection.base.collection_id)
+}
 
 /// A publisher registration with one regular output table, `<name>_t0`, so
 /// several of them fit in one collection.
@@ -51,31 +62,46 @@ pub(crate) fn register(name: &str, base_path: Option<BasePath>) -> FunctionRegis
     }
 }
 
-/// Set (or clear) a collection's `base_path` via the live-update seam (no
-/// service oneshot): seed the updater from the current `ActiveCollectionDB`,
-/// stamp modified_on/by from a RequestContext, override base_path, then
-/// `update`.
+/// Set (or clear) a collection's `base_path` without the service: open the
+/// current version's successor with the new `base_path`.
 pub(crate) async fn set_collection_base_path(
     db: &TdPool,
     project_id: ProjectId,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     base_path: Option<&BasePath>,
-) -> Result<ActiveCollectionDB, TdError> {
+) -> Result<CollectionDB, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin())
         .read::<String>("")
         .context;
-    let update = CollectionUpdateDB {
+    let update = CollectionUpdate {
         name: None,
         description: None,
-        modified_on: request_context.time.into(),
-        modified_by_id: request_context.user_id.into(),
         base_path: Some(base_path.cloned()),
     };
     db.scoped(project_id)
-        .update::<CollectionUpdateDB>(&update, &collection.id)
+        .scd2()
+        .open(
+            &collection.updated(&update, &request_context),
+            seed_instant(),
+        )
         .await?;
-    let updated = db.fetch_one::<ActiveCollectionDB>(&collection.id).await?;
+    let updated = db
+        .scd2()
+        .fetch_one::<CollectionDB>(&collection.base.collection_id)
+        .await?;
     Ok(updated)
+}
+
+/// Delete a project without the service, which refuses a non-empty one: close
+/// its timeline and its groups'.
+pub(crate) async fn delete_project(db: &TdPool, project_id: ProjectId) -> Result<(), TdError> {
+    let at = seed_instant();
+    db.scd2().close::<ProjectDB>(&project_id, at).await?;
+    db.scoped(project_id)
+        .scd2()
+        .close::<GroupDB>(&project_id, at)
+        .await?;
+    Ok(())
 }
 
 /// Plan-build output for a publisher with one regular output table:
@@ -85,7 +111,7 @@ pub(crate) async fn set_collection_base_path(
 pub(crate) async fn seed_ready_lfr(
     db: &TdPool,
     project_id: ProjectId,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     name: &str,
     base_path: Option<BasePath>,
 ) -> Result<LogicalFunctionRunDB, TdError> {
@@ -107,7 +133,7 @@ pub(crate) async fn seed_ready_lfr(
 pub(crate) async fn seed_dispatched_run(
     db: &TdPool,
     project_id: ProjectId,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     name: &str,
     base_path: Option<BasePath>,
 ) -> Result<PhysicalFunctionRunDB, TdError> {
@@ -133,11 +159,11 @@ pub(crate) async fn dispatched_publisher(
 ) -> Result<(ProjectId, PhysicalFunctionRunDB), TdError> {
     let p = db.seed().test_project().await?;
     let seeded = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from(collection)?, &UserId::admin())
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .function(&seeded, &register(function, None))
         .await?;
@@ -159,7 +185,7 @@ pub(crate) async fn dispatched_publisher(
                 external_uid: None,
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let execution = dispatch_services(db).execute_function(execute).await?.data;
     dispatch_services(db).request(()).await?;
     let attempts: Vec<PhysicalFunctionRunDB> = db
@@ -168,13 +194,13 @@ pub(crate) async fn dispatched_publisher(
         .await?;
     let [attempt] = <[_; 1]>::try_from(attempts).expect("one attempt");
     assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Dispatched);
-    Ok((p.id, attempt))
+    Ok((p.base.project_id, attempt))
 }
 
 async fn seed_run_prelude(
     db: &TdPool,
     project_id: ProjectId,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     name: &str,
     base_path: Option<BasePath>,
 ) -> Result<(FunctionDB, ExecutionDB, TransactionDB), TdError> {

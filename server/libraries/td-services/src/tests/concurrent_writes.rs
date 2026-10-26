@@ -13,7 +13,7 @@ use td_database::access::{AcrossProjects, Attempt, DbPool, Grant};
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_error::{ApiError, TdError};
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::service_token::{ServiceTokenDB, TokenCreate, TokenSlotParam};
 use td_objects::types::basic::{AccessTokenId, CollectionName, ExpiresInDays, TokenSlot, UserId};
@@ -44,7 +44,7 @@ async fn test_write_units_are_serializable(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let across =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut trx = DbPool::in_project(&across, &p.id)
+    let mut trx = DbPool::in_project(&across, &p.base.project_id)
         .begin(Attempt::unretried())
         .await?;
     let isolation = show_setting(
@@ -64,13 +64,15 @@ async fn test_concurrent_creates_of_one_collection_name_leave_one(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let services = Services::with_defaults(db.clone());
-    let outcomes = join_all(
-        (0..CONTENDERS).map(|_| services.create_collection(create_request(p.id, "c_twin", None))),
-    )
-    .await;
+    let outcomes =
+        join_all((0..CONTENDERS).map(|_| {
+            services.create_collection(create_request(p.base.project_id, "c_twin", None))
+        }))
+        .await;
     one_winner(outcomes);
-    let live: Vec<ActiveCollectionDB> = db
-        .scoped(p.id)
+    let live: Vec<CollectionDB> = db
+        .scoped(p.base.project_id)
+        .scd2()
         .fetch_all(&CollectionName::try_from("c_twin")?)
         .await?;
     assert_eq!(live.len(), 1);

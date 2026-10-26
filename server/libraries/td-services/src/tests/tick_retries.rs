@@ -81,11 +81,11 @@ async fn test_a_dispatch_aborted_by_a_concurrent_write_lands_in_the_same_tick(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_retry")?, &UserId::admin())
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .function(&collection, &register("f_retry", None))
         .await?;
@@ -107,12 +107,18 @@ async fn test_a_dispatch_aborted_by_a_concurrent_write_lands_in_the_same_tick(
                 external_uid: None,
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let execution = dispatch_services(&db).execute_function(execute).await?.data;
     let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution.id).await?;
     let [run] = <[_; 1]>::try_from(runs).expect("one run");
 
-    let gate = hold_a_write(&db, &p.id, "transactions", run.base.transaction_id.as_i64()).await?;
+    let gate = hold_a_write(
+        &db,
+        &p.base.project_id,
+        "transactions",
+        run.base.transaction_id.as_i64(),
+    )
+    .await?;
     let tick = dispatch_services(&db);
     let ticking = tokio::spawn(async move { tick.request(()).await.map(|_| ()) });
     release_once_waited_on(gate, ticking).await?;

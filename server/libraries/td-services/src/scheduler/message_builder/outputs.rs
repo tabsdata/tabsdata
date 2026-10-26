@@ -35,7 +35,7 @@ pub(crate) fn build_output_tables(
 
         let output_table = OutputTableVersion {
             collection_id: table.base.base.base.collection_id,
-            collection: table.collection.clone(),
+            collection: table.collection.name()?,
             table_id: table.base.base.base.table_id,
             table: table.base.base.base.name.clone(),
             table_version_id: table.base.base.base.table_version_id,

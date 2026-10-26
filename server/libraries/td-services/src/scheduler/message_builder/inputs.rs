@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::collection::ResolvedCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunInputDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunToExecute;
@@ -198,11 +198,11 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
 
     // Dep-fallback is used only when an input slot has no bound TDV: on the
     // first miss resolve the function's deps once and batch-fetch their
-    // `TableDB`/`ResolvedCollectionDB` rows.
+    // `TableDB`/`CollectionDB` rows.
     struct FallbackCache {
         deps: HashMap<DependencyPos, DependencyDB>,
         tables: HashMap<TableVersionId, TableDB>,
-        colls: HashMap<CollectionId, ResolvedCollectionDB>,
+        colls: HashMap<CollectionId, CollectionDB>,
     }
     let mut fallback_cache: Option<FallbackCache> = None;
 
@@ -238,7 +238,7 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
             Some(tdv) => (
                 tdv.base.base.base.name.clone(),
                 tdv.base.base.base.collection_id,
-                tdv.collection.clone(),
+                tdv.collection.name()?,
                 tdv.base.base.base.table_id,
                 tdv.base.base.base.table_version_id,
             ),
@@ -277,15 +277,15 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                             .map(|t| (t.base.id, t))
                             .collect()
                     };
-                    let colls: HashMap<CollectionId, ResolvedCollectionDB> = if coll_ids.is_empty()
-                    {
+                    let colls: HashMap<CollectionId, CollectionDB> = if coll_ids.is_empty() {
                         HashMap::new()
                     } else {
-                        conn.chunked()
-                            .fetch_all::<ResolvedCollectionDB>(&coll_ids, ())
+                        conn.scd2()
+                            .chunked()
+                            .fetch_all::<CollectionDB>(&coll_ids, ())
                             .await?
                             .into_iter()
-                            .map(|c| (c.base.id, c))
+                            .map(|c| (c.base.collection_id, c))
                             .collect()
                     };
                     fallback_cache = Some(FallbackCache {
@@ -314,13 +314,16 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                         "TableDB not found for planned table version {pinned}"
                     )
                 })?;
-                let coll = cache.colls.get(&*dep.base.table_collection_id).ok_or_else(|| {
-                    api_error!(
-                        ApiError::InternalError,
-                        "ResolvedCollectionDB not found for dep table_collection_id {} during fallback",
-                        dep.base.table_collection_id
-                    )
-                })?;
+                let coll = cache
+                    .colls
+                    .get(&*dep.base.table_collection_id)
+                    .ok_or_else(|| {
+                        api_error!(
+                            ApiError::InternalError,
+                            "No live collection {} for a dependency during fallback",
+                            dep.base.table_collection_id
+                        )
+                    })?;
                 (
                     table.base.name.clone(),
                     *dep.base.table_collection_id,

@@ -19,9 +19,7 @@ use td_objects::Dao;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::project::ProjectParam;
-use td_objects::dxo::project::{
-    ActiveProjectDB, ActiveProjectDBWithNames, ProjectRead, ProjectUpdate, ProjectUpdateDB,
-};
+use td_objects::dxo::project::{ProjectDB, ProjectDBWithNames, ProjectRead, ProjectUpdate};
 use td_objects::errors::SqlError;
 use td_queries::Queries;
 
@@ -36,32 +34,34 @@ async fn update_project(
     let current = {
         let mut connection = db.read().await?;
         let connection = connection.get(authz.none());
-        let current: ActiveProjectDB = connection.fetch_one(&param.project).await?;
+        let current: ProjectDB = connection.scd2().fetch_one(&param.project).await?;
         let _grant = authz
-            .require::<Project, ManageProject>(connection, &ctx, &current.id)
+            .require::<Project, ManageProject>(connection, &ctx, &current.base.project_id)
             .await?;
         update_project_validate(&update)?;
         assert_project_rename_available(connection, &update, &current).await?;
         assert_project_roles_rename_available(connection, &update, &current).await?;
         current
     };
-    let project = update.name.as_ref().unwrap_or(&current.name);
+    let project = update.name.as_ref().unwrap_or(&current.base.name);
     let secrets = bridge.project_secrets();
     match &update.secrets {
         Some(desired) => {
-            secrets.upsert(&current.id, project, desired).await?;
+            secrets
+                .upsert(&current.base.project_id, project, desired)
+                .await?;
         }
-        None if project != &current.name => {
-            secrets.rename(&current.id, project).await?;
+        None if project != &current.base.name => {
+            secrets.rename(&current.base.project_id, project).await?;
         }
         None => {}
     }
     retrying(|attempt| async {
         let mut gated_trx = db.begin(attempt).await?;
         let conn = gated_trx.get(authz.none());
-        let current: ActiveProjectDB = conn.fetch_one(&param.project).await?;
+        let current: ProjectDB = conn.scd2().fetch_one(&param.project).await?;
         let _grant = authz
-            .require::<Project, ManageProject>(conn, &ctx, &current.id)
+            .require::<Project, ManageProject>(conn, &ctx, &current.base.project_id)
             .await?;
         update_project_validate(&update)?;
 
@@ -71,21 +71,21 @@ async fn update_project(
         assert_project_rename_available(conn, &update, &current).await?;
         assert_project_roles_rename_available(conn, &update, &current).await?;
 
-        let current_id = current.id;
-        let update_db = ProjectUpdateDB {
-            name: update.name.clone(),
-            description: update.description.clone(),
-            modified_on: ctx.time.into(),
-            modified_by_id: ctx.user_id.into(),
-        };
-        conn.update::<ProjectUpdateDB>(&update_db, current_id)
+        let current_id = current.base.project_id;
+        let mut gated_trx = gated_trx.enter_project(&current_id).await?;
+        let at = gated_trx.locked_at();
+        let conn = gated_trx.get(authz.none());
+        conn.scd2()
+            .open(&current.updated(&update, &ctx), at)
             .await
             .map_err(SqlError::already_exists)?;
-        // Keep the derived per-project roles in step with the rename, written
-        // after the project row, as a create and a delete take them.
+        // Keep the derived per-project roles in step with the rename. They are
+        // written after the project row, as a delete closes it before dropping
+        // them: a rename racing a delete serializes on the project row instead
+        // of deadlocking on its roles.
         rename_project_roles(conn, &ctx, &current_id, &update, &current).await?;
 
-        let with_names: ActiveProjectDBWithNames = conn.fetch_one(&current_id).await?;
+        let with_names: ProjectDBWithNames = conn.scd2().fetch_one(&current_id).await?;
         let read = ProjectRead::from_dao(with_names)?;
         gated_trx.commit().await?;
         Ok(read)
@@ -109,17 +109,18 @@ pub fn update_project_validate(update: &ProjectUpdate) -> Result<(), TdError> {
 pub async fn assert_project_rename_available<S: DbScope, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     update: &ProjectUpdate,
-    current: &ActiveProjectDB,
+    current: &ProjectDB,
 ) -> Result<(), TdError> {
     if let Some(new_name) = &update.name
-        && new_name != &current.name
+        && new_name != &current.base.name
         && conn
-            .fetch_optional::<ActiveProjectDB>(new_name)
+            .scd2()
+            .fetch_optional::<ProjectDB>(new_name)
             .await?
             .is_some()
     {
         Err(SqlError::EntityAlreadyExists(
-            ActiveProjectDB::display_name().to_string(),
+            ProjectDB::display_name().to_string(),
             format!(" for 'name' = '{new_name}'"),
         ))?;
     }

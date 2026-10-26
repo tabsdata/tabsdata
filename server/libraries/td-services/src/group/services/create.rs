@@ -6,37 +6,49 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project};
-use td_database::access::{GatedConnection, InProject, RW};
+use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::group::{Group, GroupCreate, GroupDB, GroupDBWithNames};
+use td_objects::errors::SqlError;
 use td_queries::Queries;
 
 #[service_factory]
 async fn create_group(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    db: DbPool<InProject>,
     request: WithinProject<CreateRequest<GroupCreate>>,
 ) -> Result<Group, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, _, create) = request.into_parts();
-    let grant = authz
-        .require::<Project, ManageProject>(gated_trx, &ctx, &project)
-        .await?;
-    let conn = gated_trx.get(grant);
+    retrying(|attempt| async {
+        let mut gated_trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<Project, ManageProject>(&mut gated_trx, &ctx, &project)
+            .await?;
+        let at = gated_trx.locked_at();
+        let conn = gated_trx.get(grant);
 
-    let group = create.to_dao(&ctx);
-    // A duplicate name within the project (the connection is project-scoped,
-    // matching the `groups___project_id__name___uidx` UNIQUE index) reports a
-    // clean "already exists" error instead of the raw unique-constraint
-    // violation from the insert.
-    conn.assert_not_exists::<GroupDB>(&group.name).await?;
-    conn.insert(&group).await?;
+        // A duplicate live name within the project (the connection is
+        // project-scoped, matching the live-name UNIQUE index) reports a
+        // clean "already exists" error instead of the raw unique-constraint
+        // violation from the insert.
+        conn.scd2()
+            .assert_not_exists::<GroupDB>(&create.name)
+            .await?;
+        let group = create.to_dao(&ctx);
+        conn.scd2()
+            .open(&group, at)
+            .await
+            .map_err(SqlError::already_exists)?;
 
-    let with_names: GroupDBWithNames = conn.fetch_one(&group.id).await?;
-    let read = Group::from_dao(with_names)?;
-    Ok(read)
+        let with_names: GroupDBWithNames = conn.scd2().fetch_one(&group.group_id).await?;
+        let read = Group::from_dao(with_names)?;
+        gated_trx.commit().await?;
+        Ok(read)
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -65,19 +77,20 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create((), create)
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.create_group(request).await?.data;
 
         let found = db
+            .scd2()
             .fetch_one::<GroupDB>(&GroupName::try_from("analytics")?)
             .await?;
-        assert_eq!(response.id, found.base.id);
+        assert_eq!(response.group_id, found.base.group_id);
         assert_eq!(response.name, found.base.name);
         assert_eq!(response.description, found.base.description);
-        assert_eq!(response.created_by_id, found.base.created_by_id);
-        assert_eq!(response.modified_by_id, found.base.modified_by_id);
+        assert_eq!(response.id, found.base.id);
+        assert_eq!(response.defined_by_id, found.base.defined_by_id);
         // User-created groups are never system.
         assert!(!*found.base.system);
         Ok(())
@@ -94,7 +107,7 @@ mod tests {
         let p = db.seed().test_project().await.unwrap();
         let name = GroupName::try_from("analytics").unwrap();
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .group(name.clone(), Description::try_from("first one").unwrap())
             .await;
@@ -106,7 +119,7 @@ mod tests {
         };
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create((), create)
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         assert_service_error(service.create_group(request).await, |err| match err {
             SqlError::EntityAlreadyExists(_, _) => {}
@@ -130,7 +143,7 @@ mod tests {
 
         // `dup` in the first project.
         Services::with_defaults(db.clone())
-            .create_group(ctx().create((), dup()).in_project(p.id))
+            .create_group(ctx().create((), dup()).in_project(p.base.project_id))
             .await?;
 
         // A second project, then the same group name within it — succeeds
@@ -149,7 +162,7 @@ mod tests {
             .data;
 
         Services::with_defaults(db.clone())
-            .create_group(ctx().create((), dup()).in_project(p2.id))
+            .create_group(ctx().create((), dup()).in_project(p2.project_id))
             .await?;
         Ok(())
     }

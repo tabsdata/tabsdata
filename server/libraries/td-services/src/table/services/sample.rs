@@ -124,7 +124,7 @@ mod tests {
         let storage = Ctx::new(storage);
 
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -154,7 +154,7 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -164,17 +164,21 @@ mod tests {
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = db.scoped(p.id).seed().execution(&function_version).await?;
+            let execution = db
+                .scoped(p.base.project_id)
+                .seed()
+                .execution(&function_version)
+                .await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = db
-                .scoped(p.id)
+                .scoped(p.base.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?;
 
             at_times.push(AtTime::now());
             let physical_function_run = db
-                .scoped(p.id)
+                .scoped(p.base.project_id)
                 .seed()
                 .physical_function_run(
                     &collection,
@@ -190,7 +194,7 @@ mod tests {
                 let table_version: TableDB = db
                     .scd2()
                     .fetch_one::<TableDBWithNames>(and!(
-                        &collection.id,
+                        &collection.base.collection_id,
                         &TableIdName::Name(table.clone())
                     ))
                     .await?
@@ -198,7 +202,7 @@ mod tests {
 
                 if i % 2 == 0 {
                     let physical_table_data_version = db
-                        .scoped(p.id)
+                        .scoped(p.base.project_id)
                         .seed()
                         .physical_table_data_version_with_data(
                             &collection,
@@ -257,7 +261,7 @@ mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    db.scoped(p.id)
+                    db.scoped(p.base.project_id)
                         .seed()
                         .physical_table_data_version(
                             &collection,
@@ -328,9 +332,9 @@ mod tests {
         // No data before the first function run
         let bytes_with_ids = get_sample(
             db.clone(),
-            p.id,
+            p.base.project_id,
             storage.clone(),
-            format!("~{}", collection.id).as_str(),
+            format!("~{}", collection.base.collection_id).as_str(),
             created_tables[0].as_str(),
             &at_times[0],
             0,
@@ -340,9 +344,9 @@ mod tests {
 
         let bytes_with_names = get_sample(
             db.clone(),
-            p.id,
+            p.base.project_id,
             storage.clone(),
-            &collection.name,
+            &collection.base.name,
             created_tables[0].as_str(),
             &at_times[0],
             0,
@@ -359,9 +363,9 @@ mod tests {
 
         let bytes_with_ids = get_sample(
             db.clone(),
-            p.id,
+            p.base.project_id,
             storage.clone(),
-            format!("~{}", collection.id).as_str(),
+            format!("~{}", collection.base.collection_id).as_str(),
             created_tables[0].as_str(),
             &at_times[1],
             0,
@@ -371,9 +375,9 @@ mod tests {
 
         let bytes_with_names = get_sample(
             db.clone(),
-            p.id,
+            p.base.project_id,
             storage.clone(),
-            &collection.name,
+            &collection.base.name,
             created_tables[0].as_str(),
             &at_times[1],
             0,
@@ -395,9 +399,9 @@ mod tests {
         // Sample named 0 at second function run (as it has no data, it doesn't change)
         let bytes_with_ids = get_sample(
             db.clone(),
-            p.id,
+            p.base.project_id,
             storage.clone(),
-            format!("~{}", collection.id).as_str(),
+            format!("~{}", collection.base.collection_id).as_str(),
             created_tables[0].as_str(),
             &at_times[2],
             0,
@@ -407,9 +411,9 @@ mod tests {
 
         let bytes_with_names = get_sample(
             db.clone(),
-            p.id,
+            p.base.project_id,
             storage.clone(),
-            &collection.name,
+            &collection.base.name,
             created_tables[0].as_str(),
             &at_times[2],
             0,
@@ -431,9 +435,9 @@ mod tests {
         // Sample named 2 at third function run (skip 1 as second run had no data)
         let bytes_with_ids = get_sample(
             db.clone(),
-            p.id,
+            p.base.project_id,
             storage.clone(),
-            format!("~{}", collection.id).as_str(),
+            format!("~{}", collection.base.collection_id).as_str(),
             created_tables[0].as_str(),
             &at_times[3],
             0,
@@ -443,9 +447,9 @@ mod tests {
 
         let bytes_with_names = get_sample(
             db.clone(),
-            p.id,
+            p.base.project_id,
             storage.clone(),
-            &collection.name,
+            &collection.base.name,
             created_tables[0].as_str(),
             &at_times[3],
             0,
@@ -466,9 +470,9 @@ mod tests {
 
         let bytes = get_sample(
             db.clone(),
-            p.id,
+            p.base.project_id,
             storage.clone(),
-            format!("~{}", collection.id).as_str(),
+            format!("~{}", collection.base.collection_id).as_str(),
             created_tables[0].as_str(),
             &at_times[3],
             1,
@@ -485,9 +489,9 @@ mod tests {
 
         let bytes = get_sample(
             db.clone(),
-            p.id,
+            p.base.project_id,
             storage.clone(),
-            format!("~{}", collection.id).as_str(),
+            format!("~{}", collection.base.collection_id).as_str(),
             created_tables[0].as_str(),
             &at_times[3],
             0,

@@ -13,7 +13,6 @@ use td_bridge::BridgeProviderHandle;
 use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::UpdateRequest;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::execution::ExecutionParam;
@@ -36,9 +35,7 @@ async fn execution_cancel(
         let mut trx = db.read().await?;
         let conn = trx.get(authz.none());
         let execution: ExecutionDB = conn.fetch_one(&execution_id).await?;
-        let collection: ResolvedCollectionDB =
-            conn.fetch_one(&execution.base.collection_id).await?;
-        let project = collection.base.project_id;
+        let project = execution.project_id;
         let grant = authz
             .require::<Project, DevelopProject>(&mut trx, &ctx, &project)
             .await?;
@@ -120,11 +117,17 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let run = seed_run(&db, p.id).await?;
-        let lfrs: Vec<LogicalFunctionRunDB> = db.scoped(p.id).fetch_all(&run.execution).await?;
-        let attempt: PhysicalFunctionRunDB =
-            db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
-        let mut trx = begin_exclusive(&db, p.id).await?;
+        let run = seed_run(&db, p.base.project_id).await?;
+        let lfrs: Vec<LogicalFunctionRunDB> = db
+            .scoped(p.base.project_id)
+            .fetch_all(&run.execution)
+            .await?;
+        let attempt: PhysicalFunctionRunDB = db
+            .scoped(p.base.project_id)
+            .scd2()
+            .fetch_one(&lfrs[0].base.id)
+            .await?;
+        let mut trx = begin_exclusive(&db, p.base.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("cancel test"));
         for status in [
@@ -150,11 +153,17 @@ mod tests {
             .execution_cancel(request)
             .await?;
 
-        let attempt: PhysicalFunctionRunDB =
-            db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
+        let attempt: PhysicalFunctionRunDB = db
+            .scoped(p.base.project_id)
+            .scd2()
+            .fetch_one(&lfrs[0].base.id)
+            .await?;
         assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Failed);
         assert!(attempt.base.ended_on.is_some());
-        let lfr: LogicalFunctionRunDB = db.scoped(p.id).fetch_one(&lfrs[0].base.id).await?;
+        let lfr: LogicalFunctionRunDB = db
+            .scoped(p.base.project_id)
+            .fetch_one(&lfrs[0].base.id)
+            .await?;
         assert_eq!(lfr.base.status, LogicalFunctionRunStatus::Canceled);
         Ok(())
     }
@@ -162,11 +171,17 @@ mod tests {
     #[td_test::test(db)]
     async fn test_cancel_ends_the_attempt_nothing_will_report(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let run = seed_run(&db, p.id).await?;
-        let lfrs: Vec<LogicalFunctionRunDB> = db.scoped(p.id).fetch_all(&run.execution).await?;
-        let attempt: PhysicalFunctionRunDB =
-            db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
-        let mut trx = begin_exclusive(&db, p.id).await?;
+        let run = seed_run(&db, p.base.project_id).await?;
+        let lfrs: Vec<LogicalFunctionRunDB> = db
+            .scoped(p.base.project_id)
+            .fetch_all(&run.execution)
+            .await?;
+        let attempt: PhysicalFunctionRunDB = db
+            .scoped(p.base.project_id)
+            .scd2()
+            .fetch_one(&lfrs[0].base.id)
+            .await?;
+        let mut trx = begin_exclusive(&db, p.base.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("cancel test"));
         conn.logical_runs()
@@ -190,11 +205,17 @@ mod tests {
             .execution_cancel(request)
             .await?;
 
-        let attempt: PhysicalFunctionRunDB =
-            db.scoped(p.id).scd2().fetch_one(&lfrs[0].base.id).await?;
+        let attempt: PhysicalFunctionRunDB = db
+            .scoped(p.base.project_id)
+            .scd2()
+            .fetch_one(&lfrs[0].base.id)
+            .await?;
         assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Failed);
         assert!(attempt.base.ended_on.is_some());
-        let execution: ExecutionDB = db.scoped(p.id).fetch_one(&run.execution).await?;
+        let execution: ExecutionDB = db
+            .scoped(p.base.project_id)
+            .fetch_one(&run.execution)
+            .await?;
         assert_eq!(execution.status, ExecutionStatus::Finished);
         assert_eq!(
             execution.ended_on.as_deref(),
@@ -208,7 +229,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -233,7 +254,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -268,7 +289,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![
@@ -306,7 +327,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Finished,
@@ -347,7 +368,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Finished,
@@ -390,7 +411,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Finished,
@@ -431,7 +452,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![
@@ -469,7 +490,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![
@@ -507,7 +528,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_cancel_execution(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -545,7 +566,7 @@ mod tests {
                 let db = db.clone();
                 test_cancel_execution(
                     db,
-                    p.id,
+                    p.base.project_id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Finished,
                         transactions: vec![TestTransaction {

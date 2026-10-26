@@ -39,11 +39,11 @@ fn collection() -> Result<CollectionParam, TdError> {
 async fn test_flow_renders_after_a_dependency_table_is_deleted(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_flow")?, &UserId::admin())
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .function(
             &c,
@@ -56,7 +56,7 @@ async fn test_flow_renders_after_a_dependency_table_is_deleted(db: TdPool) -> Re
             },
         )
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .function(
             &c,
@@ -82,7 +82,7 @@ async fn test_flow_renders_after_a_dependency_table_is_deleted(db: TdPool) -> Re
             ),
             update,
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     Services::with_defaults(db.clone())
         .update_function(request)
         .await?;
@@ -94,7 +94,7 @@ async fn test_flow_renders_after_a_dependency_table_is_deleted(db: TdPool) -> Re
                 table: TableIdName::from_str("t_gone")?,
             },
         ))
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     Services::with_defaults(db.clone())
         .table_delete(request)
         .await?;
@@ -110,7 +110,7 @@ async fn test_flow_renders_after_a_dependency_table_is_deleted(db: TdPool) -> Re
                 at: None,
             },
         ))
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     Services::with_defaults(db.clone())
         .table_flow_graph(request)
         .await?;

@@ -34,6 +34,7 @@ mod tests {
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::types::basic::ProjectLabel;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, LogicalFunctionRunStatus, ProjectName,
@@ -45,7 +46,7 @@ mod tests {
     async fn test_list_workers(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -75,20 +76,24 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function_version).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function_version)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -100,23 +105,23 @@ mod tests {
             .await?;
 
         let workers = [
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .worker(
                     &collection,
@@ -146,17 +151,22 @@ mod tests {
         assert_eq!(response.data[4].id, workers[4].base.id);
         assert_eq!(response.data[4].worker_type, workers[4].base.worker_type);
         assert_eq!(response.data[4].worker_type, WorkerType::CronTrigger);
-        let expected_project = Some(p.name.clone());
-        assert!(response.data.iter().all(|w| w.project == expected_project));
+        let expected_project = Some(p.base.name.clone());
+        assert!(
+            response
+                .data
+                .iter()
+                .all(|w| w.project == expected_project.clone().map(ProjectLabel::new))
+        );
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_list_worker_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        let base_worker = seed_run(&db, base.id).await?.worker;
+        let base_worker = seed_run(&db, base.base.project_id).await?.worker;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let alpha_worker = seed_run(&db, alpha.id).await?.worker;
+        let alpha_worker = seed_run(&db, alpha.base.project_id).await?.worker;
 
         let service = Services::with_defaults(db.clone());
         let wildcard = service
@@ -169,20 +179,26 @@ mod tests {
 
         // The wildcard spans both projects and each row resolves to its own.
         let base_row = wildcard.data.iter().find(|w| w.id == base_worker).unwrap();
-        assert_eq!(base_row.project, Some(base.name.clone()));
+        assert_eq!(
+            base_row.project,
+            Some(ProjectLabel::new(base.base.name.clone()))
+        );
         let alpha_row = wildcard.data.iter().find(|w| w.id == alpha_worker).unwrap();
-        assert_eq!(alpha_row.project, Some(ProjectName::try_from("alpha")?));
+        assert_eq!(
+            alpha_row.project,
+            Some(ProjectLabel::new(ProjectName::try_from("alpha")?))
+        );
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_list_worker_wildcard_filters_to_viewable(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        let base_worker = seed_run(&db, base.id).await?.worker;
+        let base_worker = seed_run(&db, base.base.project_id).await?.worker;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let alpha_worker = seed_run(&db, alpha.id).await?.worker;
+        let alpha_worker = seed_run(&db, alpha.base.project_id).await?.worker;
 
-        let user = seed_project_viewer(&db, base.id).await?;
+        let user = seed_project_viewer(&db, base.base.project_id).await?;
 
         let service = Services::with_defaults(db.clone());
         let response = service

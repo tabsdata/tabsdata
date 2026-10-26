@@ -12,7 +12,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::Dao;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::project::{ActiveProjectDB, ProjectUpdate};
+use td_objects::dxo::project::{ProjectDB, ProjectUpdate};
 use td_objects::dxo::role::{RoleDB, RoleUpdate, RoleUpdateDB};
 use td_objects::errors::SqlError;
 use td_objects::types::basic::{Description, ProjectId, ProjectName, RoleName};
@@ -30,12 +30,12 @@ fn new_role_names(new_name: &ProjectName) -> Result<Vec<RoleName>, TdError> {
 pub async fn assert_project_roles_rename_available<S: DbScope, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     update: &ProjectUpdate,
-    current: &ActiveProjectDB,
+    current: &ProjectDB,
 ) -> Result<(), TdError> {
     let Some(new_name) = &update.name else {
         return Ok(());
     };
-    if new_name == &current.name {
+    if new_name == &current.base.name {
         return Ok(());
     }
     for role_name in new_role_names(new_name)? {
@@ -54,12 +54,12 @@ pub async fn rename_project_roles<S: DbScope, M: WriteMode>(
     context: &RequestContext,
     project_id: &ProjectId,
     update: &ProjectUpdate,
-    current: &ActiveProjectDB,
+    current: &ProjectDB,
 ) -> Result<(), TdError> {
     let Some(new_name) = &update.name else {
         return Ok(());
     };
-    if new_name == &current.name {
+    if new_name == &current.base.name {
         return Ok(());
     }
 

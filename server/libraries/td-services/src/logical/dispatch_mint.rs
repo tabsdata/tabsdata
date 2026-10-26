@@ -257,7 +257,7 @@ mod tests {
     use td_database::access::Grant;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
-    use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
+    use td_objects::dxo::collection::{CollectionDB, CollectionParam};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionUpdate};
     use td_objects::types::basic::{
@@ -271,7 +271,7 @@ mod tests {
     async fn seed_run_lfr(
         db: &TdPool,
         project_id: ProjectId,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         name: &str,
     ) -> Result<(LogicalFunctionRunDB, PhysicalFunctionRunId), TdError> {
         let func = db
@@ -308,19 +308,20 @@ mod tests {
     async fn test_dispatch_mints_tdvs_after_function_update(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let services = Services::with_defaults(db.clone());
         let collection_param = || CollectionParam {
-            collection: CollectionIdName::from_str(&format!("~{}", coll.id)).unwrap(),
+            collection: CollectionIdName::from_str(&format!("~{}", coll.base.collection_id))
+                .unwrap(),
         };
         services
             .register_function(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(collection_param(), register("fr", None))
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?;
         let update = FunctionUpdate {
@@ -339,11 +340,14 @@ mod tests {
                         ),
                         update,
                     )
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?;
 
-        let functions: Vec<FunctionDB> = db.scd2().fetch_all::<FunctionDB>(&coll.id).await?;
+        let functions: Vec<FunctionDB> = db
+            .scd2()
+            .fetch_all::<FunctionDB>(&coll.base.collection_id)
+            .await?;
         let func = &functions[0];
         let tables: Vec<TableDB> = db
             .scd2()
@@ -357,14 +361,14 @@ mod tests {
             "an unchanged table keeps the version that defined it"
         );
 
-        let exec = db.scoped(p.id).seed().execution(func).await?;
+        let exec = db.scoped(p.base.project_id).seed().execution(func).await?;
         let trx = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &coll,
@@ -378,7 +382,7 @@ mod tests {
             .fetch_one::<LogicalFunctionRunDB>(&pfr.base.logical_function_run_id)
             .await?;
 
-        let mut trx = begin_exclusive(&db, p.id).await?;
+        let mut trx = begin_exclusive(&db, p.base.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("dispatch mint test"));
         let minted = mint_function_runs_on_dispatch(conn, &[lfr], at).await?;
@@ -392,13 +396,13 @@ mod tests {
     async fn test_dispatch_rerun_mints_a_new_attempt(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        let (lfr, previous_pfr) = seed_run_lfr(&db, p.id, &coll, "fr").await?;
+        let (lfr, previous_pfr) = seed_run_lfr(&db, p.base.project_id, &coll, "fr").await?;
 
-        let mut trx = begin_exclusive(&db, p.id).await?;
+        let mut trx = begin_exclusive(&db, p.base.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("dispatch mint test"));
         let ready = vec![lfr.clone()];

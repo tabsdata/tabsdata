@@ -33,12 +33,12 @@ async fn test_execute_after_waiting_on_a_delete_sees_the_function_gone(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_exe")?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .function(&c, &register("f_exe", None))
         .await?;
@@ -61,16 +61,16 @@ async fn test_execute_after_waiting_on_a_delete_sees_the_function_gone(
                 external_uid: None,
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = DbPool::in_project(&pools, &p.id)
+    let mut gate = DbPool::in_project(&pools, &p.base.project_id)
         .begin(Attempt::unretried())
         .await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("function delete"));
-    let topology_at = conn.topology().bump(&p.id, at).await?;
+    let topology_at = conn.topology().bump(&p.base.project_id, at).await?;
     conn.scd2()
         .close::<FunctionDB>(&function.base.function_id, topology_at)
         .await?;
@@ -97,12 +97,12 @@ async fn test_execute_after_waiting_on_a_disable_sees_the_function_disabled(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_exe")?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .function(&c, &register("f_exe", None))
         .await?;
@@ -125,16 +125,16 @@ async fn test_execute_after_waiting_on_a_disable_sees_the_function_disabled(
                 external_uid: None,
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = DbPool::in_project(&pools, &p.id)
+    let mut gate = DbPool::in_project(&pools, &p.base.project_id)
         .begin(Attempt::unretried())
         .await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("function disable"));
-    let topology_at = conn.topology().bump(&p.id, at).await?;
+    let topology_at = conn.topology().bump(&p.base.project_id, at).await?;
     let current: FunctionDB = conn.timeline().fetch_one(&function.base.id).await?;
     let disabled = current.re_registered(
         &RequestContext::with(AccessTokenId::default(), UserId::admin()),

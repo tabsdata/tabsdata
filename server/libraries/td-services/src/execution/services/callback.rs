@@ -242,7 +242,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_callback(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -269,7 +269,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_callback(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -306,7 +306,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_callback(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![
@@ -346,7 +346,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_callback(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -383,7 +383,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_callback(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![
@@ -433,7 +433,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_callback(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -470,7 +470,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_callback(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Stalled,
                 transactions: vec![TestTransaction {
@@ -507,7 +507,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_callback(
             db,
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Stalled,
                 transactions: vec![TestTransaction {
@@ -544,7 +544,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_callback(
             db.clone(),
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -664,7 +664,7 @@ pub(crate) mod tests {
         let p = db.seed().test_project().await?;
         test_callback(
             db.clone(),
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -705,7 +705,7 @@ pub(crate) mod tests {
 
         test_callback(
             db.clone(),
-            p.id,
+            p.base.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Finished,
                 transactions: vec![TestTransaction {
@@ -926,41 +926,46 @@ pub(crate) mod tests {
                 }],
             }],
         }];
-        test_status_update(db.clone(), p.id, &test_executions, |_, _, _, f, w| {
-            let db = db.clone();
-            let test_function = test_executions
-                .iter()
-                .flat_map(|e| &e.transactions)
-                .flat_map(|t| &t.functions)
-                .next()
-                .unwrap();
-            let request = || {
-                RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
-                    (
-                        FunctionRunParam {
-                            function_run: (*f[&test_function].base.id).clone().into(),
-                        },
-                        WorkerParam {
-                            worker: (*w[&test_function].base.id).clone().into(),
-                        },
-                    ),
-                    ExecutionCallbackRequest::report(done_callback()),
-                )
-            };
-            let (first, second) = (request(), request());
+        test_status_update(
+            db.clone(),
+            p.base.project_id,
+            &test_executions,
+            |_, _, _, f, w| {
+                let db = db.clone();
+                let test_function = test_executions
+                    .iter()
+                    .flat_map(|e| &e.transactions)
+                    .flat_map(|t| &t.functions)
+                    .next()
+                    .unwrap();
+                let request = || {
+                    RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
+                        (
+                            FunctionRunParam {
+                                function_run: (*f[&test_function].base.id).clone().into(),
+                            },
+                            WorkerParam {
+                                worker: (*w[&test_function].base.id).clone().into(),
+                            },
+                        ),
+                        ExecutionCallbackRequest::report(done_callback()),
+                    )
+                };
+                let (first, second) = (request(), request());
 
-            async move {
-                let service_a = Services::with_defaults(db.clone());
-                let service_b = Services::with_defaults(db.clone());
-                let (a, b) = tokio::join!(
-                    service_a.execution_callback(first),
-                    service_b.execution_callback(second)
-                );
-                a?;
-                b?;
-                Ok(())
-            }
-        })
+                async move {
+                    let service_a = Services::with_defaults(db.clone());
+                    let service_b = Services::with_defaults(db.clone());
+                    let (a, b) = tokio::join!(
+                        service_a.execution_callback(first),
+                        service_b.execution_callback(second)
+                    );
+                    a?;
+                    b?;
+                    Ok(())
+                }
+            },
+        )
         .await
     }
 
@@ -994,41 +999,46 @@ pub(crate) mod tests {
                 ],
             }],
         }];
-        test_status_update(db.clone(), p.id, &test_executions, |_, _, _, f, w| {
-            let db = db.clone();
-            let requests: Vec<_> = test_executions
-                .iter()
-                .flat_map(|e| &e.transactions)
-                .flat_map(|t| &t.functions)
-                .map(|test_function| {
-                    RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
-                        (
-                            FunctionRunParam {
-                                function_run: (*f[&test_function].base.id).clone().into(),
-                            },
-                            WorkerParam {
-                                worker: (*w[&test_function].base.id).clone().into(),
-                            },
-                        ),
-                        ExecutionCallbackRequest::report(done_callback()),
-                    )
-                })
-                .collect();
+        test_status_update(
+            db.clone(),
+            p.base.project_id,
+            &test_executions,
+            |_, _, _, f, w| {
+                let db = db.clone();
+                let requests: Vec<_> = test_executions
+                    .iter()
+                    .flat_map(|e| &e.transactions)
+                    .flat_map(|t| &t.functions)
+                    .map(|test_function| {
+                        RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
+                            (
+                                FunctionRunParam {
+                                    function_run: (*f[&test_function].base.id).clone().into(),
+                                },
+                                WorkerParam {
+                                    worker: (*w[&test_function].base.id).clone().into(),
+                                },
+                            ),
+                            ExecutionCallbackRequest::report(done_callback()),
+                        )
+                    })
+                    .collect();
 
-            async move {
-                let mut requests = requests.into_iter();
-                let (first, second) = (requests.next().unwrap(), requests.next().unwrap());
-                let service_a = Services::with_defaults(db.clone());
-                let service_b = Services::with_defaults(db.clone());
-                let (a, b) = tokio::join!(
-                    service_a.execution_callback(first),
-                    service_b.execution_callback(second)
-                );
-                a?;
-                b?;
-                Ok(())
-            }
-        })
+                async move {
+                    let mut requests = requests.into_iter();
+                    let (first, second) = (requests.next().unwrap(), requests.next().unwrap());
+                    let service_a = Services::with_defaults(db.clone());
+                    let service_b = Services::with_defaults(db.clone());
+                    let (a, b) = tokio::join!(
+                        service_a.execution_callback(first),
+                        service_b.execution_callback(second)
+                    );
+                    a?;
+                    b?;
+                    Ok(())
+                }
+            },
+        )
         .await
     }
 }

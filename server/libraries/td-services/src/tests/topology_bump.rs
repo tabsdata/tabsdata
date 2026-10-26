@@ -42,19 +42,19 @@ async fn committed_bump(db: &TdPool, project: &ProjectId) -> Result<TopologyInst
 async fn test_a_bump_on_a_stale_snapshot_conflicts(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let pools = pools(&db);
-    let mut stale = DbPool::in_project(&pools, &p.id)
+    let mut stale = DbPool::in_project(&pools, &p.base.project_id)
         .begin(Attempt::unretried())
         .await?;
     let at = stale.locked_at();
     let conn = stale.get(Grant::asserted("stale bump"));
-    let seen: ProjectTopologyDB = conn.scd2().fetch_one(&p.id).await?;
+    let seen: ProjectTopologyDB = conn.scd2().fetch_one(&p.base.project_id).await?;
 
-    let committed = committed_bump(&db, &p.id).await?;
+    let committed = committed_bump(&db, &p.base.project_id).await?;
     assert!(LockInstant::from(committed).timestamp() > *seen.interval.valid_from);
 
     let error = conn
         .topology()
-        .bump(&p.id, at)
+        .bump(&p.base.project_id, at)
         .await
         .expect_err("a bump on a snapshot older than another's must conflict");
     let code = match &error {
@@ -74,7 +74,7 @@ async fn test_a_conflicting_bump_runs_again_past_the_committed_one(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let pools = pools(&db);
-    let pools = DbPool::in_project(&pools, &p.id);
+    let pools = DbPool::in_project(&pools, &p.base.project_id);
     let attempts = AtomicU32::new(0);
     let committed: Mutex<Option<TopologyInstant>> = Mutex::new(None);
 
@@ -82,12 +82,12 @@ async fn test_a_conflicting_bump_runs_again_past_the_committed_one(
         let mut trx = pools.begin(attempt).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("retried bump"));
-        let _: ProjectTopologyDB = conn.scd2().fetch_one(&p.id).await?;
+        let _: ProjectTopologyDB = conn.scd2().fetch_one(&p.base.project_id).await?;
         if attempts.fetch_add(1, Ordering::SeqCst) == 0 {
-            let topology_at = committed_bump(&db, &p.id).await?;
+            let topology_at = committed_bump(&db, &p.base.project_id).await?;
             *committed.lock().unwrap() = Some(topology_at);
         }
-        let topology_at = conn.topology().bump(&p.id, at).await?;
+        let topology_at = conn.topology().bump(&p.base.project_id, at).await?;
         trx.commit().await?;
         Ok(topology_at)
     })
@@ -100,7 +100,11 @@ async fn test_a_conflicting_bump_runs_again_past_the_committed_one(
     );
     let committed = (*committed.lock().unwrap()).expect("the first attempt saw a bump commit");
     assert!(retried > committed);
-    let open: ProjectTopologyDB = db.scoped(p.id).scd2().fetch_one(&p.id).await?;
+    let open: ProjectTopologyDB = db
+        .scoped(p.base.project_id)
+        .scd2()
+        .fetch_one(&p.base.project_id)
+        .await?;
     assert_eq!(
         *open.interval.valid_from,
         LockInstant::from(retried).timestamp()

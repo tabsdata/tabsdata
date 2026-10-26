@@ -105,9 +105,13 @@ pub(crate) fn cron_trigger_start_message(
                 trigger: Callback::Http(task),
                 responder: callback,
                 project_id: cron_trigger_worker.base.project_id,
-                project: cron_trigger_worker.project.clone(),
+                project: cron_trigger_worker
+                    .project
+                    .as_ref()
+                    .map(|p| p.name())
+                    .transpose()?,
                 collection_id: cron_trigger_worker.base.base.collection_id,
-                collection: cron_trigger_worker.collection.clone(),
+                collection: cron_trigger_worker.collection.name()?,
                 connection_id: cron_trigger_worker.connection_id,
                 connection: cron_trigger_worker.connection.clone(),
                 function_id: cron_trigger_worker.function_id,
@@ -122,7 +126,7 @@ pub(crate) fn cron_trigger_start_message(
         let info = cron_trigger::Info {
             worker_id: cron_trigger_worker.base.base.id.clone(),
             collection_id: cron_trigger_worker.base.base.collection_id,
-            collection: cron_trigger_worker.collection.clone(),
+            collection: cron_trigger_worker.collection.name()?,
             function_version_id: cron_trigger_worker.base.base.function_version_id.clone(),
             function: cron_trigger_worker.function.clone(),
             scheduled_on: AtTime::now(),

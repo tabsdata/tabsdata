@@ -93,7 +93,7 @@ mod tests {
             .snapshot(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(request)
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?
             .data;

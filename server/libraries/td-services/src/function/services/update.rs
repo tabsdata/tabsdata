@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::collection::resolve_collection_id;
 use crate::function::children::ensure_user_managed;
 use crate::function::children::reconcile_children;
 use crate::function::lifecycle::update_one;
@@ -15,7 +16,7 @@ use td_database::access::{AccessMode, DbPool, InProject, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_execution::SchedulerNotify;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
+use td_objects::dxo::collection::{CollectionDBWithNames, CollectionParam};
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
 use td_objects::dxo::function::FunctionParam;
 use td_objects::dxo::function::{Function, FunctionDBWithNames, FunctionUpdate};
@@ -43,13 +44,14 @@ async fn update_function(
         let topology_at = conn.topology().bump(&project, at).await?;
 
         let collection_id_name = &collection_param.collection;
-        let collection: ActiveCollectionDB = conn.fetch_one(collection_id_name).await?;
+        let collection: CollectionDBWithNames = conn.scd2().fetch_one(collection_id_name).await?;
 
         // Before-update ids: the function id does not change, the function
         // version id does.
+        let collection_id = resolve_collection_id(conn, collection_id_name).await?;
         let current: FunctionDBWithNames = conn
             .scd2()
-            .fetch_one(and!(collection_id_name, &function_param.function))
+            .fetch_one(and!(&collection_id, &function_param.function))
             .await?;
 
         ensure_user_managed(&current.base.base)?;
@@ -148,7 +150,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -175,7 +177,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -193,7 +195,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("foo")?,
@@ -201,7 +206,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -224,7 +229,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -250,7 +255,7 @@ mod tests {
             workers: None,
         };
 
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -272,7 +277,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("foo")?,
@@ -280,7 +288,7 @@ mod tests {
                 ),
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await?.data;
@@ -298,7 +306,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -325,7 +333,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -345,7 +353,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -353,7 +364,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -376,7 +387,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -403,7 +414,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -422,7 +433,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -430,7 +444,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -453,7 +467,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -480,7 +494,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -500,7 +514,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -508,7 +525,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -545,7 +562,7 @@ mod tests {
     async fn test_update_reset_state(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("reset_coll")?, &UserId::admin())
             .await?;
@@ -574,11 +591,14 @@ mod tests {
         let register = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    collection: CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection.base.collection_id
+                    ))?,
                 },
                 create,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .register_function(register)
             .await?;
@@ -597,7 +617,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("reset_fn")?,
@@ -605,7 +628,7 @@ mod tests {
                 ),
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let _ = service.update_function(request).await?.data;
 
@@ -627,7 +650,7 @@ mod tests {
     async fn test_update_no_reset_state_reuses_state_id(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("noreset_coll")?, &UserId::admin())
             .await?;
@@ -655,11 +678,14 @@ mod tests {
         let register = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    collection: CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection.base.collection_id
+                    ))?,
                 },
                 create,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .register_function(register)
             .await?;
@@ -675,7 +701,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("noreset_fn")?,
@@ -683,7 +712,7 @@ mod tests {
                 ),
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let _ = service.update_function(request).await?.data;
 
@@ -711,7 +740,7 @@ mod tests {
     async fn test_update_reset_stage_keeps_stage_base_path(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("stage_coll")?, &UserId::admin())
             .await?;
@@ -739,11 +768,14 @@ mod tests {
         let register = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    collection: CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection.base.collection_id
+                    ))?,
                 },
                 create,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .register_function(register)
             .await?;
@@ -762,7 +794,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("stage_fn")?,
@@ -770,7 +805,7 @@ mod tests {
                 ),
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let _ = service.update_function(request).await?.data;
 
@@ -790,7 +825,7 @@ mod tests {
     async fn test_update_no_reset_stage_carries_stage_id(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("nostage_coll")?, &UserId::admin())
             .await?;
@@ -818,11 +853,14 @@ mod tests {
         let register = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    collection: CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection.base.collection_id
+                    ))?,
                 },
                 create,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .register_function(register)
             .await?;
@@ -838,7 +876,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("nostage_fn")?,
@@ -846,7 +887,7 @@ mod tests {
                 ),
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let _ = service.update_function(request).await?.data;
 
@@ -864,7 +905,7 @@ mod tests {
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("override_coll")?,
@@ -895,11 +936,14 @@ mod tests {
         let register = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    collection: CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection.base.collection_id
+                    ))?,
                 },
                 create,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .register_function(register)
             .await?;
@@ -915,7 +959,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("override_fn")?,
@@ -923,7 +970,7 @@ mod tests {
                 ),
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let _ = service.update_function(request).await?.data;
 
@@ -942,7 +989,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("override_fn")?,
@@ -950,7 +1000,7 @@ mod tests {
                 ),
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let _ = service.update_function(request).await?.data;
 
@@ -968,7 +1018,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -995,7 +1045,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1016,7 +1066,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -1024,7 +1077,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -1047,7 +1100,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1074,7 +1127,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1094,7 +1147,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -1102,7 +1158,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -1125,7 +1181,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1152,7 +1208,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1173,7 +1229,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -1181,7 +1240,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -1204,7 +1263,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1231,7 +1290,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -1258,7 +1317,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1278,7 +1337,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -1286,7 +1348,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -1309,7 +1371,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1336,7 +1398,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -1363,7 +1425,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1382,7 +1444,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -1390,7 +1455,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -1413,7 +1478,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1440,7 +1505,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -1467,7 +1532,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1487,7 +1552,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -1495,7 +1563,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -1518,7 +1586,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1548,7 +1616,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &trigger_create)
             .await?;
@@ -1578,7 +1646,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1606,7 +1674,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -1614,7 +1685,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -1637,7 +1708,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1664,7 +1735,7 @@ mod tests {
         };
 
         let _created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1683,7 +1754,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -1691,7 +1765,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -1716,7 +1790,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -1724,7 +1801,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -1748,7 +1825,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("joaquin_workout")?,
@@ -1756,7 +1836,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -1780,7 +1860,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1811,7 +1891,7 @@ mod tests {
             workers: None,
         };
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -1826,7 +1906,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_foo")?,
@@ -1834,7 +1917,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(update_request).await;
@@ -1847,7 +1930,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await;
         let create_response = response?;
@@ -1897,13 +1980,13 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let collection_1 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
         let collection_2 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name_2, &UserId::admin())
             .await?;
@@ -1937,7 +2020,10 @@ mod tests {
                 enabled: None,
                 workers: None,
             };
-            db.scoped(p.id).seed().function(collection, &create).await?;
+            db.scoped(p.base.project_id)
+                .seed()
+                .function(collection, &create)
+                .await?;
         }
 
         let dependencies = Some(vec![
@@ -1971,7 +2057,7 @@ mod tests {
             enabled: None,
             workers: None,
         };
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .seed()
             .function(&collection_2, &create)
             .await?;
@@ -2016,7 +2102,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection_2.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection_2.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_2")?,
@@ -2024,7 +2113,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.update_function(request).await;
@@ -2042,7 +2131,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let collection_1 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
@@ -2070,7 +2159,7 @@ mod tests {
             enabled: None,
             workers: None,
         };
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .seed()
             .function(&collection_1, &create)
             .await?;
@@ -2091,7 +2180,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("{}", collection_1.name))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "{}",
+                            collection_1.base.name
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function")?,
@@ -2099,7 +2191,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.update_function(request).await;
@@ -2123,7 +2215,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -2150,7 +2242,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -2177,7 +2269,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &dependant)
             .await?;
@@ -2198,7 +2290,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
@@ -2206,7 +2301,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -2224,7 +2319,7 @@ mod tests {
         .await?;
 
         let downstream_triggers: Vec<TriggerDB> = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .scd2()
             .fetch_all::<TriggerDB>(TriggerDB::active())
             .await?
@@ -2258,7 +2353,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -2285,7 +2380,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -2312,7 +2407,7 @@ mod tests {
         };
 
         let dependant_function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &dependant)
             .await?;
@@ -2328,7 +2423,7 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str(&collection.base.name.to_string())?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_2")?,
@@ -2336,7 +2431,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -2354,7 +2449,7 @@ mod tests {
         .await?;
 
         let downstream_triggers: Vec<TriggerDB> = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .scd2()
             .fetch_all::<TriggerDB>(TriggerDB::active())
             .await?
@@ -2378,7 +2473,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -2404,7 +2499,7 @@ mod tests {
             workers: None,
         };
         let function_db = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -2425,7 +2520,7 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str(&collection.base.name.to_string())?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
@@ -2433,7 +2528,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let updated_function_1 = service.update_function(request).await?.data;
         let workers: Vec<WorkerDB> = db
@@ -2442,7 +2537,7 @@ mod tests {
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.collection_id, collection.base.collection_id);
         assert_eq!(worker.base.execution_id, None);
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
@@ -2461,7 +2556,7 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str(&collection.base.name.to_string())?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
@@ -2469,7 +2564,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let updated_function_2 = service.update_function(request).await?.data;
 
@@ -2479,7 +2574,7 @@ mod tests {
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.collection_id, collection.base.collection_id);
         assert_eq!(worker.base.execution_id, None);
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
@@ -2496,7 +2591,7 @@ mod tests {
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.collection_id, collection.base.collection_id);
         assert_eq!(worker.base.execution_id, None);
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
@@ -2518,7 +2613,7 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str(&collection.base.name.to_string())?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
@@ -2526,7 +2621,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let updated_function_3 = service.update_function(request).await?.data;
 
@@ -2536,7 +2631,7 @@ mod tests {
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.collection_id, collection.base.collection_id);
         assert_eq!(worker.base.execution_id, None);
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
@@ -2553,7 +2648,7 @@ mod tests {
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.collection_id, collection.base.collection_id);
         assert_eq!(worker.base.execution_id, None);
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
@@ -2572,7 +2667,7 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str(&collection.base.name.to_string())?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
@@ -2580,7 +2675,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let updated_function_4 = service.update_function(request).await?.data;
 
@@ -2590,7 +2685,7 @@ mod tests {
             .unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.collection_id, collection.base.collection_id);
         assert_eq!(worker.base.execution_id, None);
         assert_eq!(worker.base.transaction_id, None);
         assert_eq!(worker.base.physical_function_run_id, None);
@@ -2614,7 +2709,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -2640,7 +2735,7 @@ mod tests {
             workers: None,
         };
         let function_db = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -2661,7 +2756,7 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection.name.to_string())?,
+                        collection: CollectionIdName::from_str(&collection.base.name.to_string())?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
@@ -2669,7 +2764,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let service = Services::with_defaults(db.clone());
         let res = service.update_function(request).await;
         assert!(res.is_err());
@@ -2689,7 +2784,7 @@ mod tests {
         use td_objects::types::basic::{ConnectionKind, GroupName};
 
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.id, "src_upd", Some(GroupName::source())).await;
+        create_collection(&db, p.base.project_id, "src_upd", Some(GroupName::source())).await;
 
         let create = FunctionRegister {
             child_functions: None,
@@ -2718,7 +2813,7 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .register_function(register_request)
             .await?;
@@ -2741,7 +2836,7 @@ mod tests {
                 ),
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         // Run the update under Kubernetes, where the connection-kind
         // contract is enforced (see `ensure_connection_kind_matches`).
         let mut context = Services::with_defaults(db.clone());
@@ -2772,7 +2867,7 @@ mod tests {
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("defs_coll")?, &UserId::admin())
             .await?;
@@ -2797,19 +2892,22 @@ mod tests {
             workers: None,
         };
         let collection_param = || CollectionParam {
-            collection: CollectionIdName::from_str(&format!("~{}", collection.id)).unwrap(),
+            collection: CollectionIdName::from_str(&format!("~{}", collection.base.collection_id))
+                .unwrap(),
         };
         let service = Services::with_defaults(db.clone());
         service
             .register_function(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(collection_param(), create)
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?;
         let current_function = async |db: &TdPool| -> Result<FunctionDB, TdError> {
-            let functions: Vec<FunctionDB> =
-                db.scd2().fetch_all::<FunctionDB>(&collection.id).await?;
+            let functions: Vec<FunctionDB> = db
+                .scd2()
+                .fetch_all::<FunctionDB>(&collection.base.collection_id)
+                .await?;
             Ok(functions.into_iter().next().expect("one function"))
         };
         let current_tables = async |db: &TdPool, function_id| -> Result<Vec<TableDB>, TdError> {
@@ -2828,7 +2926,7 @@ mod tests {
                     ),
                     update,
                 )
-                .in_project(p.id)
+                .in_project(p.base.project_id)
         };
 
         let v1 = current_function(&db).await?;

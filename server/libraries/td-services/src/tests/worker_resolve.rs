@@ -47,43 +47,51 @@ async fn test_a_resolve_waiting_on_a_cancel_of_its_attempt_answers_not_found(
             }],
         }],
     }];
-    run_status_scenario(db.clone(), p.id, &test_executions, |_, _, _, f, w| {
-        let db = db.clone();
-        let function = &test_executions[0].transactions[0].functions[0];
-        let attempt = f[function].base.id.clone();
-        let worker = w[function].base.id.clone();
-        async move {
-            let pools = DbPool::<AcrossProjects>::new(
-                DomainPools::of_apiserver(db.clone()),
-                AcrossProjects,
-            );
-            let mut gate = pools.in_project(&p.id).begin(Attempt::unretried()).await?;
-            let at = gate.locked_at();
-            let conn = gate.get(Grant::asserted("attempt ended, held open"));
-            conn.physical_runs().end(&[attempt], at).await?;
+    run_status_scenario(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, _, _, f, w| {
+            let db = db.clone();
+            let function = &test_executions[0].transactions[0].functions[0];
+            let attempt = f[function].base.id.clone();
+            let worker = w[function].base.id.clone();
+            async move {
+                let pools = DbPool::<AcrossProjects>::new(
+                    DomainPools::of_apiserver(db.clone()),
+                    AcrossProjects,
+                );
+                let mut gate = pools
+                    .in_project(&p.base.project_id)
+                    .begin(Attempt::unretried())
+                    .await?;
+                let at = gate.locked_at();
+                let conn = gate.get(Grant::asserted("attempt ended, held open"));
+                conn.physical_runs().end(&[attempt], at).await?;
 
-            let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
-                .read(WorkerParam { worker });
-            let services = Services::with_defaults(db.clone());
-            let resolving =
-                tokio::spawn(async move { services.resolve_worker_message(request).await });
-            assert!(
-                gate.get(Grant::asserted("blocking probe"))
-                    .wait_until_blocking(BLOCKED_WITHIN)
-                    .await
-                    .expect("blocking probe"),
-                "the resolve never waited on the worker"
-            );
-            gate.commit().await?;
+                let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .read(WorkerParam { worker });
+                let services = Services::with_defaults(db.clone());
+                let resolving =
+                    tokio::spawn(async move { services.resolve_worker_message(request).await });
+                assert!(
+                    gate.get(Grant::asserted("blocking probe"))
+                        .wait_until_blocking(BLOCKED_WITHIN)
+                        .await
+                        .expect("blocking probe"),
+                    "the resolve never waited on the worker"
+                );
+                gate.commit().await?;
 
-            let resolved = resolving.await.expect("resolve task");
-            assert!(
-                matches!(&resolved, Err(e) if e.api_error() == ApiError::NotFound),
-                "a resolve of an attempt ended first must answer not-found: {resolved:?}"
-            );
-            Ok(())
-        }
-    })
+                let resolved = resolving.await.expect("resolve task");
+                assert!(
+                    matches!(&resolved, Err(e) if e.api_error() == ApiError::NotFound),
+                    "a resolve of an attempt ended first must answer not-found: {resolved:?}"
+                );
+                Ok(())
+            }
+        },
+    )
     .await
     .map(|_| ())
 }

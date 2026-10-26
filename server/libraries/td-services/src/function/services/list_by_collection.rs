@@ -8,7 +8,7 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{Project, ViewProject};
 use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::function::Function;
@@ -30,10 +30,13 @@ async fn function_list_by_collection(
     let conn = gated_conn.get(grant);
 
     let collection_id_name = param.collection;
-    let collection: ActiveCollectionDB = conn.fetch_one(&collection_id_name).await?;
+    let collection: CollectionDB = conn.scd2().fetch_one(&collection_id_name).await?;
 
     let query_params = ListQueryParams::<Function>::try_from(&list_params)?;
-    let rows = conn.scd2().list(&collection.id, &query_params).await?;
+    let rows = conn
+        .scd2()
+        .list(&collection.base.collection_id, &query_params)
+        .await?;
     build_list_response(&list_params, &query_params, rows)
 }
 
@@ -57,7 +60,7 @@ mod tests {
     async fn test_list_current_functions_by_collection(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -83,7 +86,7 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -109,7 +112,7 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -117,11 +120,14 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("~{}", collection.id))?,
+                    collection: CollectionIdName::from_str(&format!(
+                        "~{}",
+                        collection.base.collection_id
+                    ))?,
                 },
                 ListParams::default(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.function_list_by_collection(request).await;

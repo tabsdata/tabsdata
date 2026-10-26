@@ -39,7 +39,7 @@ async fn function_run_raw_data(
     let collection = collection.collection;
     let addresses_run = match &collection {
         CollectionIdName::Id(id) => *id == run.base.base.collection_id,
-        CollectionIdName::Name(name) => *name == run.collection,
+        CollectionIdName::Name(name) => run.collection.name().is_ok_and(|n| n == *name),
     };
     if !addresses_run {
         return Err(api_error!(
@@ -86,11 +86,11 @@ mod tests {
     use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
-    use td_objects::dxo::project::ActiveProjectDB;
+    use td_objects::dxo::project::ProjectDB;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, InputIdx,
         LogicalFunctionRunStatus, ReuseFrozen, StorageVersion, TransactionKey, UserId,
@@ -102,12 +102,12 @@ mod tests {
 
     async fn seed_run(
         db: &TdPool,
-        p: &ActiveProjectDB,
+        p: &ProjectDB,
         collection_name: &str,
         decorator: Decorator,
-    ) -> Result<(ActiveCollectionDB, PhysicalFunctionRunDB), TdError> {
+    ) -> Result<(CollectionDB, PhysicalFunctionRunDB), TdError> {
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from(collection_name)?,
@@ -135,18 +135,22 @@ mod tests {
             workers: None,
         };
         let function: FunctionDB = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -163,13 +167,13 @@ mod tests {
     /// prefix, under the physical run that ingested it, named by the index.
     async fn write_raw(
         context: &Services,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         run: &PhysicalFunctionRunDB,
         input_idx: &InputIdx,
     ) -> Result<(), TdError> {
         let (path, _) = StorageLocation::from(&StorageVersion::default())
             .builder(&run.base.base_path)
-            .collection(&collection.id)
+            .collection(&collection.base.collection_id)
             .function_run(&run.base.id)
             .raw_input(input_idx)
             .build()?;
@@ -179,7 +183,7 @@ mod tests {
 
     async fn get_raw_data(
         context: &Services,
-        p: &ActiveProjectDB,
+        p: &ProjectDB,
         collection: &str,
         run: &PhysicalFunctionRunDB,
         input_idx: &InputIdx,
@@ -196,7 +200,7 @@ mod tests {
                     input_idx: *input_idx,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let response = context.clone().function_run_raw_data(request).await?.data;
         let mut stream = response.into_inner();
         match stream.next().await {
@@ -215,7 +219,10 @@ mod tests {
 
         // Addressable by collection name and by id, like every other
         // collection-scoped endpoint.
-        for collection_ref in [collection.name.to_string(), format!("~{}", collection.id)] {
+        for collection_ref in [
+            collection.base.name.to_string(),
+            format!("~{}", collection.base.collection_id),
+        ] {
             let bytes = get_raw_data(&context, &p, &collection_ref, &run, &idx).await?;
             assert_eq!(bytes, Bytes::from_static(RAW));
         }

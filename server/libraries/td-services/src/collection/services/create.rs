@@ -30,7 +30,7 @@ use td_objects::dxo::collection::{CollectionCreate, CollectionRead};
 use td_objects::dxo::connection::ConnectionUpsert;
 use td_objects::dxo::crudl::{CreateRequest, WithinProject};
 use td_objects::dxo::group::GroupDB;
-use td_objects::dxo::project::ActiveProjectDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::types::basic::CollectionType;
 use td_queries::Queries;
 
@@ -51,12 +51,13 @@ async fn create_collection(
             .require::<Project, DevelopProject>(&mut conn, &ctx, &project)
             .await?;
         let conn = conn.get(grant);
-        let group: GroupDB = conn.fetch_one(&create.group).await?;
+        let group: GroupDB = conn.scd2().fetch_one(&create.group).await?;
         let collection_type = CollectionType::from_group_kind(&group.base.kind);
         // source/destination collections carry connection config: manage_project
         escalate_for_connected(&authz, conn, &ctx, &project, &collection_type).await?;
         let plan =
-            plan_collection_create(conn, &ctx, &create, &group.base.id, &collection_type).await?;
+            plan_collection_create(conn, &ctx, &create, &group.base.group_id, &collection_type)
+                .await?;
         (plan, grant)
     };
 
@@ -79,9 +80,10 @@ async fn create_collection(
     // 3. create (short TX): insert the connection row + the collection.
     let created = retrying(|attempt| async {
         let mut trx = db.begin(attempt).await?;
+        let at = trx.locked_at();
         let conn = trx.get(grant);
-        let _ = conn.fetch_one::<ActiveProjectDB>(&project).await?;
-        let read = insert_collection_with_connection(conn, &ctx, &plan).await?;
+        let _ = conn.scd2().fetch_one::<ProjectDB>(&project).await?;
+        let read = insert_collection_with_connection(conn, &ctx, &plan, at).await?;
         trx.commit().await?;
         Ok(read)
     })
@@ -144,6 +146,7 @@ mod tests {
     use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::crudl::{ListParams, RequestContext, WithinProject};
     use td_objects::dxo::project::ProjectParam;
+    use td_objects::types::basic::GroupLabel;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, CollectionName, CollectionType, Description, GroupName, ProjectId,
         ProjectIdName, ProjectName, UserId, UserLabel, UserName,
@@ -180,26 +183,25 @@ mod tests {
 
         let before = AtTime::now();
         let service = Services::with_defaults(db.clone());
-        let response = service.create_collection(request(p.id, create)).await;
+        let response = service
+            .create_collection(request(p.base.project_id, create))
+            .await;
         assert!(response.is_ok());
         let created = response.unwrap().data;
 
         assert_eq!(created.name, name);
         assert_eq!(created.description, description);
-        assert_eq!(created.group, GroupName::default_group());
+        assert_eq!(created.group, GroupLabel::new(GroupName::default_group()));
         // base_path was omitted on create: it is stored NULL, meaning the collection
         // inherits its owning project's base_path (resolved at stamp time).
         assert_eq!(created.base_path, None);
         // No group specified → default group → DataFactory flavour.
         assert_eq!(created.collection_type, CollectionType::DataFactory);
-        assert!(*created.created_on >= before);
-        assert_eq!(*created.created_by_id, UserId::admin());
-        assert_eq!(*created.created_by, UserLabel::from(UserName::admin()));
-        assert_eq!(*created.modified_on, *created.created_on);
-        assert_eq!(*created.modified_by_id, UserId::admin());
-        assert_eq!(*created.modified_by, UserLabel::from(UserName::admin()));
+        assert!(created.defined_on >= before);
+        assert_eq!(created.defined_by_id, UserId::admin());
+        assert_eq!(created.defined_by, UserLabel::from(UserName::admin()));
 
-        let found: Vec<CollectionDB> = db.fetch_all::<CollectionDB>(&name).await.unwrap();
+        let found: Vec<CollectionDB> = db.scd2().fetch_all::<CollectionDB>(&name).await.unwrap();
         assert_eq!(found.len(), 1);
     }
 
@@ -227,7 +229,7 @@ mod tests {
             secrets: None,
         };
         let response = Services::with_defaults(db.clone())
-            .create_collection(request(p.id, create))
+            .create_collection(request(p.base.project_id, create))
             .await;
         assert!(
             response.is_err(),
@@ -240,7 +242,7 @@ mod tests {
     async fn test_create_collection_resolves_group_by_name(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let group = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),
@@ -261,16 +263,17 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         service
-            .create_collection(request(p.id, create))
+            .create_collection(request(p.base.project_id, create))
             .await
             .unwrap();
 
         let found = db
-            .fetch_one::<td_objects::dxo::collection::ActiveCollectionDBWithNames>(&name)
+            .scd2()
+            .fetch_one::<td_objects::dxo::collection::CollectionDBWithNames>(&name)
             .await
             .unwrap();
-        assert_eq!(found.base.group_id, group.base.id);
-        assert_eq!(found.group, group.base.name);
+        assert_eq!(found.base.base.group_id, group.base.group_id);
+        assert_eq!(found.group, GroupLabel::new(group.base.name));
     }
 
     #[td_test::test(db)]
@@ -280,7 +283,7 @@ mod tests {
         // source/destination cases go through `create_collection`, which
         // attaches the (now mandatory) connection payload.
         let p = db.seed().test_project().await.unwrap();
-        db.scoped(p.id)
+        db.scoped(p.base.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),
@@ -289,11 +292,17 @@ mod tests {
             .await
             .unwrap();
 
-        create_collection(&db, p.id, "c_src", Some(GroupName::source())).await;
-        create_collection(&db, p.id, "c_dst", Some(GroupName::destination())).await;
+        create_collection(&db, p.base.project_id, "c_src", Some(GroupName::source())).await;
         create_collection(
             &db,
-            p.id,
+            p.base.project_id,
+            "c_dst",
+            Some(GroupName::destination()),
+        )
+        .await;
+        create_collection(
+            &db,
+            p.base.project_id,
             "c_fac",
             Some(GroupName::try_from("analytics").unwrap()),
         )
@@ -305,12 +314,16 @@ mod tests {
             ("c_fac", CollectionType::DataFactory),
         ] {
             let found = db
-                .fetch_one::<td_objects::dxo::collection::ActiveCollectionDBWithNames>(
+                .scd2()
+                .fetch_one::<td_objects::dxo::collection::CollectionDBWithNames>(
                     &CollectionName::try_from(name).unwrap(),
                 )
                 .await
                 .unwrap();
-            assert_eq!(found.base.collection_type, expected, "collection {name}");
+            assert_eq!(
+                found.base.base.collection_type, expected,
+                "collection {name}"
+            );
         }
     }
 
@@ -324,7 +337,11 @@ mod tests {
         };
 
         create
-            .create_collection(create_request(p.id, "dup", Some(GroupName::source())))
+            .create_collection(create_request(
+                p.base.project_id,
+                "dup",
+                Some(GroupName::source()),
+            ))
             .await
             .unwrap();
         // The store is written before the TX, so a taken name must be
@@ -332,15 +349,21 @@ mod tests {
         // existing collection's worker artifact and then delete it on
         // rollback.
         let err = create
-            .create_collection(create_request(p.id, "dup", Some(GroupName::source())))
+            .create_collection(create_request(
+                p.base.project_id,
+                "dup",
+                Some(GroupName::source()),
+            ))
             .await
             .expect_err("duplicate name must be rejected before the store is touched");
         assert!(err.to_string().contains("already exists"), "got: {err}");
 
-        let connection = linked_connection(&db, p.id, "dup").await.unwrap();
+        let connection = linked_connection(&db, p.base.project_id, "dup")
+            .await
+            .unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.id, &connection.base.id)
+            .fetch(&p.base.project_id, &connection.base.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "dup");
@@ -369,14 +392,16 @@ mod tests {
         };
 
         create
-            .create_collection(request(p.id, payload))
+            .create_collection(request(p.base.project_id, payload))
             .await
             .unwrap();
 
-        let connection = linked_connection(&db, p.id, "nameless").await.unwrap();
+        let connection = linked_connection(&db, p.base.project_id, "nameless")
+            .await
+            .unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.id, &connection.base.id)
+            .fetch(&p.base.project_id, &connection.base.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "nameless");
@@ -394,7 +419,7 @@ mod tests {
             secrets: None,
         };
         let err = Services::with_defaults(db.clone())
-            .create_collection(request(p.id, create))
+            .create_collection(request(p.base.project_id, create))
             .await
             .expect_err("a source collection without a connection must be rejected");
         assert!(
@@ -415,7 +440,7 @@ mod tests {
             secrets: Some(secrets()),
         };
         let err = Services::with_defaults(db.clone())
-            .create_collection(request(p.id, create))
+            .create_collection(request(p.base.project_id, create))
             .await
             .expect_err("a DataFactory with a connection must be rejected");
         assert!(err.to_string().contains("cannot carry"), "got: {err}");
@@ -424,8 +449,8 @@ mod tests {
     #[td_test::test(db)]
     async fn test_create_source_links_connection(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.id, "src_new", Some(GroupName::source())).await;
-        let row = linked_connection(&db, p.id, "src_new")
+        create_collection(&db, p.base.project_id, "src_new", Some(GroupName::source())).await;
+        let row = linked_connection(&db, p.base.project_id, "src_new")
             .await
             .expect("the collection must be born linked");
         assert_eq!(row.base.kind.to_string(), "mysqlSrcConn");
@@ -449,11 +474,12 @@ mod tests {
             bridge,
             ..Services::with_defaults(db.clone())
         }
-        .create_collection(request(p.id, create))
+        .create_collection(request(p.base.project_id, create))
         .await
         .expect_err("store failure must surface");
         assert!(err.to_string().contains("store unreachable"), "got: {err}");
         let found: Vec<CollectionDB> = db
+            .scd2()
             .fetch_all::<CollectionDB>(&CollectionName::try_from("src_fail").unwrap())
             .await
             .unwrap();
@@ -469,13 +495,14 @@ mod tests {
         // Two distinct projects to prove isolation, each seeded with its own
         // system groups. A collection resolves its default group within its
         // own project, so both projects must carry one.
-        let project_a = db.seed().test_project().await.unwrap().id;
+        let project_a = db.seed().test_project().await.unwrap().base.project_id;
         let project_b = db
             .seed()
             .project(ProjectName::try_from("project_b").unwrap())
             .await
             .unwrap()
-            .id;
+            .base
+            .project_id;
 
         for (project, name) in [(&project_a, "ca"), (&project_b, "cb")] {
             let create = CollectionCreate {
@@ -521,7 +548,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_source_create_requires_manage_project(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        let dev = seed_dev_user(&db, p.id).await;
+        let dev = seed_dev_user(&db, p.base.project_id).await;
 
         let create = CollectionCreate {
             name: CollectionName::try_from("dev_df").unwrap(),
@@ -533,7 +560,7 @@ mod tests {
         };
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .create((), create)
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .create_collection(request)
             .await
@@ -549,7 +576,7 @@ mod tests {
         };
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .create((), create)
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let err = Services::with_defaults(db.clone())
             .create_collection(request)
             .await

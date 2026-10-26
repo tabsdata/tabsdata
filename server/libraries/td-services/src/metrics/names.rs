@@ -5,16 +5,18 @@
 //! Display names for what a `/metrics` window mentions.
 
 use std::collections::{HashMap, HashSet};
+use td_objects::types::label::Label;
 
 use td_database::access::{AccessMode, SeesProjectRows};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::collection::ResolvedCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::group::GroupDB;
 use td_objects::dxo::metrics_facts::MetricsTableRow;
 use td_objects::dxo::project::ProjectDB;
 use td_objects::types::basic::{
-    CollectionId, CollectionName, GroupId, GroupName, ProjectId, ProjectName,
+    CollectionId, CollectionLabel, CollectionName, GroupId, GroupLabel, GroupName, ProjectId,
+    ProjectLabel, ProjectName,
 };
 use td_queries::Queries;
 
@@ -26,7 +28,7 @@ pub(crate) struct Names {
 }
 
 impl Names {
-    /// A soft-deleted collection keeps its pre-deletion name.
+    /// A deleted collection, group or project is labelled by its id.
     pub(crate) async fn of<S: SeesProjectRows, M: AccessMode>(
         conn: &mut DomainConnection<Apiserver, S, M>,
         rows: &[MetricsTableRow],
@@ -55,36 +57,49 @@ impl Names {
             .into_iter()
             .collect();
 
-        let collections: Vec<ResolvedCollectionDB> =
-            conn.chunked().fetch_all(&collection_ids, ()).await?;
-        let groups: Vec<GroupDB> = conn.chunked().fetch_all(&group_ids, ()).await?;
-        let projects: Vec<ProjectDB> = conn.chunked().fetch_all(&project_ids, ()).await?;
+        let collections: Vec<CollectionDB> =
+            conn.scd2().chunked().fetch_all(&collection_ids, ()).await?;
+        let groups: Vec<GroupDB> = conn.scd2().chunked().fetch_all(&group_ids, ()).await?;
+        let projects: Vec<ProjectDB> = conn.scd2().chunked().fetch_all(&project_ids, ()).await?;
 
         Ok(Self {
             collections: collections
                 .into_iter()
-                .map(|c| (c.base.id, c.base.name))
+                .map(|c| (c.base.collection_id, c.base.name))
                 .collect(),
             groups: groups
                 .into_iter()
-                .map(|g| (g.base.id, g.base.name))
+                .map(|g| (g.base.group_id, g.base.name))
                 .collect(),
             projects: projects
                 .into_iter()
-                .map(|p| (p.base.id, p.base.name))
+                .map(|p| (p.base.project_id, p.base.name))
                 .collect(),
         })
     }
 
-    pub(crate) fn collection(&self, id: &CollectionId) -> Option<CollectionName> {
-        self.collections.get(id).cloned()
+    pub(crate) fn collection(&self, id: &CollectionId) -> Option<CollectionLabel> {
+        Some(self.collections.get(id).cloned().map_or_else(
+            || CollectionLabel::new(Label::Deleted(*id)),
+            CollectionLabel::new,
+        ))
     }
 
-    pub(crate) fn group(&self, id: &GroupId) -> Option<GroupName> {
-        self.groups.get(id).cloned()
+    pub(crate) fn group(&self, id: &GroupId) -> Option<GroupLabel> {
+        Some(
+            self.groups
+                .get(id)
+                .cloned()
+                .map_or_else(|| GroupLabel::new(Label::Deleted(*id)), GroupLabel::new),
+        )
     }
 
-    pub(crate) fn project(&self, id: &ProjectId) -> Option<ProjectName> {
-        self.projects.get(id).cloned()
+    pub(crate) fn project(&self, id: &ProjectId) -> Option<ProjectLabel> {
+        Some(
+            self.projects
+                .get(id)
+                .cloned()
+                .map_or_else(|| ProjectLabel::new(Label::Deleted(*id)), ProjectLabel::new),
+        )
     }
 }

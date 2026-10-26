@@ -15,6 +15,7 @@
 
 use td_database::access::{AccessMode, DbScope};
 use td_error::td_error;
+use td_objects::types::label::Label;
 
 pub mod services;
 
@@ -53,7 +54,7 @@ use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::crudl::{ListParams, ListResponse};
 use td_objects::dxo::permission::PermissionDB;
-use td_objects::dxo::project::ActiveProjectDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::simple_permission::{
     SimplePermission, SimplePermissionGrant, SimpleProjectAccess,
@@ -61,8 +62,8 @@ use td_objects::dxo::simple_permission::{
 use td_objects::dxo::user::UserDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::{
-    PermissionEntityType, PermissionType, ProjectId, ProjectIdName, ProjectName, RoleId, RoleName,
-    SimplePermissionType, UserId, UserName, UserSystem,
+    PermissionEntityType, PermissionType, ProjectId, ProjectIdName, ProjectLabel, ProjectName,
+    RoleId, RoleName, SimplePermissionType, UserId, UserName, UserSystem,
 };
 use td_queries::Queries;
 use td_security::{PROJECT_CREATOR_ROLE, SYS_ADMIN_ROLE};
@@ -136,18 +137,20 @@ pub async fn resolve_grant<S: DbScope, M: AccessMode>(
                 .project
                 .clone()
                 .expect("project-scoped permission carries a project (validated)");
-            let project = conn.fetch_one::<ActiveProjectDB>(&project_id_name).await?;
+            let project = conn.scd2().fetch_one::<ProjectDB>(&project_id_name).await?;
             // By the project's id, not its name: a rename racing the grant
             // must not send it to the role of another project now holding
             // the name.
-            let roles: Vec<RoleDB> = conn.fetch_all::<RoleDB>(Some(project.id)).await?;
+            let roles: Vec<RoleDB> = conn
+                .fetch_all::<RoleDB>(Some(project.base.project_id))
+                .await?;
             let role = roles.into_iter().find(|r| r.kind == kind).ok_or_else(|| {
-                SimplePermissionError::ProjectRoleNotFound(format!("{} {kind}", project.name))
+                SimplePermissionError::ProjectRoleNotFound(format!("{} {kind}", project.base.name))
             })?;
             Ok(ResolvedGrant {
                 user_id: user.id,
                 role_id: role.id,
-                project_id: Some(project.id),
+                project_id: Some(project.base.project_id),
             })
         }
         SimplePermissionType::CreateProjects => {
@@ -204,8 +207,11 @@ pub fn project_role_permission(role: &RoleDB) -> Option<SimplePermissionType> {
 async fn project_names<S: DbScope, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
 ) -> Result<HashMap<ProjectId, ProjectName>, TdError> {
-    let projects = conn.fetch_all::<ActiveProjectDB>(()).await?;
-    Ok(projects.into_iter().map(|p| (p.id, p.name)).collect())
+    let projects = conn.scd2().fetch_all::<ProjectDB>(()).await?;
+    Ok(projects
+        .into_iter()
+        .map(|p| (p.base.project_id, p.base.name))
+        .collect())
 }
 
 /// Build a small (no pagination) [`ListResponse`] from a flat data vector.
@@ -279,7 +285,10 @@ fn simple_permission_of(
                 None
             } else {
                 let project_id = ProjectId::from(*perm.entity_id);
-                let project_name = projects.get(&project_id).cloned();
+                let project_name = Some(projects.get(&project_id).cloned().map_or_else(
+                    || ProjectLabel::new(Label::Deleted(project_id)),
+                    ProjectLabel::new,
+                ));
                 match perm.permission_type.as_str() {
                     "view_project" => Some((SimplePermissionType::ViewProject, project_name)),
                     "develop_project" => Some((SimplePermissionType::DevelopProject, project_name)),
@@ -309,7 +318,7 @@ pub async fn list_project_access<S: DbScope, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     project_id_name: &ProjectIdName,
 ) -> Result<ListResponse<SimpleProjectAccess>, TdError> {
-    let project = conn.fetch_one::<ActiveProjectDB>(project_id_name).await?;
+    let project = conn.scd2().fetch_one::<ProjectDB>(project_id_name).await?;
 
     let roles = conn.fetch_all::<RoleDB>(()).await?;
     let permissions = conn
@@ -330,7 +339,7 @@ pub async fn list_project_access<S: DbScope, M: AccessMode>(
     let mut system_source_roles: HashSet<RoleId> = HashSet::new();
 
     for role in &roles {
-        if role.project_id.as_ref() == Some(&project.id)
+        if role.project_id.as_ref() == Some(&project.base.project_id)
             && let Some(permission) = project_role_permission(role)
         {
             project_source.insert(role.id, (permission, format!("project ({})", role.name)));

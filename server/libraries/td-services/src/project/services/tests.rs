@@ -124,7 +124,7 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
         .permission(
             PermissionType::view_project(),
             None,
-            Some(EntityId::try_from(alpha.id)?),
+            Some(EntityId::try_from(alpha.base.project_id)?),
             &alpha_viewers,
         )
         .await?;
@@ -153,9 +153,9 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
     Ok(())
 }
 
-/// Project names are unique within the registry (DB-level constraint): a
-/// second create with the same name fails. After a soft delete the name is
-/// freed because the row is renamed to `deleted_<id>`.
+/// Live project names are unique within the registry (DB-level constraint):
+/// a second create with the same name fails. A delete closes the project's
+/// timeline, which frees the name.
 #[td_test::test(db)]
 async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
     let name = ProjectName::try_from("billing")?;
@@ -185,8 +185,7 @@ async fn test_project_name_must_be_unique(db: TdPool) -> Result<(), TdError> {
         "expected EntityAlreadyExists, got {err:?}"
     );
 
-    // Soft-delete frees the name: the row is renamed to `deleted_<id>` so the
-    // unique constraint on `name` no longer blocks reuse.
+    // The delete closes the timeline: only open versions hold a live name.
     Services::with_defaults(db.clone())
         .delete_project(admin_ctx().delete(project_param("billing")))
         .await?;
@@ -260,10 +259,10 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
         .await?
         .data;
 
-    let roles = project_roles(&db, created.id).await?;
+    let roles = project_roles(&db, created.project_id).await?;
     assert_eq!(roles.len(), 3, "exactly three per-project roles are minted");
 
-    let entity_id = EntityId::try_from(created.id)?;
+    let entity_id = EntityId::try_from(created.project_id)?;
     let expected = [
         (
             RoleKind::ProjectAdmin,
@@ -288,7 +287,11 @@ async fn test_create_mints_per_project_roles(db: TdPool) -> Result<(), TdError> 
             .find(|r| r.name == RoleName::try_from(role_name).unwrap())
             .unwrap_or_else(|| panic!("missing role {role_name}"));
         assert_eq!(role.kind, kind, "{role_name} kind");
-        assert_eq!(role.project_id, Some(created.id), "{role_name} project_id");
+        assert_eq!(
+            role.project_id,
+            Some(created.project_id),
+            "{role_name} project_id"
+        );
         assert!(*role.fixed, "{role_name} must be system-managed (fixed)");
 
         // Exactly one permission row, fixed, on the project entity.
@@ -348,7 +351,7 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
         .data;
 
     // Collect the role ids before delete.
-    let roles = project_roles(&db, created.id).await?;
+    let roles = project_roles(&db, created.project_id).await?;
     assert_eq!(roles.len(), 3);
     let role_ids: Vec<_> = roles.iter().map(|r| r.id).collect();
 
@@ -357,7 +360,7 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
         .await?;
 
     // Role rows for the project are gone.
-    let roles_after = project_roles(&db, created.id).await?;
+    let roles_after = project_roles(&db, created.project_id).await?;
     assert!(
         roles_after.is_empty(),
         "per-project roles dropped on delete"
@@ -382,7 +385,7 @@ async fn test_delete_cascades_per_project_roles(db: TdPool) -> Result<(), TdErro
         .create_project(admin_ctx().create((), create))
         .await?
         .data;
-    let roles = project_roles(&db, recreated.id).await?;
+    let roles = project_roles(&db, recreated.project_id).await?;
     assert_eq!(roles.len(), 3, "re-create mints the roles again");
 
     Ok(())
@@ -403,7 +406,7 @@ async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError
         .await?
         .data;
 
-    let before = project_roles(&db, created.id).await?;
+    let before = project_roles(&db, created.project_id).await?;
     let admin_before_id = before
         .iter()
         .find(|r| r.kind == RoleKind::ProjectAdmin)
@@ -419,7 +422,7 @@ async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError
         .update_project(admin_ctx().update(project_param("orbit"), upd))
         .await?;
 
-    let after = project_roles(&db, created.id).await?;
+    let after = project_roles(&db, created.project_id).await?;
     assert_eq!(after.len(), 3, "still exactly three roles");
 
     let expected = [
@@ -450,7 +453,11 @@ async fn test_rename_renames_per_project_roles(db: TdPool) -> Result<(), TdError
             Description::try_from(description)?,
             "refreshed description"
         );
-        assert_eq!(role.project_id, Some(created.id), "project_id unchanged");
+        assert_eq!(
+            role.project_id,
+            Some(created.project_id),
+            "project_id unchanged"
+        );
         assert!(*role.fixed, "{role_name} still fixed");
     }
 
@@ -500,7 +507,7 @@ async fn test_rename_then_recreate_old_name(db: TdPool) -> Result<(), TdError> {
         .create_project(admin_ctx().create((), create_foo()))
         .await?
         .data;
-    let roles = project_roles(&db, new_foo.id).await?;
+    let roles = project_roles(&db, new_foo.project_id).await?;
     assert_eq!(roles.len(), 3, "new foo mints its own three roles");
     Ok(())
 }
@@ -566,7 +573,7 @@ mod delete_guards {
         };
         let collections = Services::with_defaults(db.clone());
         collections
-            .create_collection(admin_ctx().create((), coll).in_project(project.id))
+            .create_collection(admin_ctx().create((), coll).in_project(project.project_id))
             .await?;
 
         // Delete is refused while the project still owns a collection.

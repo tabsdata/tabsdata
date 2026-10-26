@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::collection::resolve_collection_id;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -35,10 +36,11 @@ async fn table_list_data_versions(
     let collection_id_name = collection_param.collection;
     let at = at_param.at;
     let table_id_name = table_param.table;
+    let collection_id = resolve_collection_id(conn, &collection_id_name).await?;
     let table: TableDBWithNames = conn
         .scd2()
         .as_of(&at)
-        .fetch_one(and!(&collection_id_name, &table_id_name))
+        .fetch_one(and!(&collection_id, &table_id_name))
         .await?;
 
     let query_params = ListQueryParams::<TableDataVersion>::try_from(&list_params)?;
@@ -57,7 +59,7 @@ mod tests {
     use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
-    use td_error::TdError;
+    use td_error::{ApiError, TdError};
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::{ChildFunction, FunctionDB, FunctionRegister};
     use td_objects::dxo::table::TableDB;
@@ -75,7 +77,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("trendy")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -124,7 +126,7 @@ mod tests {
             .register_function(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(collection_param.clone(), create)
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?;
 
@@ -148,15 +150,19 @@ mod tests {
         let owner_table = live_table("t0").await?;
         let trend_table = live_table("tt").await?;
 
-        let execution = db.scoped(p.id).seed().execution(&owner).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&owner)
+            .await?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         for (function, table) in [(&owner, &owner_table), (&trend, &trend_table)] {
             let run = db
-                .scoped(p.id)
+                .scoped(p.base.project_id)
                 .seed()
                 .physical_function_run(
                     &collection,
@@ -166,7 +172,7 @@ mod tests {
                     &LogicalFunctionRunStatus::Scheduled,
                 )
                 .await?;
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .physical_table_data_version(&collection, &execution, &transaction, &run, table)
                 .await?;
@@ -192,7 +198,7 @@ mod tests {
                             ),
                             ListParams::default(),
                         )
-                        .in_project(p.id),
+                        .in_project(p.base.project_id),
                 )
                 .await
                 .map(|response| response.data.data)
@@ -220,7 +226,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("doomed")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -245,18 +251,22 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -272,7 +282,7 @@ mod tests {
             .await?
             .expect("row must exist");
         let data_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -291,17 +301,16 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str(&collection_name.to_string())?,
                     })
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?;
 
-        let request = |at: AtTime| {
+        let request = |collection: &str, at: AtTime| {
             RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .list(
                     (
                         CollectionParam {
-                            collection: CollectionIdName::from_str(&collection_name.to_string())
-                                .unwrap(),
+                            collection: CollectionIdName::from_str(collection).unwrap(),
                         },
                         TableParam {
                             table: TableIdName::from_str("t0").unwrap(),
@@ -310,11 +319,20 @@ mod tests {
                     ),
                     ListParams::default(),
                 )
-                .in_project(p.id)
+                .in_project(p.base.project_id)
         };
 
+        let by_name = collection_name.to_string();
+        let by_id = format!("~{}", collection.base.collection_id);
+        let err = service
+            .table_list_data_versions(request(&by_name, written_at))
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
+
         let data = service
-            .table_list_data_versions(request(written_at))
+            .table_list_data_versions(request(&by_id, written_at))
             .await?
             .data
             .data;
@@ -324,7 +342,7 @@ mod tests {
 
         assert!(
             service
-                .table_list_data_versions(request(AtTime::now()))
+                .table_list_data_versions(request(&by_id, AtTime::now()))
                 .await
                 .is_err()
         );

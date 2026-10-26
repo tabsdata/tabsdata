@@ -169,7 +169,7 @@ mod tests {
     use td_database::access::{InProject, LockInstant, RW};
     use td_database::pool::TdPool;
     use td_error::TdError;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::function::FunctionPatchInsertDB;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::types::basic::AtTime;
@@ -185,7 +185,7 @@ mod tests {
         project_id: ProjectId,
         coll_name: &str,
         fn_name: &str,
-    ) -> Result<(ActiveCollectionDB, FunctionDB), TdError> {
+    ) -> Result<(CollectionDB, FunctionDB), TdError> {
         let coll = db
             .scoped(project_id)
             .seed()
@@ -251,7 +251,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_latest_patch_or_head_time_pinning(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (_coll, head) = seed_head(&db, p.id, "c0", "f0").await?;
+        let (_coll, head) = seed_head(&db, p.base.project_id, "c0", "f0").await?;
 
         // Three deterministic points: `before` (epoch — no patches), `t1`
         // (p1 alive), `t2 = t1 + 1ms` (p2 alive).
@@ -260,8 +260,8 @@ mod tests {
         let t2 = AtTime::from(td_common::datetime::Timestamp::from(
             **t1 + chrono::Duration::milliseconds(1),
         ));
-        let p1 = insert_patch(&db, p.id, &head, t1, "p1").await?;
-        let p2 = insert_patch(&db, p.id, &head, t2, "p2").await?;
+        let p1 = insert_patch(&db, p.base.project_id, &head, t1, "p1").await?;
+        let p2 = insert_patch(&db, p.base.project_id, &head, t2, "p2").await?;
 
         let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
 
@@ -287,12 +287,12 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (_coll_a, head_a) = seed_head(&db, p.id, "c0", "fa").await?;
-        let (_coll_b, head_b) = seed_head(&db, p.id, "c1", "fb").await?;
+        let (_coll_a, head_a) = seed_head(&db, p.base.project_id, "c0", "fa").await?;
+        let (_coll_b, head_b) = seed_head(&db, p.base.project_id, "c1", "fb").await?;
 
         let now = AtTime::now();
-        let p_a = insert_patch(&db, p.id, &head_a, now, "p-a").await?;
-        let p_b = insert_patch(&db, p.id, &head_b, now, "p-b").await?;
+        let p_a = insert_patch(&db, p.base.project_id, &head_a, now, "p-a").await?;
+        let p_b = insert_patch(&db, p.base.project_id, &head_b, now, "p-b").await?;
 
         let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
         let map = latest_patch_or_head_batch(

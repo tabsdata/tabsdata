@@ -183,7 +183,7 @@ mod tests {
     async fn test_resolve_worker_message(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_resolve")?, &UserId::admin())
             .await?;
@@ -208,18 +208,22 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -230,7 +234,7 @@ mod tests {
             )
             .await?;
         let worker = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function_runner_worker(&execution, &transaction, &pfr)
             .await?;

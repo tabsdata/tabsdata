@@ -19,7 +19,7 @@ use td_authz::rbac::{ManageProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::{DbPool, InProject};
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::collection::CollectionParam;
 use td_objects::dxo::connection::ConnectionRead;
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
@@ -41,7 +41,7 @@ async fn connection_read(
         let grant = authz
             .require::<Project, ManageProject>(&mut conn, &ctx, &project)
             .await?;
-        let collection: ActiveCollectionDB = conn.get(grant).fetch_one(&param.collection).await?;
+        let collection: CollectionDB = conn.get(grant).scd2().fetch_one(&param.collection).await?;
         ensure_connectable(&collection)?;
         require_connection_id(&collection)?
     };

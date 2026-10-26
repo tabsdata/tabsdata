@@ -21,7 +21,7 @@ async fn test_not_allowed_to_delete_collection(db: TdPool) {
     let p = db.seed().test_project().await.unwrap();
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&name, &UserId::admin())
         .await;
@@ -49,7 +49,7 @@ async fn test_not_allowed_to_delete_collection(db: TdPool) {
         .delete(CollectionParam {
             collection: CollectionIdName::from_str(&name.to_string()).unwrap(),
         })
-        .in_project(p.id);
+        .in_project(p.base.project_id);
 
     assert_service_error(service.delete_collection(request).await, |err| match err {
         RbacError::Forbidden(_, _) => {}

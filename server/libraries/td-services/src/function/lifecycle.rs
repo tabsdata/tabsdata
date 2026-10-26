@@ -16,7 +16,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::and;
 use td_objects::dxo::bundle::BundleStatusUpdateDB;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDBWithNames;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{
     FunctionDB, FunctionDBWithNames, FunctionInsertDB, FunctionRegister, FunctionUpdate,
@@ -50,21 +50,27 @@ pub async fn register_one(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ctx: &RequestContext,
     bridge: &BridgeProviderHandle,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDBWithNames,
     register: &FunctionRegister,
     child_of: Option<ChildOf<'_>>,
     topology_at: TopologyInstant,
 ) -> Result<FunctionInsertDB, TdError> {
     conn.scd2()
-        .assert_not_exists::<FunctionDBWithNames>(and!(&collection.id, &register.name))
+        .assert_not_exists::<FunctionDBWithNames>(and!(
+            &collection.base.base.collection_id,
+            &register.name
+        ))
         .await?;
 
     // Stage/checkpoint storage prefix: the collection's effective base_path (its
-    // own, else the project's -- already resolved by the collections_active view).
-    let mut function =
-        register.to_dao(ctx, collection.id, collection.effective_base_path.clone())?;
+    // own, else the project's -- already resolved by the collections__with_names view).
+    let mut function = register.to_dao(
+        ctx,
+        collection.base.base.collection_id,
+        collection.effective_base_path.clone(),
+    )?;
     let parent_tables = child_of.map(|child_of| child_of.stamp(&mut function));
-    ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
+    ensure_connection_kind_matches(conn, bridge, &function, &collection.base).await?;
     conn.scd2().open(&function, topology_at).await?;
     claim_bundle(conn, &function).await?;
 
@@ -83,7 +89,7 @@ pub async fn register_one(
         conn,
         ctx,
         topology_at,
-        collection,
+        &collection.base,
         &function,
         &state,
         &spec,
@@ -99,18 +105,19 @@ pub async fn update_one(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ctx: &RequestContext,
     bridge: &BridgeProviderHandle,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDBWithNames,
     current: &FunctionDBWithNames,
     update: &FunctionUpdate,
     child_of: Option<ChildOf<'_>>,
     topology_at: TopologyInstant,
 ) -> Result<FunctionInsertDB, TdError> {
-    assert_function_name_not_exists(conn, &collection.id, current, update).await?;
+    assert_function_name_not_exists(conn, &collection.base.base.collection_id, current, update)
+        .await?;
 
     let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
     let mut function = update.to_dao(&previous, ctx)?;
     let parent_tables = child_of.map(|child_of| child_of.stamp(&mut function));
-    ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
+    ensure_connection_kind_matches(conn, bridge, &function, &collection.base).await?;
     conn.scd2().open(&function, topology_at).await?;
     claim_bundle(conn, &function).await?;
 
@@ -130,7 +137,7 @@ pub async fn update_one(
         conn,
         ctx,
         topology_at,
-        collection,
+        &collection.base,
         &function,
         &state,
         &spec,

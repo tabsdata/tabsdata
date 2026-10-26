@@ -83,21 +83,21 @@ pub(crate) async fn reconcile_stored_connection(
     written: &CollectionName,
     connection_id: &ConnectionId,
 ) -> Result<Reconciled, TdError> {
-    let committed: Option<ActiveCollectionDB> = {
+    let committed: Option<CollectionDB> = {
         let mut conn = db.read().await?;
-        conn.get(grant).fetch_optional(collection_id).await?
+        conn.get(grant).scd2().fetch_optional(collection_id).await?
     };
     match committed {
         None => {
             store.delete(project, connection_id).await?;
             Ok(Reconciled::Deleted)
         }
-        Some(collection) if collection.name != *written => {
+        Some(collection) if collection.base.name != *written => {
             rename_stored_connection(
                 store,
                 project,
                 collection_id,
-                &collection.name,
+                &collection.base.name,
                 connection_id,
             )
             .await?;
@@ -126,19 +126,18 @@ use serde::Deserialize;
 use std::collections::HashSet;
 use td_authz::rbac::{ManageProject, Project, SqlRbacSource};
 use td_database::access::Gated;
-use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
+use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_objects::Dao;
 use td_objects::FromDao;
 use td_objects::dxo::collection::{
-    ActiveCollectionDB, ActiveCollectionDBWithNames, CollectionCreate, CollectionInsertDB,
-    CollectionRead,
+    CollectionCreate, CollectionDB, CollectionDBWithNames, CollectionInsertDB, CollectionRead,
 };
 use td_objects::dxo::connection::ConnectionDB;
 use td_objects::dxo::connection::ConnectionInsertDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::errors::SqlError;
-use td_objects::types::basic::{CollectionType, ConnectionKind, GroupId};
+use td_objects::types::basic::{CollectionType, CollectionVersionId, ConnectionKind, GroupId};
 use td_queries::Queries;
 
 /// Source/destination collections carry connection config — `ManageProject`
@@ -165,13 +164,13 @@ pub(crate) async fn escalate_for_connected(
 
 /// Only `Source`/`Destination` collections carry connection info; reject a
 /// `DataFactory`.
-pub fn ensure_connectable(collection: &ActiveCollectionDB) -> Result<(), TdError> {
-    match &collection.collection_type {
+pub fn ensure_connectable(collection: &CollectionDB) -> Result<(), TdError> {
+    match &collection.base.collection_type {
         CollectionType::Source | CollectionType::Destination => Ok(()),
         CollectionType::DataFactory => Err(api_error!(
             ApiError::InputError,
             "collection '{}' is a DataFactory and does not carry connection info",
-            collection.name
+            collection.base.name
         )),
     }
 }
@@ -288,10 +287,10 @@ pub struct ConnectionResolution {
 /// is immutable — content was stored under it.
 pub async fn resolve_connection<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     document: &ConnectionDocument,
 ) -> Result<ConnectionResolution, TdError> {
-    let connection_id = collection.connection_id.ok_or_else(|| {
+    let connection_id = collection.base.connection_id.ok_or_else(|| {
         api_error!(
             ApiError::NotFound,
             "the collection has no connection configured"
@@ -302,8 +301,8 @@ pub async fn resolve_connection<S: SeesProjectRows, M: AccessMode>(
     Ok(ConnectionResolution {
         row: existing,
         document: document.clone(),
-        collection_id: collection.id,
-        collection: collection.name.clone(),
+        collection_id: collection.base.collection_id,
+        collection: collection.base.name.clone(),
     })
 }
 
@@ -321,8 +320,8 @@ fn ensure_same_kind(existing: &ConnectionDB, kind: &ConnectionKind) -> Result<()
 }
 
 /// The collection's connection id, or 404 — without a store round-trip.
-pub fn require_connection_id(collection: &ActiveCollectionDB) -> Result<ConnectionId, TdError> {
-    collection.connection_id.ok_or_else(|| {
+pub fn require_connection_id(collection: &CollectionDB) -> Result<ConnectionId, TdError> {
+    collection.base.connection_id.ok_or_else(|| {
         api_error!(
             ApiError::NotFound,
             "the collection has no connection configured"
@@ -404,14 +403,14 @@ pub(crate) async fn ensure_collection_name_free<S: SeesProjectRows, M: AccessMod
     conn: &mut DomainConnection<Apiserver, S, M>,
     name: &CollectionName,
 ) -> Result<(), TdError> {
-    let existing: Vec<ActiveCollectionDB> = conn.fetch_all(name).await?;
+    let existing: Vec<CollectionDB> = conn.scd2().fetch_all(name).await?;
     if existing.is_empty() {
         Ok(())
     } else {
         // Clean "already exists" (input-error/400), matching the
         // `assert_not_exists` errors used for the other entities.
         Err(SqlError::EntityAlreadyExists(
-            ActiveCollectionDB::display_name().to_string(),
+            CollectionDB::display_name().to_string(),
             format!(" for 'name' = '{name}'"),
         ))?
     }
@@ -435,25 +434,26 @@ pub async fn insert_collection_with_connection(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     request_context: &RequestContext,
     plan: &CollectionCreatePlan,
+    at: LockInstant,
 ) -> Result<CollectionRead, TdError> {
     if let Some(row) = &plan.connection_row {
         conn.insert(row).await?;
     }
     let collection = CollectionInsertDB {
-        id: plan.collection_id,
+        id: CollectionVersionId::default(),
+        collection_id: plan.collection_id,
         name: plan.create.name.clone(),
         description: plan.create.description.clone(),
-        created_on: request_context.time.into(),
-        created_by_id: request_context.user_id.into(),
-        modified_on: request_context.time.into(),
-        modified_by_id: request_context.user_id.into(),
-        name_when_deleted: None,
-        group_id: plan.group_id,
         base_path: plan.create.base_path.clone(),
+        group_id: plan.group_id,
         collection_type: plan.collection_type.clone(),
         connection_id: plan.connection_row.as_ref().map(|row| row.id),
+        defined_by_id: request_context.user_id,
     };
-    conn.insert(&collection).await?;
-    let with_names: ActiveCollectionDBWithNames = conn.fetch_one(collection.id).await?;
+    conn.scd2()
+        .open(&collection, at)
+        .await
+        .map_err(SqlError::already_exists)?;
+    let with_names: CollectionDBWithNames = conn.scd2().fetch_one(collection.collection_id).await?;
     CollectionRead::from_dao(with_names)
 }

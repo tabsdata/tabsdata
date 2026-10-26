@@ -31,16 +31,15 @@ use td_authz::AuthzContext;
 use td_authz::rbac::{DevelopProject, Project};
 use td_bridge::BridgeProviderHandle;
 use td_database::access::SeesProjectRows;
-use td_database::access::{AccessMode, DbPool, InProject, WriteMode, retrying};
+use td_database::access::{AccessMode, DbPool, InProject, LockInstant, WriteMode, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::FromDao;
-use td_objects::dxo::collection::ActiveCollectionDBWithNames;
+use td_objects::dxo::collection::CollectionDBWithNames;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::collection::{
-    ActiveCollectionDB, CollectionRead, CollectionUpdate, CollectionUpdateDB,
-};
-use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
+use td_objects::dxo::collection::{CollectionDB, CollectionRead, CollectionUpdate};
+use td_objects::dxo::crudl::{RequestContext, UpdateRequest, WithinProject};
+use td_objects::errors::SqlError;
 use td_objects::types::basic::{CollectionId, CollectionName, ConnectionId};
 use td_queries::Queries;
 use tracing::warn;
@@ -62,12 +61,18 @@ async fn update_collection(
             .require::<Project, DevelopProject>(&mut conn, &ctx, &project)
             .await?;
         let conn = conn.get(grant);
-        let collection: ActiveCollectionDB = conn.fetch_one(&param.collection).await?;
+        let collection: CollectionDB = conn.scd2().fetch_one(&param.collection).await?;
         // source/destination collections carry connection config: manage_project
-        escalate_for_connected(&authz, conn, &ctx, &project, &collection.collection_type).await?;
+        escalate_for_connected(
+            &authz,
+            conn,
+            &ctx,
+            &project,
+            &collection.base.collection_type,
+        )
+        .await?;
         update_collection_validate(&update)?;
-        let update_db = update.to_dao(&ctx);
-        let plan = plan_collection_update(conn, &collection, &update, &update_db).await?;
+        let plan = plan_collection_update(conn, &collection, &update).await?;
         (plan, grant)
     };
 
@@ -87,7 +92,8 @@ async fn update_collection(
     // 3. update (short TX).
     let updated = retrying(|attempt| async {
         let mut trx = db.begin(attempt).await?;
-        let read = apply_collection_update(trx.get(grant), &plan).await?;
+        let at = trx.locked_at();
+        let read = apply_collection_update(trx.get(grant), &ctx, at, &plan).await?;
         trx.commit().await?;
         Ok(read)
     })
@@ -127,7 +133,7 @@ pub fn update_collection_validate(update: &CollectionUpdate) -> Result<(), TdErr
 #[derive(Debug, Clone)]
 pub struct CollectionUpdatePlan {
     pub collection_id: CollectionId,
-    pub update: CollectionUpdateDB,
+    pub update: CollectionUpdate,
     pub rename: Option<ConnectionRename>,
 }
 
@@ -144,9 +150,8 @@ pub struct ConnectionRename {
 
 pub async fn plan_collection_update<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     update: &CollectionUpdate,
-    update_db: &CollectionUpdateDB,
 ) -> Result<CollectionUpdatePlan, TdError> {
     // A rename to a name already taken is rejected up front with a clean
     // "already exists" error for every collection flavour (not just connected),
@@ -155,38 +160,44 @@ pub async fn plan_collection_update<S: SeesProjectRows, M: AccessMode>(
     // otherwise the existing owner's worker artifact would be overwritten (and
     // deleted by the revert). Renaming to the current name is a no-op.
     if let Some(name) = &update.name
-        && *name != collection.name
+        && *name != collection.base.name
     {
         ensure_collection_name_free(conn, name).await?;
     }
-    let rename = match (&update.name, collection.connection_id) {
-        (Some(name), Some(connection_id)) if *name != collection.name => Some(ConnectionRename {
-            collection_id: collection.id,
-            old_name: collection.name.clone(),
-            new_name: name.clone(),
-            connection_id,
-        }),
+    let rename = match (&update.name, collection.base.connection_id) {
+        (Some(name), Some(connection_id)) if *name != collection.base.name => {
+            Some(ConnectionRename {
+                collection_id: collection.base.collection_id,
+                old_name: collection.base.name.clone(),
+                new_name: name.clone(),
+                connection_id,
+            })
+        }
         _ => None,
     };
     Ok(CollectionUpdatePlan {
-        collection_id: collection.id,
-        update: update_db.clone(),
+        collection_id: collection.base.collection_id,
+        update: update.clone(),
         rename,
     })
 }
 
-/// The update transaction: apply the (store-confirmed) update and read the
-/// result back.
-pub async fn apply_collection_update<S: SeesProjectRows, M: WriteMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+/// The update transaction: open the (store-confirmed) update's version and
+/// read the result back.
+pub async fn apply_collection_update<M: WriteMode>(
+    conn: &mut DomainConnection<Apiserver, InProject, M>,
+    ctx: &RequestContext,
+    at: LockInstant,
     plan: &CollectionUpdatePlan,
 ) -> Result<CollectionRead, TdError> {
-    // A delete that committed since the plan was read leaves no live row to
-    // update: not found, instead of renaming the deleted one.
-    let _: ActiveCollectionDB = conn.fetch_one(plan.collection_id).await?;
-    conn.update::<CollectionUpdateDB>(&plan.update, plan.collection_id)
-        .await?;
-    let with_names: ActiveCollectionDBWithNames = conn.fetch_one(plan.collection_id).await?;
+    // A delete committed since the plan was read leaves no open version, so
+    // not found, never a reopened collection.
+    let current: CollectionDB = conn.scd2().fetch_one(plan.collection_id).await?;
+    conn.scd2()
+        .open(&current.updated(&plan.update, ctx), at)
+        .await
+        .map_err(SqlError::already_exists)?;
+    let with_names: CollectionDBWithNames = conn.scd2().fetch_one(plan.collection_id).await?;
     CollectionRead::from_dao(with_names)
 }
 
@@ -208,12 +219,13 @@ mod tests {
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::{ApiError, TdError, assert_service_error};
     use td_objects::dxo::bundle::BundleDB;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionVersionParam;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::function_upload::FunctionUpload;
+    use td_objects::dxo::topology::ProjectTopologyDB;
     use td_objects::types::basic::{
         AccessTokenId, AtTime, BasePath, CollectionName, Decorator, Description, FunctionName,
         FunctionRuntimeValues, FunctionStatus, GroupName, ProjectId, UserId, UserLabel, UserName,
@@ -252,11 +264,12 @@ mod tests {
     async fn test_update_collection(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let create_name = CollectionName::try_from("ds0").unwrap();
-        let _ = db
-            .scoped(p.id)
+        let seeded = db
+            .scoped(p.base.project_id)
             .seed()
             .collection(&create_name, &UserId::admin())
-            .await;
+            .await
+            .unwrap();
 
         let before_update = AtTime::now();
 
@@ -269,21 +282,44 @@ mod tests {
             base_path: None,
         };
 
-        let service = Services::with_defaults(db);
+        let service = Services::with_defaults(db.clone());
         let response = service
-            .update_collection(update_request(p.id, &create_name.to_string(), update))
+            .update_collection(update_request(
+                p.base.project_id,
+                &create_name.to_string(),
+                update,
+            ))
             .await;
         assert!(response.is_ok());
         let updated = response.unwrap().data;
 
         assert_eq!(updated.name, name);
         assert_eq!(updated.description, description);
-        assert!(*updated.created_on < before_update);
-        assert_eq!(*updated.created_by_id, UserId::admin());
-        assert_eq!(*updated.created_by, UserLabel::from(UserName::admin()));
-        assert!(*updated.modified_on > before_update);
-        assert_eq!(*updated.modified_by_id, UserId::admin());
-        assert_eq!(*updated.modified_by, UserLabel::from(UserName::admin()));
+        assert!(updated.defined_on > before_update);
+        assert_eq!(updated.defined_by_id, UserId::admin());
+        assert_eq!(updated.defined_by, UserLabel::from(UserName::admin()));
+
+        // The update is a new version of the collection, not of the topology.
+        let mut timeline: Vec<CollectionDB> = db
+            .scoped(p.base.project_id)
+            .timeline()
+            .fetch_all(&seeded.base.collection_id)
+            .await
+            .unwrap();
+        timeline.sort_by_key(|v| v.interval.valid_from);
+        let names: Vec<_> = timeline.iter().map(|v| v.base.name.clone()).collect();
+        assert_eq!(names, [create_name, name]);
+        assert_eq!(
+            *timeline[0].interval.valid_to.at().unwrap(),
+            *timeline[1].interval.valid_from
+        );
+        let topology: ProjectTopologyDB = db
+            .scoped(p.base.project_id)
+            .scd2()
+            .fetch_one(&p.base.project_id)
+            .await
+            .unwrap();
+        assert!(*topology.interval.valid_from < *timeline[1].interval.valid_from);
     }
 
     async fn update_collection(
@@ -331,18 +367,18 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("bp_coll")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
 
         // Seeded collections start with NULL base_path (they inherit the project).
-        assert_eq!(collection.base_path, None);
+        assert_eq!(collection.base.base_path, None);
 
         let data = BasePath::try_from("/data")?;
         update_collection(
             &db,
-            p.id,
+            p.base.project_id,
             &collection_name,
             None,
             None,
@@ -350,15 +386,27 @@ mod tests {
         )
         .await?;
 
-        let reloaded: ActiveCollectionDB =
-            db.fetch_one::<ActiveCollectionDB>(&collection.id).await?;
-        assert_eq!(reloaded.base_path, Some(data.clone()));
+        let reloaded: CollectionDB = db
+            .scd2()
+            .fetch_one::<CollectionDB>(&collection.base.collection_id)
+            .await?;
+        assert_eq!(reloaded.base.base_path, Some(data.clone()));
 
         // Clearing it (base_path = null) reverts to inheriting the project.
-        update_collection(&db, p.id, &collection_name, None, None, Some(None)).await?;
-        let reloaded: ActiveCollectionDB =
-            db.fetch_one::<ActiveCollectionDB>(&collection.id).await?;
-        assert_eq!(reloaded.base_path, None, "cleared back to inherit");
+        update_collection(
+            &db,
+            p.base.project_id,
+            &collection_name,
+            None,
+            None,
+            Some(None),
+        )
+        .await?;
+        let reloaded: CollectionDB = db
+            .scd2()
+            .fetch_one::<CollectionDB>(&collection.base.collection_id)
+            .await?;
+        assert_eq!(reloaded.base.base_path, None, "cleared back to inherit");
         Ok(())
     }
 
@@ -386,7 +434,7 @@ mod tests {
         let p = db.seed().test_project().await.unwrap();
         let collection_name = CollectionName::try_from("noop_coll").unwrap();
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await;
@@ -404,7 +452,7 @@ mod tests {
                 },
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db);
         assert_service_error(service.update_collection(request).await, |err| {
@@ -427,7 +475,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("move_coll")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -437,7 +485,7 @@ mod tests {
         let a = BasePath::try_from("/a")?;
         update_collection(
             &db,
-            p.id,
+            p.base.project_id,
             &collection_name,
             None,
             None,
@@ -458,7 +506,7 @@ mod tests {
                 },
                 upload,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let bundle = context.clone().upload_function(request).await?.data;
 
         let create = FunctionRegister {
@@ -488,7 +536,7 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .register_function(request)
             .await?;
@@ -505,16 +553,18 @@ mod tests {
         let b = BasePath::try_from("/b")?;
         update_collection(
             &db,
-            p.id,
+            p.base.project_id,
             &collection_name,
             None,
             None,
             Some(Some(b.clone())),
         )
         .await?;
-        let reloaded: ActiveCollectionDB =
-            db.fetch_one::<ActiveCollectionDB>(&collection.id).await?;
-        assert_eq!(reloaded.base_path, Some(b));
+        let reloaded: CollectionDB = db
+            .scd2()
+            .fetch_one::<CollectionDB>(&collection.base.collection_id)
+            .await?;
+        assert_eq!(reloaded.base.base_path, Some(b));
 
         // The previously-generated artifacts still carry "/a": the move did not
         // relocate them, and no new function version was created.
@@ -573,7 +623,11 @@ mod tests {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .create_collection(create_request(p.id, "src0", Some(GroupName::source())))
+        .create_collection(create_request(
+            p.base.project_id,
+            "src0",
+            Some(GroupName::source()),
+        ))
         .await
         .unwrap();
 
@@ -581,16 +635,18 @@ mod tests {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .update_collection(update_request(p.id, "src0", rename_to("src1")))
+        .update_collection(update_request(p.base.project_id, "src0", rename_to("src1")))
         .await
         .unwrap();
         assert_eq!(renamed.name.to_string(), "src1");
 
         // The stored document followed the rename, values intact.
-        let connection = linked_connection(&db, p.id, "src1").await.unwrap();
+        let connection = linked_connection(&db, p.base.project_id, "src1")
+            .await
+            .unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.id, &connection.base.id)
+            .fetch(&p.base.project_id, &connection.base.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "src1");
@@ -606,12 +662,16 @@ mod tests {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .create_collection(create_request(p.id, "src0", Some(GroupName::source())))
+        .create_collection(create_request(
+            p.base.project_id,
+            "src0",
+            Some(GroupName::source()),
+        ))
         .await
         .unwrap();
         let taken = CollectionName::try_from("taken").unwrap();
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&taken, &UserId::admin())
             .await;
@@ -623,14 +683,20 @@ mod tests {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .update_collection(update_request(p.id, "src0", rename_to("taken")))
+        .update_collection(update_request(
+            p.base.project_id,
+            "src0",
+            rename_to("taken"),
+        ))
         .await
         .expect_err("renaming onto an existing collection must fail");
 
-        let connection = linked_connection(&db, p.id, "src0").await.unwrap();
+        let connection = linked_connection(&db, p.base.project_id, "src0")
+            .await
+            .unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.id, &connection.base.id)
+            .fetch(&p.base.project_id, &connection.base.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "src0");
@@ -646,36 +712,52 @@ mod tests {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .create_collection(create_request(p.id, "src0", Some(GroupName::source())))
+        .create_collection(create_request(
+            p.base.project_id,
+            "src0",
+            Some(GroupName::source()),
+        ))
         .await
         .unwrap();
-        let connection = linked_connection(&db, p.id, "src0").await.unwrap();
-        let collection: ActiveCollectionDB = db
-            .scoped(p.id)
+        let connection = linked_connection(&db, p.base.project_id, "src0")
+            .await
+            .unwrap();
+        let collection: CollectionDB = db
+            .scoped(p.base.project_id)
+            .scd2()
             .fetch_one(&CollectionName::try_from("src0").unwrap())
             .await
             .unwrap();
         let stale = CollectionName::try_from("stale").unwrap();
         let store = bridge.connection_store();
-        rename_stored_connection(store, &p.id, &collection.id, &stale, &connection.base.id)
-            .await
-            .unwrap();
-
-        let pools =
-            DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-        reconcile_stored_connection(
-            &DbPool::in_project(&pools, &p.id),
-            Grant::asserted("reconcile"),
+        rename_stored_connection(
             store,
-            &p.id,
-            &collection.id,
+            &p.base.project_id,
+            &collection.base.collection_id,
             &stale,
             &connection.base.id,
         )
         .await
         .unwrap();
 
-        let stored = store.fetch(&p.id, &connection.base.id).await.unwrap();
+        let pools =
+            DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
+        reconcile_stored_connection(
+            &DbPool::in_project(&pools, &p.base.project_id),
+            Grant::asserted("reconcile"),
+            store,
+            &p.base.project_id,
+            &collection.base.collection_id,
+            &stale,
+            &connection.base.id,
+        )
+        .await
+        .unwrap();
+
+        let stored = store
+            .fetch(&p.base.project_id, &connection.base.id)
+            .await
+            .unwrap();
         assert_eq!(stored.connection["name"], "src0");
     }
 
@@ -684,11 +766,11 @@ mod tests {
     #[td_test::test(db)]
     async fn test_source_update_requires_manage_project(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let dev = seed_dev_user(&db, p.id).await;
+        let dev = seed_dev_user(&db, p.base.project_id).await;
 
         // DataFactory rename with develop_project: fine.
         Services::with_defaults(db.clone())
-            .create_collection(create_request(p.id, "dev_df_u", None))
+            .create_collection(create_request(p.base.project_id, "dev_df_u", None))
             .await?;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(
@@ -697,13 +779,19 @@ mod tests {
                 },
                 rename_to("dev_df_u2"),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .update_collection(request)
             .await?;
 
         // Source rename with develop_project: forbidden.
-        create_collection(&db, p.id, "dev_src_u", Some(GroupName::source())).await;
+        create_collection(
+            &db,
+            p.base.project_id,
+            "dev_src_u",
+            Some(GroupName::source()),
+        )
+        .await;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(
                 CollectionParam {
@@ -711,7 +799,7 @@ mod tests {
                 },
                 rename_to("dev_src_u2"),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let err = Services::with_defaults(db.clone())
             .update_collection(request)
             .await

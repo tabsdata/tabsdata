@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::collection::resolve_collection_id;
 use crate::function_run::resolve_current_function_run;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -43,10 +44,11 @@ async fn function_run_read(
         .await?;
 
     let function_id_name = function_param.function;
+    let collection_id = resolve_collection_id(conn, &collection_id_name).await?;
     let function: FunctionDBWithNames = conn
         .scd2()
         .as_of(&topology.interval.valid_from)
-        .fetch_one(and!(&collection_id_name, &function_id_name))
+        .fetch_one(and!(&collection_id, &function_id_name))
         .await?;
 
     // Replays mint several attempts under one LFR; the current one is canonical.
@@ -61,11 +63,12 @@ mod tests {
     use std::str::FromStr;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
-    use td_error::TdError;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_error::{ApiError, TdError};
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::{FunctionDB, FunctionRegister};
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
+    use td_objects::types::basic::CollectionLabel;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Enabled, FunctionName,
         LogicalFunctionRunStatus, PhysicalFunctionRunStatus, ProjectId, TableNameDto,
@@ -73,13 +76,14 @@ mod tests {
     };
     use td_objects::types::basic::{AtTime, ReuseFrozen};
     use td_objects::types::basic::{CollectionIdName, FunctionIdName};
+    use td_objects::types::label::Label;
     use td_queries::test_utils::SeedEntry;
 
     const COLLECTION: &str = "collection";
     const FUNCTION: &str = "joaquin";
 
     struct SeededRun {
-        collection: ActiveCollectionDB,
+        collection: CollectionDB,
         function: FunctionDB,
         execution: ExecutionDB,
         run: PhysicalFunctionRunDB,
@@ -149,10 +153,18 @@ mod tests {
         project: ProjectId,
         execution: &ExecutionDB,
     ) -> WithinProject<ReadRequest<(CollectionParam, FunctionParam, ExecutionParam)>> {
+        read_request_in(project, COLLECTION, execution)
+    }
+
+    fn read_request_in(
+        project: ProjectId,
+        collection: &str,
+        execution: &ExecutionDB,
+    ) -> WithinProject<ReadRequest<(CollectionParam, FunctionParam, ExecutionParam)>> {
         RequestContext::with(AccessTokenId::default(), UserId::admin())
             .read((
                 CollectionParam {
-                    collection: CollectionIdName::from_str(COLLECTION).unwrap(),
+                    collection: CollectionIdName::from_str(collection).unwrap(),
                 },
                 FunctionParam {
                     function: FunctionIdName::from_str(FUNCTION).unwrap(),
@@ -167,7 +179,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_read_function_run(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let seeded = seed_done_run(&db, p.id, None).await?;
+        let seeded = seed_done_run(&db, p.base.project_id, None).await?;
         let SeededRun {
             collection,
             function,
@@ -177,7 +189,7 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let response = service
-            .function_run_read(read_request(p.id, execution))
+            .function_run_read(read_request(p.base.project_id, execution))
             .await?
             .data;
 
@@ -192,7 +204,10 @@ mod tests {
         assert_eq!(response.ended_on, run.base.ended_on);
         assert_eq!(response.status, PhysicalFunctionRunStatus::Done);
         assert_eq!(response.name, FunctionName::try_from(FUNCTION)?);
-        assert_eq!(response.collection, collection.name);
+        assert_eq!(
+            response.collection,
+            CollectionLabel::new(collection.base.name.clone())
+        );
         assert_eq!(response.execution, execution.base.name);
         assert_eq!(response.triggered_by, UserLabel::from(UserName::admin()));
         assert_eq!(function.base.name, response.name);
@@ -204,7 +219,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_read_function_run_of_deleted_collection(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let seeded = seed_done_run(&db, p.id, None).await?;
+        let seeded = seed_done_run(&db, p.base.project_id, None).await?;
 
         let service = Services::with_defaults(db.clone());
         service
@@ -213,26 +228,41 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str(COLLECTION)?,
                     })
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?;
 
+        let err = service
+            .function_run_read(read_request(p.base.project_id, &seeded.execution))
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
+
+        let by_id = format!("~{}", seeded.collection.base.collection_id);
         let response = service
-            .function_run_read(read_request(p.id, &seeded.execution))
+            .function_run_read(read_request_in(
+                p.base.project_id,
+                &by_id,
+                &seeded.execution,
+            ))
             .await?
             .data;
         assert_eq!(response.id, seeded.run.base.id);
-        assert_eq!(response.collection, seeded.collection.name);
+        assert_eq!(
+            response.collection,
+            CollectionLabel::new(Label::Deleted(seeded.collection.base.collection_id))
+        );
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_read_function_run_of_disabled_function(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let seeded = seed_done_run(&db, p.id, Some(Enabled::FALSE)).await?;
+        let seeded = seed_done_run(&db, p.base.project_id, Some(Enabled::FALSE)).await?;
 
         let response = Services::with_defaults(db.clone())
-            .function_run_read(read_request(p.id, &seeded.execution))
+            .function_run_read(read_request(p.base.project_id, &seeded.execution))
             .await?
             .data;
         assert_eq!(response.id, seeded.run.base.id);

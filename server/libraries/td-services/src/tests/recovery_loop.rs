@@ -88,11 +88,11 @@ fn observing(
 async fn dispatch(db: &TdPool, decorator: Decorator) -> Result<(ProjectId, Attempt), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from(COLLECTION)?, &UserId::admin())
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .function(
             &collection,
@@ -120,11 +120,11 @@ async fn dispatch(db: &TdPool, decorator: Decorator) -> Result<(ProjectId, Attem
                 external_uid: None,
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let execution = dispatch_services(db).execute_function(request).await?.data;
     dispatch_services(db).request(()).await?;
     let attempt = current_attempt(db, &execution).await?;
-    Ok((p.id, attempt))
+    Ok((p.base.project_id, attempt))
 }
 
 async fn attempts(
@@ -285,7 +285,7 @@ async fn test_a_transiently_failed_streamer_is_started_again(db: TdPool) -> Resu
     let p = db.seed().test_project().await?;
     let (_, stage) = trigger_worker(
         &db,
-        p.id,
+        p.base.project_id,
         "c_stage",
         WorkerType::StageTrigger,
         WorkerStatus::Running,
@@ -340,7 +340,7 @@ async fn test_a_streamer_that_exits_unreported_restarts_with_backoff(
     let p = db.seed().test_project().await?;
     let (_, stage) = trigger_worker(
         &db,
-        p.id,
+        p.base.project_id,
         "c_stage_exit",
         WorkerType::StageTrigger,
         WorkerStatus::Running,
@@ -540,7 +540,7 @@ async fn test_a_cron_job_left_suspended_is_repaired(db: TdPool) -> Result<(), Td
     let p = db.seed().test_project().await?;
     let (function, cron) = trigger_worker(
         &db,
-        p.id,
+        p.base.project_id,
         "c_cron",
         WorkerType::CronTrigger,
         WorkerStatus::Running,

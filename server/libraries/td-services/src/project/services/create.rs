@@ -13,9 +13,7 @@ use td_database::access::{DbPool, Global, retrying};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::CreateRequest;
-use td_objects::dxo::project::{
-    ActiveProjectDB, ActiveProjectDBWithNames, ProjectCreate, ProjectRead,
-};
+use td_objects::dxo::project::{ProjectCreate, ProjectDB, ProjectDBWithNames, ProjectRead};
 use td_objects::errors::SqlError;
 use td_objects::types::basic::ProjectId;
 use td_queries::Queries;
@@ -37,7 +35,8 @@ async fn create_project(
             .await?;
         connection
             .get(grant)
-            .assert_not_exists::<ActiveProjectDB>(&create.name)
+            .scd2()
+            .assert_not_exists::<ProjectDB>(&create.name)
             .await?;
     }
     let secrets = bridge.project_secrets();
@@ -49,31 +48,34 @@ async fn create_project(
         let grant = authz
             .require::<System, CreateProjects>(&mut trx, &ctx, &SystemEntity)
             .await?;
+        let at = trx.locked_at();
         let conn = trx.get(grant);
 
-        let mut project = create.clone().to_dao(&ctx);
-        project.id = project_id;
+        let mut project = create.to_dao(&ctx);
+        project.project_id = project_id;
         // A duplicate project name reports a clean "already exists" error
         // instead of the raw unique-constraint violation from the insert.
-        conn.assert_not_exists::<ActiveProjectDB>(&project.name)
+        conn.scd2()
+            .assert_not_exists::<ProjectDB>(&create.name)
             .await?;
-        conn.insert(&project)
-            .await
-            .map_err(SqlError::already_exists)?;
 
         // Enter the new project for the rest of the unit of work: the seeds below
         // default `project_id` from the GUC instead of stamping it by hand, and
-        // the connection is typed for it.
-        let mut trx = trx.enter_project(&project.id).await?;
-        let at = trx.locked_at();
+        // the connection is typed for it. The project, its system groups and its
+        // first, empty topology version all open at the same instant.
+        let mut trx = trx.enter_project(&project_id).await?;
         let conn = trx.get(grant);
+        conn.topology().bump(&project_id, at).await?;
+        conn.scd2()
+            .open(&project, at)
+            .await
+            .map_err(SqlError::already_exists)?;
         // A collection resolves its group within its own project, so seed the
         // system groups (default/source/destination) into the new project.
-        seed_default_groups(conn, &ctx).await?;
-        seed_project_roles(conn, &ctx, &project.id, &project).await?;
-        conn.topology().bump(&project.id, at).await?;
+        seed_default_groups(conn, &ctx, at).await?;
+        seed_project_roles(conn, &ctx, &project_id, &create.name).await?;
 
-        let with_names: ActiveProjectDBWithNames = conn.fetch_one(&project.id).await?;
+        let with_names: ProjectDBWithNames = conn.scd2().fetch_one(&project_id).await?;
         let read = ProjectRead::from_dao(with_names)?;
         trx.commit().await?;
         Ok(read)

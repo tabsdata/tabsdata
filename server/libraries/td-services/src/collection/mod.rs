@@ -4,7 +4,10 @@
 
 use td_error::td_error;
 
+mod resolve;
 pub mod services;
+
+pub use resolve::resolve_collection_id;
 
 #[td_error]
 pub enum CollectionError {

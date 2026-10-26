@@ -59,35 +59,41 @@ async fn test_recovering_a_run_blocked_on_a_foreign_failure_does_not_read_runnin
             }],
         },
     ];
-    run_status_scenario(db.clone(), p.id, &test_executions, |_, e, _, _, _| {
-        let db = db.clone();
-        let execution = e[&test_executions[1]].base.id.clone();
-        async move {
-            let recover = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
-                ExecutionParam {
-                    execution: execution.clone(),
-                },
-                (),
-            );
-            dispatch_services(&db).execution_recover(recover).await?;
-            dispatch_services(&db).request(()).await?;
+    run_status_scenario(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, e, _, _, _| {
+            let db = db.clone();
+            let execution = e[&test_executions[1]].base.id.clone();
+            async move {
+                let recover = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .update(
+                        ExecutionParam {
+                            execution: execution.clone(),
+                        },
+                        (),
+                    );
+                dispatch_services(&db).execution_recover(recover).await?;
+                dispatch_services(&db).request(()).await?;
 
-            let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution).await?;
-            let statuses: Vec<_> = runs.iter().map(|r| r.base.status).collect();
-            assert!(
-                !statuses.contains(&LogicalFunctionRunStatus::Requested),
-                "the blocked run was dispatched: {statuses:?}"
-            );
-            assert_eq!(statuses, [LogicalFunctionRunStatus::OnHold]);
-            let rolled_up: ExecutionDB = db.fetch_one(&execution).await?;
-            assert_eq!(
-                rolled_up.status,
-                ExecutionStatus::Stalled,
-                "ep-1 has nothing able to progress: runs {statuses:?}"
-            );
-            Ok(())
-        }
-    })
+                let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution).await?;
+                let statuses: Vec<_> = runs.iter().map(|r| r.base.status).collect();
+                assert!(
+                    !statuses.contains(&LogicalFunctionRunStatus::Requested),
+                    "the blocked run was dispatched: {statuses:?}"
+                );
+                assert_eq!(statuses, [LogicalFunctionRunStatus::OnHold]);
+                let rolled_up: ExecutionDB = db.fetch_one(&execution).await?;
+                assert_eq!(
+                    rolled_up.status,
+                    ExecutionStatus::Stalled,
+                    "ep-1 has nothing able to progress: runs {statuses:?}"
+                );
+                Ok(())
+            }
+        },
+    )
     .await
     .map(|_| ())
 }

@@ -12,7 +12,6 @@ use td_error::TdError;
 use td_error::{ApiError, api_error};
 use td_objects::and;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::{AtTimeParam, ReadRequest};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionParam};
 use td_objects::dxo::table::TableDBWithNames;
@@ -43,9 +42,7 @@ async fn table_state_download(
             "Function version '{function_version_id}' was not live at '{at}'",
         ));
     }
-    let collection: ResolvedCollectionDB =
-        conn.fetch_one(&function.base.base.collection_id).await?;
-    let project = collection.base.project_id;
+    let project = function.base.project_id;
     let mut trx = trx.enter_project(&project).await?;
     let conn = trx.get(authz.none());
 
@@ -122,7 +119,7 @@ mod tests {
         let context = Services::with_defaults(db.clone());
 
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -152,11 +149,15 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let system_tables = db.scoped(p.id).seed().system_tables(&function).await?;
+        let system_tables = db
+            .scoped(p.base.project_id)
+            .seed()
+            .system_tables(&function)
+            .await?;
         let td_fn_state_table = system_tables
             .iter()
             .find(|t| t.base.name.starts_with(TD_FN_STATE_PREFIX))

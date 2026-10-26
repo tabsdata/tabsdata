@@ -15,7 +15,7 @@ use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::dxo::group::{GroupDB, GroupParam, GroupUpdate, GroupUpdateDB};
+use td_objects::dxo::group::{GroupDB, GroupParam, GroupUpdate};
 use td_objects::types::basic::{AccessTokenId, Description, GroupIdName, GroupName, UserId};
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
@@ -30,7 +30,7 @@ async fn test_a_service_aborted_by_a_concurrent_write_runs_again(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let group = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .group(
             GroupName::try_from("g_retry")?,
@@ -41,19 +41,17 @@ async fn test_a_service_aborted_by_a_concurrent_write_runs_again(
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = DbPool::in_project(&pools, &p.id)
+    let mut gate = DbPool::in_project(&pools, &p.base.project_id)
         .begin(Attempt::unretried())
         .await?;
-    gate.get(Grant::asserted("concurrent group update"))
-        .update::<GroupUpdateDB>(
-            &GroupUpdateDB {
-                name: None,
-                description: Some(Description::try_from("concurrent")?),
-                modified_on: context.time.into(),
-                modified_by_id: context.user_id.into(),
-            },
-            group.base.id,
-        )
+    let at = gate.locked_at();
+    let conn = gate.get(Grant::asserted("concurrent group update"));
+    let update = GroupUpdate {
+        name: None,
+        description: Some(Description::try_from("concurrent")?),
+    };
+    conn.scd2()
+        .open(&group.updated(&update, &context), at)
         .await?;
 
     let request = context
@@ -66,7 +64,7 @@ async fn test_a_service_aborted_by_a_concurrent_write_runs_again(
                 description: Some(Description::try_from("retried")?),
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let services = Services::with_defaults(db.clone());
     let updating = tokio::spawn(async move { services.update_group(request).await });
     assert!(
@@ -83,7 +81,7 @@ async fn test_a_service_aborted_by_a_concurrent_write_runs_again(
         updated.is_ok(),
         "the service was not run again: {updated:?}"
     );
-    let stored: GroupDB = db.fetch_one(&group.base.id).await?;
+    let stored: GroupDB = db.scd2().fetch_one(&group.base.group_id).await?;
     assert_eq!(stored.base.description, Description::try_from("retried")?);
     Ok(())
 }

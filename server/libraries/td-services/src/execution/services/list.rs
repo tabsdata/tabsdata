@@ -30,23 +30,23 @@ async fn execution_list(
 #[cfg(test)]
 mod tests {
     use crate::Services;
+    use crate::tests::fixtures::delete_project;
     use td_database::pool::TdPool;
     use td_error::TdError;
     use td_objects::dxo::crudl::{ListParams, RequestContext};
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::dxo::project::ProjectDeleteDB;
+    use td_objects::types::basic::ProjectLabel;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, ProjectName, UserId,
     };
-    use td_queries::Queries;
     use td_queries::test_utils::{SeedEntry, seed_project_viewer, seed_run};
 
     #[td_test::test(db)]
     async fn test_list_execution(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -76,16 +76,31 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let executions = [
-            db.scoped(p.id).seed().execution(&function_version).await?,
-            db.scoped(p.id).seed().execution(&function_version).await?,
-            db.scoped(p.id).seed().execution(&function_version).await?,
-            db.scoped(p.id).seed().execution(&function_version).await?,
-            db.scoped(p.id).seed().execution(&function_version).await?,
+            db.scoped(p.base.project_id)
+                .seed()
+                .execution(&function_version)
+                .await?,
+            db.scoped(p.base.project_id)
+                .seed()
+                .execution(&function_version)
+                .await?,
+            db.scoped(p.base.project_id)
+                .seed()
+                .execution(&function_version)
+                .await?,
+            db.scoped(p.base.project_id)
+                .seed()
+                .execution(&function_version)
+                .await?,
+            db.scoped(p.base.project_id)
+                .seed()
+                .execution(&function_version)
+                .await?,
         ];
 
         let service = Services::with_defaults(db.clone());
@@ -119,17 +134,22 @@ mod tests {
             response.data[4].triggered_on,
             executions[4].base.triggered_on
         );
-        let base = Some(p.name.clone());
-        assert!(response.data.iter().all(|e| e.project == base));
+        let base = Some(p.base.name.clone());
+        assert!(
+            response
+                .data
+                .iter()
+                .all(|e| e.project == base.clone().map(ProjectLabel::new))
+        );
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_list_execution_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        let base_exec = seed_run(&db, base.id).await?.execution;
+        let base_exec = seed_run(&db, base.base.project_id).await?.execution;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let alpha_exec = seed_run(&db, alpha.id).await?.execution;
+        let alpha_exec = seed_run(&db, alpha.base.project_id).await?.execution;
 
         let service = Services::with_defaults(db.clone());
         let wildcard = service
@@ -142,20 +162,26 @@ mod tests {
 
         // The wildcard spans both projects and each row resolves to its own.
         let base_row = wildcard.data.iter().find(|e| e.id == base_exec).unwrap();
-        assert_eq!(base_row.project, Some(base.name.clone()));
+        assert_eq!(
+            base_row.project,
+            Some(ProjectLabel::new(base.base.name.clone()))
+        );
         let alpha_row = wildcard.data.iter().find(|e| e.id == alpha_exec).unwrap();
-        assert_eq!(alpha_row.project, Some(ProjectName::try_from("alpha")?));
+        assert_eq!(
+            alpha_row.project,
+            Some(ProjectLabel::new(ProjectName::try_from("alpha")?))
+        );
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_list_execution_wildcard_filters_to_viewable(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        let base_exec = seed_run(&db, base.id).await?.execution;
+        let base_exec = seed_run(&db, base.base.project_id).await?.execution;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let alpha_exec = seed_run(&db, alpha.id).await?.execution;
+        let alpha_exec = seed_run(&db, alpha.base.project_id).await?.execution;
 
-        let user = seed_project_viewer(&db, base.id).await?;
+        let user = seed_project_viewer(&db, base.base.project_id).await?;
 
         let service = Services::with_defaults(db.clone());
         let response = service
@@ -174,13 +200,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_execution_wildcard_skips_deleted_project(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        let base_exec = seed_run(&db, base.id).await?.execution;
+        let base_exec = seed_run(&db, base.base.project_id).await?.execution;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let alpha_exec = seed_run(&db, alpha.id).await?.execution;
+        let alpha_exec = seed_run(&db, alpha.base.project_id).await?.execution;
 
         let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
-        db.update::<ProjectDeleteDB>(&alpha.to_delete_dao(&ctx), alpha.id)
-            .await?;
+        delete_project(&db, alpha.base.project_id).await?;
 
         let service = Services::with_defaults(db.clone());
         let wildcard = service

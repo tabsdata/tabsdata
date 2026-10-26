@@ -13,12 +13,12 @@ use td_database::access::{
 use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionUpdateDB};
+use td_objects::dxo::collection::{CollectionDB, CollectionUpdate};
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::types::basic::{AccessTokenId, CollectionName, UserId};
 use td_queries::Queries;
-use td_queries::test_utils::SeedEntry;
 use td_queries::test_utils::probes::show_setting;
+use td_queries::test_utils::{SeedEntry, seed_instant};
 
 async fn lock_timeout(conn: &mut GatedConnection<impl AccessMode, InProject>) -> String {
     show_setting(
@@ -39,7 +39,7 @@ fn pools(db: &TdPool) -> DbPool<AcrossProjects> {
 #[td_test::test(db)]
 async fn test_project_lock_bounds_only_its_own_wait(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let project = DbPool::in_project(&pools(&db), &p.id);
+    let project = DbPool::in_project(&pools(&db), &p.base.project_id);
 
     let mut plain = project.begin(Attempt::unretried()).await?;
     let default = lock_timeout(&mut plain).await;
@@ -57,7 +57,7 @@ async fn test_project_lock_bounds_only_its_own_wait(db: TdPool) -> Result<(), Td
 #[td_test::test(db)]
 async fn test_waiting_on_one_project_does_not_starve_another(db: TdPool) -> Result<(), TdError> {
     let busy_project = db.seed().test_project().await?;
-    let busy = DbPool::in_project(&pools(&db), &busy_project.id);
+    let busy = DbPool::in_project(&pools(&db), &busy_project.base.project_id);
     let idle = DbPool::in_project(&pools(&db), &"another_project");
 
     let held: GatedConnection<XW, InProject> = busy.begin_exclusive(Attempt::unretried()).await?;
@@ -86,7 +86,7 @@ async fn test_an_exclusive_unit_holds_the_project_lock_until_it_ends(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let project = DbPool::in_project(&pools(&db), &p.id);
+    let project = DbPool::in_project(&pools(&db), &p.base.project_id);
 
     let held = project.begin_exclusive(Attempt::unretried()).await?;
     let waiting = tokio::time::timeout(
@@ -123,35 +123,35 @@ async fn test_an_exclusive_unit_holds_the_project_lock_until_it_ends(
 async fn test_an_exclusive_unit_reads_the_last_holders_commit(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_before")?, &UserId::admin())
         .await?;
-    let project = DbPool::in_project(&pools(&db), &p.id);
+    let project = DbPool::in_project(&pools(&db), &p.base.project_id);
 
     let mut held = project.begin_exclusive(Attempt::unretried()).await?;
     let admin = RequestContext::with(AccessTokenId::default(), UserId::admin());
-    let renamed = CollectionUpdateDB {
+    let renamed = CollectionUpdate {
         name: Some(CollectionName::try_from("c_after")?),
         description: None,
-        modified_on: admin.time.into(),
-        modified_by_id: admin.user_id.into(),
         base_path: None,
     };
     held.get(Grant::asserted("rename held under the lock"))
-        .update::<CollectionUpdateDB>(&renamed, c.id)
+        .scd2()
+        .open(&c.updated(&renamed, &admin), seed_instant())
         .await?;
 
     let queued = tokio::spawn({
         let project = project.clone();
         async move {
             let mut next = project.begin_exclusive(Attempt::unretried()).await?;
-            let read: ActiveCollectionDB = next
+            let read: CollectionDB = next
                 .get(Grant::asserted("read after the lock"))
-                .fetch_one(&c.id)
+                .scd2()
+                .fetch_one(&c.base.collection_id)
                 .await?;
             next.commit().await?;
-            Ok::<_, TdError>(read.name)
+            Ok::<_, TdError>(read.base.name)
         }
     });
     tokio::time::sleep(Duration::from_millis(200)).await;

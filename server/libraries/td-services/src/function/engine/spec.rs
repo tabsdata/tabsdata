@@ -11,7 +11,7 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_execution::VersionResolver;
 use td_objects::and;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
 use td_objects::dxo::table::{TableDBWithNames, TableInsertDB};
 use td_objects::system::{
@@ -139,7 +139,7 @@ pub struct ResolvedSpec {
 /// batched lookup), self-triggers, and the version selectors.
 pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     function_id: &FunctionId,
     spec: &FunctionSpec<'_>,
     at: LockInstant,
@@ -155,8 +155,8 @@ pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
             duplicates.into(),
         ))?
     }
-    check_private_tables(&collection.name, spec.dependencies)?;
-    check_private_tables(&collection.name, spec.triggers)?;
+    check_private_tables(&collection.base.name, spec.dependencies)?;
+    check_private_tables(&collection.base.name, spec.triggers)?;
 
     let tables = resolve_tables(conn, collection, function_id, spec).await?;
 
@@ -166,20 +166,21 @@ pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
         .iter()
         .map(TableDependency::try_from)
         .try_collect()?;
-    let triggers = trigger_list(spec, &collection.name)?;
+    let triggers = trigger_list(spec, &collection.base.name)?;
 
     // The function's own tables, system ones included, are addressable before
     // they are written: a dependency on the state table is resolved here.
-    let mut referenced = referenced_rows(conn, &collection.name, &dependencies, &triggers).await?;
+    let mut referenced =
+        referenced_rows(conn, &collection.base.name, &dependencies, &triggers).await?;
     for table in &tables {
         let row = ReferencedRow {
-            collection_id: collection.id,
+            collection_id: collection.base.collection_id,
             function_id: *function_id,
             table_id: table.table_id,
             system: System::from(table.pos < 0),
             status: TableStatus::Active,
         };
-        referenced.insert((collection.name.clone(), table.name.clone()), row);
+        referenced.insert((collection.base.name.clone(), table.name.clone()), row);
     }
 
     let system_dependencies: Vec<TableDependency> = SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES
@@ -192,7 +193,7 @@ pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
             dependency
                 .collection
                 .clone()
-                .unwrap_or_else(|| collection.name.clone()),
+                .unwrap_or_else(|| collection.base.name.clone()),
             dependency.table.clone(),
         );
         let row = referenced.get(&key).ok_or_else(|| {
@@ -221,7 +222,7 @@ pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
             trigger
                 .collection
                 .clone()
-                .unwrap_or_else(|| collection.name.clone()),
+                .unwrap_or_else(|| collection.base.name.clone()),
             trigger.table.clone(),
         );
         let row = referenced
@@ -230,7 +231,7 @@ pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
         let own_collection = trigger
             .collection
             .as_ref()
-            .is_none_or(|c| *c == collection.name);
+            .is_none_or(|c| *c == collection.base.name);
         if own_collection && own_tables.iter().any(|t| ***t == *trigger.table) {
             Err(RegisterFunctionError::SelfTrigger(trigger.clone()))?
         }
@@ -256,7 +257,7 @@ fn positioned<'a, T>(user: &'a [T], system: &'a [T]) -> impl Iterator<Item = (i3
 
 async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     function_id: &FunctionId,
     spec: &FunctionSpec<'_>,
 ) -> Result<Vec<ResolvedTable>, TdError> {
@@ -287,7 +288,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
         .try_collect()?;
 
     let lookups: Vec<_> = positioned(&user_tables, &system_tables)
-        .map(|(_, (name, _))| and!(&collection.id, name))
+        .map(|(_, (name, _))| and!(&collection.base.collection_id, name))
         .collect();
     let current: Vec<TableDBWithNames> = conn.scd2().chunked().fetch_all(&lookups, ()).await?;
     let current: HashMap<&TableName, &TableInsertDB> = current
@@ -306,7 +307,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
         .try_collect()?;
     let lookups: Vec<_> = elsewhere
         .iter()
-        .map(|name| and!(&collection.id, name))
+        .map(|name| and!(&collection.base.collection_id, name))
         .collect();
     let found: Vec<TableDBWithNames> = if lookups.is_empty() {
         Vec::new()
@@ -334,7 +335,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
             Some(t) if t.status == TableStatus::Frozen => {
                 Err(RegisterFunctionError::FrozenTableAlreadyExists(
                     name.clone(),
-                    collection.name.clone(),
+                    collection.base.name.clone(),
                 ))?
             }
             Some(t) if t.function_id == *function_id => (t.table_id, false),
@@ -366,7 +367,10 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
             continue;
         };
         let (parent_id, parent_type) = parent_candidates.get(&parent).ok_or_else(|| {
-            RegisterFunctionError::ParentTableDoesNotExist(parent.clone(), collection.name.clone())
+            RegisterFunctionError::ParentTableDoesNotExist(
+                parent.clone(),
+                collection.base.name.clone(),
+            )
         })?;
         if !matches!(parent_type, TableType::Regular) {
             Err(RegisterFunctionError::ParentTableMustBeRegular(
@@ -384,7 +388,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
     if !owned_elsewhere.is_empty() {
         Err(RegisterFunctionError::TableAlreadyExists(
             owned_elsewhere.into(),
-            collection.name.clone(),
+            collection.base.name.clone(),
         ))?
     }
     Ok(tables)
@@ -414,24 +418,44 @@ fn trigger_list(
 }
 
 /// Every table a dependency or trigger names, fetched once and keyed by
-/// (collection name, table name).
+/// (collection name, table name). Names resolve among the live collections.
 async fn referenced_rows<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     collection: &CollectionName,
     dependencies: &[TableDependency],
     triggers: &[TableTrigger],
 ) -> Result<HashMap<(CollectionName, TableName), ReferencedRow>, TdError> {
-    let mut lookups = Vec::new();
-    for d in dependencies {
-        lookups.push(and!(d.collection.as_ref().unwrap_or(collection), &d.table));
-    }
-    for t in triggers {
-        lookups.push(and!(t.collection.as_ref().unwrap_or(collection), &t.table));
-    }
+    let references: Vec<(&CollectionName, &TableName)> = dependencies
+        .iter()
+        .map(|d| (d.collection.as_ref().unwrap_or(collection), &d.table))
+        .chain(
+            triggers
+                .iter()
+                .map(|t| (t.collection.as_ref().unwrap_or(collection), &t.table)),
+        )
+        .collect();
+    let names: Vec<CollectionName> = references
+        .iter()
+        .map(|(c, _)| (*c).clone())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let collections: Vec<CollectionDB> = conn.scd2().chunked().fetch_all(&names, ()).await?;
+    let ids: HashMap<CollectionName, CollectionId> = collections
+        .into_iter()
+        .map(|c| (c.base.name, c.base.collection_id))
+        .collect();
+    let names_by_id: HashMap<CollectionId, CollectionName> =
+        ids.iter().map(|(name, id)| (*id, name.clone())).collect();
+    let lookups: Vec<_> = references
+        .iter()
+        .filter_map(|(c, table)| ids.get(*c).map(|id| and!(id, *table)))
+        .collect();
     let rows: Vec<TableDBWithNames> = conn.scd2().chunked().fetch_all(&lookups, ()).await?;
     Ok(rows
         .into_iter()
-        .map(|t| {
+        .filter_map(|t| {
+            let collection = names_by_id.get(&t.base.base.collection_id)?.clone();
             let row = ReferencedRow {
                 collection_id: t.base.base.collection_id,
                 function_id: t.base.base.function_id,
@@ -439,7 +463,7 @@ async fn referenced_rows<S: SeesProjectRows, M: AccessMode>(
                 system: t.system,
                 status: t.base.base.status,
             };
-            ((t.collection, t.base.base.name), row)
+            Some(((collection, t.base.base.name), row))
         })
         .collect())
 }

@@ -7,7 +7,7 @@
 //! must not hold the transaction open) and never before it (a failed delete
 //! must not destroy a live collection's secrets). The store delete is
 //! best-effort: a failure leaves invisible content an idempotent re-delete
-//! repairs; the connection row itself stays (the soft-deleted collection
+//! repairs; the connection row itself stays (the deleted collection
 //! still references it).
 
 use crate::collection::services::connection::{
@@ -26,8 +26,8 @@ use td_database::access::SeesProjectRows;
 use td_database::access::{DbPool, InProject, LockInstant, WriteMode, retrying};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionDeleteDB};
 use td_objects::dxo::crudl::{DeleteRequest, WithinProject};
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
@@ -56,9 +56,16 @@ async fn delete_collection(
             .require::<Project, DevelopProject>(&mut conn, &ctx, &project)
             .await?;
         let conn = conn.get(grant);
-        let collection: ActiveCollectionDB = conn.fetch_one(&param.collection).await?;
+        let collection: CollectionDB = conn.scd2().fetch_one(&param.collection).await?;
         // Source/destination collections carry connection config: manage_project.
-        escalate_for_connected(&authz, conn, &ctx, &project, &collection.collection_type).await?;
+        escalate_for_connected(
+            &authz,
+            conn,
+            &ctx,
+            &project,
+            &collection.base.collection_type,
+        )
+        .await?;
         (collection, grant)
     };
 
@@ -66,48 +73,60 @@ async fn delete_collection(
         let mut trx = db.begin(attempt).await?;
         let at = trx.locked_at();
         let conn = trx.get(grant);
-        let topology_at = conn.topology().bump(&project, at).await?;
-        // A raced delete loses with not-found instead of silently re-renaming
-        // the already-deleted row.
-        let collection: ActiveCollectionDB = conn.fetch_one(&collection.id).await?;
-        let delete_db = collection.to_delete_dao(&ctx);
-        conn.update::<CollectionDeleteDB>(&delete_db, collection.id)
+        // A raced delete loses with not-found: the timeline is already closed.
+        let collection: CollectionDB = conn
+            .scd2()
+            .fetch_one(&collection.base.collection_id)
             .await?;
-
-        let tables: Vec<TableDB> = conn.scd2().fetch_all(&collection.id).await?;
-        let table_ids: Vec<TableId> = tables.iter().map(|x| x.base.table_id).collect();
-        // Same-collection dependants are closed with the collection below; a
-        // frozen version for them would be closed in the same instant.
-        let dependants: Vec<FunctionDB> = dependants_of_tables(conn, &table_ids)
-            .await?
-            .into_iter()
-            .filter(|f| f.base.collection_id != collection.id)
-            .collect();
-        ensure_freezes_on_top(conn, &dependants, at).await?;
-        freeze_functions(conn, &dependants, &ctx, topology_at).await?;
+        let tables: Vec<TableDB> = conn
+            .scd2()
+            .fetch_all(&collection.base.collection_id)
+            .await?;
+        let functions: Vec<FunctionDB> = conn
+            .scd2()
+            .fetch_all(&collection.base.collection_id)
+            .await?;
+        // Closing the collection's functions and tables changes the graph;
+        // closing an empty collection does not.
+        if !tables.is_empty() || !functions.is_empty() {
+            let topology_at = conn.topology().bump(&project, at).await?;
+            let table_ids: Vec<TableId> = tables.iter().map(|x| x.base.table_id).collect();
+            // Same-collection dependants are closed with the collection below; a
+            // frozen version for them would be closed in the same instant.
+            let dependants: Vec<FunctionDB> = dependants_of_tables(conn, &table_ids)
+                .await?
+                .into_iter()
+                .filter(|f| f.base.collection_id != collection.base.collection_id)
+                .collect();
+            ensure_freezes_on_top(conn, &dependants, at).await?;
+            freeze_functions(conn, &dependants, &ctx, topology_at).await?;
+            conn.scd2()
+                .chunked()
+                .close::<TriggerDB>(&table_ids, (), topology_at)
+                .await?;
+            conn.scd2()
+                .close::<TriggerDB>(&collection.base.collection_id, topology_at)
+                .await?;
+            conn.scd2()
+                .chunked()
+                .close::<DependencyDB>(&table_ids, (), topology_at)
+                .await?;
+            conn.scd2()
+                .close::<DependencyDB>(&collection.base.collection_id, topology_at)
+                .await?;
+            conn.scd2()
+                .close::<TableDB>(&collection.base.collection_id, topology_at)
+                .await?;
+            conn.scd2()
+                .close::<FunctionDB>(&collection.base.collection_id, topology_at)
+                .await?;
+        }
         conn.scd2()
-            .chunked()
-            .close::<TriggerDB>(&table_ids, (), topology_at)
+            .close::<CollectionDB>(&collection.base.collection_id, at)
             .await?;
-        conn.scd2()
-            .close::<TriggerDB>(&collection.id, topology_at)
-            .await?;
-        conn.scd2()
-            .chunked()
-            .close::<DependencyDB>(&table_ids, (), topology_at)
-            .await?;
-        conn.scd2()
-            .close::<DependencyDB>(&collection.id, topology_at)
-            .await?;
-        conn.scd2()
-            .close::<TableDB>(&collection.id, topology_at)
-            .await?;
-        conn.scd2()
-            .close::<FunctionDB>(&collection.id, topology_at)
-            .await?;
-        update_deleted_workers(conn, &collection.id, at).await?;
+        update_deleted_workers(conn, &collection.base.collection_id, at).await?;
         trx.commit().await?;
-        Ok(collection.connection_id)
+        Ok(collection.base.connection_id)
     })
     .await?;
 
@@ -150,8 +169,8 @@ mod tests {
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
     use td_error::{ApiError, TdError};
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::dxo::collection::CollectionParam;
-    use td_objects::dxo::collection::{CollectionDB, ResolvedCollectionDB};
     use td_objects::dxo::connection::ConnectionUpsert;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::dependency::DependencyDBWithNames;
@@ -164,7 +183,7 @@ mod tests {
         GroupName, LogicalFunctionRunStatus, ProjectId, TableName, TableNameDto, TransactionKey,
         UserId, WorkerStatus, WorkerType,
     };
-    use td_objects::types::basic::{CollectionIdName, ReuseFrozen, WhenDeleted};
+    use td_objects::types::basic::{CollectionIdName, ReuseFrozen};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -189,22 +208,28 @@ mod tests {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .create_collection(create_request(p.id, "src0", Some(GroupName::source())))
+        .create_collection(create_request(
+            p.base.project_id,
+            "src0",
+            Some(GroupName::source()),
+        ))
         .await
         .unwrap();
-        let connection = linked_connection(&db, p.id, "src0").await.unwrap();
+        let connection = linked_connection(&db, p.base.project_id, "src0")
+            .await
+            .unwrap();
 
         Services {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .delete_collection(delete_request(p.id, "src0"))
+        .delete_collection(delete_request(p.base.project_id, "src0"))
         .await
         .unwrap();
 
         let err = bridge
             .connection_store()
-            .fetch(&p.id, &connection.base.id)
+            .fetch(&p.base.project_id, &connection.base.id)
             .await
             .expect_err("store content must be dropped with the collection");
         assert!(err.to_string().contains("no connection configured"));
@@ -220,26 +245,40 @@ mod tests {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .create_collection(create_request(p.id, "src0", Some(GroupName::source())))
+        .create_collection(create_request(
+            p.base.project_id,
+            "src0",
+            Some(GroupName::source()),
+        ))
         .await
         .unwrap();
-        let connection = linked_connection(&db, p.id, "src0").await.unwrap();
+        let connection = linked_connection(&db, p.base.project_id, "src0")
+            .await
+            .unwrap();
         let name = CollectionName::try_from("src0").unwrap();
-        let collection: ActiveCollectionDB = db.scoped(p.id).fetch_one(&name).await.unwrap();
+        let collection: CollectionDB = db
+            .scoped(p.base.project_id)
+            .scd2()
+            .fetch_one(&name)
+            .await
+            .unwrap();
         let store = bridge.connection_store();
-        let late = store.fetch(&p.id, &connection.base.id).await.unwrap();
+        let late = store
+            .fetch(&p.base.project_id, &connection.base.id)
+            .await
+            .unwrap();
 
         Services {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .delete_collection(delete_request(p.id, "src0"))
+        .delete_collection(delete_request(p.base.project_id, "src0"))
         .await
         .unwrap();
         store
             .upsert(
-                &p.id,
-                &collection.id,
+                &p.base.project_id,
+                &collection.base.collection_id,
                 &name,
                 &connection.base.id,
                 &ConnectionUpsert {
@@ -253,11 +292,11 @@ mod tests {
         let pools =
             DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
         let reconciled = reconcile_stored_connection(
-            &DbPool::in_project(&pools, &p.id),
+            &DbPool::in_project(&pools, &p.base.project_id),
             Grant::asserted("reconcile"),
             store,
-            &p.id,
-            &collection.id,
+            &p.base.project_id,
+            &collection.base.collection_id,
             &name,
             &connection.base.id,
         )
@@ -266,7 +305,7 @@ mod tests {
 
         assert!(matches!(reconciled, Reconciled::Deleted));
         store
-            .fetch(&p.id, &connection.base.id)
+            .fetch(&p.base.project_id, &connection.base.id)
             .await
             .expect_err("a write after the delete must be dropped");
     }
@@ -276,7 +315,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let name = CollectionName::try_from("c")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&name, &UserId::admin())
             .await?;
@@ -303,7 +342,7 @@ mod tests {
                 workers: None,
             };
             let _ = db
-                .scoped(p.id)
+                .scoped(p.base.project_id)
                 .seed()
                 .function(&collection, &create)
                 .await?;
@@ -333,13 +372,13 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
 
         let _cron_worker = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .worker(
                 &collection,
@@ -349,15 +388,19 @@ mod tests {
             )
             .await?;
 
-        let execution = db.scoped(p.id).seed().execution(&function).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -368,50 +411,51 @@ mod tests {
             )
             .await?;
         let _function_worker = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function_runner_worker(&execution, &transaction, &physical_function_run)
             .await?;
 
         Services::with_defaults(db.clone())
-            .delete_collection(delete_request(p.id, &name.to_string()))
+            .delete_collection(delete_request(p.base.project_id, &name.to_string()))
             .await?;
 
-        let found = db.fetch_all::<ActiveCollectionDB>(()).await?;
+        let found = db.scd2().fetch_all::<CollectionDB>(()).await?;
         assert_eq!(found.len(), 0);
 
-        let res = db.fetch_one::<CollectionDB>(&collection.id).await?;
-        assert_eq!(
-            res.base.name_when_deleted,
-            Some(WhenDeleted::from(collection.name.clone()))
-        );
-
-        // The resolved surface still returns the soft-deleted collection (its
-        // scheduled run outlives it), carrying the real pre-deletion name and the
-        // `deleted` flag — this is what dispatch/enrichment resolves against.
-        let resolved = db.fetch_all::<ResolvedCollectionDB>(()).await?;
-        assert_eq!(resolved.len(), 1);
-        assert_eq!(resolved[0].base.name, collection.name);
-        assert!(*resolved[0].deleted);
+        let timeline = db
+            .scoped(p.base.project_id)
+            .timeline()
+            .fetch_all::<CollectionDB>(&collection.base.collection_id)
+            .await?;
+        assert_eq!(timeline.len(), 1);
+        assert_eq!(timeline[0].base.name, collection.base.name);
+        assert!(!timeline[0].interval.valid_to.is_infinity());
 
         let found = db.scd2().fetch_all::<FunctionDBWithNames>(()).await?;
         assert!(found.is_empty());
         let versions = db
             .timeline()
-            .fetch_all::<FunctionDB>(&collection.id)
+            .fetch_all::<FunctionDB>(&collection.base.collection_id)
             .await?;
         assert_eq!(versions.len(), 4);
         assert!(versions.iter().all(|f| !f.interval.valid_to.is_infinity()));
 
         let found = db.scd2().fetch_all::<TableDBWithNames>(()).await?;
         assert!(found.is_empty());
-        let versions = db.timeline().fetch_all::<TableDB>(&collection.id).await?;
+        let versions = db
+            .timeline()
+            .fetch_all::<TableDB>(&collection.base.collection_id)
+            .await?;
         assert_eq!(versions.len(), 4);
         assert!(versions.iter().all(|t| !t.interval.valid_to.is_infinity()));
 
         let found = db.scd2().fetch_all::<TriggerDBWithNames>(()).await?;
         assert!(found.is_empty());
-        let versions = db.timeline().fetch_all::<TriggerDB>(&collection.id).await?;
+        let versions = db
+            .timeline()
+            .fetch_all::<TriggerDB>(&collection.base.collection_id)
+            .await?;
         assert_eq!(versions.len(), 2);
         assert!(versions.iter().all(|t| !t.interval.valid_to.is_infinity()));
 
@@ -419,7 +463,7 @@ mod tests {
         assert!(found.is_empty());
         let versions = db
             .timeline()
-            .fetch_all::<DependencyDB>(&collection.id)
+            .fetch_all::<DependencyDB>(&collection.base.collection_id)
             .await?;
         assert_eq!(versions.len(), 1);
         assert!(versions.iter().all(|d| !d.interval.valid_to.is_infinity()));
@@ -442,7 +486,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let name_c_0 = CollectionName::try_from("c_0")?;
         let collection_0 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&name_c_0, &UserId::admin())
             .await?;
@@ -467,14 +511,14 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
 
         let name_c_1 = CollectionName::try_from("c_1")?;
         let collection_1 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&name_c_1, &UserId::admin())
             .await?;
@@ -503,18 +547,18 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection_1, &create)
             .await?;
 
         Services::with_defaults(db.clone())
-            .delete_collection(delete_request(p.id, &name_c_0.to_string()))
+            .delete_collection(delete_request(p.base.project_id, &name_c_0.to_string()))
             .await?;
 
-        let found = db.fetch_all::<ActiveCollectionDB>(()).await?;
+        let found = db.scd2().fetch_all::<CollectionDB>(()).await?;
         assert_eq!(found.len(), 1);
-        assert_eq!(found[0].name, name_c_1);
+        assert_eq!(found[0].base.name, name_c_1);
 
         let found = db
             .scd2()
@@ -535,13 +579,19 @@ mod tests {
     #[td_test::test(db)]
     async fn test_source_delete_requires_manage_project(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.id, "dev_src_d", Some(GroupName::source())).await;
-        let dev = seed_dev_user(&db, p.id).await;
+        create_collection(
+            &db,
+            p.base.project_id,
+            "dev_src_d",
+            Some(GroupName::source()),
+        )
+        .await;
+        let dev = seed_dev_user(&db, p.base.project_id).await;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .delete(CollectionParam {
                 collection: CollectionIdName::from_str("dev_src_d").unwrap(),
             })
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         let err = Services::with_defaults(db.clone())
             .delete_collection(request)
             .await

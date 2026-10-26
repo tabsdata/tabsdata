@@ -13,7 +13,6 @@ use td_authz::rbac::{DevelopProject, Project};
 use td_database::access::{AcrossProjects, DbPool, retrying};
 use td_error::TdError;
 use td_execution::{SchedulerNotify, TransactionBy};
-use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::crudl::CreateRequest;
 use td_objects::dxo::execution::{ExecutionRequest, InternalExecutionRequest, TriggerResponse};
 use td_objects::dxo::function::{FunctionDBWithNames, FunctionVersionParam};
@@ -37,9 +36,7 @@ async fn execute_function_version(
         let conn = trx.get(authz.none());
         let requested: FunctionDBWithNames =
             conn.timeline().fetch_one(&function_version_id).await?;
-        let collection: ResolvedCollectionDB =
-            conn.fetch_one(&requested.base.base.collection_id).await?;
-        let project = collection.base.project_id;
+        let project = requested.base.project_id;
         // the project is known now: authorize before any further read and
         // before queueing on its exclusive lock
         let grant = authz
@@ -129,7 +126,8 @@ mod tests {
     #[td_test::test(db)]
     async fn test_execute_version_no_previous_execution(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (_, response) = test_execute_version(db, p.id, None, SkipIfRunning::FALSE).await?;
+        let (_, response) =
+            test_execute_version(db, p.base.project_id, None, SkipIfRunning::FALSE).await?;
         assert_eq!(response.outcome, TriggerOutcome::Scheduled);
         Ok(())
     }
@@ -139,7 +137,8 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (_, response) = test_execute_version(db, p.id, None, SkipIfRunning::TRUE).await?;
+        let (_, response) =
+            test_execute_version(db, p.base.project_id, None, SkipIfRunning::TRUE).await?;
         assert_eq!(response.outcome, TriggerOutcome::Scheduled);
         Ok(())
     }
@@ -149,7 +148,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, response) = test_execute_version(
             db,
-            p.id,
+            p.base.project_id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::CronTrigger,
@@ -168,7 +167,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, response) = test_execute_version(
             db.clone(),
-            p.id,
+            p.base.project_id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::CronTrigger,
@@ -188,7 +187,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, response) = test_execute_version(
             db,
-            p.id,
+            p.base.project_id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Committed,
                 trigger_type: TriggerType::CronTrigger,
@@ -207,7 +206,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, response) = test_execute_version(
             db,
-            p.id,
+            p.base.project_id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Committed,
                 trigger_type: TriggerType::CronTrigger,
@@ -226,7 +225,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, response) = test_execute_version(
             db,
-            p.id,
+            p.base.project_id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::Manual,
@@ -245,7 +244,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, response) = test_execute_version(
             db,
-            p.id,
+            p.base.project_id,
             Some(PreviousRun {
                 status: LogicalFunctionRunStatus::Running,
                 trigger_type: TriggerType::Manual,
@@ -354,7 +353,7 @@ mod tests {
     async fn test_execute_version_previous_version_err(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection_0 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
             .await?;
@@ -381,7 +380,7 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -395,7 +394,10 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!("~{}", collection_0.id))?,
+                        collection: CollectionIdName::from_str(&format!(
+                            "~{}",
+                            collection_0.base.collection_id
+                        ))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str(&format!(
@@ -406,7 +408,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let updated = service.update_function(request).await?.data;
@@ -528,7 +530,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_execute_version_external_uid_held(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let function = seed_dedup_function(&db, p.id).await?;
+        let function = seed_dedup_function(&db, p.base.project_id).await?;
         let uid = ExternalUid::try_from("uid-123")?;
 
         let first = trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
@@ -553,7 +555,7 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let function = seed_dedup_function(&db, p.id).await?;
+        let function = seed_dedup_function(&db, p.base.project_id).await?;
         let uid = ExternalUid::try_from("uid-committed")?;
 
         let first = trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
@@ -567,7 +569,14 @@ mod tests {
                 TriggerOutcome::Consumed,
             ),
         ] {
-            set_trigger_run_status(&db, p.id, &function, &first.execution_id, status).await?;
+            set_trigger_run_status(
+                &db,
+                p.base.project_id,
+                &function,
+                &first.execution_id,
+                status,
+            )
+            .await?;
             let again =
                 trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
             assert_eq!(again.outcome, outcome, "trigger run {status:?}");
@@ -581,13 +590,13 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let function = seed_dedup_function(&db, p.id).await?;
+        let function = seed_dedup_function(&db, p.base.project_id).await?;
         let uid = ExternalUid::try_from("uid-released")?;
 
         let first = trigger_with_external_uid(&db, &function.base.id, Some(uid.clone())).await?;
         set_trigger_run_status(
             &db,
-            p.id,
+            p.base.project_id,
             &function,
             &first.execution_id,
             LogicalFunctionRunStatus::Canceled,
@@ -607,7 +616,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_execute_version_null_external_uid_not_deduped(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let function = seed_dedup_function(&db, p.id).await?;
+        let function = seed_dedup_function(&db, p.base.project_id).await?;
 
         trigger_with_external_uid(&db, &function.base.id, None).await?;
         trigger_with_external_uid(&db, &function.base.id, None).await?;
@@ -630,7 +639,7 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let function = seed_dedup_function(&db, p.id).await?;
+        let function = seed_dedup_function(&db, p.base.project_id).await?;
         let uid = ExternalUid::try_from("uid-concurrent")?;
 
         let (a, b) = tokio::join!(
@@ -654,7 +663,7 @@ mod tests {
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection_0")?, &UserId::admin())
             .await?;
@@ -681,12 +690,12 @@ mod tests {
             })
         };
         let parent = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &register("parent_0", "table_0")?)
             .await?;
         let child = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .child_function(
                 &collection,

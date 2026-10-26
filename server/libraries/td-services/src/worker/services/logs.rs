@@ -147,7 +147,7 @@ mod tests {
     async fn test_worker_logs(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -177,20 +177,24 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db.scoped(p.id).seed().execution(&function_version).await?;
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function_version)
+            .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -202,11 +206,11 @@ mod tests {
             .await?;
 
         let workers = [
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,
-            db.scoped(p.id)
+            db.scoped(p.base.project_id)
                 .seed()
                 .function_runner_worker(&execution, &transaction, &physical_function_run)
                 .await?,

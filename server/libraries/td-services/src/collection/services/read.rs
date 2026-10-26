@@ -10,7 +10,7 @@ use td_database::access::{GatedConnection, InProject, RO};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::collection::CollectionParam;
-use td_objects::dxo::collection::{ActiveCollectionDBWithNames, CollectionRead};
+use td_objects::dxo::collection::{CollectionDBWithNames, CollectionRead};
 use td_objects::dxo::crudl::{ReadRequest, WithinProject};
 use td_queries::Queries;
 
@@ -27,7 +27,7 @@ async fn read_collection(
         .await?;
     let conn = gated_conn.get(grant);
     let id_name = param.collection;
-    let with_names: ActiveCollectionDBWithNames = conn.fetch_one(&id_name).await?;
+    let with_names: CollectionDBWithNames = conn.scd2().fetch_one(&id_name).await?;
     CollectionRead::from_dao(with_names)
 }
 
@@ -51,7 +51,7 @@ mod tests {
         let before = AtTime::now();
         let name = CollectionName::try_from("ds0").unwrap();
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&name, &UserId::admin())
             .await;
@@ -60,7 +60,7 @@ mod tests {
             .read(CollectionParam {
                 collection: CollectionIdName::from_str(&name.to_string()).unwrap(),
             })
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db);
         let response = service.read_collection(request).await;
@@ -69,11 +69,8 @@ mod tests {
 
         assert_eq!(created.name, name);
         assert_eq!(created.description, Description::default());
-        assert!(*created.created_on >= before);
-        assert_eq!(*created.created_by_id, UserId::admin());
-        assert_eq!(*created.created_by, UserLabel::from(UserName::admin()));
-        assert_eq!(*created.modified_on, *created.created_on);
-        assert_eq!(*created.modified_by_id, UserId::admin());
-        assert_eq!(*created.modified_by, UserLabel::from(UserName::admin()));
+        assert!(created.defined_on >= before);
+        assert_eq!(created.defined_by_id, UserId::admin());
+        assert_eq!(created.defined_by, UserLabel::from(UserName::admin()));
     }
 }

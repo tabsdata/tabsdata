@@ -30,7 +30,9 @@ async fn test_read_only_units_read_at_one_snapshot(db: TdPool) -> Result<(), TdE
     .await
     .expect("isolation probe");
 
-    let mut scoped = DbPool::in_project(&pools, &p.id).read().await?;
+    let mut scoped = DbPool::in_project(&pools, &p.base.project_id)
+        .read()
+        .await?;
     let scoped_isolation = show_setting(
         scoped.get(Grant::asserted("isolation probe")),
         "transaction_isolation",

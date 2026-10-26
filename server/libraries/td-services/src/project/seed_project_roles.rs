@@ -23,12 +23,11 @@ use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::permission::PermissionDB;
-use td_objects::dxo::project::ProjectInsertDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::user_role::UserRoleDB;
 use td_objects::types::basic::{
     Description, EntityId, Fixed, PermissionEntityType, PermissionId, PermissionType, ProjectId,
-    RoleId, RoleKind,
+    ProjectName, RoleId, RoleKind,
 };
 use td_queries::Queries;
 
@@ -36,10 +35,9 @@ pub async fn seed_project_roles<S: DbScope, M: WriteMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     context: &RequestContext,
     project_id: &ProjectId,
-    project: &ProjectInsertDB,
+    project_name: &ProjectName,
 ) -> Result<(), TdError> {
     let project_id = *project_id;
-    let project_name = &project.name;
     let entity_id = EntityId::try_from(project_id)?;
 
     let mut admin_role_id = None;

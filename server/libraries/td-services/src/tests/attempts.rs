@@ -34,23 +34,27 @@ use td_queries::test_utils::SeedEntry;
 async fn test_recover_during_replay_keeps_one_attempt_in_flight(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_twice")?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .function(&collection, &register("f_twice", None))
         .await?;
-    let execution = db.scoped(p.id).seed().execution(&function).await?;
+    let execution = db
+        .scoped(p.base.project_id)
+        .seed()
+        .execution(&function)
+        .await?;
     let transaction = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .transaction(&execution, &TransactionKey::try_from("ANY")?)
         .await?;
     let failed = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .physical_function_run(
             &collection,
@@ -129,45 +133,51 @@ async fn test_replay_that_heals_a_producer_releases_its_on_hold_consumers(
             ],
         }],
     }];
-    test_status_update(db.clone(), p.id, &test_executions, |_, _, _, f, _| {
-        let db = db.clone();
-        let producer = f[&test_executions[0].transactions[0].functions[0]].clone();
-        let consumer = f[&test_executions[0].transactions[0].functions[1]].clone();
-        async move {
-            let replay = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
-                LogicalFunctionRunParam {
-                    logical_function_run: producer.base.logical_function_run_id.clone(),
-                },
-                (),
-            );
-            let replayed = dispatch_services(&db)
-                .replay_logical_function_run(replay)
-                .await?
-                .data;
-            dispatch_services(&db).request(()).await?;
-            let workers: Vec<WorkerDB> = db.fetch_all(&replayed.new_function_run_id).await?;
-            assert_eq!(workers.len(), 1);
+    test_status_update(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, _, _, f, _| {
+            let db = db.clone();
+            let producer = f[&test_executions[0].transactions[0].functions[0]].clone();
+            let consumer = f[&test_executions[0].transactions[0].functions[1]].clone();
+            async move {
+                let replay = RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .create(
+                        LogicalFunctionRunParam {
+                            logical_function_run: producer.base.logical_function_run_id.clone(),
+                        },
+                        (),
+                    );
+                let replayed = dispatch_services(&db)
+                    .replay_logical_function_run(replay)
+                    .await?
+                    .data;
+                dispatch_services(&db).request(()).await?;
+                let workers: Vec<WorkerDB> = db.fetch_all(&replayed.new_function_run_id).await?;
+                assert_eq!(workers.len(), 1);
 
-            for status in [WorkerCallbackStatus::Running, WorkerCallbackStatus::Done] {
-                post_callback(
-                    &db,
-                    &replayed.new_function_run_id,
-                    &workers[0].base.id,
-                    status,
-                )
-                .await?;
+                for status in [WorkerCallbackStatus::Running, WorkerCallbackStatus::Done] {
+                    post_callback(
+                        &db,
+                        &replayed.new_function_run_id,
+                        &workers[0].base.id,
+                        status,
+                    )
+                    .await?;
+                }
+
+                let consumer: LogicalFunctionRunDB =
+                    db.fetch_one(&consumer.base.logical_function_run_id).await?;
+                assert_ne!(
+                    consumer.base.status,
+                    LogicalFunctionRunStatus::OnHold,
+                    "the healed producer's consumer must be released"
+                );
+                Ok(())
             }
-
-            let consumer: LogicalFunctionRunDB =
-                db.fetch_one(&consumer.base.logical_function_run_id).await?;
-            assert_ne!(
-                consumer.base.status,
-                LogicalFunctionRunStatus::OnHold,
-                "the healed producer's consumer must be released"
-            );
-            Ok(())
-        }
-    })
+        },
+    )
     .await
 }
 
@@ -200,21 +210,26 @@ async fn test_the_tick_releases_a_run_nothing_holds(db: TdPool) -> Result<(), Td
             ],
         }],
     }];
-    run_status_scenario(db.clone(), p.id, &test_executions, |_, _, _, f, _| {
-        let db = db.clone();
-        let consumer = f[&test_executions[0].transactions[0].functions[1]].clone();
-        async move {
-            dispatch_services(&db).request(()).await?;
-            let consumer: LogicalFunctionRunDB =
-                db.fetch_one(&consumer.base.logical_function_run_id).await?;
-            assert_ne!(
-                consumer.base.status,
-                LogicalFunctionRunStatus::OnHold,
-                "nothing holds f_1, so the tick releases it"
-            );
-            Ok(())
-        }
-    })
+    run_status_scenario(
+        db.clone(),
+        p.base.project_id,
+        &test_executions,
+        |_, _, _, f, _| {
+            let db = db.clone();
+            let consumer = f[&test_executions[0].transactions[0].functions[1]].clone();
+            async move {
+                dispatch_services(&db).request(()).await?;
+                let consumer: LogicalFunctionRunDB =
+                    db.fetch_one(&consumer.base.logical_function_run_id).await?;
+                assert_ne!(
+                    consumer.base.status,
+                    LogicalFunctionRunStatus::OnHold,
+                    "nothing holds f_1, so the tick releases it"
+                );
+                Ok(())
+            }
+        },
+    )
     .await
     .map(|_| ())
 }

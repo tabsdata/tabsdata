@@ -27,7 +27,7 @@ async fn read_group(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let with_names: GroupDBWithNames = conn.fetch_one(&param.group).await?;
+    let with_names: GroupDBWithNames = conn.scd2().fetch_one(&param.group).await?;
     Group::from_dao(with_names)
 }
 
@@ -49,7 +49,7 @@ mod tests {
     async fn test_read_group_by_name(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -61,14 +61,15 @@ mod tests {
             .read(GroupParam {
                 group: GroupIdName::from_str("analytics")?,
             })
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.read_group(request).await?.data;
         let found = db
+            .scd2()
             .fetch_one::<GroupDB>(&GroupName::try_from("analytics")?)
             .await?;
-        assert_eq!(response.id, found.base.id);
+        assert_eq!(response.group_id, found.base.group_id);
         assert_eq!(response.name, found.base.name);
         assert_eq!(response.description, found.base.description);
         Ok(())
@@ -81,7 +82,7 @@ mod tests {
             .read(GroupParam {
                 group: GroupIdName::from_str("default")?,
             })
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.read_group(request).await?.data;

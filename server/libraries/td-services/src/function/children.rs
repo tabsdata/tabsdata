@@ -10,7 +10,7 @@ use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::and;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDBWithNames;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{ChildFunction, FunctionDB, FunctionDBWithNames, FunctionInsertDB};
 use td_objects::dxo::topology::TopologyInstant;
@@ -49,7 +49,7 @@ pub async fn reconcile_children(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ctx: &RequestContext,
     bridge: &BridgeProviderHandle,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDBWithNames,
     parent: &FunctionInsertDB,
     desired: &Option<Vec<ChildFunction>>,
     parent_tables: Option<&HashMap<TableNameDto, TableNameDto>>,
@@ -63,7 +63,7 @@ pub async fn reconcile_children(
     let parent_id = Some(Parent::from(parent.function_id));
     let existing: Vec<FunctionDBWithNames> = conn
         .scd2()
-        .fetch_all(and!(&parent_id, &collection.id))
+        .fetch_all(and!(&parent_id, &collection.base.base.collection_id))
         .await?;
 
     let declared: HashSet<&FunctionName> = desired.iter().map(|child| &child.name).collect();

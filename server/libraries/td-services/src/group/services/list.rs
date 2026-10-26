@@ -28,7 +28,7 @@ async fn list_group(
         .await?;
     let conn = gated_conn.get(grant);
     let query_params = ListQueryParams::<Group>::try_from(&list_params)?;
-    let rows = conn.list(&(), &query_params).await?;
+    let rows = conn.scd2().list(&(), &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
 
@@ -46,7 +46,7 @@ mod tests {
     async fn test_list_groups_includes_seeds(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -56,7 +56,7 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.list_group(request).await?.data;

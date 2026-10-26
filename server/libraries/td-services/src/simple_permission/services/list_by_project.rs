@@ -10,7 +10,7 @@ use td_authz::rbac::{ManageAccess, ManageProject, Project};
 use td_database::access::{GatedConnection, RO};
 use td_error::TdError;
 use td_objects::dxo::crudl::ListResponse;
-use td_objects::dxo::project::ActiveProjectDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::dxo::simple_permission::{ListByProjectRequest, SimpleProjectAccess};
 use td_queries::Queries;
 
@@ -23,9 +23,13 @@ async fn list_simple_permission_by_project(
     // resolve the project and authorize against it: manage_access (system)
     // OR manage_project on the project (a project admin can see the roster).
     let conn = gated_conn.get(authz.none());
-    let project: ActiveProjectDB = conn.fetch_one(&request.project).await?;
+    let project: ProjectDB = conn.scd2().fetch_one(&request.project).await?;
     let _grant = authz
-        .require::<Project, (ManageAccess, ManageProject)>(conn, &request.context, &project.id)
+        .require::<Project, (ManageAccess, ManageProject)>(
+            conn,
+            &request.context,
+            &project.base.project_id,
+        )
         .await?;
     list_project_access(conn, &request.project).await
 }
@@ -169,7 +173,7 @@ mod tests {
             .seed()
             .role(RoleName::try_from("dev_only")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = p0.id.try_into()?;
+        let entity_id: EntityId = p0.base.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::develop_project(),

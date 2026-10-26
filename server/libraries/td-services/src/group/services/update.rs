@@ -7,47 +7,51 @@ use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
 use td_authz::rbac::{ManageProject, Project};
-use td_database::access::{GatedConnection, InProject, RW};
+use td_database::access::{DbPool, InProject, retrying};
 use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::{UpdateRequest, WithinProject};
-use td_objects::dxo::group::{Group, GroupDBWithNames, GroupParam, GroupUpdate, GroupUpdateDB};
+use td_objects::dxo::group::{Group, GroupDB, GroupDBWithNames, GroupParam, GroupUpdate};
+use td_objects::errors::SqlError;
 use td_queries::Queries;
 
 #[service_factory]
 async fn update_group(
     authz: Ctx<AuthzContext>,
-    gated_trx: &mut GatedConnection<RW, InProject>,
+    db: DbPool<InProject>,
     request: WithinProject<UpdateRequest<GroupUpdate, GroupParam>>,
 ) -> Result<Group, TdError> {
     let (project, request) = request.into_parts();
     let (ctx, param, update) = request.into_parts();
-    let grant = authz
-        .require::<Project, ManageProject>(gated_trx, &ctx, &project)
-        .await?;
-    let conn = gated_trx.get(grant);
+    retrying(|attempt| async {
+        let mut gated_trx = db.begin(attempt).await?;
+        let grant = authz
+            .require::<Project, ManageProject>(&mut gated_trx, &ctx, &project)
+            .await?;
+        let at = gated_trx.locked_at();
+        let conn = gated_trx.get(grant);
 
-    let update_db = GroupUpdateDB {
-        name: update.name.clone(),
-        description: update.description.clone(),
-        modified_on: ctx.time.into(),
-        modified_by_id: ctx.user_id.into(),
-    };
+        // A group deleted meanwhile has no open version: not found, never
+        // reopened.
+        let current: GroupDB = conn.scd2().fetch_one(&param.group).await?;
+        // Reject mutation of the seeded system groups via the `system`
+        // flag — `default` / `source` / `destination` carry it.
+        assert_not_system(&current)?;
+        // A rename to a name already taken by another group in the project
+        // reports a clean "already exists" error instead of the raw
+        // unique-constraint violation from the write.
+        assert_group_rename_available(conn, &update, &current).await?;
 
-    let current: GroupDBWithNames = conn.fetch_one(&param.group).await?;
-    // Reject mutation of the seeded system groups via the `system`
-    // flag — `default` / `source` / `destination` carry it.
-    assert_not_system(&current)?;
-    // A rename to a name already taken by another group in the project
-    // reports a clean "already exists" error instead of the raw
-    // unique-constraint violation from the update write.
-    assert_group_rename_available(conn, &update, &current).await?;
-
-    conn.update::<GroupUpdateDB>(&update_db, current.base.base.id)
-        .await?;
-    let with_names: GroupDBWithNames = conn.fetch_one(&current.base.base.id).await?;
-    let read = Group::from_dao(with_names)?;
-    Ok(read)
+        conn.scd2()
+            .open(&current.updated(&update, &ctx), at)
+            .await
+            .map_err(SqlError::already_exists)?;
+        let with_names: GroupDBWithNames = conn.scd2().fetch_one(&current.base.group_id).await?;
+        let read = Group::from_dao(with_names)?;
+        gated_trx.commit().await?;
+        Ok(read)
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -69,7 +73,7 @@ mod tests {
     async fn test_update_group(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -89,13 +93,16 @@ mod tests {
                 },
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_group(request).await?.data;
 
-        let found = db.fetch_one::<GroupDB>(&GroupName::try_from("ml")?).await?;
-        assert_eq!(response.id, found.base.id);
+        let found = db
+            .scd2()
+            .fetch_one::<GroupDB>(&GroupName::try_from("ml")?)
+            .await?;
+        assert_eq!(response.group_id, found.base.group_id);
         assert_eq!(response.name, found.base.name);
         assert_eq!(response.description, found.base.description);
         assert!(!*found.base.system);
@@ -110,7 +117,7 @@ mod tests {
     async fn test_update_rename_to_existing_name_rejected(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),
@@ -118,7 +125,7 @@ mod tests {
             )
             .await;
         let _ = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .group(
                 GroupName::try_from("ml").unwrap(),
@@ -138,7 +145,7 @@ mod tests {
                 },
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         assert_service_error(service.update_group(request).await, |err| match err {
@@ -162,7 +169,7 @@ mod tests {
                 },
                 update,
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.update_group(request).await;

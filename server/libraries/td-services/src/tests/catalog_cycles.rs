@@ -21,7 +21,7 @@ use td_database::domain::DomainPools;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt;
 use td_error::TdError;
-use td_objects::dxo::collection::{CollectionDeleteDB, CollectionParam};
+use td_objects::dxo::collection::{CollectionDB, CollectionParam};
 use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionRegister, FunctionUpdate};
 use td_objects::dxo::trigger::TriggerDB;
 use td_objects::types::basic::{
@@ -30,7 +30,7 @@ use td_objects::types::basic::{
 };
 use td_objects::types::composed::TableDependencyDto;
 use td_queries::Queries;
-use td_queries::test_utils::SeedEntry;
+use td_queries::test_utils::{SeedEntry, seed_instant};
 
 const BLOCKED_WITHIN: Duration = Duration::from_secs(10);
 
@@ -63,16 +63,16 @@ async fn test_table_delete_and_update_of_a_dependant_do_not_deadlock(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let reader = setup(&db, p.id).await?;
+    let reader = setup(&db, p.base.project_id).await?;
 
-    let (mut gate, at) = function_service_gate(&db, p.id).await?;
+    let (mut gate, at) = function_service_gate(&db, p.base.project_id).await?;
     let conn = gate.get(Grant::asserted("update held open"));
-    let topology_at = conn.topology().bump(&p.id, at).await?;
+    let topology_at = conn.topology().bump(&p.base.project_id, at).await?;
     let current: FunctionDB = conn.scd2().fetch_one(&reader).await?;
     conn.scd2()
         .open(&current.re_registered(&admin(), Enabled::TRUE), topology_at)
         .await?;
-    let deleting = delete_t_gone(&db, p.id);
+    let deleting = delete_t_gone(&db, p.base.project_id);
     wait_for_the_delete(&mut gate).await;
     let updated = gate.commit().await;
     let deleted = deleting.await.expect("delete task");
@@ -160,15 +160,15 @@ async fn test_table_delete_and_delete_of_a_dependant_do_not_deadlock(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let reader = setup_with_trigger(&db, p.id).await?;
+    let reader = setup_with_trigger(&db, p.base.project_id).await?;
 
-    let (mut gate, at) = function_service_gate(&db, p.id).await?;
+    let (mut gate, at) = function_service_gate(&db, p.base.project_id).await?;
     let conn = gate.get(Grant::asserted("function delete held open"));
-    let topology_at = conn.topology().bump(&p.id, at).await?;
+    let topology_at = conn.topology().bump(&p.base.project_id, at).await?;
     let state = FunctionState::load(conn, &reader).await?;
     apply(conn, &Changes::for_delete(&state, &admin()), topology_at).await?;
 
-    let deleting = delete_t_gone(&db, p.id);
+    let deleting = delete_t_gone(&db, p.base.project_id);
     wait_for_the_delete(&mut gate).await;
 
     let closed = gate
@@ -197,17 +197,17 @@ async fn test_collection_delete_and_update_of_a_dependant_do_not_deadlock(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let reader = setup(&db, p.id).await?;
+    let reader = setup(&db, p.base.project_id).await?;
 
-    let (mut gate, at) = function_service_gate(&db, p.id).await?;
+    let (mut gate, at) = function_service_gate(&db, p.base.project_id).await?;
     let conn = gate.get(Grant::asserted("update held open"));
-    let topology_at = conn.topology().bump(&p.id, at).await?;
+    let topology_at = conn.topology().bump(&p.base.project_id, at).await?;
     let current: FunctionDB = conn.scd2().fetch_one(&reader).await?;
     conn.scd2()
         .open(&current.re_registered(&admin(), Enabled::TRUE), topology_at)
         .await?;
     let services = Services::with_defaults(db.clone());
-    let project = p.id;
+    let project = p.base.project_id;
     let deleting = tokio::spawn(async move {
         let request = admin()
             .delete(CollectionParam {
@@ -241,11 +241,11 @@ async fn test_a_trigger_flip_into_a_collection_being_deleted_waits_and_completes
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c_1 = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_1")?, &UserId::admin())
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .function(
             &c_1,
@@ -259,7 +259,7 @@ async fn test_a_trigger_flip_into_a_collection_being_deleted_waits_and_completes
         )
         .await?;
     let c_0 = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_0")?, &UserId::admin())
         .await?;
@@ -273,7 +273,7 @@ async fn test_a_trigger_flip_into_a_collection_being_deleted_waits_and_completes
                 ..register("g", None)
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     Services::with_defaults(db.clone())
         .register_function(register_g)
         .await?;
@@ -283,7 +283,7 @@ async fn test_a_trigger_flip_into_a_collection_being_deleted_waits_and_completes
         .delete(CollectionParam {
             collection: CollectionIdName::from_str("c_0")?,
         })
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let update = admin()
         .update(
             (
@@ -299,7 +299,7 @@ async fn test_a_trigger_flip_into_a_collection_being_deleted_waits_and_completes
                 ..Default::default()
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     let (deleting, updating) = (services.clone(), services.clone());
     let (deleted, updated) = tokio::join!(
         deleting.delete_collection(delete),
@@ -308,7 +308,7 @@ async fn test_a_trigger_flip_into_a_collection_being_deleted_waits_and_completes
     deleted?;
     updated?;
 
-    let open: Vec<TriggerDB> = db.scd2().fetch_all(&c_0.id).await?;
+    let open: Vec<TriggerDB> = db.scd2().fetch_all(&c_0.base.collection_id).await?;
     assert!(
         open.is_empty(),
         "the deleted c_0 kept {} open triggers",
@@ -317,21 +317,21 @@ async fn test_a_trigger_flip_into_a_collection_being_deleted_waits_and_completes
     Ok(())
 }
 
-/// c_0 is being deleted, its soft-delete rename written and uncommitted.
-/// Meanwhile `producer` in c_1 drops t_1, which flips the trigger c_0's `g`
-/// has on t_1: a new trigger version in c_0, whose FK check only shares c_0's
-/// row. The rename must not hold that row in a mode the FK check waits on.
+/// c_0 is being deleted, its version closed and uncommitted. Meanwhile
+/// `producer` in c_1 drops t_1, which flips the trigger c_0's `g` has on t_1:
+/// a new trigger version in c_0, whose FK check only shares c_0's identity
+/// row. The close must not hold that row in a mode the FK check waits on.
 #[td_test::test(db)]
-async fn test_a_collection_rename_does_not_block_a_trigger_flip_into_it(
+async fn test_a_collection_close_does_not_block_a_trigger_flip_into_it(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c_1 = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_1")?, &UserId::admin())
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .function(
             &c_1,
@@ -345,7 +345,7 @@ async fn test_a_collection_rename_does_not_block_a_trigger_flip_into_it(
         )
         .await?;
     let c_0 = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_0")?, &UserId::admin())
         .await?;
@@ -359,25 +359,23 @@ async fn test_a_collection_rename_does_not_block_a_trigger_flip_into_it(
                 ..register("g", None)
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     Services::with_defaults(db.clone())
         .register_function(register_g)
         .await?;
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = DbPool::in_project(&pools, &p.id)
+    let mut gate = DbPool::in_project(&pools, &p.base.project_id)
         .begin(Attempt::unretried())
         .await?;
-    gate.get(Grant::asserted("collection delete rename held open"))
-        .update::<CollectionDeleteDB>(
-            &c_0.to_delete_dao(&admin().read::<String>("").context),
-            c_0.id,
-        )
+    gate.get(Grant::asserted("collection delete close held open"))
+        .scd2()
+        .close::<CollectionDB>(&c_0.base.collection_id, seed_instant())
         .await?;
 
     let services = Services::with_defaults(db.clone());
-    let project = p.id;
+    let project = p.base.project_id;
     let mut updating = tokio::spawn(async move {
         let request = admin()
             .update(
@@ -410,6 +408,6 @@ async fn test_a_collection_rename_does_not_block_a_trigger_flip_into_it(
     if blocked {
         let _ = updating.await;
     }
-    assert!(!blocked, "the trigger flip into c_0 waited on c_0's rename");
+    assert!(!blocked, "the trigger flip into c_0 waited on c_0's close");
     Ok(())
 }
