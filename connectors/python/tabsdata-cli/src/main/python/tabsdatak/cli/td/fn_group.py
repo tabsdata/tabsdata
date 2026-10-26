@@ -1117,7 +1117,7 @@ def list_patches(ctx: click.Context, name: str, coll: str):
                         present(p.get("parent_function_version_id")),
                         present(p.get("description")),
                         _defined_on(p),
-                        present(p.get("defined_by") or p.get("defined_by_id")),
+                        present(p.get("defined_by")),
                         present(
                             _FUNCTION_STATUS_LABELS.get(
                                 p.get("status"), p.get("status")
