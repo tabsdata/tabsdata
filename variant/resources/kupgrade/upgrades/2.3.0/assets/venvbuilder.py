@@ -813,7 +813,10 @@ def send_image(arguments: argparse.Namespace, workspace: dict[str, str]) -> None
     if not arguments.storage_config:
         print(">> Skipping the image upload; no storage configuration given")
         return
-    for target in (workspace["output_image_td"], workspace["output_image_fn"]):
+    for target in (
+        workspace["output_image_td"],
+        workspace["output_image_fn"],
+    ):
         size = os.path.getsize(target)
         trace(f"Sending {target}: {human_size(size)} ({size} bytes)")
         run([
