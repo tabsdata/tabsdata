@@ -50,58 +50,119 @@ Contributions are welcome! Please refer to the [Contributing Guide](assets/docs/
 
 The following snippets show how to publish and subscribe to tables in Tabsdata.
 
+Endpoints and credentials are declared as connections, apart from function code, and attached to the
+collection a function is registered in. Functions declare only what they read and write.
+
+## Declaring the Connections
+
+A connection to a MySQL database, `conn-mysql.yaml`:
+
+```
+kind: connectionDef
+apiVersion: '1.0'
+type: tabsdatak.conn.mysql:MySQLSrcConn
+spec:
+  uri: 'str:mysql://127.0.0.1:3306/testing'
+  credentials:
+    kind: userPasswordCredentials
+    apiVersion: '1.0'
+    type: tabsdatak.conn.common.types:UserPassword
+    spec:
+      user: '$secret:MYSQL_USER'
+      password: '$secret:MYSQL_PASSWORD'
+```
+
+A connection to an S3 bucket, `conn-s3.yaml`:
+
+```
+kind: connectionDef
+apiVersion: '1.0'
+type: tabsdatak.conn.s3:S3DestConn
+spec:
+  bucket: 'str:my-bucket'
+  region: 'str:us-east-1'
+  credentials:
+    kind: awsAccessSecretKeyCredentials
+    apiVersion: '1.0'
+    type: tabsdatak.conn.common.types:AwsAccessSecretKey
+    spec:
+      access_key_id: '$secret:AWS_ACCESS_KEY_ID'
+      secret_access_key: '$secret:AWS_SECRET_ACCESS_KEY'
+```
+
+A `$secret:<ENV_VAR>` value is read from that environment variable when the collection is created,
+and is stored as a secret. `tdk connection template --type <type>` prints a fill-in template for any
+connector, and `tdk connection types` lists them.
+
 ## Publishing data from a MySQL Database
 
 ```
-@td.publisher(
-    td.MySQLSource(
-        "mysql://127.0.0.1:3306/testing",
-        ["select * from CUSTOMERS"],
-        td.UserPasswordCredentials("admin", td.EnvironmentSecret("DB_PASWORD"))
-    ),
-    tables=["customers"]
+from tabsdatak.api import TableFrameSpec, publisher
+from tabsdatak.conn.mysql import MySQLSrc
+
+
+@publisher(
+    source=MySQLSrc(queries=["select * from CUSTOMERS"]),
+    output_tables=["customers"],
 )
-def pub(customers: td.TableFrame) -> td.TableFrame:
+def pub(customers: TableFrameSpec) -> TableFrameSpec:
     return customers
 ```
 
 ## Subscribing, transforming and publishing data within Tabsdata
 
 ```
-@td.transformer(
-    input_tables=["persons"],
-    output_tables=["spanish"]
+from tabsdatak.api import TableFrameSpec, transformer
+from tabsdatak.tableframe.functions import col
+
+
+@transformer(
+    input_tables=["input/customers"],
+    output_tables=["spanish"],
 )
-def tfr(persons: td.TableFrame):
-    return persons.filter(td.col("nationality").eq("spanish")).select(
-        ["identifier", "name", "surname", "language"]
+def tfr(customers: TableFrameSpec) -> TableFrameSpec:
+    return customers.filter(col("nationality").eq("spanish")).select(
+        col("identifier"), col("name"), col("surname"), col("language")
     )
 ```
 
 ## Subscribing to data in an S3 Bucket
 
 ```
-@td.subscriber(
-    "spanish",
-    td.S3Destination(
-        "s3://my_bucket/spanish.parquet",
-        td.S3AccessKeyCredentials(
-            td.EnvironmentSecret("AWS_ACCESS_KEY_ID"),
-            td.EnvironmentSecret("AWS_SECRET_KEY")
-        )
-    ),
+from tabsdatak.api import TableFrameSpec, subscriber
+from tabsdatak.conn.s3 import S3Dest
+
+
+@subscriber(
+    destination=S3Dest(paths=["spanish.parquet"]),
+    input_tables=["dataprod/spanish"],
 )
-def sub(spanish: td.TableFrame):
+def sub(spanish: TableFrameSpec) -> TableFrameSpec:
     return spanish
 ```
 
-## Executing the Publisher
+## Registering and Executing the Functions
 
-To publish data to Tabsdata run the following command:
+Log in, create a project, create one collection per function (the source and destination ones with
+their connections), register each function in its collection, and trigger the publisher to run the
+rest:
 
 ```
-$ tdk fn trigger --coll examples --name pub
+$ tdk login
+
+$ tdk project create --name example
+$ tdk set --proj example
+
+$ tdk collection create --name input --group sources --conn-file conn-mysql.yaml
+$ tdk collection create --name dataprod --group default
+$ tdk collection create --name output --group destinations --conn-file conn-s3.yaml
+
+$ tdk fn register --coll input --path input.py::pub
+$ tdk fn register --coll dataprod --path transform.py::tfr
+$ tdk fn register --coll output --path output.py::sub
+
+$ tdk fn trigger --coll input --name pub
 ```
 
-In Tabsdata binary distribution, every time the `pub` publisher is executed, the `tfr` transformer
-and the `sub` subscriber will also be executed.
+Every time the `pub` publisher is executed, the `tfr` transformer and the `sub` subscriber will also
+be executed.
