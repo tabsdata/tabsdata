@@ -232,28 +232,52 @@ _TABLE_SCHEMA = [{"name": "id", "type": "Int64"}, {"name": "label", "type": "Str
 _TABLE_DATA_DF = pl.DataFrame({"n": [1, 2], "label": ["x", "y"]})
 _TABLE_DATA_ROWS = _TABLE_DATA_DF.to_dicts()
 
-# ``metrics show`` aggregates ``nodes`` into a summary table; the machine formats
-# emit the whole dict verbatim (edges included -- only the table drops them).
+# ``metrics show`` aggregates ``nodes`` into a summary table, one row per
+# collection, group and run status: each node carries its measures per status
+# in ``by_status``, as the server's NodeRow does. The machine formats emit the
+# whole dict verbatim (edges included -- only the table drops them).
 _METRICS = {
     "dim": "collection",
-    "unit": "hour",
     "start_ms": 1000,
     "end_ms": 2000,
     "nodes": [
         {
+            "project_id": "P1",
+            "project_name": "proj-a",
+            "kind": "collection",
             "collection_id": "C1",
             "collection_name": "coll-a",
             "group_id": "G1",
             "group_name": "grp-a",
-            "status": "D",
-            "fn_runs": 2,
-            "transactions": 1,
-            "table_versions_in": 3,
-            "row_count_in": 555,
-            "data_bytes_in": 0,
-            "table_versions_out": 4,
-            "row_count_out": 777,
-            "data_bytes_out": 0,
+            "logical_tables_out": 1,
+            "tables_unread": 0,
+            "logical_tables_in": 1,
+            "by_status": {
+                "D": {
+                    "fn_runs": 2,
+                    "table_versions_out": 4,
+                    "logical_tables_out": 1,
+                    "versions_unconsumed": 0,
+                    "row_count_out": 777,
+                    "data_bytes_out": 0,
+                    "table_versions_in": 3,
+                    "logical_tables_in": 1,
+                    "row_count_in": 555,
+                    "data_bytes_in": 0,
+                },
+                "F": {
+                    "fn_runs": 9,
+                    "table_versions_out": 0,
+                    "logical_tables_out": 0,
+                    "versions_unconsumed": 0,
+                    "row_count_out": 0,
+                    "data_bytes_out": 0,
+                    "table_versions_in": 1,
+                    "logical_tables_in": 1,
+                    "row_count_in": 333,
+                    "data_bytes_in": 0,
+                },
+            },
         },
     ],
     "edges": [],
@@ -818,7 +842,7 @@ CASES: tuple[RenderCase, ...] = (
         ["metrics", "show"],
         _set_metrics_show,
         _METRICS,
-        ("coll-a", "grp-a", "555", "777"),
+        ("coll-a", "grp-a", "555", "777", "333"),
     ),
     RenderCase(
         "metrics-inflight",
@@ -1282,3 +1306,15 @@ def test_fn_patches_names_its_author_only_from_defined_by(tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert "UID_AUTHOR" not in result.output
+
+
+def test_metrics_show_sums_each_status_across_nodes(tmp_path):
+    client = _client()
+    node = _METRICS["nodes"][0]
+    client.metrics.return_value = {**_METRICS, "nodes": [node, node]}
+    result = _invoke(["metrics", "show"], client=client, tmp_path=tmp_path)
+    assert result.exit_code == 0, result.output
+    assert "1554" in result.output
+    assert "666" in result.output
+    assert "Txns" not in result.output
+    assert "Unit" not in result.output
