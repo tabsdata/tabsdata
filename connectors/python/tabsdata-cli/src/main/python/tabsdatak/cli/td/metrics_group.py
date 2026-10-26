@@ -32,17 +32,24 @@ def _split(value: str | None) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
+EXTERNAL_LABELS = {
+    "ExternalSource": "(external sources)",
+    "ExternalDestination": "(external destinations)",
+}
+
+
 def _summary_view(data: dict, scope: list) -> TableView:
     """Single condensed table: one row per
-    `(dim_entity, group, status)`, magnitudes summed across nodes. Each node
-    carries its measures per run status in `by_status`.
+    `(dim_entity, group, status)`, magnitudes summed across buckets.
     """
     dim = (data.get("dim") or "").lower()
+    unit = data.get("unit", "?")
     start_ms = data.get("start_ms")
     end_ms = data.get("end_ms")
     context = [
         *scope,
         ("Dim", dim or "?"),
+        ("Unit", unit),
         ("Window", f"[{start_ms}, {end_ms})"),
     ]
 
@@ -55,7 +62,16 @@ def _summary_view(data: dict, scope: list) -> TableView:
         coll_name = (n.get("collection_name") or "") if is_collection_dim else ""
         grp_id = n.get("group_id") or ""
         grp_name = n.get("group_name") or ""
-        dim_key = coll_id if is_collection_dim else grp_id
+        kind = n.get("kind") or ""
+        if kind != "Dim":
+            label = EXTERNAL_LABELS.get(kind, kind)
+            dim_key, coll_name, grp_name = (
+                kind,
+                label,
+                "" if is_collection_dim else label,
+            )
+        else:
+            dim_key = coll_id if is_collection_dim else grp_id
         for status, measures in (n.get("by_status") or {}).items():
             row = agg.setdefault(
                 (dim_key, grp_id, status),
@@ -219,8 +235,8 @@ def show(
 ):
     """Per-collection (or per-group) operational summary over the window.
 
-    Renders one row per `(dim_entity, status)` with `Runs /
-    Tables in / Rows in / Tables out / Rows out` (bytes columns added
+    Renders one row per `(dim_entity, status)` with `Runs / Tables in /
+    Rows in / Tables out / Rows out` (bytes columns added
     when any non-zero). Edges are dropped from the rendering — they
     belong in a flow visualization; use `-o json` for the raw shape.
     """

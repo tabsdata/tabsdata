@@ -249,7 +249,7 @@ _METRICS = {
         {
             "project_id": "P1",
             "project_name": "proj-a",
-            "kind": "collection",
+            "kind": "Dim",
             "collection_id": "C1",
             "collection_name": "coll-a",
             "group_id": "G1",
@@ -1322,4 +1322,4 @@ def test_metrics_show_sums_each_status_across_nodes(tmp_path):
     assert "1554" in result.output
     assert "666" in result.output
     assert "Txns" not in result.output
-    assert "Unit" not in result.output
+    assert "Unit" in result.output
