@@ -2,6 +2,18 @@
 Copyright {c.year} Tabsdata Inc.
 -->
 
+<div align="center">
+    <img
+        src="https://docs.tabsdata.com/img/logo-light.svg"
+        alt="Tabsdata"
+        width="500"
+    />
+</div>
+
+<div align="center">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
+
+<br>
+
 Tabsdata {c.backend} Python Package
 
 Warning: this is not a standalone package. It is an `extra` of the Tabsdata package.
