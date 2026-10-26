@@ -6,11 +6,19 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Mapping, MutableMapping
+from collections.abc import Iterator, Mapping, MutableMapping
+from contextlib import contextmanager
+
+from tabsdatak.common._storage.mounts import (
+    SECRET_SEPARATOR,
+    STORAGE_KEY,
+    secret_variable,
+)
 
 PREFIX = "SECRET_PRJ__"
 SEPARATOR = "__"
 REFERENCE_SEPARATOR = "."
+STORAGE_SECRET_PREFIX = f"{secret_variable(STORAGE_KEY)}{SECRET_SEPARATOR}"
 
 logger = logging.getLogger(__name__)
 
@@ -78,3 +86,27 @@ def take_project_secret(
         name = _ignoring_case(secrets, name) or name
         secrets.setdefault(name, {})[key] = value
     return ProjectSecret(secrets)
+
+
+class StorageSecrets:
+    def __init__(self, environment: MutableMapping[str, str] | None = None) -> None:
+        self._environment = os.environ if environment is None else environment
+        self._excluded: dict[str, str] = {}
+
+    def exclude(self) -> None:
+        for name in [
+            name for name in self._environment if name.startswith(STORAGE_SECRET_PREFIX)
+        ]:
+            self._excluded[name] = self._environment.pop(name)
+
+    def include(self) -> None:
+        self._environment.update(self._excluded)
+        self._excluded.clear()
+
+    @contextmanager
+    def managed(self) -> Iterator[None]:
+        self.exclude()
+        try:
+            yield
+        finally:
+            self.include()

@@ -8,6 +8,7 @@ import pytest
 
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     ProjectSecret,
+    StorageSecrets,
     take_project_secret,
 )
 
@@ -93,3 +94,49 @@ def test_malformed_variables_are_removed_and_ignored():
 
 def test_no_variables_give_no_secrets():
     assert take_project_secret({"PATH": "/bin"}).names == []
+
+
+STORAGE_SECRET = "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_SECRET_ACCESS_KEY"
+PROJECT_SECRET = "SECRET_PRJ__AWS__KEY1"
+OTHER_SECRET = "SECRETS__AGENT__KEY"
+
+
+def storage_environment() -> dict[str, str]:
+    return {
+        STORAGE_SECRET: "secret",
+        PROJECT_SECRET: "project",
+        OTHER_SECRET: "agent",
+        "HOME": "/home",
+    }
+
+
+def test_the_storage_secrets_are_out_while_managed_and_back_after():
+    variables = storage_environment()
+
+    with StorageSecrets(variables).managed():
+        assert STORAGE_SECRET not in variables
+        assert variables[PROJECT_SECRET] == "project"
+        assert variables[OTHER_SECRET] == "agent"
+
+    assert variables == storage_environment()
+
+
+def test_the_storage_secrets_come_back_when_the_managed_code_fails():
+    variables = storage_environment()
+
+    with pytest.raises(RuntimeError):
+        with StorageSecrets(variables).managed():
+            raise RuntimeError("Failure inside the managed block")
+
+    assert variables == storage_environment()
+
+
+def test_exclude_and_include_work_on_their_own():
+    variables = storage_environment()
+    secrets = StorageSecrets(variables)
+
+    secrets.exclude()
+    assert STORAGE_SECRET not in variables
+    secrets.include()
+
+    assert variables == storage_environment()

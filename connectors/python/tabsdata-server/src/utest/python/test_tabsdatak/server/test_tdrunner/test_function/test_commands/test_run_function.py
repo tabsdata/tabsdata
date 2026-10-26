@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import shutil
 import sys
 from datetime import datetime
@@ -651,6 +652,21 @@ def test_invoke_user_function_happy():
     assert len(result) == 2
     assert isinstance(result[0], TableFrame)
     assert result[1] is None
+
+
+def test_invoke_user_function_runs_without_the_storage_secrets(monkeypatch):
+    variable = "SECRETS__STORAGE__MOUNTS__ROOT__OPTIONS__AWS_SECRET_ACCESS_KEY"
+    monkeypatch.setenv(variable, "secret")
+    seen = {}
+
+    def fn(in_1):
+        seen["value"] = os.environ.get(variable)
+        return in_1
+
+    _invoke_user_function(fn, [_fake_table_frame()], ["t1"])
+
+    assert seen == {"value": None}
+    assert os.environ[variable] == "secret"
 
 
 def test_invoke_user_function_raises_maps_to_user_function_failed():

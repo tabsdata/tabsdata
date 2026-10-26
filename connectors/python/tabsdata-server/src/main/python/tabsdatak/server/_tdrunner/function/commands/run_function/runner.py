@@ -40,6 +40,7 @@ from tabsdatak.server._tdrunner import dataquality
 from tabsdatak.server._tdrunner.function._commons.document.request import Request
 from tabsdatak.server._tdrunner.function._commons.solver.secrets import (
     ProjectSecret,
+    StorageSecrets,
     take_project_secret,
 )
 from tabsdatak.server._tdrunner.function._lib import (
@@ -345,7 +346,8 @@ def _invoke_user_function(func, call_args: list, output_tables: list[str]) -> tu
     from tabsdatak.tableframe import TableFrame
 
     try:
-        result = func(*call_args)
+        with StorageSecrets().managed():
+            result = func(*call_args)
     except Exception as exc:
         raise RunFunctionErrorCode.RF_12.exception(cause=exc, detail=str(exc))
 
