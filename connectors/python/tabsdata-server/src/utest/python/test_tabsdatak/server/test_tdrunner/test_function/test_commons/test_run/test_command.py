@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 
 import pytest
 
@@ -15,6 +16,12 @@ from tabsdatak.server._tdrunner.function._commons.run.command import (
     notify_status,
     notify_step_destination_write,
     run_command,
+    show_dataflow_settings,
+)
+from tabsdatak.server._tdrunner.function._commons.run.dataflow import (
+    POLARS_OOC_SPILL_DIR,
+    POLARS_TEMP_DIR,
+    POLARS_VARIABLES,
 )
 from tabsdatak.server._tdrunner.function._lib.errors import (
     CommandErrorCode,
@@ -210,3 +217,30 @@ def test_a_destination_write_names_its_operation_only(monkeypatch):
     bodies = _posted(monkeypatch)
     notify_step_destination_write(argparse.Namespace())
     assert bodies == [{"op": "destination_write"}]
+
+
+def test_a_command_logs_the_query_engine_settings_in_effect(monkeypatch, caplog):
+    for name in POLARS_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(POLARS_TEMP_DIR, "/dataflow/temporary")
+    monkeypatch.setenv(POLARS_OOC_SPILL_DIR, "/dataflow/spill")
+
+    with caplog.at_level(logging.INFO, logger=command_module.logger.name):
+        show_dataflow_settings()
+
+    assert caplog.messages == [
+        f"Query engine setting {POLARS_TEMP_DIR} is '/dataflow/temporary'",
+        f"Query engine setting {POLARS_OOC_SPILL_DIR} is '/dataflow/spill'",
+    ]
+
+
+def test_a_command_says_when_the_query_engine_keeps_its_defaults(monkeypatch, caplog):
+    for name in POLARS_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+
+    with caplog.at_level(logging.INFO, logger=command_module.logger.name):
+        show_dataflow_settings()
+
+    assert caplog.messages == [
+        "The query engine runs on its own memory and spill defaults"
+    ]

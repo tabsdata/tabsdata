@@ -9,3 +9,7 @@ __path__ = pkgutil.extend_path(__path__, __name__)
 #
 # Copyright 2026 Tabsdata Inc.
 #
+
+from tabsdatak.server._tdrunner.function._commons.run.dataflow import Dataflow
+
+Dataflow().apply()

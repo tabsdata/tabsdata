@@ -21,6 +21,7 @@ from tabsdatak.server._tdrunner.function._commons.http.request import (
     DEFAULT_TIMEOUT_SECONDS,
 )
 from tabsdatak.server._tdrunner.function._commons.http.retry import call_with_retry
+from tabsdatak.server._tdrunner.function._commons.run.dataflow import Dataflow
 from tabsdatak.server._tdrunner.function._commons.solver.arguments import (
     resolve_value,
 )
@@ -299,6 +300,15 @@ def notify_step_destination_write(arguments: argparse.Namespace) -> None:
     )
 
 
+def show_dataflow_settings() -> None:
+    settings = Dataflow.settings_in_effect()
+    if not settings:
+        logger.info("The query engine runs on its own memory and spill defaults")
+        return
+    for name, value in settings.items():
+        logger.info(f"Query engine setting {name} is '{value}'")
+
+
 def tabsdata_command(*, name: str) -> Callable[[Callable], Callable]:
     def wrap(target: Callable) -> Callable:
         target.tabsdata_command = True
@@ -324,6 +334,7 @@ def command(
                 parsed = parser().parse_args()
                 arguments = parsed
                 setup_logging(parsed.log_config)
+                show_dataflow_settings()
                 install_liveness_handler(Path(parsed.liveness))
                 result = body(parsed)
                 exit_code = 0 if result is None else int(result)
