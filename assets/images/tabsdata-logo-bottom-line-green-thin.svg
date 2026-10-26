@@ -1,0 +1,14 @@
+<svg
+	width="770"
+	height="2"
+	viewBox="0 0 770 2"
+	preserveAspectRatio="none"
+	xmlns="http://www.w3.org/2000/svg"
+>
+	<style>
+		.line-color {
+			stroke: #6ab35c;
+		}
+	</style>
+	<line y1="1" x2="770" y2="1" class="line-color" stroke-width="2" vector-effect="non-scaling-stroke"/>
+</svg>
