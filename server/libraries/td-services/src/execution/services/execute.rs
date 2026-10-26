@@ -5,7 +5,6 @@
 use crate::collection::resolve_collection_id;
 use crate::execution::execution_version::refusal;
 use crate::execution::{execute, trigger_gate};
-use crate::function::children::ensure_user_managed;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -54,7 +53,6 @@ async fn execute_function(
             .fetch_one(and!(&collection_id, &function_param.function))
             .await?;
 
-        ensure_user_managed(conn, &function).await?;
         if let Some(refused) =
             trigger_gate(conn, &execution_request, &function, &TriggerType::Manual).await?
         {

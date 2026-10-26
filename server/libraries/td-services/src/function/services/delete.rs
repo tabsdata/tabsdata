@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::function::children::ensure_user_managed;
+use crate::function::children::ensure_user_managed_now;
 use crate::function::lifecycle::delete_one;
 use crate::tag::parent::children_of;
 use ta_services::factory::service_factory;
@@ -46,7 +46,7 @@ async fn delete_function(
             .fetch_one(and!(&collection.collection_id, &function_param.function))
             .await?;
 
-        ensure_user_managed(conn, &current).await?;
+        ensure_user_managed_now(conn, &current).await?;
 
         let children: Vec<FunctionId> = children_of(conn, current.function_id).await?;
         let children: Vec<FunctionDB> = conn.scd2().chunked().fetch_all(&children, ()).await?;

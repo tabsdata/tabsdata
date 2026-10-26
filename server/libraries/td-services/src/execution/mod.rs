@@ -13,6 +13,7 @@ use crate::execution::plan::rows::{
     update_initial_function_run_status,
 };
 use crate::execution::plan::versions::resolve_execution_plan_versions;
+use crate::function::children::ensure_user_managed;
 use ta_services::ctx_service::ReqCtx;
 use td_database::access::LockInstant;
 use td_database::access::{InProject, SeesProjectRows, XW};
@@ -92,6 +93,7 @@ pub(crate) async fn execute(
         override_disabled_trigger,
     };
     let topology = ProjectTopology::current(conn, &function.project_id).await?;
+    ensure_user_managed(&function, topology.parent_of(&function_id))?;
     let execution_plan = topology.plan(FunctionState::Executable, &function_id, &options)?;
     execution_plan.validate(transaction_by)?;
 

@@ -27,14 +27,23 @@ pub enum ChildFunctionError {
     NotUserManaged(FunctionName) = 2000,
 }
 
-pub async fn ensure_user_managed<S: SeesProjectRows, M: AccessMode>(
-    conn: &mut DomainConnection<Apiserver, S, M>,
+/// A function with a parent is the parent's to update, delete, enable or run.
+pub fn ensure_user_managed(
     function: &FunctionInsertDB,
+    parent: Option<&FunctionId>,
 ) -> Result<(), TdError> {
-    if parent_of(conn, function.function_id).await?.is_some() {
+    if parent.is_some() {
         Err(ChildFunctionError::NotUserManaged(function.name.clone()))?
     }
     Ok(())
+}
+
+pub async fn ensure_user_managed_now<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
+    function: &FunctionInsertDB,
+) -> Result<(), TdError> {
+    let parent = parent_of(conn, function.function_id).await?;
+    ensure_user_managed(function, parent.as_ref())
 }
 
 pub fn child_tables(children: Option<&[ChildFunction]>) -> HashSet<&TableNameDto> {

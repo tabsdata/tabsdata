@@ -3,7 +3,7 @@
 //
 
 use crate::collection::resolve_collection_id;
-use crate::function::children::ensure_user_managed;
+use crate::function::children::ensure_user_managed_now;
 use crate::function::children::reconcile_children;
 use crate::function::lifecycle::update_one;
 use ta_services::factory::service_factory;
@@ -54,7 +54,7 @@ async fn update_function(
             .fetch_one(and!(&collection_id, &function_param.function))
             .await?;
 
-        ensure_user_managed(conn, &current).await?;
+        ensure_user_managed_now(conn, &current).await?;
         let function = update_one(
             conn,
             &ctx,

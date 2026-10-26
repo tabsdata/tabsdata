@@ -4,7 +4,6 @@
 
 use crate::execution::execution_version::assert_function_version;
 use crate::execution::{execute, trigger_gate};
-use crate::function::children::ensure_user_managed;
 use ta_services::ctx_service::ReqCtx;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
@@ -57,7 +56,6 @@ async fn execute_function_version(
         // allow older versions to execute).
         let function: FunctionDBWithNames = conn.scd2().fetch_one(&requested.function_id).await?;
         assert_function_version(&function_version_id, &function)?;
-        ensure_user_managed(conn, &function).await?;
 
         if let Some(refused) =
             trigger_gate(conn, &execution_request, &function, &trigger_type).await?

@@ -96,6 +96,10 @@ impl ProjectTopology {
         ))
     }
 
+    pub fn parent_of(&self, function: &FunctionId) -> Option<&FunctionId> {
+        self.tags.parent(function)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         version: ProjectTopologyDB,

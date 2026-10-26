@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::function::children::ensure_user_managed;
+use crate::function::children::ensure_user_managed_now;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -42,14 +42,9 @@ async fn create_function_patch(
     let collection: CollectionDB = conn.scd2().fetch_one(&collection_id_name).await?;
 
     let parent: FunctionDB = conn.timeline().fetch_one(&body.patch_of).await?;
-    ensure_user_managed(conn, &parent.base).await?;
-    assert_patch_parent_matches_url(
-        conn,
-        &parent,
-        &collection.collection_id,
-        &function_id_name,
-    )
-    .await?;
+    ensure_user_managed_now(conn, &parent).await?;
+    assert_patch_parent_matches_url(conn, &parent, &collection.collection_id, &function_id_name)
+        .await?;
     let patch: FunctionPatchInsertDB = body.to_dao(parent, &ctx)?;
     conn.scd2().open(&patch, at).await?;
 
