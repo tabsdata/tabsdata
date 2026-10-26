@@ -52,7 +52,7 @@ publisher = function_module(FUNCTIONS, "publisher")
 # from the python function's name, so a test can update one declaration onto
 # another without the owner appearing to be renamed.
 OWNER = "dq_trend_owner"
-PARENT_TAG = "td.parent"
+PARENT_TAG = "_parent"
 
 TREND_SUFFIX = "_trend"
 
@@ -109,10 +109,10 @@ def parent_table_id(collection: Collection, name: str) -> str | None:
 
 def trend_functions(collection: Collection, owner_id: str) -> list:
     """The trend functions the server says belong to ``owner_id`` -- found by
-    their ``td.parent`` tag, which is what the reconciler itself keys on."""
+    their ``_parent`` tag, which is what the reconciler itself keys on."""
     return collection.list_functions(
         filter=[
-            f"tag.{PARENT_TAG}:eq:{owner_id}",
+            f"function.{PARENT_TAG}:eq:{owner_id}",
             f"function_type:eq:{FunctionType.DQSummaryTrends.value}",
         ]
     )

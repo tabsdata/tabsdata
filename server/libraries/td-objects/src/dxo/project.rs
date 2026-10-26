@@ -14,7 +14,7 @@ use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::secret::SecretUpsert;
 use crate::types::basic::{
     AtTime, BasePath, Description, ProjectId, ProjectIdName, ProjectName, ProjectVersionId,
-    Scd2ValidFrom, TagEntityType, UserId, UserLabel,
+    Scd2ValidFrom, UserId, UserLabel,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -70,7 +70,6 @@ impl ProjectDB {
 #[dao(
     view = "projects__with_names",
     scd2,
-    tagged = TagEntityType::Project,
     unique_at(ProjectName),
     unique_at(ProjectIdName)
 )]
@@ -118,7 +117,7 @@ pub struct ProjectUpdate {
 pub struct ProjectRead {
     #[dto(list(pagination_by = "+"))]
     pub id: ProjectVersionId,
-    #[dto(list(filter))]
+    #[dto(list(filter, tags))]
     pub project_id: ProjectId,
     #[dto(list(filter, filter_like, order_by))]
     pub name: ProjectName,

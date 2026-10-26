@@ -115,7 +115,7 @@ pub struct FunctionRunDBWithNames {
 pub struct FunctionRun {
     #[dto(list(pagination_by = "+", filter))]
     pub id: LogicalFunctionRunId,
-    #[dto(list(filter))]
+    #[dto(list(filter, tags))]
     pub project_id: ProjectId,
     #[dto(list(filter, order_by))]
     pub collection_id: CollectionId,
@@ -123,7 +123,7 @@ pub struct FunctionRun {
     pub execution_id: ExecutionId,
     #[dto(list(filter, filter_like, order_by))]
     pub transaction_id: TransactionId,
-    #[dto(list(filter, order_by))]
+    #[dto(list(filter, order_by, tags))]
     pub function_id: FunctionId,
     #[dto(list(filter, order_by))]
     pub function_version_id: FunctionVersionId,
@@ -354,9 +354,9 @@ pub struct TableDataVersionDBWithNames {
 pub struct TableDataVersion {
     #[dto(list(pagination_by = "+", filter, filter_like))]
     pub id: LogicalTableDataVersionId,
-    #[dto(list(filter, order_by))]
+    #[dto(list(filter, order_by, tags))]
     pub collection_id: CollectionId,
-    #[dto(list(filter, order_by))]
+    #[dto(list(filter, order_by, tags))]
     pub table_id: TableId,
     #[dto(list(filter, filter_like, order_by))]
     pub execution_id: ExecutionId,

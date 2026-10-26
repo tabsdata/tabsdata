@@ -116,9 +116,9 @@ pub struct PhysicalTableDataVersionDBWithNames {
 pub struct PhysicalTableDataVersion {
     #[dto(list(pagination_by = "+", filter, filter_like))]
     pub id: PhysicalTableDataVersionId,
-    #[dto(list(filter, order_by))]
+    #[dto(list(filter, order_by, tags))]
     pub collection_id: CollectionId,
-    #[dto(list(filter, order_by))]
+    #[dto(list(filter, order_by, tags))]
     pub table_id: TableId,
     #[dto(list(filter, filter_like, order_by))]
     pub name: TableName,

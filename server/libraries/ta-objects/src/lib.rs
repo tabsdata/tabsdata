@@ -8,6 +8,7 @@ mod tests;
 mod composed_string;
 pub mod dao_registry;
 mod dxo;
+mod entity_tags;
 pub mod errors;
 mod list_cursor;
 mod path_params;
@@ -26,6 +27,7 @@ pub use {
         DaoProjection, RegisteredDao, dao_projection, registered_daos, scoped_dao_projection,
     },
     dxo::*,
+    entity_tags::{NoTags, SomeTags, Taggable},
     list_cursor::ListFilterStr,
     path_params::{PathParams, Route},
     relation::{

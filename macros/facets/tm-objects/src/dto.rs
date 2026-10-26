@@ -45,6 +45,9 @@ pub fn dto(_args: TokenStream, item: TokenStream) -> TokenStream {
                 if arg.order_by {
                     doc.push_str("order_by, ");
                 }
+                if arg.tags {
+                    doc.push_str("tags, ");
+                }
                 let doc = doc.trim_end_matches(", ").to_string();
                 quote! { #[doc = #doc] }
             });
@@ -120,6 +123,10 @@ struct FieldListArguments {
     filter_like: bool,
     #[darling(default)]
     order_by: bool,
+    /// The field is a taggable entity's id: the list filters by that
+    /// entity's tags as `<entity>.<key>:<op>:<value>`.
+    #[darling(default)]
+    tags: bool,
     /// The DAO column's type, when it differs from this DTO field's — the
     /// column is resolved by type, so only a retyped field needs it.
     #[darling(default)]
@@ -191,6 +198,7 @@ fn gen_list_query(
         is_order_by: bool,
         is_filter: bool,
         is_filter_like: bool,
+        is_tags: bool,
     }
 
     let mut pagination_field: Option<&Ident> = None;
@@ -212,6 +220,7 @@ fn gen_list_query(
             is_order_by: false,
             is_filter: false,
             is_filter_like: false,
+            is_tags: false,
         };
 
         for list_arg in dto_args.list {
@@ -235,6 +244,9 @@ fn gen_list_query(
             }
             if list_arg.filter_like {
                 meta.is_filter_like = true;
+            }
+            if list_arg.tags {
+                meta.is_tags = true;
             }
         }
 
@@ -279,6 +291,28 @@ fn gen_list_query(
         let name = m.ident.to_string();
         let col = dao_col_expr(m);
         quote! { #name => Some(#col), }
+    });
+
+    let tag_metas: Vec<_> = metas.iter().filter(|m| m.is_tags).collect();
+    let tags_marker = match tag_metas.is_empty() {
+        true => quote! { ta_objects::NoTags },
+        false => quote! { ta_objects::SomeTags },
+    };
+    let tag_col_arms = tag_metas.iter().map(|m| {
+        let ty = m.ty;
+        let col = dao_col_expr(m);
+        quote! {
+            if entity == <#ty as ta_objects::Taggable>::ENTITY {
+                return Some((
+                    #col,
+                    ta_objects::SeaValue::as_sea_expr(&<#ty as ta_objects::Taggable>::ENTITY_TYPE),
+                ));
+            }
+        }
+    });
+    let tag_entities = tag_metas.iter().map(|m| {
+        let ty = m.ty;
+        quote! { <#ty as ta_objects::Taggable>::ENTITY }
     });
 
     let pag_meta = metas.iter().find(|m| m.is_pagination).unwrap();
@@ -337,6 +371,17 @@ fn gen_list_query(
                     #(#order_by_arms)*
                     _ => None,
                 }
+            }
+
+            type Tags = #tags_marker;
+
+            fn tag_col(entity: &str) -> Option<(<Self::Dao as ta_objects::Dao>::Iden, sea_query::Expr)> {
+                #(#tag_col_arms)*
+                None
+            }
+
+            fn tag_entities() -> &'static [&'static str] {
+                &[#(#tag_entities),*]
             }
 
             fn pagination_col() -> (<Self::Dao as ta_objects::Dao>::Iden, sea_query::Order) {

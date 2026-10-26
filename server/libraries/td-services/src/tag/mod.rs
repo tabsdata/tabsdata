@@ -9,13 +9,14 @@ pub mod user;
 use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
+use td_objects::Taggable;
 use td_objects::dxo::tag::TopologyTagDB;
 use td_objects::dxo::topology::TopologyInstant;
-use td_objects::types::basic::{TagEntityId, Taggable};
+use td_objects::types::basic::{TagEntityId, TagEntityType};
 use td_queries::Queries;
 
 /// Every open tag of the entities, closed with them at the topology instant.
-pub async fn close_tags_of<T: Taggable>(
+pub async fn close_tags_of<T: Taggable<EntityType = TagEntityType>>(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     entities: &[T],
     topology_at: TopologyInstant,
@@ -23,7 +24,7 @@ pub async fn close_tags_of<T: Taggable>(
     if entities.is_empty() {
         return Ok(());
     }
-    let entity_ids: Vec<TagEntityId> = entities.iter().map(|id| id.tag_entity_id()).collect();
+    let entity_ids: Vec<TagEntityId> = entities.iter().map(|id| TagEntityId::of(*id)).collect();
     conn.scd2()
         .chunked()
         .close::<TopologyTagDB>(&entity_ids, &T::ENTITY_TYPE, topology_at)

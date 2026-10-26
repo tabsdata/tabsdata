@@ -6,14 +6,16 @@ use std::collections::HashMap;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
+use td_objects::Taggable;
 use td_objects::and;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::tag::{TopologyTagDB, TopologyTagInsertDB};
 use td_objects::dxo::topology::TopologyInstant;
-use td_objects::types::basic::{TagEntity, TagEntityId, TagId, TagValue, Taggable, TopologyTagKey};
+use td_objects::types::basic::{
+    TagEntity, TagEntityId, TagEntityType, TagId, TagValue, TopologyTagKey,
+};
 use td_queries::Queries;
 
-/// The open `td.parent` tag of one entity.
 pub async fn parent_tag<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     entity: &TagEntity,
@@ -29,7 +31,11 @@ pub async fn parent_tag<S: SeesProjectRows, M: AccessMode>(
         .await?)
 }
 
-pub async fn parent_of<T: Taggable, S: SeesProjectRows, M: AccessMode>(
+pub async fn parent_of<
+    T: Taggable<EntityType = TagEntityType>,
+    S: SeesProjectRows,
+    M: AccessMode,
+>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     child: T,
 ) -> Result<Option<T>, TdError> {
@@ -39,8 +45,11 @@ pub async fn parent_of<T: Taggable, S: SeesProjectRows, M: AccessMode>(
         .transpose()
 }
 
-/// The entities of `T`'s type whose open `td.parent` tag names `parent`.
-pub async fn children_of<T: Taggable, S: SeesProjectRows, M: AccessMode>(
+pub async fn children_of<
+    T: Taggable<EntityType = TagEntityType>,
+    S: SeesProjectRows,
+    M: AccessMode,
+>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     parent: T,
 ) -> Result<Vec<T>, TdError> {
@@ -53,15 +62,18 @@ pub async fn children_of<T: Taggable, S: SeesProjectRows, M: AccessMode>(
             TopologyTagDB::topology(),
         ))
         .await?;
-    tags.iter().map(|tag| T::try_from(&tag.entity_id)).collect()
+    tags.iter().map(|tag| tag.entity_id.id::<T>()).collect()
 }
 
-/// The open `td.parent` tags of the entities, by entity.
-pub async fn parents_of<T: Taggable + Eq + std::hash::Hash, S: SeesProjectRows, M: AccessMode>(
+pub async fn parents_of<
+    T: Taggable<EntityType = TagEntityType> + Eq + std::hash::Hash,
+    S: SeesProjectRows,
+    M: AccessMode,
+>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     entities: &[T],
 ) -> Result<HashMap<T, TopologyTagDB>, TdError> {
-    let entity_ids: Vec<TagEntityId> = entities.iter().map(|id| id.tag_entity_id()).collect();
+    let entity_ids: Vec<TagEntityId> = entities.iter().map(|id| TagEntityId::of(*id)).collect();
     let tags: Vec<TopologyTagDB> = conn
         .scd2()
         .chunked()
@@ -75,11 +87,11 @@ pub async fn parents_of<T: Taggable + Eq + std::hash::Hash, S: SeesProjectRows, 
         )
         .await?;
     tags.into_iter()
-        .map(|tag| Ok((T::try_from(&tag.entity_id)?, tag)))
+        .map(|tag| Ok((tag.entity_id.id::<T>()?, tag)))
         .collect()
 }
 
-/// The `td.parent` version to open for `entity` naming `parent`, if its open
+/// The `_parent` version to open for `entity` naming `parent`, if its open
 /// tag does not already: a new tag, or the next version of the current one.
 pub fn parent_version(
     ctx: &RequestContext,
@@ -94,7 +106,7 @@ pub fn parent_version(
     TopologyTagInsertDB::new(tag_id, entity, TopologyTagKey::Parent, parent, ctx.user_id).map(Some)
 }
 
-pub async fn stamp_parent<T: Taggable>(
+pub async fn stamp_parent<T: Taggable<EntityType = TagEntityType>>(
     conn: &mut DomainConnection<Apiserver, InProject, impl WriteMode>,
     ctx: &RequestContext,
     child: T,
@@ -113,14 +125,18 @@ pub async fn stamp_parent<T: Taggable>(
 pub(crate) mod test_support {
     use td_database::pool::TdPool;
     use td_error::TdError;
+    use td_objects::Taggable;
     use td_objects::and;
     use td_objects::dxo::tag::TopologyTagDB;
     use td_objects::types::basic::{
-        FunctionId, TableId, TagEntity, TagValue, Taggable, TopologyTagKey,
+        FunctionId, TableId, TagEntity, TagEntityType, TagValue, TopologyTagKey,
     };
     use td_queries::Queries;
 
-    async fn parent<T: Taggable>(db: &TdPool, entity: T) -> Result<Option<T>, TdError> {
+    async fn parent<T: Taggable<EntityType = TagEntityType>>(
+        db: &TdPool,
+        entity: T,
+    ) -> Result<Option<T>, TdError> {
         let entity = TagEntity::from(entity);
         db.scd2()
             .fetch_optional::<TopologyTagDB>(and!(
@@ -134,7 +150,10 @@ pub(crate) mod test_support {
             .transpose()
     }
 
-    async fn children<T: Taggable>(db: &TdPool, parent: T) -> Result<Vec<T>, TdError> {
+    async fn children<T: Taggable<EntityType = TagEntityType>>(
+        db: &TdPool,
+        parent: T,
+    ) -> Result<Vec<T>, TdError> {
         db.scd2()
             .fetch_all::<TopologyTagDB>(and!(
                 &T::ENTITY_TYPE,
@@ -144,7 +163,7 @@ pub(crate) mod test_support {
             ))
             .await?
             .iter()
-            .map(|tag| T::try_from(&tag.entity_id))
+            .map(|tag| tag.entity_id.id::<T>())
             .collect()
     }
 

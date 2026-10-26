@@ -83,9 +83,9 @@ pub struct Transaction {
     pub triggered_on: TriggeredOn,
     #[dto(list(filter))]
     pub triggered_by_id: UserId,
-    #[dto(list(filter))]
+    #[dto(list(filter, tags))]
     pub group_id: GroupId,
-    #[dto(list(filter))]
+    #[dto(list(filter, tags))]
     pub project_id: ProjectId,
     #[dto(list(filter, order_by))]
     pub started_on: Option<Started<AtTime>>,

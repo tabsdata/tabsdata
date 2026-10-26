@@ -270,10 +270,17 @@ table delete   --name NAME  [--proj PROJECT] [--coll COLLECTION] [--confirm dele
                     #   entity type (P/G/C/F/T) and id of each. `set` / `delete` act on user tags only.
 ```
 
-Every entity listing (`project`, `group`, `collection`, `fn`, `table` list)
-also takes tag filters beside its column filters: `tag.<key>:eq:<value>`,
-`:ne:<value>`, `:lk:<pattern>` and `:is:null` / `:is:not_null`. The same key
-repeated is OR, different keys AND. The SDK's `list_tag_keys()` and
+Listings also take tag filters beside their column filters,
+`<entity>.<key>:eq:<value>`, `:ne:<value>`, `:lk:<pattern>` and
+`:is:null` / `:is:not_null`, where `<entity>` is `project`, `group`,
+`collection`, `function` or `table`: on `fn list`, `function.team:eq:a` keeps
+the functions tagged `team=a`; on the run lists it keeps the runs of those
+functions. A list accepts the entities whose ids its rows carry (its API
+schema marks those fields `tags`); the same entity and key repeated is OR,
+otherwise AND. `:ne:` and `:lk:` match only rows whose entity carries the
+key, so an untagged row matches neither. Tag filters test current tags,
+except on as-of listings, which test the tags of their instant. System keys
+start with `_`, like `_parent`. The SDK's `list_tag_keys()` and
 `list_tag_values(key)` list the keys and values in use.
 
 ## Execution

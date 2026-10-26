@@ -12,7 +12,6 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::function::Function;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_objects::types::tag_selector::TagSelector;
 use td_queries::Queries;
 
 #[service_factory]
@@ -28,7 +27,7 @@ async fn function_list(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let query_params = ListQueryParams::<Function, TagSelector>::try_from(&list_params)?;
+    let query_params = ListQueryParams::<Function>::try_from(&list_params)?;
     let rows = conn.scd2().list((), &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
@@ -198,20 +197,20 @@ mod tests {
         let parent = TagValue::of_id(owner.function_id);
 
         assert_eq!(
-            names(vec![format!("tag.td.parent:eq:{}", *parent)]).await?,
+            names(vec![format!("function._parent:eq:{}", *parent)]).await?,
             ["child"]
         );
         assert_eq!(
-            names(vec!["tag.td.parent:is:not_null".to_string()]).await?,
+            names(vec!["function._parent:is:not_null".to_string()]).await?,
             ["child"]
         );
         assert_eq!(
-            names(vec!["tag.td.parent:is:null".to_string()]).await?,
+            names(vec!["function._parent:is:null".to_string()]).await?,
             ["owner"]
         );
         assert!(
             names(vec![
-                format!("tag.td.parent:eq:{}", *parent),
+                format!("function._parent:eq:{}", *parent),
                 "name:eq:owner".to_string()
             ])
             .await?

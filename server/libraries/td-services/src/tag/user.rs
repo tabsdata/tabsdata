@@ -6,11 +6,12 @@ use td_database::access::{AccessMode, InProject, LockInstant, SeesProjectRows, W
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
 use td_objects::FromDao;
+use td_objects::Taggable;
 use td_objects::and;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::tag::{Tag, TagDB, TagSet, UserTagDB, UserTagInsertDB};
 use td_objects::types::basic::{
-    TagEntity, TagEntityId, TagId, TagKey, TagKind, Taggable, UserTagKey,
+    TagEntity, TagEntityId, TagEntityType, TagId, TagKey, TagKind, UserTagKey,
 };
 use td_queries::Queries;
 
@@ -79,7 +80,7 @@ pub async fn delete_user_tag<S: SeesProjectRows>(
 }
 
 /// The open user tags of the entities, closed with them at the lock instant.
-pub async fn close_user_tags_of<T: Taggable, S: SeesProjectRows>(
+pub async fn close_user_tags_of<T: Taggable<EntityType = TagEntityType>, S: SeesProjectRows>(
     conn: &mut DomainConnection<Apiserver, S, impl WriteMode>,
     entities: &[T],
     at: LockInstant,
@@ -87,7 +88,7 @@ pub async fn close_user_tags_of<T: Taggable, S: SeesProjectRows>(
     if entities.is_empty() {
         return Ok(());
     }
-    let entity_ids: Vec<TagEntityId> = entities.iter().map(|id| id.tag_entity_id()).collect();
+    let entity_ids: Vec<TagEntityId> = entities.iter().map(|id| TagEntityId::of(*id)).collect();
     conn.scd2()
         .chunked()
         .close::<UserTagDB>(&entity_ids, and!(&T::ENTITY_TYPE, UserTagDB::user()), at)

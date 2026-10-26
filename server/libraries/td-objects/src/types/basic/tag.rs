@@ -4,7 +4,7 @@
 
 use crate::types::basic::{CollectionId, FunctionId, GroupId, ProjectId, TableId, TagEntityId};
 use std::collections::BTreeMap;
-use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
+use ta_objects::{Taggable, Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_common::id::Id;
 use td_error::{TdError, td_error};
 
@@ -28,36 +28,44 @@ pub enum TagEntityType {
     Table,
 }
 
-/// The ids of the entities that carry tags; each names its entity type, so a
-/// tag read or write is addressed from the id alone.
-pub trait Taggable:
-    Typed<Inner = Id> + Copy + for<'a> TryFrom<&'a TagEntityId, Error = TdError>
-{
-    const ENTITY_TYPE: TagEntityType;
-
-    fn tag_entity_id(self) -> TagEntityId {
-        TagEntityId::try_new(self.into_inner()).expect("an id is a valid tag entity id")
-    }
-}
-
 impl Taggable for ProjectId {
+    type EntityType = TagEntityType;
     const ENTITY_TYPE: TagEntityType = TagEntityType::Project;
+    const ENTITY: &'static str = "project";
 }
 
 impl Taggable for GroupId {
+    type EntityType = TagEntityType;
     const ENTITY_TYPE: TagEntityType = TagEntityType::Group;
+    const ENTITY: &'static str = "group";
 }
 
 impl Taggable for CollectionId {
+    type EntityType = TagEntityType;
     const ENTITY_TYPE: TagEntityType = TagEntityType::Collection;
+    const ENTITY: &'static str = "collection";
 }
 
 impl Taggable for FunctionId {
+    type EntityType = TagEntityType;
     const ENTITY_TYPE: TagEntityType = TagEntityType::Function;
+    const ENTITY: &'static str = "function";
 }
 
 impl Taggable for TableId {
+    type EntityType = TagEntityType;
     const ENTITY_TYPE: TagEntityType = TagEntityType::Table;
+    const ENTITY: &'static str = "table";
+}
+
+impl TagEntityId {
+    pub fn of<T: Typed<Inner = Id>>(id: T) -> Self {
+        Self::try_new(id.into_inner()).expect("an id is a valid tag entity id")
+    }
+
+    pub fn id<T: Typed<Inner = Id>>(&self) -> Result<T, TdError> {
+        T::try_new((*self).into_inner())
+    }
 }
 
 /// One tagged entity: the pair every tag row addresses, built from a typed id
@@ -68,11 +76,11 @@ pub struct TagEntity {
     pub entity_id: TagEntityId,
 }
 
-impl<T: Taggable> From<T> for TagEntity {
+impl<T: Taggable<EntityType = TagEntityType>> From<T> for TagEntity {
     fn from(id: T) -> Self {
         Self {
             entity_type: T::ENTITY_TYPE,
-            entity_id: id.tag_entity_id(),
+            entity_id: TagEntityId::of(id),
         }
     }
 }
@@ -149,7 +157,6 @@ pub struct TagValue(String);
 #[typed(max_len = 256)]
 pub struct TagPrefix(String);
 
-/// An entity's topology tags at one topology version.
 pub type TopologyTags = BTreeMap<TopologyTagKey, TagValue>;
 
 impl TagValue {

@@ -2,15 +2,18 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::QueryExecutor;
+use crate::Serves;
+use crate::generic::grain::Unversioned;
+use crate::generic::tagged::TagFilter;
 use sea_query::{Expr, ExprTrait, Query, SelectStatement};
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
-use ta_objects::{Dao, FromDao};
+use ta_objects::{Dao, FromDao, ListDto};
 use td_database::sea_query::builder::SeaQueryExt;
 use td_objects::dxo::execution::{Execution, ExecutionDBIden};
 use td_objects::dxo::logical::{LogicalFunctionRunDBIden, LogicalFunctionRunInputDBIden};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDBIden;
+use td_objects::dxo::tag::TagDB;
 use td_objects::list::params::ListQueryParams;
 use td_objects::types::basic::{FunctionVersionId, LogicalTableDataVersionId};
 
@@ -25,7 +28,7 @@ pub struct Executions<E> {
 
 impl<E> Executions<E>
 where
-    E: QueryExecutor,
+    E: Serves<TagDB>,
 {
     /// Executions that consumed `tdv_id` as an input.
     pub async fn list_by_table_data_version(
@@ -33,7 +36,7 @@ where
         tdv_id: &LogicalTableDataVersionId,
         params: &ListQueryParams<Execution>,
     ) -> Result<Vec<Execution>, SqlError> {
-        self.list(params.apply_to(list_by_tdv_query(tdv_id))).await
+        self.list(params, list_by_tdv_query(tdv_id)).await
     }
 
     /// Executions that ran `fv_id`, as a head version or as a patch.
@@ -42,11 +45,21 @@ where
         fv_id: &FunctionVersionId,
         params: &ListQueryParams<Execution>,
     ) -> Result<Vec<Execution>, SqlError> {
-        self.list(params.apply_to(list_by_fv_query(fv_id))).await
+        self.list(params, list_by_fv_query(fv_id)).await
     }
 
-    async fn list(self, mut query: SelectStatement) -> Result<Vec<Execution>, SqlError> {
-        let daos: Vec<DaoOf> = query
+    async fn list(
+        self,
+        params: &ListQueryParams<Execution>,
+        mut base: SelectStatement,
+    ) -> Result<Vec<Execution>, SqlError> {
+        <<Execution as ListDto>::Tags as TagFilter<DaoOf, Unversioned, E>>::restrict(
+            &Unversioned,
+            &params.tags,
+            &mut base,
+        );
+        let daos: Vec<DaoOf> = params
+            .apply_to(base)
             .build_query_as()
             .fetch_all(self.executor)
             .await

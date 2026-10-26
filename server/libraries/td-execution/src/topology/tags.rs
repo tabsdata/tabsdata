@@ -7,7 +7,6 @@ use td_error::TdError;
 use td_objects::dxo::topology::TopologyTag;
 use td_objects::types::basic::{FunctionId, TableId, TagEntityType, TopologyTagKey, TopologyTags};
 
-/// The topology tags of a topology version's functions and tables.
 #[derive(Default)]
 pub(crate) struct TagIndex {
     functions: HashMap<FunctionId, TopologyTags>,
@@ -21,7 +20,7 @@ impl TagIndex {
         for row in rows {
             match row.entity_type {
                 TagEntityType::Function => {
-                    let function = FunctionId::try_from(&row.entity_id)?;
+                    let function = row.entity_id.id()?;
                     if row.key == TopologyTagKey::Parent {
                         tags.parents.insert(function, row.value.id()?);
                     }
@@ -31,7 +30,7 @@ impl TagIndex {
                         .insert(row.key, row.value);
                 }
                 TagEntityType::Table => {
-                    let table = TableId::try_from(&row.entity_id)?;
+                    let table = row.entity_id.id()?;
                     tags.tables
                         .entry(table)
                         .or_default()

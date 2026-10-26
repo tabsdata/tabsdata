@@ -12,7 +12,6 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::table::{Table, TableDBWithNames};
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
-use td_objects::types::tag_selector::TagSelector;
 use td_queries::Queries;
 
 #[service_factory]
@@ -28,7 +27,7 @@ async fn table_list(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let query_params = ListQueryParams::<Table, TagSelector>::try_from(&list_params)?;
+    let query_params = ListQueryParams::<Table>::try_from(&list_params)?;
     let rows = conn
         .scd2()
         .list(TableDBWithNames::user(), &query_params)
@@ -234,10 +233,10 @@ mod tests {
         };
         let parent = TagValue::of_id(owner_table.table_id);
         assert_eq!(
-            names(format!("tag.td.parent:eq:{}", *parent)).await?,
+            names(format!("table._parent:eq:{}", *parent)).await?,
             ["tt"]
         );
-        let roots = names("tag.td.parent:is:null".to_string()).await?;
+        let roots = names("table._parent:is:null".to_string()).await?;
         assert!(roots.contains(&"t0".to_string()) && !roots.contains(&"tt".to_string()));
         Ok(())
     }

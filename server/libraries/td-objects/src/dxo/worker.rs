@@ -143,9 +143,9 @@ impl WorkerDBWithNames {
 pub struct Worker {
     #[dto(list(pagination_by = "+", filter))]
     pub id: WorkerId,
-    #[dto(list(filter))]
+    #[dto(list(filter, tags))]
     pub project_id: ProjectId,
-    #[dto(list(filter, order_by))]
+    #[dto(list(filter, order_by, tags))]
     pub collection_id: CollectionId,
     #[dto(list(filter, filter_like, order_by))]
     pub execution_id: Option<ExecutionId>,

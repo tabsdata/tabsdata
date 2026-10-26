@@ -5,6 +5,7 @@
 use crate::dxo::crudl::ListParams;
 use crate::parse::IDENTIFIER_PATTERN;
 use crate::types::basic::LikeFilter;
+use crate::types::tag_selector::{TagSelector, is_tag_filter};
 use itertools::Itertools;
 use regex::Regex;
 use sea_query::{
@@ -270,13 +271,7 @@ where
     }
 }
 
-/// A listing that takes no `tag.` filters: the default of [`ListQueryParams`],
-/// to which such a filter is an unknown field.
-pub struct Untagged;
-
-/// A listing's parsed parameters. `Tags` is [`Untagged`] or, for a DTO over a
-/// tagged DAO, the listing's `tag.` filters.
-pub struct ListQueryParams<D, Tags = Untagged>
+pub struct ListQueryParams<D>
 where
     D: ListDto,
 {
@@ -285,10 +280,10 @@ where
     pub natural_order: Order<D>,
     pub order: Option<Order<D>>,
     pub pagination: Option<Pagination<D>>,
-    pub tags: Tags,
+    pub tags: TagSelector<<D::Dao as Dao>::Iden>,
 }
 
-impl<D, Tags> ListQueryParams<D, Tags>
+impl<D> ListQueryParams<D>
 where
     D: ListDto,
 {
@@ -296,6 +291,7 @@ where
     ///
     /// `base` should be a `SelectStatement` that already has the correct
     /// columns and FROM clause — this method appends WHERE, ORDER BY and LIMIT.
+    /// It leaves `tags` out: the read renders them at its grain first.
     pub fn apply_to(&self, mut base: SelectStatement) -> SelectStatement {
         base.cond_where(self.filter.clone());
 
@@ -509,9 +505,11 @@ impl<D: ListDto> TryFrom<&ListParams> for ListQueryParams<D> {
     type Error = TdError;
 
     fn try_from(value: &ListParams) -> Result<Self, Self::Error> {
-        let parsed: Vec<_> = value
-            .filter
-            .iter()
+        let (tags, columns): (Vec<&String>, Vec<&String>) =
+            value.filter.iter().partition(|f| is_tag_filter(f));
+        let tags = TagSelector::parse::<D, _>(&tags)?;
+        let parsed: Vec<_> = columns
+            .into_iter()
             .map(String::as_str)
             .map(parse_condition::<D>)
             .collect::<Result<_, _>>()?;
@@ -575,7 +573,7 @@ impl<D: ListDto> TryFrom<&ListParams> for ListQueryParams<D> {
             natural_order,
             order,
             pagination,
-            tags: Untagged,
+            tags,
         })
     }
 }

@@ -6,7 +6,6 @@ use crate::dxo::crudl::RequestContext;
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::Scd2ValidFrom;
-use crate::types::basic::TagEntityType;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionLabel, ConnectionKind, Connector,
     Decorator, Description, Enabled, FunctionId, FunctionIdName, FunctionName,
@@ -397,9 +396,9 @@ pub struct FunctionPatchRecord {
     pub id: FunctionVersionId,
     #[dto(list(filter, filter_like, order_by))]
     pub parent_function_version_id: Parent<FunctionVersionId>,
-    #[dto(list(filter, filter_like, order_by))]
+    #[dto(list(filter, filter_like, order_by, tags))]
     pub function_id: FunctionId,
-    #[dto(list(filter, filter_like, order_by))]
+    #[dto(list(filter, filter_like, order_by, tags))]
     pub collection_id: CollectionId,
     pub snippet: Snippet,
     pub bundle_id: BundleId,
@@ -464,7 +463,6 @@ impl FromDao for FunctionPatchRecord {
 #[dao(
     view = "functions__with_names",
     scd2,
-    tagged = TagEntityType::Function,
     project_scoped(unique_at(CollectionId, FunctionIdName))
 )]
 pub struct FunctionDBWithNames {
@@ -520,6 +518,7 @@ impl FunctionVersionDBWithNames {}
 pub struct FunctionVersion {
     #[dto(list(pagination_by = "+"))]
     pub id: FunctionVersionId,
+    #[dto(list(tags))]
     pub collection_id: CollectionId,
     #[dto(list(filter, filter_like, order_by))]
     pub name: FunctionName,
@@ -534,6 +533,7 @@ pub struct FunctionVersion {
     #[dto(list(filter, filter_like, order_by))]
     pub connection: Option<ConnectionKind>,
     pub runtime_values: FunctionRuntimeValues,
+    #[dto(list(tags))]
     pub function_id: FunctionId,
     pub base_path: Option<BasePath>,
     pub stage_id: StageId,
@@ -605,6 +605,7 @@ pub struct FunctionDBWithBundleBasePath {
 pub struct Function {
     #[dto(list(pagination_by = "+"))]
     pub id: FunctionVersionId,
+    #[dto(list(tags))]
     pub collection_id: CollectionId,
     #[dto(list(filter, filter_like, order_by))]
     pub name: FunctionName,
@@ -619,6 +620,7 @@ pub struct Function {
     #[dto(list(filter, filter_like, order_by))]
     pub connection: Option<ConnectionKind>,
     pub runtime_values: FunctionRuntimeValues,
+    #[dto(list(tags))]
     pub function_id: FunctionId,
     pub base_path: Option<BasePath>,
     pub stage_id: StageId,
@@ -635,6 +637,7 @@ pub struct Function {
 
     #[dto(list(filter, filter_like, order_by))]
     pub collection: CollectionLabel,
+    #[dto(list(tags))]
     pub group_id: GroupId,
     #[dto(list(filter, filter_like, order_by))]
     pub defined_by: UserLabel,

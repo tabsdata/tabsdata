@@ -12,7 +12,7 @@ use crate::dxo::scd2_interval::Scd2Interval;
 use crate::types::basic::{
     AtTime, BasePath, CollectionId, CollectionIdName, CollectionLabel, CollectionName,
     CollectionType, CollectionVersionId, ConnectionId, Description, GroupId, GroupLabel, GroupName,
-    ProjectId, ProjectLabel, Scd2ValidFrom, TagEntityType, UserId, UserLabel,
+    ProjectId, ProjectLabel, Scd2ValidFrom, UserId, UserLabel,
 };
 use crate::types::label::Label;
 use ta_objects::FromDao;
@@ -90,7 +90,6 @@ impl CollectionDB {
 #[dao(
     view = "collections__with_names",
     scd2,
-    tagged = TagEntityType::Collection,
     project_scoped(unique_at(CollectionName), unique_at(CollectionIdName))
 )]
 pub struct CollectionDBWithNames {
@@ -145,14 +144,15 @@ pub struct CollectionUpdate {
 pub struct CollectionRead {
     #[dto(list(pagination_by = "+"))]
     pub id: CollectionVersionId,
-    #[dto(list(filter))]
+    #[dto(list(filter, tags))]
     pub collection_id: CollectionId,
-    #[dto(list(filter))]
+    #[dto(list(filter, tags))]
     pub project_id: ProjectId,
     #[dto(list(filter, filter_like, order_by))]
     pub name: CollectionName,
     #[dto(list(filter, filter_like, order_by))]
     pub description: Description,
+    #[dto(list(tags))]
     pub group_id: GroupId,
     pub base_path: Option<BasePath>,
     pub effective_base_path: BasePath,

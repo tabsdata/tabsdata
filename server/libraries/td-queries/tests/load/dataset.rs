@@ -239,7 +239,7 @@ struct Unit {
 /// (publishes `src`) and a consumer (depends on `src` and consumes the
 /// producer's LTDV via an LFRI) — populating every table the chain queries
 /// scan.
-/// A `team` user tag on every open table and every collection, `a` on about
+/// A `team` user tag on every open table, collection and function, `a` on about
 /// half of them, so a tag selector has rows to match and rows to skip. A
 /// second pass leaves the tags of the rows the first one tagged.
 async fn tag_tables(db: &TdPool) {
@@ -261,6 +261,16 @@ async fn tag_tables(db: &TdPool) {
                 CASE WHEN hashtext(collection_id) % 2 = 0 THEN 'a' ELSE 'b' END, \
                 valid_from, defined_by_id, 'infinity' \
          FROM collections WHERE valid_to = 'infinity' \
+         ON CONFLICT DO NOTHING"
+            .to_string(),
+        "INSERT INTO tags (id, tag_id, project_id, entity_type, entity_id, kind, key, \
+                           value, valid_from, defined_by_id, valid_to) \
+         SELECT substr(md5('id' || function_id), 1, 26), \
+                substr(md5('tag' || function_id), 1, 26), \
+                project_id, 'F', function_id, 'U', 'team', \
+                CASE WHEN hashtext(function_id) % 2 = 0 THEN 'a' ELSE 'b' END, \
+                valid_from, defined_by_id, 'infinity' \
+         FROM functions WHERE valid_to = 'infinity' \
          ON CONFLICT DO NOTHING"
             .to_string(),
     ];

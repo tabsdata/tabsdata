@@ -31,6 +31,7 @@ use crate::daos::topology::Topology;
 use crate::generic::chunked::Chunked;
 use crate::generic::grain::{AllVersions, Current, Locked, Unversioned};
 use crate::generic::reader::Reader;
+use crate::generic::tagged::TagFilter;
 use crate::primitives::table::{
     delete_query, insert_or_ignore_query, insert_query, update_query, upsert_query,
 };
@@ -225,6 +226,7 @@ pub trait Queries: QueryExecutor {
         T: ListDto,
         T::Dao: UnversionedDao,
         Self: Serves<T::Dao>,
+        T::Tags: TagFilter<T::Dao, Unversioned, Self>,
     {
         unversioned(self).list(condition, params)
     }

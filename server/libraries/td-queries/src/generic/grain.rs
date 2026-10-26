@@ -9,7 +9,7 @@
 //! `Grain` impl, so a read of the wrong kind of relation does not compile.
 
 use crate::primitives::chunked::select_chunk;
-use crate::primitives::scd2::{last_version_cond, open_interval_cond, visible_at_cond};
+use crate::primitives::scd2::{last_version_cond, open_interval_cond, visible_at, visible_at_cond};
 use sea_query::{Condition, Expr, ExprTrait, IntoTableRef, LockType, Query, SelectStatement};
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
@@ -17,12 +17,17 @@ use ta_objects::{
     TimelineDao, UnversionedDao,
 };
 use td_database::access::DbScope;
+use td_objects::dxo::tag::TagDB;
 
 pub trait Grain<D: SelectDao> {
     /// AND-ed onto the caller's condition; `None` reads the rows as they are.
     fn condition(&self) -> Option<Condition>;
 
     fn shape(&self, _query: &mut SelectStatement) {}
+
+    fn tags_visible(&self) -> Condition {
+        Condition::all().add(open_interval_cond::<TagDB>())
+    }
 }
 
 /// The rows of an unversioned relation.
@@ -70,6 +75,14 @@ where
 {
     fn condition(&self) -> Option<Condition> {
         Some(visible_at_cond::<D, V>(self.0))
+    }
+
+    fn tags_visible(&self) -> Condition {
+        visible_at(
+            (TagDB::TABLE, TagDB::VALID_FROM),
+            (TagDB::TABLE, TagDB::VALID_TO),
+            self.0,
+        )
     }
 }
 

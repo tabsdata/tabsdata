@@ -47,7 +47,6 @@ use td_objects::types::basic::{
     LogicalFunctionRunInputId, LogicalFunctionRunStatus, PhysicalFunctionRunStatus, TagKey,
     VersionPos,
 };
-use td_objects::types::tag_selector::TagSelector;
 use td_objects::types::visible_projects::VisibleProjects;
 use td_queries::Queries;
 use td_queries::test_utils::{derive_metrics_facts, topology_write};
@@ -563,8 +562,8 @@ async fn time_chain_queries(
             .list::<Function>((), &fn_params)
             .await?
     );
-    let team_a = ListQueryParams::<Table, TagSelector>::try_from(&ListParams {
-        filter: vec!["tag.team:eq:a".to_string()],
+    let team_a = ListQueryParams::<Table>::try_from(&ListParams {
+        filter: vec!["table.team:eq:a".to_string()],
         ..ListParams::default()
     })?;
     let _ = timed!(
@@ -572,11 +571,10 @@ async fn time_chain_queries(
         "tagged::list",
         (db).scd2().list::<Table>((), &team_a).await?
     );
-    let team_a_collections =
-        ListQueryParams::<CollectionRead, TagSelector>::try_from(&ListParams {
-            filter: vec!["tag.team:eq:a".to_string()],
-            ..ListParams::default()
-        })?;
+    let team_a_collections = ListQueryParams::<CollectionRead>::try_from(&ListParams {
+        filter: vec!["collection.team:eq:a".to_string()],
+        ..ListParams::default()
+    })?;
     let _ = timed!(
         out,
         "latest::tagged::collections",

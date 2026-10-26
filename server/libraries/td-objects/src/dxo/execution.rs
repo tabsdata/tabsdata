@@ -137,8 +137,9 @@ pub struct Execution {
     pub id: ExecutionId,
     #[dto(list(filter, filter_like))]
     pub name: Option<ExecutionName>,
-    #[dto(list(filter, order_by))]
+    #[dto(list(filter, order_by, tags))]
     pub collection_id: CollectionId,
+    #[dto(list(tags))]
     pub function_id: FunctionId,
     #[dto(list(filter))]
     pub function_version_id: FunctionVersionId,
@@ -160,7 +161,7 @@ pub struct Execution {
     pub triggered_by: UserLabel,
     #[dto(list(filter, filter_like, order_by))]
     pub project: Option<ProjectLabel>,
-    #[dto(list(filter))]
+    #[dto(list(filter, tags))]
     pub project_id: ProjectId,
 
     #[dto(list(filter, order_by))]

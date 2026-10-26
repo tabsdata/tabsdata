@@ -36,16 +36,6 @@ pub trait Dao: Send + Sync {
     fn column_display_values(&self) -> Vec<(String, String)>;
 }
 
-/// Rows that are entities carrying tags, from `#[dao(tagged = ..)]`: reads of
-/// them can select by tags.
-pub trait TaggedDao: Dao {
-    /// The column holding the row's entity id.
-    const ENTITY: Self::Iden;
-
-    /// The tags' entity type of the rows.
-    fn entity_type() -> sea_query::Expr;
-}
-
 /// The DAO's column of domain type `T`. The macro bans duplicate field types,
 /// so the type identifies the column.
 #[diagnostic::on_unimplemented(
@@ -232,6 +222,16 @@ pub trait ListDto: Dto + Send + FromDao {
     fn filter_like_col(field: &str) -> Option<<Self::Dao as Dao>::Iden>;
 
     fn order_by_col(field: &str) -> Option<<Self::Dao as Dao>::Iden>;
+
+    /// [`SomeTags`](crate::SomeTags) when a field is marked `tags`, else
+    /// [`NoTags`](crate::NoTags).
+    type Tags;
+
+    /// Resolves the entity of an `<entity>.<key>` tag filter to the column
+    /// holding its id and the entity type its tag rows store.
+    fn tag_col(entity: &str) -> Option<(<Self::Dao as Dao>::Iden, sea_query::Expr)>;
+
+    fn tag_entities() -> &'static [&'static str];
 
     /// The natural pagination column and its default direction.
     fn pagination_col() -> (<Self::Dao as Dao>::Iden, sea_query::Order);

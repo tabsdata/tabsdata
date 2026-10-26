@@ -134,6 +134,10 @@ pub struct ListParams {
     #[validate(maximum = 1000)]
     #[serde(default = "default_page_len")]
     pub len: usize,
+    /// `<field>:<op>:<value>` on the fields marked `filter`, or
+    /// `<entity>.<key>:<op>:<value>` on the tags of the entities whose id
+    /// fields are marked `tags`: current ones, or as of the instant of an as-of
+    /// listing.
     #[serde(alias = "search", default)]
     pub filter: Vec<String>,
     #[serde(alias = "order-by", default)]

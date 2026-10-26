@@ -29,7 +29,7 @@ pub use generic::grain::{
     AllVersions, Current, Grain, LastVersion, Locked, OneRow, Until, Unversioned, VisibleAt,
 };
 pub use generic::reader::Reader;
-pub use generic::tagged::{SeesTags, TagFilter};
+pub use generic::tagged::{TagFilter, list_plan_sql};
 
 pub use logic_id::initialize_logical_ids;
 pub use queries::Queries;

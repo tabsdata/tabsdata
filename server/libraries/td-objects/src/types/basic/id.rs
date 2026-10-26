@@ -27,12 +27,7 @@ impl AccessTokenId {
 pub struct BundleId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-#[typed(
-    try_from = EntityId,
-    try_from = FromCollectionId,
-    try_from = ToCollectionId,
-    try_from = TagEntityId
-)]
+#[typed(try_from = EntityId, try_from = FromCollectionId, try_from = ToCollectionId)]
 pub struct CollectionId(Id);
 
 impl CollectionId {
@@ -49,7 +44,7 @@ impl CollectionId {
 pub struct ConnectionId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-#[typed(try_from = EntityId, try_from = TagEntityId)]
+#[typed(try_from = EntityId)]
 pub struct ProjectId(Id);
 
 impl ProjectKey for ProjectId {}
@@ -91,7 +86,6 @@ pub struct ExecutionId(IdL<EP>);
 pub struct FromCollectionId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-#[typed(try_from = TagEntityId)]
 pub struct FunctionId(Id);
 
 /// Identity of a function's stage/checkpoint directory. Stable across function
@@ -104,7 +98,6 @@ pub struct StageId(Id);
 pub struct FunctionVersionId(IdL<FV>);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-#[typed(try_from = TagEntityId)]
 pub struct GroupId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
@@ -152,7 +145,6 @@ impl RoleId {
 }
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-#[typed(try_from = TagEntityId)]
 pub struct TableId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
