@@ -26,7 +26,7 @@ use sea_query::{ColumnDef, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, 
 
 use crate::schema::render::{render_query, render_schema, update_db_version};
 use crate::schema::sql::id_column;
-use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
+use crate::schema::sql::{Changed, Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
 use crate::schema::version::SchemaDelta;
 
 const DERIVATION_WORK_MEM: &str = "64MB";
@@ -198,6 +198,16 @@ fn execution_rollup() -> RollupDef {
         fallback: "F",
         finished: TERMINALS,
     }
+}
+
+/// The v13 roll-up of the parents of the attempts whose ids `table` holds,
+/// transactions first: for a later rung that rewrites attempts.
+pub fn status_rollup_of_attempts_in(table: &str) -> Vec<String> {
+    let ids = || [Expr::cust(format!("SELECT id FROM {table}"))];
+    vec![
+        render_query(transaction_rollup().recompute_for(Changed::PhysicalRuns, ids())),
+        render_query(execution_rollup().recompute_for(Changed::PhysicalRuns, ids())),
+    ]
 }
 
 /// The v13 roll-up of the parents, transactions first. Exposed so the DAO
