@@ -4,6 +4,7 @@
 
 use crate::function::engine::diff::{Changes, TableTransition};
 use crate::function::on_top::ensure_flips_on_top;
+use crate::tag::close_tags_of;
 use itertools::Itertools;
 use std::collections::HashMap;
 use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
@@ -13,9 +14,12 @@ use td_objects::and;
 use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::TableDB;
+use td_objects::dxo::tag::TopologyTagDB;
 use td_objects::dxo::topology::TopologyInstant;
 use td_objects::dxo::trigger::{TriggerDB, TriggerInsertDB};
-use td_objects::types::basic::{FunctionId, TableId, TableStatus, TriggerStatus, TriggerVersionId};
+use td_objects::types::basic::{
+    FunctionId, TableId, TableStatus, TagEntityId, TagEntityType, TriggerStatus, TriggerVersionId,
+};
 use td_queries::Queries;
 
 /// Land `changes`. Tables first, so the trigger flips their transitions imply
@@ -32,6 +36,12 @@ pub async fn apply(
         .chunked()
         .close::<TableDB>(&changes.close_tables, (), topology_at)
         .await?;
+    let closed_tables = changes
+        .close_tables
+        .iter()
+        .map(|id| TagEntityId::try_from(*id))
+        .collect::<Result<Vec<_>, _>>()?;
+    close_tags_of(conn, TagEntityType::Table, &closed_tables, topology_at).await?;
     conn.scd2()
         .chunked()
         .open(&changes.tables, topology_at)
@@ -53,6 +63,14 @@ pub async fn apply(
     conn.scd2()
         .chunked()
         .close::<TriggerDB>(&changes.close_triggers, (), topology_at)
+        .await?;
+    conn.scd2()
+        .chunked()
+        .close::<TopologyTagDB>(&changes.close_tags, (), topology_at)
+        .await?;
+    conn.scd2()
+        .chunked()
+        .open(&changes.tags, topology_at)
         .await?;
     Ok(())
 }

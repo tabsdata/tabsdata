@@ -201,7 +201,6 @@ mod tests {
 
         let v2 = FunctionInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_id: None,
             bundle_id: bundle_b_id,
             ..v1.base.clone()
         };

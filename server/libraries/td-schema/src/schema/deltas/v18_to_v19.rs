@@ -3,12 +3,15 @@
 //
 
 //! v18 → v19: `tags`, the versioned key/value annotations of projects,
-//! groups, collections, functions and tables.
+//! groups, collections, functions and tables. A function's or table's parent
+//! moves from its own column to a `_parent` topology tag over the same
+//! intervals.
 
 use sea_query::{ColumnDef, Iden, Table};
 
 use crate::schema::render::{render_schema, update_db_version};
 use crate::schema::sql::id_column;
+use crate::schema::sql::mint::{DROP_MINT_ID, MINT_ID};
 use crate::schema::version::SchemaDelta;
 
 const TENANT_PREDICATE: &str = "project_id = current_setting('app.project_id', true)";
@@ -31,6 +34,29 @@ enum Tags {
     ValidTo,
 }
 
+/// One tag per run of contiguous row versions naming the same parent, as the
+/// live writer opens a new version only when the parent changes and a new tag
+/// once the parent was dropped.
+fn backfill_parents(table: &str, entity_type: &str, entity_id: &str, parent: &str) -> String {
+    format!(
+        "INSERT INTO tags (id, tag_id, project_id, entity_type, entity_id, kind, key, value, \
+                           valid_from, defined_by_id, valid_to) \
+         SELECT td_mint_id(min(i.valid_from)), td_mint_id(min(i.valid_from)), i.project_id, '{entity_type}', \
+                i.{entity_id}, 'T', '_parent', i.{parent}, min(i.valid_from), \
+                (array_agg(i.defined_by_id ORDER BY i.valid_from, i.id))[1], max(i.valid_to) \
+         FROM (SELECT r.*, sum(r.starts) OVER (PARTITION BY r.{entity_id} \
+                                               ORDER BY r.valid_from, r.id) AS run \
+               FROM (SELECT v.id, v.project_id, v.{entity_id}, v.{parent}, v.valid_from, \
+                            v.valid_to, v.defined_by_id, \
+                            CASE WHEN lag(v.{parent}) OVER w = v.{parent} \
+                                  AND lag(v.valid_to) OVER w = v.valid_from \
+                                 THEN 0 ELSE 1 END AS starts \
+                     FROM {table} v WHERE v.{parent} IS NOT NULL \
+                     WINDOW w AS (PARTITION BY v.{entity_id} ORDER BY v.valid_from, v.id)) r) i \
+         GROUP BY i.{entity_id}, i.run, i.project_id, i.{parent}"
+    )
+}
+
 fn policies(table: &str) -> Vec<String> {
     vec![
         format!(
@@ -51,7 +77,7 @@ impl SchemaDelta for Migration {
     const TO_VERSION: usize = 19;
 
     fn retired() -> Vec<String> {
-        vec![]
+        vec!["DROP INDEX IF EXISTS \"functions___parent_function_id___current_idx\"".to_string()]
     }
 
     fn up() -> Vec<String> {
@@ -71,7 +97,15 @@ impl SchemaDelta for Migration {
             .to_owned();
         let mut out = vec![render_schema(tags)];
         out.extend(policies("tags"));
-        out.push(update_db_version(Self::TO_VERSION));
+        out.extend([
+            MINT_ID.to_string(),
+            backfill_parents("functions", "F", "function_id", "parent_function_id"),
+            backfill_parents("tables", "T", "table_id", "parent_table_id"),
+            DROP_MINT_ID.to_string(),
+            "ALTER TABLE functions DROP COLUMN parent_function_id".to_string(),
+            "ALTER TABLE tables DROP COLUMN parent_table_id".to_string(),
+            update_db_version(Self::TO_VERSION),
+        ]);
         out
     }
 }

@@ -85,6 +85,7 @@ mod tests {
     use crate::function::children::ChildFunctionError;
     use crate::function::register::RegisterFunctionError;
     use crate::function::services::tests::assert_register;
+    use crate::tag::parent::test_support::{function_parent, table_parent};
     use std::collections::HashMap;
     use std::str::FromStr;
     use td_database::pool::TdPool;
@@ -103,8 +104,8 @@ mod tests {
     use td_objects::types::basic::{
         AccessTokenId, BasePath, BundleStatus, CollectionType, ConnectionKind, Decorator, Enabled,
         FunctionIdName, FunctionName, FunctionRuntimeValues, FunctionStatus, FunctionType,
-        GroupName, Parent, ProjectId, SNIPPET_MAX_LEN, TableName, TableStatus, TableType,
-        TriggerStatus, UserId, WorkerStatus, WorkerType,
+        GroupName, ProjectId, SNIPPET_MAX_LEN, TableName, TableStatus, TableType, TriggerStatus,
+        UserId, WorkerStatus, WorkerType,
     };
     use td_objects::types::basic::{
         BundleId, CollectionIdName, CollectionName, ReuseFrozen, TableNameDto, WorkerConfig,
@@ -2061,8 +2062,8 @@ mod tests {
 
         let child = live_by_name(&db, "child_fn").await?.expect("registered");
         assert_eq!(
-            child.parent_function_id,
-            Some(Parent::from(parent.function_id))
+            function_parent(&db, &child.function_id).await?,
+            Some(parent.function_id)
         );
         Ok(())
     }
@@ -2169,9 +2170,12 @@ mod tests {
         create_collection(&db, p.project_id, "parent_stable", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
         let owner = register_ok(&db, p.project_id, "parent_stable", create).await?;
-        let expected = Some(Parent::from(owner.function_id));
+        let expected = Some(owner.function_id);
         let before = live_by_name(&db, "a").await?.expect("child registered");
-        assert_eq!(before.parent_function_id, expected);
+        assert_eq!(
+            function_parent(&db, &before.function_id).await?,
+            expected
+        );
 
         let mut update = owner_update(Some(vec![child("a")?]));
         update.name = Some("owner_renamed".try_into()?);
@@ -2181,7 +2185,10 @@ mod tests {
             .await?
             .expect("child still registered");
         assert_ne!(after.id, before.id);
-        assert_eq!(after.parent_function_id, expected);
+        assert_eq!(
+            function_parent(&db, &after.function_id).await?,
+            expected
+        );
         Ok(())
     }
 
@@ -2323,8 +2330,8 @@ mod tests {
         let child = live_by_name(&db, "m").await?.expect("child registered");
         assert_eq!(child.function_type, FunctionType::DQSummaryTrends);
         assert_eq!(
-            child.parent_function_id,
-            Some(Parent::from(owner.function_id))
+            function_parent(&db, &child.function_id).await?,
+            Some(owner.function_id)
         );
 
         // The trend table points back at the owner table the summary was taken
@@ -2332,8 +2339,8 @@ mod tests {
         let parent_table = active_table(&db, OWNER_TABLE).await?;
         let child_table = active_table(&db, "m_table").await?;
         assert_eq!(
-            child_table.parent_table_id,
-            Some(Parent::from(parent_table.table_id))
+            table_parent(&db, &child_table.table_id).await?,
+            Some(parent_table.table_id)
         );
         Ok(())
     }
@@ -2410,8 +2417,8 @@ mod tests {
         let other = active_table(&db, "other").await?;
         let child_table = active_table(&db, "a_table").await?;
         assert_eq!(
-            child_table.parent_table_id,
-            Some(Parent::from(other.table_id))
+            table_parent(&db, &child_table.table_id).await?,
+            Some(other.table_id)
         );
         Ok(())
     }
@@ -2452,8 +2459,11 @@ mod tests {
 
         let owned = active_table(&db, "owned").await?;
         let summary = active_table(&db, SUMMARY_TABLE).await?;
-        assert_eq!(summary.parent_table_id, Some(Parent::from(owned.table_id)));
-        assert_eq!(owned.parent_table_id, None);
+        assert_eq!(
+            table_parent(&db, &summary.table_id).await?,
+            Some(owned.table_id)
+        );
+        assert_eq!(table_parent(&db, &owned.table_id).await?, None);
         Ok(())
     }
 
@@ -2475,7 +2485,10 @@ mod tests {
         let other = active_table(&db, "other").await?;
         let summary = active_table(&db, SUMMARY_TABLE).await?;
         assert_eq!(summary.table_id, before.table_id);
-        assert_eq!(summary.parent_table_id, Some(Parent::from(other.table_id)));
+        assert_eq!(
+            table_parent(&db, &summary.table_id).await?,
+            Some(other.table_id)
+        );
         Ok(())
     }
 
@@ -2492,7 +2505,7 @@ mod tests {
         register_ok(&db, p.project_id, "dqs_none", create).await?;
 
         let summary = active_table(&db, SUMMARY_TABLE).await?;
-        assert_eq!(summary.parent_table_id, None);
+        assert_eq!(table_parent(&db, &summary.table_id).await?, None);
         Ok(())
     }
 
@@ -2530,7 +2543,7 @@ mod tests {
         register_ok(&db, p.project_id, "mgd_unmapped", create).await?;
 
         let child_table = active_table(&db, "a_table").await?;
-        assert_eq!(child_table.parent_table_id, None);
+        assert_eq!(table_parent(&db, &child_table.table_id).await?, None);
         Ok(())
     }
 

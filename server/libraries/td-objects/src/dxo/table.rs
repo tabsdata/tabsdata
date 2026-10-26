@@ -6,7 +6,7 @@ use crate::dxo::crudl::RequestContext;
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionLabel, FunctionId, FunctionName, FunctionVersionId, Parent,
+    AtTime, CollectionId, CollectionLabel, FunctionId, FunctionName, FunctionVersionId,
     Partitioned, Private, ProjectId, SampleLen, SampleOffset, SchemaFieldName, SchemaFieldType,
     Sql, System, TableFunctionParamPos, TableId, TableIdName, TableName, TableStatus, TableType,
     TableVersionId, UncommittedStatus, UserId, UserLabel,
@@ -33,7 +33,6 @@ pub struct TableInsertDB {
     pub defined_by_id: UserId,
     pub status: TableStatus,
     pub table_type: TableType,
-    pub parent_table_id: Option<Parent<TableId>>,
 }
 
 #[ta_objects::Dao]
@@ -108,8 +107,6 @@ pub struct Table {
     pub status: TableStatus,
     #[dto(list(filter, order_by))]
     pub table_type: TableType,
-    #[dto(list(filter, order_by))]
-    pub parent_table_id: Option<Parent<TableId>>,
     pub system: System,
     pub defined_by: UserLabel,
     #[dto(list(filter, filter_like, order_by))]
@@ -139,7 +136,6 @@ impl FromDao for Table {
                             defined_by_id,
                             status,
                             table_type,
-                            parent_table_id,
                             ..
                         },
                     interval,
@@ -165,7 +161,6 @@ impl FromDao for Table {
             defined_by_id,
             status,
             table_type,
-            parent_table_id,
             system,
             defined_by,
             collection,

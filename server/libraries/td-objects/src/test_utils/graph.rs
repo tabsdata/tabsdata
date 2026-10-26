@@ -185,7 +185,6 @@ pub fn function(function: &FunctionName) -> TopologyFunction {
         function_id: *FUNCTION_IDS.get(function).unwrap(),
         collection_id: *COLLECTION_ID,
         name: function.clone(),
-        parent_function_id: None,
         status: FunctionStatus::Active,
         enabled: Enabled::TRUE,
         interval: interval(),

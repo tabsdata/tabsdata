@@ -5,6 +5,8 @@
 use crate::function::engine::dependants_of_tables;
 use crate::function::freeze::freeze_functions;
 use crate::function::on_top::ensure_freezes_on_top;
+use crate::tag::close_tags_of;
+use crate::tag::parent::child_tables;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -18,7 +20,9 @@ use td_objects::dxo::dependency::DependencyDB;
 use td_objects::dxo::table::TableParam;
 use td_objects::dxo::table::{TableDB, TableDBWithNames};
 use td_objects::dxo::trigger::TriggerDB;
-use td_objects::types::basic::{CollectionName, Parent, TableName, TableStatus};
+use td_objects::types::basic::{
+    CollectionName, TableName, TableStatus, TagEntityId, TagEntityType,
+};
 use td_queries::Queries;
 
 #[td_error]
@@ -64,10 +68,11 @@ async fn table_delete(
         }
         let table_id = table.table_id;
 
-        let parent = Some(Parent::from(table_id));
+        let children = child_tables(conn, &table_id).await?;
         let children: Vec<TableDB> = conn
             .scd2()
-            .fetch_all(and!(&parent, &collection.collection_id))
+            .chunked()
+            .fetch_all(&children, &collection.collection_id)
             .await?;
         for child in &children {
             if !matches!(child.status, TableStatus::Frozen) {
@@ -95,6 +100,11 @@ async fn table_delete(
                 .await?;
             conn.scd2().close::<TableDB>(table_id, topology_at).await?;
         }
+        let entity_ids = table_ids
+            .iter()
+            .map(|id| TagEntityId::try_from(*id))
+            .collect::<Result<Vec<_>, _>>()?;
+        close_tags_of(conn, TagEntityType::Table, &entity_ids, topology_at).await?;
         trx.commit().await
     })
     .await

@@ -49,7 +49,7 @@ async fn enable_function(
             .fetch_one(and!(&collection_id, &function_param.function))
             .await?;
 
-        ensure_user_managed(&current)?;
+        ensure_user_managed(conn, &current).await?;
 
         let previous: FunctionDB = conn.timeline().fetch_one(&current.id).await?;
         let function = previous.re_registered(&ctx, enable.enabled);
@@ -96,6 +96,7 @@ mod tests {
     use td_objects::dxo::dependency::DependencyDB;
     use td_objects::dxo::function::{ChildFunction, FunctionRegister};
     use td_objects::dxo::table::TableDB;
+    use td_objects::dxo::tag::TopologyTagDB;
     use td_objects::dxo::trigger::TriggerDB;
     use td_objects::dxo::worker::WorkerDB;
     use td_objects::types::basic::TableType;
@@ -105,6 +106,7 @@ mod tests {
     use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
     use td_objects::types::basic::{BundleId, CollectionName, ReuseFrozen};
     use td_objects::types::basic::{FunctionId, FunctionName, FunctionType, ProjectId};
+    use td_objects::types::basic::{TagEntityType, TagValue, TopologyTagKey};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -500,10 +502,19 @@ mod tests {
     }
 
     async fn live_child(db: &TdPool, owner: &FunctionId) -> Result<FunctionDB, TdError> {
-        let rows: Vec<FunctionDB> = db
+        let children: Vec<FunctionId> = db
             .scd2()
-            .fetch_all::<FunctionDB>(FunctionDB::children_of(owner))
-            .await?;
+            .fetch_all::<TopologyTagDB>(and!(
+                &TagEntityType::Function,
+                &TopologyTagKey::Parent,
+                &TagValue::of_id(*owner),
+                TopologyTagDB::topology(),
+            ))
+            .await?
+            .iter()
+            .map(|tag| FunctionId::try_from(&tag.base.entity_id))
+            .collect::<Result<_, _>>()?;
+        let rows: Vec<FunctionDB> = db.scd2().chunked().fetch_all(&children, ()).await?;
         assert_eq!(rows.len(), 1);
         Ok(rows.into_iter().next().unwrap())
     }

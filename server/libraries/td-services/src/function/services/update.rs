@@ -54,7 +54,7 @@ async fn update_function(
             .fetch_one(and!(&collection_id, &function_param.function))
             .await?;
 
-        ensure_user_managed(&current)?;
+        ensure_user_managed(conn, &current).await?;
         let function = update_one(
             conn,
             &ctx,

@@ -608,30 +608,24 @@ def test_disabling_an_owner_without_a_trend_function_is_unaffected(
 
 
 @tabsdata_instance(consumer="tdtest")
-def test_a_trend_data_version_reports_the_parent_table(
+def test_a_trend_with_data_versions_keeps_its_parent_table(
     instance_tdtest: Instance,
     collection_factory: CollectionFactory,
 ) -> None:
-    # The link is on the data-version listing too, so a reader of the trend's
-    # history can tell which table it describes without a second lookup.
+    # Running the owner writes the trend's history without moving its parent,
+    # so a reader of that history can still tell which table it describes.
     collection = source_collection(collection_factory)
     owner = register(collection, publisher.pub_with_default_trend)
 
     execution = owner.trigger()
     assert wait_for_completion(execution) in EXECUTION_SUCCESSFUL_FINAL_STATUSES
 
-    published = table_id(collection, publisher.PUBLISHED_TABLE)
-    versions = collection.get_table(publisher.DEFAULT_TREND_TABLE).list_dataversions()
-    assert versions
-    assert [version.kwargs.get("parent_table_id") for version in versions] == [
-        published
-    ] * len(versions)
-
-    own_versions = collection.get_table(publisher.PUBLISHED_TABLE).list_dataversions()
-    assert own_versions
-    assert all(
-        version.kwargs.get("parent_table_id") is None for version in own_versions
+    assert collection.get_table(publisher.DEFAULT_TREND_TABLE).list_dataversions()
+    assert collection.get_table(publisher.PUBLISHED_TABLE).list_dataversions()
+    assert parent_table_id(collection, publisher.DEFAULT_TREND_TABLE) == table_id(
+        collection, publisher.PUBLISHED_TABLE
     )
+    assert parent_table_id(collection, publisher.PUBLISHED_TABLE) is None
 
 
 @tabsdata_instance(consumer="tdtest")

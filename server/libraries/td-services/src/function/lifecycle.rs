@@ -9,6 +9,8 @@ use crate::function::engine::{
 use crate::function::register::ensure_connection_kind_matches;
 use crate::function::services::update::assert_function_name_not_exists;
 use crate::function::workers::register_workers;
+use crate::tag::close_tags_of;
+use crate::tag::parent::stamp_function_parent;
 use std::collections::HashMap;
 use td_bridge::BridgeProviderHandle;
 use td_database::access::{InProject, WriteMode};
@@ -23,7 +25,7 @@ use td_objects::dxo::function::{
 };
 use td_objects::dxo::topology::TopologyInstant;
 use td_objects::types::basic::{
-    FunctionId, FunctionType, Parent, TableNameDto, WorkerConfig, WorkerTypeDto,
+    FunctionId, FunctionType, TableNameDto, TagEntityId, TagEntityType, WorkerConfig, WorkerTypeDto,
 };
 use td_queries::Queries;
 
@@ -38,11 +40,14 @@ pub struct ChildOf<'a> {
     pub parent_tables: HashMap<TableNameDto, TableNameDto>,
 }
 
-impl ChildOf<'_> {
-    fn stamp(self, function: &mut FunctionInsertDB) -> HashMap<TableNameDto, TableNameDto> {
+impl<'a> ChildOf<'a> {
+    /// The function's type; its parent is tagged once the version is open.
+    fn stamp(
+        self,
+        function: &mut FunctionInsertDB,
+    ) -> (&'a FunctionId, HashMap<TableNameDto, TableNameDto>) {
         function.function_type = self.function_type;
-        function.parent_function_id = Some(Parent::from(*self.parent));
-        self.parent_tables
+        (self.parent, self.parent_tables)
     }
 }
 
@@ -66,9 +71,14 @@ pub async fn register_one(
         collection.collection_id,
         collection.effective_base_path.clone(),
     )?;
-    let parent_tables = child_of.map(|child_of| child_of.stamp(&mut function));
-    ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
+    let (parent, parent_tables) = child_of
+        .map(|child_of| child_of.stamp(&mut function))
+        .unzip();
+    ensure_connection_kind_matches(conn, bridge, &function, parent, &collection.base).await?;
     conn.scd2().open(&function, topology_at).await?;
+    if let Some(parent) = parent {
+        stamp_function_parent(conn, ctx, &function.function_id, parent, topology_at).await?;
+    }
     claim_bundle(conn, &function).await?;
 
     let state = FunctionState::empty();
@@ -112,9 +122,14 @@ pub async fn update_one(
 
     let previous: FunctionDB = conn.timeline().fetch_one(&current.id).await?;
     let mut function = update.to_dao(&previous, ctx)?;
-    let parent_tables = child_of.map(|child_of| child_of.stamp(&mut function));
-    ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
+    let (parent, parent_tables) = child_of
+        .map(|child_of| child_of.stamp(&mut function))
+        .unzip();
+    ensure_connection_kind_matches(conn, bridge, &function, parent, &collection.base).await?;
     conn.scd2().open(&function, topology_at).await?;
+    if let Some(parent) = parent {
+        stamp_function_parent(conn, ctx, &function.function_id, parent, topology_at).await?;
+    }
     claim_bundle(conn, &function).await?;
 
     let previous_version_id = Some(current.id.clone());
@@ -164,6 +179,13 @@ pub async fn delete_one(
         &previous_version_id,
         &empty_workers,
         topology_at.into(),
+    )
+    .await?;
+    close_tags_of(
+        conn,
+        TagEntityType::Function,
+        &[TagEntityId::try_from(function.function_id)?],
+        topology_at,
     )
     .await?;
     conn.scd2()

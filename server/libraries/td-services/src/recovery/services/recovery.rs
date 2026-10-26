@@ -550,7 +550,6 @@ mod tests {
     ) -> Result<(), TdError> {
         let newer = FunctionInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_id: None,
             defined_by_id: UserId::admin(),
             ..function.base.clone()
         };

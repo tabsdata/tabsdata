@@ -126,7 +126,6 @@ impl FunctionRegister {
     ) -> Result<FunctionInsertDB, TdError> {
         Ok(FunctionInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_id: None,
             collection_id,
             name: self.name.clone(),
             description: self.description.clone(),
@@ -281,7 +280,6 @@ impl FunctionPatch {
 pub struct FunctionInsertDB {
     #[dao(pk)]
     pub id: FunctionVersionId,
-    pub parent_function_id: Option<Parent<FunctionId>>,
     pub collection_id: CollectionId,
     pub name: FunctionName,
     pub description: Description,
@@ -323,10 +321,6 @@ pub struct FunctionDB {
 impl FunctionDB {
     pub fn active() -> impl SqlCondition<Self> {
         FunctionStatus::Active
-    }
-
-    pub fn children_of(parent: &FunctionId) -> impl SqlCondition<Self> {
-        Some(Parent::from(*parent))
     }
 
     pub fn frozen_version(&self, ctx: &RequestContext) -> FunctionInsertDB {
@@ -510,7 +504,6 @@ pub struct FunctionVersionDBWithNames {
     pub status: FunctionStatus,
     pub enabled: Enabled,
     pub function_type: FunctionType,
-    pub parent_function_id: Option<Parent<FunctionId>>,
     pub collection: CollectionLabel,
     pub defined_by: UserLabel,
     pub patch_of: Option<FunctionVersionId>,
@@ -534,8 +527,6 @@ pub struct FunctionVersion {
     pub decorator: Decorator,
     #[dto(list(filter, order_by))]
     pub function_type: FunctionType,
-    #[dto(list(filter, order_by))]
-    pub parent_function_id: Option<Parent<FunctionId>>,
     #[dto(list(filter, filter_like, order_by))]
     pub connector: Option<Connector>,
     #[dto(list(filter, filter_like, order_by))]
@@ -574,7 +565,6 @@ impl FromDao for FunctionVersion {
             description: dao.description,
             decorator: dao.decorator,
             function_type: dao.function_type,
-            parent_function_id: dao.parent_function_id,
             connector: dao.connector,
             connection: dao.connection,
             runtime_values: dao.runtime_values,
@@ -622,8 +612,6 @@ pub struct Function {
     pub decorator: Decorator,
     #[dto(list(filter, order_by))]
     pub function_type: FunctionType,
-    #[dto(list(filter, order_by))]
-    pub parent_function_id: Option<Parent<FunctionId>>,
     #[dto(list(filter, filter_like, order_by))]
     pub connector: Option<Connector>,
     #[dto(list(filter, filter_like, order_by))]
@@ -665,7 +653,6 @@ impl FromDao for Function {
                             description,
                             decorator,
                             function_type,
-                            parent_function_id,
                             connector,
                             connection,
                             runtime_values,
@@ -696,7 +683,6 @@ impl FromDao for Function {
             description,
             decorator,
             function_type,
-            parent_function_id,
             connector,
             connection,
             runtime_values,

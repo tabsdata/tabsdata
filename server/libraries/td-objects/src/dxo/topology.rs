@@ -7,9 +7,10 @@
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::types::basic::{
     AtTime, CollectionId, DependencyId, DependencyPos, DependencyVersionId, Enabled, FunctionId,
-    FunctionName, FunctionStatus, FunctionVersionId, OfTable, Parent, Private, ProjectId,
-    Scd2ValidFrom, Scd2ValidTo, System, TableFunctionParamPos, TableId, TableName, TableStatus,
-    TableVersionId, TopologyVersionId, TriggerBy, TriggerId, TriggerStatus, TriggerVersionId,
+    FunctionName, FunctionStatus, FunctionVersionId, OfTable, Private, ProjectId, Scd2ValidFrom,
+    Scd2ValidTo, System, TableFunctionParamPos, TableId, TableName, TableStatus, TableVersionId,
+    TagEntityId, TagEntityType, TagId, TagKind, TagValue, TagVersionId, TopologyTagKey,
+    TopologyVersionId, TriggerBy, TriggerId, TriggerStatus, TriggerVersionId,
 };
 use crate::types::composed::TableVersions;
 use ta_objects::FromDao;
@@ -49,7 +50,6 @@ pub struct TopologyFunction {
     pub function_id: FunctionId,
     pub collection_id: CollectionId,
     pub name: FunctionName,
-    pub parent_function_id: Option<Parent<FunctionId>>,
     pub status: FunctionStatus,
     pub enabled: Enabled,
     #[dao(flatten)]
@@ -164,4 +164,20 @@ impl FromDao for ProjectTopologyVersion {
 pub struct TopologyReadParam {
     pub topology_version: Option<TopologyVersionId>,
     pub at: Option<AtTime>,
+}
+
+#[ta_objects::Dao]
+#[dao(table = "tags", ops(select), scd2, project_scoped)]
+pub struct TopologyTag {
+    #[dao(pk)]
+    pub id: TagVersionId,
+    #[dao(partition_by)]
+    pub tag_id: TagId,
+    pub entity_type: TagEntityType,
+    pub entity_id: TagEntityId,
+    pub kind: TagKind,
+    pub key: TopologyTagKey,
+    pub value: TagValue,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
 }

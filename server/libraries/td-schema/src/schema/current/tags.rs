@@ -2,7 +2,9 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use sea_query::{ColumnDef, ConditionalStatement, Iden, Index, IndexCreateStatement, IntoIden, Table, TableCreateStatement};
+use sea_query::{
+    ColumnDef, ConditionalStatement, Expr, ExprTrait, Iden, Index, IndexCreateStatement, IntoIden, Table, TableCreateStatement,
+};
 
 use crate::schema::Entity;
 use crate::schema::source::Derived;
@@ -51,6 +53,15 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
+            // The as-of topology load: the project's topology tags open at an
+            // instant, without walking user tags or closed history.
+            Index::create()
+                .name("tags___project_id__valid_to___topology_idx")
+                .table(Tags::Table)
+                .col(Tags::ProjectId)
+                .col(Tags::ValidTo)
+                .and_where(Expr::col(Tags::Kind).eq("T"))
+                .to_owned(),
             Index::create()
                 .name("tags___tag_id__valid_from__id___idx")
                 .table(Tags::Table)
@@ -72,6 +83,14 @@ impl Entity for Defs {
                 .col(Tags::EntityId)
                 .col(Tags::Key)
                 .unique()
+                .and_where(open_interval(Tags::ValidTo))
+                .to_owned(),
+            Index::create()
+                .name("tags___key__value__entity_type___current_idx")
+                .table(Tags::Table)
+                .col(Tags::Key)
+                .col(Tags::Value)
+                .col(Tags::EntityType)
                 .and_where(open_interval(Tags::ValidTo))
                 .to_owned(),
         ]

@@ -17,6 +17,7 @@ use crate::function::engine::dependants_of_tables;
 use crate::function::freeze::freeze_functions;
 use crate::function::on_top::ensure_freezes_on_top;
 use crate::function::workers::stop_triggers;
+use crate::tag::close_tags_of;
 use ta_services::factory::service_factory;
 use ta_services::service::Ctx;
 use td_authz::AuthzContext;
@@ -34,7 +35,7 @@ use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::TriggerDB;
 use td_objects::dxo::worker::WorkerDB;
-use td_objects::types::basic::TableId;
+use td_objects::types::basic::{TableId, TagEntityId, TagEntityType};
 use td_objects::types::basic::{CollectionId, WorkerType};
 use td_objects::{and, or};
 use td_queries::Queries;
@@ -104,6 +105,16 @@ async fn delete_collection(
             conn.scd2()
                 .close::<FunctionDB>(&collection.collection_id, topology_at)
                 .await?;
+            let table_tags = table_ids
+                .iter()
+                .map(|id| TagEntityId::try_from(*id))
+                .collect::<Result<Vec<_>, _>>()?;
+            close_tags_of(conn, TagEntityType::Table, &table_tags, topology_at).await?;
+            let function_tags = functions
+                .iter()
+                .map(|f| TagEntityId::try_from(f.base.function_id))
+                .collect::<Result<Vec<_>, _>>()?;
+            close_tags_of(conn, TagEntityType::Function, &function_tags, topology_at).await?;
         }
         conn.scd2()
             .close::<CollectionDB>(&collection.collection_id, at)
@@ -141,6 +152,7 @@ pub async fn update_deleted_workers<S: SeesProjectRows, M: WriteMode>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tag::parent::test_support::function_parent;
     use crate::Services;
     use crate::collection::services::connection::test_support::{
         bridge, create_collection, create_request, linked_connection, seed_dev_user,
@@ -285,6 +297,57 @@ mod tests {
             .fetch(&p.project_id, &connection.id)
             .await
             .expect_err("a write after the delete must be dropped");
+    }
+
+    #[td_test::test(db)]
+    async fn test_delete_closes_the_parent_tags_of_its_functions(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.base.project_id)
+            .seed()
+            .collection(&CollectionName::try_from("c")?, &UserId::admin())
+            .await?;
+        let register = |name: &str| -> Result<FunctionRegister, TdError> {
+            Ok(FunctionRegister {
+                child_functions: None,
+                name: name.try_into()?,
+                description: "description".try_into()?,
+                bundle_id: BundleId::default(),
+                snippet: "snippet".try_into()?,
+                decorator: Decorator::Publisher,
+                connector: None,
+                connection: None,
+                base_path: None,
+                dependencies: None,
+                triggers: None,
+                tables: None,
+                table_types: None,
+                parent_tables: None,
+                runtime_values: FunctionRuntimeValues::default(),
+                reuse_frozen_tables: ReuseFrozen::FALSE,
+                enabled: None,
+                workers: None,
+            })
+        };
+        let owner = db
+            .scoped(p.base.project_id)
+            .seed()
+            .function(&collection, &register("owner")?)
+            .await?;
+        let child = db
+            .scoped(p.base.project_id)
+            .seed()
+            .child_function(&collection, &register("child")?, &owner.base.function_id)
+            .await?;
+
+        Services::with_defaults(db.clone())
+            .delete_collection(delete_request(p.base.project_id, "c"))
+            .await?;
+
+        assert_eq!(function_parent(&db, &child.base.function_id).await?, None);
+        Ok(())
     }
 
     #[td_test::test(db)]

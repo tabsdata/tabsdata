@@ -4,19 +4,18 @@
 
 use crate::function::lifecycle::{ChildOf, delete_one, register_one, update_one};
 use crate::function::workers::register_workers;
+use crate::tag::parent::{child_functions, parent_function};
 use std::collections::{HashMap, HashSet};
 use td_bridge::BridgeProviderHandle;
-use td_database::access::{InProject, WriteMode};
+use td_database::access::{AccessMode, InProject, SeesProjectRows, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{TdError, td_error};
-use td_objects::and;
 use td_objects::dxo::collection::CollectionDBWithNames;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::{ChildFunction, FunctionDB, FunctionDBWithNames, FunctionInsertDB};
 use td_objects::dxo::topology::TopologyInstant;
 use td_objects::types::basic::{
-    Enabled, FunctionId, FunctionName, Parent, ReuseFrozen, TableNameDto, WorkerConfig,
-    WorkerTypeDto,
+    Enabled, FunctionId, FunctionName, ReuseFrozen, TableNameDto, WorkerConfig, WorkerTypeDto,
 };
 use td_queries::Queries;
 
@@ -28,8 +27,14 @@ pub enum ChildFunctionError {
     NotUserManaged(FunctionName) = 2000,
 }
 
-pub fn ensure_user_managed(function: &FunctionInsertDB) -> Result<(), TdError> {
-    if function.parent_function_id.is_some() {
+pub async fn ensure_user_managed<S: SeesProjectRows, M: AccessMode>(
+    conn: &mut DomainConnection<Apiserver, S, M>,
+    function: &FunctionInsertDB,
+) -> Result<(), TdError> {
+    if parent_function(conn, &function.function_id)
+        .await?
+        .is_some()
+    {
         Err(ChildFunctionError::NotUserManaged(function.name.clone()))?
     }
     Ok(())
@@ -60,10 +65,11 @@ pub async fn reconcile_children(
         return cascade_enabled(conn, ctx, &parent.function_id, parent.enabled, topology_at).await;
     };
 
-    let parent_id = Some(Parent::from(parent.function_id));
+    let children = child_functions(conn, &parent.function_id).await?;
     let existing: Vec<FunctionDBWithNames> = conn
         .scd2()
-        .fetch_all(and!(&parent_id, &collection.collection_id))
+        .chunked()
+        .fetch_all(&children, &collection.collection_id)
         .await?;
 
     let declared: HashSet<&FunctionName> = desired.iter().map(|child| &child.name).collect();
@@ -129,10 +135,8 @@ pub async fn cascade_enabled(
     enabled: Enabled,
     topology_at: TopologyInstant,
 ) -> Result<(), TdError> {
-    let children: Vec<FunctionDB> = conn
-        .scd2()
-        .fetch_all(FunctionDB::children_of(parent))
-        .await?;
+    let children = child_functions(conn, parent).await?;
+    let children: Vec<FunctionDB> = conn.scd2().chunked().fetch_all(&children, ()).await?;
     let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
     for child in children {
         if child.enabled == enabled {

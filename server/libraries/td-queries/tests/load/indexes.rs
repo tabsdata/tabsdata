@@ -183,10 +183,6 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Queries(TIMELINE),
     },
     IndexCase {
-        index: "functions___parent_function_id___current_idx",
-        served_by: Path("child functions of a parent"),
-    },
-    IndexCase {
         index: "functions___project_id__id___idx",
         served_by: Path(KEYSET),
     },
@@ -412,6 +408,14 @@ const INDEX_CASES: &[IndexCase] = &[
     IndexCase {
         index: "tags___entity_type__entity_id__key___current_uidx",
         served_by: Constraint,
+    },
+    IndexCase {
+        index: "tags___key__value__entity_type___current_idx",
+        served_by: Path("children of a parent function or table"),
+    },
+    IndexCase {
+        index: "tags___project_id__valid_to___topology_idx",
+        served_by: Path("as-of topology load: the project's topology tags open at an instant"),
     },
     IndexCase {
         index: "tags___tag_id__valid_from__id___idx",

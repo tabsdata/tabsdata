@@ -4,6 +4,7 @@
 
 use std::str::FromStr;
 use ta_objects::{Typed, TypedEnum, TypedOpenApi, TypedSerde, TypedSqlx};
+use td_common::id::Id;
 use td_error::{TdError, td_error};
 
 #[td_error]
@@ -98,6 +99,16 @@ impl From<TopologyTagKey> for TagKey {
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 #[typed(max_len = 256, default = "")]
 pub struct TagValue(String);
+
+impl TagValue {
+    pub fn of_id<T: Typed<Inner = Id>>(id: T) -> Self {
+        Self::try_new(id.into_inner().to_string()).expect("an id is a valid tag value")
+    }
+
+    pub fn id<T: Typed<Inner = Id>>(&self) -> Result<T, TdError> {
+        T::try_new(Id::try_from(self.as_str())?)
+    }
+}
 
 #[cfg(test)]
 mod tests {

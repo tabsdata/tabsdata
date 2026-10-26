@@ -38,6 +38,7 @@ async fn table_list(
 #[cfg(test)]
 mod tests {
     use crate::Services;
+    use crate::tag::parent::test_support::table_parent;
     use std::collections::HashMap;
     use std::str::FromStr;
     use td_authz::rbac::RbacError;
@@ -53,7 +54,7 @@ mod tests {
     use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description,
-        FunctionType, Parent, RoleName, TableName, TableNameDto, UserEnabled, UserId, UserName,
+        FunctionType, RoleName, TableName, TableNameDto, UserEnabled, UserId, UserName,
     };
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
@@ -194,14 +195,14 @@ mod tests {
             .find(|table| table.name == TableName::try_from("tt").unwrap())
             .expect("trend table is listed");
         assert_eq!(
-            trend.parent_table_id,
-            Some(Parent::from(owner_table.table_id))
+            table_parent(&db, &trend.table_id).await?,
+            Some(owner_table.table_id)
         );
         let owner = data
             .iter()
             .find(|table| table.name == TableName::try_from("t0").unwrap())
             .expect("owner table is listed");
-        assert_eq!(owner.parent_table_id, None);
+        assert_eq!(table_parent(&db, &owner.table_id).await?, None);
         Ok(())
     }
 

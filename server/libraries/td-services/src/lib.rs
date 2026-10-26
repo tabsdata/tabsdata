@@ -42,6 +42,7 @@ pub mod scheduler;
 pub mod simple_permission;
 pub mod system;
 pub mod table;
+pub mod tag;
 #[cfg(test)]
 mod tests;
 pub mod token;

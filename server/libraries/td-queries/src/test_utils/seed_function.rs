@@ -14,61 +14,31 @@ use td_objects::dxo::dependency::DependencyInsertDB;
 use td_objects::dxo::function::{FunctionDB, FunctionInsertDB, FunctionRegister};
 use td_objects::dxo::table::TableDBWithNames;
 use td_objects::dxo::table::TableInsertDB;
+use td_objects::dxo::tag::TopologyTagInsertDB;
 use td_objects::dxo::topology::TopologyInstant;
 use td_objects::dxo::trigger::TriggerInsertDB;
 use td_objects::dxo::worker::WorkerInsertDB;
 use td_objects::types::basic::{
     AccessTokenId, BasePath, DependencyId, DependencyPos, DependencyVersionId, FunctionId,
-    FunctionStatus, FunctionType, FunctionVersionId, Parent, Partitioned, Private, Snippet,
-    StageId, StorageVersion, System, TableFunctionParamPos, TableId, TableName, TableStatus,
-    TableType, TableVersionId, TriggerId, TriggerStatus, TriggerVersionId, UserId, WorkerId,
-    WorkerStatus,
+    FunctionStatus, FunctionType, FunctionVersionId, Partitioned, Private, Snippet, StageId,
+    StorageVersion, System, TableFunctionParamPos, TableId, TableName, TableStatus, TableType,
+    TableVersionId, TagEntityId, TagEntityType, TagId, TagValue, TopologyTagKey, TriggerId,
+    TriggerStatus, TriggerVersionId, UserId, WorkerId, WorkerStatus,
 };
 
 /// Runs every statement on the caller's executor; if it is project-scoped
 /// (`db.scoped(p)`), the field-less rows (function, tables, dependencies,
 /// triggers) default their `project_id` from that scope.
 pub(crate) async fn seed_function(
-    executor: impl Writes<Domain = Apiserver, Scope = InProject>,
-    topology_at: TopologyInstant,
-    collection: &CollectionDB,
-    function_create: &FunctionRegister,
-) -> Result<FunctionDB, TdError> {
-    seed_function_with_parent(executor, topology_at, collection, function_create, None).await
-}
-
-/// A child function row. A request cannot express a parent, so a test needing
-/// a platform-owned row states it here rather than going through the
-/// reconcile that would normally create one.
-pub(crate) async fn seed_child_function(
-    executor: impl Writes<Domain = Apiserver, Scope = InProject>,
-    topology_at: TopologyInstant,
-    collection: &CollectionDB,
-    function_create: &FunctionRegister,
-    parent: &FunctionId,
-) -> Result<FunctionDB, TdError> {
-    seed_function_with_parent(
-        executor,
-        topology_at,
-        collection,
-        function_create,
-        Some(Parent::from(*parent)),
-    )
-    .await
-}
-
-async fn seed_function_with_parent(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     topology_at: TopologyInstant,
     collection: &CollectionDB,
     function_create: &FunctionRegister,
-    parent_function_id: Option<Parent<FunctionId>>,
 ) -> Result<FunctionDB, TdError> {
     let request_context = RequestContext::with(AccessTokenId::default(), UserId::admin());
 
     let function_db = FunctionInsertDB {
         id: FunctionVersionId::new(),
-        parent_function_id,
         collection_id: collection.collection_id,
         name: function_create.name.clone(),
         description: function_create.description.clone(),
@@ -111,7 +81,6 @@ async fn seed_function_with_parent(
                 defined_by_id: request_context.user_id,
                 status: TableStatus::Active,
                 table_type: TableType::default(),
-                parent_table_id: None,
             };
 
             executor.reuse().scd2().open(&table, topology_at).await?;
@@ -221,6 +190,30 @@ async fn seed_function_with_parent(
         .timeline()
         .fetch_one(&function_db.id)
         .await?)
+}
+
+/// A child function row. A request cannot express a parent, so a test needing
+/// a platform-owned row states it here rather than going through the
+/// reconcile that would normally create one.
+pub(crate) async fn seed_child_function(
+    mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
+    topology_at: TopologyInstant,
+    collection: &CollectionDB,
+    function_create: &FunctionRegister,
+    parent: &FunctionId,
+) -> Result<FunctionDB, TdError> {
+    let function =
+        seed_function(executor.reuse(), topology_at, collection, function_create).await?;
+    let tag = TopologyTagInsertDB::new(
+        TagId::default(),
+        TagEntityType::Function,
+        TagEntityId::try_from(function.base.function_id)?,
+        TopologyTagKey::Parent,
+        TagValue::of_id(*parent),
+        UserId::admin(),
+    )?;
+    executor.scd2().open(&tag, topology_at).await?;
+    Ok(function)
 }
 
 #[cfg(test)]

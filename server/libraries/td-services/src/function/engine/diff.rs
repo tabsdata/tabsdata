@@ -4,6 +4,7 @@
 
 use crate::function::engine::spec::{ResolvedSpec, ResolvedTable};
 use crate::function::engine::state::FunctionState;
+use crate::tag::parent::parent_version;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_error::TdError;
@@ -11,12 +12,13 @@ use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::dependency::DependencyInsertDB;
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::dxo::table::{TableDB, TableInsertDB};
+use td_objects::dxo::tag::{TopologyTagDB, TopologyTagInsertDB};
 use td_objects::dxo::trigger::TriggerInsertDB;
 use td_objects::system::SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES;
 use td_objects::types::basic::{
     DependencyId, DependencyPos, DependencyVersionId, FunctionId, Partitioned, Private, System,
-    TableFunctionParamPos, TableId, TableStatus, TableVersionId, TriggerId, TriggerStatus,
-    TriggerVersionId,
+    TableFunctionParamPos, TableId, TableStatus, TableVersionId, TagEntityId, TagEntityType, TagId,
+    TagValue, TriggerId, TriggerStatus, TriggerVersionId,
 };
 
 /// A table whose status changed, so the triggers reading it follow.
@@ -40,18 +42,23 @@ pub struct Changes {
     pub close_dependencies: Vec<DependencyId>,
     pub triggers: Vec<TriggerInsertDB>,
     pub close_triggers: Vec<TriggerId>,
+    pub tags: Vec<TopologyTagInsertDB>,
+    pub close_tags: Vec<TagId>,
 }
 
 impl Changes {
-    /// Register (empty state) and update (loaded state) against a spec.
+    /// Register (empty state) and update (loaded state) against a spec;
+    /// `parents` are the open parent tags of the resolved tables.
     pub fn for_spec(
         state: &FunctionState,
         resolved: &ResolvedSpec,
+        parents: &HashMap<TableId, TopologyTagDB>,
         function: &FunctionInsertDB,
         ctx: &RequestContext,
     ) -> Result<Self, TdError> {
         let mut changes = Self::default();
         changes.diff_tables(state, resolved, function, ctx)?;
+        changes.diff_table_parents(resolved, parents, ctx)?;
         changes.diff_dependencies(state, resolved, function, ctx)?;
         changes.diff_triggers(state, resolved, function, ctx);
         Ok(changes)
@@ -122,6 +129,30 @@ impl Changes {
                 status: TableStatus::Frozen,
                 function_id: table.function_id,
             });
+        }
+        Ok(())
+    }
+
+    fn diff_table_parents(
+        &mut self,
+        resolved: &ResolvedSpec,
+        parents: &HashMap<TableId, TopologyTagDB>,
+        ctx: &RequestContext,
+    ) -> Result<(), TdError> {
+        for table in &resolved.tables {
+            let current = parents.get(&table.table_id);
+            match table.parent {
+                Some(parent) => self.tags.extend(parent_version(
+                    ctx,
+                    TagEntityType::Table,
+                    TagEntityId::try_from(table.table_id)?,
+                    TagValue::of_id(parent),
+                    current,
+                )?),
+                None => self
+                    .close_tags
+                    .extend(current.map(|current| current.base.tag_id)),
+            }
         }
         Ok(())
     }
@@ -238,7 +269,6 @@ fn desired_table(
 ) -> Result<TableInsertDB, TdError> {
     Ok(TableInsertDB {
         id: TableVersionId::default(),
-        parent_table_id: table.parent_table_id,
         collection_id: function.collection_id,
         table_id: table.table_id,
         name: table.name.clone(),
@@ -262,7 +292,6 @@ fn same_table(current: &TableInsertDB, desired: &TableInsertDB) -> bool {
         && current.private == desired.private
         && current.partitioned == desired.partitioned
         && current.table_type == desired.table_type
-        && current.parent_table_id == desired.parent_table_id
 }
 
 pub(crate) fn is_system_table(table: &TableDB) -> bool {

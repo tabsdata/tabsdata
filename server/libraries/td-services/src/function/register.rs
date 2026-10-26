@@ -11,7 +11,7 @@ use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::connection::ConnectionDB;
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::types::basic::{
-    CollectionName, CollectionType, ConnectionKind, Decorator, FunctionName, TableName,
+    CollectionName, CollectionType, ConnectionKind, Decorator, FunctionId, FunctionName, TableName,
     TableNameDto, TableType,
 };
 use td_objects::types::composed::{TableDependency, TableTrigger};
@@ -56,7 +56,8 @@ pub enum RegisterFunctionError {
 /// A publisher/subscriber must declare the connection kind it uses, its
 /// collection must carry a connection, and the two kinds must match. A
 /// transformer must declare none, and must be in a `DataFactory` collection
-/// unless it is a child function, which lives wherever its parent does.
+/// unless it is a child function (it has a `parent`), which lives wherever
+/// its parent does.
 ///
 /// TODO FOR 2.0: this contract is enforced only under the Kubernetes
 /// orchestrator (the 2.x deployment). The 1.x local Supervisor still runs
@@ -68,6 +69,7 @@ pub async fn ensure_connection_kind_matches<S: SeesProjectRows, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     bridge: &BridgeProviderHandle,
     function: &FunctionInsertDB,
+    parent: Option<&FunctionId>,
     collection: &CollectionDB,
 ) -> Result<(), TdError> {
     // TODO FOR 2.0: drop this guard (see fn doc) -- enforce on every orchestrator.
@@ -98,7 +100,7 @@ pub async fn ensure_connection_kind_matches<S: SeesProjectRows, M: AccessMode>(
                 ))?
             }
 
-            if function.parent_function_id.is_none()
+            if parent.is_none()
                 && !matches!(collection.collection_type, CollectionType::DataFactory)
             {
                 Err(RegisterFunctionError::TransformerInConnectedCollection(

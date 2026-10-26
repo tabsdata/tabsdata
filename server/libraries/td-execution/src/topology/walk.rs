@@ -172,9 +172,9 @@ impl ProjectTopology {
             .functions
             .values()
             .filter(|f| {
-                f.parent_function_id.as_ref().is_some_and(|parent| {
-                    (in_graph.contains(&**parent) && admitted.state.matches(f))
-                        || (**parent == admitted.start && admitted.overrides(f))
+                self.parents.get(&f.function_id).is_some_and(|parent| {
+                    (in_graph.contains(parent) && admitted.state.matches(f))
+                        || (*parent == admitted.start && admitted.overrides(f))
                 })
             })
             .map(|f| f.function_id)

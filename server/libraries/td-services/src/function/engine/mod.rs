@@ -21,6 +21,7 @@ pub use spec::{FunctionSpec, PrivateTableError, ResolvedSpec, requested_parents,
 pub use state::FunctionState;
 
 use crate::function::workers::register_workers;
+use crate::tag::parent::table_parents;
 use std::collections::HashMap;
 use td_database::access::{InProject, WriteMode};
 use td_database::domain::{Apiserver, DomainConnection};
@@ -29,7 +30,7 @@ use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::function::FunctionInsertDB;
 use td_objects::dxo::topology::TopologyInstant;
-use td_objects::types::basic::{FunctionVersionId, WorkerConfig, WorkerTypeDto};
+use td_objects::types::basic::{FunctionVersionId, TableId, WorkerConfig, WorkerTypeDto};
 
 /// Bring a function's relations and workers in line with `spec` for the
 /// version row `function`, already inserted: register when `state` is empty,
@@ -54,7 +55,9 @@ pub async fn register_version(
         topology_at.into(),
     )
     .await?;
-    let changes = Changes::for_spec(state, &resolved, function, ctx)?;
+    let table_ids: Vec<TableId> = resolved.tables.iter().map(|t| t.table_id).collect();
+    let parents = table_parents(conn, &table_ids).await?;
+    let changes = Changes::for_spec(state, &resolved, &parents, function, ctx)?;
     apply(conn, &changes, topology_at).await?;
     register_workers(
         conn,

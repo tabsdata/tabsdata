@@ -54,7 +54,7 @@ async fn execute_function(
             .fetch_one(and!(&collection_id, &function_param.function))
             .await?;
 
-        ensure_user_managed(&function)?;
+        ensure_user_managed(conn, &function).await?;
         if let Some(refused) =
             trigger_gate(conn, &execution_request, &function, &TriggerType::Manual).await?
         {

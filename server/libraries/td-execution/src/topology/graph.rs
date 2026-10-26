@@ -15,7 +15,9 @@ use td_objects::dxo::graph::{
     GraphOutput, TableNode,
 };
 use td_objects::dxo::topology::{TopologyDependency, TopologyTable, TopologyTrigger};
-use td_objects::types::basic::{CollectionId, FunctionId, GroupId, SelfDependency, TableId};
+use td_objects::types::basic::{
+    CollectionId, FunctionId, GroupId, Parent, SelfDependency, TableId,
+};
 use td_objects::types::table_ref::Versions;
 
 #[td_error]
@@ -86,7 +88,11 @@ impl ProjectTopology {
             name: function.name.clone(),
             enabled: function.enabled,
             group_id: self.group_of(&function.collection_id)?,
-            parent_function_id: function.parent_function_id,
+            parent_function_id: self
+                .parents
+                .get(&function.function_id)
+                .copied()
+                .map(Parent::from),
         })
     }
 

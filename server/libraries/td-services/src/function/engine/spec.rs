@@ -18,8 +18,8 @@ use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES, TD_FN_STATE_PREFIX,
 };
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, Parent, ResetState,
-    ReuseFrozen, System, TableId, TableName, TableNameDto, TableStatus, TableType,
+    AtTime, CollectionId, CollectionName, FunctionId, FunctionName, ResetState, ReuseFrozen,
+    System, TableId, TableName, TableNameDto, TableStatus, TableType,
 };
 use td_objects::types::composed::{
     TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto,
@@ -103,7 +103,7 @@ pub struct ResolvedTable {
     pub table_type: TableType,
     pub table_id: TableId,
     pub adopted_frozen: bool,
-    pub parent_table_id: Option<Parent<TableId>>,
+    pub parent: Option<TableId>,
 }
 
 /// A table another relation points at, as the request named it.
@@ -342,7 +342,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
             table_type: table_type.clone(),
             table_id,
             adopted_frozen,
-            parent_table_id: None,
+            parent: None,
         });
     }
 
@@ -372,7 +372,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
                 child.clone(),
             ))?
         }
-        table.parent_table_id = Some((*parent_id).into());
+        table.parent = Some(*parent_id);
     }
     if !owned_elsewhere.is_empty() {
         Err(RegisterFunctionError::TableAlreadyExists(

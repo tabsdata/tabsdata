@@ -57,7 +57,7 @@ async fn execute_function_version(
         // allow older versions to execute).
         let function: FunctionDBWithNames = conn.scd2().fetch_one(&requested.function_id).await?;
         assert_function_version(&function_version_id, &function)?;
-        ensure_user_managed(&function)?;
+        ensure_user_managed(conn, &function).await?;
 
         if let Some(refused) =
             trigger_gate(conn, &execution_request, &function, &trigger_type).await?

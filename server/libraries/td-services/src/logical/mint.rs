@@ -310,7 +310,6 @@ mod tests {
             defined_by_id: request_context.user_id,
             status: TableStatus::Active,
             table_type: TableType::default(),
-            parent_table_id: None,
         };
         let (mut conn, version) = topology_write(db, &p.project_id).await?;
         conn.scd2().open(&private, version).await?;

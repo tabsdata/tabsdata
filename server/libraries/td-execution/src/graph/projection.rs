@@ -253,6 +253,7 @@ mod tests {
             vec![collection()],
             vec![],
             vec![updated],
+            HashMap::new(),
             vec![table(&FUNCTION_NAMES[0], &TABLE_NAMES[0])],
             vec![],
             vec![dependency(&TABLE_NAMES[0], &FUNCTION_NAMES[0])],

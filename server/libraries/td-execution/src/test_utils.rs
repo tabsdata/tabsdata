@@ -4,7 +4,7 @@
 
 use crate::graph::TopologyGraph;
 use crate::topology::ProjectTopology;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use strum::{Display, EnumString};
 use ta_execution::TransactionMapper;
 use td_error::TdError;
@@ -58,6 +58,7 @@ pub fn test_graph() -> TopologyGraph {
         vec![collection()],
         vec![],
         functions,
+        HashMap::new(),
         tables,
         triggers,
         dependencies,
