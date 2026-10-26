@@ -512,6 +512,8 @@ description = "Task 'build' for Python projects"
 run_task = [
     { name = [
         "dehydrate_py",
+        "__os__generate_sourcetrack",
+        "__os__generate_assets",
         "__os__hydrate_py_ta_features",
         "__os__hydrate_py_ta_tableframe",
         "__os__hydrate_py_te_examples",
