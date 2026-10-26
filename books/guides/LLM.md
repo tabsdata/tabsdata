@@ -799,7 +799,9 @@ example often omits `credentials` or invents a field like
 ```python
 from tabsdatak.conn.mysql.quickstart import mysql_src
 
-src = mysql_src(uri="mysql://...", user="etl", password=Secret(...), queries=["SELECT 1"])
+src = mysql_src(
+    uri="mysql://...", user="etl", password=Secret(...), queries=["SELECT 1"]
+)
 ```
 
 The function does the wiring; the LLM only sets actual values. Same

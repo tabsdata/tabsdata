@@ -96,8 +96,7 @@ from tabsdatak.conn.kafka import KafkaStreamSrc
     output_tables=["users"],
     batch_max_secs=60,
 )
-def load_users(batches: TableFramesSpec) -> TableFrameSpec:
-    ...
+def load_users(batches: TableFramesSpec) -> TableFrameSpec: ...
 ```
 
 ## Function Signatures
@@ -351,7 +350,8 @@ from tabsdatak.tableframe.functions import col
 
 def transform(df: TableFrameSpec) -> TableFrameSpec:
     return (
-        df.filter(col("age") > 18)
+        df
+        .filter(col("age") > 18)
         .with_columns(col("name").str.to_uppercase().alias("NAME"))
         .drop_nulls()
         .select("NAME", "age", "email")

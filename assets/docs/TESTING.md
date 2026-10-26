@@ -164,8 +164,9 @@ reads any of the six, and a test moves between a store and its twin by its fixtu
 @s3local_domain("s3local_world_xs")
 def test_scans(domain_s3local_world_xs: S3LocalDomain):
     domain = domain_s3local_world_xs
-    lf = pl.scan_parquet(f"{domain.uri}/parquet/*.parquet",
-                         storage_options=domain.storage_options)
+    lf = pl.scan_parquet(
+        f"{domain.uri}/parquet/*.parquet", storage_options=domain.storage_options
+    )
 ```
 
 ## Resolution Order
