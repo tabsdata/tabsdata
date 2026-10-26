@@ -4,6 +4,7 @@
 
 use crate::generic::as_of::AsOf;
 use crate::generic::chunked::Scd2Chunked;
+use crate::generic::last::Last;
 use crate::primitives::scd2::select_open;
 use crate::primitives::scd2::{close_query, open_query, update_open_query};
 use crate::{QueryExecutor, Serves, Writes};
@@ -32,6 +33,14 @@ impl<E> Scd2<E> {
     pub fn as_of<V>(self, on: &V) -> AsOf<'_, E, V> {
         AsOf {
             on,
+            executor: self.executor,
+        }
+    }
+
+    /// Every matching timeline's latest version, open or closed: how a
+    /// deleted entity is still read.
+    pub fn last(self) -> Last<E> {
+        Last {
             executor: self.executor,
         }
     }

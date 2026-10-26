@@ -7,7 +7,7 @@ use crate::Writes;
 use td_database::access::InProject;
 use td_database::domain::Apiserver;
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::transaction::TransactionDB;
 use td_objects::dxo::transaction::TransactionInsertDB;
@@ -20,9 +20,10 @@ pub(crate) async fn seed_transaction(
 ) -> Result<TransactionDB, TdError> {
     // A transaction's group is a snapshot of its collection's group at mint —
     // resolve it from the collection rather than assuming the global default.
-    let collection: ActiveCollectionDB = executor
+    let collection: CollectionDB = executor
         .reuse()
-        .fetch_one::<ActiveCollectionDB>(&execution.base.collection_id)
+        .scd2()
+        .fetch_one::<CollectionDB>(&execution.base.collection_id)
         .await?;
     let transaction_db = TransactionInsertDB {
         id: TransactionId::new(),
@@ -32,7 +33,7 @@ pub(crate) async fn seed_transaction(
         transaction_key: transaction_key.clone(),
         triggered_on: execution.base.triggered_on,
         triggered_by_id: execution.base.triggered_by_id,
-        group_id: collection.group_id,
+        group_id: collection.base.group_id,
     };
 
     // Field-less row; runs on a project-scoped connection so `project_id`
@@ -54,7 +55,7 @@ mod tests {
     async fn test_seed_transaction(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -89,14 +90,14 @@ mod tests {
         };
 
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .execution(&function_version)
             .await
@@ -104,7 +105,7 @@ mod tests {
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await

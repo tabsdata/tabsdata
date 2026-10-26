@@ -6,8 +6,8 @@
 
 use crate::dxo::query_filters::{DimensionFilter, TimeWindow, WindowAlign, WindowUnit};
 use crate::types::basic::{
-    ByteCount, CollectionId, CollectionName, EpochMs, FunctionRunCount, GroupId, GroupName,
-    IncludePrivate, IncludeReplaced, LogicalFunctionRunStatus, ProjectId, ProjectName, RowCount,
+    ByteCount, CollectionId, CollectionLabel, EpochMs, FunctionRunCount, GroupId, GroupLabel,
+    IncludePrivate, IncludeReplaced, LogicalFunctionRunStatus, ProjectId, ProjectLabel, RowCount,
     TableCount, TableVersionCount, WindowSpan,
 };
 use std::collections::BTreeMap;
@@ -30,11 +30,11 @@ pub enum StatusFilterError {
 #[derive(sqlx::FromRow, serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 pub struct InflightRow {
     pub project_id: ProjectId,
-    pub project_name: Option<ProjectName>,
+    pub project_name: Option<ProjectLabel>,
     pub collection_id: CollectionId,
-    pub collection_name: CollectionName,
+    pub collection_name: CollectionLabel,
     pub group_id: GroupId,
-    pub group_name: Option<GroupName>,
+    pub group_name: Option<GroupLabel>,
     pub status: LogicalFunctionRunStatus,
     pub count: i64,
 }
@@ -83,12 +83,12 @@ pub struct NodeStatusMeasures {
 #[ta_objects::Dto]
 pub struct NodeRow {
     pub project_id: Option<ProjectId>,
-    pub project_name: Option<ProjectName>,
+    pub project_name: Option<ProjectLabel>,
     pub kind: NodeKind,
     pub collection_id: Option<CollectionId>,
-    pub collection_name: Option<CollectionName>,
+    pub collection_name: Option<CollectionLabel>,
     pub group_id: Option<GroupId>,
-    pub group_name: Option<GroupName>,
+    pub group_name: Option<GroupLabel>,
     pub logical_tables_out: TableCount,
     /// Tables none of whose versions in the window was consumed by its end.
     pub tables_unread: TableCount,
@@ -110,7 +110,7 @@ pub struct EdgeStatusMeasures {
 #[ta_objects::Dto]
 pub struct EdgeRow {
     pub project_id: Option<ProjectId>,
-    pub project_name: Option<ProjectName>,
+    pub project_name: Option<ProjectLabel>,
     pub source_kind: NodeKind,
     pub source: Option<String>,
     pub source_name: Option<String>,

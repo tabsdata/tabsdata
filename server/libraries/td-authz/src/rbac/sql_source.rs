@@ -94,11 +94,10 @@ mod tests {
     use crate::rbac::source::RbacSource;
     use td_database::access::{InProject, RW};
     use td_database::pool::TdPool;
-    use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::project::ProjectDeleteDB;
-    use td_objects::types::basic::{AccessTokenId, ProjectName, UserId};
+    use td_objects::dxo::project::ProjectDB;
+    use td_objects::types::basic::{ProjectName, UserId};
     use td_queries::Queries;
-    use td_queries::test_utils::SeedEntry;
+    use td_queries::test_utils::{SeedEntry, seed_instant};
 
     #[td_test::test(db)]
     async fn test_admin_user_effective_grants(db: TdPool) -> Result<(), TdError> {
@@ -122,14 +121,14 @@ mod tests {
     }
 
     #[td_test::test(db)]
-    async fn test_is_current_follows_project_soft_delete(db: TdPool) -> Result<(), TdError> {
+    async fn test_is_current_follows_project_delete(db: TdPool) -> Result<(), TdError> {
         let project = db.seed().project(ProjectName::try_from("doomed")?).await?;
         let source = SqlRbacSource::default();
         let mut slot = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
 
         assert!(
             source
-                .is_current::<Project, _, _>(&mut slot, &project.id)
+                .is_current::<Project, _, _>(&mut slot, &project.base.project_id)
                 .await?
         );
         assert!(
@@ -143,12 +142,12 @@ mod tests {
                 .await?
         );
 
-        let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
-        db.update::<ProjectDeleteDB>(&project.to_delete_dao(&ctx), project.id)
+        db.scd2()
+            .close::<ProjectDB>(&project.base.project_id, seed_instant())
             .await?;
         assert!(
             !source
-                .is_current::<Project, _, _>(&mut slot, &project.id)
+                .is_current::<Project, _, _>(&mut slot, &project.base.project_id)
                 .await?
         );
         Ok(())

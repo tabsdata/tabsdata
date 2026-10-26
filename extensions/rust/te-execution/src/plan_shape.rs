@@ -74,20 +74,20 @@ async fn run_trigger(
 > {
     let p = db.seed().test_project().await?;
     let c0 = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c0")?, &UserId::admin())
         .await?;
     let c1 = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c1")?, &UserId::admin())
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .function(&c0, &register("f0", &["t0"], None)?)
         .await?;
-    db.scoped(p.id)
+    db.scoped(p.base.project_id)
         .seed()
         .function(&c1, &register("f1", &["t1"], Some("c0/t0"))?)
         .await?;
@@ -110,7 +110,7 @@ async fn run_trigger(
                 external_uid: None,
             },
         )
-        .in_project(p.id);
+        .in_project(p.base.project_id);
     Services::with_defaults(db.clone())
         .execute_function(request)
         .await?;

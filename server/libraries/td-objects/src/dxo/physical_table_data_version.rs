@@ -5,7 +5,7 @@
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
-    AtTime, BasePath, ByteCount, CollectionId, CollectionName, ColumnCount, DataChanged, Ended,
+    AtTime, BasePath, ByteCount, CollectionId, CollectionLabel, ColumnCount, DataChanged, Ended,
     ExecutionId, FunctionName, FunctionVersionId, HasData, LogicalTableDataVersionId, Patch,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, ProjectId,
     RowCount, SchemaChanged, SchemaDataChanged, SchemaHash, Started, StorageVersion,
@@ -106,7 +106,7 @@ pub struct PhysicalTableDataVersionDBWithFunction {
 pub struct PhysicalTableDataVersionDBWithNames {
     #[dao(flatten)]
     pub base: PhysicalTableDataVersionDBWithFunction,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub function: FunctionName,
     pub created_by: UserLabel,
 }
@@ -151,7 +151,7 @@ pub struct PhysicalTableDataVersion {
     pub status: PhysicalFunctionRunStatus,
 
     #[dto(list(filter, filter_like, order_by))]
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     #[dto(list(filter, filter_like, order_by))]
     pub function: FunctionName,
     #[dto(list(filter, filter_like, order_by))]

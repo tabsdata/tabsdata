@@ -6,10 +6,10 @@ use crate::dxo::crudl::RequestContext;
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionIdName, CollectionName, FunctionId, FunctionName,
-    FunctionVersionId, Parent, Partitioned, Private, ProjectId, SampleLen, SampleOffset,
-    SchemaFieldName, SchemaFieldType, Sql, System, TableFunctionParamPos, TableId, TableIdName,
-    TableName, TableStatus, TableType, TableVersionId, UncommittedStatus, UserId, UserLabel,
+    AtTime, CollectionId, CollectionLabel, FunctionId, FunctionName, FunctionVersionId, Parent,
+    Partitioned, Private, ProjectId, SampleLen, SampleOffset, SchemaFieldName, SchemaFieldType,
+    Sql, System, TableFunctionParamPos, TableId, TableIdName, TableName, TableStatus, TableType,
+    TableVersionId, UncommittedStatus, UserId, UserLabel,
 };
 use polars::prelude::Field;
 use ta_objects::sql_condition::SqlCondition;
@@ -68,17 +68,14 @@ impl TableDB {
 #[dao(
     view = "tables__with_names",
     scd2,
-    project_scoped(
-        unique_at(CollectionIdName, TableIdName),
-        unique_at(CollectionId, TableIdName)
-    )
+    project_scoped(unique_at(CollectionId, TableIdName))
 )]
 pub struct TableDBWithNames {
     #[dao(flatten)]
     pub base: TableDB,
     pub system: System,
     pub defined_by: UserLabel,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub function: FunctionName,
 }
 
@@ -116,7 +113,7 @@ pub struct Table {
     pub system: System,
     pub defined_by: UserLabel,
     #[dto(list(filter, filter_like, order_by))]
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     #[dto(list(filter, filter_like, order_by))]
     pub function: FunctionName,
 }

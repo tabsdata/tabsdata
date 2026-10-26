@@ -3,13 +3,14 @@
 //
 
 use crate::daos::metrics::read::apply_dim_filter;
+use crate::primitives::scd2::{label_of, last_version_of};
 use sea_query::{Expr, ExprTrait, Func, Iden, JoinType, Query, SelectStatement};
 use ta_objects::SeaValue;
-use td_objects::dxo::collection::ResolvedCollectionDBIden;
-use td_objects::dxo::group::GroupDBIden;
+use td_objects::dxo::collection::{CollectionDB, CollectionDBIden};
+use td_objects::dxo::group::{GroupDB, GroupDBIden};
 use td_objects::dxo::logical::LogicalFunctionRunDBIden;
 use td_objects::dxo::metrics::InflightRequest;
-use td_objects::dxo::project::ActiveProjectDBIden;
+use td_objects::dxo::project::{ProjectDB, ProjectDBIden};
 use td_objects::types::basic::LogicalFunctionRunStatus;
 use td_objects::types::visible_projects::VisibleProjects;
 
@@ -21,7 +22,8 @@ enum Col {
     Count,
 }
 
-/// A soft-deleted collection keeps its pre-deletion name, as in `/metrics`.
+/// A deleted collection, group or project is labelled by its id, as in
+/// `/metrics`.
 pub(crate) fn inflight_query(
     req: &InflightRequest,
     visible_projects: &VisibleProjects,
@@ -30,44 +32,45 @@ pub(crate) fn inflight_query(
     let mut stmt = Query::select();
     stmt.column(lfr(LogicalFunctionRunDBIden::CollectionId))
         .expr_as(
-            Expr::col((
-                ResolvedCollectionDBIden::Table,
-                ResolvedCollectionDBIden::Name,
-            )),
+            label_of::<CollectionDB>(
+                (CollectionDBIden::Table, CollectionDBIden::Name),
+                lfr(LogicalFunctionRunDBIden::CollectionId),
+            ),
             Col::CollectionName,
         )
         .column(lfr(LogicalFunctionRunDBIden::GroupId))
         .expr_as(
-            Expr::col((GroupDBIden::Table, GroupDBIden::Name)),
+            label_of::<GroupDB>(
+                (GroupDBIden::Table, GroupDBIden::Name),
+                lfr(LogicalFunctionRunDBIden::GroupId),
+            ),
             Col::GroupName,
         )
         .column(lfr(LogicalFunctionRunDBIden::ProjectId))
         .expr_as(
-            Expr::col((ActiveProjectDBIden::Table, ActiveProjectDBIden::Name)),
+            label_of::<ProjectDB>(
+                (ProjectDBIden::Table, ProjectDBIden::Name),
+                lfr(LogicalFunctionRunDBIden::ProjectId),
+            ),
             Col::ProjectName,
         )
         .column(lfr(LogicalFunctionRunDBIden::Status))
         .expr_as(Func::count(Expr::val(1)), Col::Count)
         .from(LogicalFunctionRunDBIden::Table)
         .join(
-            JoinType::InnerJoin,
-            ResolvedCollectionDBIden::Table,
-            Expr::col(lfr(LogicalFunctionRunDBIden::CollectionId)).equals((
-                ResolvedCollectionDBIden::Table,
-                ResolvedCollectionDBIden::Id,
-            )),
+            JoinType::LeftJoin,
+            CollectionDBIden::Table,
+            last_version_of::<CollectionDB>(lfr(LogicalFunctionRunDBIden::CollectionId)),
         )
         .join(
             JoinType::LeftJoin,
             GroupDBIden::Table,
-            Expr::col(lfr(LogicalFunctionRunDBIden::GroupId))
-                .equals((GroupDBIden::Table, GroupDBIden::Id)),
+            last_version_of::<GroupDB>(lfr(LogicalFunctionRunDBIden::GroupId)),
         )
         .join(
-            JoinType::InnerJoin,
-            ActiveProjectDBIden::Table,
-            Expr::col(lfr(LogicalFunctionRunDBIden::ProjectId))
-                .equals((ActiveProjectDBIden::Table, ActiveProjectDBIden::Id)),
+            JoinType::LeftJoin,
+            ProjectDBIden::Table,
+            last_version_of::<ProjectDB>(lfr(LogicalFunctionRunDBIden::ProjectId)),
         )
         .and_where(
             Expr::col(lfr(LogicalFunctionRunDBIden::Status)).is_in(
@@ -78,14 +81,14 @@ pub(crate) fn inflight_query(
         )
         .cond_where(visible_projects.narrows(Expr::col(lfr(LogicalFunctionRunDBIden::ProjectId))))
         .group_by_col(lfr(LogicalFunctionRunDBIden::CollectionId))
-        .group_by_col((
-            ResolvedCollectionDBIden::Table,
-            ResolvedCollectionDBIden::Name,
-        ))
+        .group_by_col((CollectionDBIden::Table, CollectionDBIden::Name))
+        .group_by_col((CollectionDBIden::Table, CollectionDBIden::ValidTo))
         .group_by_col(lfr(LogicalFunctionRunDBIden::GroupId))
         .group_by_col((GroupDBIden::Table, GroupDBIden::Name))
+        .group_by_col((GroupDBIden::Table, GroupDBIden::ValidTo))
         .group_by_col(lfr(LogicalFunctionRunDBIden::ProjectId))
-        .group_by_col((ActiveProjectDBIden::Table, ActiveProjectDBIden::Name))
+        .group_by_col((ProjectDBIden::Table, ProjectDBIden::Name))
+        .group_by_col((ProjectDBIden::Table, ProjectDBIden::ValidTo))
         .group_by_col(lfr(LogicalFunctionRunDBIden::Status));
 
     apply_dim_filter(

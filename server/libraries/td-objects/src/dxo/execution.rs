@@ -123,8 +123,6 @@ pub struct ExecutionDBWithNames {
     #[dao(flatten)]
     pub base: ExecutionDB,
     pub collection: CollectionName,
-    // True when the owning collection is soft-deleted; `collection` still
-    // carries the real pre-deletion name (resolved view).
     pub collection_deleted: CollectionWhenDeleted,
     pub function: FunctionName,
     pub triggered_by: UserLabel,

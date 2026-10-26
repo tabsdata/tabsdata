@@ -6,7 +6,7 @@ use super::*;
 use td_database::access::{InProject, RW};
 use td_database::pool::TdPool;
 use td_objects::and;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
 use td_objects::types::basic::{AtTime, TriggeredOn};
 
@@ -40,14 +40,14 @@ async fn seed_ftdv_timeline(
     db: &TdPool,
     n: usize,
 ) -> (
-    ActiveCollectionDB,
+    CollectionDB,
     FunctionDB,
     TableId,
     Vec<LogicalTableDataVersionInsertDB>,
 ) {
     let p = db.seed().test_project().await.unwrap();
     let collection = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
         .await
@@ -75,7 +75,7 @@ async fn seed_ftdv_timeline(
         workers: None,
     };
     let function = db
-        .scoped(p.id)
+        .scoped(p.base.project_id)
         .seed()
         .function(&collection, &create)
         .await
@@ -84,16 +84,21 @@ async fn seed_ftdv_timeline(
     let table_name_typed = TableName::try_from(&table_name).unwrap();
     let table = db
         .scd2()
-        .fetch_first::<TableDB>(and!(&collection.id, &table_name_typed))
+        .fetch_first::<TableDB>(and!(&collection.base.collection_id, &table_name_typed))
         .await
         .unwrap()
         .expect("row must exist");
 
     let mut ltdvs = Vec::with_capacity(n);
     for _ in 0..n {
-        let execution = db.scoped(p.id).seed().execution(&function).await.unwrap();
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await
+            .unwrap();
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
             .await
@@ -101,7 +106,7 @@ async fn seed_ftdv_timeline(
 
         let ltdv = LogicalTableDataVersionInsertDB {
             id: LogicalTableDataVersionId::new(),
-            collection_id: collection.id,
+            collection_id: collection.base.collection_id,
             execution_id: execution.base.id.clone(),
             transaction_id: transaction.base.id.clone(),
             table_id: table.base.table_id,
@@ -110,7 +115,7 @@ async fn seed_ftdv_timeline(
             private: Private::FALSE,
             triggered_on: execution.base.triggered_on,
             triggered_by_id: execution.base.triggered_by_id,
-            group_id: collection.group_id,
+            group_id: collection.base.group_id,
         };
 
         insert_ftdv(db, &collection.project_id, &ltdv).await;
@@ -395,7 +400,7 @@ async fn test_resolve_logical_new_downstream_consumer(db: TdPool) -> Result<(), 
     // Consumer LFR aligned with run 1 is the resolution cutoff.
     let lfr_run1 = LogicalFunctionRunInsertDB {
         id: LogicalFunctionRunId::new(),
-        collection_id: collection.id,
+        collection_id: collection.base.collection_id,
         execution_id: ltdvs[0].execution_id.clone(),
         transaction_id: ltdvs[0].transaction_id.clone(),
         function_id: consumer.base.function_id,
@@ -404,7 +409,7 @@ async fn test_resolve_logical_new_downstream_consumer(db: TdPool) -> Result<(), 
         triggered_on: ltdvs[0].triggered_on,
         triggered_by_id: UserId::admin(),
         status: LogicalFunctionRunStatus::Committed,
-        group_id: collection.group_id,
+        group_id: collection.base.group_id,
     };
     db.scoped(collection.project_id)
         .insert::<LogicalFunctionRunInsertDB>(&lfr_run1)
@@ -468,7 +473,7 @@ async fn test_resolve_logical_partition_isolation(db: TdPool) -> Result<(), TdEr
     let table_b_typed = TableName::try_from(&table_b_name)?;
     let table_b = db
         .scd2()
-        .fetch_first::<TableDB>(and!(&collection.id, &table_b_typed))
+        .fetch_first::<TableDB>(and!(&collection.base.collection_id, &table_b_typed))
         .await?
         .expect("row must exist");
     for _ in 0..2 {
@@ -484,7 +489,7 @@ async fn test_resolve_logical_partition_isolation(db: TdPool) -> Result<(), TdEr
             .await?;
         let ltdv = LogicalTableDataVersionInsertDB {
             id: LogicalTableDataVersionId::new(),
-            collection_id: collection.id,
+            collection_id: collection.base.collection_id,
             execution_id: execution.base.id.clone(),
             transaction_id: transaction.base.id.clone(),
             table_id: table_b.base.table_id,
@@ -493,7 +498,7 @@ async fn test_resolve_logical_partition_isolation(db: TdPool) -> Result<(), TdEr
             private: Private::FALSE,
             triggered_on: execution.base.triggered_on,
             triggered_by_id: execution.base.triggered_by_id,
-            group_id: collection.group_id,
+            group_id: collection.base.group_id,
         };
         insert_ftdv(&db, &collection.project_id, &ltdv).await;
     }
@@ -554,7 +559,7 @@ async fn test_resolve_ignores_materialization_state(db: TdPool) -> Result<(), Td
 /// is what makes the active view hide the returned LTDV.
 async fn seed_canceled_ltdv(
     db: &TdPool,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     function: &FunctionDB,
     table_id: TableId,
 ) -> LogicalTableDataVersionInsertDB {
@@ -572,7 +577,7 @@ async fn seed_canceled_ltdv(
         .unwrap();
     let canceled_lfr = LogicalFunctionRunInsertDB {
         id: LogicalFunctionRunId::new(),
-        collection_id: collection.id,
+        collection_id: collection.base.collection_id,
         execution_id: execution.base.id.clone(),
         transaction_id: transaction.base.id.clone(),
         function_id: function.base.function_id,
@@ -581,7 +586,7 @@ async fn seed_canceled_ltdv(
         triggered_on: TriggeredOn::asserted(*AtTime::now()),
         triggered_by_id: UserId::admin(),
         status: LogicalFunctionRunStatus::Canceled,
-        group_id: collection.group_id,
+        group_id: collection.base.group_id,
     };
     db.scoped(collection.project_id)
         .insert::<LogicalFunctionRunInsertDB>(&canceled_lfr)
@@ -589,7 +594,7 @@ async fn seed_canceled_ltdv(
         .unwrap();
     let canceled_ltdv = LogicalTableDataVersionInsertDB {
         id: LogicalTableDataVersionId::new(),
-        collection_id: collection.id,
+        collection_id: collection.base.collection_id,
         execution_id: execution.base.id,
         transaction_id: transaction.base.id,
         table_id,
@@ -598,7 +603,7 @@ async fn seed_canceled_ltdv(
         private: Private::FALSE,
         triggered_on: canceled_lfr.triggered_on,
         triggered_by_id: canceled_lfr.triggered_by_id,
-        group_id: collection.group_id,
+        group_id: collection.base.group_id,
     };
     db.scoped(collection.project_id)
         .insert::<LogicalTableDataVersionInsertDB>(&canceled_ltdv)

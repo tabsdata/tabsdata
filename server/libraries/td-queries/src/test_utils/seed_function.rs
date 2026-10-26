@@ -8,7 +8,7 @@ use ta_objects::and;
 use td_database::access::InProject;
 use td_database::domain::Apiserver;
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::dependency::DependencyInsertDB;
 use td_objects::dxo::function::{FunctionDB, FunctionInsertDB, FunctionRegister};
@@ -31,7 +31,7 @@ use td_objects::types::basic::{
 pub(crate) async fn seed_function(
     executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     topology_at: TopologyInstant,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     function_create: &FunctionRegister,
 ) -> Result<FunctionDB, TdError> {
     seed_function_with_parent(executor, topology_at, collection, function_create, None).await
@@ -43,7 +43,7 @@ pub(crate) async fn seed_function(
 pub(crate) async fn seed_child_function(
     executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     topology_at: TopologyInstant,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     function_create: &FunctionRegister,
     parent: &FunctionId,
 ) -> Result<FunctionDB, TdError> {
@@ -60,7 +60,7 @@ pub(crate) async fn seed_child_function(
 async fn seed_function_with_parent(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     topology_at: TopologyInstant,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     function_create: &FunctionRegister,
     parent_function_id: Option<Parent<FunctionId>>,
 ) -> Result<FunctionDB, TdError> {
@@ -69,7 +69,7 @@ async fn seed_function_with_parent(
     let function_db = FunctionInsertDB {
         id: FunctionVersionId::new(),
         parent_function_id,
-        collection_id: collection.id,
+        collection_id: collection.base.collection_id,
         name: function_create.name.clone(),
         description: function_create.description.clone(),
         decorator: function_create.decorator.clone(),
@@ -120,16 +120,14 @@ async fn seed_function_with_parent(
 
     if let Some(dependency_tables) = &function_create.dependencies {
         for (pos, dependency_table) in dependency_tables.iter().enumerate() {
-            let (table_collection, table_name) = {
-                let collection = dependency_table
-                    .collection
-                    .clone()
-                    .unwrap_or_else(|| collection.name.clone());
-                (
-                    collection,
-                    TableName::try_from(dependency_table.table.clone())?,
-                )
+            let table_collection = match &dependency_table.collection {
+                Some(name) => {
+                    let named: CollectionDB = executor.reuse().scd2().fetch_one(name).await?;
+                    named.base.collection_id
+                }
+                None => collection.base.collection_id,
             };
+            let table_name = TableName::try_from(dependency_table.table.clone())?;
 
             let table_db: TableDBWithNames = executor
                 .reuse()
@@ -162,16 +160,14 @@ async fn seed_function_with_parent(
 
     if let Some(trigger_tables) = &function_create.triggers {
         for trigger_table in trigger_tables {
-            let (table_collection, table_name) = {
-                let collection = trigger_table
-                    .collection
-                    .clone()
-                    .unwrap_or_else(|| collection.name.clone());
-                (
-                    collection,
-                    TableName::try_from(trigger_table.table.clone())?,
-                )
+            let table_collection = match &trigger_table.collection {
+                Some(name) => {
+                    let named: CollectionDB = executor.reuse().scd2().fetch_one(name).await?;
+                    named.base.collection_id
+                }
+                None => collection.base.collection_id,
             };
+            let table_name = TableName::try_from(trigger_table.table.clone())?;
 
             let table_db: TableDBWithNames = executor
                 .reuse()
@@ -241,7 +237,7 @@ mod tests {
     async fn test_seed_function(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -276,7 +272,7 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await

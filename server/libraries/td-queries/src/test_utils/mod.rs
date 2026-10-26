@@ -9,7 +9,7 @@ pub use metrics_facts::derive_metrics_facts;
 pub use seed::{Seed, SeedEntry};
 pub use seed_run::{SeededRun, seed_project_viewer, seed_run};
 pub use status_rollup::derive_status_rollup;
-pub use topology::{commit_topology_write, topology_write, topology_write_at};
+pub use topology::{commit_topology_write, seed_instant, topology_write, topology_write_at};
 
 mod exclusive;
 mod metrics_facts;

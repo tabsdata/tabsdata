@@ -8,7 +8,7 @@ use td_database::access::InProject;
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::and;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunInputDB, LogicalFunctionRunInputInsertDB,
@@ -27,7 +27,7 @@ use td_objects::types::basic::{DependencyPos, LogicalFunctionRunInputId, Version
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn seed_logical_input(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     physical_function_run: &PhysicalFunctionRunDB,
@@ -50,7 +50,7 @@ pub(crate) async fn seed_logical_input(
 
     let ffr_input = LogicalFunctionRunInputInsertDB {
         id: LogicalFunctionRunInputId::default(),
-        collection_id: collection.id,
+        collection_id: collection.base.collection_id,
         execution_id: execution.base.id.clone(),
         transaction_id: transaction.base.id.clone(),
         logical_function_run_id: consumer_lfr_id,
@@ -85,7 +85,7 @@ mod tests {
     async fn test_seed_logical_input(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -116,22 +116,27 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
-        let execution = db.scoped(p.id).seed().execution(&function).await.unwrap();
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await
+            .unwrap();
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -152,7 +157,7 @@ mod tests {
         let requirement_table = &requirement_tables[0];
 
         let requirement_table_data_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -186,21 +191,26 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
-        let execution = db.scoped(p.id).seed().execution(&function).await.unwrap();
+        let execution = db
+            .scoped(p.base.project_id)
+            .seed()
+            .execution(&function)
+            .await
+            .unwrap();
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let _requirement_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -213,7 +223,7 @@ mod tests {
             .unwrap();
 
         let ffri = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .logical_input(
                 &collection,
@@ -227,7 +237,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(ffri.base.collection_id, collection.id);
+        assert_eq!(ffri.base.collection_id, collection.base.collection_id);
         assert_eq!(ffri.base.execution_id, execution.base.id);
         let consumer_lfr: LogicalFunctionRunDB = db
             .fetch_one::<LogicalFunctionRunDB>(and!(

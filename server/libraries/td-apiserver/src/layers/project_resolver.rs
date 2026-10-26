@@ -7,8 +7,8 @@
 //! project-scoped table is touched). The `Project` extractor reads it
 //! downstream.
 //!
-//! The lookup hits `projects_active` (the soft-delete-filtering view), which
-//! is NOT under RLS — so no GUC manipulation is needed to read it.
+//! The lookup reads the open project versions (a deleted project has none),
+//! which are NOT under RLS — so no GUC manipulation is needed to read them.
 
 use axum::extract::{Path, Request, State};
 use axum::middleware::Next;
@@ -19,7 +19,7 @@ use ta_apiserver::status::error_status::ErrorStatus;
 use td_database::access::{AccessMode, DbPool, DbScope, Global, Grant};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::project::ActiveProjectDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::types::basic::{ProjectId, ProjectIdName};
 use td_queries::Queries;
 use td_services::project::ProjectError;
@@ -58,8 +58,8 @@ async fn resolve<S: DbScope, M: AccessMode>(
     conn: &mut DomainConnection<Apiserver, S, M>,
     id_name: &ProjectIdName,
 ) -> Result<Option<ProjectId>, TdError> {
-    let proj: Option<ActiveProjectDB> = conn.fetch_optional::<ActiveProjectDB>(id_name).await?;
-    Ok(proj.map(|p| p.id))
+    let proj: Option<ProjectDB> = conn.scd2().fetch_optional::<ProjectDB>(id_name).await?;
+    Ok(proj.map(|p| p.base.project_id))
 }
 
 #[cfg(test)]

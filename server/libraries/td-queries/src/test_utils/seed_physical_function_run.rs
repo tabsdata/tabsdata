@@ -8,7 +8,7 @@ use crate::test_utils::seed_logical_function_run::seed_logical_function_run;
 use td_database::access::{InProject, LockInstant};
 use td_database::domain::Apiserver;
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
@@ -20,7 +20,7 @@ use td_objects::types::basic::{
 
 pub(crate) async fn seed_physical_function_run(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     function_version: &FunctionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -40,7 +40,7 @@ pub(crate) async fn seed_physical_function_run(
     let pfr_id = PhysicalFunctionRunId::new();
     let function_db = PhysicalFunctionRunInsertDB {
         id: pfr_id.clone(),
-        collection_id: collection.id,
+        collection_id: collection.base.collection_id,
         function_id: function_version.base.function_id,
         function_version_id: function_version.base.id.clone(),
         execution_id: execution.base.id.clone(),
@@ -51,7 +51,8 @@ pub(crate) async fn seed_physical_function_run(
             .base
             .base_path
             .clone()
-            .unwrap_or_else(|| collection.effective_base_path.clone()),
+            .or_else(|| collection.base.base_path.clone())
+            .unwrap_or_default(),
         dispatched_on: None,
         started_on: None,
         ended_on: None,
@@ -92,7 +93,7 @@ mod tests {
     async fn test_seed_function_run(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -127,14 +128,14 @@ mod tests {
         };
 
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .execution(&function_version)
             .await
@@ -142,14 +143,14 @@ mod tests {
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -161,7 +162,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(physical_function_run.base.collection_id, collection.id);
+        assert_eq!(
+            physical_function_run.base.collection_id,
+            collection.base.collection_id
+        );
         assert_eq!(
             physical_function_run.base.function_version_id,
             function_version.base.id

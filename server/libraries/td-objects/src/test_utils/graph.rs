@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::dxo::collection::{ActiveCollectionDB, ResolvedCollectionDB};
+use crate::dxo::collection::ResolvedCollectionDB;
 use crate::dxo::graph::{FunctionNode, TableNode};
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::{
@@ -147,21 +147,19 @@ pub fn version() -> ProjectTopologyDB {
 
 pub fn collection() -> ResolvedCollectionDB {
     ResolvedCollectionDB {
-        base: ActiveCollectionDB {
-            id: *COLLECTION_ID,
-            project_id: *PROJECT_ID,
-            name: COLLECTION_NAME.clone(),
-            description: Description::default(),
-            created_on: AtTime::default().into(),
-            created_by_id: UserId::default().into(),
-            modified_on: AtTime::default().into(),
-            modified_by_id: UserId::default().into(),
-            group_id: *GROUP_ID,
-            base_path: None,
-            effective_base_path: BasePath::default(),
-            collection_type: CollectionType::DataFactory,
-            connection_id: None,
-        },
+        id: *COLLECTION_ID,
+        project_id: *PROJECT_ID,
+        name: COLLECTION_NAME.clone(),
+        description: Description::default(),
+        created_on: AtTime::default().into(),
+        created_by_id: UserId::default().into(),
+        modified_on: AtTime::default().into(),
+        modified_by_id: UserId::default().into(),
+        group_id: *GROUP_ID,
+        base_path: None,
+        effective_base_path: BasePath::default(),
+        collection_type: CollectionType::DataFactory,
+        connection_id: None,
         deleted: CollectionWhenDeleted::FALSE,
     }
 }

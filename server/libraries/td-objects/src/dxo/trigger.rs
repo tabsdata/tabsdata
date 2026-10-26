@@ -5,7 +5,7 @@
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
-    CollectionId, CollectionName, FunctionId, ProjectId, System, TableId, TriggerBy, TriggerId,
+    CollectionId, CollectionLabel, FunctionId, ProjectId, System, TableId, TriggerBy, TriggerId,
     TriggerStatus, TriggerVersionId, UserId,
 };
 use ta_objects::sql_condition::SqlCondition;
@@ -49,8 +49,8 @@ impl TriggerDB {
 pub struct TriggerDBWithNames {
     #[dao(flatten)]
     pub base: TriggerDB,
-    pub collection: CollectionName,
-    pub trigger_by_collection: TriggerBy<CollectionName>,
+    pub collection: CollectionLabel,
+    pub trigger_by_collection: TriggerBy<CollectionLabel>,
 }
 
 impl TriggerDBWithNames {

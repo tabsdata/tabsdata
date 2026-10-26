@@ -81,12 +81,12 @@ impl ProjectTopology {
         let collection = self.collection(&function.collection_id)?;
         Ok(FunctionNode {
             collection_id: function.collection_id,
-            collection: collection.base.name.clone(),
+            collection: collection.name.clone(),
             function_id: function.function_id,
             function_version_id: function.id.clone(),
             name: function.name.clone(),
             enabled: function.enabled,
-            group_id: collection.base.group_id,
+            group_id: collection.group_id,
             parent_function_id: function.parent_function_id,
         })
     }
@@ -95,7 +95,7 @@ impl ProjectTopology {
         let collection = self.collection(&table.collection_id)?;
         Ok(TableNode {
             collection_id: table.collection_id,
-            collection: collection.base.name.clone(),
+            collection: collection.name.clone(),
             function_version_id: table.function_version_id.clone(),
             table_id: table.table_id,
             table_version_id: table.id,

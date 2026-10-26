@@ -8,14 +8,16 @@
 use crate::QueryExecutor;
 use crate::daos::function_runs::LogicalRuns;
 use crate::primitives::chunked::fetch_chunked;
+use crate::primitives::scd2::current_version_of;
 use sea_query::{Alias, Expr, ExprTrait, Func, JoinType, Query, SelectStatement};
 use std::collections::HashMap;
 use ta_objects::Dao;
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use td_objects::dxo::bundle::BundleDBIden;
-use td_objects::dxo::collection::{ActiveCollectionDBIden, ResolvedCollectionDBIden};
+use td_objects::dxo::collection::{CollectionDB, CollectionDBIden};
 use td_objects::dxo::function::{FunctionDB, FunctionDBIden, FunctionDBWithBundleBasePath};
+use td_objects::dxo::project::{ProjectDB, ProjectDBIden};
 use td_objects::types::basic::{BasePath, FunctionVersionId};
 
 impl<E> LogicalRuns<E>
@@ -53,8 +55,9 @@ fn fvid_in(fvids: &[FunctionVersionId]) -> sea_query::SimpleExpr {
         .is_in(fvids.iter().map(SeaValue::as_sea_expr))
 }
 
-/// `(id, base_path)`, decoded positionally into a tuple. The collection's
-/// `effective_base_path` is NOT NULL, so the COALESCE always resolves.
+/// `(id, base_path)`, decoded positionally into a tuple: the function's own
+/// prefix, else its open collection's, else its project's (NOT NULL, so the
+/// COALESCE always resolves). A function of a deleted collection has no row.
 pub(crate) fn fetch_effective_output_base_paths_query(
     fvids: &[FunctionVersionId],
 ) -> SelectStatement {
@@ -66,19 +69,24 @@ pub(crate) fn fetch_effective_output_base_paths_query(
         .expr_as(
             Expr::expr(Func::coalesce([
                 Expr::col((FunctionDBIden::Table, FunctionDBIden::BasePath)),
-                Expr::col((
-                    ResolvedCollectionDBIden::Table,
-                    ActiveCollectionDBIden::EffectiveBasePath,
-                )),
+                Expr::col((CollectionDBIden::Table, CollectionDBIden::BasePath)),
+                Expr::col((ProjectDBIden::Table, ProjectDBIden::BasePath)),
             ])),
             Alias::new("base_path"),
         )
         .from(FunctionDBIden::Table)
         .join(
             JoinType::Join,
-            ResolvedCollectionDBIden::Table,
-            Expr::col((ResolvedCollectionDBIden::Table, ActiveCollectionDBIden::Id))
-                .equals((FunctionDBIden::Table, FunctionDBIden::CollectionId)),
+            CollectionDBIden::Table,
+            current_version_of::<CollectionDB>((
+                FunctionDBIden::Table,
+                FunctionDBIden::CollectionId,
+            )),
+        )
+        .join(
+            JoinType::Join,
+            ProjectDBIden::Table,
+            current_version_of::<ProjectDB>((FunctionDBIden::Table, FunctionDBIden::ProjectId)),
         )
         .and_where(fvid_in(fvids))
         .take()
@@ -126,7 +134,7 @@ mod tests {
         let sql = fetch_effective_output_base_paths_query(&fvids()).to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "functions"."id" AS "id", COALESCE("functions"."base_path", "collections_resolved"."effective_base_path") AS "base_path" FROM "functions" JOIN "collections_resolved" ON "collections_resolved"."id" = "functions"."collection_id" WHERE "functions"."id" IN (202601010000000001)"#
+            r#"SELECT "functions"."id" AS "id", COALESCE("functions"."base_path", "collections"."base_path", "projects"."base_path") AS "base_path" FROM "functions" JOIN "collections" ON "collections"."collection_id" = "functions"."collection_id" AND "collections"."valid_to" = ('infinity'::timestamptz) JOIN "projects" ON "projects"."project_id" = "functions"."project_id" AND "projects"."valid_to" = ('infinity'::timestamptz) WHERE "functions"."id" IN (202601010000000001)"#
         );
     }
 

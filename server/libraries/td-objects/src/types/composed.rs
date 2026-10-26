@@ -36,7 +36,7 @@ impl TryFrom<&TableDBWithNames> for TableTrigger {
 
     fn try_from(v: &TableDBWithNames) -> Result<Self, Self::Error> {
         let table = TableTrigger::new(TableRef::new(
-            Some(v.collection.clone()),
+            Some(v.collection.name()?),
             v.base.base.name.clone(),
         ));
         Ok(table)

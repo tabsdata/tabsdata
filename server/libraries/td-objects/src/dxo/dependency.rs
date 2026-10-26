@@ -5,7 +5,7 @@
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
-    CollectionId, CollectionName, DependencyId, DependencyPos, DependencyVersionId, FunctionId,
+    CollectionId, CollectionLabel, DependencyId, DependencyPos, DependencyVersionId, FunctionId,
     OfTable, ProjectId, System, TableId, UserId,
 };
 use crate::types::composed::TableVersions;
@@ -45,8 +45,8 @@ pub struct DependencyDB {
 pub struct DependencyDBWithNames {
     #[dao(flatten)]
     pub base: DependencyDB,
-    pub collection: CollectionName,
-    pub table_collection: OfTable<CollectionName>,
+    pub collection: CollectionLabel,
+    pub table_collection: OfTable<CollectionLabel>,
 }
 
 impl DependencyDBWithNames {

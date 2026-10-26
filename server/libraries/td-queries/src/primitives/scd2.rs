@@ -8,13 +8,13 @@
 //! the condition's own indexes.
 
 use sea_query::{
-    Condition, Expr, ExprTrait, InsertStatement, IntoColumnRef, Query, SelectStatement,
-    UpdateStatement,
+    Alias, Condition, Expr, ExprTrait, Func, InsertStatement, IntoColumnRef, Query,
+    SelectStatement, UpdateStatement,
 };
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    SameInner, Scd2Dao, Scd2OpenDao, SeaValue, SelectDao, TableDao, TimelineDao, TypedInner,
+    PkDao, SameInner, Scd2Dao, Scd2OpenDao, SeaValue, SelectDao, TableDao, TimelineDao, TypedInner,
     UpdateDao,
 };
 use td_common::datetime::{IntervalEnd, Timestamp};
@@ -28,6 +28,63 @@ pub(crate) fn open_interval_at(valid_to: impl IntoColumnRef) -> Expr {
 
 pub(crate) fn open_interval_cond<D: Scd2Dao>() -> Expr {
     open_interval_at(D::VALID_TO)
+}
+
+/// The join to `D`'s open version of the timeline `referrer` points at: no
+/// row once that timeline is closed.
+pub(crate) fn current_version_of<D: Scd2Dao>(referrer: impl IntoColumnRef) -> Condition {
+    Condition::all()
+        .add(Expr::col((D::TABLE, D::PARTITION)).equals(referrer))
+        .add(open_interval_at((D::TABLE, D::VALID_TO)))
+}
+
+/// No later version of the row's timeline exists: the row is its last
+/// version, open or closed. Versions order by `(valid_from, pk)`, the
+/// close-out trigger's own order for same-instant versions.
+pub(crate) fn last_version_cond<D: Scd2Dao + PkDao>() -> Expr {
+    let later = Alias::new("later");
+    let order = |valid_from: Expr, pk: Expr| Expr::tuple([valid_from, pk]);
+    Expr::not_exists(
+        Query::select()
+            .expr(Expr::val(1))
+            .from_as(D::TABLE, later.clone())
+            .and_where(Expr::col((later.clone(), D::PARTITION)).equals((D::TABLE, D::PARTITION)))
+            .and_where(
+                order(
+                    Expr::col((later.clone(), D::VALID_FROM)),
+                    Expr::col((later, D::PK)),
+                )
+                .gt(order(
+                    Expr::col((D::TABLE, D::VALID_FROM)),
+                    Expr::col((D::TABLE, D::PK)),
+                )),
+            )
+            .to_owned(),
+    )
+}
+
+/// The join to `D`'s last version of the timeline `referrer` points at,
+/// open or closed.
+pub(crate) fn last_version_of<D: Scd2Dao + PkDao>(referrer: impl IntoColumnRef) -> Condition {
+    Condition::all()
+        .add(Expr::col((D::TABLE, D::PARTITION)).equals(referrer))
+        .add(last_version_cond::<D>())
+}
+
+/// How a row names what `referrer` points at: `name` while its timeline is
+/// open, `[<id>]` once closed or never found.
+pub(crate) fn name_or_id(name: impl IntoColumnRef, referrer: impl IntoColumnRef) -> Expr {
+    Expr::expr(Func::coalesce([
+        Expr::col(name),
+        Expr::cust_with_exprs("'[' || $1 || ']'", [Expr::col(referrer)]),
+    ]))
+}
+
+pub(crate) fn label_of<D: Scd2Dao>(name: impl IntoColumnRef, referrer: impl IntoColumnRef) -> Expr {
+    Expr::expr(Func::coalesce([
+        Expr::case(open_interval_at((D::TABLE, D::VALID_TO)), Expr::col(name)).into(),
+        Expr::cust_with_exprs("'[' || $1 || ']'", [Expr::col(referrer)]),
+    ]))
 }
 
 pub(crate) fn visible_at<V: SeaValue>(
@@ -101,6 +158,13 @@ pub(crate) fn select_open<D: SelectDao + Scd2Dao>(
     condition: impl SqlCondition<D>,
 ) -> SelectStatement {
     select_where::<D>(condition, Condition::all().add(open_interval_cond::<D>()))
+}
+
+/// The last version of every matching timeline, open or closed.
+pub(crate) fn select_last<D: SelectDao + Scd2Dao + PkDao>(
+    condition: impl SqlCondition<D>,
+) -> SelectStatement {
+    select_where::<D>(condition, Condition::all().add(last_version_cond::<D>()))
 }
 
 /// A payload update of the matching open rows; closed versions stay as written.

@@ -4,24 +4,27 @@
 
 use crate::Queries;
 use crate::Writes;
+use crate::test_utils::topology::seed_instant;
 use td_database::access::InProject;
 use td_database::domain::Apiserver;
 use td_error::TdError;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionInsertDB};
+use td_objects::dxo::collection::{CollectionDB, CollectionInsertDB};
 use td_objects::dxo::group::GroupDB;
 use td_objects::types::basic::{
-    AtTime, CollectionId, CollectionName, CollectionType, Description, GroupName, UserId,
+    CollectionId, CollectionName, CollectionType, CollectionVersionId, Description, GroupName,
+    UserId,
 };
 
 pub(crate) async fn seed_collection(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
     collection_name: &CollectionName,
     created_by: &UserId,
-) -> Result<ActiveCollectionDB, TdError> {
+) -> Result<CollectionDB, TdError> {
     // Assign the collection to its project's own `default` group: the name is
     // unique only within the project, hence the `InProject` executor.
     let default_group = executor
         .reuse()
+        .scd2()
         .fetch_one::<GroupDB>(&GroupName::default_group())
         .await?;
     seed_collection_in_group(executor, collection_name, created_by, &default_group).await
@@ -36,32 +39,30 @@ pub(crate) async fn seed_collection_in_group(
     collection_name: &CollectionName,
     created_by: &UserId,
     group: &GroupDB,
-) -> Result<ActiveCollectionDB, TdError> {
+) -> Result<CollectionDB, TdError> {
     let collection_type = CollectionType::from_group_kind(&group.base.kind);
 
-    let created_on = AtTime::now();
+    let at = seed_instant();
     let collection = CollectionInsertDB {
-        id: CollectionId::default(),
+        id: CollectionVersionId::default(),
+        collection_id: CollectionId::default(),
         name: collection_name.clone(),
         description: Description::default(),
-        created_on: created_on.into(),
-        created_by_id: (*created_by).into(),
-        modified_on: created_on.into(),
-        modified_by_id: (*created_by).into(),
-        name_when_deleted: None,
-        group_id: group.base.id,
         base_path: None,
+        group_id: group.base.group_id,
         collection_type,
         connection_id: None,
+        defined_by_id: *created_by,
     };
 
-    executor.reuse().insert(&collection).await?;
+    executor.reuse().scd2().open(&collection, at).await?;
 
     // Read the row back so the returned model carries the DB-assigned
     // `project_id` (the scope's project), rather than guessing it. The `?`
     // converts `SqlError` into `TdError`.
     Ok(executor
-        .fetch_one::<ActiveCollectionDB>(&collection.id)
+        .scd2()
+        .fetch_one::<CollectionDB>(&collection.collection_id)
         .await?)
 }
 
@@ -70,7 +71,7 @@ mod tests {
     use crate::Queries;
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
-    use td_objects::dxo::collection::ActiveCollectionDB;
+    use td_objects::dxo::collection::CollectionDB;
     use td_objects::types::basic::{CollectionName, UserId};
     use td_security::ENCODED_ID_SYSTEM;
 
@@ -78,7 +79,7 @@ mod tests {
     async fn test_seed_collection(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -90,15 +91,15 @@ mod tests {
         // Read it back through a project-scoped executor: serving connections
         // run as `td_app` under RLS, so an unscoped read would see nothing.
         let found = db
-            .fetch_one::<ActiveCollectionDB>(&collection.id)
+            .scoped(p.base.project_id)
+            .scd2()
+            .fetch_one::<CollectionDB>(&collection.base.collection_id)
             .await
             .unwrap();
-        assert_eq!(found.id, collection.id);
-        assert_eq!(found.name, collection.name);
-        assert_eq!(found.description, collection.description);
-        assert_eq!(found.created_on, collection.created_on);
-        assert_eq!(found.created_by_id, collection.created_by_id);
-        assert_eq!(found.modified_on, collection.modified_on);
-        assert_eq!(found.modified_by_id, collection.modified_by_id);
+        assert_eq!(found.base.collection_id, collection.base.collection_id);
+        assert_eq!(found.base.name, collection.base.name);
+        assert_eq!(found.base.description, collection.base.description);
+        assert_eq!(found.interval, collection.interval);
+        assert_eq!(found.base.defined_by_id, collection.base.defined_by_id);
     }
 }

@@ -2,19 +2,20 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::dxo::project::{ActiveProjectDB, ActiveProjectDBIden};
+use crate::dxo::project::{ProjectDB, ProjectDBIden};
 use crate::types::basic::ProjectId;
 use sea_query::{Condition, Expr, ExprTrait, Query, SimpleExpr};
 use std::collections::HashSet;
 use ta_objects::sql_condition::SqlCondition;
-use ta_objects::{Dao, HasColumn, SeaValue};
+use ta_objects::{Dao, HasColumn, Scd2Dao, SeaValue};
+use td_common::datetime::IntervalEnd;
 
 /// The set of projects a requester may view: every live project ([`Self::All`],
 /// from a `project:__all__` view grant) or an explicit set ([`Self::Only`],
 /// possibly empty — the requester then sees nothing). `td_authz` derives it
 /// from grants; a cross-project listing filters its result set to it. A
-/// soft-deleted project is in neither: its roles are dropped with it, and
-/// `All` reaches only `projects_active`.
+/// deleted project is in neither: its roles are dropped with it, and `All`
+/// reaches only the projects with an open version.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VisibleProjects {
     All,
@@ -41,8 +42,11 @@ impl VisibleProjects {
         let ids = match self {
             VisibleProjects::All => {
                 let live = Query::select()
-                    .column(ActiveProjectDBIden::Id)
-                    .from(ActiveProjectDB::TABLE)
+                    .column(ProjectDBIden::ProjectId)
+                    .from(ProjectDB::TABLE)
+                    .and_where(
+                        Expr::col(ProjectDB::VALID_TO).eq(Expr::cust(IntervalEnd::SQL_INFINITY)),
+                    )
                     .to_owned();
                 return Condition::all().add(project_id.into().in_subquery(live));
             }
@@ -79,9 +83,9 @@ mod tests {
     fn test_all_narrows_to_live_projects() {
         assert_eq!(
             render(&VisibleProjects::All),
-            r#"SELECT "id" FROM "plans" WHERE "project_id" IN (SELECT "id" FROM "projects_active")"#
+            r#"SELECT "id" FROM "plans" WHERE "project_id" IN (SELECT "project_id" FROM "projects" WHERE "valid_to" = ('infinity'::timestamptz))"#
         );
-        assert!(!SqlCondition::<ActiveProjectDB>::matches_all(
+        assert!(!SqlCondition::<ProjectDB>::matches_all(
             &VisibleProjects::All
         ));
     }

@@ -2,129 +2,97 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+//! A collection is an SCD2 timeline of versions; its id is what every
+//! function, table and run points at. The live collections are the open
+//! versions; a delete closes the timeline.
+
 use crate::dxo::connection::KeyValue;
 use crate::dxo::crudl::RequestContext;
+use crate::dxo::scd2_interval::Scd2Interval;
 use crate::types::basic::{
     AtTime, BasePath, CollectionId, CollectionIdName, CollectionName, CollectionType,
-    CollectionWhenDeleted, ConnectionId, Created, Description, GroupId, GroupName, Modified,
-    ProjectId, ProjectName, UserId, UserLabel, WhenDeleted,
+    CollectionVersionId, ConnectionId, Description, GroupId, GroupLabel, GroupName, ProjectId,
+    ProjectLabel, Scd2ValidFrom, UserId, UserLabel,
 };
 use ta_objects::FromDao;
-use td_common::id::Id;
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(table = "collections", ops(insert), project_scoped)]
+#[dao(table = "collections", ops(insert), scd2, project_scoped)]
 pub struct CollectionInsertDB {
     #[dao(pk)]
-    pub id: CollectionId,
+    pub id: CollectionVersionId,
+    #[dao(partition_by)]
+    pub collection_id: CollectionId,
     pub name: CollectionName,
     pub description: Description,
-    pub created_on: Created<AtTime>,
-    pub created_by_id: Created<UserId>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
-    pub name_when_deleted: Option<WhenDeleted<CollectionName>>,
-    // Resolved from `CollectionCreate::group` (id-or-name) by the create service.
-    pub group_id: GroupId,
-    // Logical storage prefix, mapped from `CollectionCreate::base_path`.
-    // `None` (omitted) inherits the owning project's base_path at stamp time.
+    // Logical storage prefix. `None` inherits the owning project's base_path
+    // at stamp time.
     pub base_path: Option<BasePath>,
+    // Fixed for the collection's life, from here down. Resolved from
+    // `CollectionCreate::group` (id-or-name) by the create service.
+    pub group_id: GroupId,
     // Inferred from the resolved group by the create service.
     pub collection_type: CollectionType,
     // The connection minted with the collection (source/destination only).
     pub connection_id: Option<ConnectionId>,
+    pub defined_by_id: UserId,
 }
 
-/// The row as the database holds it: `project_id` is the `project_isolation`
-/// policy's, defaulted from the connection the insert ran on. The base table,
-/// so it is the row a catalog write locks to write under the collection.
 #[ta_objects::Dao]
 #[dao(
     table = "collections",
-    ops(select),
-    project_scoped(unique(CollectionName))
+    ops(select, close),
+    scd2,
+    project_scoped(unique_at(CollectionName), unique_at(CollectionIdName))
 )]
 pub struct CollectionDB {
     #[dao(flatten)]
     pub base: CollectionInsertDB,
     pub project_id: ProjectId,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
 }
 
-#[ta_objects::Dao]
-#[dao(view = "collections_active", project_scoped(unique(CollectionName)))]
-pub struct ActiveCollectionDB {
-    #[dao(pk)]
-    pub id: CollectionId,
-    /// The project that owns this collection. Read from the DB column when
-    /// SELECT'd so downstream constructions (functions, runs, workers) can
-    /// propagate it. Set by RLS on INSERTs.
-    pub project_id: ProjectId,
-    pub name: CollectionName,
-    pub description: Description,
-    pub created_on: Created<AtTime>,
-    pub created_by_id: Created<UserId>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
-    pub group_id: GroupId,
-    // Raw override: `None` means inherit the owning project's base_path.
-    pub base_path: Option<BasePath>,
-    // Resolved prefix from the `collections_active` view (COALESCE of own
-    // base_path, else project's). Read-only; stamp it at register/upload/download.
-    pub effective_base_path: BasePath,
-    pub collection_type: CollectionType,
-    /// The connection minted with this collection (source/destination
-    /// only — they are 1:1 with it).
-    pub connection_id: Option<ConnectionId>,
-}
-
-impl ActiveCollectionDB {
-    /// The soft-delete update: the row is renamed to `deleted_<id>`,
-    /// freeing the name for reuse.
-    pub fn to_delete_dao(&self, ctx: &RequestContext) -> CollectionDeleteDB {
-        CollectionDeleteDB {
-            name: CollectionName::try_from(format!("deleted_{}", Id::default()))
-                .expect("invalid collection name"),
-            modified_on: ctx.time.into(),
-            modified_by_id: ctx.user_id.into(),
-            name_when_deleted: self.name.clone().into(),
+impl CollectionDB {
+    /// The version an update opens: this one's values with the update's
+    /// changes on top.
+    pub fn updated(&self, update: &CollectionUpdate, ctx: &RequestContext) -> CollectionInsertDB {
+        CollectionInsertDB {
+            id: CollectionVersionId::default(),
+            name: update
+                .name
+                .clone()
+                .unwrap_or_else(|| self.base.name.clone()),
+            description: update
+                .description
+                .clone()
+                .unwrap_or_else(|| self.base.description.clone()),
+            base_path: update
+                .base_path
+                .clone()
+                .unwrap_or_else(|| self.base.base_path.clone()),
+            defined_by_id: ctx.user_id,
+            ..self.base.clone()
         }
     }
 }
 
 #[ta_objects::Dao]
-#[dao(view = "collections_resolved", project_scoped)]
-pub struct ResolvedCollectionDB {
-    #[dao(flatten)]
-    pub base: ActiveCollectionDB,
-    pub deleted: CollectionWhenDeleted,
-}
-
-#[ta_objects::Dao]
-#[dao(table = "collections", ops(update(CollectionDB)), project_scoped)]
-pub struct CollectionDeleteDB {
-    pub name: CollectionName,
-
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
-
-    pub name_when_deleted: WhenDeleted<CollectionName>,
-}
-
-#[ta_objects::Dao]
 #[dao(
     view = "collections__with_names",
-    project_scoped(unique(CollectionName))
+    scd2,
+    project_scoped(unique_at(CollectionName), unique_at(CollectionIdName))
 )]
-pub struct ActiveCollectionDBWithNames {
+pub struct CollectionDBWithNames {
     #[dao(flatten)]
-    pub base: ActiveCollectionDB,
-    // Owning project's name, from the view's join to projects_resolved.
-    pub project: ProjectName,
-    pub created_by: Created<UserLabel>,
-    pub modified_by: Modified<UserLabel>,
-    // Resolved group display name from the joined groups row.
-    pub group: GroupName,
+    pub base: CollectionDB,
+    // Resolved prefix (COALESCE of own base_path, else project's). Read-only;
+    // stamp it at register/upload/download.
+    pub effective_base_path: BasePath,
+    pub project: ProjectLabel,
+    pub defined_by: UserLabel,
+    pub group: GroupLabel,
 }
 
 #[ta_objects::Dto]
@@ -163,88 +131,68 @@ pub struct CollectionUpdate {
     pub base_path: Option<Option<BasePath>>,
 }
 
-impl CollectionUpdate {
-    pub fn to_dao(&self, ctx: &RequestContext) -> CollectionUpdateDB {
-        CollectionUpdateDB {
-            name: self.name.clone(),
-            description: self.description.clone(),
-            modified_on: ctx.time.into(),
-            modified_by_id: ctx.user_id.into(),
-            base_path: self.base_path.clone(),
-        }
-    }
-}
-
-#[ta_objects::Dao]
-#[dao(table = "collections", ops(update(CollectionDB)), project_scoped)]
-pub struct CollectionUpdateDB {
-    // Each column is written only when set (an outer `None` skips it): an
-    // update writes what its request changed, never a copy of the row.
-    pub name: Option<CollectionName>,
-    pub description: Option<Description>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
-    pub base_path: Option<Option<BasePath>>,
-}
-
 #[ta_objects::Dto]
-#[dto(list(on = ActiveCollectionDBWithNames))]
+#[dto(list(on = CollectionDBWithNames))]
 pub struct CollectionRead {
     #[dto(list(pagination_by = "+"))]
-    pub id: CollectionId,
+    pub id: CollectionVersionId,
+    #[dto(list(filter))]
+    pub collection_id: CollectionId,
     #[dto(list(filter))]
     pub project_id: ProjectId,
     #[dto(list(filter, filter_like, order_by))]
     pub name: CollectionName,
     #[dto(list(filter, filter_like, order_by))]
     pub description: Description,
-    pub created_on: Created<AtTime>,
-    pub created_by_id: Created<UserId>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
     pub group_id: GroupId,
     pub base_path: Option<BasePath>,
     pub effective_base_path: BasePath,
     #[dto(list(filter, order_by))]
     pub collection_type: CollectionType,
     pub connection_id: Option<ConnectionId>,
+    #[dto(list(filter, order_by, col = Scd2ValidFrom))]
+    pub defined_on: AtTime,
+    pub defined_by_id: UserId,
     // Disambiguates same-named collections across projects in wildcard listings.
     #[dto(list(filter, filter_like, order_by))]
-    pub project: ProjectName,
-    pub created_by: Created<UserLabel>,
-    pub modified_by: Modified<UserLabel>,
+    pub project: ProjectLabel,
     #[dto(list(filter, filter_like, order_by))]
-    pub group: GroupName,
+    pub defined_by: UserLabel,
+    #[dto(list(filter, filter_like, order_by))]
+    pub group: GroupLabel,
 }
 
 impl FromDao for CollectionRead {
-    type Dao = ActiveCollectionDBWithNames;
+    type Dao = CollectionDBWithNames;
 
-    fn from_dao(dao: ActiveCollectionDBWithNames) -> Result<Self, TdError> {
-        let ActiveCollectionDBWithNames {
-            base,
+    fn from_dao(dao: CollectionDBWithNames) -> Result<Self, TdError> {
+        let CollectionDBWithNames {
+            base:
+                CollectionDB {
+                    base,
+                    project_id,
+                    interval,
+                },
+            effective_base_path,
             project,
-            created_by,
-            modified_by,
+            defined_by,
             group,
         } = dao;
         Ok(Self {
             id: base.id,
-            project_id: base.project_id,
+            collection_id: base.collection_id,
+            project_id,
             name: base.name,
             description: base.description,
-            created_on: base.created_on,
-            created_by_id: base.created_by_id,
-            modified_on: base.modified_on,
-            modified_by_id: base.modified_by_id,
             group_id: base.group_id,
             base_path: base.base_path,
-            effective_base_path: base.effective_base_path,
+            effective_base_path,
             collection_type: base.collection_type,
             connection_id: base.connection_id,
+            defined_on: interval.valid_from.into(),
+            defined_by_id: base.defined_by_id,
             project,
-            created_by,
-            modified_by,
+            defined_by,
             group,
         })
     }

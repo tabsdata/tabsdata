@@ -21,7 +21,7 @@ use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
 use td_objects::dxo::crudl::Provenance;
-use td_objects::dxo::project::ActiveProjectDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::types::basic::{TokenScope, UserId};
 use td_objects::types::visible_projects::VisibleProjects;
 use td_queries::Queries;
@@ -369,7 +369,7 @@ impl EntityKind for Project {
         conn: &mut DomainConnection<Apiserver, S, M>,
         id: &Self::Id,
     ) -> Result<bool, TdError> {
-        let live: Option<ActiveProjectDB> = conn.fetch_optional(id).await?;
+        let live: Option<ProjectDB> = conn.scd2().fetch_optional(id).await?;
         Ok(live.is_some())
     }
 }

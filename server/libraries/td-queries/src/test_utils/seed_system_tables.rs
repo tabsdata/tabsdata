@@ -116,7 +116,7 @@ mod tests {
     async fn test_seed_system_tables(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -151,13 +151,13 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
         let system_tables = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .system_tables(&function)
             .await

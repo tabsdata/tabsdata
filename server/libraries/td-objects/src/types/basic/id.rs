@@ -53,6 +53,15 @@ pub struct DependencyId(Id);
 pub struct DependencyVersionId(Id);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct CollectionVersionId(Id);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct GroupVersionId(Id);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+pub struct ProjectVersionId(Id);
+
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 #[typed(try_from = CollectionId, try_from = ProjectId)]
 pub struct EntityId(Id);
 

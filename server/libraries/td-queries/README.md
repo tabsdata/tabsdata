@@ -287,11 +287,11 @@ the only op it may declare, and it gets no `FromRow` — its `Option` fields
 mean "leave the column alone", which a readable DAO would read as "nullable".
 Its condition is typed over `U::FilterBy`, the payload DAO itself. A
 partial-column payload names the relation's row DAO instead —
-`#[dao(table = "collections", ops(update(CollectionDB)), project_scoped)]` —
+`#[dao(table = "executions", ops(update(ExecutionDB)), project_scoped)]` —
 so it can be filtered on a column it does not carry. The named DAO must
 address the same relation, asserted at compile time against
 `Dao::RELATION`: a view's columns can be computed
-(`collections_active.name` is a `COALESCE`), and must not supply the filter
+(`collections_resolved.effective_base_path` is a `COALESCE`), and must not supply the filter
 vocabulary for an UPDATE on the base table. The named DAO may be an SCD2
 row DAO: a payload still targets rows of the base table.
 
@@ -368,8 +368,8 @@ the base.
 
 ```rust
 #[ta_objects::Dao]
-#[dao(view = "collections_active", project_scoped(unique(CollectionName)))]
-pub struct ActiveCollectionDB {
+#[dao(view = "collections_resolved", project_scoped)]
+pub struct ResolvedCollectionDB {
     #[dao(pk)]
     pub id: CollectionId,
     pub project_id: ProjectId,
@@ -377,18 +377,17 @@ pub struct ActiveCollectionDB {
     pub description: Description,
     pub created_on: Created<AtTime>,
     pub created_by_id: Created<UserId>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
     pub group_id: GroupId,
     pub base_path: Option<BasePath>,
+    pub deleted: CollectionWhenDeleted,
 }
 ```
 
-This generates `ActiveCollectionDBIden` with variants `Table`, `Id`,
+This generates `ResolvedCollectionDBIden` with variants `Table`, `Id`,
 `ProjectId`, `Name`, … and implements `Dao` with `columns()` / `order_by()`,
-`PkDao`, `ProjectScoped`, `AddressesOneRow` for `&CollectionId` and for
-`&CollectionName` (unique within the project), plus `SelectDao` — a view is
-readable by construction and declares no `ops`.
+`PkDao`, `ProjectScoped`, `AddressesOneRow` for `&CollectionId` (the name is
+not unique here: a deleted collection keeps its last name), plus `SelectDao`
+— a view is readable by construction and declares no `ops`.
 
 ### SCD2 DAO Example
 

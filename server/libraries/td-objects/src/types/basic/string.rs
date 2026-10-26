@@ -4,9 +4,10 @@
 
 use crate::dxo::table::TableDBWithNames;
 use crate::parse::{
-    DATA_LOCATION_REGEX, NAME_PATTERN, SECRET_NAME_PATTERN, UNDERSCORE_NAME_PATTERN,
-    USER_LABEL_PATTERN, parse_email,
+    DATA_LOCATION_REGEX, NAME_PATTERN, SECRET_NAME_PATTERN, UNDERSCORE_NAME_PATTERN, parse_email,
 };
+use crate::types::basic::{CollectionId, GroupId, ProjectId};
+use crate::types::label::Label;
 use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_error::{ApiError, api_error};
 use td_security::token::HINT_LENGTH;
@@ -284,11 +285,26 @@ pub struct TransactionKey(String);
 #[typed(regex = NAME_PATTERN, expected = "a [A-Za-z0-9] word of up to 100 characters")]
 pub struct UserName(String);
 
+/// How a row names its collection: the name while the collection exists,
+/// `[<id>]` after it is deleted.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct CollectionLabel(Label<CollectionName, CollectionId>);
+
+/// How a row names its group: the name while the group exists, `[<id>]`
+/// after it is deleted.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct GroupLabel(Label<GroupName, GroupId>);
+
+/// How a row names its project: the name while the project exists, `[<id>]`
+/// after it is deleted.
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
+pub struct ProjectLabel(Label<ProjectName, ProjectId>);
+
 /// How a row names the user who touched it: the name while the account
 /// exists, `[<id>]` after it is deleted.
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 #[typed(
-    regex = USER_LABEL_PATTERN,
+    regex = LABEL_PATTERN,
     expected = "a user name, or the bracketed id of a deleted user"
 )]
 pub struct UserLabel(String);

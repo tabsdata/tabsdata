@@ -10,12 +10,12 @@
 //! the newest being the current one.
 
 use crate::types::basic::{
-    AtTime, ByteCount, CollectionId, CollectionName, CollectionWhenDeleted, ColumnCount,
+    AtTime, ByteCount, CollectionId, CollectionLabel, CollectionWhenDeleted, ColumnCount,
     DataChanged, DependencyPos, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName,
-    FunctionVersionId, GroupId, GroupName, HasData, InputIdx, LogicalFunctionRunId,
+    FunctionVersionId, GroupId, GroupLabel, HasData, InputIdx, LogicalFunctionRunId,
     LogicalFunctionRunInputId, LogicalFunctionRunStatus, LogicalTableDataVersionId, Parent, Patch,
     PhysicalFunctionRunId, PhysicalFunctionRunStatus, PhysicalTableDataVersionId, Private,
-    ProjectId, ProjectName, RecoveryCount, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash,
+    ProjectId, ProjectLabel, RecoveryCount, RowCount, SchemaChanged, SchemaDataChanged, SchemaHash,
     Started, StorageVersion, TableFunctionParamPos, TableId, TableName, TableVersionId,
     TransactionId, Trigger, TriggeredOn, UserId, UserLabel, VersionPos, WithData,
 };
@@ -90,14 +90,12 @@ pub struct FunctionRunDBWithNames {
     #[dao(flatten)]
     pub base: LogicalFunctionRunDB,
     pub name: FunctionName,
-    pub collection: CollectionName,
-    // True when the owning collection is soft-deleted; `collection` still
-    // carries the real pre-deletion name (resolved view).
+    pub collection: CollectionLabel,
     pub collection_deleted: CollectionWhenDeleted,
     pub execution: Option<ExecutionName>,
     pub triggered_by: UserLabel,
-    pub group: Option<GroupName>,
-    pub project: Option<ProjectName>,
+    pub group: Option<GroupLabel>,
+    pub project: Option<ProjectLabel>,
     // This LFR's current PFR; NULL while none was minted, or after a void.
     pub physical_function_run_id: Option<PhysicalFunctionRunId>,
     pub started_on: Option<Started<AtTime>>,
@@ -140,12 +138,12 @@ pub struct FunctionRun {
     #[dto(list(filter, filter_like, order_by))]
     pub name: FunctionName,
     #[dto(list(filter, filter_like, order_by))]
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub collection_deleted: CollectionWhenDeleted,
     #[dto(list(filter, filter_like))]
     pub execution: Option<ExecutionName>,
     #[dto(list(filter, filter_like, order_by))]
-    pub project: Option<ProjectName>,
+    pub project: Option<ProjectLabel>,
     pub triggered_by: UserLabel,
     // Per-attempt fields from the current PFR;
     // `physical_function_run_id` is NULL while there is none.
@@ -284,10 +282,10 @@ pub struct ActiveLogicalTableDataVersionDB {
 pub struct TableDataVersionDBWithNames {
     #[dao(flatten)]
     pub base: LogicalTableDataVersionDB,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub execution: Option<ExecutionName>,
     pub triggered_by: UserLabel,
-    pub group: Option<GroupName>,
+    pub group: Option<GroupLabel>,
     // This LTDV's current PTDV; NULL while none was minted, or after a void.
     pub physical_table_data_version_id: Option<PhysicalTableDataVersionId>,
     pub name: Option<TableName>,
@@ -342,7 +340,7 @@ pub struct TableDataVersion {
     pub triggered_by_id: UserId,
 
     #[dto(list(filter, filter_like, order_by))]
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     #[dto(list(filter, filter_like))]
     pub execution: Option<ExecutionName>,
     pub created_by: UserLabel,

@@ -298,7 +298,7 @@ mod tests {
     use td_database::access::{InProject, RW};
     use td_database::pool::TdPool;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::project::ActiveProjectDB;
+    use td_objects::dxo::project::ProjectDB;
     use td_objects::dxo::role::RoleCreate;
     use td_objects::types::basic::{
         AccessTokenId, Description, EntityId, Fixed, PermissionId, ProjectName, RoleName, UserId,
@@ -319,9 +319,9 @@ mod tests {
     /// exactly its one fixed permission on the project. `db.seed().project()`
     /// only creates the project + system groups, so the per-project roles —
     /// the subject of condition 5 — must be seeded explicitly here.
-    async fn seed_per_project_roles(db: &TdPool, project: &ActiveProjectDB) -> Result<(), TdError> {
+    async fn seed_per_project_roles(db: &TdPool, project: &ProjectDB) -> Result<(), TdError> {
         let context = admin_context();
-        let entity_id = EntityId::try_from(project.id)?;
+        let entity_id = EntityId::try_from(project.base.project_id)?;
         let specs = [
             (
                 RoleKind::ProjectAdmin,
@@ -340,7 +340,7 @@ mod tests {
             ),
         ];
         for (kind, suffix, permission_type) in specs {
-            let role_name = RoleName::try_from(format!("{}_{suffix}", project.name))?;
+            let role_name = RoleName::try_from(format!("{}_{suffix}", project.base.name))?;
             let role_create = RoleCreate {
                 name: role_name,
                 description: Description::try_from("per-project role")?,
@@ -354,7 +354,7 @@ mod tests {
                 modified_on: context.time.into(),
                 modified_by_id: context.user_id.into(),
                 kind,
-                project_id: Some(project.id),
+                project_id: Some(project.base.project_id),
                 fixed: Fixed::TRUE,
             };
             let permission = PermissionDB {
@@ -443,7 +443,7 @@ mod tests {
             .permission(
                 PermissionType::view_project(),
                 None,
-                Some(EntityId::try_from(project.id)?),
+                Some(EntityId::try_from(project.base.project_id)?),
                 &default_role,
             )
             .await?;
@@ -470,7 +470,7 @@ mod tests {
             .permission(
                 PermissionType::manage_project(),
                 None,
-                Some(EntityId::try_from(project.id)?),
+                Some(EntityId::try_from(project.base.project_id)?),
                 &project_creator,
             )
             .await?;

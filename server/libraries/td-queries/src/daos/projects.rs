@@ -7,7 +7,8 @@
 
 use crate::QueryExecutor;
 use crate::daos::function_runs::deleted_functions::UNFINISHED;
-use sea_query::{Expr, ExprTrait, Query, SelectStatement};
+use crate::primitives::scd2::open_interval_at;
+use sea_query::{Alias, Expr, ExprTrait, Query, SelectStatement};
 use ta_objects::SeaValue;
 use ta_objects::errors::SqlError;
 use td_database::sea_query::builder::SeaQueryExt;
@@ -37,7 +38,7 @@ where
 }
 
 pub(crate) fn draining_query() -> SelectStatement {
-    let project = (ProjectDBIden::Table, ProjectDBIden::Id);
+    let project = (ProjectDBIden::Table, ProjectDBIden::ProjectId);
     let unfinished_run = Query::select()
         .expr(Expr::val(1))
         .from(LogicalFunctionRunDBIden::Table)
@@ -73,10 +74,18 @@ pub(crate) fn draining_query() -> SelectStatement {
         )
         .and_where(Expr::col((WorkerDBIden::Table, WorkerDBIden::ProjectId)).equals(project))
         .take();
+    let live = Alias::new("live");
+    let open_version = Query::select()
+        .expr(Expr::val(1))
+        .from_as(ProjectDBIden::Table, live.clone())
+        .and_where(Expr::col((live.clone(), ProjectDBIden::ProjectId)).equals(project))
+        .and_where(open_interval_at((live, ProjectDBIden::ValidTo)))
+        .take();
     Query::select()
+        .distinct()
         .column(project)
         .from(ProjectDBIden::Table)
-        .and_where(Expr::col((ProjectDBIden::Table, ProjectDBIden::Deleted)).eq(true))
+        .and_where(Expr::exists(open_version).not())
         .and_where(Expr::exists(unfinished_run).or(Expr::exists(stopping_trigger)))
         .take()
 }
@@ -91,7 +100,7 @@ mod tests {
         let sql = draining_query().to_string(PostgresQueryBuilder);
         assert_eq!(
             sql,
-            r#"SELECT "projects_resolved"."id" FROM "projects_resolved" WHERE "projects_resolved"."deleted" = TRUE AND (EXISTS(SELECT 1 FROM "logical_function_runs" WHERE "logical_function_runs"."project_id" = "projects_resolved"."id" AND "logical_function_runs"."status" IN ('S', 'RR', 'RS', 'R', 'D', 'E', 'F', 'H')) OR EXISTS(SELECT 1 FROM "workers" WHERE "workers"."worker_enabled" = TRUE AND "workers"."worker_type" IN ('CT', 'ST') AND "workers"."status" = 'SPS' AND "workers"."project_id" = "projects_resolved"."id"))"#
+            r#"SELECT DISTINCT "projects"."project_id" FROM "projects" WHERE (NOT EXISTS(SELECT 1 FROM "projects" AS "live" WHERE "live"."project_id" = "projects"."project_id" AND "live"."valid_to" = ('infinity'::timestamptz))) AND (EXISTS(SELECT 1 FROM "logical_function_runs" WHERE "logical_function_runs"."project_id" = "projects"."project_id" AND "logical_function_runs"."status" IN ('S', 'RR', 'RS', 'R', 'D', 'E', 'F', 'H')) OR EXISTS(SELECT 1 FROM "workers" WHERE "workers"."worker_enabled" = TRUE AND "workers"."worker_type" IN ('CT', 'ST') AND "workers"."status" = 'SPS' AND "workers"."project_id" = "projects"."project_id"))"#
         );
     }
 }

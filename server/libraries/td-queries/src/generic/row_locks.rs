@@ -17,7 +17,7 @@ mod tests {
     use std::time::Duration;
     use ta_objects::Dao;
     use td_database::pool::TdPool;
-    use td_objects::types::basic::{ProjectId, ProjectName};
+    use td_objects::types::basic::{BasePath, ProjectId, ProjectName, ProjectVersionId};
 
     /// How long the second reader is given before we call it blocked.
     const BLOCKED_AFTER: Duration = Duration::from_millis(300);
@@ -28,8 +28,9 @@ mod tests {
     #[dao(table = "projects", ops(select))]
     struct LockedProjectDao {
         #[dao(pk)]
-        id: ProjectId,
-        name: ProjectName,
+        id: ProjectVersionId,
+        project_id: ProjectId,
+        base_path: BasePath,
     }
 
     /// `fetch_all_for_update` blocks a second reader of the same rows until the
@@ -43,7 +44,7 @@ mod tests {
         let mut holder = db.begin().await.unwrap();
         let locked = holder
             .for_update()
-            .fetch_all::<LockedProjectDao>(&project.id)
+            .fetch_all::<LockedProjectDao>(&project.base.project_id)
             .await
             .unwrap();
         assert_eq!(locked.len(), 1, "the holder must have locked its row");
@@ -55,7 +56,7 @@ mod tests {
         {
             let mut reader = db.begin().await.unwrap();
             let unlocked: Vec<LockedProjectDao> =
-                tokio::time::timeout(BLOCKED_AFTER, reader.fetch_all(&project.id))
+                tokio::time::timeout(BLOCKED_AFTER, reader.fetch_all(&project.base.project_id))
                     .await
                     .expect("an unlocked read must not wait")
                     .unwrap();
@@ -67,7 +68,7 @@ mod tests {
             BLOCKED_AFTER,
             waiter
                 .for_update()
-                .fetch_all::<LockedProjectDao>(&project.id),
+                .fetch_all::<LockedProjectDao>(&project.base.project_id),
         )
         .await;
         assert!(
@@ -86,9 +87,9 @@ mod tests {
 
         let mut holder = db.begin().await.unwrap();
         let claimed: Vec<LockedProjectDao> = holder.for_update().claim_all(&()).await.unwrap();
-        let held: HashSet<String> = claimed.iter().map(|p| p.id.to_string()).collect();
+        let held: HashSet<String> = claimed.iter().map(|p| p.project_id.to_string()).collect();
         assert!(
-            held.contains(&seeded.id.to_string()),
+            held.contains(&seeded.base.project_id.to_string()),
             "the first claimer must take the seeded project"
         );
 

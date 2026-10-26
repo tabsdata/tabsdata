@@ -13,7 +13,9 @@
 use crate::dxo::crudl::RequestContext;
 use crate::dxo::project::ProjectParam;
 use crate::dxo::user::UserParam;
-use crate::types::basic::{ProjectIdName, ProjectName, SimplePermissionType, UserIdName, UserName};
+use crate::types::basic::{
+    ProjectIdName, ProjectLabel, SimplePermissionType, UserIdName, UserName,
+};
 
 /// Grant / revoke request body: grant `permission` to `user`, optionally on
 /// `project`.
@@ -38,7 +40,7 @@ pub struct SimplePermissionGrant {
 #[derive(Eq, PartialEq, Hash)]
 pub struct SimplePermission {
     pub permission: SimplePermissionType,
-    pub project: Option<ProjectName>,
+    pub project: Option<ProjectLabel>,
 }
 
 /// One row of "who has access to a project" (`tdk permission list

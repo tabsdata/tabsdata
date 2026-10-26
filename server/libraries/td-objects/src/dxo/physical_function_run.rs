@@ -6,10 +6,10 @@ use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::worker::WorkerExecutionUpdate;
 use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
-    AtTime, BasePath, BundleId, CollectionId, CollectionName, ConnectionId, ConnectionKind,
+    AtTime, BasePath, BundleId, CollectionId, CollectionLabel, ConnectionId, ConnectionKind,
     Decorator, Dispatched, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName,
     FunctionVersionId, InputIdx, LogicalFunctionRunId, OfExecution, Patch, PhysicalFunctionRunId,
-    PhysicalFunctionRunStatus, ProjectId, ProjectName, StageId, Started, StorageVersion,
+    PhysicalFunctionRunStatus, ProjectId, ProjectLabel, StageId, Started, StorageVersion,
     TransactionId, Trigger, UserId, UserLabel,
 };
 use ta_objects::FromDao;
@@ -66,8 +66,8 @@ pub struct PhysicalFunctionRunDBWithNames {
     #[dao(flatten)]
     pub base: PhysicalFunctionRunDB,
     pub name: FunctionName,
-    pub collection: CollectionName,
-    pub project: Option<ProjectName>,
+    pub collection: CollectionLabel,
+    pub project: Option<ProjectLabel>,
     pub connection: Option<ConnectionKind>,
     pub execution: Option<ExecutionName>,
     pub execution_function_version_id: OfExecution<FunctionVersionId>,
@@ -123,7 +123,7 @@ pub struct PhysicalFunctionRun {
     #[dto(list(filter, filter_like, order_by))]
     pub name: FunctionName,
     #[dto(list(filter, filter_like, order_by))]
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     #[dto(list(filter, filter_like))]
     pub execution: Option<ExecutionName>,
     #[dto(list(filter, order_by))]

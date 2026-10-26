@@ -5,94 +5,81 @@
 //! Project DXOs (Data Exchange Objects) — mirrors the collection DXOs but
 //! one rung "above" collections: projects are the tenant boundary for
 //! row-level security and are themselves a global registry (not RLS-scoped).
+//!
+//! A project is an SCD2 timeline of versions. The live projects are the open
+//! versions; a delete closes the timeline.
 
 use crate::dxo::crudl::RequestContext;
+use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::secret::SecretUpsert;
 use crate::types::basic::{
-    AtTime, BasePath, Created, Description, Modified, ProjectId, ProjectIdName, ProjectName,
-    ProjectWhenDeleted, UserId, UserLabel, WhenDeleted,
+    AtTime, BasePath, Description, ProjectId, ProjectIdName, ProjectName, ProjectVersionId,
+    Scd2ValidFrom, UserId, UserLabel,
 };
 use ta_objects::FromDao;
-use td_common::id::Id;
 use td_error::TdError;
 
 #[ta_objects::Dao]
-#[dao(table = "projects", ops(insert))]
+#[dao(table = "projects", ops(insert), scd2)]
 pub struct ProjectInsertDB {
     #[dao(pk)]
-    pub id: ProjectId,
+    pub id: ProjectVersionId,
+    #[dao(partition_by)]
+    pub project_id: ProjectId,
     pub name: ProjectName,
     pub description: Description,
-    // Logical storage prefix, mapped from `ProjectCreate::base_path` (defaults `/`).
+    // Fixed for the project's life, from here down. Logical storage prefix,
+    // mapped from `ProjectCreate::base_path` (defaults `/`).
     pub base_path: BasePath,
-    pub created_on: Created<AtTime>,
-    pub created_by_id: Created<UserId>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
-    pub name_when_deleted: Option<WhenDeleted<ProjectName>>,
+    pub defined_by_id: UserId,
 }
 
 #[ta_objects::Dao]
-#[dao(view = "projects_active", unique(ProjectName))]
-pub struct ActiveProjectDB {
-    #[dao(pk)]
-    pub id: ProjectId,
-    pub name: ProjectName,
-    pub description: Description,
-    pub base_path: BasePath,
-    pub created_on: Created<AtTime>,
-    pub created_by_id: Created<UserId>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
+#[dao(
+    table = "projects",
+    ops(select, close),
+    scd2,
+    unique_at(ProjectName),
+    unique_at(ProjectIdName)
+)]
+pub struct ProjectDB {
+    #[dao(flatten)]
+    pub base: ProjectInsertDB,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
 }
 
-impl ActiveProjectDB {
-    /// The soft-delete update: the row is renamed to `deleted_<id>`,
-    /// freeing the name for reuse.
-    pub fn to_delete_dao(&self, ctx: &RequestContext) -> ProjectDeleteDB {
-        ProjectDeleteDB {
-            name: generate_deleted_name(),
-            modified_on: ctx.time.into(),
-            modified_by_id: ctx.user_id.into(),
-            name_when_deleted: self.name.clone().into(),
+impl ProjectDB {
+    /// The version an update opens: this one's values with the update's
+    /// changes on top.
+    pub fn updated(&self, update: &ProjectUpdate, ctx: &RequestContext) -> ProjectInsertDB {
+        ProjectInsertDB {
+            id: ProjectVersionId::default(),
+            name: update
+                .name
+                .clone()
+                .unwrap_or_else(|| self.base.name.clone()),
+            description: update
+                .description
+                .clone()
+                .unwrap_or_else(|| self.base.description.clone()),
+            defined_by_id: ctx.user_id,
+            ..self.base.clone()
         }
     }
 }
 
-// Canonical read/join surface: the `projects_resolved` view — every row, real
-// name resolved. Same columns as `ActiveProjectDB` plus the `deleted` flag.
-// The name is not unique here: the view resolves the freed name back, so a
-// delete/recreate cycle leaves two rows under it. Only the id addresses a row.
 #[ta_objects::Dao]
-#[dao(view = "projects_resolved")]
-pub struct ProjectDB {
+#[dao(
+    view = "projects__with_names",
+    scd2,
+    unique_at(ProjectName),
+    unique_at(ProjectIdName)
+)]
+pub struct ProjectDBWithNames {
     #[dao(flatten)]
-    pub base: ActiveProjectDB,
-    pub deleted: ProjectWhenDeleted,
-}
-
-#[ta_objects::Dao]
-#[dao(table = "projects", ops(update(ProjectInsertDB)))]
-pub struct ProjectDeleteDB {
-    pub name: ProjectName,
-
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
-
-    pub name_when_deleted: WhenDeleted<ProjectName>,
-}
-
-pub fn generate_deleted_name() -> ProjectName {
-    ProjectName::try_from(format!("deleted_{}", Id::default())).unwrap()
-}
-
-#[ta_objects::Dao]
-#[dao(view = "projects__with_names", unique(ProjectName))]
-pub struct ActiveProjectDBWithNames {
-    #[dao(flatten)]
-    pub base: ActiveProjectDB,
-    pub created_by: Created<UserLabel>,
-    pub modified_by: Modified<UserLabel>,
+    pub base: ProjectDB,
+    pub defined_by: UserLabel,
 }
 
 #[ta_objects::Dto]
@@ -108,17 +95,14 @@ pub struct ProjectCreate {
 }
 
 impl ProjectCreate {
-    pub fn to_dao(self, ctx: &RequestContext) -> ProjectInsertDB {
+    pub fn to_dao(&self, ctx: &RequestContext) -> ProjectInsertDB {
         ProjectInsertDB {
-            id: ProjectId::default(),
-            name: self.name,
-            description: self.description,
-            base_path: self.base_path,
-            created_on: ctx.time.into(),
-            created_by_id: ctx.user_id.into(),
-            modified_on: ctx.time.into(),
-            modified_by_id: ctx.user_id.into(),
-            name_when_deleted: None,
+            id: ProjectVersionId::default(),
+            project_id: ProjectId::default(),
+            name: self.name.clone(),
+            description: self.description.clone(),
+            base_path: self.base_path.clone(),
+            defined_by_id: ctx.user_id,
         }
     }
 }
@@ -131,67 +115,44 @@ pub struct ProjectUpdate {
     pub secrets: Option<Vec<SecretUpsert>>,
 }
 
-#[ta_objects::Dao]
-#[dao(table = "projects", ops(update(ProjectInsertDB)))]
-pub struct ProjectUpdateDB {
-    pub name: Option<ProjectName>,
-    pub description: Option<Description>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
-}
-
 #[ta_objects::Dto]
-#[dto(list(on = ActiveProjectDBWithNames))]
+#[dto(list(on = ProjectDBWithNames))]
 pub struct ProjectRead {
     #[dto(list(pagination_by = "+"))]
-    pub id: ProjectId,
+    pub id: ProjectVersionId,
+    #[dto(list(filter))]
+    pub project_id: ProjectId,
     #[dto(list(filter, filter_like, order_by))]
     pub name: ProjectName,
     #[dto(list(filter, filter_like, order_by))]
     pub description: Description,
     #[dto(list(filter, filter_like, order_by))]
     pub base_path: BasePath,
-    pub created_on: Created<AtTime>,
-    pub created_by_id: Created<UserId>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
-    pub created_by: Created<UserLabel>,
-    pub modified_by: Modified<UserLabel>,
+    #[dto(list(filter, order_by, col = Scd2ValidFrom))]
+    pub defined_on: AtTime,
+    pub defined_by_id: UserId,
+    #[dto(list(filter, filter_like, order_by))]
+    pub defined_by: UserLabel,
 }
 
 impl FromDao for ProjectRead {
-    type Dao = ActiveProjectDBWithNames;
+    type Dao = ProjectDBWithNames;
 
-    fn from_dao(dao: ActiveProjectDBWithNames) -> Result<Self, TdError> {
+    fn from_dao(dao: ProjectDBWithNames) -> Result<Self, TdError> {
+        let ProjectDB { base, interval } = dao.base;
         Ok(Self {
-            id: dao.base.id,
-            name: dao.base.name,
-            description: dao.base.description,
-            base_path: dao.base.base_path,
-            created_on: dao.base.created_on,
-            created_by_id: dao.base.created_by_id,
-            modified_on: dao.base.modified_on,
-            modified_by_id: dao.base.modified_by_id,
-            created_by: dao.created_by,
-            modified_by: dao.modified_by,
+            id: base.id,
+            project_id: base.project_id,
+            name: base.name,
+            description: base.description,
+            base_path: base.base_path,
+            defined_on: interval.valid_from.into(),
+            defined_by_id: base.defined_by_id,
+            defined_by: dao.defined_by,
         })
     }
 }
 
-impl From<ProjectInsertDB> for ActiveProjectDB {
-    fn from(src: ProjectInsertDB) -> Self {
-        ActiveProjectDB {
-            id: src.id,
-            name: src.name,
-            description: src.description,
-            base_path: src.base_path,
-            created_on: src.created_on,
-            created_by_id: src.created_by_id,
-            modified_on: src.modified_on,
-            modified_by_id: src.modified_by_id,
-        }
-    }
-}
 #[ta_objects::UrlParam]
 pub struct ProjectParam {
     pub project: ProjectIdName,

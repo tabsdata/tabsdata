@@ -37,6 +37,12 @@ pub async fn topology_write_at(
     Ok((conn, topology_at))
 }
 
+/// The lock instant a seed opens its project, collection and group versions
+/// at.
+pub fn seed_instant() -> LockInstant {
+    LockInstant::asserted(*AtTime::now())
+}
+
 pub async fn commit_topology_write(
     conn: DomainConnection<Apiserver, InProject, RW>,
 ) -> Result<(), TdError> {

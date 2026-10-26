@@ -4,11 +4,12 @@
 
 use crate::dxo::callback::CallbackRequest;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, ConnectionId, ConnectionKind, CronMask, DestinationWrite,
-    Enabled, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId,
-    LogicalFunctionRunId, LogsCastNumber, OfFunction, Patch, PhysicalFunctionRunId, ProjectId,
-    ProjectName, Retry, SizeThreshold, Started, TimeoutThresholdMin, TransactionId, WorkerConfig,
-    WorkerFailures, WorkerId, WorkerStatus, WorkerType,
+    AtTime, CollectionId, CollectionLabel, ConnectionId, ConnectionKind, CronMask,
+    DestinationWrite, Enabled, Ended, ExecutionId, ExecutionName, FunctionId, FunctionName,
+    FunctionVersionId, LogicalFunctionRunId, LogsCastNumber, OfFunction, Patch,
+    PhysicalFunctionRunId, ProjectId, ProjectLabel, Retry, SizeThreshold, Started,
+    TimeoutThresholdMin, TransactionId, WorkerConfig, WorkerFailures, WorkerId, WorkerStatus,
+    WorkerType,
 };
 use chrono::{DateTime, Utc};
 use ta_objects::sql_condition::SqlCondition;
@@ -75,7 +76,7 @@ pub struct WorkerDBWithNames {
     pub base: WorkerDB,
     pub logical_function_run_id: Option<LogicalFunctionRunId>,
 
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     // The collection's connection (NULL for non-source/destination),
     // joined from the collections table for the stage/cron-trigger requests.
     pub connection_id: Option<ConnectionId>,
@@ -86,7 +87,7 @@ pub struct WorkerDBWithNames {
     pub enabled: OfFunction<Enabled>,
     // Patch the attempt's PFR ran (NULL = head), from physical_function_runs.
     pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
-    pub project: Option<ProjectName>,
+    pub project: Option<ProjectLabel>,
 }
 
 impl WorkerDBWithNames {
@@ -167,7 +168,7 @@ pub struct Worker {
     pub logical_function_run_id: Option<LogicalFunctionRunId>,
 
     #[dto(list(filter, filter_like, order_by))]
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     #[dto(list(filter, filter_like))]
     pub execution: Option<ExecutionName>,
     #[dto(list(filter, filter_like, order_by))]
@@ -177,7 +178,7 @@ pub struct Worker {
     #[dto(list(filter, order_by))]
     pub function_version_patch_id: Option<Patch<FunctionVersionId>>,
     #[dto(list(filter, filter_like, order_by))]
-    pub project: Option<ProjectName>,
+    pub project: Option<ProjectLabel>,
 }
 
 impl FromDao for Worker {

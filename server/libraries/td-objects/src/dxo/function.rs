@@ -7,8 +7,8 @@ use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::Scd2ValidFrom;
 use crate::types::basic::{
-    AtTime, BasePath, BundleId, CollectionId, CollectionIdName, CollectionName, ConnectionKind,
-    Connector, Decorator, Description, Enabled, FunctionId, FunctionIdName, FunctionName,
+    AtTime, BasePath, BundleId, CollectionId, CollectionLabel, ConnectionKind, Connector,
+    Decorator, Description, Enabled, FunctionId, FunctionIdName, FunctionName,
     FunctionRuntimeValues, FunctionStatus, FunctionType, FunctionVersionId, GroupId, Parent,
     ProjectId, RawSnippet, ResetStage, ResetState, ReuseFrozen, Snippet, StageId, StorageVersion,
     TableName, TableNameDto, TableType, UserId, UserLabel, WorkerConfig, WorkerId, WorkerTypeDto,
@@ -444,18 +444,12 @@ impl FromDao for FunctionPatchRecord {
 #[dao(
     view = "functions__with_names",
     scd2,
-    project_scoped(
-        unique_at(CollectionIdName, FunctionIdName),
-        unique_at(CollectionId, FunctionIdName)
-    )
+    project_scoped(unique_at(CollectionId, FunctionIdName))
 )]
 pub struct FunctionDBWithNames {
     #[dao(flatten)]
     pub base: FunctionDB,
-    pub collection: CollectionName,
-    /// Group snapshot of the function's collection at view-query time.
-    /// Threaded into LFR/LTDV stamping via FunctionNode at plan-build.
-    /// No default: the group is project-scoped and must be set explicitly.
+    pub collection: CollectionLabel,
     pub group_id: GroupId,
     pub defined_by: UserLabel,
 }
@@ -469,6 +463,7 @@ pub struct FunctionDBWithNames {
 pub struct FunctionVersionDBWithNames {
     #[dao(pk)]
     pub id: FunctionVersionId,
+    pub project_id: ProjectId,
     pub collection_id: CollectionId,
     pub name: FunctionName,
     pub description: Description,
@@ -491,7 +486,7 @@ pub struct FunctionVersionDBWithNames {
     pub enabled: Enabled,
     pub function_type: FunctionType,
     pub parent_function_id: Option<Parent<FunctionId>>,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub defined_by: UserLabel,
     pub patch_of: Option<FunctionVersionId>,
 }
@@ -536,7 +531,7 @@ pub struct FunctionVersion {
     pub enabled: Enabled,
 
     #[dto(list(filter, filter_like, order_by))]
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     #[dto(list(filter, filter_like, order_by))]
     pub defined_by: UserLabel,
     #[dto(list(filter, order_by))]
@@ -624,7 +619,7 @@ pub struct Function {
     pub enabled: Enabled,
 
     #[dto(list(filter, filter_like, order_by))]
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub group_id: GroupId,
     #[dto(list(filter, filter_like, order_by))]
     pub defined_by: UserLabel,

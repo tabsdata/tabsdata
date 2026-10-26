@@ -8,7 +8,7 @@ use ta_objects::and;
 use td_database::access::InProject;
 use td_database::domain::Apiserver;
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::logical::{
@@ -32,7 +32,7 @@ use td_objects::types::basic::{
 /// violate the invariant.
 pub(crate) async fn seed_logical_function_run(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     function_version: &FunctionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
@@ -53,7 +53,7 @@ pub(crate) async fn seed_logical_function_run(
         None => {
             let lfr = LogicalFunctionRunInsertDB {
                 id: LogicalFunctionRunId::new(),
-                collection_id: collection.id,
+                collection_id: collection.base.collection_id,
                 execution_id: execution.base.id.clone(),
                 transaction_id: transaction.base.id.clone(),
                 function_id: function_version.base.function_id,
@@ -62,7 +62,7 @@ pub(crate) async fn seed_logical_function_run(
                 triggered_on: transaction.base.triggered_on,
                 triggered_by_id: transaction.base.triggered_by_id,
                 status: *status,
-                group_id: collection.group_id,
+                group_id: collection.base.group_id,
             };
             executor.reuse().insert(&lfr).await?;
             lfr.id
@@ -78,7 +78,7 @@ pub(crate) async fn seed_logical_function_run(
     for t in &tables {
         let ltdv = LogicalTableDataVersionInsertDB {
             id: LogicalTableDataVersionId::new(),
-            collection_id: collection.id,
+            collection_id: collection.base.collection_id,
             execution_id: execution.base.id.clone(),
             transaction_id: transaction.base.id.clone(),
             table_id: t.base.table_id,

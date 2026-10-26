@@ -66,9 +66,6 @@ pub struct Patch<T>(T);
 pub struct WithData<T>(T);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
-pub struct WhenDeleted<T>(T);
-
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct OfExecution<T>(T);
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]

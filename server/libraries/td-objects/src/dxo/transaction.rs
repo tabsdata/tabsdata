@@ -3,8 +3,8 @@
 //
 
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, Ended, ExecutionId, ExecutionName, GroupId, GroupName,
-    LogicalFunctionRunStatus, ProjectId, ProjectName, Started, StatusCount, TransactionByStr,
+    AtTime, CollectionId, CollectionLabel, Ended, ExecutionId, ExecutionName, GroupId, GroupLabel,
+    LogicalFunctionRunStatus, ProjectId, ProjectLabel, Started, StatusCount, TransactionByStr,
     TransactionId, TransactionKey, TransactionStatus, TriggeredOn, UserId, UserLabel,
 };
 use crate::types::json::Json;
@@ -59,11 +59,11 @@ pub struct TransactionValue {
 pub struct TransactionDBWithNames {
     #[dao(flatten)]
     pub base: TransactionDB,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub execution: Option<ExecutionName>,
     pub triggered_by: UserLabel,
-    pub group: Option<GroupName>,
-    pub project: Option<ProjectName>,
+    pub group: Option<GroupLabel>,
+    pub project: Option<ProjectLabel>,
 
     pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
 }
@@ -94,15 +94,15 @@ pub struct Transaction {
     #[dto(list(filter, order_by))]
     pub status: TransactionStatus,
     #[dto(list(filter, filter_like, order_by))]
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     #[dto(list(filter, filter_like))]
     pub execution: Option<ExecutionName>,
     #[dto(list(filter, filter_like, order_by))]
     pub triggered_by: UserLabel,
     #[dto(list(filter, filter_like))]
-    pub group: Option<GroupName>,
+    pub group: Option<GroupLabel>,
     #[dto(list(filter, filter_like, order_by))]
-    pub project: Option<ProjectName>,
+    pub project: Option<ProjectLabel>,
 
     pub function_run_status_count: FunctionRunStatusCount,
 }

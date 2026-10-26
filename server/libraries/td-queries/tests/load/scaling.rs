@@ -25,9 +25,10 @@ use td_database::access::LockInstant;
 use td_database::connection::PgConnectionExt;
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionRead};
+use td_objects::dxo::collection::CollectionRead;
 use td_objects::dxo::crudl::ListParams;
 use td_objects::dxo::execution::Execution;
+use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::{Function, FunctionDB};
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalFunctionRunInputInsertDB, LogicalFunctionRunStatusUpdateDB,
@@ -341,6 +342,11 @@ async fn time_chain_queries(
     );
     let _ = timed!(
         out,
+        "last::fetch_all",
+        (db).scd2().last().fetch_all::<TableDB>(()).await?
+    );
+    let _ = timed!(
+        out,
         "latest::fetch_all_chunked",
         (db).scd2()
             .chunked()
@@ -350,25 +356,22 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "default::fetch_one",
-        (db).fetch_one::<ActiveCollectionDB>(&h.collection_id)
-            .await?
+        (db).fetch_one::<ExecutionDB>(&h.execs[0]).await?
     );
     let _ = timed!(
         out,
         "default::fetch_optional",
-        (db).fetch_optional::<ActiveCollectionDB>(&h.collection_id)
-            .await?
+        (db).fetch_optional::<ExecutionDB>(&h.execs[0]).await?
     );
     let _ = timed!(
         out,
         "default::fetch_all",
-        (db).fetch_all::<ActiveCollectionDB>(()).await?
+        (db).fetch_all::<ExecutionDB>(()).await?
     );
     let _ = timed!(
         out,
         "default::fetch_last",
-        (db).fetch_last::<ActiveCollectionDB>(&h.collection_id)
-            .await?
+        (db).fetch_last::<ExecutionDB>(&h.execs[0]).await?
     );
     {
         // `FOR UPDATE` needs the read-write transaction; dropping the tx
@@ -497,18 +500,22 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "default::fetch_all",
-        (db).fetch_all::<ActiveCollectionDB>(()).await?
+        (db).fetch_all::<ExecutionDB>(()).await?
     );
     let _ = timed!(
         out,
         "default::fetch_latest_before",
-        (db).fetch_nth_last::<ActiveCollectionDB>((), 0).await?
+        (db).fetch_nth_last::<ExecutionDB>((), 0).await?
     );
 
     let coll_params = ListQueryParams::<CollectionRead>::try_from(&ListParams::default())?;
     let table_params = ListQueryParams::<Table>::try_from(&ListParams::default())?;
     let fn_params = ListQueryParams::<Function>::try_from(&ListParams::default())?;
-    let _ = timed!(out, "default::list", (db).list((), &coll_params).await?);
+    let _ = timed!(
+        out,
+        "default::list",
+        (db).scd2().list((), &coll_params).await?
+    );
     let _ = timed!(
         out,
         "latest::list",
@@ -526,7 +533,7 @@ async fn time_chain_queries(
     let _ = timed!(
         out,
         "default::fetch_first",
-        (db).fetch_first::<ActiveCollectionDB>(()).await?
+        (db).fetch_first::<ExecutionDB>(()).await?
     );
     let _ = timed!(
         out,

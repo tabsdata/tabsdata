@@ -8,7 +8,7 @@ use td_database::access::{InProject, LockInstant};
 use td_database::domain::Apiserver;
 use td_error::TdError;
 use td_objects::and;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::logical::{
     LogicalFunctionRunDB, LogicalTableDataVersionDB, LogicalTableDataVersionInsertDB,
@@ -25,7 +25,7 @@ use td_objects::types::basic::{
 
 pub(crate) async fn seed_physical_table_data_version_with_data(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     physical_function_run: &PhysicalFunctionRunDB,
@@ -45,7 +45,7 @@ pub(crate) async fn seed_physical_table_data_version_with_data(
 
 pub(crate) async fn seed_physical_table_data_version(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     physical_function_run: &PhysicalFunctionRunDB,
@@ -65,7 +65,7 @@ pub(crate) async fn seed_physical_table_data_version(
 
 pub async fn _seed_physical_table_data_version(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     execution: &ExecutionDB,
     transaction: &TransactionDB,
     physical_function_run: &PhysicalFunctionRunDB,
@@ -94,7 +94,7 @@ pub async fn _seed_physical_table_data_version(
         None => {
             let ltdv = LogicalTableDataVersionInsertDB {
                 id: LogicalTableDataVersionId::new(),
-                collection_id: collection.id,
+                collection_id: collection.base.collection_id,
                 execution_id: execution.base.id.clone(),
                 transaction_id: transaction.base.id.clone(),
                 table_id: table.base.table_id,
@@ -113,7 +113,7 @@ pub async fn _seed_physical_table_data_version(
     let ptdv_id = PhysicalTableDataVersionId::new();
     let table_data_version_db = PhysicalTableDataVersionInsertDB {
         id: ptdv_id.clone(),
-        collection_id: collection.id,
+        collection_id: collection.base.collection_id,
         table_id: table.base.table_id,
         name: table.base.name.clone(),
         table_version_id: table.base.id,
@@ -164,7 +164,7 @@ mod tests {
     async fn test_seed_physical_table_data_version(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -201,14 +201,14 @@ mod tests {
         };
 
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .execution(&function_version)
             .await
@@ -216,14 +216,14 @@ mod tests {
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -238,7 +238,7 @@ mod tests {
         let table_version = db
             .scd2()
             .fetch_first::<TableDB>(and!(
-                &collection.id,
+                &collection.base.collection_id,
                 TableName::try_from(table_name).unwrap()
             ))
             .await
@@ -246,7 +246,7 @@ mod tests {
             .expect("seeded table must exist");
 
         let physical_table_data_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -260,7 +260,7 @@ mod tests {
 
         assert_eq!(
             physical_table_data_version.base.collection_id,
-            collection.id
+            collection.base.collection_id
         );
         assert_eq!(
             physical_table_data_version.base.table_version_id,

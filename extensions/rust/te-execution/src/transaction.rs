@@ -34,7 +34,7 @@ mod tests {
     use ta_execution::TransactionMapperError;
     use td_objects::dxo::graph::FunctionNode;
     use td_objects::types::basic::{
-        CollectionId, CollectionName, Enabled, FunctionId, FunctionName, FunctionVersionId,
+        CollectionId, CollectionLabel, Enabled, FunctionId, FunctionName, FunctionVersionId,
         GroupId, TransactionKey,
     };
 
@@ -50,7 +50,7 @@ mod tests {
         let key = FunctionVersionId::new();
         let function = FunctionNode {
             collection_id: CollectionId::default(),
-            collection: CollectionName::try_from("test")?,
+            collection: CollectionLabel::try_from("test")?,
             function_id: FunctionId::default(),
             function_version_id: key.clone(),
             name: FunctionName::try_from("name")?,

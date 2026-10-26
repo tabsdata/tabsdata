@@ -67,6 +67,10 @@ impl ProjectTopology {
         version: ProjectTopologyDB,
     ) -> Result<Self, TdError> {
         let at = &version.interval.valid_from;
+        // Collections label the graph by their latest version, not the one at
+        // `at`: a past topology shows today's names. Their versions open at
+        // topology instants too, so labelling as of `at` would only change
+        // this read.
         let collections: Vec<ResolvedCollectionDB> = conn.fetch_all(()).await?;
         let functions: Vec<TopologyFunction> = conn.scd2().as_of(at).fetch_all(()).await?;
         let tables: Vec<TopologyTable> = conn.scd2().as_of(at).fetch_all(()).await?;
@@ -101,7 +105,7 @@ impl ProjectTopology {
             dependencies_from: index(dependencies.iter().map(|d| *d.table_function_id)),
             dependencies_into: index(dependencies.iter().map(|d| d.function_id)),
             table_order: tables.iter().map(|t| t.table_id).collect(),
-            collections: collections.into_iter().map(|c| (c.base.id, c)).collect(),
+            collections: collections.into_iter().map(|c| (c.id, c)).collect(),
             tables: tables.into_iter().map(|t| (t.table_id, t)).collect(),
             functions: functions.into_iter().map(|f| (f.function_id, f)).collect(),
             triggers,

@@ -70,9 +70,22 @@ use ServedBy::{Constraint, List, Path, Queries};
 
 const KEYSET: &str = "keyset pagination: ORDER BY id under the tenant predicate";
 const GROUP_FK: &str = "group-delete RESTRICT FK probe";
+const LATEST: &str = "a referrer's join to its timeline's latest version, open or closed";
 const TIMELINE: &[&str] = &["Timeline::list_until", "Scd2::fetch_one"];
 
 const INDEX_CASES: &[IndexCase] = &[
+    IndexCase {
+        index: "collections___collection_id___current_uidx",
+        served_by: Constraint,
+    },
+    IndexCase {
+        index: "collections___project_id__name___current_uidx",
+        served_by: Constraint,
+    },
+    IndexCase {
+        index: "collections___collection_id__valid_from__id___idx",
+        served_by: Path(LATEST),
+    },
     IndexCase {
         index: "collections___group_id__project_id___idx",
         served_by: Path(GROUP_FK),
@@ -80,14 +93,6 @@ const INDEX_CASES: &[IndexCase] = &[
     IndexCase {
         index: "collections___project_id__id___idx",
         served_by: Path(KEYSET),
-    },
-    IndexCase {
-        index: "collections___project_id__name___live_uidx",
-        served_by: Constraint,
-    },
-    IndexCase {
-        index: "collections___project_id__resolved_name___idx",
-        served_by: Path("collections_resolved lookup by name"),
     },
     IndexCase {
         index: "dependencies___dependency_id___current_uidx",
@@ -190,12 +195,20 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Path("as-of topology load: the project's rows open at an instant"),
     },
     IndexCase {
+        index: "groups___group_id___current_uidx",
+        served_by: Constraint,
+    },
+    IndexCase {
         index: "groups___name___idx",
         served_by: Path("group by name"),
     },
     IndexCase {
-        index: "groups___project_id__name___uidx",
+        index: "groups___project_id__name___current_uidx",
         served_by: Constraint,
+    },
+    IndexCase {
+        index: "groups___group_id__valid_from__id___idx",
+        served_by: Path(LATEST),
     },
     IndexCase {
         index: "logical_function_run_inputs___execution_id___idx",
@@ -397,12 +410,16 @@ const INDEX_CASES: &[IndexCase] = &[
         served_by: Constraint,
     },
     IndexCase {
-        index: "projects___name___live_uidx",
+        index: "projects___name___current_uidx",
         served_by: Constraint,
     },
     IndexCase {
-        index: "projects___resolved_name___idx",
-        served_by: Path("projects_resolved lookup by name"),
+        index: "projects___project_id__valid_from__id___idx",
+        served_by: Path(LATEST),
+    },
+    IndexCase {
+        index: "projects___project_id___current_uidx",
+        served_by: Constraint,
     },
     IndexCase {
         index: "roles___name___uidx",

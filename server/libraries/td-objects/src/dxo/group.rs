@@ -4,19 +4,20 @@
 
 //! `groups` DAO/DXO.
 //!
-//! Mirrors the role DAO layout: `GroupDB` is the canonical table row,
-//! `GroupDBWithNames` is the read-side view (joined to `users` for
-//! `created_by` / `modified_by` name resolution), and the `Create` /
-//! `Update` DTOs are the API request surface.
+//! A group is an SCD2 timeline of versions, its kind fixed for its life.
+//! `GroupDB` reads the versions (its open rows are the live groups),
+//! `GroupDBWithNames` adds the `defined_by` name, and the
+//! `Create` / `Update` DTOs are the API request surface.
 //!
 //! System rows (the seeded `default`, `sources`, `destinations` groups)
 //! carry `system = true` and are rejected by `update` and `delete` at
 //! the service layer; `kind` says which one a row is.
 
 use crate::dxo::crudl::RequestContext;
+use crate::dxo::scd2_interval::Scd2Interval;
 use crate::types::basic::{
-    AtTime, Created, Description, GroupId, GroupIdName, GroupKind, GroupName, Modified, ProjectId,
-    System, UserId, UserLabel,
+    AtTime, Description, GroupId, GroupIdName, GroupKind, GroupName, GroupVersionId, ProjectId,
+    Scd2ValidFrom, System, UserId, UserLabel,
 };
 use ta_objects::FromDao;
 use td_error::TdError;
@@ -42,40 +43,65 @@ pub const SYSTEM_GROUPS: [(GroupKind, &str, &str); 3] = [
 ];
 
 #[ta_objects::Dao]
-#[dao(table = "groups", ops(insert), project_scoped)]
+#[dao(table = "groups", ops(insert), scd2, project_scoped)]
 pub struct GroupInsertDB {
     #[dao(pk)]
-    pub id: GroupId,
+    pub id: GroupVersionId,
+    #[dao(partition_by)]
+    pub group_id: GroupId,
     pub name: GroupName,
     pub description: Description,
-    pub created_on: Created<AtTime>,
-    pub created_by_id: Created<UserId>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
+    // Fixed for the group's life, from here down.
     pub system: System,
     pub kind: GroupKind,
+    pub defined_by_id: UserId,
 }
 
-/// The row as the database holds it: `project_id` is the `project_isolation` policy's, defaulted from the connection the insert ran on.
 #[ta_objects::Dao]
 #[dao(
     table = "groups",
-    ops(select, delete),
-    project_scoped(unique(GroupName))
+    ops(select, close),
+    scd2,
+    project_scoped(unique_at(GroupName), unique_at(GroupIdName))
 )]
 pub struct GroupDB {
     #[dao(flatten)]
     pub base: GroupInsertDB,
     pub project_id: ProjectId,
+    #[dao(flatten)]
+    pub interval: Scd2Interval,
+}
+
+impl GroupDB {
+    /// The version an update opens: this one's values with the update's
+    /// changes on top.
+    pub fn updated(&self, update: &GroupUpdate, ctx: &RequestContext) -> GroupInsertDB {
+        GroupInsertDB {
+            id: GroupVersionId::default(),
+            name: update
+                .name
+                .clone()
+                .unwrap_or_else(|| self.base.name.clone()),
+            description: update
+                .description
+                .clone()
+                .unwrap_or_else(|| self.base.description.clone()),
+            defined_by_id: ctx.user_id,
+            ..self.base.clone()
+        }
+    }
 }
 
 #[ta_objects::Dao]
-#[dao(view = "groups__with_names", project_scoped(unique(GroupName)))]
+#[dao(
+    view = "groups__with_names",
+    scd2,
+    project_scoped(unique_at(GroupName), unique_at(GroupIdName))
+)]
 pub struct GroupDBWithNames {
     #[dao(flatten)]
     pub base: GroupDB,
-    pub created_by: Created<UserLabel>,
-    pub modified_by: Modified<UserLabel>,
+    pub defined_by: UserLabel,
 }
 
 #[ta_objects::Dto]
@@ -86,28 +112,17 @@ pub struct GroupCreate {
 }
 
 impl GroupCreate {
-    pub fn to_dao(self, ctx: &RequestContext) -> GroupInsertDB {
+    pub fn to_dao(&self, ctx: &RequestContext) -> GroupInsertDB {
         GroupInsertDB {
-            id: GroupId::default(),
-            name: self.name,
-            description: self.description,
-            created_on: ctx.time.into(),
-            created_by_id: ctx.user_id.into(),
-            modified_on: ctx.time.into(),
-            modified_by_id: ctx.user_id.into(),
+            id: GroupVersionId::default(),
+            group_id: GroupId::default(),
+            name: self.name.clone(),
+            description: self.description.clone(),
             system: System::FALSE,
             kind: GroupKind::Custom,
+            defined_by_id: ctx.user_id,
         }
     }
-}
-
-#[ta_objects::Dao]
-#[dao(table = "groups", ops(update(GroupDB)), project_scoped)]
-pub struct GroupUpdateDB {
-    pub name: Option<GroupName>,
-    pub description: Option<Description>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
 }
 
 #[ta_objects::Dto]
@@ -120,37 +135,37 @@ pub struct GroupUpdate {
 #[dto(list(on = GroupDBWithNames))]
 pub struct Group {
     #[dto(list(pagination_by = "+"))]
-    pub id: GroupId,
+    pub id: GroupVersionId,
+    #[dto(list(filter))]
+    pub group_id: GroupId,
     #[dto(list(filter, filter_like, order_by))]
     pub name: GroupName,
     #[dto(list(filter, filter_like, order_by))]
     pub description: Description,
-    pub created_on: Created<AtTime>,
-    pub created_by_id: Created<UserId>,
-    pub modified_on: Modified<AtTime>,
-    pub modified_by_id: Modified<UserId>,
     pub system: System,
     pub kind: GroupKind,
-    pub created_by: Created<UserLabel>,
-    pub modified_by: Modified<UserLabel>,
+    #[dto(list(filter, order_by, col = Scd2ValidFrom))]
+    pub defined_on: AtTime,
+    pub defined_by_id: UserId,
+    #[dto(list(filter, filter_like, order_by))]
+    pub defined_by: UserLabel,
 }
 
 impl FromDao for Group {
     type Dao = GroupDBWithNames;
 
     fn from_dao(dao: GroupDBWithNames) -> Result<Self, TdError> {
+        let GroupDB { base, interval, .. } = dao.base;
         Ok(Self {
-            id: dao.base.base.id,
-            name: dao.base.base.name,
-            description: dao.base.base.description,
-            created_on: dao.base.base.created_on,
-            created_by_id: dao.base.base.created_by_id,
-            modified_on: dao.base.base.modified_on,
-            modified_by_id: dao.base.base.modified_by_id,
-            system: dao.base.base.system,
-            kind: dao.base.base.kind,
-            created_by: dao.created_by,
-            modified_by: dao.modified_by,
+            id: base.id,
+            group_id: base.group_id,
+            name: base.name,
+            description: base.description,
+            system: base.system,
+            kind: base.kind,
+            defined_on: interval.valid_from.into(),
+            defined_by_id: base.defined_by_id,
+            defined_by: dao.defined_by,
         })
     }
 }

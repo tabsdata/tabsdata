@@ -25,6 +25,10 @@ pub struct CollectionWhenDeleted(bool);
 #[typed(default = false)]
 pub struct ProjectWhenDeleted(bool);
 
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
+#[typed(default = false)]
+pub struct GroupWhenDeleted(bool);
+
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq, Hash)]
 #[typed(default = true)]
 pub struct Enabled(bool);

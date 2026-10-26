@@ -9,7 +9,7 @@ use std::time::Instant;
 
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::logical::{LogicalFunctionRunInputInsertDB, LogicalFunctionRunStatusUpdateDB};
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunUpdateDB;
 use td_objects::types::basic::{
@@ -111,7 +111,7 @@ async fn load_default_delete(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_latest_before(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let row = db.fetch_nth_last::<ActiveCollectionDB>((), 0).await?;
+    let row = db.fetch_nth_last::<ExecutionDB>((), 0).await?;
     record(
         "default::fetch_latest_before",
         profile,

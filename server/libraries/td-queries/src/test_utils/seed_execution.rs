@@ -73,7 +73,7 @@ mod tests {
     async fn test_seed_execution(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -108,14 +108,14 @@ mod tests {
         };
 
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .execution(&function_version)
             .await
@@ -124,7 +124,7 @@ mod tests {
             execution.base.name,
             Some(ExecutionName::try_from("test_execution").unwrap())
         );
-        assert_eq!(execution.base.collection_id, collection.id);
+        assert_eq!(execution.base.collection_id, collection.base.collection_id);
         assert_eq!(execution.base.function_version_id, function_version.base.id);
         assert_eq!(
             **execution.base.triggered_by_id,

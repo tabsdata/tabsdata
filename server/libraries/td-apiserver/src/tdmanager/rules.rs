@@ -98,10 +98,10 @@ impl UpgradeRule for EnsureProjectSecret {
         let store = KubernetesSecretStore::new(context.kubernetes.clone());
         let mut created = 0;
         for project in &projects {
-            let owner = SecretOwner::project(&project.id)?;
-            let entity = EntityName::try_from(project.name.to_string())?;
+            let owner = SecretOwner::project(&project.base.project_id)?;
+            let entity = EntityName::try_from(project.base.name.to_string())?;
             if store.ensure(&owner, &entity).await? {
-                info!(project_id = %project.id, project = %project.name, "Created the project secret");
+                info!(project_id = %project.base.project_id, project = %project.base.name, "Created the project secret");
                 created += 1;
             }
         }

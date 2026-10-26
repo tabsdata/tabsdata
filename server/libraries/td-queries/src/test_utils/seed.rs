@@ -43,7 +43,7 @@ use td_database::domain::{Apiserver, Domained};
 use td_database::pool::TdPool;
 use td_database::pool::scoped::Scoped;
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::{FunctionDB, FunctionRegister};
 use td_objects::dxo::group::GroupDB;
@@ -51,7 +51,7 @@ use td_objects::dxo::logical::{LogicalFunctionRunDB, LogicalFunctionRunInputDB};
 use td_objects::dxo::permission::PermissionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
 use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDB;
-use td_objects::dxo::project::ActiveProjectDB;
+use td_objects::dxo::project::ProjectDB;
 use td_objects::dxo::role::RoleDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::topology::TopologyInstant;
@@ -91,14 +91,14 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
     // Project seeding uses its executor only to scope into the freshly-created
     // project, so the write bound is on the scoped view; `&TdPool` is the only
     // executor that scopes to one.
-    pub async fn project(self, name: ProjectName) -> Result<ActiveProjectDB, TdError>
+    pub async fn project(self, name: ProjectName) -> Result<ProjectDB, TdError>
     where
         for<'s> &'s Scoped<E, ProjectId>: Writes<Domain = Apiserver, Scope = InProject>,
     {
         seed_project(self.executor, name).await
     }
 
-    pub async fn test_project(self) -> Result<ActiveProjectDB, TdError>
+    pub async fn test_project(self) -> Result<ProjectDB, TdError>
     where
         for<'s> &'s Scoped<E, ProjectId>: Writes<Domain = Apiserver, Scope = InProject>,
     {
@@ -109,7 +109,7 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
         self,
         collection_name: &CollectionName,
         created_by: &UserId,
-    ) -> Result<ActiveCollectionDB, TdError>
+    ) -> Result<CollectionDB, TdError>
     where
         E: Domained<Scope = InProject>,
     {
@@ -121,7 +121,7 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
         collection_name: &CollectionName,
         created_by: &UserId,
         group: &GroupDB,
-    ) -> Result<ActiveCollectionDB, TdError>
+    ) -> Result<CollectionDB, TdError>
     where
         E: Domained<Scope = InProject>,
     {
@@ -145,7 +145,7 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
     #[allow(clippy::too_many_arguments)]
     pub async fn logical_input(
         self,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
@@ -171,7 +171,7 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
 
     pub async fn logical_function_run(
         self,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         function_version: &FunctionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
@@ -193,7 +193,7 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
 
     pub async fn physical_function_run(
         self,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         function_version: &FunctionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
@@ -219,7 +219,7 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
     /// not yet dispatched).
     pub async fn physical_function_run_with_attempt(
         self,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         function_version: &FunctionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
@@ -271,7 +271,7 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
 
     pub async fn physical_table_data_version(
         self,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
@@ -293,7 +293,7 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
 
     pub async fn physical_table_data_version_with_data(
         self,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         execution: &ExecutionDB,
         transaction: &TransactionDB,
         physical_function_run: &PhysicalFunctionRunDB,
@@ -338,7 +338,7 @@ impl<E: Writes<Domain = Apiserver, Scope: SeesProjectRows>> Seed<E> {
 
     pub async fn worker(
         self,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         function: &FunctionDB,
         worker_type: &WorkerType,
         worker_status: &WorkerStatus,
@@ -382,7 +382,7 @@ impl<P: Borrow<ProjectId> + Clone + Sync> Seed<&Scoped<&TdPool, P>> {
 
     pub async fn function(
         self,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         function_create: &FunctionRegister,
     ) -> Result<FunctionDB, TdError> {
         let (mut conn, topology_at) = self.topology_write().await?;
@@ -393,7 +393,7 @@ impl<P: Borrow<ProjectId> + Clone + Sync> Seed<&Scoped<&TdPool, P>> {
 
     pub async fn child_function(
         self,
-        collection: &ActiveCollectionDB,
+        collection: &CollectionDB,
         function_create: &FunctionRegister,
         parent: &FunctionId,
     ) -> Result<FunctionDB, TdError> {

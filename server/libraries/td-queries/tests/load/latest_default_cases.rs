@@ -3,13 +3,13 @@
 //
 
 //! Current- and Default-family read cases, plus the session purge, over the chain
-//! dataset. Current reads target `TableDB`; Default reads target `ActiveCollectionDB`.
+//! dataset. Current reads target `TableDB`; Default reads target `ExecutionDB`.
 
 use crate::harness::{record, seed};
 use std::time::Instant;
 use td_database::pool::TdPool;
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::logical::LogicalFunctionRunDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::worker::WorkerDB;
@@ -52,6 +52,16 @@ async fn load_current_fetch_all(db: TdPool) -> Result<(), TdError> {
 }
 
 #[td_test::test(db)]
+async fn load_last_fetch_all(db: TdPool) -> Result<(), TdError> {
+    let (_h, profile, seeded) = seed(&db).await?;
+    let t = Instant::now();
+    let rows = db.scd2().last().fetch_all::<TableDB>(()).await?;
+    record("last::fetch_all", profile, t, rows.len(), seeded);
+    assert!(!rows.is_empty());
+    Ok(())
+}
+
+#[td_test::test(db)]
 async fn load_current_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let fvids = vec![h.producer_function_version_id.clone()];
@@ -82,7 +92,7 @@ async fn load_current_fetch_first(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_first(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let row = db.fetch_first::<ActiveCollectionDB>(()).await?;
+    let row = db.fetch_first::<ExecutionDB>(()).await?;
     record(
         "default::fetch_first",
         profile,
@@ -98,7 +108,7 @@ async fn load_default_fetch_first(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_one(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let _row: ActiveCollectionDB = db.fetch_one::<ActiveCollectionDB>(&h.collection_id).await?;
+    let _row: ExecutionDB = db.fetch_one::<ExecutionDB>(&h.execs[0]).await?;
     record("default::fetch_one", profile, t, 1, seeded);
     Ok(())
 }
@@ -107,9 +117,7 @@ async fn load_default_fetch_one(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_optional(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let row = db
-        .fetch_optional::<ActiveCollectionDB>(&h.collection_id)
-        .await?;
+    let row = db.fetch_optional::<ExecutionDB>(&h.execs[0]).await?;
     record(
         "default::fetch_optional",
         profile,
@@ -125,7 +133,7 @@ async fn load_default_fetch_optional(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_all(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let rows = db.fetch_all::<ActiveCollectionDB>(()).await?;
+    let rows = db.fetch_all::<ExecutionDB>(()).await?;
     record("default::fetch_all", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())
@@ -135,9 +143,7 @@ async fn load_default_fetch_all(db: TdPool) -> Result<(), TdError> {
 async fn load_default_fetch_last(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let t = Instant::now();
-    let row = db
-        .fetch_last::<ActiveCollectionDB>(&h.collection_id)
-        .await?;
+    let row = db.fetch_last::<ExecutionDB>(&h.execs[0]).await?;
     record(
         "default::fetch_last",
         profile,

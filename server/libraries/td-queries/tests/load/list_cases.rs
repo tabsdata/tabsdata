@@ -24,7 +24,7 @@ async fn load_default_list(db: TdPool) -> Result<(), TdError> {
     let (_h, profile, seeded) = seed(&db).await?;
     let params = ListQueryParams::<CollectionRead>::try_from(&ListParams::default())?;
     let t = Instant::now();
-    let rows = db.list((), &params).await?;
+    let rows = db.scd2().list((), &params).await?;
     record("default::list", profile, t, rows.len(), seeded);
     assert!(!rows.is_empty());
     Ok(())

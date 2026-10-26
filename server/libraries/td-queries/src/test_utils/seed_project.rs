@@ -11,13 +11,12 @@ use td_database::pool::scoped::{Scoped, ScopedExt};
 use td_error::TdError;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::group::{GroupInsertDB, SYSTEM_GROUPS};
-use td_objects::dxo::project::ProjectInsertDB;
-use td_objects::dxo::project::{ActiveProjectDB, ProjectCreate};
+use td_objects::dxo::project::{ProjectCreate, ProjectDB};
 use td_objects::dxo::topology::ProjectTopologyInsertDB;
 use td_objects::types::basic::TopologyVersionId;
 use td_objects::types::basic::{
-    AccessTokenId, BasePath, Description, GroupId, GroupName, ProjectId, ProjectName, System,
-    UserId,
+    AccessTokenId, BasePath, Description, GroupId, GroupName, GroupVersionId, ProjectId,
+    ProjectName, System, UserId,
 };
 
 /// Seed a project together with the system groups (`default`, `sources`,
@@ -29,7 +28,7 @@ use td_objects::types::basic::{
 /// `db.scoped(new_project)` — the field-less `GroupDB` defaults its `project_id`
 /// from that scope, mirroring `seed_default_groups`. The `projects` row itself
 /// is not RLS-scoped, so it is inserted directly on the pool.
-pub(crate) async fn seed_project<E>(db: E, name: ProjectName) -> Result<ActiveProjectDB, TdError>
+pub(crate) async fn seed_project<E>(db: E, name: ProjectName) -> Result<ProjectDB, TdError>
 where
     for<'s> &'s Scoped<E, ProjectId>: Writes<Domain = Apiserver, Scope = InProject>,
 {
@@ -41,50 +40,39 @@ where
         base_path: BasePath::default(),
         secrets: Vec::new(),
     };
-    let project_db = ProjectInsertDB {
-        id: ProjectId::default(),
-        name: project_create.name,
-        description: project_create.description,
-        base_path: project_create.base_path,
-        created_on: request_context.time.into(),
-        created_by_id: request_context.user_id.into(),
-        modified_on: request_context.time.into(),
-        modified_by_id: request_context.user_id.into(),
-        name_when_deleted: None,
-    };
+    let at = LockInstant::asserted(*request_context.time);
+    let project_db = project_create.to_dao(&request_context);
 
-    // Everything runs through the new project's scope. The `projects` row itself
-    // is not RLS-scoped, so scoping is harmless there; the field-less `GroupDB`
-    // rows default their `project_id` from the scope's GUC (and RLS `WITH CHECK`
-    // enforces the match), mirroring `seed_default_groups`.
-    let scoped = db.in_project(project_db.id);
-    scoped.insert(&project_db).await?;
+    // Everything runs through the new project's scope. The `projects` table
+    // itself is not RLS-scoped, so scoping is harmless there; the field-less
+    // `GroupDB` rows default their `project_id` from the scope's GUC (and RLS
+    // `WITH CHECK` enforces the match), mirroring `seed_default_groups`.
+    let scoped = db.in_project(project_db.project_id);
+    scoped.scd2().open(&project_db, at).await?;
 
     for (kind, group_name, group_description) in SYSTEM_GROUPS {
         let group = GroupInsertDB {
-            id: GroupId::default(),
+            id: GroupVersionId::default(),
+            group_id: GroupId::default(),
             name: GroupName::try_from(group_name)?,
             description: Description::try_from(group_description)?,
-            created_on: request_context.time.into(),
-            created_by_id: request_context.user_id.into(),
-            modified_on: request_context.time.into(),
-            modified_by_id: request_context.user_id.into(),
             system: System::TRUE,
             kind,
+            defined_by_id: request_context.user_id,
         };
-        scoped.insert(&group).await?;
+        scoped.scd2().open(&group, at).await?;
     }
 
     let topology = ProjectTopologyInsertDB {
         id: TopologyVersionId::default(),
-        project_id: project_db.id,
+        project_id: project_db.project_id,
     };
-    scoped
-        .scd2()
-        .open(&topology, LockInstant::asserted(*request_context.time))
-        .await?;
+    scoped.scd2().open(&topology, at).await?;
 
-    Ok(ActiveProjectDB::from(project_db))
+    Ok(scoped
+        .scd2()
+        .fetch_one::<ProjectDB>(&project_db.project_id)
+        .await?)
 }
 
 #[cfg(test)]
@@ -93,7 +81,7 @@ mod tests {
     use crate::test_utils::SeedEntry;
     use td_database::pool::TdPool;
     use td_objects::dxo::group::GroupDB;
-    use td_objects::dxo::project::ActiveProjectDB;
+    use td_objects::dxo::project::ProjectDB;
     use td_objects::types::basic::{GroupKind, GroupName, ProjectName};
 
     #[td_test::test(db)]
@@ -104,9 +92,13 @@ mod tests {
             .await
             .unwrap();
 
-        let found = db.fetch_one::<ActiveProjectDB>(&project.id).await.unwrap();
-        assert_eq!(found.id, project.id);
-        assert_eq!(found.name, project.name);
+        let found = db
+            .scd2()
+            .fetch_one::<ProjectDB>(&project.base.project_id)
+            .await
+            .unwrap();
+        assert_eq!(found.base.project_id, project.base.project_id);
+        assert_eq!(found.base.name, project.base.name);
 
         // Project tagging is covered by `test_collection_rls_scoped_by_project`.
         for (kind, name) in [
@@ -115,7 +107,8 @@ mod tests {
             (GroupKind::Destinations, GroupName::destination()),
         ] {
             let group: GroupDB = db
-                .scoped(project.id)
+                .scoped(project.base.project_id)
+                .scd2()
                 .fetch_one::<GroupDB>(&name)
                 .await
                 .unwrap();

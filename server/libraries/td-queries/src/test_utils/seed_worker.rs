@@ -7,7 +7,7 @@ use crate::Writes;
 use td_database::access::InProject;
 use td_database::domain::Apiserver;
 use td_error::TdError;
-use td_objects::dxo::collection::ActiveCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::execution::ExecutionDB;
 use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
@@ -20,7 +20,7 @@ use td_objects::types::basic::{
 
 pub(crate) async fn seed_worker(
     mut executor: impl Writes<Domain = Apiserver, Scope = InProject>,
-    collection: &ActiveCollectionDB,
+    collection: &CollectionDB,
     function: &FunctionDB,
     worker_type: &WorkerType,
     worker_status: &WorkerStatus,
@@ -38,7 +38,7 @@ pub(crate) async fn seed_worker(
     };
     let worker_db = WorkerInsertDB {
         id: WorkerId::new(),
-        collection_id: collection.id,
+        collection_id: collection.base.collection_id,
         execution_id: None,
         transaction_id: None,
         physical_function_run_id: None,
@@ -103,7 +103,7 @@ mod tests {
     async fn test_seed_worker(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -138,14 +138,14 @@ mod tests {
         };
 
         let function_version = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .execution(&function_version)
             .await
@@ -153,14 +153,14 @@ mod tests {
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -173,13 +173,13 @@ mod tests {
             .unwrap();
 
         let worker = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function_runner_worker(&execution, &transaction, &physical_function_run)
             .await
             .unwrap();
 
-        assert_eq!(worker.base.collection_id, collection.id);
+        assert_eq!(worker.base.collection_id, collection.base.collection_id);
         assert_eq!(worker.base.execution_id, Some(execution.base.id));
         assert_eq!(worker.base.transaction_id, Some(transaction.base.id));
         assert_eq!(
