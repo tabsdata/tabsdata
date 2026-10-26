@@ -7,12 +7,16 @@ use std::collections::HashSet;
 use td_error::TdError;
 use td_execution::graph::TopologyGraph;
 use td_objects::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
-use td_objects::dxo::graph::{GraphNode, GraphRelation, GraphResponse};
+use td_objects::dxo::graph::{GraphLabels, GraphNode, GraphRelation, GraphResponse};
 use td_objects::types::composed::TableVersions;
 
 /// A graph as the API serves it: nodes keyed by version, system tables told
-/// apart from user ones, and its relations in a stable order.
-pub async fn graph_response(graph: &TopologyGraph) -> Result<GraphResponse, TdError> {
+/// apart from user ones, its relations in a stable order, and the labels of
+/// the collections and groups it names.
+pub async fn graph_response(
+    graph: &TopologyGraph,
+    labels: GraphLabels,
+) -> Result<GraphResponse, TdError> {
     let graph = graph
         .map(
             |node| async move {
@@ -68,5 +72,6 @@ pub async fn graph_response(graph: &TopologyGraph) -> Result<GraphResponse, TdEr
         system_tables,
         user_tables,
         relations,
+        labels,
     })
 }

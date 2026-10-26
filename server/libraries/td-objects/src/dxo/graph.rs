@@ -4,9 +4,10 @@
 
 use crate::dxo::execution::{FunctionNodeResponse, TableNodeResponse};
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, DependencyPos, Enabled, FunctionId, FunctionName,
-    FunctionVersionId, GroupId, LogicalTableDataVersionId, Parent, Private, SelfDependency, System,
-    TableFunctionParamPos, TableId, TableName, TableVersionId, TopologyVersionId,
+    AtTime, CollectionId, CollectionLabel, DependencyPos, Enabled, FunctionId, FunctionName,
+    FunctionVersionId, GroupId, GroupLabel, LogicalTableDataVersionId, Parent, Private,
+    SelfDependency, System, TableFunctionParamPos, TableId, TableName, TableVersionId,
+    TopologyVersionId,
 };
 use crate::types::composed::TableVersions;
 use serde::{Deserialize, Serialize};
@@ -19,7 +20,7 @@ use utoipa::ToSchema;
 #[derive(Eq, PartialEq, Hash)]
 pub struct FunctionNode {
     pub collection_id: CollectionId,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub function_id: FunctionId,
     pub function_version_id: FunctionVersionId,
     pub name: FunctionName,
@@ -39,7 +40,8 @@ impl Display for FunctionNode {
 #[derive(Eq, PartialEq, Hash)]
 pub struct TableNode {
     pub collection_id: CollectionId,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
+    pub group_id: GroupId,
     pub function_version_id: FunctionVersionId,
     pub table_id: TableId,
     pub table_version_id: TableVersionId,
@@ -204,6 +206,28 @@ pub struct GraphRelation<V> {
     pub edge: GraphEdge<V>,
 }
 
+#[ta_objects::Dto]
+#[derive(Eq, PartialEq)]
+pub struct GraphCollection {
+    pub name: CollectionLabel,
+    pub group_id: GroupId,
+}
+
+#[ta_objects::Dto]
+#[derive(Eq, PartialEq)]
+pub struct GraphGroup {
+    pub name: GroupLabel,
+}
+
+/// The collections and groups a graph names, labelled as they are now, not as
+/// of the graph's topology version: their current name, `[<id>]` once
+/// deleted.
+#[ta_objects::Dto]
+pub struct GraphLabels {
+    pub collections: HashMap<CollectionId, GraphCollection>,
+    pub groups: HashMap<GroupId, GraphGroup>,
+}
+
 /// A graph of functions and tables, keyed by version.
 #[ta_objects::Dto]
 pub struct GraphResponse {
@@ -212,6 +236,8 @@ pub struct GraphResponse {
     pub system_tables: HashSet<TableVersionId>,
     pub user_tables: HashSet<TableVersionId>,
     pub relations: Vec<GraphRelation<TableVersions>>,
+    #[serde(flatten)]
+    pub labels: GraphLabels,
 }
 
 #[ta_objects::Dto]
@@ -222,7 +248,8 @@ pub struct TableFlowGraphResponse {
 }
 
 /// One version of a project's whole topology, empty until something is
-/// registered. A read at `at` later returns the same graph.
+/// registered. A read at `at` later returns the same functions, tables and
+/// relations; collection and group labels are the current ones.
 #[ta_objects::Dto]
 pub struct ProjectGraphResponse {
     pub version: TopologyVersionId,

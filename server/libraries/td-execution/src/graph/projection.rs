@@ -251,6 +251,7 @@ mod tests {
         let graph = ProjectTopology::new(
             version(),
             vec![collection()],
+            vec![],
             vec![updated],
             vec![table(&FUNCTION_NAMES[0], &TABLE_NAMES[0])],
             vec![],

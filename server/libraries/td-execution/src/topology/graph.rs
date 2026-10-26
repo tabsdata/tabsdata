@@ -10,12 +10,12 @@ use petgraph::prelude::NodeIndex;
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
 use td_error::{TdError, td_error};
-use td_objects::dxo::collection::ResolvedCollectionDB;
 use td_objects::dxo::graph::{
-    FunctionNode, GraphDependency, GraphEdge, GraphNode, GraphOutput, TableNode,
+    FunctionNode, GraphCollection, GraphDependency, GraphEdge, GraphGroup, GraphLabels, GraphNode,
+    GraphOutput, TableNode,
 };
 use td_objects::dxo::topology::{TopologyDependency, TopologyTable, TopologyTrigger};
-use td_objects::types::basic::{CollectionId, FunctionId, SelfDependency, TableId};
+use td_objects::types::basic::{CollectionId, FunctionId, GroupId, SelfDependency, TableId};
 use td_objects::types::table_ref::Versions;
 
 #[td_error]
@@ -78,24 +78,23 @@ impl ProjectTopology {
             .functions
             .get(function)
             .ok_or(Missing::Function(*function))?;
-        let collection = self.collection(&function.collection_id)?;
         Ok(FunctionNode {
             collection_id: function.collection_id,
-            collection: collection.name.clone(),
+            collection: self.collection_label(&function.collection_id),
             function_id: function.function_id,
             function_version_id: function.id.clone(),
             name: function.name.clone(),
             enabled: function.enabled,
-            group_id: collection.group_id,
+            group_id: self.group_of(&function.collection_id)?,
             parent_function_id: function.parent_function_id,
         })
     }
 
     fn table_node(&self, table: &TopologyTable) -> Result<TableNode, TdError> {
-        let collection = self.collection(&table.collection_id)?;
         Ok(TableNode {
             collection_id: table.collection_id,
-            collection: collection.name.clone(),
+            collection: self.collection_label(&table.collection_id),
+            group_id: self.group_of(&table.collection_id)?,
             function_version_id: table.function_version_id.clone(),
             table_id: table.table_id,
             table_version_id: table.id,
@@ -105,15 +104,49 @@ impl ProjectTopology {
         })
     }
 
+    /// The current labels of the collections `graph`'s nodes belong to and of
+    /// their groups.
+    pub fn labels(&self, graph: &TopologyGraph) -> Result<GraphLabels, TdError> {
+        let collections: HashSet<CollectionId> = graph
+            .functions()
+            .into_iter()
+            .map(|f| f.collection_id)
+            .chain(graph.tables().into_iter().map(|t| t.collection_id))
+            .collect();
+        let mut labels = GraphLabels {
+            collections: HashMap::new(),
+            groups: HashMap::new(),
+        };
+        for id in collections {
+            let group_id = self.group_of(&id)?;
+            labels.collections.insert(
+                id,
+                GraphCollection {
+                    name: self.collection_label(&id),
+                    group_id,
+                },
+            );
+            labels.groups.insert(
+                group_id,
+                GraphGroup {
+                    name: self.group_label(&group_id),
+                },
+            );
+        }
+        Ok(labels)
+    }
+
     fn table(&self, table: &TableId) -> Result<&TopologyTable, TdError> {
         Ok(self.tables.get(table).ok_or(Missing::Table(*table))?)
     }
 
-    fn collection(&self, collection: &CollectionId) -> Result<&ResolvedCollectionDB, TdError> {
+    fn group_of(&self, collection: &CollectionId) -> Result<GroupId, TdError> {
         Ok(self
             .collections
             .get(collection)
-            .ok_or(Missing::Collection(*collection))?)
+            .ok_or(Missing::Collection(*collection))?
+            .base
+            .group_id)
     }
 
     /// The graph of these rows: a trigger and a dependency are edges from a

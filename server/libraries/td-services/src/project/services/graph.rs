@@ -31,10 +31,11 @@ async fn project_graph(
 
     let version = read_version(conn, &project, &topology_param).await?;
     let topology = ProjectTopology::of(conn, version).await?;
+    let graph = topology.graph()?;
     Ok(ProjectGraphResponse {
         version: topology.version.base.id,
         at: AtTime::from(topology.version.interval.valid_from),
-        graph: graph_response(&topology.graph()?).await?,
+        graph: graph_response(&graph, topology.labels(&graph)?).await?,
     })
 }
 
@@ -53,10 +54,12 @@ mod tests {
     use td_objects::dxo::graph::{GraphEdge, ProjectGraphResponse};
     use td_objects::dxo::topology::TopologyReadParam;
     use td_objects::types::basic::{
-        CollectionIdName, CollectionName, FunctionIdName, ProjectId, TableNameDto,
+        CollectionIdName, CollectionName, FunctionIdName, GroupName, ProjectId, TableNameDto,
         TopologyVersionId, UserId,
     };
+    use td_objects::types::basic::{CollectionLabel, GroupLabel};
     use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
+    use td_objects::types::label::Label;
     use td_queries::test_utils::SeedEntry;
 
     async fn graph(
@@ -138,9 +141,9 @@ mod tests {
     #[td_test::test(db)]
     async fn test_project_graph_holds_the_whole_topology(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        setup(&db, p.id).await?;
+        setup(&db, p.base.project_id).await?;
 
-        let graph = graph(&db, p.id, None).await?;
+        let graph = graph(&db, p.base.project_id, None).await?;
         assert_eq!(graph.graph.all_functions.len(), 2);
         assert_eq!(graph.graph.user_tables.len(), 3);
         let count = |user: bool, kind: fn(&GraphEdge<_>) -> bool| {
@@ -159,14 +162,74 @@ mod tests {
             1
         );
         assert_eq!(count(true, |e| matches!(e, GraphEdge::Trigger { .. })), 1);
+
+        let [(collection_id, label)] =
+            graph.graph.labels.collections.iter().collect::<Vec<_>>()[..]
+        else {
+            panic!("one collection: {:?}", graph.graph.labels.collections);
+        };
+        assert_eq!(
+            label.name,
+            CollectionLabel::new(CollectionName::try_from("c")?)
+        );
+        let group_id = label.group_id;
+        let group = &graph.graph.labels.groups[&group_id];
+        assert_eq!(group.name, GroupLabel::new(GroupName::default_group()));
+        assert!(
+            graph
+                .graph
+                .all_functions
+                .values()
+                .all(|f| f.collection_id == *collection_id && f.group_id == group_id)
+        );
+        assert!(
+            graph
+                .graph
+                .all_tables
+                .values()
+                .all(|t| t.group_id == group_id)
+        );
+        Ok(())
+    }
+
+    /// A past version keeps its functions and tables, but labels its
+    /// collection as it is now: deleted, by its id.
+    #[td_test::test(db)]
+    async fn test_project_graph_labels_its_collections_as_they_are_now(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        setup(&db, p.base.project_id).await?;
+        let before = graph(&db, p.base.project_id, None).await?;
+
+        let delete = admin()
+            .delete(CollectionParam {
+                collection: CollectionIdName::from_str("c")?,
+            })
+            .in_project(p.base.project_id);
+        Services::with_defaults(db.clone())
+            .delete_collection(delete)
+            .await?;
+
+        let replayed = graph(&db, p.base.project_id, Some(before.version)).await?;
+        assert_eq!(shape(&replayed), shape(&before));
+        let labels: Vec<_> = replayed.graph.labels.collections.iter().collect();
+        assert_eq!(labels.len(), 1);
+        let (collection_id, label) = labels[0];
+        assert_eq!(
+            label.name,
+            CollectionLabel::new(Label::Deleted(*collection_id))
+        );
+        let group = &replayed.graph.labels.groups[&label.group_id];
+        assert_eq!(group.name, GroupLabel::new(GroupName::default_group()));
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_project_graph_of_its_version_replays_it(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        setup(&db, p.id).await?;
-        let before = graph(&db, p.id, None).await?;
+        setup(&db, p.base.project_id).await?;
+        let before = graph(&db, p.base.project_id, None).await?;
 
         let drop_t_a = admin()
             .update(
@@ -183,17 +246,17 @@ mod tests {
                     ..Default::default()
                 },
             )
-            .in_project(p.id);
+            .in_project(p.base.project_id);
         Services::with_defaults(db.clone())
             .update_function(drop_t_a)
             .await?;
 
-        let after = graph(&db, p.id, None).await?;
+        let after = graph(&db, p.base.project_id, None).await?;
         assert!(after.at > before.at);
         assert_ne!(after.version, before.version);
         assert_ne!(shape(&after), shape(&before));
 
-        let replayed = graph(&db, p.id, Some(before.version)).await?;
+        let replayed = graph(&db, p.base.project_id, Some(before.version)).await?;
         assert_eq!(replayed.version, before.version);
         assert_eq!(replayed.at, before.at);
         assert_eq!(shape(&replayed), shape(&before));
@@ -203,10 +266,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_topology_versions_list_the_project_timeline(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        setup(&db, p.id).await?;
-        let latest = graph(&db, p.id, None).await?;
+        setup(&db, p.base.project_id).await?;
+        let latest = graph(&db, p.base.project_id, None).await?;
 
-        let request = admin().list((), ListParams::default()).in_project(p.id);
+        let request = admin()
+            .list((), ListParams::default())
+            .in_project(p.base.project_id);
         let versions = Services::with_defaults(db.clone())
             .list_topology_versions(request)
             .await?
@@ -226,7 +291,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_project_graph_of_an_empty_project(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let graph = graph(&db, p.id, None).await?;
+        let graph = graph(&db, p.base.project_id, None).await?;
         assert!(graph.graph.all_functions.is_empty() && graph.graph.relations.is_empty());
         Ok(())
     }

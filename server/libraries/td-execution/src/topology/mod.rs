@@ -6,11 +6,16 @@ use std::collections::HashMap;
 use td_database::access::{AccessMode, InProject};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::TdError;
-use td_objects::dxo::collection::ResolvedCollectionDB;
+use td_objects::dxo::collection::CollectionDB;
+use td_objects::dxo::group::GroupDB;
 use td_objects::dxo::topology::{
     ProjectTopologyDB, TopologyDependency, TopologyFunction, TopologyTable, TopologyTrigger,
 };
-use td_objects::types::basic::{CollectionId, FunctionId, FunctionStatus, ProjectId, TableId};
+use td_objects::types::basic::{
+    CollectionId, CollectionLabel, FunctionId, FunctionStatus, GroupId, GroupLabel, ProjectId,
+    TableId,
+};
+use td_objects::types::label::Label;
 use td_queries::Queries;
 
 mod graph;
@@ -22,7 +27,8 @@ mod walk_tests;
 /// A project's whole catalog at one topology version, indexed for walks.
 pub struct ProjectTopology {
     pub version: ProjectTopologyDB,
-    collections: HashMap<CollectionId, ResolvedCollectionDB>,
+    collections: HashMap<CollectionId, CollectionDB>,
+    groups: HashMap<GroupId, GroupDB>,
     functions: HashMap<FunctionId, TopologyFunction>,
     tables: HashMap<TableId, TopologyTable>,
     table_order: Vec<TableId>,
@@ -67,11 +73,8 @@ impl ProjectTopology {
         version: ProjectTopologyDB,
     ) -> Result<Self, TdError> {
         let at = &version.interval.valid_from;
-        // Collections label the graph by their latest version, not the one at
-        // `at`: a past topology shows today's names. Their versions open at
-        // topology instants too, so labelling as of `at` would only change
-        // this read.
-        let collections: Vec<ResolvedCollectionDB> = conn.fetch_all(()).await?;
+        let collections: Vec<CollectionDB> = conn.scd2().last().fetch_all(()).await?;
+        let groups: Vec<GroupDB> = conn.scd2().last().fetch_all(()).await?;
         let functions: Vec<TopologyFunction> = conn.scd2().as_of(at).fetch_all(()).await?;
         let tables: Vec<TopologyTable> = conn.scd2().as_of(at).fetch_all(()).await?;
         let triggers: Vec<TopologyTrigger> = conn.scd2().as_of(at).fetch_all(()).await?;
@@ -79,6 +82,7 @@ impl ProjectTopology {
         Ok(Self::new(
             version,
             collections,
+            groups,
             functions,
             tables,
             triggers,
@@ -88,7 +92,8 @@ impl ProjectTopology {
 
     pub(crate) fn new(
         version: ProjectTopologyDB,
-        collections: Vec<ResolvedCollectionDB>,
+        collections: Vec<CollectionDB>,
+        groups: Vec<GroupDB>,
         functions: Vec<TopologyFunction>,
         mut tables: Vec<TopologyTable>,
         mut triggers: Vec<TopologyTrigger>,
@@ -105,12 +110,32 @@ impl ProjectTopology {
             dependencies_from: index(dependencies.iter().map(|d| *d.table_function_id)),
             dependencies_into: index(dependencies.iter().map(|d| d.function_id)),
             table_order: tables.iter().map(|t| t.table_id).collect(),
-            collections: collections.into_iter().map(|c| (c.id, c)).collect(),
+            collections: collections
+                .into_iter()
+                .map(|c| (c.base.collection_id, c))
+                .collect(),
+            groups: groups.into_iter().map(|g| (g.base.group_id, g)).collect(),
             tables: tables.into_iter().map(|t| (t.table_id, t)).collect(),
             functions: functions.into_iter().map(|f| (f.function_id, f)).collect(),
             triggers,
             dependencies,
             version,
+        }
+    }
+
+    fn collection_label(&self, collection: &CollectionId) -> CollectionLabel {
+        match self.collections.get(collection) {
+            Some(c) if c.interval.valid_to.is_infinity() => {
+                CollectionLabel::new(c.base.name.clone())
+            }
+            _ => CollectionLabel::new(Label::Deleted(*collection)),
+        }
+    }
+
+    fn group_label(&self, group: &GroupId) -> GroupLabel {
+        match self.groups.get(group) {
+            Some(g) if g.interval.valid_to.is_infinity() => GroupLabel::new(g.base.name.clone()),
+            _ => GroupLabel::new(Label::Deleted(*group)),
         }
     }
 

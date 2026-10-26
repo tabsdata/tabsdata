@@ -2,6 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
+use crate::collection::resolve_collection_id;
 use crate::table::flow::build_response;
 use crate::topology::read_version;
 use ta_services::factory::service_factory;
@@ -35,17 +36,17 @@ async fn table_flow_graph(
     let collection_id_name = collection_param.collection;
     let table_id_name = table_param.table;
     let topology = read_version(conn, &project, &topology_param).await?;
+    let collection_id = resolve_collection_id(conn, &collection_id_name).await?;
     let table: TableDBWithNames = conn
         .scd2()
         .as_of(&topology.interval.valid_from)
-        .fetch_one(and!(&collection_id_name, &table_id_name))
+        .fetch_one(and!(&collection_id, &table_id_name))
         .await?;
 
-    let graph = ProjectTopology::of(conn, topology)
-        .await?
-        .flow_graph(&table.base.base.table_id)?;
+    let topology = ProjectTopology::of(conn, topology).await?;
+    let graph = topology.flow_graph(&table.base.base.table_id)?;
 
-    build_response(&table, &graph).await
+    build_response(&table, &graph, topology.labels(&graph)?).await
 }
 
 #[cfg(test)]
@@ -58,7 +59,7 @@ mod tests {
     use std::sync::LazyLock;
     use td_database::pool::TdPool;
     use td_database::pool::scoped::ScopedExt as _;
-    use td_error::TdError;
+    use td_error::{ApiError, TdError};
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::graph::GraphEdge;
@@ -86,7 +87,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -117,7 +118,7 @@ mod tests {
         };
 
         let function_0 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -136,7 +137,7 @@ mod tests {
                     at: None,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let response = service.table_flow_graph(request).await?.data;
 
@@ -203,7 +204,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -230,7 +231,7 @@ mod tests {
         };
 
         let function_0 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -261,7 +262,7 @@ mod tests {
         };
 
         let function_1 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -288,7 +289,7 @@ mod tests {
         };
 
         let function_2 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -307,7 +308,7 @@ mod tests {
                     at: None,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let response = service.table_flow_graph(request).await?.data;
 
@@ -395,7 +396,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -422,7 +423,7 @@ mod tests {
         };
 
         let function_0 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -453,7 +454,7 @@ mod tests {
         };
 
         let _function_1 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -480,7 +481,7 @@ mod tests {
         };
 
         let function_2 = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -499,7 +500,7 @@ mod tests {
                     at: None,
                 },
             ))
-            .in_project(p.id);
+            .in_project(p.base.project_id);
 
         let response = service.table_flow_graph(request).await?.data;
 
@@ -572,7 +573,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("doomed")?;
         let collection = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -597,13 +598,16 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.id)
+            .scoped(p.base.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let table: TableDBWithNames = db
             .scd2()
-            .fetch_one(and!(&collection.id, &TableIdName::from_str("table_0")?))
+            .fetch_one(and!(
+                &collection.base.collection_id,
+                &TableIdName::from_str("table_0")?
+            ))
             .await?;
         let registered_at = AtTime::now();
 
@@ -614,16 +618,15 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str(&collection_name.to_string())?,
                     })
-                    .in_project(p.id),
+                    .in_project(p.base.project_id),
             )
             .await?;
 
-        let request = |at: Option<AtTime>| {
+        let request = |collection: &str, at: Option<AtTime>| {
             RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .read((
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&collection_name.to_string())
-                            .unwrap(),
+                        collection: CollectionIdName::from_str(collection).unwrap(),
                     },
                     TableParam {
                         table: TableIdName::from_str("table_0").unwrap(),
@@ -633,17 +636,31 @@ mod tests {
                         at,
                     },
                 ))
-                .in_project(p.id)
+                .in_project(p.base.project_id)
         };
 
+        let by_name = collection_name.to_string();
+        let by_id = format!("~{}", collection.base.collection_id);
+        let err = service
+            .table_flow_graph(request(&by_name, Some(registered_at)))
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(err.api_error(), ApiError::NotFound);
+
         let response = service
-            .table_flow_graph(request(Some(registered_at)))
+            .table_flow_graph(request(&by_id, Some(registered_at)))
             .await?
             .data;
         assert_eq!(response.table, table.base.base.id);
         assert!(response.graph.all_functions.contains_key(&function.base.id));
 
-        assert!(service.table_flow_graph(request(None)).await.is_err());
+        assert!(
+            service
+                .table_flow_graph(request(&by_id, None))
+                .await
+                .is_err()
+        );
         Ok(())
     }
 }

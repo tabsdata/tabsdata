@@ -2,7 +2,7 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use crate::dxo::collection::ResolvedCollectionDB;
+use crate::dxo::collection::{CollectionDB, CollectionInsertDB};
 use crate::dxo::graph::{FunctionNode, TableNode};
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::{
@@ -10,13 +10,13 @@ use crate::dxo::topology::{
     TopologyTable, TopologyTrigger,
 };
 use crate::types::basic::{
-    AtTime, CollectionType, CollectionWhenDeleted, Scd2ValidFrom, TopologyVersionId,
+    CollectionId, CollectionName, DependencyId, DependencyPos, DependencyVersionId, Description,
+    Enabled, FunctionId, FunctionName, FunctionStatus, FunctionVersionId, GroupId, Private,
+    ProjectId, System, TableId, TableName, TableStatus, TableVersionId, TriggerId, TriggerStatus,
+    TriggerVersionId, UserId,
 };
 use crate::types::basic::{
-    BasePath, CollectionId, CollectionName, DependencyId, DependencyPos, DependencyVersionId,
-    Description, Enabled, FunctionId, FunctionName, FunctionStatus, FunctionVersionId, GroupId,
-    Private, ProjectId, System, TableId, TableName, TableStatus, TableVersionId, TriggerId,
-    TriggerStatus, TriggerVersionId, UserId,
+    CollectionLabel, CollectionType, CollectionVersionId, Scd2ValidFrom, TopologyVersionId,
 };
 use crate::types::composed::TableVersions;
 use std::collections::HashMap;
@@ -99,7 +99,7 @@ pub static TABLE_VERSION_IDS: LazyLock<HashMap<TableName, TableVersionId>> = Laz
 pub fn function_node(function: &FunctionName) -> FunctionNode {
     FunctionNode {
         collection_id: *COLLECTION_ID,
-        collection: COLLECTION_NAME.clone(),
+        collection: CollectionLabel::new(COLLECTION_NAME.clone()),
         function_id: *FUNCTION_IDS.get(function).unwrap(),
         function_version_id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
         name: function.clone(),
@@ -113,7 +113,8 @@ pub fn table_node(table: &TableName) -> TableNode {
     let function = writer(table);
     TableNode {
         collection_id: *COLLECTION_ID,
-        collection: COLLECTION_NAME.clone(),
+        collection: CollectionLabel::new(COLLECTION_NAME.clone()),
+        group_id: *GROUP_ID,
         function_version_id: FUNCTION_VERSION_IDS.get(function).unwrap().clone(),
         table_id: *TABLE_IDS.get(table).unwrap(),
         table_version_id: *TABLE_VERSION_IDS.get(table).unwrap(),
@@ -145,22 +146,21 @@ pub fn version() -> ProjectTopologyDB {
     }
 }
 
-pub fn collection() -> ResolvedCollectionDB {
-    ResolvedCollectionDB {
-        id: *COLLECTION_ID,
+pub fn collection() -> CollectionDB {
+    CollectionDB {
+        base: CollectionInsertDB {
+            id: CollectionVersionId::default(),
+            collection_id: *COLLECTION_ID,
+            name: COLLECTION_NAME.clone(),
+            description: Description::default(),
+            base_path: None,
+            group_id: *GROUP_ID,
+            collection_type: CollectionType::DataFactory,
+            connection_id: None,
+            defined_by_id: UserId::default(),
+        },
         project_id: *PROJECT_ID,
-        name: COLLECTION_NAME.clone(),
-        description: Description::default(),
-        created_on: AtTime::default().into(),
-        created_by_id: UserId::default().into(),
-        modified_on: AtTime::default().into(),
-        modified_by_id: UserId::default().into(),
-        group_id: *GROUP_ID,
-        base_path: None,
-        effective_base_path: BasePath::default(),
-        collection_type: CollectionType::DataFactory,
-        connection_id: None,
-        deleted: CollectionWhenDeleted::FALSE,
+        interval: interval(),
     }
 }
 

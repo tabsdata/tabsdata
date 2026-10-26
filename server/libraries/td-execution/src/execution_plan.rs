@@ -432,6 +432,7 @@ mod tests {
             let graph = ProjectTopology::new(
                 version(),
                 vec![collection()],
+                vec![],
                 vec![function(f0), function(f1), function(f2)],
                 vec![table(f0, t0), table(f1, t1), table(f2, t3)],
                 vec![trigger(t0, f1), trigger(f2_trigger, f2)],

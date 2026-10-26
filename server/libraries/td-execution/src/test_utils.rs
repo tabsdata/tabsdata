@@ -56,6 +56,7 @@ pub fn test_graph() -> TopologyGraph {
     let graph = ProjectTopology::new(
         version(),
         vec![collection()],
+        vec![],
         functions,
         tables,
         triggers,

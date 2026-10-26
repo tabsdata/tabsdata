@@ -6,10 +6,10 @@ use crate::dxo::function::Function;
 use crate::dxo::graph::{FunctionNode, GraphRelation, TableNode};
 use crate::dxo::logical::TableDataVersion;
 use crate::types::basic::{
-    AtTime, CollectionId, CollectionName, CollectionWhenDeleted, Dot, Enabled, Ended, ExecutionId,
+    AtTime, CollectionId, CollectionLabel, CollectionWhenDeleted, Dot, Enabled, Ended, ExecutionId,
     ExecutionName, ExecutionStatus, ExternalUid, FunctionId, FunctionName, FunctionOnly,
-    FunctionVersionId, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
-    OverrideDisabledTrigger, ProjectId, ProjectName, SkipIfRunning, Started, StatusCount, System,
+    FunctionVersionId, GroupId, InputIdx, LogicalFunctionRunStatus, LogicalTableDataVersionId,
+    OverrideDisabledTrigger, ProjectId, ProjectLabel, SkipIfRunning, Started, StatusCount, System,
     TableName, TableVersionId, TopologyVersionId, TransactionId, TriggerOutcome, TriggerType,
     TriggeredOn, UserId, UserLabel,
 };
@@ -122,11 +122,11 @@ impl ExecutionExternalUidReleaseDB {
 pub struct ExecutionDBWithNames {
     #[dao(flatten)]
     pub base: ExecutionDB,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub collection_deleted: CollectionWhenDeleted,
     pub function: FunctionName,
     pub triggered_by: UserLabel,
-    pub project: Option<ProjectName>,
+    pub project: Option<ProjectLabel>,
     pub function_run_status_count: Json<HashMap<LogicalFunctionRunStatus, StatusCount>>,
 }
 
@@ -152,14 +152,14 @@ pub struct Execution {
     pub topology_version_id: TopologyVersionId,
 
     #[dto(list(filter, filter_like, order_by))]
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub collection_deleted: CollectionWhenDeleted,
     #[dto(list(filter, filter_like, order_by))]
     pub function: FunctionName,
     #[dto(list(filter, filter_like, order_by))]
     pub triggered_by: UserLabel,
     #[dto(list(filter, filter_like, order_by))]
-    pub project: Option<ProjectName>,
+    pub project: Option<ProjectLabel>,
     #[dto(list(filter))]
     pub project_id: ProjectId,
 
@@ -211,7 +211,8 @@ pub struct ExecutionDetails {
 #[derive(Eq, PartialEq, Hash)]
 pub struct FunctionNodeResponse {
     pub collection_id: CollectionId,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
+    pub group_id: GroupId,
     pub function_version_id: FunctionVersionId,
     pub name: FunctionName,
     pub enabled: Enabled,
@@ -221,7 +222,8 @@ pub struct FunctionNodeResponse {
 #[derive(Eq, PartialEq, Hash)]
 pub struct TableNodeResponse {
     pub collection_id: CollectionId,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
+    pub group_id: GroupId,
     pub function_version_id: FunctionVersionId,
     pub table_version_id: TableVersionId,
     pub name: TableName,
@@ -272,6 +274,7 @@ impl From<&FunctionNode> for FunctionNodeResponse {
         FunctionNodeResponse {
             collection_id: src.collection_id,
             collection: src.collection.clone(),
+            group_id: src.group_id,
             function_version_id: src.function_version_id.clone(),
             name: src.name.clone(),
             enabled: src.enabled,
@@ -284,6 +287,7 @@ impl From<&TableNode> for TableNodeResponse {
         TableNodeResponse {
             collection_id: src.collection_id,
             collection: src.collection.clone(),
+            group_id: src.group_id,
             function_version_id: src.function_version_id.clone(),
             table_version_id: src.table_version_id,
             name: src.name.clone(),
