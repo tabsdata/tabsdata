@@ -63,18 +63,18 @@ pub async fn reconcile_children(
     let parent_id = Some(Parent::from(parent.function_id));
     let existing: Vec<FunctionDBWithNames> = conn
         .scd2()
-        .fetch_all(and!(&parent_id, &collection.base.base.collection_id))
+        .fetch_all(and!(&parent_id, &collection.collection_id))
         .await?;
 
     let declared: HashSet<&FunctionName> = desired.iter().map(|child| &child.name).collect();
     for child in &existing {
-        if !declared.contains(&child.base.base.name) {
-            delete_one(conn, ctx, &child.base.base, topology_at).await?;
+        if !declared.contains(&child.name) {
+            delete_one(conn, ctx, child, topology_at).await?;
         }
     }
 
     let by_name: HashMap<&FunctionName, &FunctionDBWithNames> =
-        existing.iter().map(|f| (&f.base.base.name, f)).collect();
+        existing.iter().map(|f| (&f.name, f)).collect();
     for child in desired {
         let child_of = ChildOf {
             function_type: child.function_type.clone(),
@@ -135,10 +135,10 @@ pub async fn cascade_enabled(
         .await?;
     let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
     for child in children {
-        if child.base.enabled == enabled {
+        if child.enabled == enabled {
             continue;
         }
-        let previous_version_id = Some(child.base.id.clone());
+        let previous_version_id = Some(child.id.clone());
         let updated = child.re_registered(ctx, enabled);
         conn.scd2().open(&updated, topology_at).await?;
         register_workers(

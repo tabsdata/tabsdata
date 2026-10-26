@@ -219,7 +219,7 @@ pub async fn linked_connection(
         .fetch_one::<CollectionDB>(&CollectionName::try_from(collection).unwrap())
         .await
         .unwrap();
-    match collection.base.connection_id {
+    match collection.connection_id {
         Some(id) => Some(
             db.scoped(project)
                 .fetch_one::<ConnectionDB>(&id)

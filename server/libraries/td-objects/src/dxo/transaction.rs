@@ -111,25 +111,54 @@ impl FromDao for Transaction {
     type Dao = TransactionDBWithNames;
 
     fn from_dao(dao: TransactionDBWithNames) -> Result<Self, TdError> {
+        let TransactionDBWithNames {
+            base:
+                TransactionDB {
+                    base:
+                        TransactionInsertDB {
+                            id,
+                            collection_id,
+                            execution_id,
+                            transaction_by,
+                            transaction_key,
+                            triggered_on,
+                            triggered_by_id,
+                            group_id,
+                            ..
+                        },
+                    project_id,
+                    started_on,
+                    ended_on,
+                    status,
+                    ..
+                },
+            collection,
+            execution,
+            triggered_by,
+            group,
+            project,
+            function_run_status_count,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.base.id,
-            collection_id: dao.base.base.collection_id,
-            execution_id: dao.base.base.execution_id,
-            transaction_by: dao.base.base.transaction_by,
-            transaction_key: dao.base.base.transaction_key,
-            triggered_on: dao.base.base.triggered_on,
-            triggered_by_id: dao.base.base.triggered_by_id,
-            group_id: dao.base.base.group_id,
-            project_id: dao.base.project_id,
-            started_on: dao.base.started_on,
-            ended_on: dao.base.ended_on,
-            status: dao.base.status,
-            collection: dao.collection,
-            execution: dao.execution,
-            triggered_by: dao.triggered_by,
-            group: dao.group,
-            project: dao.project,
-            function_run_status_count: dao.function_run_status_count.into(),
+            id,
+            collection_id,
+            execution_id,
+            transaction_by,
+            transaction_key,
+            triggered_on,
+            triggered_by_id,
+            group_id,
+            project_id,
+            started_on,
+            ended_on,
+            status,
+            collection,
+            execution,
+            triggered_by,
+            group,
+            project,
+            function_run_status_count: function_run_status_count.into(),
         })
     }
 }

@@ -96,14 +96,14 @@ impl<M: WriteMode> PhysicalRuns<&mut DomainConnection<Apiserver, InProject, M>> 
         let conn = self.executor;
         let audit =
             PhysicalFunctionRunUpdateDB::try_from(update).map_err(SqlError::DtoConversionError)?;
-        let from = physical_run.base.status;
+        let from = physical_run.status;
         if !from.can_move_to(&audit.status) {
             return Ok(false);
         }
         conn.scd2()
-            .update(&audit, and!(&physical_run.base.id, from))
+            .update(&audit, and!(&physical_run.id, from))
             .await?;
-        physical_runs_changed(conn, std::slice::from_ref(&physical_run.base.id)).await?;
+        physical_runs_changed(conn, std::slice::from_ref(&physical_run.id)).await?;
         Ok(PhysicalFunctionRunStatus::IN_FLIGHT.contains(&from))
     }
 
@@ -127,7 +127,7 @@ impl<M: WriteMode> PhysicalRuns<&mut DomainConnection<Apiserver, InProject, M>> 
         let failed = WorkerUpdateDB::failed_at(at);
         let live: Vec<_> = workers
             .iter()
-            .map(|worker| &worker.base.base)
+            .map(|worker| &worker.base)
             .filter(|worker| {
                 worker.status != failed.status
                     && worker
@@ -192,7 +192,7 @@ mod tests {
         status: LogicalFunctionRunStatus,
     ) -> Result<(), TdError> {
         let lfrs: Vec<LogicalFunctionRunDB> = db.scoped(project).fetch_all(execution).await?;
-        let ids: Vec<_> = lfrs.iter().map(|lfr| lfr.base.id.clone()).collect();
+        let ids: Vec<_> = lfrs.iter().map(|lfr| lfr.id.clone()).collect();
         in_project(db, project, async |conn| {
             let walk = path(
                 LogicalFunctionRunStatus::TRANSITIONS,
@@ -215,10 +215,10 @@ mod tests {
     ) -> Result<(), TdError> {
         in_project(db, project, async |conn| {
             let current: PhysicalFunctionRunDB =
-                conn.timeline().fetch_one(&physical_run.base.id).await?;
+                conn.timeline().fetch_one(&physical_run.id).await?;
             if conn.physical_runs().reported(&current, update).await? {
                 conn.physical_runs()
-                    .ended(std::slice::from_ref(&current.base.id))
+                    .ended(std::slice::from_ref(&current.id))
                     .await?;
             }
             Ok(())
@@ -258,12 +258,12 @@ mod tests {
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let (execution, transaction) =
-            run_at(&db, p.base.project_id, LogicalFunctionRunStatus::Canceled).await?;
+            run_at(&db, p.project_id, LogicalFunctionRunStatus::Canceled).await?;
 
-        let transaction = rolled_up_transaction(&db, p.base.project_id, &transaction).await?;
+        let transaction = rolled_up_transaction(&db, p.project_id, &transaction).await?;
         assert_eq!(transaction.status, TransactionStatus::Canceled);
         assert!(transaction.ended_on.is_some());
-        let execution = rolled_up_execution(&db, p.base.project_id, &execution).await?;
+        let execution = rolled_up_execution(&db, p.project_id, &execution).await?;
         assert_eq!(
             execution.ended_on, transaction.ended_on,
             "an execution ends with its last transaction"
@@ -275,14 +275,14 @@ mod tests {
     #[td_test::test(db)]
     async fn test_a_planned_run_starts_scheduled(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let run = seed_run(&db, p.base.project_id).await?;
+        let run = seed_run(&db, p.project_id).await?;
 
-        let rolled_up = rolled_up_execution(&db, p.base.project_id, &run.execution).await?;
+        let rolled_up = rolled_up_execution(&db, p.project_id, &run.execution).await?;
         assert_eq!(rolled_up.status, ExecutionStatus::Scheduled);
         assert!(rolled_up.started_on.is_none(), "nothing has started yet");
         assert!(rolled_up.ended_on.is_none(), "nothing has ended yet");
         assert_eq!(
-            rolled_up_transaction(&db, p.base.project_id, &run.transaction)
+            rolled_up_transaction(&db, p.project_id, &run.transaction)
                 .await?
                 .status,
             TransactionStatus::Scheduled
@@ -334,16 +334,16 @@ mod tests {
                 .seed()
                 .project(ProjectName::try_from(format!("p{i}").as_str())?)
                 .await?;
-            let (execution_id, transaction_id) = run_at(&db, p.base.project_id, run).await?;
+            let (execution_id, transaction_id) = run_at(&db, p.project_id, run).await?;
             assert_eq!(
-                rolled_up_execution(&db, p.base.project_id, &execution_id)
+                rolled_up_execution(&db, p.project_id, &execution_id)
                     .await?
                     .status,
                 expected_execution,
                 "execution for {run:?}"
             );
             assert_eq!(
-                rolled_up_transaction(&db, p.base.project_id, &transaction_id)
+                rolled_up_transaction(&db, p.project_id, &transaction_id)
                     .await?
                     .status,
                 expected_transaction,
@@ -358,20 +358,18 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let run = seed_run(&db, p.base.project_id).await?;
-        let lfrs: Vec<LogicalFunctionRunDB> = db
-            .scoped(p.base.project_id)
-            .fetch_all(&run.execution)
-            .await?;
+        let run = seed_run(&db, p.project_id).await?;
+        let lfrs: Vec<LogicalFunctionRunDB> =
+            db.scoped(p.project_id).fetch_all(&run.execution).await?;
         let physical_run: PhysicalFunctionRunDB = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .scd2()
-            .fetch_one(&lfrs[0].base.id)
+            .fetch_one(&lfrs[0].id)
             .await?;
-        in_project(&db, p.base.project_id, async |conn| {
+        in_project(&db, p.project_id, async |conn| {
             conn.physical_runs()
                 .dispatched(
-                    std::slice::from_ref(&physical_run.base.id),
+                    std::slice::from_ref(&physical_run.id),
                     LockInstant::asserted(*AtTime::now()),
                 )
                 .await?;
@@ -385,9 +383,9 @@ mod tests {
             ended_on: None,
             status: WorkerCallbackStatus::Running,
         };
-        reported(&db, p.base.project_id, &physical_run, &running).await?;
+        reported(&db, p.project_id, &physical_run, &running).await?;
 
-        let rolled_up = rolled_up_execution(&db, p.base.project_id, &run.execution).await?;
+        let rolled_up = rolled_up_execution(&db, p.project_id, &run.execution).await?;
         assert_eq!(
             rolled_up.started_on.as_deref(),
             Some(&started),
@@ -404,9 +402,9 @@ mod tests {
             ended_on: Some(ended.into()),
             status: WorkerCallbackStatus::Done,
         };
-        reported(&db, p.base.project_id, &physical_run, &done).await?;
+        reported(&db, p.project_id, &physical_run, &done).await?;
         assert!(
-            rolled_up_execution(&db, p.base.project_id, &run.execution)
+            rolled_up_execution(&db, p.project_id, &run.execution)
                 .await?
                 .ended_on
                 .is_none(),
@@ -415,13 +413,13 @@ mod tests {
 
         runs_to(
             &db,
-            p.base.project_id,
+            p.project_id,
             &run.execution,
             LogicalFunctionRunStatus::Committed,
         )
         .await?;
         assert_eq!(
-            rolled_up_execution(&db, p.base.project_id, &run.execution)
+            rolled_up_execution(&db, p.project_id, &run.execution)
                 .await?
                 .ended_on
                 .as_deref(),
@@ -447,12 +445,12 @@ mod tests {
                 .seed()
                 .project(ProjectName::try_from(format!("p{i}").as_str())?)
                 .await?;
-            run_at(&db, project.base.project_id, status).await?;
-            projects.push(project.base.project_id);
+            run_at(&db, project.project_id, status).await?;
+            projects.push(project.project_id);
         }
         let untouched = db.seed().test_project().await?;
-        seed_run(&db, untouched.base.project_id).await?;
-        projects.push(untouched.base.project_id);
+        seed_run(&db, untouched.project_id).await?;
+        projects.push(untouched.project_id);
 
         let door = rollup_rows(&db, &projects).await?;
         derive_status_rollup(&db).await?;
@@ -478,7 +476,7 @@ mod tests {
             let executions: Vec<ExecutionDB> = db.scoped(project).fetch_all(()).await?;
             for execution in executions {
                 rows.push((
-                    execution.base.id.to_string(),
+                    execution.id.to_string(),
                     execution.status.to_string(),
                     format!("{:?}", execution.started_on),
                     execution.ended_on.map(|ended| format!("{ended:?}")),
@@ -487,7 +485,7 @@ mod tests {
             let transactions: Vec<TransactionDB> = db.scoped(project).fetch_all(()).await?;
             for transaction in transactions {
                 rows.push((
-                    transaction.base.id.to_string(),
+                    transaction.id.to_string(),
                     transaction.status.to_string(),
                     format!("{:?}", transaction.started_on),
                     transaction.ended_on.map(|ended| format!("{ended:?}")),

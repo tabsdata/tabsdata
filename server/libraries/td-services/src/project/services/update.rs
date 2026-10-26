@@ -36,23 +36,23 @@ async fn update_project(
         let connection = connection.get(authz.none());
         let current: ProjectDB = connection.scd2().fetch_one(&param.project).await?;
         let _grant = authz
-            .require::<Project, ManageProject>(connection, &ctx, &current.base.project_id)
+            .require::<Project, ManageProject>(connection, &ctx, &current.project_id)
             .await?;
         update_project_validate(&update)?;
         assert_project_rename_available(connection, &update, &current).await?;
         assert_project_roles_rename_available(connection, &update, &current).await?;
         current
     };
-    let project = update.name.as_ref().unwrap_or(&current.base.name);
+    let project = update.name.as_ref().unwrap_or(&current.name);
     let secrets = bridge.project_secrets();
     match &update.secrets {
         Some(desired) => {
             secrets
-                .upsert(&current.base.project_id, project, desired)
+                .upsert(&current.project_id, project, desired)
                 .await?;
         }
-        None if project != &current.base.name => {
-            secrets.rename(&current.base.project_id, project).await?;
+        None if project != &current.name => {
+            secrets.rename(&current.project_id, project).await?;
         }
         None => {}
     }
@@ -61,7 +61,7 @@ async fn update_project(
         let conn = gated_trx.get(authz.none());
         let current: ProjectDB = conn.scd2().fetch_one(&param.project).await?;
         let _grant = authz
-            .require::<Project, ManageProject>(conn, &ctx, &current.base.project_id)
+            .require::<Project, ManageProject>(conn, &ctx, &current.project_id)
             .await?;
         update_project_validate(&update)?;
 
@@ -71,7 +71,7 @@ async fn update_project(
         assert_project_rename_available(conn, &update, &current).await?;
         assert_project_roles_rename_available(conn, &update, &current).await?;
 
-        let current_id = current.base.project_id;
+        let current_id = current.project_id;
         let mut gated_trx = gated_trx.enter_project(&current_id).await?;
         let at = gated_trx.locked_at();
         let conn = gated_trx.get(authz.none());
@@ -112,7 +112,7 @@ pub async fn assert_project_rename_available<S: DbScope, M: AccessMode>(
     current: &ProjectDB,
 ) -> Result<(), TdError> {
     if let Some(new_name) = &update.name
-        && new_name != &current.base.name
+        && new_name != &current.name
         && conn
             .scd2()
             .fetch_optional::<ProjectDB>(new_name)

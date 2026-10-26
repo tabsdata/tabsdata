@@ -51,9 +51,9 @@ pub async fn load_current_function_run_id<S: SeesProjectRows, M: AccessMode>(
 ) -> Result<PhysicalFunctionRunId, TdError> {
     let current: Option<PhysicalFunctionRunDB> = conn
         .scd2()
-        .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
+        .fetch_optional::<PhysicalFunctionRunDB>(&lfr.id)
         .await?;
-    let current = current.ok_or_else(|| ReplayError::NoAttempt(lfr.base.id.clone()))?;
+    let current = current.ok_or_else(|| ReplayError::NoAttempt(lfr.id.clone()))?;
     Ok(current.base.id)
 }
 
@@ -70,15 +70,15 @@ pub async fn assert_no_concurrent_replay<S: SeesProjectRows, M: AccessMode>(
 ) -> Result<(), TdError> {
     let current: Option<PhysicalFunctionRunDB> = conn
         .scd2()
-        .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
+        .fetch_optional::<PhysicalFunctionRunDB>(&lfr.id)
         .await?;
     if let Some(pfr) = current
-        && PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status)
+        && PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.status)
     {
         Err(ReplayError::AttemptInFlight(
-            lfr.base.id.clone(),
-            pfr.base.id.clone(),
-            pfr.base.status,
+            lfr.id.clone(),
+            pfr.id.clone(),
+            pfr.status,
         ))?
     }
     Ok(())
@@ -103,16 +103,13 @@ pub async fn assert_no_concurrent_replay<S: SeesProjectRows, M: AccessMode>(
     err(Debug, level = "debug")
 )]
 pub fn assert_lfr_terminal(lfr: &LogicalFunctionRunDB) -> Result<(), TdError> {
-    match lfr.base.status {
+    match lfr.status {
         LogicalFunctionRunStatus::Done
         | LogicalFunctionRunStatus::Committed
         | LogicalFunctionRunStatus::Failed
         | LogicalFunctionRunStatus::Canceled
         | LogicalFunctionRunStatus::Yanked => Ok(()),
-        _ => Err(ReplayError::NotTerminal(
-            lfr.base.id.clone(),
-            lfr.base.status,
-        ))?,
+        _ => Err(ReplayError::NotTerminal(lfr.id.clone(), lfr.status))?,
     }
 }
 
@@ -130,10 +127,10 @@ pub async fn resolve_replay_function_version_id<S: SeesProjectRows, M: AccessMod
     lfr: &LogicalFunctionRunDB,
     at: &AtTime,
 ) -> Result<RunnableVersion, TdError> {
-    let runnable = latest_patch_or_head(&mut *conn, &lfr.base.function_version_id, at).await?;
+    let runnable = latest_patch_or_head(&mut *conn, &lfr.function_version_id, at).await?;
     debug!(
-        lfr = %lfr.base.id,
-        planned = %lfr.base.function_version_id,
+        lfr = %lfr.id,
+        planned = %lfr.function_version_id,
         head = %runnable.function_version_id,
         patch = ?runnable.function_version_patch_id,
         "replay.resolve: head + optional patch"
@@ -181,7 +178,7 @@ pub fn build_replay_response(
     runnable: &RunnableVersion,
 ) -> Result<LogicalFunctionRunReplayResponse, TdError> {
     Ok(LogicalFunctionRunReplayResponse {
-        logical_function_run_id: lfr.base.id.clone(),
+        logical_function_run_id: lfr.id.clone(),
         previous_function_run_id: previous_function_run_id.clone(),
         new_function_run_id: fr_new.id.clone(),
         function_version_id: runnable.effective().clone(),

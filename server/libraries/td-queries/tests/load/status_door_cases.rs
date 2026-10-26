@@ -51,7 +51,7 @@ async fn load_pfr_reported(db: TdPool) -> Result<(), TdError> {
         .await?
     {
         conn.physical_runs()
-            .ended(std::slice::from_ref(&physical_run.base.id))
+            .ended(std::slice::from_ref(&physical_run.id))
             .await?;
     }
     record("pfr::reported", profile, t, 1, seeded);

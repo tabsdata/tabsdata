@@ -46,7 +46,7 @@ async fn execution_read(
     let conn = trx.get(grant);
     let topology: ProjectTopologyDB = conn
         .timeline()
-        .fetch_one(&execution.base.topology_version_id)
+        .fetch_one(&execution.topology_version_id)
         .await?;
 
     let lfrs: Vec<LogicalFunctionRunInsertDB> = conn
@@ -77,7 +77,7 @@ async fn execution_read(
     build_response(
         &transaction_by,
         &transaction_map,
-        &execution.base,
+        &execution,
         &pinned_plan,
         &lfrs,
         &inputs,
@@ -104,8 +104,7 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let execution =
-            test_execute(db.clone(), alpha.base.project_id, false, false, false).await?;
+        let execution = test_execute(db.clone(), alpha.project_id, false, false, false).await?;
         let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
         let request = |ctx: &RequestContext| {
             ctx.read(ExecutionParam {
@@ -116,7 +115,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         service.execution_read(request(&ctx)).await?;
 
-        delete_project(&db, alpha.base.project_id).await?;
+        delete_project(&db, alpha.project_id).await?;
         let err = service.execution_read(request(&ctx)).await.unwrap_err();
         assert_eq!(err.api_error(), ApiError::NotFound);
         Ok(())
@@ -125,7 +124,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_read_execution(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let execution = test_execute(db.clone(), p.base.project_id, false, false, false).await?;
+        let execution = test_execute(db.clone(), p.project_id, false, false, false).await?;
 
         let service = Services::with_defaults(db.clone());
         let request =

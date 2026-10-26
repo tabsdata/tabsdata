@@ -19,12 +19,12 @@ pub(crate) fn build_function_info(
     storage: &Storage,
     f: &PhysicalFunctionRunToExecute,
 ) -> Result<FunctionInfo, TdError> {
-    let storage_location = StorageLocation::from(&f.base.storage_version);
+    let storage_location = StorageLocation::from(&f.storage_version);
 
     // Bundle location — the effective bundle's stamped base_path (from the to_execute join).
     let (path, _) = storage_location
         .builder(&f.bundle_base_path)
-        .collection(&f.base.base.base.collection_id)
+        .collection(&f.collection_id)
         .function(&f.bundle_id)
         .build()?;
     let (bundle_location, _) = build_external_location(storage, &path)?;
@@ -33,7 +33,7 @@ pub(crate) fn build_function_info(
     // not relocate when the collection base_path later changes.
     let (path, _) = storage_location
         .builder(&f.stage_base_path)
-        .collection(&f.base.base.base.collection_id)
+        .collection(&f.collection_id)
         .stage(&f.stage_id)
         .build()?;
     let (stage_location, _) = build_external_location(storage, &path)?;
@@ -41,16 +41,16 @@ pub(crate) fn build_function_info(
     // Patch if resolved, otherwise head — drives the worker's data uri
     // and the yaml `function_version_id` so reads/writes go under the
     // patched identity.
-    let effective_fvid = match &f.base.base.base.function_version_patch_id {
+    let effective_fvid = match &f.function_version_patch_id {
         Some(patch) => (**patch).clone(),
-        None => f.base.base.base.function_version_id.clone(),
+        None => f.function_version_id.clone(),
     };
 
     // Function run content location — the prefix stamped on the run at mint.
     let (path, _) = storage_location
-        .builder(&f.base.base.base.base_path)
-        .collection(&f.base.base.base.collection_id)
-        .transaction(&f.base.base.base.transaction_id)
+        .builder(&f.base_path)
+        .collection(&f.collection_id)
+        .transaction(&f.transaction_id)
         .function_version(&effective_fvid)
         .build()?;
     let (function_run_location, _) = build_external_location(storage, &path)?;
@@ -60,7 +60,7 @@ pub(crate) fn build_function_info(
     // resolves back to the ingested data through its physical_function_run_id.
     let function_raw = match f.decorator {
         Decorator::Publisher => {
-            let (location, _) = build_external_location(storage, &raw_data_dir(&f.base)?)?;
+            let (location, _) = build_external_location(storage, &raw_data_dir(f)?)?;
             Some(location)
         }
         Decorator::Transformer | Decorator::Subscriber => None,
@@ -74,29 +74,29 @@ pub(crate) fn build_function_info(
             api_error!(
                 ApiError::InternalError,
                 "function run [{}] references unknown project {}",
-                f.base.base.base.id,
-                f.base.base.project_id
+                f.id,
+                f.project_id
             )
         })?
         .name()?;
 
     let info = FunctionInfo {
-        project_id: f.base.base.project_id,
+        project_id: f.project_id,
         project,
-        collection_id: f.base.base.base.collection_id,
-        collection: f.base.collection.name()?,
-        function_id: f.base.base.base.function_id,
-        function: f.base.name.clone(),
+        collection_id: f.collection_id,
+        collection: f.collection.name()?,
+        function_id: f.function_id,
+        function: f.name.clone(),
         function_version_id: effective_fvid.clone(),
         function_defined_on: f.defined_on,
         function_bundle: bundle_location,
         function_stage: stage_location,
-        execution_id: f.base.base.base.execution_id.clone(),
-        execution: f.base.execution.clone(),
-        transaction_id: f.base.base.base.transaction_id.clone(),
-        logical_function_run_id: f.base.base.base.logical_function_run_id.clone(),
-        physical_function_run_id: f.base.base.base.id.clone(),
-        triggered_on: AtTime::from(f.base.base.interval.valid_from),
+        execution_id: f.execution_id.clone(),
+        execution: f.execution.clone(),
+        transaction_id: f.transaction_id.clone(),
+        logical_function_run_id: f.logical_function_run_id.clone(),
+        physical_function_run_id: f.id.clone(),
+        triggered_on: AtTime::from(f.interval.valid_from),
         function_data: function_run_location,
         function_raw,
         scheduled_on: AtTime::default(),
@@ -207,10 +207,7 @@ mod tests {
             .expect("a publisher is given a raw-data location");
         let raw = raw.uri.path();
         assert!(
-            raw.contains(&format!(
-                "/r/c/{}/w/{}/r",
-                f.base.base.base.collection_id, f.base.base.base.id
-            )),
+            raw.contains(&format!("/r/c/{}/w/{}/r", f.collection_id, f.id)),
             "raw data must hang off the physical run that ingested it, under the \
              prefix stamped on that run: {raw}"
         );

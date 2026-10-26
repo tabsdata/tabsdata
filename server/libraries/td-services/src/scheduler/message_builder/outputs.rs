@@ -23,34 +23,31 @@ pub(crate) fn build_output_tables(
     let mut output_tables_map = HashMap::new();
     for table in tables.iter() {
         let (path, _) = StorageLocation::current()
-            .builder(&table.base.base.base.base_path)
-            .collection(&table.base.base.base.collection_id)
-            .data(&table.base.base.base.id)
-            .table(
-                &table.base.base.base.table_id,
-                &table.base.base.base.table_version_id,
-            )
+            .builder(&table.base_path)
+            .collection(&table.collection_id)
+            .data(&table.id)
+            .table(&table.table_id, &table.table_version_id)
             .build()?;
         let (location, _) = build_external_location(storage, &path)?;
 
         let output_table = OutputTableVersion {
-            collection_id: table.base.base.base.collection_id,
+            collection_id: table.collection_id,
             collection: table.collection.name()?,
-            table_id: table.base.base.base.table_id,
-            table: table.base.base.base.name.clone(),
-            table_version_id: table.base.base.base.table_version_id,
+            table_id: table.table_id,
+            table: table.name.clone(),
+            table_version_id: table.table_version_id,
             logical_table_data_version_id: table
                 .base
                 .base
                 .base
                 .logical_table_data_version_id
                 .clone(),
-            physical_table_data_version_id: table.base.base.base.id.clone(),
+            physical_table_data_version_id: table.id.clone(),
             location,
-            table_pos: table.base.base.base.function_param_pos,
+            table_pos: table.function_param_pos,
         };
 
-        output_tables_map.insert(*table.base.base.base.function_param_pos, output_table);
+        output_tables_map.insert(*table.function_param_pos, output_table);
     }
     Ok(partition_and_sort(output_tables_map, OutputTable::Table))
 }

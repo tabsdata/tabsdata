@@ -45,7 +45,7 @@ async fn list_function_patches(
     let rows = conn
         .timeline()
         .until(&at)
-        .list(&function.base.base.function_id, &query_params)
+        .list(&function.function_id, &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }
@@ -110,7 +110,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_patches_returns_empty_for_no_patches(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let _coll = seed_patches_fixture(&db, p.base.project_id).await;
+        let _coll = seed_patches_fixture(&db, p.project_id).await;
         let param = (
             CollectionParam {
                 collection: CollectionIdName::from_str("c0")?,
@@ -122,7 +122,7 @@ mod tests {
         );
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list(param, ListParams::default())
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let response = Services::with_defaults(db.clone())
             .list_function_patches(request)
             .await?
@@ -134,7 +134,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_patches_returns_all_patches_latest_first(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let coll = seed_patches_fixture(&db, p.base.project_id).await;
+        let coll = seed_patches_fixture(&db, p.project_id).await;
         let parent: FunctionDBWithNames = {
             db.scd2()
                 .fetch_one::<FunctionDBWithNames>(and!(
@@ -146,7 +146,7 @@ mod tests {
 
         for i in 0..2 {
             let body = FunctionPatch {
-                patch_of: parent.base.base.id.clone(),
+                patch_of: parent.id.clone(),
                 bundle_id: BundleId::default(),
                 snippet: format!("v{i}").try_into()?,
                 runtime_values: None,
@@ -164,7 +164,7 @@ mod tests {
                     ),
                     body,
                 )
-                .in_project(p.base.project_id);
+                .in_project(p.project_id);
             let _ = Services::with_defaults(db.clone())
                 .create_function_patch(req)
                 .await?
@@ -193,12 +193,12 @@ mod tests {
             workers: None,
         };
         let sibling = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&coll, &register)
             .await?;
         let body = FunctionPatch {
-            patch_of: sibling.base.id.clone(),
+            patch_of: sibling.id.clone(),
             bundle_id: BundleId::default(),
             snippet: "sibling patch".try_into()?,
             runtime_values: None,
@@ -216,7 +216,7 @@ mod tests {
                 ),
                 body,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let _ = Services::with_defaults(db.clone())
             .create_function_patch(req)
             .await?
@@ -236,7 +236,7 @@ mod tests {
                     ),
                     ListParams::default(),
                 )
-                .in_project(p.base.project_id);
+                .in_project(p.project_id);
             Services::with_defaults(db.clone())
                 .list_function_patches(request)
                 .await
@@ -247,15 +247,12 @@ mod tests {
         assert_eq!(response.data.len(), 2);
         assert!(response.data[0].defined_on >= response.data[1].defined_on);
         for v in &response.data {
-            assert_eq!(*v.parent_function_version_id, parent.base.base.id);
+            assert_eq!(*v.parent_function_version_id, parent.id);
         }
 
         let response = list("f1").await?;
         assert_eq!(response.data.len(), 1);
-        assert_eq!(
-            *response.data[0].parent_function_version_id,
-            sibling.base.id
-        );
+        assert_eq!(*response.data[0].parent_function_version_id, sibling.id);
 
         // Deleting a function hides its patches: the function no longer
         // resolves, so the listing is not found rather than leaking rows.
@@ -268,7 +265,7 @@ mod tests {
                     function: FunctionIdName::from_str("f0")?,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         Services::with_defaults(db.clone())
             .delete_function(request)
             .await?;
@@ -283,19 +280,16 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_patches_at(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let coll = seed_patches_fixture(&db, p.base.project_id).await;
+        let coll = seed_patches_fixture(&db, p.project_id).await;
         let parent: FunctionDBWithNames = db
             .scd2()
-            .fetch_one(and!(
-                &coll.base.collection_id,
-                &FunctionIdName::from_str("f0")?
-            ))
+            .fetch_one(and!(&coll.collection_id, &FunctionIdName::from_str("f0")?))
             .await?;
 
         let service = Services::with_defaults(db.clone());
         let patch = async |snippet: &str| -> Result<(), TdError> {
             let body = FunctionPatch {
-                patch_of: parent.base.base.id.clone(),
+                patch_of: parent.id.clone(),
                 bundle_id: BundleId::default(),
                 snippet: snippet.try_into()?,
                 runtime_values: None,
@@ -313,7 +307,7 @@ mod tests {
                     ),
                     body,
                 )
-                .in_project(p.base.project_id);
+                .in_project(p.project_id);
             service.create_function_patch(request).await?;
             Ok(())
         };
@@ -339,7 +333,7 @@ mod tests {
                     ),
                     ListParams::default(),
                 )
-                .in_project(p.base.project_id);
+                .in_project(p.project_id);
             service
                 .list_function_patches(request)
                 .await
@@ -357,13 +351,13 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str("c0")?,
                     })
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
         let err = list("c0", after_first).await.map(|_| ()).unwrap_err();
         assert_eq!(err.api_error(), ApiError::NotFound);
-        let by_id = format!("~{}", coll.base.collection_id);
+        let by_id = format!("~{}", coll.collection_id);
         let still_first = list(&by_id, after_first).await?.data;
         assert_eq!(still_first.len(), 1);
         assert_eq!(still_first[0].id, first[0].id);

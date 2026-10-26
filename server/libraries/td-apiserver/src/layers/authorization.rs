@@ -103,7 +103,7 @@ async fn session(
     })?;
 
     // The project, if any, is resolved later by `project_resolver_layer`.
-    let context = RequestContext::with(session.base.access_token_id, session.base.user_id);
+    let context = RequestContext::with(session.access_token_id, session.user_id);
     let mut request = request;
     request.extensions_mut().insert(context);
     request.extensions_mut().insert(access_token);
@@ -151,11 +151,8 @@ async fn service_token(
         TdError::from(AuthError::AuthenticationFailed)
     })?;
 
-    let context = RequestContext::service_token(
-        AccessTokenId::from(*token.base.id),
-        token.base.user_id,
-        token.base.scope,
-    );
+    let context =
+        RequestContext::service_token(AccessTokenId::from(*token.id), token.user_id, token.scope);
     // The request's instant decides expiry and stamps last use.
     let at = context.time;
     tokens.accept(&token, &at).map_err(|e| {
@@ -172,11 +169,11 @@ async fn service_token(
         .await;
 
     // The interval is checked before a write connection is acquired.
-    if tokens.due_for_touch(&token.base.id, **at) {
+    if tokens.due_for_touch(&token.id, **at) {
         let stamped = retrying(|attempt| async {
             let mut conn = db.begin(attempt).await?;
             let grant = Grant::asserted("service token last-used stamp");
-            tokens.touch(conn.get(grant), &token.base.id, &at).await?;
+            tokens.touch(conn.get(grant), &token.id, &at).await?;
             conn.commit().await?;
             Ok(())
         })
@@ -201,9 +198,9 @@ fn session_span(session: &Session) -> Span {
         Level::INFO,
         "authorized",
         credential = "session",
-        user_id = %session.base.user_id,
+        user_id = %session.user_id,
         user_name = %session.user_name,
-        access_token_id = %session.base.access_token_id.log(),
+        access_token_id = %session.access_token_id.log(),
     )
 }
 
@@ -212,10 +209,10 @@ fn service_token_span(token: &ServiceTokenDBWithNames) -> Span {
         Level::INFO,
         "authorized",
         credential = "service",
-        user_id = %token.base.user_id,
+        user_id = %token.user_id,
         user_name = %token.user_name,
-        slot = %token.base.slot,
-        token_id = %token.base.id,
+        slot = %token.slot,
+        token_id = %token.id,
     )
 }
 

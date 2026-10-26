@@ -53,12 +53,12 @@ fn running_report() -> CallbackRequest {
 async fn test_late_running_report_does_not_undo_a_stop(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_stop")?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&collection, &register("f_stop", None))
         .await?;
@@ -69,14 +69,14 @@ async fn test_late_running_report_does_not_undo_a_stop(db: TdPool) -> Result<(),
         WorkerStatus::Stopped,
     ] {
         let worker = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .worker(&collection, &function, &WorkerType::CronTrigger, &stopping)
             .await?;
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
             WorkerParam {
-                worker: worker.base.id.clone(),
+                worker: worker.id.clone(),
             },
             running_report(),
         );
@@ -84,9 +84,9 @@ async fn test_late_running_report_does_not_undo_a_stop(db: TdPool) -> Result<(),
             .worker_callback(request)
             .await?;
 
-        let after: WorkerDB = db.fetch_one(&worker.base.id).await?;
+        let after: WorkerDB = db.fetch_one(&worker.id).await?;
         assert_eq!(
-            after.base.status, stopping,
+            after.status, stopping,
             "a late Running report must not move a worker out of {stopping:?}"
         );
     }
@@ -101,12 +101,12 @@ async fn test_late_running_report_does_not_undo_a_stop(db: TdPool) -> Result<(),
 async fn test_collection_delete_stops_each_trigger_once(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_gone")?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&collection, &register("f_gone", None))
         .await?;
@@ -122,7 +122,7 @@ async fn test_collection_delete_stops_each_trigger_once(db: TdPool) -> Result<()
         (WorkerStatus::Canceled, WorkerStatus::Canceled),
     ] {
         let worker = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .worker(&collection, &function, &WorkerType::CronTrigger, &status)
             .await?;
@@ -133,7 +133,7 @@ async fn test_collection_delete_stops_each_trigger_once(db: TdPool) -> Result<()
         .delete(CollectionParam {
             collection: CollectionIdName::from_str("c_gone")?,
         })
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     Services::with_defaults(db.clone())
         .delete_collection(request)
         .await?;
@@ -141,7 +141,7 @@ async fn test_collection_delete_stops_each_trigger_once(db: TdPool) -> Result<()
     for (id, status, expected) in workers {
         let after: WorkerDB = db.fetch_one(&id).await?;
         assert_eq!(
-            after.base.status, expected,
+            after.status, expected,
             "collection delete on a {status:?} trigger"
         );
     }
@@ -155,17 +155,17 @@ async fn test_collection_delete_stops_each_trigger_once(db: TdPool) -> Result<()
 async fn test_function_delete_stops_a_parked_cron_trigger(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_cron")?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&collection, &register("f_cron", None))
         .await?;
     let parked = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .worker(
             &collection,
@@ -184,13 +184,13 @@ async fn test_function_delete_stops_a_parked_cron_trigger(db: TdPool) -> Result<
                 function: FunctionIdName::from_str("f_cron")?,
             },
         ))
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     Services::with_defaults(db.clone())
         .delete_function(request)
         .await?;
 
-    let after: WorkerDB = db.fetch_one(&parked.base.id).await?;
-    assert_eq!(after.base.status, WorkerStatus::StopScheduled);
+    let after: WorkerDB = db.fetch_one(&parked.id).await?;
+    assert_eq!(after.status, WorkerStatus::StopScheduled);
     Ok(())
 }
 
@@ -215,15 +215,15 @@ fn cron_reader() -> Result<FunctionParam, TdError> {
 async fn frozen_cron_reader(db: &TdPool) -> Result<ProjectId, TdError> {
     let p = db.seed().test_project().await?;
     let upstream = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_0")?, &UserId::admin())
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .function(&upstream, &register("producer", None))
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_1")?, &UserId::admin())
         .await?;
@@ -238,7 +238,7 @@ async fn frozen_cron_reader(db: &TdPool) -> Result<ProjectId, TdError> {
         ..register("cron_reader", None)
     };
     Services::with_defaults(db.clone())
-        .register_function(admin().create(c_1()?, create).in_project(p.base.project_id))
+        .register_function(admin().create(c_1()?, create).in_project(p.project_id))
         .await?;
 
     Services::with_defaults(db.clone())
@@ -247,10 +247,10 @@ async fn frozen_cron_reader(db: &TdPool) -> Result<ProjectId, TdError> {
                 .delete(CollectionParam {
                     collection: CollectionIdName::from_str("c_0")?,
                 })
-                .in_project(p.base.project_id),
+                .in_project(p.project_id),
         )
         .await?;
-    Ok(p.base.project_id)
+    Ok(p.project_id)
 }
 
 /// F has a cron trigger and depends on a table in c_0. Deleting c_0
@@ -268,16 +268,16 @@ async fn test_function_delete_stops_the_trigger_of_a_frozen_function(
     let workers: Vec<WorkerDB> = db.fetch_all(()).await?;
     let triggers: Vec<_> = workers
         .iter()
-        .filter(|w| w.base.worker_type == WorkerType::CronTrigger)
+        .filter(|w| w.worker_type == WorkerType::CronTrigger)
         .collect();
     assert_eq!(triggers.len(), 1);
     assert!(
         matches!(
-            triggers[0].base.status,
+            triggers[0].status,
             WorkerStatus::StopScheduled | WorkerStatus::StopRequested | WorkerStatus::Stopped
         ),
         "the deleted function's trigger is left {:?}",
-        triggers[0].base.status
+        triggers[0].status
     );
     Ok(())
 }
@@ -303,12 +303,10 @@ async fn test_a_thawed_function_gets_its_trigger_back(db: TdPool) -> Result<(), 
     let workers: Vec<WorkerDB> = db.fetch_all(()).await?;
     let live: Vec<_> = workers
         .iter()
-        .filter(|w| {
-            w.base.worker_type == WorkerType::CronTrigger && w.base.function_version_id == thawed.id
-        })
+        .filter(|w| w.worker_type == WorkerType::CronTrigger && w.function_version_id == thawed.id)
         .collect();
     assert_eq!(live.len(), 1, "the thawed function has no cron trigger");
-    assert_eq!(live[0].base.status, WorkerStatus::Scheduled);
+    assert_eq!(live[0].status, WorkerStatus::Scheduled);
     Ok(())
 }
 
@@ -320,7 +318,7 @@ async fn test_function_update_stops_a_trigger_the_tick_is_claiming(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_cron")?, &UserId::admin())
         .await?;
@@ -338,16 +336,12 @@ async fn test_function_update_stops_a_trigger_the_tick_is_claiming(
         ..register("cron_f", None)
     };
     Services::with_defaults(db.clone())
-        .register_function(
-            admin()
-                .create(c_cron()?, create)
-                .in_project(p.base.project_id),
-        )
+        .register_function(admin().create(c_cron()?, create).in_project(p.project_id))
         .await?;
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut tick: GatedConnection<RW, InProject> = DbPool::in_project(&pools, &p.base.project_id)
+    let mut tick: GatedConnection<RW, InProject> = DbPool::in_project(&pools, &p.project_id)
         .begin(Attempt::unretried())
         .await?;
     let conn = tick.get(Grant::asserted("request tick held open"));
@@ -355,7 +349,7 @@ async fn test_function_update_stops_a_trigger_the_tick_is_claiming(
         .fetch_all(WorkerDB::triggers_to_schedule(WorkerType::CronTrigger))
         .await?;
     assert_eq!(claimed.len(), 1);
-    let old_trigger = claimed[0].base.id.clone();
+    let old_trigger = claimed[0].id.clone();
     conn.update(&WorkerUpdateDB::requested(), &old_trigger)
         .await?;
 
@@ -373,7 +367,7 @@ async fn test_function_update_stops_a_trigger_the_tick_is_claiming(
                 ..Default::default()
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     let updating = tokio::spawn(async move { services.update_function(update).await.map(|_| ()) });
     assert!(
         tick.get(Grant::asserted("blocking probe"))
@@ -388,11 +382,11 @@ async fn test_function_update_stops_a_trigger_the_tick_is_claiming(
     let after: WorkerDB = db.fetch_one(&old_trigger).await?;
     assert!(
         matches!(
-            after.base.status,
+            after.status,
             WorkerStatus::StopScheduled | WorkerStatus::StopRequested | WorkerStatus::Stopped
         ),
         "the old version's trigger is left {:?}",
-        after.base.status
+        after.status
     );
     Ok(())
 }
@@ -400,7 +394,7 @@ async fn test_function_update_stops_a_trigger_the_tick_is_claiming(
 /// A cron publisher `cron_f`, enabled or not, whose trigger was never started.
 async fn unstarted_cron(db: &TdPool, enabled: Enabled) -> Result<(ProjectId, WorkerDB), TdError> {
     let p = db.seed().test_project().await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_1")?, &UserId::admin())
         .await?;
@@ -413,12 +407,12 @@ async fn unstarted_cron(db: &TdPool, enabled: Enabled) -> Result<(ProjectId, Wor
         ..register("cron_f", None)
     };
     Services::with_defaults(db.clone())
-        .register_function(admin().create(c_1()?, create).in_project(p.base.project_id))
+        .register_function(admin().create(c_1()?, create).in_project(p.project_id))
         .await?;
     let workers: Vec<WorkerDB> = db.fetch_all(()).await?;
     assert_eq!(workers.len(), 1);
-    assert_eq!(workers[0].base.status, WorkerStatus::Scheduled);
-    Ok((p.base.project_id, workers.into_iter().next().unwrap()))
+    assert_eq!(workers[0].status, WorkerStatus::Scheduled);
+    Ok((p.project_id, workers.into_iter().next().unwrap()))
 }
 
 async fn describe_cron_f(db: &TdPool, project: ProjectId) -> Result<(), TdError> {
@@ -461,13 +455,13 @@ async fn cron_stops_after_a_tick(db: &TdPool) -> Result<Vec<String>, TdError> {
 }
 
 async fn assert_stopped_without_a_stop(db: &TdPool, worker: &WorkerDB) -> Result<(), TdError> {
-    let after: WorkerDB = db.fetch_one(&worker.base.id).await?;
-    assert_eq!(after.base.status, WorkerStatus::Stopped);
-    assert!(after.base.ended_on.is_some());
+    let after: WorkerDB = db.fetch_one(&worker.id).await?;
+    assert_eq!(after.status, WorkerStatus::Stopped);
+    assert!(after.ended_on.is_some());
     assert!(
         !cron_stops_after_a_tick(db)
             .await?
-            .contains(&worker.base.id.to_string()),
+            .contains(&worker.id.to_string()),
         "a trigger that never started got a stop"
     );
     Ok(())
@@ -499,7 +493,7 @@ async fn test_freezing_a_function_stops_its_unstarted_trigger(db: TdPool) -> Res
     let workers: Vec<WorkerDB> = db.fetch_all(()).await?;
     let triggers: Vec<&WorkerDB> = workers
         .iter()
-        .filter(|w| w.base.worker_type == WorkerType::CronTrigger)
+        .filter(|w| w.worker_type == WorkerType::CronTrigger)
         .collect();
     assert_eq!(triggers.len(), 1);
     assert_stopped_without_a_stop(&db, triggers[0]).await

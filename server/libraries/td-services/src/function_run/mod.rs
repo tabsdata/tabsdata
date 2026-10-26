@@ -34,15 +34,15 @@ pub async fn resolve_current_function_run<S: SeesProjectRows, M: AccessMode>(
     let lfr: LogicalFunctionRunDB = conn.fetch_one(and!(execution_id, function_id)).await?;
     let current: PhysicalFunctionRunDB = conn
         .scd2()
-        .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
+        .fetch_optional::<PhysicalFunctionRunDB>(&lfr.id)
         .await?
         .ok_or_else(|| {
             api_error!(
                 ApiError::NotFound,
                 "LFR {} has no current physical function run",
-                lfr.base.id
+                lfr.id
             )
         })?;
-    let fr: PhysicalFunctionRunDBWithNames = conn.timeline().fetch_one(&current.base.id).await?;
+    let fr: PhysicalFunctionRunDBWithNames = conn.timeline().fetch_one(&current.id).await?;
     Ok(fr)
 }

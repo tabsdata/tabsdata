@@ -3,7 +3,7 @@
 //
 
 use td_error::TdError;
-use td_objects::dxo::worker::WorkerDBWithNames;
+use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerInsertDB};
 use td_objects::dxo::worker_input::cron::{CronInfo, CronInput};
 use td_objects::types::basic::{AtTime, WorkerConfig};
 
@@ -12,14 +12,31 @@ use td_objects::types::basic::{AtTime, WorkerConfig};
 /// gets its trigger via env). Needs only the worker row -- no jwt, server
 /// addresses, or storage -- so the resolve endpoint can call it directly.
 pub(crate) fn build_cron_input(worker: WorkerDBWithNames) -> Result<CronInput, TdError> {
+    let WorkerDBWithNames {
+        base:
+            WorkerDB {
+                base:
+                    WorkerInsertDB {
+                        id,
+                        collection_id,
+                        function_version_id,
+                        worker_config,
+                        ..
+                    },
+                ..
+            },
+        collection,
+        function,
+        ..
+    } = worker;
     let info = CronInfo {
-        worker_id: worker.base.base.id,
-        collection_id: worker.base.base.collection_id,
-        collection: worker.collection.name()?,
-        function_version_id: worker.base.base.function_version_id,
-        function: worker.function,
+        worker_id: id,
+        collection_id,
+        collection: collection.name()?,
+        function_version_id,
+        function,
         scheduled_on: AtTime::now(),
-        config: WorkerConfig::serialize(&worker.base.base.worker_config)?,
+        config: WorkerConfig::serialize(&worker_config)?,
     };
     Ok(CronInput { info })
 }

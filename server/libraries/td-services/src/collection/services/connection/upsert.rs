@@ -61,7 +61,7 @@ async fn connection_upsert(
             &project,
             &resolution.collection_id,
             &resolution.collection,
-            &resolution.row.base.id,
+            &resolution.row.id,
             &payload,
         )
         .await?;
@@ -72,7 +72,7 @@ async fn connection_upsert(
         &project,
         &resolution.collection_id,
         &resolution.collection,
-        &resolution.row.base.id,
+        &resolution.row.id,
     )
     .await?;
     if let Reconciled::Deleted = reconciled {
@@ -82,7 +82,7 @@ async fn connection_upsert(
             resolution.collection
         ));
     }
-    read.id = Some(resolution.row.base.id);
+    read.id = Some(resolution.row.id);
     Ok(read)
 }
 
@@ -97,7 +97,7 @@ async fn verify_kept_keys(
     if document.kept_secrets.is_empty() {
         return Ok(());
     }
-    let stored = store.fetch(project, &resolution.row.base.id).await?;
+    let stored = store.fetch(project, &resolution.row.id).await?;
     let missing: Vec<&String> = document
         .kept_secrets
         .iter()
@@ -142,7 +142,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_upsert_forwards_to_store(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "src", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "src", Some(GroupName::source())).await;
         let upserts = Arc::new(Mutex::new(Vec::new()));
 
         let response = upsert_service(
@@ -151,33 +151,31 @@ mod tests {
                 upserts: upserts.clone(),
             },
         )
-        .connection_upsert(upsert_request(p.base.project_id, "src"))
+        .connection_upsert(upsert_request(p.project_id, "src"))
         .await
         .unwrap();
 
-        let row = linked_connection(&db, p.base.project_id, "src")
-            .await
-            .unwrap();
+        let row = linked_connection(&db, p.project_id, "src").await.unwrap();
         let recorded = upserts.lock().unwrap();
         assert_eq!(recorded.len(), 1);
-        assert_eq!(recorded[0].0, p.base.project_id);
+        assert_eq!(recorded[0].0, p.project_id);
         assert_eq!(
-            recorded[0].1, row.base.id,
+            recorded[0].1, row.id,
             "store keyed by the row minted at create"
         );
         assert_eq!(
             response.secret_names,
             vec!["CREDENTIALS_PASSWORD".to_string()]
         );
-        assert_eq!(response.id, Some(row.base.id));
+        assert_eq!(response.id, Some(row.id));
     }
 
     #[td_test::test(db)]
     async fn test_upsert_rejects_datafactory(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "fac", None).await; // default group -> DataFactory
+        create_collection(&db, p.project_id, "fac", None).await; // default group -> DataFactory
         let result = upsert_service(&db, MockStore::default())
-            .connection_upsert(upsert_request(p.base.project_id, "fac"))
+            .connection_upsert(upsert_request(p.project_id, "fac"))
             .await;
         assert!(result.is_err(), "DataFactory must be rejected");
     }
@@ -185,7 +183,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_upsert_rejects_missing_connection(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "src3", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "src3", Some(GroupName::source())).await;
         // Secrets without the dehydrated connection — rejected (no subset
         // updates until fetch-and-align lands).
         let body = ConnectionUpsert {
@@ -193,7 +191,7 @@ mod tests {
             secrets: Some(secrets()),
         };
         let result = upsert_service(&db, MockStore::default())
-            .connection_upsert(upsert_request_body(p.base.project_id, "src3", body))
+            .connection_upsert(upsert_request_body(p.project_id, "src3", body))
             .await;
         assert!(result.is_err(), "connection-less upsert must be rejected");
     }
@@ -201,7 +199,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_upsert_requires_project_role(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "src2", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "src2", Some(GroupName::source())).await;
         // A user with no role in the project fails the DevelopProject check.
         let outsider = db
             .seed()
@@ -214,7 +212,7 @@ mod tests {
         };
         let request = RequestContext::with(AccessTokenId::default(), outsider.id)
             .update(collection_param("src2"), body)
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let result = upsert_service(&db, MockStore::default())
             .connection_upsert(request)
             .await;
@@ -227,15 +225,15 @@ mod tests {
     #[td_test::test(db)]
     async fn test_upsert_requires_manage_project(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "srcm", Some(GroupName::source())).await;
-        let dev = seed_dev_user(&db, p.base.project_id).await;
+        create_collection(&db, p.project_id, "srcm", Some(GroupName::source())).await;
+        let dev = seed_dev_user(&db, p.project_id).await;
         let body = ConnectionUpsert {
             connection: Some(document("srcm", "mysqlSrcConn")),
             secrets: Some(secrets()),
         };
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(collection_param("srcm"), body)
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let err = upsert_service(&db, MockStore::default())
             .connection_upsert(request)
             .await
@@ -246,11 +244,11 @@ mod tests {
     #[td_test::test(db)]
     async fn test_read_requires_manage_project(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "srcr", Some(GroupName::source())).await;
-        let dev = seed_dev_user(&db, p.base.project_id).await;
+        create_collection(&db, p.project_id, "srcr", Some(GroupName::source())).await;
+        let dev = seed_dev_user(&db, p.project_id).await;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .read(collection_param("srcr"))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let err = Services::with_defaults(db.clone())
             .connection_read(request)
             .await
@@ -261,13 +259,9 @@ mod tests {
     #[td_test::test(db)]
     async fn test_upsert_rejects_kind_change(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "srck", Some(GroupName::source())).await; // mysqlSrcConn
+        create_collection(&db, p.project_id, "srck", Some(GroupName::source())).await; // mysqlSrcConn
         let result = upsert_service(&db, MockStore::default())
-            .connection_upsert(upsert_request_kind(
-                p.base.project_id,
-                "srck",
-                "postgresSrcConn",
-            ))
+            .connection_upsert(upsert_request_kind(p.project_id, "srck", "postgresSrcConn"))
             .await;
         let err = result.expect_err("connector kind must be immutable");
         assert!(err.to_string().contains("cannot change"), "got: {err}");
@@ -276,7 +270,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_upsert_rejects_duplicate_keys(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "srcd", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "srcd", Some(GroupName::source())).await;
         // Same key twice — which value applies would be backend-dependent.
         let body = ConnectionUpsert {
             connection: Some(document("srcd", "mysqlSrcConn")),
@@ -291,7 +285,7 @@ mod tests {
             ),
         };
         let err = upsert_service(&db, MockStore::default())
-            .connection_upsert(upsert_request_body(p.base.project_id, "srcd", body))
+            .connection_upsert(upsert_request_body(p.project_id, "srcd", body))
             .await
             .expect_err("duplicate keys must be rejected");
         assert!(err.to_string().contains("duplicate"), "got: {err}");
@@ -300,7 +294,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_upsert_kept_value_checked_against_store(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "srcv", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "srcv", Some(GroupName::source())).await;
         let service = upsert_service(
             &db,
             KeepStore {
@@ -317,7 +311,7 @@ mod tests {
             }]),
         };
         service
-            .connection_upsert(upsert_request_body(p.base.project_id, "srcv", keep_stored))
+            .connection_upsert(upsert_request_body(p.project_id, "srcv", keep_stored))
             .await
             .expect("keeping a stored secret must be accepted");
 
@@ -336,7 +330,7 @@ mod tests {
             ]),
         };
         let err = service
-            .connection_upsert(upsert_request_body(p.base.project_id, "srcv", keep_missing))
+            .connection_upsert(upsert_request_body(p.project_id, "srcv", keep_missing))
             .await
             .expect_err("keeping a never-stored secret must be rejected");
         assert!(err.to_string().contains("NEVER_STORED"), "got: {err}");
@@ -345,9 +339,9 @@ mod tests {
     #[td_test::test(db)]
     async fn test_upsert_with_unconfigured_store_fails(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "srcq", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "srcq", Some(GroupName::source())).await;
         let err = upsert_service(&db, NoopConnectionStore)
-            .connection_upsert(upsert_request(p.base.project_id, "srcq"))
+            .connection_upsert(upsert_request(p.project_id, "srcq"))
             .await
             .expect_err("unconfigured store must error");
         assert!(err.to_string().contains("not configured"));
@@ -375,7 +369,7 @@ mod tests {
             ..Services::with_defaults(db.clone())
         }
         .create_collection(create_request(
-            p.base.project_id,
+            p.project_id,
             "srcw",
             Some(GroupName::source()),
         ))
@@ -386,7 +380,7 @@ mod tests {
         // under the run's project.
         assert!(
             dir.join("connections")
-                .join(p.base.project_id.to_string())
+                .join(p.project_id.to_string())
                 .join("srcw.json")
                 .is_file()
         );
@@ -396,7 +390,7 @@ mod tests {
             bridge: bridge(),
             ..Services::with_defaults(db.clone())
         }
-        .connection_upsert(upsert_request(p.base.project_id, "srcw"))
+        .connection_upsert(upsert_request(p.project_id, "srcw"))
         .await
         .expect("supervisor-mode upsert must work");
         assert_eq!(response.secret_names, vec!["CREDENTIALS_PASSWORD"]);
@@ -406,7 +400,7 @@ mod tests {
             bridge: bridge(),
             ..Services::with_defaults(db.clone())
         }
-        .connection_read(read_request(p.base.project_id, "srcw"))
+        .connection_read(read_request(p.project_id, "srcw"))
         .await
         .expect("supervisor-mode read must work");
         assert_eq!(read.secret_names, vec!["CREDENTIALS_PASSWORD"]);

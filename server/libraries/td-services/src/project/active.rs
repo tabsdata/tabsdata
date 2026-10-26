@@ -20,5 +20,5 @@ where
 {
     let mut conn = db.read().await?;
     let projects: Vec<ProjectDB> = conn.get(grant).scd2().fetch_all(&()).await?;
-    Ok(projects.into_iter().map(|p| p.base.project_id).collect())
+    Ok(projects.into_iter().map(|p| p.project_id).collect())
 }

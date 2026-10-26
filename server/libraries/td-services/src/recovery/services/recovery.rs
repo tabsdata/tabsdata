@@ -276,7 +276,7 @@ mod tests {
 
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_stuck")?, &UserId::admin())
             .await?;
@@ -301,7 +301,7 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -309,10 +309,7 @@ mod tests {
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!(
-                            "{}",
-                            collection.base.name
-                        ))?,
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("f_stuck")?,
@@ -326,7 +323,7 @@ mod tests {
                     external_uid: None,
                 },
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let execution = dispatch_services(&db).execute_function(request).await?.data;
 
         let (context_1, sent_1) = sending_to(dispatch_services(&db), TestBridgeProvider::default());
@@ -337,8 +334,8 @@ mod tests {
             .await?;
         assert_eq!(pfrs.len(), 1);
         let pfr_old = pfrs[0].clone();
-        assert_eq!(pfr_old.base.status, PhysicalFunctionRunStatus::Dispatched);
-        assert!(pfr_old.base.dispatched_on.is_some());
+        assert_eq!(pfr_old.status, PhysicalFunctionRunStatus::Dispatched);
+        assert!(pfr_old.dispatched_on.is_some());
         assert_eq!(sent_1.messages().len(), 1);
 
         // A freshly-dispatched run is well within the default timeout — the
@@ -346,39 +343,33 @@ mod tests {
         let sent_fresh = recovery_and_request_tick(&db, StuckRequestedTimeout::default()).await?;
         let pfr: PhysicalFunctionRunDB = db
             .timeline()
-            .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.base.id)
+            .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.id)
             .await?;
-        assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Dispatched);
+        assert_eq!(pfr.status, PhysicalFunctionRunStatus::Dispatched);
         assert!(sent_fresh.messages().is_empty());
 
         let sent_2 = recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
 
         let pfr_failed: PhysicalFunctionRunDB = db
             .timeline()
-            .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.base.id)
+            .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.id)
             .await?;
-        assert_eq!(pfr_failed.base.status, PhysicalFunctionRunStatus::Failed);
-        assert!(pfr_failed.base.ended_on.is_some());
+        assert_eq!(pfr_failed.status, PhysicalFunctionRunStatus::Failed);
+        assert!(pfr_failed.ended_on.is_some());
 
         let pfrs: Vec<PhysicalFunctionRunDB> = db
             .timeline()
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
             .await?;
         assert_eq!(pfrs.len(), 2);
-        let pfr_new = pfrs
-            .iter()
-            .find(|pfr| pfr.base.id != pfr_old.base.id)
-            .unwrap();
-        assert_eq!(pfr_new.base.status, PhysicalFunctionRunStatus::Dispatched);
-        assert!(pfr_new.base.dispatched_on.is_some());
+        let pfr_new = pfrs.iter().find(|pfr| pfr.id != pfr_old.id).unwrap();
+        assert_eq!(pfr_new.status, PhysicalFunctionRunStatus::Dispatched);
+        assert!(pfr_new.dispatched_on.is_some());
 
         let lfr: LogicalFunctionRunDB = db
-            .fetch_one::<LogicalFunctionRunDB>(and!(
-                &pfr_old.base.execution_id,
-                &pfr_old.base.function_id
-            ))
+            .fetch_one::<LogicalFunctionRunDB>(and!(&pfr_old.execution_id, &pfr_old.function_id))
             .await?;
-        assert_eq!(lfr.base.status, LogicalFunctionRunStatus::Requested);
+        assert_eq!(lfr.status, LogicalFunctionRunStatus::Requested);
         assert_eq!(sent_2.messages().len(), 1);
 
         let (context_3, sent_3) = sending_to(dispatch_services(&db), TestBridgeProvider::default());
@@ -390,9 +381,9 @@ mod tests {
         assert_eq!(pfrs.len(), 2);
         let pfr: PhysicalFunctionRunDB = db
             .timeline()
-            .fetch_one::<PhysicalFunctionRunDB>(&pfr_new.base.id)
+            .fetch_one::<PhysicalFunctionRunDB>(&pfr_new.id)
             .await?;
-        assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Dispatched);
+        assert_eq!(pfr.status, PhysicalFunctionRunStatus::Dispatched);
         assert!(sent_3.messages().is_empty());
 
         Ok(())
@@ -406,7 +397,7 @@ mod tests {
 
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_stuck_rp")?, &UserId::admin())
             .await?;
@@ -431,22 +422,18 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(p.base.project_id)
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.project_id).seed().execution(&function).await?;
         let trx = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let fr_old = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -457,16 +444,13 @@ mod tests {
             )
             .await?;
         let lfr: LogicalFunctionRunDB = db
-            .fetch_one::<LogicalFunctionRunDB>(and!(
-                &fr_old.base.execution_id,
-                &fr_old.base.function_id
-            ))
+            .fetch_one::<LogicalFunctionRunDB>(and!(&fr_old.execution_id, &fr_old.function_id))
             .await?;
 
         let replay_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 LogicalFunctionRunParam {
-                    logical_function_run: lfr.base.id.clone(),
+                    logical_function_run: lfr.id.clone(),
                 },
                 (),
             );
@@ -481,8 +465,8 @@ mod tests {
             .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
             .await?;
-        assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Dispatched);
-        assert!(pfr.base.dispatched_on.is_some());
+        assert_eq!(pfr.status, PhysicalFunctionRunStatus::Dispatched);
+        assert!(pfr.dispatched_on.is_some());
 
         let sent_2 = recovery_and_request_tick(&db, StuckRequestedTimeout(Duration::ZERO)).await?;
 
@@ -490,23 +474,19 @@ mod tests {
             .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&replay_response.new_function_run_id)
             .await?;
-        assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Failed);
-        assert!(pfr.base.ended_on.is_some());
+        assert_eq!(pfr.status, PhysicalFunctionRunStatus::Failed);
+        assert!(pfr.ended_on.is_some());
 
-        let lfr_after: LogicalFunctionRunDB =
-            db.fetch_one::<LogicalFunctionRunDB>(&lfr.base.id).await?;
-        assert_eq!(lfr_after.base.status, LogicalFunctionRunStatus::Committed);
-        let rolled_up: ExecutionDB = db
-            .scoped(p.base.project_id)
-            .fetch_one(&execution.base.id)
-            .await?;
+        let lfr_after: LogicalFunctionRunDB = db.fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
+        assert_eq!(lfr_after.status, LogicalFunctionRunStatus::Committed);
+        let rolled_up: ExecutionDB = db.scoped(p.project_id).fetch_one(&execution.id).await?;
         assert_eq!(rolled_up.status, ExecutionStatus::Finished);
-        assert_eq!(rolled_up.ended_on.as_deref(), pfr.base.ended_on.as_deref());
+        assert_eq!(rolled_up.ended_on.as_deref(), pfr.ended_on.as_deref());
         let current = db
             .scd2()
-            .fetch_one::<PhysicalFunctionRunDB>(&lfr.base.id)
+            .fetch_one::<PhysicalFunctionRunDB>(&lfr.id)
             .await?;
-        assert_eq!(current.base.id, replay_response.new_function_run_id);
+        assert_eq!(current.id, replay_response.new_function_run_id);
         assert!(sent_2.messages().is_empty());
 
         Ok(())
@@ -588,7 +568,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, _, cron) = seed_trigger_worker(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c_revive_cron",
             WorkerType::CronTrigger,
             WorkerStatus::Requested,
@@ -596,7 +576,7 @@ mod tests {
         .await?;
         let (_, _, stage) = seed_trigger_worker(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c_revive_stage",
             WorkerType::StageTrigger,
             WorkerStatus::Requested,
@@ -610,7 +590,7 @@ mod tests {
         assert_eq!(messages.len(), 2);
         let cron_message = messages
             .iter()
-            .find(|m| m.id == cron.base.id.to_string())
+            .find(|m| m.id == cron.id.to_string())
             .expect("cron workload must be recreated");
         assert!(matches!(
             &cron_message.payload,
@@ -620,7 +600,7 @@ mod tests {
         ));
         let stage_message = messages
             .iter()
-            .find(|m| m.id == stage.base.id.to_string())
+            .find(|m| m.id == stage.id.to_string())
             .expect("streamer workload must be recreated");
         assert!(matches!(
             &stage_message.payload,
@@ -629,10 +609,10 @@ mod tests {
             )
         ));
 
-        let cron_after: WorkerDB = db.fetch_one(&cron.base.id).await?;
-        assert_eq!(cron_after.base.status, WorkerStatus::Requested);
-        let stage_after: WorkerDB = db.fetch_one(&stage.base.id).await?;
-        assert_eq!(stage_after.base.status, WorkerStatus::Requested);
+        let cron_after: WorkerDB = db.fetch_one(&cron.id).await?;
+        assert_eq!(cron_after.status, WorkerStatus::Requested);
+        let stage_after: WorkerDB = db.fetch_one(&stage.id).await?;
+        assert_eq!(stage_after.status, WorkerStatus::Requested);
 
         Ok(())
     }
@@ -647,7 +627,7 @@ mod tests {
 
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("c_run_missing")?,
@@ -675,7 +655,7 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -683,10 +663,7 @@ mod tests {
             .create(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!(
-                            "{}",
-                            collection.base.name
-                        ))?,
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("f_run_missing")?,
@@ -700,7 +677,7 @@ mod tests {
                     external_uid: None,
                 },
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let execution = dispatch_services(&db).execute_function(request).await?.data;
         dispatch_services(&db).request(()).await?;
 
@@ -710,28 +687,25 @@ mod tests {
             .await?;
         assert_eq!(pfrs.len(), 1);
         let pfr_old = pfrs[0].clone();
-        assert_eq!(pfr_old.base.status, PhysicalFunctionRunStatus::Dispatched);
+        assert_eq!(pfr_old.status, PhysicalFunctionRunStatus::Dispatched);
 
         // The fn's begin-execution report: attempt and run go Running.
         let to_running = PhysicalFunctionRunUpdateDB {
-            dispatched_on: pfr_old.base.dispatched_on,
+            dispatched_on: pfr_old.dispatched_on,
             started_on: None,
             ended_on: None,
             status: PhysicalFunctionRunStatus::Running,
         };
-        db.scd2().update(&to_running, &pfr_old.base.id).await?;
+        db.scd2().update(&to_running, &pfr_old.id).await?;
         let lfr: LogicalFunctionRunDB = db
-            .fetch_one::<LogicalFunctionRunDB>(and!(
-                &pfr_old.base.execution_id,
-                &pfr_old.base.function_id
-            ))
+            .fetch_one::<LogicalFunctionRunDB>(and!(&pfr_old.execution_id, &pfr_old.function_id))
             .await?;
         let lfr_to_running = LogicalFunctionRunStatusUpdateDB {
             status: LogicalFunctionRunStatus::Running,
         };
-        db.update(&lfr_to_running, &lfr.base.id).await?;
+        db.update(&lfr_to_running, &lfr.id).await?;
 
-        let old_workers: Vec<WorkerDB> = db.fetch_all(&pfr_old.base.id).await?;
+        let old_workers: Vec<WorkerDB> = db.fetch_all(&pfr_old.id).await?;
         assert_eq!(old_workers.len(), 1);
 
         // Empty cluster observation, no dispatch grace: the workload is
@@ -747,10 +721,10 @@ mod tests {
 
         let pfr_failed: PhysicalFunctionRunDB = db
             .timeline()
-            .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.base.id)
+            .fetch_one::<PhysicalFunctionRunDB>(&pfr_old.id)
             .await?;
-        assert_eq!(pfr_failed.base.status, PhysicalFunctionRunStatus::Failed);
-        assert!(pfr_failed.base.ended_on.is_some());
+        assert_eq!(pfr_failed.status, PhysicalFunctionRunStatus::Failed);
+        assert!(pfr_failed.ended_on.is_some());
         let stops: Vec<_> = sent
             .messages()
             .into_iter()
@@ -764,13 +738,10 @@ mod tests {
             })
             .map(|m| m.id)
             .collect();
-        assert_eq!(stops, vec![old_workers[0].base.id.to_string()]);
+        assert_eq!(stops, vec![old_workers[0].id.to_string()]);
         let lfr_recovered: LogicalFunctionRunDB =
-            db.fetch_one::<LogicalFunctionRunDB>(&lfr.base.id).await?;
-        assert_eq!(
-            lfr_recovered.base.status,
-            LogicalFunctionRunStatus::ReScheduled
-        );
+            db.fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
+        assert_eq!(lfr_recovered.status, LogicalFunctionRunStatus::ReScheduled);
 
         dispatch_services(&db).request(()).await?;
         let pfrs: Vec<PhysicalFunctionRunDB> = db
@@ -778,14 +749,10 @@ mod tests {
             .fetch_all::<PhysicalFunctionRunDB>(&(&execution.manual_trigger))
             .await?;
         assert_eq!(pfrs.len(), 2);
-        let pfr_new = pfrs
-            .iter()
-            .find(|pfr| pfr.base.id != pfr_old.base.id)
-            .unwrap();
-        assert_eq!(pfr_new.base.status, PhysicalFunctionRunStatus::Dispatched);
-        let lfr_after: LogicalFunctionRunDB =
-            db.fetch_one::<LogicalFunctionRunDB>(&lfr.base.id).await?;
-        assert_eq!(lfr_after.base.status, LogicalFunctionRunStatus::Requested);
+        let pfr_new = pfrs.iter().find(|pfr| pfr.id != pfr_old.id).unwrap();
+        assert_eq!(pfr_new.status, PhysicalFunctionRunStatus::Dispatched);
+        let lfr_after: LogicalFunctionRunDB = db.fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
+        assert_eq!(lfr_after.status, LogicalFunctionRunStatus::Requested);
 
         Ok(())
     }
@@ -797,7 +764,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, cron_fn, _) = seed_trigger_worker(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c_outdated_cron",
             WorkerType::CronTrigger,
             WorkerStatus::Requested,
@@ -805,14 +772,14 @@ mod tests {
         .await?;
         let (_, stage_fn, _) = seed_trigger_worker(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c_outdated_stage",
             WorkerType::StageTrigger,
             WorkerStatus::Requested,
         )
         .await?;
-        outdate_function_version(&db, p.base.project_id, &cron_fn).await?;
-        outdate_function_version(&db, p.base.project_id, &stage_fn).await?;
+        outdate_function_version(&db, p.project_id, &cron_fn).await?;
+        outdate_function_version(&db, p.project_id, &stage_fn).await?;
 
         let (services, sent) = kubernetes_recovery_services(&db, RecoveryConfig::default());
         services.clone().recovery(()).await?;
@@ -830,7 +797,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, _, cron) = seed_trigger_worker(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c_failed_cron",
             WorkerType::CronTrigger,
             WorkerStatus::Failed,
@@ -838,7 +805,7 @@ mod tests {
         .await?;
         let (_, _, stage) = seed_trigger_worker(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c_failed_stage",
             WorkerType::StageTrigger,
             WorkerStatus::Failed,
@@ -851,7 +818,7 @@ mod tests {
         let messages = sent.messages();
         assert_eq!(messages.len(), 1);
         let cron_message = &messages[0];
-        assert_eq!(cron_message.id, cron.base.id.to_string());
+        assert_eq!(cron_message.id, cron.id.to_string());
         assert!(matches!(
             &cron_message.payload,
             OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Start(
@@ -859,8 +826,8 @@ mod tests {
             ))
         ));
 
-        let stage_after: WorkerDB = db.fetch_one(&stage.base.id).await?;
-        assert_eq!(stage_after.base.status, WorkerStatus::Failed);
+        let stage_after: WorkerDB = db.fetch_one(&stage.id).await?;
+        assert_eq!(stage_after.status, WorkerStatus::Failed);
 
         Ok(())
     }
@@ -876,7 +843,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (_, _, stage) = seed_trigger_worker(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c_done_stage",
             WorkerType::StageTrigger,
             WorkerStatus::Done,
@@ -887,20 +854,20 @@ mod tests {
         services.clone().recovery(()).await?;
 
         assert!(sent.messages().is_empty());
-        let failed: WorkerDB = db.fetch_one(&stage.base.id).await?;
-        assert_eq!(failed.base.status, WorkerStatus::Failed);
+        let failed: WorkerDB = db.fetch_one(&stage.id).await?;
+        assert_eq!(failed.status, WorkerStatus::Failed);
         assert!(failed.retry_at.is_some());
 
         let due = WorkerRetryUpdateDB {
             failures: failed.failures,
             retry_at: Retry::from(AtTime::now()),
         };
-        db.update(&due, &stage.base.id).await?;
+        db.update(&due, &stage.id).await?;
         services.clone().recovery(()).await?;
 
         let messages = sent.messages();
         assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].id, stage.base.id.to_string());
+        assert_eq!(messages[0].id, stage.id.to_string());
         assert!(matches!(
             &messages[0].payload,
             OrchestratorMessagePayload::OrchestratorStageTriggerRequestMessagePayload(

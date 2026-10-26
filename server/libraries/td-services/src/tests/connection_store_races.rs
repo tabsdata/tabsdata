@@ -105,20 +105,21 @@ async fn test_a_connection_update_racing_a_collection_delete_leaves_no_secrets(
     let store = PausingStore::default();
     upsert_service(&db, store.clone())
         .create_collection(create_request(
-            p.base.project_id,
+            p.project_id,
             "src",
             Some(GroupName::source()),
         ))
         .await?;
-    let connection = linked_connection(&db, p.base.project_id, "src")
+    let connection = linked_connection(&db, p.project_id, "src")
         .await
         .expect("a source collection has a connection");
 
     let (reached, release) = store.pause_next_upsert();
     let updater = upsert_service(&db, store.clone());
+    let project_id = p.project_id;
     let updating = tokio::spawn(async move {
         updater
-            .connection_upsert(upsert_request(p.base.project_id, "src"))
+            .connection_upsert(upsert_request(project_id, "src"))
             .await
     });
     reached.await.expect("the update never reached the store");
@@ -127,13 +128,13 @@ async fn test_a_connection_update_racing_a_collection_delete_leaves_no_secrets(
         .delete_collection(
             RequestContext::with(AccessTokenId::default(), UserId::admin())
                 .delete(collection_param("src"))
-                .in_project(p.base.project_id),
+                .in_project(p.project_id),
         )
         .await?;
     let _ = release.send(());
     let _ = updating.await.expect("update task");
 
-    let left = store.fetch(&p.base.project_id, &connection.base.id).await;
+    let left = store.fetch(&p.project_id, &connection.id).await;
     assert!(
         left.is_err(),
         "the deleted collection's connection is back in the store: {left:?}"

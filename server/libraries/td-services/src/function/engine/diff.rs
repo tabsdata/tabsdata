@@ -62,30 +62,22 @@ impl Changes {
     pub fn for_delete(state: &FunctionState, ctx: &RequestContext) -> Self {
         let mut changes = Self::default();
         for table in &state.tables {
-            if table.base.status != TableStatus::Active {
+            if table.status != TableStatus::Active {
                 continue;
             }
             if is_system_table(table) {
-                changes.close_tables.push(table.base.table_id);
+                changes.close_tables.push(table.table_id);
             } else {
                 changes.tables.push(table.frozen_version(ctx));
                 changes.table_transitions.push(TableTransition {
-                    table_id: table.base.table_id,
+                    table_id: table.table_id,
                     status: TableStatus::Frozen,
-                    function_id: table.base.function_id,
+                    function_id: table.function_id,
                 });
             }
         }
-        changes.close_dependencies = state
-            .dependencies
-            .iter()
-            .map(|d| d.base.dependency_id)
-            .collect();
-        changes.close_triggers = state
-            .triggers
-            .iter()
-            .map(|t| t.base.base.trigger_id)
-            .collect();
+        changes.close_dependencies = state.dependencies.iter().map(|d| d.dependency_id).collect();
+        changes.close_triggers = state.triggers.iter().map(|t| t.trigger_id).collect();
         changes
     }
 
@@ -96,19 +88,18 @@ impl Changes {
         function: &FunctionInsertDB,
         ctx: &RequestContext,
     ) -> Result<(), TdError> {
-        let existing: HashMap<_, &TableDB> =
-            state.tables.iter().map(|t| (&t.base.name, t)).collect();
+        let existing: HashMap<_, &TableDB> = state.tables.iter().map(|t| (&t.name, t)).collect();
         let mut kept = HashSet::new();
         for table in &resolved.tables {
             kept.insert(&table.name);
             let desired = desired_table(table, function, ctx)?;
             match existing.get(&table.name) {
-                Some(current) if same_table(&current.base, &desired) => {}
+                Some(current) if same_table(current, &desired) => {}
                 current => {
                     if let Some(current) =
-                        current.filter(|current| current.base.table_id != desired.table_id)
+                        current.filter(|current| current.table_id != desired.table_id)
                     {
-                        self.close_tables.push(current.base.table_id);
+                        self.close_tables.push(current.table_id);
                     }
                     if table.adopted_frozen {
                         self.table_transitions.push(TableTransition {
@@ -122,14 +113,14 @@ impl Changes {
             }
         }
         for table in &state.tables {
-            if kept.contains(&table.base.name) || table.base.status != TableStatus::Active {
+            if kept.contains(&table.name) || table.status != TableStatus::Active {
                 continue;
             }
             self.tables.push(table.frozen_version(ctx));
             self.table_transitions.push(TableTransition {
-                table_id: table.base.table_id,
+                table_id: table.table_id,
                 status: TableStatus::Frozen,
-                function_id: table.base.function_id,
+                function_id: table.function_id,
             });
         }
         Ok(())
@@ -180,7 +171,7 @@ impl Changes {
         self.close_dependencies = existing
             .iter()
             .filter(|(k, _)| !kept.contains(*k))
-            .map(|(_, d)| d.base.dependency_id)
+            .map(|(_, d)| d.dependency_id)
             .collect();
         Ok(())
     }
@@ -197,10 +188,7 @@ impl Changes {
             .iter()
             .map(|t| {
                 (
-                    (
-                        *t.base.base.trigger_by_collection_id.deref(),
-                        t.base.base.trigger_by_table_id,
-                    ),
+                    (*t.trigger_by_collection_id.deref(), t.trigger_by_table_id),
                     t,
                 )
             })
@@ -209,15 +197,14 @@ impl Changes {
         for trigger in &resolved.triggers {
             let k = (trigger.table.collection_id, trigger.table.table_id);
             let current = existing.get(&k);
-            let trigger_id = current.map_or_else(TriggerId::default, |t| t.base.base.trigger_id);
+            let trigger_id = current.map_or_else(TriggerId::default, |t| t.trigger_id);
             // A trigger fires only while its source table is produced.
             let status = match trigger.table.status {
                 TableStatus::Frozen => TriggerStatus::Frozen,
                 TableStatus::Active => TriggerStatus::Active,
             };
             let unchanged = current.is_some_and(|t| {
-                t.base.base.status == status
-                    && *t.base.base.trigger_by_function_id.deref() == trigger.table.function_id
+                t.status == status && *t.trigger_by_function_id.deref() == trigger.table.function_id
             });
             kept.insert(k);
             if unchanged {
@@ -239,7 +226,7 @@ impl Changes {
         self.close_triggers = existing
             .iter()
             .filter(|(k, _)| !kept.contains(*k))
-            .map(|(_, t)| t.base.base.trigger_id)
+            .map(|(_, t)| t.trigger_id)
             .collect();
     }
 }
@@ -281,5 +268,5 @@ fn same_table(current: &TableInsertDB, desired: &TableInsertDB) -> bool {
 pub(crate) fn is_system_table(table: &TableDB) -> bool {
     SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES
         .iter()
-        .any(|prefix| table.base.name.starts_with(prefix))
+        .any(|prefix| table.name.starts_with(prefix))
 }

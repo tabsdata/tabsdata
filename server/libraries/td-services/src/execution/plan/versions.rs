@@ -91,7 +91,7 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
     for (key, reader) in &readers {
         let (table, versions, _) = key;
         let ltdvs = if is_head(versions) {
-            vec![newest.get(table).map(|ltdv| ltdv.base.base.id.clone())]
+            vec![newest.get(table).map(|ltdv| ltdv.id.clone())]
         } else {
             VersionResolver::builder()
                 .function_id(reader)
@@ -102,7 +102,7 @@ pub async fn resolve_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
                 .resolve(&mut *conn)
                 .await?
                 .into_iter()
-                .map(|ltdv| ltdv.map(|ltdv| ltdv.base.base.id))
+                .map(|ltdv| ltdv.map(|ltdv| ltdv.id.clone()))
                 .collect()
         };
         ltdv_cache.insert(key.clone(), ltdvs);
@@ -160,7 +160,7 @@ pub async fn pinned_execution_plan_versions<S: SeesProjectRows, M: AccessMode>(
         conn.timeline().chunked().fetch_all(&producers, ()).await?;
     let produced_by_table: HashMap<TableId, LogicalTableDataVersionId> = produced
         .iter()
-        .map(|l| (l.base.table_id, l.base.id.clone()))
+        .map(|l| (l.table_id, l.id.clone()))
         .collect();
     let mut table_of: HashMap<LogicalTableDataVersionId, TableId> = produced
         .into_iter()

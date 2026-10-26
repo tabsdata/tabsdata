@@ -46,10 +46,7 @@ pub struct LabeledTableTrigger(TableRef<TableName, CollectionLabel>);
 
 impl From<&TableDBWithNames> for LabeledTableTrigger {
     fn from(v: &TableDBWithNames) -> Self {
-        LabeledTableTrigger::new(TableRef::new(
-            Some(v.collection.clone()),
-            v.base.base.name.clone(),
-        ))
+        LabeledTableTrigger::new(TableRef::new(Some(v.collection.clone()), v.name.clone()))
     }
 }
 

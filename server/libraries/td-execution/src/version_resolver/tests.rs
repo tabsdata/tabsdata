@@ -47,7 +47,7 @@ async fn seed_ftdv_timeline(
 ) {
     let p = db.seed().test_project().await.unwrap();
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c0").unwrap(), &UserId::admin())
         .await
@@ -75,7 +75,7 @@ async fn seed_ftdv_timeline(
         workers: None,
     };
     let function = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&collection, &create)
         .await
@@ -84,7 +84,7 @@ async fn seed_ftdv_timeline(
     let table_name_typed = TableName::try_from(&table_name).unwrap();
     let table = db
         .scd2()
-        .fetch_first::<TableDB>(and!(&collection.base.collection_id, &table_name_typed))
+        .fetch_first::<TableDB>(and!(&collection.collection_id, &table_name_typed))
         .await
         .unwrap()
         .expect("row must exist");
@@ -92,13 +92,13 @@ async fn seed_ftdv_timeline(
     let mut ltdvs = Vec::with_capacity(n);
     for _ in 0..n {
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function)
             .await
             .unwrap();
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY").unwrap())
             .await
@@ -106,22 +106,22 @@ async fn seed_ftdv_timeline(
 
         let ltdv = LogicalTableDataVersionInsertDB {
             id: LogicalTableDataVersionId::new(),
-            collection_id: collection.base.collection_id,
-            execution_id: execution.base.id.clone(),
-            transaction_id: transaction.base.id.clone(),
-            table_id: table.base.table_id,
+            collection_id: collection.collection_id,
+            execution_id: execution.id.clone(),
+            transaction_id: transaction.id.clone(),
+            table_id: table.table_id,
             producer_logical_function_run_id: None,
             function_param_pos: None,
             private: Private::FALSE,
-            triggered_on: execution.base.triggered_on,
-            triggered_by_id: execution.base.triggered_by_id,
-            group_id: collection.base.group_id,
+            triggered_on: execution.triggered_on,
+            triggered_by_id: execution.triggered_by_id,
+            group_id: collection.group_id,
         };
 
         insert_ftdv(db, &collection.project_id, &ltdv).await;
         ltdvs.push(ltdv);
     }
-    (collection, function, table.base.table_id, ltdvs)
+    (collection, function, table.table_id, ltdvs)
 }
 
 #[td_test::test(db)]
@@ -139,7 +139,7 @@ async fn test_resolve_logical_none(db: TdPool) -> Result<(), TdError> {
         .resolve(&mut conn)
         .await?;
     assert_eq!(found.len(), 1);
-    assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdvs[0].id);
+    assert_eq!(found[0].as_ref().unwrap().id, ltdvs[0].id);
     Ok(())
 }
 
@@ -165,7 +165,7 @@ async fn test_resolve_logical_single_head(db: TdPool) -> Result<(), TdError> {
             .await?;
         assert_eq!(found.len(), 1);
         match expected {
-            Some(ltdv) => assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdv.id),
+            Some(ltdv) => assert_eq!(found[0].as_ref().unwrap().id, ltdv.id),
             None => assert!(found[0].is_none()),
         }
     }
@@ -194,7 +194,7 @@ async fn test_resolve_logical_single_initial(db: TdPool) -> Result<(), TdError> 
             .await?;
         assert_eq!(found.len(), 1);
         match expected {
-            Some(ltdv) => assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdv.id),
+            Some(ltdv) => assert_eq!(found[0].as_ref().unwrap().id, ltdv.id),
             None => assert!(found[0].is_none()),
         }
     }
@@ -223,11 +223,11 @@ async fn test_resolve_logical_list_relative(db: TdPool) -> Result<(), TdError> {
         .resolve(&mut conn)
         .await?;
     assert_eq!(found.len(), 6);
-    assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdvs[1].id);
-    assert_eq!(found[1].as_ref().unwrap().base.base.id, ltdvs[0].id);
+    assert_eq!(found[0].as_ref().unwrap().id, ltdvs[1].id);
+    assert_eq!(found[1].as_ref().unwrap().id, ltdvs[0].id);
     assert!(found[2].is_none());
-    assert_eq!(found[3].as_ref().unwrap().base.base.id, ltdvs[0].id);
-    assert_eq!(found[4].as_ref().unwrap().base.base.id, ltdvs[1].id);
+    assert_eq!(found[3].as_ref().unwrap().id, ltdvs[0].id);
+    assert_eq!(found[4].as_ref().unwrap().id, ltdvs[1].id);
     assert!(found[5].is_none());
     Ok(())
 }
@@ -254,11 +254,11 @@ async fn test_resolve_logical_list_without_head_or_initial(db: TdPool) -> Result
         .resolve(&mut conn)
         .await?;
     assert_eq!(found.len(), 6);
-    assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdvs[1].id);
-    assert_eq!(found[1].as_ref().unwrap().base.base.id, ltdvs[0].id);
+    assert_eq!(found[0].as_ref().unwrap().id, ltdvs[1].id);
+    assert_eq!(found[1].as_ref().unwrap().id, ltdvs[0].id);
     assert!(found[2].is_none());
-    assert_eq!(found[3].as_ref().unwrap().base.base.id, ltdvs[2].id);
-    assert_eq!(found[4].as_ref().unwrap().base.base.id, ltdvs[1].id);
+    assert_eq!(found[3].as_ref().unwrap().id, ltdvs[2].id);
+    assert_eq!(found[4].as_ref().unwrap().id, ltdvs[1].id);
     assert!(found[5].is_none());
     Ok(())
 }
@@ -278,9 +278,9 @@ async fn test_resolve_logical_range_head(db: TdPool) -> Result<(), TdError> {
         .resolve(&mut conn)
         .await?;
     assert_eq!(found.len(), 3);
-    assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdvs[0].id);
-    assert_eq!(found[1].as_ref().unwrap().base.base.id, ltdvs[1].id);
-    assert_eq!(found[2].as_ref().unwrap().base.base.id, ltdvs[2].id);
+    assert_eq!(found[0].as_ref().unwrap().id, ltdvs[0].id);
+    assert_eq!(found[1].as_ref().unwrap().id, ltdvs[1].id);
+    assert_eq!(found[2].as_ref().unwrap().id, ltdvs[2].id);
     Ok(())
 }
 
@@ -317,9 +317,9 @@ async fn test_resolve_logical_range_initial(db: TdPool) -> Result<(), TdError> {
         .resolve(&mut conn)
         .await?;
     assert_eq!(found.len(), 3);
-    assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdvs[0].id);
-    assert_eq!(found[1].as_ref().unwrap().base.base.id, ltdvs[1].id);
-    assert_eq!(found[2].as_ref().unwrap().base.base.id, ltdvs[2].id);
+    assert_eq!(found[0].as_ref().unwrap().id, ltdvs[0].id);
+    assert_eq!(found[1].as_ref().unwrap().id, ltdvs[1].id);
+    assert_eq!(found[2].as_ref().unwrap().id, ltdvs[2].id);
     Ok(())
 }
 
@@ -340,8 +340,8 @@ async fn test_resolve_logical_range_mixed_bounds(db: TdPool) -> Result<(), TdErr
         .resolve(&mut conn)
         .await?;
     assert_eq!(found.len(), 3);
-    assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdvs[0].id);
-    assert_eq!(found[2].as_ref().unwrap().base.base.id, ltdvs[2].id);
+    assert_eq!(found[0].as_ref().unwrap().id, ltdvs[0].id);
+    assert_eq!(found[2].as_ref().unwrap().id, ltdvs[2].id);
     Ok(())
 }
 
@@ -360,8 +360,8 @@ async fn test_resolve_logical_new_no_prior_execution(db: TdPool) -> Result<(), T
         .resolve(&mut conn)
         .await?;
     assert_eq!(found.len(), 3);
-    assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdvs[0].id);
-    assert_eq!(found[2].as_ref().unwrap().base.base.id, ltdvs[2].id);
+    assert_eq!(found[0].as_ref().unwrap().id, ltdvs[0].id);
+    assert_eq!(found[2].as_ref().unwrap().id, ltdvs[2].id);
     Ok(())
 }
 
@@ -400,16 +400,16 @@ async fn test_resolve_logical_new_downstream_consumer(db: TdPool) -> Result<(), 
     // Consumer LFR aligned with run 1 is the resolution cutoff.
     let lfr_run1 = LogicalFunctionRunInsertDB {
         id: LogicalFunctionRunId::new(),
-        collection_id: collection.base.collection_id,
+        collection_id: collection.collection_id,
         execution_id: ltdvs[0].execution_id.clone(),
         transaction_id: ltdvs[0].transaction_id.clone(),
-        function_id: consumer.base.function_id,
+        function_id: consumer.function_id,
         function_version_id: consumer.base.id,
         trigger: Trigger::Dependency,
         triggered_on: ltdvs[0].triggered_on,
         triggered_by_id: UserId::admin(),
         status: LogicalFunctionRunStatus::Committed,
-        group_id: collection.base.group_id,
+        group_id: collection.group_id,
     };
     db.scoped(collection.project_id)
         .insert::<LogicalFunctionRunInsertDB>(&lfr_run1)
@@ -427,14 +427,14 @@ async fn test_resolve_logical_new_downstream_consumer(db: TdPool) -> Result<(), 
 
     let found_ids: Vec<_> = found
         .iter()
-        .map(|f| f.as_ref().map(|f| f.base.base.id.clone()))
+        .map(|f| f.as_ref().map(|f| f.id.clone()))
         .collect();
     assert_eq!(
         found.len(),
         1,
         "downstream consumer should see only the LTDV minted after its prior run, got {found_ids:?}",
     );
-    assert_eq!(found[0].as_ref().unwrap().base.base.id, ltdvs[1].id);
+    assert_eq!(found[0].as_ref().unwrap().id, ltdvs[1].id);
     Ok(())
 }
 
@@ -473,7 +473,7 @@ async fn test_resolve_logical_partition_isolation(db: TdPool) -> Result<(), TdEr
     let table_b_typed = TableName::try_from(&table_b_name)?;
     let table_b = db
         .scd2()
-        .fetch_first::<TableDB>(and!(&collection.base.collection_id, &table_b_typed))
+        .fetch_first::<TableDB>(and!(&collection.collection_id, &table_b_typed))
         .await?
         .expect("row must exist");
     for _ in 0..2 {
@@ -489,16 +489,16 @@ async fn test_resolve_logical_partition_isolation(db: TdPool) -> Result<(), TdEr
             .await?;
         let ltdv = LogicalTableDataVersionInsertDB {
             id: LogicalTableDataVersionId::new(),
-            collection_id: collection.base.collection_id,
-            execution_id: execution.base.id.clone(),
-            transaction_id: transaction.base.id.clone(),
-            table_id: table_b.base.table_id,
+            collection_id: collection.collection_id,
+            execution_id: execution.id.clone(),
+            transaction_id: transaction.id.clone(),
+            table_id: table_b.table_id,
             producer_logical_function_run_id: None,
             function_param_pos: None,
             private: Private::FALSE,
-            triggered_on: execution.base.triggered_on,
-            triggered_by_id: execution.base.triggered_by_id,
-            group_id: collection.base.group_id,
+            triggered_on: execution.triggered_on,
+            triggered_by_id: execution.triggered_by_id,
+            group_id: collection.group_id,
         };
         insert_ftdv(&db, &collection.project_id, &ltdv).await;
     }
@@ -515,12 +515,12 @@ async fn test_resolve_logical_partition_isolation(db: TdPool) -> Result<(), TdEr
     assert_eq!(found.len(), 2);
     let ids: Vec<_> = found
         .iter()
-        .map(|f| f.as_ref().unwrap().base.base.id.clone())
+        .map(|f| f.as_ref().unwrap().id.clone())
         .collect();
     assert!(ids.contains(&ftdvs_a[0].id));
     assert!(ids.contains(&ftdvs_a[1].id));
     for ltdv in found.iter().flatten() {
-        assert_eq!(ltdv.base.base.table_id, table_a_id);
+        assert_eq!(ltdv.table_id, table_a_id);
     }
     Ok(())
 }
@@ -543,13 +543,13 @@ async fn test_resolve_ignores_materialization_state(db: TdPool) -> Result<(), Td
         .await?;
     assert_eq!(found.len(), 1);
     let ltdv = found[0].as_ref().unwrap();
-    assert_eq!(ltdv.base.base.id, ltdvs[1].id);
+    assert_eq!(ltdv.id, ltdvs[1].id);
     // The resolver pins the latest logical version whether or not a
     // materialization exists for it; translating to one is the
     // caller's step.
     let current: Option<PhysicalTableDataVersionDB> = conn
         .scd2()
-        .fetch_optional::<PhysicalTableDataVersionDB>(&ltdv.base.base.id)
+        .fetch_optional::<PhysicalTableDataVersionDB>(&ltdv.id)
         .await?;
     assert!(current.is_none(), "no materialization was seeded");
     Ok(())
@@ -577,16 +577,16 @@ async fn seed_canceled_ltdv(
         .unwrap();
     let canceled_lfr = LogicalFunctionRunInsertDB {
         id: LogicalFunctionRunId::new(),
-        collection_id: collection.base.collection_id,
-        execution_id: execution.base.id.clone(),
-        transaction_id: transaction.base.id.clone(),
-        function_id: function.base.function_id,
-        function_version_id: function.base.id.clone(),
+        collection_id: collection.collection_id,
+        execution_id: execution.id.clone(),
+        transaction_id: transaction.id.clone(),
+        function_id: function.function_id,
+        function_version_id: function.id.clone(),
         trigger: Trigger::Manual,
         triggered_on: TriggeredOn::asserted(*AtTime::now()),
         triggered_by_id: UserId::admin(),
         status: LogicalFunctionRunStatus::Canceled,
-        group_id: collection.base.group_id,
+        group_id: collection.group_id,
     };
     db.scoped(collection.project_id)
         .insert::<LogicalFunctionRunInsertDB>(&canceled_lfr)
@@ -594,7 +594,7 @@ async fn seed_canceled_ltdv(
         .unwrap();
     let canceled_ltdv = LogicalTableDataVersionInsertDB {
         id: LogicalTableDataVersionId::new(),
-        collection_id: collection.base.collection_id,
+        collection_id: collection.collection_id,
         execution_id: execution.base.id,
         transaction_id: transaction.base.id,
         table_id,
@@ -603,7 +603,7 @@ async fn seed_canceled_ltdv(
         private: Private::FALSE,
         triggered_on: canceled_lfr.triggered_on,
         triggered_by_id: canceled_lfr.triggered_by_id,
-        group_id: collection.base.group_id,
+        group_id: collection.group_id,
     };
     db.scoped(collection.project_id)
         .insert::<LogicalTableDataVersionInsertDB>(&canceled_ltdv)
@@ -630,7 +630,7 @@ async fn test_resolve_logical_skips_canceled_producer(db: TdPool) -> Result<(), 
         .await?;
     assert_eq!(found.len(), 1);
     assert_eq!(
-        found[0].as_ref().unwrap().base.base.id,
+        found[0].as_ref().unwrap().id,
         good.id,
         "canceled-producer version must disappear; HEAD falls back to the previous live version",
     );
@@ -656,7 +656,7 @@ async fn test_resolve_logical_fixed_skips_canceled_producer(db: TdPool) -> Resul
         .resolve(&mut conn)
         .await?;
     assert_eq!(found.len(), 1);
-    assert_eq!(found[0].as_ref().unwrap().base.base.id, good.id);
+    assert_eq!(found[0].as_ref().unwrap().id, good.id);
 
     let err = VersionResolver::builder()
         .function_id(&FunctionId::default())
@@ -684,7 +684,7 @@ async fn test_resolve_heads_matches_each_tables_head(db: TdPool) -> Result<(), T
     for at in [AtTime::from(ltdvs[1].triggered_on), AtTime::now()] {
         let heads = VersionResolver::resolve_heads(&mut conn, &[table_id, empty], &at).await?;
         let head = VersionResolver::builder()
-            .function_id(&function.base.function_id)
+            .function_id(&function.function_id)
             .table_id(&table_id)
             .versions(&Versions::None)
             .triggered_on(&at)
@@ -692,8 +692,8 @@ async fn test_resolve_heads_matches_each_tables_head(db: TdPool) -> Result<(), T
             .resolve(&mut conn)
             .await?;
         assert_eq!(
-            heads.get(&table_id).map(|l| l.base.base.id.clone()),
-            head[0].as_ref().map(|l| l.base.base.id.clone()),
+            heads.get(&table_id).map(|l| l.id.clone()),
+            head[0].as_ref().map(|l| l.id.clone()),
         );
         assert!(!heads.contains_key(&empty));
     }

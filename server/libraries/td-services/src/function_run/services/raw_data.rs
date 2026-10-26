@@ -38,7 +38,7 @@ async fn function_run_raw_data(
     let run: PhysicalFunctionRunDBWithNames = conn.timeline().fetch_one(&run_id).await?;
     let collection = collection.collection;
     let addresses_run = match &collection {
-        CollectionIdName::Id(id) => *id == run.base.base.collection_id,
+        CollectionIdName::Id(id) => *id == run.collection_id,
         CollectionIdName::Name(name) => run.collection.name().is_ok_and(|n| n == *name),
     };
     if !addresses_run {
@@ -50,16 +50,13 @@ async fn function_run_raw_data(
         ));
     }
     // Only a publisher ingests, so only a publisher run has raw data at all.
-    let function: FunctionDB = conn
-        .timeline()
-        .fetch_one(&run.base.base.function_version_id)
-        .await?;
-    if function.base.decorator != Decorator::Publisher {
+    let function: FunctionDB = conn.timeline().fetch_one(&run.function_version_id).await?;
+    if function.decorator != Decorator::Publisher {
         return Err(api_error!(
             ApiError::NotFound,
             "function run {} is a {:?}, which ingests no raw data",
             run_id,
-            function.base.decorator
+            function.decorator
         ));
     }
 
@@ -107,7 +104,7 @@ mod tests {
         decorator: Decorator,
     ) -> Result<(CollectionDB, PhysicalFunctionRunDB), TdError> {
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from(collection_name)?,
@@ -135,22 +132,18 @@ mod tests {
             workers: None,
         };
         let function: FunctionDB = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(p.base.project_id)
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.project_id).seed().execution(&function).await?;
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let run = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -172,9 +165,9 @@ mod tests {
         input_idx: &InputIdx,
     ) -> Result<(), TdError> {
         let (path, _) = StorageLocation::from(&StorageVersion::default())
-            .builder(&run.base.base_path)
-            .collection(&collection.base.collection_id)
-            .function_run(&run.base.id)
+            .builder(&run.base_path)
+            .collection(&collection.collection_id)
+            .function_run(&run.id)
             .raw_input(input_idx)
             .build()?;
         context.storage.write(&path, RAW.to_vec()).await?;
@@ -194,13 +187,13 @@ mod tests {
                     collection: CollectionIdName::from_str(collection)?,
                 },
                 FunctionRunParam {
-                    function_run: run.base.id.clone(),
+                    function_run: run.id.clone(),
                 },
                 InputIdxParam {
                     input_idx: *input_idx,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let response = context.clone().function_run_raw_data(request).await?.data;
         let mut stream = response.into_inner();
         match stream.next().await {
@@ -220,8 +213,8 @@ mod tests {
         // Addressable by collection name and by id, like every other
         // collection-scoped endpoint.
         for collection_ref in [
-            collection.base.name.to_string(),
-            format!("~{}", collection.base.collection_id),
+            collection.name.to_string(),
+            format!("~{}", collection.collection_id),
         ] {
             let bytes = get_raw_data(&context, &p, &collection_ref, &run, &idx).await?;
             assert_eq!(bytes, Bytes::from_static(RAW));

@@ -176,27 +176,58 @@ impl FromDao for Execution {
     type Dao = ExecutionDBWithNames;
 
     fn from_dao(dao: ExecutionDBWithNames) -> Result<Self, TdError> {
+        let ExecutionDBWithNames {
+            base:
+                ExecutionDB {
+                    base:
+                        ExecutionInsertDB {
+                            id,
+                            name,
+                            collection_id,
+                            function_id,
+                            function_version_id,
+                            triggered_on,
+                            triggered_by_id,
+                            trigger_type,
+                            external_uid,
+                            topology_version_id,
+                            ..
+                        },
+                    project_id,
+                    started_on,
+                    ended_on,
+                    status,
+                    ..
+                },
+            collection,
+            collection_deleted,
+            function,
+            triggered_by,
+            project,
+            function_run_status_count,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.base.id,
-            name: dao.base.base.name,
-            collection_id: dao.base.base.collection_id,
-            function_id: dao.base.base.function_id,
-            function_version_id: dao.base.base.function_version_id,
-            triggered_on: dao.base.base.triggered_on,
-            triggered_by_id: dao.base.base.triggered_by_id,
-            trigger_type: dao.base.base.trigger_type,
-            external_uid: dao.base.base.external_uid,
-            topology_version_id: dao.base.base.topology_version_id,
-            collection: dao.collection,
-            collection_deleted: dao.collection_deleted,
-            function: dao.function,
-            triggered_by: dao.triggered_by,
-            project: dao.project,
-            project_id: dao.base.project_id,
-            started_on: dao.base.started_on,
-            ended_on: dao.base.ended_on,
-            status: dao.base.status,
-            function_run_status_count: dao.function_run_status_count.into(),
+            id,
+            name,
+            collection_id,
+            function_id,
+            function_version_id,
+            triggered_on,
+            triggered_by_id,
+            trigger_type,
+            external_uid,
+            topology_version_id,
+            collection,
+            collection_deleted,
+            function,
+            triggered_by,
+            project,
+            project_id,
+            started_on,
+            ended_on,
+            status,
+            function_run_status_count: function_run_status_count.into(),
         })
     }
 }

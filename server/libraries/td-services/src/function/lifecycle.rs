@@ -56,21 +56,18 @@ pub async fn register_one(
     topology_at: TopologyInstant,
 ) -> Result<FunctionInsertDB, TdError> {
     conn.scd2()
-        .assert_not_exists::<FunctionDBWithNames>(and!(
-            &collection.base.base.collection_id,
-            &register.name
-        ))
+        .assert_not_exists::<FunctionDBWithNames>(and!(&collection.collection_id, &register.name))
         .await?;
 
     // Stage/checkpoint storage prefix: the collection's effective base_path (its
     // own, else the project's -- already resolved by the collections__with_names view).
     let mut function = register.to_dao(
         ctx,
-        collection.base.base.collection_id,
+        collection.collection_id,
         collection.effective_base_path.clone(),
     )?;
     let parent_tables = child_of.map(|child_of| child_of.stamp(&mut function));
-    ensure_connection_kind_matches(conn, bridge, &function, &collection.base).await?;
+    ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
     conn.scd2().open(&function, topology_at).await?;
     claim_bundle(conn, &function).await?;
 
@@ -89,7 +86,7 @@ pub async fn register_one(
         conn,
         ctx,
         topology_at,
-        &collection.base,
+        collection,
         &function,
         &state,
         &spec,
@@ -111,17 +108,16 @@ pub async fn update_one(
     child_of: Option<ChildOf<'_>>,
     topology_at: TopologyInstant,
 ) -> Result<FunctionInsertDB, TdError> {
-    assert_function_name_not_exists(conn, &collection.base.base.collection_id, current, update)
-        .await?;
+    assert_function_name_not_exists(conn, &collection.collection_id, current, update).await?;
 
-    let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
+    let previous: FunctionDB = conn.timeline().fetch_one(&current.id).await?;
     let mut function = update.to_dao(&previous, ctx)?;
     let parent_tables = child_of.map(|child_of| child_of.stamp(&mut function));
-    ensure_connection_kind_matches(conn, bridge, &function, &collection.base).await?;
+    ensure_connection_kind_matches(conn, bridge, &function, collection).await?;
     conn.scd2().open(&function, topology_at).await?;
     claim_bundle(conn, &function).await?;
 
-    let previous_version_id = Some(current.base.base.id.clone());
+    let previous_version_id = Some(current.id.clone());
     let state = FunctionState::load(conn, &function.function_id).await?;
     let mut spec = FunctionSpec::from(update);
     spec.parent_tables = match parent_tables {
@@ -137,7 +133,7 @@ pub async fn update_one(
         conn,
         ctx,
         topology_at,
-        &collection.base,
+        collection,
         &function,
         &state,
         &spec,

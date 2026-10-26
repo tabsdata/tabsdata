@@ -42,14 +42,9 @@ async fn create_function_patch(
     let collection: CollectionDB = conn.scd2().fetch_one(&collection_id_name).await?;
 
     let parent: FunctionDB = conn.timeline().fetch_one(&body.patch_of).await?;
-    ensure_user_managed(&parent.base)?;
-    assert_patch_parent_matches_url(
-        conn,
-        &parent,
-        &collection.base.collection_id,
-        &function_id_name,
-    )
-    .await?;
+    ensure_user_managed(&parent)?;
+    assert_patch_parent_matches_url(conn, &parent, &collection.collection_id, &function_id_name)
+        .await?;
     let patch: FunctionPatchInsertDB = body.to_dao(parent, &ctx)?;
     conn.scd2().open(&patch, at).await?;
 
@@ -80,30 +75,24 @@ pub async fn assert_patch_parent_matches_url<S: SeesProjectRows, M: AccessMode>(
     url_collection: &CollectionId,
     url_function: &FunctionIdName,
 ) -> Result<(), TdError> {
-    if parent.base.collection_id != *url_collection {
-        Err(CreateFunctionPatchError::WrongCollection(
-            parent.base.id.clone(),
-        ))?
+    if parent.collection_id != *url_collection {
+        Err(CreateFunctionPatchError::WrongCollection(parent.id.clone()))?
     }
     let url_matches = match url_function {
-        FunctionIdName::Id(id) => *id == parent.base.function_id,
-        FunctionIdName::Name(name) => *name == parent.base.name,
+        FunctionIdName::Id(id) => *id == parent.function_id,
+        FunctionIdName::Name(name) => *name == parent.name,
     };
     if !url_matches {
-        Err(CreateFunctionPatchError::WrongFunction(
-            parent.base.id.clone(),
-        ))?
+        Err(CreateFunctionPatchError::WrongFunction(parent.id.clone()))?
     }
     // Deletion closes the function's open interval, so aliveness is whether a
     // current row exists, not the parent row's status.
     let current = conn
         .scd2()
-        .fetch_optional::<FunctionDB>(&parent.base.function_id)
+        .fetch_optional::<FunctionDB>(&parent.function_id)
         .await?;
     if current.is_none() {
-        Err(CreateFunctionPatchError::DeletedParent(
-            parent.base.id.clone(),
-        ))?
+        Err(CreateFunctionPatchError::DeletedParent(parent.id.clone()))?
     }
     Ok(())
 }
@@ -210,10 +199,10 @@ mod tests {
     #[td_test::test(db)]
     async fn test_patch_creates_row_in_separate_table(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let parent = seed_function(&db, p.base.project_id, "c0", "f0").await;
+        let parent = seed_function(&db, p.project_id, "c0", "f0").await;
 
         let body = FunctionPatch {
-            patch_of: parent.base.id.clone(),
+            patch_of: parent.id.clone(),
             bundle_id: BundleId::default(),
             snippet: "patched snippet".try_into()?,
             runtime_values: None,
@@ -221,26 +210,26 @@ mod tests {
         };
 
         let response = Services::with_defaults(db.clone())
-            .create_function_patch(patch_request(p.base.project_id, "c0", "f0", body))
+            .create_function_patch(patch_request(p.project_id, "c0", "f0", body))
             .await?
             .data;
 
-        assert_ne!(response.id, parent.base.id);
-        assert_eq!(*response.parent_function_version_id, parent.base.id);
-        assert_eq!(response.function_id, parent.base.function_id);
-        assert_eq!(response.collection_id, parent.base.collection_id);
+        assert_ne!(response.id, parent.id);
+        assert_eq!(*response.parent_function_version_id, parent.id);
+        assert_eq!(response.function_id, parent.function_id);
+        assert_eq!(response.collection_id, parent.collection_id);
 
         let stored: FunctionPatchDB = db
             .timeline()
             .fetch_one::<FunctionPatchDB>(&response.id)
             .await?;
-        assert_eq!(*stored.base.parent_function_version_id, parent.base.id);
-        assert_eq!(stored.base.function_id, parent.base.function_id);
-        assert_ne!(stored.base.snippet, parent.base.snippet);
+        assert_eq!(*stored.parent_function_version_id, parent.id);
+        assert_eq!(stored.function_id, parent.function_id);
+        assert_ne!(stored.snippet, parent.snippet);
 
         let functions: Vec<FunctionDB> = db
             .timeline()
-            .fetch_all::<FunctionDB>(&parent.base.function_id)
+            .fetch_all::<FunctionDB>(&parent.function_id)
             .await?;
         assert_eq!(
             functions.len(),
@@ -255,7 +244,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_patch_of_nonexistent_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let _parent = seed_function(&db, p.base.project_id, "c0", "f0").await;
+        let _parent = seed_function(&db, p.project_id, "c0", "f0").await;
 
         let body = FunctionPatch {
             patch_of: FunctionVersionId::new(),
@@ -266,7 +255,7 @@ mod tests {
         };
 
         let response = Services::with_defaults(db.clone())
-            .create_function_patch(patch_request(p.base.project_id, "c0", "f0", body))
+            .create_function_patch(patch_request(p.project_id, "c0", "f0", body))
             .await;
 
         assert!(response.is_err(), "expected refusal, got {response:?}");
@@ -276,12 +265,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_patch_of_wrong_function_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = seed_collection_helper(&db, p.base.project_id, "c0").await;
-        let _parent_f0 = seed_function_in(&db, p.base.project_id, &collection, "f0").await;
-        let parent_f1 = seed_function_in(&db, p.base.project_id, &collection, "f1").await;
+        let collection = seed_collection_helper(&db, p.project_id, "c0").await;
+        let _parent_f0 = seed_function_in(&db, p.project_id, &collection, "f0").await;
+        let parent_f1 = seed_function_in(&db, p.project_id, &collection, "f1").await;
 
         let body = FunctionPatch {
-            patch_of: parent_f1.base.id.clone(),
+            patch_of: parent_f1.id.clone(),
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             runtime_values: None,
@@ -289,7 +278,7 @@ mod tests {
         };
 
         let response = Services::with_defaults(db.clone())
-            .create_function_patch(patch_request(p.base.project_id, "c0", "f0", body))
+            .create_function_patch(patch_request(p.project_id, "c0", "f0", body))
             .await;
 
         let err = response.expect_err("expected refusal");
@@ -304,11 +293,11 @@ mod tests {
     #[td_test::test(db)]
     async fn test_patch_of_wrong_collection_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let parent_c0 = seed_function(&db, p.base.project_id, "c0", "f0").await;
-        let _parent_c1 = seed_function(&db, p.base.project_id, "c1", "f0").await;
+        let parent_c0 = seed_function(&db, p.project_id, "c0", "f0").await;
+        let _parent_c1 = seed_function(&db, p.project_id, "c1", "f0").await;
 
         let body = FunctionPatch {
-            patch_of: parent_c0.base.id.clone(),
+            patch_of: parent_c0.id.clone(),
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             runtime_values: None,
@@ -316,7 +305,7 @@ mod tests {
         };
 
         let response = Services::with_defaults(db.clone())
-            .create_function_patch(patch_request(p.base.project_id, "c1", "f0", body))
+            .create_function_patch(patch_request(p.project_id, "c1", "f0", body))
             .await;
 
         let err = response.expect_err("expected refusal");
@@ -333,20 +322,20 @@ mod tests {
     #[td_test::test(db)]
     async fn test_patch_of_deleted_function_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let v0 = seed_function(&db, p.base.project_id, "c0", "f0").await;
-        let (mut conn, version) = topology_write(&db, &p.base.project_id).await?;
+        let v0 = seed_function(&db, p.project_id, "c0", "f0").await;
+        let (mut conn, version) = topology_write(&db, &p.project_id).await?;
         conn.scd2()
-            .close::<FunctionDB>(&v0.base.function_id, version)
+            .close::<FunctionDB>(&v0.function_id, version)
             .await?;
         commit_topology_write(conn).await?;
 
         let response = Services::with_defaults(db.clone())
             .create_function_patch(patch_request(
-                p.base.project_id,
+                p.project_id,
                 "c0",
                 "f0",
                 FunctionPatch {
-                    patch_of: v0.base.id.clone(),
+                    patch_of: v0.id.clone(),
                     bundle_id: BundleId::default(),
                     snippet: "snippet".try_into()?,
                     runtime_values: None,
@@ -370,15 +359,15 @@ mod tests {
     #[td_test::test(db)]
     async fn test_patch_of_patch_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let v0 = seed_function(&db, p.base.project_id, "c0", "f0").await;
+        let v0 = seed_function(&db, p.project_id, "c0", "f0").await;
 
         let v0_prime = Services::with_defaults(db.clone())
             .create_function_patch(patch_request(
-                p.base.project_id,
+                p.project_id,
                 "c0",
                 "f0",
                 FunctionPatch {
-                    patch_of: v0.base.id.clone(),
+                    patch_of: v0.id.clone(),
                     bundle_id: BundleId::default(),
                     snippet: "v1".try_into()?,
                     runtime_values: None,
@@ -387,11 +376,11 @@ mod tests {
             ))
             .await?
             .data;
-        assert_eq!(*v0_prime.parent_function_version_id, v0.base.id);
+        assert_eq!(*v0_prime.parent_function_version_id, v0.id);
 
         let attempt = Services::with_defaults(db.clone())
             .create_function_patch(patch_request(
-                p.base.project_id,
+                p.project_id,
                 "c0",
                 "f0",
                 FunctionPatch {
@@ -418,14 +407,14 @@ mod tests {
     ) -> Result<(), TdError> {
         use td_queries::Queries;
         let p = db.seed().test_project().await?;
-        let parent = seed_function(&db, p.base.project_id, "c0", "f0").await;
-        let parent_id = parent.base.id.clone();
+        let parent = seed_function(&db, p.project_id, "c0", "f0").await;
+        let parent_id = parent.id.clone();
 
         // `parent_function_version_id` isn't a `FunctionPatchDB` extractor,
         // so fetch-all + filter (≤1 row per parent partition).
         let current_for_parent = |rows: Vec<FunctionPatchDB>| -> Vec<FunctionPatchDB> {
             rows.into_iter()
-                .filter(|p| *p.base.parent_function_version_id == parent_id)
+                .filter(|p| *p.parent_function_version_id == parent_id)
                 .collect()
         };
 
@@ -437,11 +426,11 @@ mod tests {
 
         let first = Services::with_defaults(db.clone())
             .create_function_patch(patch_request(
-                p.base.project_id,
+                p.project_id,
                 "c0",
                 "f0",
                 FunctionPatch {
-                    patch_of: parent.base.id.clone(),
+                    patch_of: parent.id.clone(),
                     bundle_id: BundleId::default(),
                     snippet: "v1".try_into()?,
                     runtime_values: None,
@@ -452,16 +441,16 @@ mod tests {
             .data;
         let after_first = current_for_parent(db.scd2().fetch_all::<FunctionPatchDB>(&()).await?);
         assert_eq!(after_first.len(), 1);
-        assert_eq!(after_first[0].base.id, first.id);
+        assert_eq!(after_first[0].id, first.id);
 
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
         let second = Services::with_defaults(db.clone())
             .create_function_patch(patch_request(
-                p.base.project_id,
+                p.project_id,
                 "c0",
                 "f0",
                 FunctionPatch {
-                    patch_of: parent.base.id.clone(),
+                    patch_of: parent.id.clone(),
                     bundle_id: BundleId::default(),
                     snippet: "v2".try_into()?,
                     runtime_values: None,
@@ -472,7 +461,7 @@ mod tests {
             .data;
         let after_second = current_for_parent(db.scd2().fetch_all::<FunctionPatchDB>(&()).await?);
         assert_eq!(after_second.len(), 1, "one current row per parent");
-        assert_eq!(after_second[0].base.id, second.id);
+        assert_eq!(after_second[0].id, second.id);
         assert!(
             after_second[0].interval.valid_from >= after_first[0].interval.valid_from,
             "current row must have the latest valid_from",
@@ -480,7 +469,7 @@ mod tests {
 
         let all: Vec<FunctionPatchDB> = db
             .timeline()
-            .fetch_all::<FunctionPatchDB>(&parent.base.function_id)
+            .fetch_all::<FunctionPatchDB>(&parent.function_id)
             .await?;
         assert_eq!(all.len(), 2, "both patches retained in base table");
         Ok(())
@@ -489,8 +478,8 @@ mod tests {
     #[td_test::test(db)]
     async fn test_patch_of_a_child_function_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = seed_collection_helper(&db, p.base.project_id, "c0").await;
-        let owner = seed_function_in(&db, p.base.project_id, &collection, "owner_fn").await;
+        let collection = seed_collection_helper(&db, p.project_id, "c0").await;
+        let owner = seed_function_in(&db, p.project_id, &collection, "owner_fn").await;
         let register = FunctionRegister {
             child_functions: None,
             name: "child_fn".try_into()?,
@@ -512,13 +501,13 @@ mod tests {
             workers: None,
         };
         let parent = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
-            .child_function(&collection, &register, &owner.base.function_id)
+            .child_function(&collection, &register, &owner.function_id)
             .await?;
 
         let body = FunctionPatch {
-            patch_of: parent.base.id.clone(),
+            patch_of: parent.id.clone(),
             bundle_id: BundleId::default(),
             snippet: "snippet".try_into()?,
             runtime_values: None,
@@ -526,7 +515,7 @@ mod tests {
         };
 
         let err = Services::with_defaults(db.clone())
-            .create_function_patch(patch_request(p.base.project_id, "c0", "child_fn", body))
+            .create_function_patch(patch_request(p.project_id, "c0", "child_fn", body))
             .await
             .expect_err("a child function must not be patchable");
 

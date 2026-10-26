@@ -29,8 +29,8 @@ use td_queries::Queries;
 /// `default` / `source` / `destination` groups are protected from
 /// update and delete by this guard.
 pub fn assert_not_system(group: &GroupDB) -> Result<(), TdError> {
-    if *group.base.system {
-        Err(GroupError::SystemGroup(group.base.name.clone()))?
+    if *group.system {
+        Err(GroupError::SystemGroup(group.name.clone()))?
     }
     Ok(())
 }
@@ -44,11 +44,11 @@ pub async fn assert_group_unused(
 ) -> Result<(), TdError> {
     if conn
         .scd2()
-        .fetch_first::<CollectionDB>(&group.base.group_id)
+        .fetch_first::<CollectionDB>(&group.group_id)
         .await?
         .is_some()
     {
-        Err(GroupError::GroupHasCollections(group.base.name.clone()))?
+        Err(GroupError::GroupHasCollections(group.name.clone()))?
     }
     Ok(())
 }
@@ -65,7 +65,7 @@ pub async fn assert_group_rename_available(
     current: &GroupDB,
 ) -> Result<(), TdError> {
     if let Some(new_name) = &update.name
-        && new_name != &current.base.name
+        && new_name != &current.name
         && conn
             .scd2()
             .fetch_optional::<GroupDB>(new_name)

@@ -44,7 +44,7 @@ async fn table_flow_graph(
         .await?;
 
     let topology = ProjectTopology::of(conn, topology).await?;
-    let graph = topology.flow_graph(&table.base.base.table_id)?;
+    let graph = topology.flow_graph(&table.table_id)?;
 
     build_response(&table, &graph, topology.labels(&graph)?).await
 }
@@ -87,7 +87,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -118,7 +118,7 @@ mod tests {
         };
 
         let function_0 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -137,22 +137,22 @@ mod tests {
                     at: None,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let response = service.table_flow_graph(request).await?.data;
 
         let central_table = db
             .scd2()
             .fetch_one::<TableDBWithNames>(and!(
-                &function_0.base.collection_id,
+                &function_0.collection_id,
                 &TableIdName::from_str("table_0")?
             ))
             .await?;
-        assert_eq!(response.table, central_table.base.base.id);
+        assert_eq!(response.table, central_table.id);
 
         let expected_functions = [&function_0]
             .iter()
-            .map(|f| (f.base.id.clone(), f.base.name.clone()))
+            .map(|f| (f.id.clone(), f.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
             .graph
@@ -189,7 +189,7 @@ mod tests {
                 .get(&relation.table_version_id)
                 .map(|t| t.name.clone())
                 .unwrap();
-            if f == function_0.base.id && t == expected_tables[0] {
+            if f == function_0.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
                     GraphEdge::Output { .. } | GraphEdge::Dependency { .. }
@@ -204,7 +204,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -231,7 +231,7 @@ mod tests {
         };
 
         let function_0 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -262,7 +262,7 @@ mod tests {
         };
 
         let function_1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -289,7 +289,7 @@ mod tests {
         };
 
         let function_2 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -308,22 +308,22 @@ mod tests {
                     at: None,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let response = service.table_flow_graph(request).await?.data;
 
         let central_table: TableDBWithNames = db
             .scd2()
             .fetch_one::<TableDBWithNames>(and!(
-                &function_0.base.collection_id,
+                &function_0.collection_id,
                 &TableIdName::from_str("table_0")?
             ))
             .await?;
-        assert_eq!(response.table, central_table.base.base.id);
+        assert_eq!(response.table, central_table.id);
 
         let expected_functions = [&function_0, &function_1, &function_2]
             .iter()
-            .map(|f| (f.base.id.clone(), f.base.name.clone()))
+            .map(|f| (f.id.clone(), f.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
             .graph
@@ -362,29 +362,29 @@ mod tests {
                 .get(&relation.table_version_id)
                 .map(|t| t.name.clone())
                 .unwrap();
-            if f == function_0.base.id && t == expected_tables[0] {
+            if f == function_0.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
                     GraphEdge::Output { .. } | GraphEdge::Dependency { .. }
                 ));
             }
-            if f == function_1.base.id && t == expected_tables[0] {
+            if f == function_1.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
                     GraphEdge::Dependency { .. } | GraphEdge::Trigger { .. }
                 ));
             }
-            if f == function_1.base.id && t == expected_tables[1] {
+            if f == function_1.id && t == expected_tables[1] {
                 assert!(matches!(edge, GraphEdge::Output { .. }));
             }
-            if f == function_1.base.id && t == expected_tables[2] {
+            if f == function_1.id && t == expected_tables[2] {
                 assert!(matches!(edge, GraphEdge::Output { .. }));
             }
 
-            if f == function_2.base.id && t == expected_tables[0] {
+            if f == function_2.id && t == expected_tables[0] {
                 assert!(matches!(edge, GraphEdge::Dependency { .. }));
             }
-            if f == function_2.base.id && t == expected_tables[3] {
+            if f == function_2.id && t == expected_tables[3] {
                 assert!(matches!(edge, GraphEdge::Output { .. }));
             }
         }
@@ -396,7 +396,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection_0")?;
         let collection_0 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -423,7 +423,7 @@ mod tests {
         };
 
         let function_0 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -454,7 +454,7 @@ mod tests {
         };
 
         let _function_1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -481,7 +481,7 @@ mod tests {
         };
 
         let function_2 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection_0, &create)
             .await?;
@@ -500,22 +500,22 @@ mod tests {
                     at: None,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let response = service.table_flow_graph(request).await?.data;
 
         let central_table = db
             .scd2()
             .fetch_one::<TableDBWithNames>(and!(
-                &function_2.base.collection_id,
+                &function_2.collection_id,
                 &TableIdName::from_str("table_3")?
             ))
             .await?;
-        assert_eq!(response.table, central_table.base.base.id);
+        assert_eq!(response.table, central_table.id);
 
         let expected_functions = [&function_0, &function_2]
             .iter()
-            .map(|f| (f.base.id.clone(), f.base.name.clone()))
+            .map(|f| (f.id.clone(), f.name.clone()))
             .collect::<HashMap<_, _>>();
         let functions = response
             .graph
@@ -549,19 +549,19 @@ mod tests {
                 .get(&relation.table_version_id)
                 .map(|t| t.name.clone())
                 .unwrap();
-            if f == function_0.base.id && t == expected_tables[0] {
+            if f == function_0.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
                     GraphEdge::Output { .. } | GraphEdge::Dependency { .. }
                 ));
             }
-            if f == function_2.base.id && t == expected_tables[0] {
+            if f == function_2.id && t == expected_tables[0] {
                 assert!(matches!(
                     edge,
                     GraphEdge::Dependency { .. } | GraphEdge::Trigger { .. }
                 ));
             }
-            if f == function_2.base.id && t == expected_tables[1] {
+            if f == function_2.id && t == expected_tables[1] {
                 assert!(matches!(edge, GraphEdge::Output { .. }));
             }
         }
@@ -573,7 +573,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("doomed")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -598,14 +598,14 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let table: TableDBWithNames = db
             .scd2()
             .fetch_one(and!(
-                &collection.base.collection_id,
+                &collection.collection_id,
                 &TableIdName::from_str("table_0")?
             ))
             .await?;
@@ -618,7 +618,7 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str(&collection_name.to_string())?,
                     })
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -636,11 +636,11 @@ mod tests {
                         at,
                     },
                 ))
-                .in_project(p.base.project_id)
+                .in_project(p.project_id)
         };
 
         let by_name = collection_name.to_string();
-        let by_id = format!("~{}", collection.base.collection_id);
+        let by_id = format!("~{}", collection.collection_id);
         let err = service
             .table_flow_graph(request(&by_name, Some(registered_at)))
             .await
@@ -652,8 +652,8 @@ mod tests {
             .table_flow_graph(request(&by_id, Some(registered_at)))
             .await?
             .data;
-        assert_eq!(response.table, table.base.base.id);
-        assert!(response.graph.all_functions.contains_key(&function.base.id));
+        assert_eq!(response.table, table.id);
+        assert!(response.graph.all_functions.contains_key(&function.id));
 
         assert!(
             service

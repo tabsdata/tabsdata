@@ -91,7 +91,7 @@ async fn on_hold_readers(
         .fetch_all::<LogicalFunctionRunDB>(&readers, ())
         .await?
         .into_iter()
-        .filter(|lfr| lfr.base.status == LogicalFunctionRunStatus::OnHold)
+        .filter(|lfr| lfr.status == LogicalFunctionRunStatus::OnHold)
         .map(|lfr| lfr.base.id)
         .collect())
 }

@@ -46,7 +46,7 @@ pub mod tests {
     async fn test_seed_group(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let group = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .group(
                 GroupName::try_from("test_group").unwrap(),
@@ -60,12 +60,12 @@ pub mod tests {
             .fetch_one::<GroupDB>(&GroupName::try_from("test_group").unwrap())
             .await
             .unwrap();
-        assert_eq!(group.base.group_id, found.base.group_id);
-        assert_eq!(group.base.name, found.base.name);
-        assert_eq!(group.base.description, found.base.description);
+        assert_eq!(group.group_id, found.group_id);
+        assert_eq!(group.name, found.name);
+        assert_eq!(group.description, found.description);
         assert_eq!(group.interval, found.interval);
-        assert_eq!(group.base.defined_by_id, found.base.defined_by_id);
-        assert_eq!(group.base.system, found.base.system);
+        assert_eq!(group.defined_by_id, found.defined_by_id);
+        assert_eq!(group.system, found.system);
     }
 
     #[td_test::test(db)]
@@ -77,18 +77,18 @@ pub mod tests {
             .fetch_one::<GroupDB>(&GroupName::default_group())
             .await
             .unwrap();
-        assert!(*group.base.system);
+        assert!(*group.system);
         let source = db
             .scd2()
             .fetch_one::<GroupDB>(&GroupName::source())
             .await
             .unwrap();
-        assert!(*source.base.system);
+        assert!(*source.system);
         let dest = db
             .scd2()
             .fetch_one::<GroupDB>(&GroupName::destination())
             .await
             .unwrap();
-        assert!(*dest.base.system);
+        assert!(*dest.system);
     }
 }

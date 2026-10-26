@@ -100,7 +100,7 @@ mod tests {
     ) -> Result<(), TdError> {
         test_status_update(db.clone(), project_id, &test_executions, |_, e, _, _, _| {
             let db = db.clone();
-            let execution = e[&test_executions[recover_on]].base.id.to_string();
+            let execution = e[&test_executions[recover_on]].id.to_string();
 
             async move {
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -125,7 +125,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -150,7 +150,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -185,7 +185,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![
@@ -226,7 +226,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![
@@ -264,7 +264,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Running,
@@ -305,7 +305,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Running,
@@ -346,7 +346,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_execution(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -384,7 +384,7 @@ mod tests {
                 let db = db.clone();
                 test_recover_execution(
                     db,
-                    p.base.project_id,
+                    p.project_id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Running,
                         transactions: vec![TestTransaction {
@@ -441,7 +441,7 @@ mod tests {
                 let db = db.clone();
                 test_recover_execution(
                     db,
-                    p.base.project_id,
+                    p.project_id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Running,
                         transactions: vec![TestTransaction {
@@ -538,11 +538,11 @@ mod tests {
         }];
         test_status_update(
             db.clone(),
-            p.base.project_id,
+            p.project_id,
             &test_executions,
             |_, e, _, f, _| {
                 let db = db.clone();
-                let execution = e[&test_executions[0]].base.id.to_string();
+                let execution = e[&test_executions[0]].id.to_string();
                 let pfr_id = f[&test_executions[0].transactions[0].functions[0]]
                     .base
                     .id
@@ -564,8 +564,8 @@ mod tests {
                         .timeline()
                         .fetch_one::<PhysicalFunctionRunDB>(&pfr_id)
                         .await?;
-                    assert_eq!(pfr.base.status, PhysicalFunctionRunStatus::Failed);
-                    assert!(pfr.base.ended_on.is_some());
+                    assert_eq!(pfr.status, PhysicalFunctionRunStatus::Failed);
+                    assert!(pfr.ended_on.is_some());
                     Ok(())
                 }
             },

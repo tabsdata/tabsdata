@@ -17,8 +17,8 @@ use td_error::TdError;
 use td_objects::dxo::role::RoleDBWithNames;
 
 pub fn assert_not_fixed(role: &RoleDBWithNames) -> Result<(), TdError> {
-    if *role.base.fixed {
-        Err(RoleError::FixedRole(role.base.name.clone()))?
+    if *role.fixed {
+        Err(RoleError::FixedRole(role.name.clone()))?
     }
 
     Ok(())

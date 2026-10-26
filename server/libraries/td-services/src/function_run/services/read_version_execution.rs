@@ -33,7 +33,7 @@ async fn function_version_execution_read(
 
     // Replays mint several attempts under one LFR; the current one is canonical.
     let function: FunctionDB = conn.timeline().fetch_one(&function_version_id).await?;
-    let run = resolve_current_function_run(conn, &execution_id, &function.base.function_id).await?;
+    let run = resolve_current_function_run(conn, &execution_id, &function.function_id).await?;
     PhysicalFunctionRun::from_dao(run)
 }
 #[cfg(test)]
@@ -56,7 +56,7 @@ mod tests {
     async fn test_read_function_version_execution_run(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -85,24 +85,24 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version)
             .await?;
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
         let physical_function_run = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -118,37 +118,31 @@ mod tests {
                 function_version: function_version.base.id,
             },
             ExecutionParam {
-                execution: execution.base.id.clone(),
+                execution: execution.id.clone(),
             },
         ));
 
         let service = Services::with_defaults(db.clone());
         let response = service.function_version_execution_read(request).await;
         let response = response?;
-        assert_eq!(response.id, physical_function_run.base.id);
-        assert_eq!(
-            response.collection_id,
-            physical_function_run.base.collection_id
-        );
+        assert_eq!(response.id, physical_function_run.id);
+        assert_eq!(response.collection_id, physical_function_run.collection_id);
         assert_eq!(
             response.function_version_id,
-            physical_function_run.base.function_version_id
+            physical_function_run.function_version_id
         );
-        assert_eq!(
-            response.execution_id,
-            physical_function_run.base.execution_id
-        );
+        assert_eq!(response.execution_id, physical_function_run.execution_id);
         assert_eq!(
             response.transaction_id,
-            physical_function_run.base.transaction_id
+            physical_function_run.transaction_id
         );
         assert_eq!(
             response.triggered_on,
             AtTime::from(physical_function_run.interval.valid_from)
         );
-        assert_eq!(response.trigger, physical_function_run.base.trigger);
-        assert_eq!(response.started_on, physical_function_run.base.started_on);
-        assert_eq!(response.ended_on, physical_function_run.base.ended_on);
+        assert_eq!(response.trigger, physical_function_run.trigger);
+        assert_eq!(response.started_on, physical_function_run.started_on);
+        assert_eq!(response.ended_on, physical_function_run.ended_on);
         // Status lives on the LFR; the read endpoint joins it in.
         assert_eq!(response.status, PhysicalFunctionRunStatus::Done);
         assert_eq!(response.name, FunctionName::try_from("joaquin")?);
@@ -156,7 +150,7 @@ mod tests {
             response.collection,
             CollectionLabel::new(collection.base.name)
         );
-        assert_eq!(response.execution, execution.base.name);
+        assert_eq!(response.execution, execution.name);
         assert_eq!(response.triggered_by, UserLabel::new(UserName::admin()));
         Ok(())
     }

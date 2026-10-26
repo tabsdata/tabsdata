@@ -69,7 +69,7 @@ async fn seed_function_with_parent(
     let function_db = FunctionInsertDB {
         id: FunctionVersionId::new(),
         parent_function_id,
-        collection_id: collection.base.collection_id,
+        collection_id: collection.collection_id,
         name: function_create.name.clone(),
         description: function_create.description.clone(),
         decorator: function_create.decorator.clone(),
@@ -123,9 +123,9 @@ async fn seed_function_with_parent(
             let table_collection = match &dependency_table.collection {
                 Some(name) => {
                     let named: CollectionDB = executor.reuse().scd2().fetch_one(name).await?;
-                    named.base.collection_id
+                    named.collection_id
                 }
-                None => collection.base.collection_id,
+                None => collection.collection_id,
             };
             let table_name = TableName::try_from(dependency_table.table.clone())?;
 
@@ -141,9 +141,9 @@ async fn seed_function_with_parent(
                 collection_id: function_db.collection_id,
                 dependency_id: DependencyId::default(),
                 function_id: function_db.function_id,
-                table_collection_id: table_db.base.base.collection_id.into(),
-                table_function_id: table_db.base.base.function_id.into(),
-                table_id: table_db.base.base.table_id,
+                table_collection_id: table_db.collection_id.into(),
+                table_function_id: table_db.function_id.into(),
+                table_id: table_db.table_id,
                 table_versions: dependency_table.versions.clone().into(),
                 dep_pos: DependencyPos::try_from(pos as i32)?,
                 defined_by_id: request_context.user_id,
@@ -163,9 +163,9 @@ async fn seed_function_with_parent(
             let table_collection = match &trigger_table.collection {
                 Some(name) => {
                     let named: CollectionDB = executor.reuse().scd2().fetch_one(name).await?;
-                    named.base.collection_id
+                    named.collection_id
                 }
-                None => collection.base.collection_id,
+                None => collection.collection_id,
             };
             let table_name = TableName::try_from(trigger_table.table.clone())?;
 
@@ -181,9 +181,9 @@ async fn seed_function_with_parent(
                 collection_id: function_db.collection_id,
                 trigger_id: TriggerId::default(),
                 function_id: function_db.function_id,
-                trigger_by_collection_id: table_db.base.base.collection_id.into(),
-                trigger_by_function_id: table_db.base.base.function_id.into(),
-                trigger_by_table_id: table_db.base.base.table_id,
+                trigger_by_collection_id: table_db.collection_id.into(),
+                trigger_by_function_id: table_db.function_id.into(),
+                trigger_by_table_id: table_db.table_id,
                 status: TriggerStatus::Active,
                 defined_by_id: request_context.user_id,
                 system: System::FALSE,
@@ -237,7 +237,7 @@ mod tests {
     async fn test_seed_function(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -272,29 +272,29 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
         let found = db
             .timeline()
-            .fetch_one::<FunctionDB>(&function.base.id)
+            .fetch_one::<FunctionDB>(&function.id)
             .await
             .unwrap();
 
-        assert_eq!(function.base.id, found.base.id);
-        assert_eq!(function.base.collection_id, found.base.collection_id);
-        assert_eq!(function.base.name, found.base.name);
-        assert_eq!(function.base.description, found.base.description);
-        assert_eq!(function.base.runtime_values, found.base.runtime_values);
-        assert_eq!(function.base.function_id, found.base.function_id);
-        assert_eq!(function.base.storage_version, found.base.storage_version);
-        assert_eq!(function.base.bundle_id, found.base.bundle_id);
-        assert_eq!(function.base.snippet, found.base.snippet);
+        assert_eq!(function.id, found.id);
+        assert_eq!(function.collection_id, found.collection_id);
+        assert_eq!(function.name, found.name);
+        assert_eq!(function.description, found.description);
+        assert_eq!(function.runtime_values, found.runtime_values);
+        assert_eq!(function.function_id, found.function_id);
+        assert_eq!(function.storage_version, found.storage_version);
+        assert_eq!(function.bundle_id, found.bundle_id);
+        assert_eq!(function.snippet, found.snippet);
         assert_eq!(function.interval.valid_from, found.interval.valid_from);
-        assert_eq!(function.base.defined_by_id, found.base.defined_by_id);
-        assert_eq!(function.base.status, found.base.status);
-        assert_eq!(function.base.enabled, found.base.enabled);
+        assert_eq!(function.defined_by_id, found.defined_by_id);
+        assert_eq!(function.status, found.status);
+        assert_eq!(function.enabled, found.enabled);
     }
 }

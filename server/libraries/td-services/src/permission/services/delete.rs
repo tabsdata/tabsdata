@@ -106,7 +106,7 @@ mod tests {
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = p0.base.project_id.try_into()?;
+        let entity_id: EntityId = p0.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::manage_project(),
@@ -146,7 +146,7 @@ mod tests {
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = p0.base.project_id.try_into()?;
+        let entity_id: EntityId = p0.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::manage_project(),
@@ -198,7 +198,7 @@ mod tests {
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = p0.base.project_id.try_into()?;
+        let entity_id: EntityId = p0.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::manage_project(),
@@ -245,7 +245,7 @@ mod tests {
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = p0.base.project_id.try_into()?;
+        let entity_id: EntityId = p0.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::manage_project(),
@@ -289,7 +289,7 @@ mod tests {
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = p0.base.project_id.try_into()?;
+        let entity_id: EntityId = p0.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::manage_project(),
@@ -345,7 +345,7 @@ mod tests {
             .permission(
                 PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
-                Some(p0.base.project_id.try_into()?),
+                Some(p0.project_id.try_into()?),
                 &role0,
             )
             .await?;
@@ -354,7 +354,7 @@ mod tests {
             .permission(
                 PermissionType::develop_project(),
                 Some(EntityName::try_from("p1")?),
-                Some(p1.base.project_id.try_into()?),
+                Some(p1.project_id.try_into()?),
                 &role1,
             )
             .await?;
@@ -398,7 +398,7 @@ mod tests {
             .permission(
                 PermissionType::manage_project(),
                 Some(EntityName::try_from("p0")?),
-                Some(p0.base.project_id.try_into()?),
+                Some(p0.project_id.try_into()?),
                 &role,
             )
             .await?;

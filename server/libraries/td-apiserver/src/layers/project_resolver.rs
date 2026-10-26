@@ -59,7 +59,7 @@ async fn resolve<S: DbScope, M: AccessMode>(
     id_name: &ProjectIdName,
 ) -> Result<Option<ProjectId>, TdError> {
     let proj: Option<ProjectDB> = conn.scd2().fetch_optional::<ProjectDB>(id_name).await?;
-    Ok(proj.map(|p| p.base.project_id))
+    Ok(proj.map(|p| p.project_id))
 }
 
 #[cfg(test)]

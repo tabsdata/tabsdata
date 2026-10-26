@@ -36,7 +36,7 @@ async fn table_list_by_collection(
     let rows = conn
         .scd2()
         .list(
-            and!(&collection.base.collection_id, TableDBWithNames::user()),
+            and!(&collection.collection_id, TableDBWithNames::user()),
             &query_params,
         )
         .await?;
@@ -63,7 +63,7 @@ mod tests {
     async fn test_list_current_tables_by_collection(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -93,7 +93,7 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -103,12 +103,12 @@ mod tests {
                 CollectionParam {
                     collection: CollectionIdName::from_str(&format!(
                         "~{}",
-                        collection.base.collection_id
+                        collection.collection_id
                     ))?,
                 },
                 ListParams::default(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.table_list_by_collection(request).await;

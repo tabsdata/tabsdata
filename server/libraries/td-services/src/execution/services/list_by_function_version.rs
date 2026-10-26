@@ -75,7 +75,7 @@ mod tests {
     async fn test_list_executions_by_function_version(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -102,7 +102,7 @@ mod tests {
             workers: None,
         };
         let function_version_a = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -110,17 +110,17 @@ mod tests {
 
         // Create an execution with a function run for function_version_a.
         let execution_1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version_a)
             .await?;
         let transaction_1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution_1, &transaction_key)
             .await?;
         let function_run_1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -134,14 +134,14 @@ mod tests {
         let table: TableDB = db
             .scd2()
             .fetch_one::<TableDBWithNames>(and!(
-                &collection.base.collection_id,
+                &collection.collection_id,
                 &TableIdName::Name(TableName::try_from(tables[0].clone())?)
             ))
             .await?
             .base;
 
         let tdv = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -153,7 +153,7 @@ mod tests {
             .await?;
 
         // Seed a function requirement for function_run_1 (belongs to function_version_a).
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .logical_input(
                 &collection,
@@ -188,23 +188,23 @@ mod tests {
             workers: None,
         };
         let function_version_b = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create_b)
             .await?;
 
         let execution_2 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version_b)
             .await?;
         let transaction_2 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution_2, &transaction_key)
             .await?;
         let function_run_2 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -215,7 +215,7 @@ mod tests {
             )
             .await?;
 
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .logical_input(
                 &collection,
@@ -231,9 +231,9 @@ mod tests {
         // A third execution of function_version_a whose attempt ran a patch.
         let patch = FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: function_version_a.base.id.clone().into(),
-            function_id: function_version_a.base.function_id,
-            collection_id: function_version_a.base.collection_id,
+            parent_function_version_id: function_version_a.id.clone().into(),
+            function_id: function_version_a.function_id,
+            collection_id: function_version_a.collection_id,
             snippet: Snippet::try_from("patched")?,
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("rv")?,
@@ -241,23 +241,23 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .scd2()
             .open(&patch, LockInstant::asserted(*AtTime::now()))
             .await?;
 
         let execution_3 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version_a)
             .await?;
         let transaction_3 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution_3, &transaction_key)
             .await?;
         let function_run_3 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -273,9 +273,7 @@ mod tests {
                 PhysicalFunctionRunDBIden::FunctionVersionPatchId,
                 patch.id.as_sea_expr(),
             )
-            .and_where(
-                Expr::col(PhysicalFunctionRunDBIden::Id).eq(function_run_3.base.id.as_sea_expr()),
-            )
+            .and_where(Expr::col(PhysicalFunctionRunDBIden::Id).eq(function_run_3.id.as_sea_expr()))
             .build_query()
             .execute(&db)
             .await
@@ -298,18 +296,18 @@ mod tests {
 
         // The head fvid matches every execution that ran the version,
         // patched attempts included.
-        let response = list(&function_version_a.base.id).await?;
+        let response = list(&function_version_a.id).await?;
         assert_eq!(response.len, 2);
         let mut ids: Vec<_> = response.data.iter().map(|e| e.id.clone()).collect();
         ids.sort();
-        let mut expected = vec![execution_1.base.id.clone(), execution_3.base.id.clone()];
+        let mut expected = vec![execution_1.id.clone(), execution_3.id.clone()];
         expected.sort();
         assert_eq!(ids, expected);
 
         // The patch fvid matches exactly the executions that ran the patch.
         let response = list(&patch.id).await?;
         assert_eq!(response.len, 1);
-        assert_eq!(response.data[0].id, execution_3.base.id);
+        assert_eq!(response.data[0].id, execution_3.id);
 
         Ok(())
     }
@@ -318,7 +316,7 @@ mod tests {
     async fn test_list_executions_by_function_version_empty(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -344,7 +342,7 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -353,7 +351,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
             FunctionVersionParam {
-                function_version: function_version.base.id.clone(),
+                function_version: function_version.id.clone(),
             },
             ListParams::default(),
         );

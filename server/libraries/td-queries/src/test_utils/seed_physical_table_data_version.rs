@@ -80,30 +80,30 @@ pub async fn _seed_physical_table_data_version(
     let producer_lfr: LogicalFunctionRunDB = executor
         .reuse()
         .fetch_one(and!(
-            &physical_function_run.base.execution_id,
-            &physical_function_run.base.function_id
+            &physical_function_run.execution_id,
+            &physical_function_run.function_id
         ))
         .await?;
     let existing: Option<LogicalTableDataVersionDB> = executor
         .reuse()
         .timeline()
-        .fetch_first(and!(&execution.base.id, &table.base.table_id))
+        .fetch_first(and!(&execution.id, &table.table_id))
         .await?;
     let logical_id = match existing {
         Some(ltdv) => ltdv.base.id,
         None => {
             let ltdv = LogicalTableDataVersionInsertDB {
                 id: LogicalTableDataVersionId::new(),
-                collection_id: collection.base.collection_id,
-                execution_id: execution.base.id.clone(),
-                transaction_id: transaction.base.id.clone(),
-                table_id: table.base.table_id,
-                producer_logical_function_run_id: Some(producer_lfr.base.id.clone()),
+                collection_id: collection.collection_id,
+                execution_id: execution.id.clone(),
+                transaction_id: transaction.id.clone(),
+                table_id: table.table_id,
+                producer_logical_function_run_id: Some(producer_lfr.id.clone()),
                 function_param_pos: Some(TableFunctionParamPos::try_from(0)?),
-                private: table.base.private,
+                private: table.private,
                 triggered_on: TriggeredOn::asserted(*physical_function_run.interval.valid_from),
-                triggered_by_id: transaction.base.triggered_by_id,
-                group_id: producer_lfr.base.group_id,
+                triggered_by_id: transaction.triggered_by_id,
+                group_id: producer_lfr.group_id,
             };
             executor.reuse().insert(&ltdv).await?;
             ltdv.id
@@ -113,18 +113,18 @@ pub async fn _seed_physical_table_data_version(
     let ptdv_id = PhysicalTableDataVersionId::new();
     let table_data_version_db = PhysicalTableDataVersionInsertDB {
         id: ptdv_id.clone(),
-        collection_id: collection.base.collection_id,
-        table_id: table.base.table_id,
-        name: table.base.name.clone(),
-        table_version_id: table.base.id,
-        function_version_id: table.base.function_version_id.clone(),
+        collection_id: collection.collection_id,
+        table_id: table.table_id,
+        name: table.name.clone(),
+        table_version_id: table.id,
+        function_version_id: table.function_version_id.clone(),
         function_version_patch_id: None,
-        execution_id: execution.base.id.clone(),
-        transaction_id: transaction.base.id.clone(),
-        physical_function_run_id: physical_function_run.base.id.clone(),
+        execution_id: execution.id.clone(),
+        transaction_id: transaction.id.clone(),
+        physical_function_run_id: physical_function_run.id.clone(),
         function_param_pos: TableFunctionParamPos::try_from(0)?,
         // Mirror the mint: an FR and its output TDVs stamp the same prefix.
-        base_path: physical_function_run.base.base_path.clone(),
+        base_path: physical_function_run.base_path.clone(),
         has_data: has_data.cloned(),
         schema_changed: None,
         column_count: None,
@@ -164,7 +164,7 @@ mod tests {
     async fn test_seed_physical_table_data_version(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -201,14 +201,14 @@ mod tests {
         };
 
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version)
             .await
@@ -216,14 +216,14 @@ mod tests {
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -238,7 +238,7 @@ mod tests {
         let table_version = db
             .scd2()
             .fetch_first::<TableDB>(and!(
-                &collection.base.collection_id,
+                &collection.collection_id,
                 TableName::try_from(table_name).unwrap()
             ))
             .await
@@ -246,7 +246,7 @@ mod tests {
             .expect("seeded table must exist");
 
         let physical_table_data_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -259,29 +259,23 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            physical_table_data_version.base.collection_id,
-            collection.base.collection_id
+            physical_table_data_version.collection_id,
+            collection.collection_id
         );
         assert_eq!(
-            physical_table_data_version.base.table_version_id,
-            table_version.base.id
+            physical_table_data_version.table_version_id,
+            table_version.id
         );
         assert_eq!(
-            physical_table_data_version.base.function_version_id,
-            function_version.base.id
+            physical_table_data_version.function_version_id,
+            function_version.id
         );
-        assert_eq!(physical_table_data_version.base.has_data, None);
+        assert_eq!(physical_table_data_version.has_data, None);
+        assert_eq!(physical_table_data_version.execution_id, execution.id);
+        assert_eq!(physical_table_data_version.transaction_id, transaction.id);
         assert_eq!(
-            physical_table_data_version.base.execution_id,
-            execution.base.id
-        );
-        assert_eq!(
-            physical_table_data_version.base.transaction_id,
-            transaction.base.id
-        );
-        assert_eq!(
-            physical_table_data_version.base.physical_function_run_id,
-            physical_function_run.base.id
+            physical_table_data_version.physical_function_run_id,
+            physical_function_run.id
         );
     }
 }

@@ -6,7 +6,7 @@ use super::build_external_location;
 use td_database::access::{AccessMode, DbScope};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_error::{ApiError, TdError, api_error};
-use td_objects::dxo::worker::WorkerDBWithNames;
+use td_objects::dxo::worker::{WorkerDB, WorkerDBWithNames, WorkerInsertDB};
 use td_objects::dxo::worker_input::stream::{StreamerInfo, StreamerInput};
 use td_objects::types::basic::AtTime;
 use td_queries::Queries;
@@ -24,9 +24,28 @@ pub(crate) async fn build_streamer_input<S: DbScope, M: AccessMode>(
     storage: &Storage,
     worker: WorkerDBWithNames,
 ) -> Result<StreamerInput, TdError> {
+    let WorkerDBWithNames {
+        base:
+            WorkerDB {
+                base:
+                    WorkerInsertDB {
+                        id,
+                        collection_id,
+                        function_version_id,
+                        ..
+                    },
+                project_id,
+                ..
+            },
+        collection,
+        function_id,
+        function,
+        project,
+        ..
+    } = worker;
     let f = conn
         .logical_runs()
-        .with_bundle_base_path(std::slice::from_ref(&worker.base.base.function_version_id))
+        .with_bundle_base_path(std::slice::from_ref(&function_version_id))
         .await?
         .into_iter()
         .next()
@@ -34,53 +53,52 @@ pub(crate) async fn build_streamer_input<S: DbScope, M: AccessMode>(
             api_error!(
                 ApiError::InternalError,
                 "stage trigger worker [{}] references unknown function_version_id {}",
-                worker.base.base.id,
-                worker.base.base.function_version_id
+                id,
+                function_version_id
             )
         })?;
 
-    let storage_location = StorageLocation::from(&f.base.base.storage_version);
+    let storage_location = StorageLocation::from(&f.storage_version);
 
     // Function bundle (stamped bundle_base_path + bundle_id).
     let (path, _) = storage_location
         .builder(&f.bundle_base_path)
-        .collection(&f.base.base.collection_id)
-        .function(&f.base.base.bundle_id)
+        .collection(&f.collection_id)
+        .function(&f.bundle_id)
         .build()?;
     let (function_bundle, _) = build_external_location(storage, &path)?;
 
     // Function stage (stamped stage_base_path + stage_id).
     let (path, _) = storage_location
-        .builder(&f.base.base.stage_base_path)
-        .collection(&f.base.base.collection_id)
-        .stage(&f.base.base.stage_id)
+        .builder(&f.stage_base_path)
+        .collection(&f.collection_id)
+        .stage(&f.stage_id)
         .build()?;
     let (function_stage, _) = build_external_location(storage, &path)?;
 
-    let project = worker
-        .project
+    let project = project
         .ok_or_else(|| {
             api_error!(
                 ApiError::InternalError,
                 "stage trigger worker [{}] references unknown project {}",
-                worker.base.base.id,
-                worker.base.project_id
+                id,
+                project_id
             )
         })?
         .name()?;
 
     let info = StreamerInfo {
-        project_id: worker.base.project_id,
+        project_id,
         project,
-        collection_id: worker.base.base.collection_id,
-        collection: worker.collection.name()?,
-        function_id: worker.function_id,
-        function: worker.function,
-        function_version_id: worker.base.base.function_version_id,
-        function_defined_on: f.base.interval.valid_from.into(),
+        collection_id,
+        collection: collection.name()?,
+        function_id,
+        function,
+        function_version_id,
+        function_defined_on: f.interval.valid_from.into(),
         function_bundle,
         function_stage,
-        worker_id: worker.base.base.id,
+        worker_id: id,
         scheduled_on: AtTime::now(),
     };
     Ok(StreamerInput { info })

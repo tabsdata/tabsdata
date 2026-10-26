@@ -38,11 +38,11 @@ pub(crate) async fn seed_worker(
     };
     let worker_db = WorkerInsertDB {
         id: WorkerId::new(),
-        collection_id: collection.base.collection_id,
+        collection_id: collection.collection_id,
         execution_id: None,
         transaction_id: None,
         physical_function_run_id: None,
-        function_version_id: function.base.id.clone(),
+        function_version_id: function.id.clone(),
         started_on: None,
         ended_on: None,
         status: *worker_status,
@@ -63,14 +63,14 @@ pub(crate) async fn seed_function_runner_worker(
 ) -> Result<WorkerDB, TdError> {
     let worker_db = WorkerInsertDB {
         id: WorkerId::new(),
-        collection_id: execution.base.collection_id,
-        execution_id: Some(execution.base.id.clone()),
-        transaction_id: Some(transaction.base.id.clone()),
-        physical_function_run_id: Some(physical_function_run.base.id.clone()),
-        function_version_id: physical_function_run.base.function_version_id.clone(),
+        collection_id: execution.collection_id,
+        execution_id: Some(execution.id.clone()),
+        transaction_id: Some(transaction.id.clone()),
+        physical_function_run_id: Some(physical_function_run.id.clone()),
+        function_version_id: physical_function_run.function_version_id.clone(),
         started_on: None,
         ended_on: None,
-        status: match physical_function_run.base.status {
+        status: match physical_function_run.status {
             PhysicalFunctionRunStatus::Requested | PhysicalFunctionRunStatus::Dispatched => {
                 WorkerStatus::Requested
             }
@@ -103,7 +103,7 @@ mod tests {
     async fn test_seed_worker(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -138,14 +138,14 @@ mod tests {
         };
 
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version)
             .await
@@ -153,14 +153,14 @@ mod tests {
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -173,21 +173,21 @@ mod tests {
             .unwrap();
 
         let worker = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function_runner_worker(&execution, &transaction, &physical_function_run)
             .await
             .unwrap();
 
-        assert_eq!(worker.base.collection_id, collection.base.collection_id);
+        assert_eq!(worker.collection_id, collection.collection_id);
         assert_eq!(worker.base.execution_id, Some(execution.base.id));
         assert_eq!(worker.base.transaction_id, Some(transaction.base.id));
         assert_eq!(
-            worker.base.physical_function_run_id,
+            worker.physical_function_run_id,
             Some(physical_function_run.base.id)
         );
         assert_eq!(
-            worker.base.function_version_id,
+            worker.function_version_id,
             physical_function_run.base.function_version_id
         );
     }

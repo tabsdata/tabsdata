@@ -51,7 +51,7 @@ mod tests {
         let before = AtTime::now();
         let name = CollectionName::try_from("ds0").unwrap();
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&name, &UserId::admin())
             .await;
@@ -60,7 +60,7 @@ mod tests {
             .read(CollectionParam {
                 collection: CollectionIdName::from_str(&name.to_string()).unwrap(),
             })
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db);
         let response = service.read_collection(request).await;

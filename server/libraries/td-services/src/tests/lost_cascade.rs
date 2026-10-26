@@ -53,11 +53,11 @@ async fn test_a_registration_racing_a_table_delete_does_not_stay_active(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c_0 = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_0")?, &UserId::admin())
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .function(
             &c_0,
@@ -71,7 +71,7 @@ async fn test_a_registration_racing_a_table_delete_does_not_stay_active(
         )
         .await?;
     let c_1 = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_1")?, &UserId::admin())
         .await?;
@@ -90,25 +90,25 @@ async fn test_a_registration_racing_a_table_delete_does_not_stay_active(
                 ..Default::default()
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     Services::with_defaults(db.clone())
         .update_function(freeze_t_gone)
         .await?;
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = DbPool::in_project(&pools, &p.base.project_id)
+    let mut gate = DbPool::in_project(&pools, &p.project_id)
         .begin(Attempt::unretried())
         .await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("table delete held open"));
-    let topology_at = conn.topology().bump(&p.base.project_id, at).await?;
+    let topology_at = conn.topology().bump(&p.project_id, at).await?;
     let collection = resolve_collection_id(conn, &CollectionIdName::from_str("c_0")?).await?;
     let table: TableDBWithNames = conn
         .scd2()
         .fetch_one(and!(&collection, &TableIdName::from_str("t_gone")?))
         .await?;
-    let table_id = table.base.base.table_id;
+    let table_id = table.table_id;
     let frozen: Vec<FunctionInsertDB> = dependants_of_tables(conn, &[table_id])
         .await?
         .iter()
@@ -121,7 +121,7 @@ async fn test_a_registration_racing_a_table_delete_does_not_stay_active(
     conn.scd2().close::<TableDB>(&table_id, topology_at).await?;
 
     let services = Services::with_defaults(db.clone());
-    let project = p.base.project_id;
+    let project = p.project_id;
     let mut registering = tokio::spawn(async move {
         let request = admin()
             .create(
@@ -156,7 +156,7 @@ async fn test_a_registration_racing_a_table_delete_does_not_stay_active(
             ApiError::Unavailable,
             "the delete failed for another reason: {conflict}"
         );
-        delete_t_gone(&db, p.base.project_id)
+        delete_t_gone(&db, p.project_id)
             .await
             .expect("delete task")?;
     }
@@ -165,13 +165,13 @@ async fn test_a_registration_racing_a_table_delete_does_not_stay_active(
         let late_reader: Option<FunctionDBWithNames> = db
             .scd2()
             .fetch_optional(and!(
-                &c_1.base.collection_id,
+                &c_1.collection_id,
                 &FunctionIdName::Name(FunctionName::try_from("late_reader")?)
             ))
             .await?;
         if let Some(late_reader) = late_reader {
             assert_eq!(
-                late_reader.base.base.status,
+                late_reader.status,
                 FunctionStatus::Frozen,
                 "late_reader stays active on the deleted c_0/t_gone"
             );

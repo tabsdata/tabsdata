@@ -22,5 +22,5 @@ pub async fn active_session(
     access_token_id: &AccessTokenId,
 ) -> Result<Option<Session>, TdError> {
     let session: Option<Session> = conn.fetch_optional(access_token_id).await?;
-    Ok(session.filter(|session| session.base.status == SessionStatus::Active))
+    Ok(session.filter(|session| session.status == SessionStatus::Active))
 }

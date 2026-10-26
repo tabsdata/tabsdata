@@ -48,7 +48,7 @@ async fn test_projects(db: &TdPool, n: usize) -> Result<Vec<ProjectDB>, TdError>
     let mut out = Vec::with_capacity(n.max(1));
     for i in 0..n.max(1) {
         let name = ProjectName::try_from(format!("test_p{i}").as_str())?;
-        match existing.iter().find(|p| p.base.name == name) {
+        match existing.iter().find(|p| p.name == name) {
             Some(p) => out.push(p.clone()),
             None => out.push(db.seed().project(name).await?),
         }
@@ -77,7 +77,7 @@ pub async fn metrics_dataset(db: &TdPool, knobs: MetricsKnobs) -> Result<usize, 
     for (pi, project) in projects.iter().enumerate() {
         let pubs = share(knobs.publishers, np, pi);
         let cons = share(knobs.consumers, np, pi);
-        seed_project_runs(db, project.base.project_id, pubs, cons).await?;
+        seed_project_runs(db, project.project_id, pubs, cons).await?;
     }
     Ok(knobs.publishers + knobs.consumers)
 }
@@ -242,7 +242,7 @@ struct Unit {
 pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle, TdError> {
     let user = system_user()?;
     let project = test_projects(db, 1).await?.remove(0);
-    let pid = project.base.project_id;
+    let pid = project.project_id;
     let mut execs = Vec::with_capacity(knobs.units * 2);
     let mut fr_ids = Vec::with_capacity(knobs.units * 2);
     let mut producer_lfrs = Vec::with_capacity(knobs.units);
@@ -265,7 +265,7 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
             )
             .await?;
         if collection_id.is_none() {
-            collection_id = Some(coll.base.collection_id);
+            collection_id = Some(coll.collection_id);
         }
         // Producer first: the consumer's dependency ref resolves against its
         // `src` table.
@@ -379,28 +379,28 @@ async fn build_unit(
 
     let lfr = LogicalFunctionRunInsertDB {
         id: LogicalFunctionRunId::new(),
-        collection_id: collection.base.collection_id,
-        execution_id: exec.base.id.clone(),
-        transaction_id: trx.base.id.clone(),
-        function_id: func.base.function_id,
-        function_version_id: func.base.id.clone(),
+        collection_id: collection.collection_id,
+        execution_id: exec.id.clone(),
+        transaction_id: trx.id.clone(),
+        function_id: func.function_id,
+        function_version_id: func.id.clone(),
         trigger: Trigger::Manual,
-        triggered_on: trx.base.triggered_on,
-        triggered_by_id: trx.base.triggered_by_id,
+        triggered_on: trx.triggered_on,
+        triggered_by_id: trx.triggered_by_id,
         status: LogicalFunctionRunStatus::Done,
-        group_id: collection.base.group_id,
+        group_id: collection.group_id,
     };
     let pfr_id = PhysicalFunctionRunId::new();
     let mut pfr = PhysicalFunctionRunInsertDB {
         id: pfr_id.clone(),
-        collection_id: collection.base.collection_id,
-        function_id: func.base.function_id,
-        function_version_id: func.base.id.clone(),
-        execution_id: exec.base.id.clone(),
-        transaction_id: trx.base.id.clone(),
-        triggered_by_id: trx.base.triggered_by_id,
+        collection_id: collection.collection_id,
+        function_id: func.function_id,
+        function_version_id: func.id.clone(),
+        execution_id: exec.id.clone(),
+        transaction_id: trx.id.clone(),
+        triggered_by_id: trx.triggered_by_id,
         trigger: Trigger::Manual,
-        base_path: collection.base.base_path.clone().unwrap_or_default(),
+        base_path: collection.base_path.clone().unwrap_or_default(),
         dispatched_on: None,
         started_on: None,
         ended_on: None,
@@ -415,7 +415,7 @@ async fn build_unit(
     }
     let pfr = pfr;
 
-    let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&func.base.id).await?;
+    let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&func.id).await?;
     let table = tables
         .into_iter()
         .next()
@@ -423,24 +423,24 @@ async fn build_unit(
 
     let ltdv = LogicalTableDataVersionInsertDB {
         id: LogicalTableDataVersionId::new(),
-        collection_id: collection.base.collection_id,
-        execution_id: exec.base.id.clone(),
-        transaction_id: trx.base.id.clone(),
-        table_id: table.base.table_id,
+        collection_id: collection.collection_id,
+        execution_id: exec.id.clone(),
+        transaction_id: trx.id.clone(),
+        table_id: table.table_id,
         producer_logical_function_run_id: Some(lfr.id.clone()),
-        function_param_pos: table.base.function_param_pos,
+        function_param_pos: table.function_param_pos,
         private: Private::FALSE,
-        triggered_on: trx.base.triggered_on,
-        triggered_by_id: trx.base.triggered_by_id,
-        group_id: collection.base.group_id,
+        triggered_on: trx.triggered_on,
+        triggered_by_id: trx.triggered_by_id,
+        group_id: collection.group_id,
     };
     let ptdv = PhysicalTableDataVersionInsertDB {
         id: PhysicalTableDataVersionId::new(),
         collection_id: ltdv.collection_id,
-        table_id: table.base.table_id,
-        name: table.base.name.clone(),
-        table_version_id: table.base.id,
-        function_version_id: table.base.function_version_id.clone(),
+        table_id: table.table_id,
+        name: table.name.clone(),
+        table_version_id: table.id,
+        function_version_id: table.function_version_id.clone(),
         function_version_patch_id: None,
         execution_id: ltdv.execution_id.clone(),
         transaction_id: ltdv.transaction_id.clone(),
@@ -461,16 +461,16 @@ async fn build_unit(
     };
 
     let unit = Unit {
-        function_id: func.base.function_id,
-        function_version_id: func.base.id.clone(),
-        execution_id: exec.base.id.clone(),
-        transaction_id: trx.base.id.clone(),
+        function_id: func.function_id,
+        function_version_id: func.id.clone(),
+        execution_id: exec.id.clone(),
+        transaction_id: trx.id.clone(),
         pfr_id: pfr.id.clone(),
         lfr_id: lfr.id.clone(),
         ltdv: ltdv.clone(),
     };
     graph.lfrs.push(lfr);
-    let at = LockInstant::asserted(*trx.base.triggered_on);
+    let at = LockInstant::asserted(*trx.triggered_on);
     graph.pfrs.push((pfr, at));
     graph.ltdvs.push(ltdv);
     graph.ptdvs.push((ptdv, at));
@@ -485,7 +485,7 @@ fn build_lfri(
 ) -> Result<LogicalFunctionRunInputInsertDB, TdError> {
     Ok(LogicalFunctionRunInputInsertDB {
         id: LogicalFunctionRunInputId::default(),
-        collection_id: collection.base.collection_id,
+        collection_id: collection.collection_id,
         execution_id: consumer.execution_id.clone(),
         transaction_id: consumer.transaction_id.clone(),
         logical_function_run_id: consumer.lfr_id.clone(),

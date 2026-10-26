@@ -56,16 +56,16 @@ fn kubernetes(db: &TdPool) -> (Services, InMemoryOrchestratorMessageQueue) {
 async fn running(db: &TdPool) -> Result<(ProjectId, ExecutionResponse), TdError> {
     let p = db.seed().test_project().await?;
     let seeded = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from(COLLECTION)?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&seeded, &register(FUNCTION, None))
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .worker(
             &seeded,
@@ -90,10 +90,10 @@ async fn running(db: &TdPool) -> Result<(ProjectId, ExecutionResponse), TdError>
                 external_uid: None,
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     let execution = dispatch_services(db).execute_function(execute).await?.data;
     kubernetes(db).0.request(()).await?;
-    Ok((p.base.project_id, execution))
+    Ok((p.project_id, execution))
 }
 
 async fn delete_collection_and_project(db: &TdPool, project: ProjectId) -> Result<(), TdError> {
@@ -141,24 +141,21 @@ async fn test_a_deleted_project_ends_its_runs_and_stops_its_workers(
     let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution.id).await?;
     assert!(!runs.is_empty());
     for run in &runs {
-        assert_eq!(run.base.status, LogicalFunctionRunStatus::Canceled);
-        let transaction: TransactionDB = db.fetch_one(&run.base.transaction_id).await?;
+        assert_eq!(run.status, LogicalFunctionRunStatus::Canceled);
+        let transaction: TransactionDB = db.fetch_one(&run.transaction_id).await?;
         assert_eq!(transaction.status, TransactionStatus::Canceled);
     }
     let mut stopped = stops(&sent);
     stopped.sort();
-    let mut expected: Vec<String> = live.iter().map(|w| w.base.id.to_string()).collect();
+    let mut expected: Vec<String> = live.iter().map(|w| w.id.to_string()).collect();
     expected.sort();
     assert_eq!(stopped, expected, "every live workload gets a stop");
     for worker in live {
-        let after: WorkerDB = db.fetch_one(&worker.base.id).await?;
-        if worker.base.worker_type == WorkerType::CronTrigger {
-            assert_eq!(after.base.status, WorkerStatus::Stopped);
+        let after: WorkerDB = db.fetch_one(&worker.id).await?;
+        if worker.worker_type == WorkerType::CronTrigger {
+            assert_eq!(after.status, WorkerStatus::Stopped);
         } else {
-            assert!(
-                after.base.ended_on.is_some(),
-                "the runner is left {after:?}"
-            );
+            assert!(after.ended_on.is_some(), "the runner is left {after:?}");
         }
     }
     Ok(())

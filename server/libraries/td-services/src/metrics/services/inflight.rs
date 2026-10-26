@@ -78,7 +78,7 @@ mod tests {
             .inflight(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(request)
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?
             .data;
@@ -104,7 +104,7 @@ mod tests {
 
         // An in-flight run in the first project.
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("inflight_iso_coll")?,
@@ -132,21 +132,17 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(p.base.project_id)
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.project_id).seed().execution(&function).await?;
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -166,7 +162,7 @@ mod tests {
                         groups: DimensionFilter::default(),
                         statuses: vec![],
                     })
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?
             .data;
@@ -184,7 +180,7 @@ mod tests {
                         groups: DimensionFilter::default(),
                         statuses: vec![],
                     })
-                    .in_project(other_project.base.project_id),
+                    .in_project(other_project.project_id),
             )
             .await?
             .data;
@@ -249,7 +245,7 @@ mod tests {
         // Project A: an in-flight run in one of its collections.
         let p = db.seed().test_project().await?;
         let coll_a = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("g_inflight_a")?, &UserId::admin())
             .await?;
@@ -276,11 +272,11 @@ mod tests {
                             secrets: None,
                         },
                     )
-                    .in_project(project_b.base.project_id),
+                    .in_project(project_b.project_id),
             )
             .await?;
         let coll_b: CollectionDB = db
-            .scoped(project_b.base.project_id)
+            .scoped(project_b.project_id)
             .scd2()
             .fetch_one::<CollectionDB>(&coll_b_name)
             .await?;
@@ -304,21 +300,21 @@ mod tests {
         let row_a = response
             .rows
             .iter()
-            .find(|r| r.collection_id == coll_a.base.collection_id)
+            .find(|r| r.collection_id == coll_a.collection_id)
             .expect("project A collection's in-flight run must appear in the global view");
         let row_b = response
             .rows
             .iter()
-            .find(|r| r.collection_id == coll_b.base.collection_id)
+            .find(|r| r.collection_id == coll_b.collection_id)
             .expect("project B collection's in-flight run must appear in the global view");
 
         // Each row is attributed to its own project.
-        assert_eq!(row_a.project_id, p.base.project_id);
-        assert_eq!(row_b.project_id, project_b.base.project_id);
+        assert_eq!(row_a.project_id, p.project_id);
+        assert_eq!(row_b.project_id, project_b.project_id);
         // Each project's `default` group is a row of its own.
-        assert_eq!(row_a.group_id, coll_a.base.group_id);
-        assert_eq!(row_b.group_id, coll_b.base.group_id);
-        assert_ne!(coll_a.base.group_id, coll_b.base.group_id);
+        assert_eq!(row_a.group_id, coll_a.group_id);
+        assert_eq!(row_b.group_id, coll_b.group_id);
+        assert_ne!(coll_a.group_id, coll_b.group_id);
         // A groups join not matching project_id would fan out and double these.
         assert_eq!(row_a.count, 1, "fan-out: project A count inflated");
         assert_eq!(row_b.count, 1, "fan-out: project B count inflated");

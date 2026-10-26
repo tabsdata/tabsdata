@@ -46,7 +46,7 @@ mod tests {
     async fn test_list_execution(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -76,28 +76,28 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let executions = [
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .execution(&function_version)
                 .await?,
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .execution(&function_version)
                 .await?,
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .execution(&function_version)
                 .await?,
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .execution(&function_version)
                 .await?,
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .execution(&function_version)
                 .await?,
@@ -109,32 +109,17 @@ mod tests {
 
         let response = service.execution_list(request).await?.data;
         assert_eq!(response.len, executions.len());
-        assert_eq!(response.data[0].id, executions[0].base.id);
-        assert_eq!(
-            response.data[0].triggered_on,
-            executions[0].base.triggered_on
-        );
-        assert_eq!(response.data[1].id, executions[1].base.id);
-        assert_eq!(
-            response.data[1].triggered_on,
-            executions[1].base.triggered_on
-        );
-        assert_eq!(response.data[2].id, executions[2].base.id);
-        assert_eq!(
-            response.data[2].triggered_on,
-            executions[2].base.triggered_on
-        );
-        assert_eq!(response.data[3].id, executions[3].base.id);
-        assert_eq!(
-            response.data[3].triggered_on,
-            executions[3].base.triggered_on
-        );
-        assert_eq!(response.data[4].id, executions[4].base.id);
-        assert_eq!(
-            response.data[4].triggered_on,
-            executions[4].base.triggered_on
-        );
-        let base = Some(p.base.name.clone());
+        assert_eq!(response.data[0].id, executions[0].id);
+        assert_eq!(response.data[0].triggered_on, executions[0].triggered_on);
+        assert_eq!(response.data[1].id, executions[1].id);
+        assert_eq!(response.data[1].triggered_on, executions[1].triggered_on);
+        assert_eq!(response.data[2].id, executions[2].id);
+        assert_eq!(response.data[2].triggered_on, executions[2].triggered_on);
+        assert_eq!(response.data[3].id, executions[3].id);
+        assert_eq!(response.data[3].triggered_on, executions[3].triggered_on);
+        assert_eq!(response.data[4].id, executions[4].id);
+        assert_eq!(response.data[4].triggered_on, executions[4].triggered_on);
+        let base = Some(p.name.clone());
         assert!(
             response
                 .data
@@ -147,9 +132,9 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_execution_wildcard_spans_projects(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        let base_exec = seed_run(&db, base.base.project_id).await?.execution;
+        let base_exec = seed_run(&db, base.project_id).await?.execution;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let alpha_exec = seed_run(&db, alpha.base.project_id).await?.execution;
+        let alpha_exec = seed_run(&db, alpha.project_id).await?.execution;
 
         let service = Services::with_defaults(db.clone());
         let wildcard = service
@@ -162,10 +147,7 @@ mod tests {
 
         // The wildcard spans both projects and each row resolves to its own.
         let base_row = wildcard.data.iter().find(|e| e.id == base_exec).unwrap();
-        assert_eq!(
-            base_row.project,
-            Some(ProjectLabel::new(base.base.name.clone()))
-        );
+        assert_eq!(base_row.project, Some(ProjectLabel::new(base.name.clone())));
         let alpha_row = wildcard.data.iter().find(|e| e.id == alpha_exec).unwrap();
         assert_eq!(
             alpha_row.project,
@@ -177,11 +159,11 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_execution_wildcard_filters_to_viewable(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        let base_exec = seed_run(&db, base.base.project_id).await?.execution;
+        let base_exec = seed_run(&db, base.project_id).await?.execution;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let alpha_exec = seed_run(&db, alpha.base.project_id).await?.execution;
+        let alpha_exec = seed_run(&db, alpha.project_id).await?.execution;
 
-        let user = seed_project_viewer(&db, base.base.project_id).await?;
+        let user = seed_project_viewer(&db, base.project_id).await?;
 
         let service = Services::with_defaults(db.clone());
         let response = service
@@ -200,12 +182,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_execution_wildcard_skips_deleted_project(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        let base_exec = seed_run(&db, base.base.project_id).await?.execution;
+        let base_exec = seed_run(&db, base.project_id).await?.execution;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        let alpha_exec = seed_run(&db, alpha.base.project_id).await?.execution;
+        let alpha_exec = seed_run(&db, alpha.project_id).await?.execution;
 
         let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
-        delete_project(&db, alpha.base.project_id).await?;
+        delete_project(&db, alpha.project_id).await?;
 
         let service = Services::with_defaults(db.clone());
         let wildcard = service

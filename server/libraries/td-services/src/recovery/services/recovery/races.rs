@@ -44,12 +44,12 @@ fn no_grace() -> RecoveryConfig {
 async fn started(db: &TdPool, attempt: &PhysicalFunctionRunDB) -> Result<AtTime, TdError> {
     let at = AtTime::now();
     let running = PhysicalFunctionRunUpdateDB {
-        dispatched_on: attempt.base.dispatched_on,
+        dispatched_on: attempt.dispatched_on,
         started_on: Some(at.into()),
         ended_on: None,
         status: PhysicalFunctionRunStatus::Running,
     };
-    db.scd2().update(&running, &attempt.base.id).await?;
+    db.scd2().update(&running, &attempt.id).await?;
     Ok(at)
 }
 
@@ -100,13 +100,13 @@ async fn test_a_start_reported_after_the_judgement_keeps_the_attempt(
     let committed = apply(&db, &project, &actions).await?;
 
     assert!(committed.fn_actions.is_empty(), "{committed:?}");
-    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.base.id).await?;
-    assert_eq!(after.base.status, PhysicalFunctionRunStatus::Running);
-    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.base.id).await?;
+    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.id).await?;
+    assert_eq!(after.status, PhysicalFunctionRunStatus::Running);
+    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.id).await?;
     assert!(
         workers
             .iter()
-            .all(|worker| worker.base.status != WorkerStatus::Failed),
+            .all(|worker| worker.status != WorkerStatus::Failed),
         "{workers:?}"
     );
     Ok(())
@@ -125,9 +125,9 @@ async fn test_a_failed_attempt_ends_after_it_started(db: TdPool) -> Result<(), T
 
     apply(&db, &project, &actions).await?;
 
-    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.base.id).await?;
-    assert_eq!(after.base.status, PhysicalFunctionRunStatus::Failed);
-    let ended_on = after.base.ended_on.expect("a failed attempt has an end");
+    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.id).await?;
+    assert_eq!(after.status, PhysicalFunctionRunStatus::Failed);
+    let ended_on = after.ended_on.expect("a failed attempt has an end");
     assert!(*ended_on >= started_on, "{ended_on:?} < {started_on:?}");
     Ok(())
 }
@@ -137,13 +137,10 @@ async fn test_a_failed_attempt_ends_after_it_started(db: TdPool) -> Result<(), T
 #[td_test::test(db)]
 async fn test_a_run_still_being_created_is_not_missing(db: TdPool) -> Result<(), TdError> {
     let (_, attempt) = dispatched_publisher(&db, COLLECTION, FUNCTION).await?;
-    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.base.id).await?;
+    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.id).await?;
     let queued = WorkloadObservation {
         workloads: Vec::new(),
-        queued: workers
-            .iter()
-            .map(|worker| worker.base.id.clone())
-            .collect(),
+        queued: workers.iter().map(|worker| worker.id.clone()).collect(),
     };
     let actions = judged(&db, &AtTime::now(), &queued).await?;
     assert!(actions.fn_actions.is_empty(), "{actions:?}");

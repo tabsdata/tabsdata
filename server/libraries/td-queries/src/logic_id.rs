@@ -195,7 +195,7 @@ mod tests {
 
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection")?,
@@ -223,15 +223,15 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let patch = FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: function.base.id.clone().into(),
-            function_id: function.base.function_id,
-            collection_id: function.base.collection_id,
+            parent_function_version_id: function.id.clone().into(),
+            function_id: function.function_id,
+            collection_id: function.collection_id,
             snippet: Snippet::try_from("S")?,
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("V")?,
@@ -239,7 +239,7 @@ mod tests {
             defined_by_id: UserId::try_from(ENCODED_ID_SYSTEM)?,
             status: FunctionStatus::Active,
         };
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .scd2()
             .open(&patch, LockInstant::asserted(*function.interval.valid_from))
             .await?;
@@ -259,7 +259,7 @@ mod tests {
     async fn test_initial_logical_ids(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection")?,
@@ -290,7 +290,7 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -300,31 +300,27 @@ mod tests {
                 tables: vec![TableNameDto::try_from(format!("t{n}"))?].into(),
                 ..create.clone()
             };
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .function(&collection, &another)
                 .await?;
         }
 
-        let execution = db
-            .scoped(p.base.project_id)
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.project_id).seed().execution(&function).await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
 
         let physical_function_run = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -338,13 +334,13 @@ mod tests {
         let table_version = db
             .scd2()
             .fetch_first::<TableDB>(and!(
-                &collection.base.collection_id,
+                &collection.collection_id,
                 TableName::try_from(table_name)?
             ))
             .await?
             .expect("seeded table must exist");
 
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,

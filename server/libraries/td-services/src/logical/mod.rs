@@ -27,9 +27,9 @@ pub fn index_lfrs_by_exec_fn(
 ) -> HashMap<ExecutionId, HashMap<FunctionId, LogicalFunctionRunDB>> {
     let mut out: HashMap<ExecutionId, HashMap<FunctionId, LogicalFunctionRunDB>> = HashMap::new();
     for lfr in lfrs {
-        out.entry(lfr.base.execution_id.clone())
+        out.entry(lfr.execution_id.clone())
             .or_default()
-            .insert(lfr.base.function_id, lfr);
+            .insert(lfr.function_id, lfr);
     }
     out
 }

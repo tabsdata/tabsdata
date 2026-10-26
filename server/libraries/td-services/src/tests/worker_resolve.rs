@@ -47,22 +47,23 @@ async fn test_a_resolve_waiting_on_a_cancel_of_its_attempt_answers_not_found(
             }],
         }],
     }];
+    let project_id = p.project_id;
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, _, f, w| {
             let db = db.clone();
             let function = &test_executions[0].transactions[0].functions[0];
-            let attempt = f[function].base.id.clone();
-            let worker = w[function].base.id.clone();
+            let attempt = f[function].id.clone();
+            let worker = w[function].id.clone();
             async move {
                 let pools = DbPool::<AcrossProjects>::new(
                     DomainPools::of_apiserver(db.clone()),
                     AcrossProjects,
                 );
                 let mut gate = pools
-                    .in_project(&p.base.project_id)
+                    .in_project(&project_id)
                     .begin(Attempt::unretried())
                     .await?;
                 let at = gate.locked_at();

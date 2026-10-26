@@ -121,7 +121,7 @@ mod tests {
             .await?;
         let function = active
             .into_iter()
-            .find(|f| f.base.name == *name)
+            .find(|f| f.name == *name)
             .expect("matching active function exists");
         Ok(function)
     }
@@ -157,7 +157,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -195,7 +195,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await;
@@ -209,7 +209,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -246,7 +246,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await?.data;
@@ -254,7 +254,7 @@ mod tests {
         assert_eq!(*response.snippet, module);
 
         let stored: FunctionDB = db.timeline().fetch_one(&response.id).await?;
-        assert_eq!(*stored.base.snippet, module);
+        assert_eq!(*stored.snippet, module);
 
         assert_register(&db, &UserId::admin(), &collection, &create, &response).await
     }
@@ -265,7 +265,7 @@ mod tests {
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -305,7 +305,7 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await?.data;
@@ -323,7 +323,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -361,7 +361,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await;
@@ -375,7 +375,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -413,7 +413,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await;
@@ -429,7 +429,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -454,7 +454,7 @@ mod tests {
             enabled: None,
             workers: None,
         };
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .function(&collection, &producer)
             .await?;
@@ -480,7 +480,7 @@ mod tests {
             workers: None,
         };
         let consumer_function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &consumer)
             .await?;
@@ -495,7 +495,7 @@ mod tests {
                     function: FunctionIdName::from_str("producer")?,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         service.delete_function(request).await?;
 
         let frozen: Vec<TableDB> = db
@@ -503,14 +503,14 @@ mod tests {
             .fetch_all::<TableDB>(and!(TableName::try_from("table_foo")?, TableStatus::Frozen))
             .await?;
         assert_eq!(frozen.len(), 1);
-        let table_id = frozen[0].base.table_id;
+        let table_id = frozen[0].table_id;
 
         let triggers: Vec<TriggerDB> = db
             .scd2()
-            .fetch_all::<TriggerDB>(&consumer_function.base.function_id)
+            .fetch_all::<TriggerDB>(&consumer_function.function_id)
             .await?;
         assert_eq!(triggers.len(), 1);
-        assert_eq!(triggers[0].base.status, TriggerStatus::Frozen);
+        assert_eq!(triggers[0].status, TriggerStatus::Frozen);
 
         let successor = FunctionRegister {
             child_functions: None,
@@ -524,7 +524,7 @@ mod tests {
                 },
                 successor.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let error = service.register_function(request).await.unwrap_err();
         assert!(matches!(
             error.domain_err::<RegisterFunctionError>(),
@@ -543,7 +543,7 @@ mod tests {
                 },
                 successor.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let registered = service.register_function(request).await?.data;
 
         let tables: Vec<TableDB> = db
@@ -551,19 +551,16 @@ mod tests {
             .fetch_all::<TableDB>(and!(TableName::try_from("table_foo")?, TableStatus::Active))
             .await?;
         assert_eq!(tables.len(), 1);
-        assert_eq!(tables[0].base.table_id, table_id);
-        assert_eq!(tables[0].base.function_id, registered.function_id);
+        assert_eq!(tables[0].table_id, table_id);
+        assert_eq!(tables[0].function_id, registered.function_id);
 
         let triggers: Vec<TriggerDB> = db
             .scd2()
-            .fetch_all::<TriggerDB>(&consumer_function.base.function_id)
+            .fetch_all::<TriggerDB>(&consumer_function.function_id)
             .await?;
         assert_eq!(triggers.len(), 1);
-        assert_eq!(triggers[0].base.status, TriggerStatus::Active);
-        assert_eq!(
-            *triggers[0].base.trigger_by_function_id,
-            registered.function_id
-        );
+        assert_eq!(triggers[0].status, TriggerStatus::Active);
+        assert_eq!(*triggers[0].trigger_by_function_id, registered.function_id);
         Ok(())
     }
 
@@ -574,7 +571,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let _collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -615,7 +612,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await;
@@ -638,7 +635,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -676,7 +673,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await;
@@ -712,7 +709,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -753,7 +750,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let _response = service.register_function(request).await?.data;
@@ -796,7 +793,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await;
@@ -810,7 +807,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -851,7 +848,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let _response = service.register_function(request).await?.data;
@@ -898,7 +895,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request).await;
@@ -931,13 +928,13 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let _collection_1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
         let collection_2 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name_2, &UserId::admin())
             .await?;
@@ -978,7 +975,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let _response = service.register_function(request).await?.data;
@@ -1019,7 +1016,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let _ = service.register_function(request).await?.data;
@@ -1079,7 +1076,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.register_function(request).await;
@@ -1093,7 +1090,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1131,7 +1128,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.register_function(request.clone()).await;
@@ -1173,13 +1170,13 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
         let collection_1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
         let collection_name_2 = CollectionName::try_from("collection_2")?;
         let collection_2 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name_2, &UserId::admin())
             .await?;
@@ -1213,7 +1210,7 @@ mod tests {
                 enabled: None,
                 workers: None,
             };
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .function(collection, &create)
                 .await?;
@@ -1269,7 +1266,7 @@ mod tests {
                 },
                 create.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.register_function(request).await;
@@ -1287,7 +1284,7 @@ mod tests {
     async fn test_private_table_flag(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
@@ -1326,7 +1323,7 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.register_function(request).await;
@@ -1338,10 +1335,10 @@ mod tests {
             .await?;
         let map: HashMap<String, TableDB> = tables
             .into_iter()
-            .map(|table| (table.base.name.to_string(), table))
+            .map(|table| (table.name.to_string(), table))
             .collect();
-        assert!(!*map.get("table0").unwrap().base.private);
-        assert!(*map.get("_table0").unwrap().base.private);
+        assert!(!*map.get("table0").unwrap().private);
+        assert!(*map.get("_table0").unwrap().private);
         Ok(())
     }
 
@@ -1349,7 +1346,7 @@ mod tests {
     async fn test_dependency_fixed_validation(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
@@ -1385,7 +1382,7 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.register_function(request).await;
@@ -1428,7 +1425,7 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.register_function(request).await;
@@ -1447,7 +1444,7 @@ mod tests {
     async fn test_dependency_range_validation(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection_name_1 = CollectionName::try_from("collection_1")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&collection_name_1, &UserId::admin())
             .await?;
@@ -1481,7 +1478,7 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.register_function(request).await;
@@ -1498,7 +1495,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1533,23 +1530,23 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let service = Services::with_defaults(db.clone());
         let res = service.register_function(request).await?.data;
 
         let workers: Vec<WorkerDB> = db.fetch_all::<WorkerDB>(&res.id).await.unwrap();
         assert_eq!(workers.len(), 1);
         let worker = &workers[0];
-        assert_eq!(worker.base.collection_id, collection.base.collection_id);
-        assert_eq!(worker.base.execution_id, None);
-        assert_eq!(worker.base.transaction_id, None);
-        assert_eq!(worker.base.physical_function_run_id, None);
-        assert_eq!(worker.base.function_version_id, res.id);
-        assert_eq!(worker.base.started_on, None);
-        assert_eq!(worker.base.ended_on, None);
-        assert_eq!(worker.base.status, WorkerStatus::Scheduled);
-        assert_eq!(worker.base.worker_type, WorkerType::CronTrigger);
-        assert_eq!(worker.base.worker_config, Some(WorkerConfig::default()));
+        assert_eq!(worker.collection_id, collection.collection_id);
+        assert_eq!(worker.execution_id, None);
+        assert_eq!(worker.transaction_id, None);
+        assert_eq!(worker.physical_function_run_id, None);
+        assert_eq!(worker.function_version_id, res.id);
+        assert_eq!(worker.started_on, None);
+        assert_eq!(worker.ended_on, None);
+        assert_eq!(worker.status, WorkerStatus::Scheduled);
+        assert_eq!(worker.worker_type, WorkerType::CronTrigger);
+        assert_eq!(worker.worker_config, Some(WorkerConfig::default()));
         Ok(())
     }
 
@@ -1557,7 +1554,7 @@ mod tests {
     async fn test_multiple_workers_error(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("collection")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1593,7 +1590,7 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.register_function(request).await;
@@ -1609,13 +1606,12 @@ mod tests {
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("prod_coll")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
 
-        let prod =
-            set_collection_base_path(&db, p.base.project_id, &collection_name, "/prod").await?;
+        let prod = set_collection_base_path(&db, p.project_id, &collection_name, "/prod").await?;
 
         let create = FunctionRegister {
             child_functions: None,
@@ -1644,13 +1640,13 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let service = Services::with_defaults(db.clone());
         service.register_function(request).await?;
 
         let function = active_function(&db, &FunctionName::try_from("stamped_fn")?).await?;
         assert_eq!(
-            function.base.stage_base_path, prod,
+            function.stage_base_path, prod,
             "stage_base_path is stamped from the collection base_path at register"
         );
         Ok(())
@@ -1666,7 +1662,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -1684,10 +1680,10 @@ mod tests {
                 },
                 upload,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let bundle = context.clone().upload_function(request).await?.data;
         assert_eq!(
-            db.fetch_all::<BundleDB>(&bundle.id).await?[0].base.status,
+            db.fetch_all::<BundleDB>(&bundle.id).await?[0].status,
             BundleStatus::Pending,
             "bundle starts Pending right after upload"
         );
@@ -1719,15 +1715,15 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let service = Services::with_defaults(db.clone());
         service.register_function(request).await?;
 
         let function = active_function(&db, &FunctionName::try_from("flip_fn")?).await?;
-        let bundles: Vec<BundleDB> = db.fetch_all::<BundleDB>(&function.base.bundle_id).await?;
+        let bundles: Vec<BundleDB> = db.fetch_all::<BundleDB>(&function.bundle_id).await?;
         assert_eq!(bundles.len(), 1);
-        assert_eq!(bundles[0].base.status, BundleStatus::Registered);
-        assert_eq!(bundles[0].base.collection_id, collection.base.collection_id);
+        assert_eq!(bundles[0].status, BundleStatus::Registered);
+        assert_eq!(bundles[0].collection_id, collection.collection_id);
         Ok(())
     }
 
@@ -1735,14 +1731,13 @@ mod tests {
     async fn test_register_base_path_override(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("prod_coll")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
 
         // Non-default collection base_path so we can tell override from stamping.
-        let prod =
-            set_collection_base_path(&db, p.base.project_id, &collection_name, "/prod").await?;
+        let prod = set_collection_base_path(&db, p.project_id, &collection_name, "/prod").await?;
 
         let create = FunctionRegister {
             child_functions: None,
@@ -1771,18 +1766,18 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let service = Services::with_defaults(db.clone());
         service.register_function(request).await?;
 
         let function = active_function(&db, &FunctionName::try_from("override_fn")?).await?;
         assert_eq!(
-            function.base.base_path,
+            function.base_path,
             Some(BasePath::try_from("/fn")?),
             "base_path override is persisted on the function version"
         );
         assert_eq!(
-            function.base.stage_base_path, prod,
+            function.stage_base_path, prod,
             "stage_base_path still comes from the collection, not the override"
         );
         Ok(())
@@ -1874,14 +1869,14 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_publisher_matching_connector_ok(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "src_pub", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "src_pub", Some(GroupName::source())).await;
         let create = pubsub_register("pub_fn", Decorator::Publisher, Some("mysqlSrcConn"))?;
-        register_in_kubernetes(&db, p.base.project_id, "src_pub", create).await?;
+        register_in_kubernetes(&db, p.project_id, "src_pub", create).await?;
 
         let function = active_function(&db, &FunctionName::try_from("pub_fn")?).await?;
-        assert_eq!(function.base.decorator, Decorator::Publisher);
+        assert_eq!(function.decorator, Decorator::Publisher);
         assert_eq!(
-            function.base.connection,
+            function.connection,
             Some(ConnectionKind::try_from("mysqlSrcConn")?)
         );
         Ok(())
@@ -1890,20 +1885,14 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_subscriber_matching_connector_ok(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(
-            &db,
-            p.base.project_id,
-            "dst_sub",
-            Some(GroupName::destination()),
-        )
-        .await;
+        create_collection(&db, p.project_id, "dst_sub", Some(GroupName::destination())).await;
         let create = pubsub_register("sub_fn", Decorator::Subscriber, Some("mysqlDestConn"))?;
-        register_in_kubernetes(&db, p.base.project_id, "dst_sub", create).await?;
+        register_in_kubernetes(&db, p.project_id, "dst_sub", create).await?;
 
         let function = active_function(&db, &FunctionName::try_from("sub_fn")?).await?;
-        assert_eq!(function.base.decorator, Decorator::Subscriber);
+        assert_eq!(function.decorator, Decorator::Subscriber);
         assert_eq!(
-            function.base.connection,
+            function.connection,
             Some(ConnectionKind::try_from("mysqlDestConn")?)
         );
         Ok(())
@@ -1912,9 +1901,9 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_publisher_connector_mismatch_err(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "src_mm", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "src_mm", Some(GroupName::source())).await;
         let create = pubsub_register("mm_fn", Decorator::Publisher, Some("postgresSrcConn"))?;
-        let err = register_in_kubernetes(&db, p.base.project_id, "src_mm", create)
+        let err = register_in_kubernetes(&db, p.project_id, "src_mm", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
@@ -1928,9 +1917,9 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_publisher_requires_connector_err(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "src_req", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "src_req", Some(GroupName::source())).await;
         let create = pubsub_register("req_fn", Decorator::Publisher, None)?;
-        let err = register_in_kubernetes(&db, p.base.project_id, "src_req", create)
+        let err = register_in_kubernetes(&db, p.project_id, "src_req", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
@@ -1946,12 +1935,12 @@ mod tests {
         let p = db.seed().test_project().await?;
         // A plain (DataFactory) collection carries no connection.
         let collection_name = CollectionName::try_from("fac_pub")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
         let create = pubsub_register("facpub_fn", Decorator::Publisher, Some("mysqlSrcConn"))?;
-        let err = register_in_kubernetes(&db, p.base.project_id, "fac_pub", create)
+        let err = register_in_kubernetes(&db, p.project_id, "fac_pub", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
@@ -1973,16 +1962,16 @@ mod tests {
         let p = db.seed().test_project().await?;
         // A plain (DataFactory) collection carries no connection.
         let collection_name = CollectionName::try_from("fac_legacy_pub")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
         let create = pubsub_register("legacy_pub_fn", Decorator::Publisher, None)?;
-        register_in(&db, p.base.project_id, "fac_legacy_pub", create).await?;
+        register_in(&db, p.project_id, "fac_legacy_pub", create).await?;
 
         let function = active_function(&db, &FunctionName::try_from("legacy_pub_fn")?).await?;
-        assert_eq!(function.base.decorator, Decorator::Publisher);
-        assert_eq!(function.base.connection, None);
+        assert_eq!(function.decorator, Decorator::Publisher);
+        assert_eq!(function.connection, None);
         Ok(())
     }
 
@@ -1990,12 +1979,12 @@ mod tests {
     async fn test_register_transformer_with_connector_err(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("fac_tf")?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
         let create = pubsub_register("tf_fn", Decorator::Transformer, Some("mysqlSrcConn"))?;
-        let err = register_in_kubernetes(&db, p.base.project_id, "fac_tf", create)
+        let err = register_in_kubernetes(&db, p.project_id, "fac_tf", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
@@ -2009,9 +1998,9 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_transformer_in_source_collection_err(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "src_tf", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "src_tf", Some(GroupName::source())).await;
         let create = pubsub_register("src_tf_fn", Decorator::Transformer, None)?;
-        let err = register_in_kubernetes(&db, p.base.project_id, "src_tf", create)
+        let err = register_in_kubernetes(&db, p.project_id, "src_tf", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
@@ -2027,15 +2016,9 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(
-            &db,
-            p.base.project_id,
-            "dst_tf",
-            Some(GroupName::destination()),
-        )
-        .await;
+        create_collection(&db, p.project_id, "dst_tf", Some(GroupName::destination())).await;
         let create = pubsub_register("dst_tf_fn", Decorator::Transformer, None)?;
-        let err = register_in_kubernetes(&db, p.base.project_id, "dst_tf", create)
+        let err = register_in_kubernetes(&db, p.project_id, "dst_tf", create)
             .await
             .unwrap_err();
         let err = err.domain_err::<RegisterFunctionError>();
@@ -2068,7 +2051,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let parent = register_parent_with_child(
             &db,
-            p.base.project_id,
+            p.project_id,
             "fct_child",
             None,
             Decorator::Transformer,
@@ -2078,7 +2061,7 @@ mod tests {
 
         let child = live_by_name(&db, "child_fn").await?.expect("registered");
         assert_eq!(
-            child.base.parent_function_id,
+            child.parent_function_id,
             Some(Parent::from(parent.function_id))
         );
         Ok(())
@@ -2091,7 +2074,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         register_parent_with_child(
             &db,
-            p.base.project_id,
+            p.project_id,
             "src_child",
             Some(GroupName::source()),
             Decorator::Publisher,
@@ -2110,7 +2093,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         register_parent_with_child(
             &db,
-            p.base.project_id,
+            p.project_id,
             "dst_child",
             Some(GroupName::destination()),
             Decorator::Subscriber,
@@ -2127,17 +2110,11 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(
-            &db,
-            p.base.project_id,
-            "src_regular",
-            Some(GroupName::source()),
-        )
-        .await;
+        create_collection(&db, p.project_id, "src_regular", Some(GroupName::source())).await;
         let mut create = pubsub_register("plain_tfr", Decorator::Transformer, None)?;
         create.tables = Some(vec![TableNameDto::try_from("plain")?]);
 
-        let err = register_in_kubernetes(&db, p.base.project_id, "src_regular", create)
+        let err = register_in_kubernetes(&db, p.project_id, "src_regular", create)
             .await
             .unwrap_err();
 
@@ -2189,22 +2166,22 @@ mod tests {
     #[td_test::test(db)]
     async fn test_parent_function_id_is_stable_across_writes(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "parent_stable", None).await;
+        create_collection(&db, p.project_id, "parent_stable", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        let owner = register_ok(&db, p.base.project_id, "parent_stable", create).await?;
+        let owner = register_ok(&db, p.project_id, "parent_stable", create).await?;
         let expected = Some(Parent::from(owner.function_id));
         let before = live_by_name(&db, "a").await?.expect("child registered");
-        assert_eq!(before.base.parent_function_id, expected);
+        assert_eq!(before.parent_function_id, expected);
 
         let mut update = owner_update(Some(vec![child("a")?]));
         update.name = Some("owner_renamed".try_into()?);
-        update_ok(&db, p.base.project_id, "parent_stable", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "parent_stable", CHILD_OWNER, update).await?;
 
         let after = live_by_name(&db, "a")
             .await?
             .expect("child still registered");
-        assert_ne!(after.base.id, before.base.id);
-        assert_eq!(after.base.parent_function_id, expected);
+        assert_ne!(after.id, before.id);
+        assert_eq!(after.parent_function_id, expected);
         Ok(())
     }
 
@@ -2337,16 +2314,16 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_with_a_child_function_registers_it(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd", None).await;
+        create_collection(&db, p.project_id, "mgd", None).await;
         let mut declared = child("m")?;
         declared.function_type = FunctionType::DQSummaryTrends;
         let create = owner_register(&["owned"], Some(vec![declared]))?;
-        let owner = register_ok(&db, p.base.project_id, "mgd", create).await?;
+        let owner = register_ok(&db, p.project_id, "mgd", create).await?;
 
         let child = live_by_name(&db, "m").await?.expect("child registered");
-        assert_eq!(child.base.function_type, FunctionType::DQSummaryTrends);
+        assert_eq!(child.function_type, FunctionType::DQSummaryTrends);
         assert_eq!(
-            child.base.parent_function_id,
+            child.parent_function_id,
             Some(Parent::from(owner.function_id))
         );
 
@@ -2355,8 +2332,8 @@ mod tests {
         let parent_table = active_table(&db, OWNER_TABLE).await?;
         let child_table = active_table(&db, "m_table").await?;
         assert_eq!(
-            child_table.base.parent_table_id,
-            Some(Parent::from(parent_table.base.table_id))
+            child_table.parent_table_id,
+            Some(Parent::from(parent_table.table_id))
         );
         Ok(())
     }
@@ -2366,14 +2343,14 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_child_parent_table_must_be_owned(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_parent", None).await;
+        create_collection(&db, p.project_id, "mgd_parent", None).await;
         let mut create = owner_register(&["owned"], Some(vec![child("s")?]))?;
         create.parent_tables = Some(HashMap::from([(
             TableNameDto::try_from("s_table")?,
             TableNameDto::try_from("not_owned")?,
         )]));
 
-        let err = register_err(&db, p.base.project_id, "mgd_parent", create).await?;
+        let err = register_err(&db, p.project_id, "mgd_parent", create).await?;
         assert!(matches!(
             err.domain_err::<RegisterFunctionError>(),
             RegisterFunctionError::ParentTableNotOwned(_, _)
@@ -2386,7 +2363,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_child_parent_table_must_be_regular(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_ptype", None).await;
+        create_collection(&db, p.project_id, "mgd_ptype", None).await;
         let mut create = owner_register(&["owned", "summary"], Some(vec![child("d")?]))?;
         create.table_types = Some(HashMap::from([(
             TableNameDto::try_from("summary")?,
@@ -2397,7 +2374,7 @@ mod tests {
             TableNameDto::try_from("summary")?,
         )]));
 
-        let err = register_err(&db, p.base.project_id, "mgd_ptype", create).await?;
+        let err = register_err(&db, p.project_id, "mgd_ptype", create).await?;
         assert!(matches!(
             err.domain_err::<RegisterFunctionError>(),
             RegisterFunctionError::ParentTableMustBeRegular(_, _)
@@ -2412,9 +2389,9 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_reparent", None).await;
+        create_collection(&db, p.project_id, "mgd_reparent", None).await;
         let create = owner_register(&["owned", "other"], Some(vec![child("a")?]))?;
-        register_ok(&db, p.base.project_id, "mgd_reparent", create).await?;
+        register_ok(&db, p.project_id, "mgd_reparent", create).await?;
         let before = live_by_name(&db, "a").await?.expect("registered");
 
         let mut update = owner_update(Some(vec![child("a")?]));
@@ -2426,15 +2403,15 @@ mod tests {
             TableNameDto::try_from("a_table")?,
             TableNameDto::try_from("other")?,
         )]));
-        update_ok(&db, p.base.project_id, "mgd_reparent", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "mgd_reparent", CHILD_OWNER, update).await?;
 
         let after = live_by_name(&db, "a").await?.expect("still registered");
-        assert_eq!(after.base.function_id, before.base.function_id);
+        assert_eq!(after.function_id, before.function_id);
         let other = active_table(&db, "other").await?;
         let child_table = active_table(&db, "a_table").await?;
         assert_eq!(
-            child_table.base.parent_table_id,
-            Some(Parent::from(other.base.table_id))
+            child_table.parent_table_id,
+            Some(Parent::from(other.table_id))
         );
         Ok(())
     }
@@ -2464,10 +2441,10 @@ mod tests {
     #[td_test::test(db)]
     async fn test_register_parents_a_summary_on_its_own_output(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "dqs_parent", None).await;
+        create_collection(&db, p.project_id, "dqs_parent", None).await;
         register_ok(
             &db,
-            p.base.project_id,
+            p.project_id,
             "dqs_parent",
             summary_register(&["owned"], "owned")?,
         )
@@ -2475,20 +2452,17 @@ mod tests {
 
         let owned = active_table(&db, "owned").await?;
         let summary = active_table(&db, SUMMARY_TABLE).await?;
-        assert_eq!(
-            summary.base.parent_table_id,
-            Some(Parent::from(owned.base.table_id))
-        );
-        assert_eq!(owned.base.parent_table_id, None);
+        assert_eq!(summary.parent_table_id, Some(Parent::from(owned.table_id)));
+        assert_eq!(owned.parent_table_id, None);
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_update_moves_a_summary_to_another_output(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "dqs_move", None).await;
+        create_collection(&db, p.project_id, "dqs_move", None).await;
         let create = summary_register(&["owned", "other"], "owned")?;
-        register_ok(&db, p.base.project_id, "dqs_move", create).await?;
+        register_ok(&db, p.project_id, "dqs_move", create).await?;
         let before = active_table(&db, SUMMARY_TABLE).await?;
 
         let moved = summary_register(&["owned", "other"], "other")?;
@@ -2496,15 +2470,12 @@ mod tests {
         update.tables = moved.tables;
         update.table_types = moved.table_types;
         update.parent_tables = moved.parent_tables;
-        update_ok(&db, p.base.project_id, "dqs_move", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "dqs_move", CHILD_OWNER, update).await?;
 
         let other = active_table(&db, "other").await?;
         let summary = active_table(&db, SUMMARY_TABLE).await?;
-        assert_eq!(summary.base.table_id, before.base.table_id);
-        assert_eq!(
-            summary.base.parent_table_id,
-            Some(Parent::from(other.base.table_id))
-        );
+        assert_eq!(summary.table_id, before.table_id);
+        assert_eq!(summary.parent_table_id, Some(Parent::from(other.table_id)));
         Ok(())
     }
 
@@ -2515,13 +2486,13 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "dqs_none", None).await;
+        create_collection(&db, p.project_id, "dqs_none", None).await;
         let mut create = summary_register(&["owned"], "owned")?;
         create.parent_tables = None;
-        register_ok(&db, p.base.project_id, "dqs_none", create).await?;
+        register_ok(&db, p.project_id, "dqs_none", create).await?;
 
         let summary = active_table(&db, SUMMARY_TABLE).await?;
-        assert_eq!(summary.base.parent_table_id, None);
+        assert_eq!(summary.parent_table_id, None);
         Ok(())
     }
 
@@ -2532,13 +2503,13 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "dqs_elsewhere", None).await;
+        create_collection(&db, p.project_id, "dqs_elsewhere", None).await;
         let mut neighbour = pubsub_register("neighbour", Decorator::Transformer, None)?;
         neighbour.tables = Some(vec![TableNameDto::try_from("theirs")?]);
-        register_ok(&db, p.base.project_id, "dqs_elsewhere", neighbour).await?;
+        register_ok(&db, p.project_id, "dqs_elsewhere", neighbour).await?;
 
         let create = summary_register(&["owned"], "theirs")?;
-        let err = register_err(&db, p.base.project_id, "dqs_elsewhere", create).await?;
+        let err = register_err(&db, p.project_id, "dqs_elsewhere", create).await?;
         assert!(matches!(
             err.domain_err::<RegisterFunctionError>(),
             RegisterFunctionError::ParentTableNotOwned(_, _)
@@ -2553,22 +2524,22 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_unmapped", None).await;
+        create_collection(&db, p.project_id, "mgd_unmapped", None).await;
         let mut create = owner_register(&["owned"], Some(vec![child("a")?]))?;
         create.parent_tables = None;
-        register_ok(&db, p.base.project_id, "mgd_unmapped", create).await?;
+        register_ok(&db, p.project_id, "mgd_unmapped", create).await?;
 
         let child_table = active_table(&db, "a_table").await?;
-        assert_eq!(child_table.base.parent_table_id, None);
+        assert_eq!(child_table.parent_table_id, None);
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_register_with_two_child_functions(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd2", None).await;
+        create_collection(&db, p.project_id, "mgd2", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?, child("b")?]))?;
-        register_ok(&db, p.base.project_id, "mgd2", create).await?;
+        register_ok(&db, p.project_id, "mgd2", create).await?;
 
         assert!(live_by_name(&db, "a").await?.is_some());
         assert!(live_by_name(&db, "b").await?.is_some());
@@ -2580,15 +2551,15 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_retype", None).await;
+        create_collection(&db, p.project_id, "mgd_retype", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        register_ok(&db, p.base.project_id, "mgd_retype", create).await?;
+        register_ok(&db, p.project_id, "mgd_retype", create).await?;
 
         let mut declared = child("a")?;
         declared.function_type = FunctionType::DQSummaryTrends;
         update_ok(
             &db,
-            p.base.project_id,
+            p.project_id,
             "mgd_retype",
             CHILD_OWNER,
             owner_update(Some(vec![declared])),
@@ -2596,20 +2567,20 @@ mod tests {
         .await?;
 
         let child = live_by_name(&db, "a").await?.expect("child registered");
-        assert_eq!(child.base.function_type, FunctionType::DQSummaryTrends);
+        assert_eq!(child.function_type, FunctionType::DQSummaryTrends);
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_a_child_name_already_taken_is_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_taken", None).await;
+        create_collection(&db, p.project_id, "mgd_taken", None).await;
         let mut squatter = pubsub_register("a", Decorator::Transformer, None)?;
         squatter.tables = Some(vec![TableNameDto::try_from("squatted")?]);
-        register_ok(&db, p.base.project_id, "mgd_taken", squatter).await?;
+        register_ok(&db, p.project_id, "mgd_taken", squatter).await?;
 
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        let err = register_err(&db, p.base.project_id, "mgd_taken", create).await?;
+        let err = register_err(&db, p.project_id, "mgd_taken", create).await?;
         assert!(matches!(
             err.domain_err::<SqlError>(),
             SqlError::EntityAlreadyExists(_, _)
@@ -2622,40 +2593,40 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "tt_dqs", None).await;
+        create_collection(&db, p.project_id, "tt_dqs", None).await;
         let mut create = owner_register(&["owned"], None)?;
         create.table_types = Some(HashMap::from([(
             TableNameDto::try_from("owned")?,
             TableType::DQSummary,
         )]));
 
-        register_ok(&db, p.base.project_id, "tt_dqs", create).await?;
+        register_ok(&db, p.project_id, "tt_dqs", create).await?;
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_a_childs_table_types_are_stored_as_declared(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "tt_child", None).await;
+        create_collection(&db, p.project_id, "tt_child", None).await;
         let mut declared = child("t")?;
         declared.table_types = Some(HashMap::from([(
             TableNameDto::try_from("t_table")?,
             TableType::DQSummaryTrends,
         )]));
         let create = owner_register(&["owned"], Some(vec![declared]))?;
-        register_ok(&db, p.base.project_id, "tt_child", create).await?;
+        register_ok(&db, p.project_id, "tt_child", create).await?;
 
         let child = live_by_name(&db, "t").await?.expect("child registered");
         let tables: Vec<TableDB> = db
             .scd2()
             .fetch_all::<TableDB>(and!(
-                &child.base.function_id,
+                &child.function_id,
                 TableName::try_from("t_table")?,
                 TableDB::active()
             ))
             .await?;
         assert_eq!(tables.len(), 1);
-        assert_eq!(tables[0].base.table_type, TableType::DQSummaryTrends);
+        assert_eq!(tables[0].table_type, TableType::DQSummaryTrends);
         Ok(())
     }
 
@@ -2664,13 +2635,13 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_off", None).await;
+        create_collection(&db, p.project_id, "mgd_off", None).await;
         let mut create = owner_register(&["owned"], Some(vec![child("d")?]))?;
         create.enabled = Some(Enabled::FALSE);
-        register_ok(&db, p.base.project_id, "mgd_off", create).await?;
+        register_ok(&db, p.project_id, "mgd_off", create).await?;
 
         let child = live_by_name(&db, "d").await?.expect("child registered");
-        assert_eq!(child.base.enabled, Enabled::FALSE);
+        assert_eq!(child.enabled, Enabled::FALSE);
         Ok(())
     }
 
@@ -2679,12 +2650,12 @@ mod tests {
         // The child cannot be toggled directly, so an owner that came back on
         // without carrying its child would strand it disabled for good.
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_back", None).await;
+        create_collection(&db, p.project_id, "mgd_back", None).await;
         let mut create = owner_register(&["owned"], Some(vec![child("r")?]))?;
         create.enabled = Some(Enabled::FALSE);
-        register_ok(&db, p.base.project_id, "mgd_back", create).await?;
+        register_ok(&db, p.project_id, "mgd_back", create).await?;
         assert_eq!(
-            live_by_name(&db, "r").await?.expect("child").base.enabled,
+            live_by_name(&db, "r").await?.expect("child").enabled,
             Enabled::FALSE
         );
 
@@ -2692,10 +2663,10 @@ mod tests {
             enabled: Some(Enabled::TRUE),
             ..owner_update(Some(vec![child("r")?]))
         };
-        update_ok(&db, p.base.project_id, "mgd_back", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "mgd_back", CHILD_OWNER, update).await?;
 
         assert_eq!(
-            live_by_name(&db, "r").await?.expect("child").base.enabled,
+            live_by_name(&db, "r").await?.expect("child").enabled,
             Enabled::TRUE
         );
         Ok(())
@@ -2706,11 +2677,11 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_down", None).await;
+        create_collection(&db, p.project_id, "mgd_down", None).await;
         let create = owner_register(&["owned"], Some(vec![child("x")?]))?;
-        register_ok(&db, p.base.project_id, "mgd_down", create).await?;
+        register_ok(&db, p.project_id, "mgd_down", create).await?;
         assert_eq!(
-            live_by_name(&db, "x").await?.expect("child").base.enabled,
+            live_by_name(&db, "x").await?.expect("child").enabled,
             Enabled::TRUE
         );
 
@@ -2718,10 +2689,10 @@ mod tests {
             enabled: Some(Enabled::FALSE),
             ..owner_update(Some(vec![child("x")?]))
         };
-        update_ok(&db, p.base.project_id, "mgd_down", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "mgd_down", CHILD_OWNER, update).await?;
 
         assert_eq!(
-            live_by_name(&db, "x").await?.expect("child").base.enabled,
+            live_by_name(&db, "x").await?.expect("child").enabled,
             Enabled::FALSE
         );
         Ok(())
@@ -2730,12 +2701,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_update_dropping_a_child_function_deletes_it(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_drop", None).await;
+        create_collection(&db, p.project_id, "mgd_drop", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?, child("b")?]))?;
-        register_ok(&db, p.base.project_id, "mgd_drop", create).await?;
+        register_ok(&db, p.project_id, "mgd_drop", create).await?;
 
         let update = owner_update(Some(vec![child("a")?]));
-        update_ok(&db, p.base.project_id, "mgd_drop", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "mgd_drop", CHILD_OWNER, update).await?;
 
         assert!(live_by_name(&db, "a").await?.is_some());
         assert!(live_by_name(&db, "b").await?.is_none());
@@ -2747,12 +2718,12 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_refrozen", None).await;
+        create_collection(&db, p.project_id, "mgd_refrozen", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        register_ok(&db, p.base.project_id, "mgd_refrozen", create).await?;
+        register_ok(&db, p.project_id, "mgd_refrozen", create).await?;
         update_ok(
             &db,
-            p.base.project_id,
+            p.project_id,
             "mgd_refrozen",
             CHILD_OWNER,
             owner_update(Some(vec![])),
@@ -2760,7 +2731,7 @@ mod tests {
         .await?;
 
         let update = owner_update_reusing(Some(vec![child("a")?]), ReuseFrozen::FALSE);
-        let err = update_err(&db, p.base.project_id, "mgd_refrozen", CHILD_OWNER, update).await?;
+        let err = update_err(&db, p.project_id, "mgd_refrozen", CHILD_OWNER, update).await?;
 
         assert!(matches!(
             err.domain_err::<RegisterFunctionError>(),
@@ -2774,12 +2745,12 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_readopt", None).await;
+        create_collection(&db, p.project_id, "mgd_readopt", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        register_ok(&db, p.base.project_id, "mgd_readopt", create).await?;
+        register_ok(&db, p.project_id, "mgd_readopt", create).await?;
         update_ok(
             &db,
-            p.base.project_id,
+            p.project_id,
             "mgd_readopt",
             CHILD_OWNER,
             owner_update(Some(vec![])),
@@ -2788,7 +2759,7 @@ mod tests {
         assert!(live_by_name(&db, "a").await?.is_none());
 
         let update = owner_update_reusing(Some(vec![child("a")?]), ReuseFrozen::TRUE);
-        update_ok(&db, p.base.project_id, "mgd_readopt", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "mgd_readopt", CHILD_OWNER, update).await?;
 
         assert!(live_by_name(&db, "a").await?.is_some());
         Ok(())
@@ -2797,17 +2768,17 @@ mod tests {
     #[td_test::test(db)]
     async fn test_update_without_child_functions_keeps_them(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_none", None).await;
+        create_collection(&db, p.project_id, "mgd_none", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        register_ok(&db, p.base.project_id, "mgd_none", create).await?;
+        register_ok(&db, p.project_id, "mgd_none", create).await?;
         let before = live_by_name(&db, "a").await?.expect("registered");
 
         let mut update = owner_update(None);
         update.description = Some("touched".try_into()?);
-        update_ok(&db, p.base.project_id, "mgd_none", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "mgd_none", CHILD_OWNER, update).await?;
 
         let after = live_by_name(&db, "a").await?.expect("still registered");
-        assert_eq!(after.base.id, before.base.id);
+        assert_eq!(after.id, before.id);
         Ok(())
     }
 
@@ -2816,18 +2787,18 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_none_off", None).await;
+        create_collection(&db, p.project_id, "mgd_none_off", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        register_ok(&db, p.base.project_id, "mgd_none_off", create).await?;
+        register_ok(&db, p.project_id, "mgd_none_off", create).await?;
 
         let update = FunctionUpdate {
             enabled: Some(Enabled::FALSE),
             ..owner_update(None)
         };
-        update_ok(&db, p.base.project_id, "mgd_none_off", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "mgd_none_off", CHILD_OWNER, update).await?;
 
         assert_eq!(
-            live_by_name(&db, "a").await?.expect("child").base.enabled,
+            live_by_name(&db, "a").await?.expect("child").enabled,
             Enabled::FALSE
         );
         Ok(())
@@ -2836,13 +2807,13 @@ mod tests {
     #[td_test::test(db)]
     async fn test_update_with_no_child_functions_deletes_them(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "mgd_empty", None).await;
+        create_collection(&db, p.project_id, "mgd_empty", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        register_ok(&db, p.base.project_id, "mgd_empty", create).await?;
+        register_ok(&db, p.project_id, "mgd_empty", create).await?;
 
         update_ok(
             &db,
-            p.base.project_id,
+            p.project_id,
             "mgd_empty",
             CHILD_OWNER,
             owner_update(Some(vec![])),
@@ -2856,46 +2827,46 @@ mod tests {
     #[td_test::test(db)]
     async fn test_updating_a_child_function_is_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "usr_upd", None).await;
+        create_collection(&db, p.project_id, "usr_upd", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        register_ok(&db, p.base.project_id, "usr_upd", create).await?;
+        register_ok(&db, p.project_id, "usr_upd", create).await?;
         let before = live_by_name(&db, "a").await?.expect("registered");
 
-        let err = update_err(&db, p.base.project_id, "usr_upd", "a", owner_update(None)).await?;
+        let err = update_err(&db, p.project_id, "usr_upd", "a", owner_update(None)).await?;
 
         assert!(matches!(
             err.domain_err::<ChildFunctionError>(),
             ChildFunctionError::NotUserManaged(_)
         ));
         let after = live_by_name(&db, "a").await?.expect("still registered");
-        assert_eq!(after.base.id, before.base.id);
+        assert_eq!(after.id, before.id);
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_the_reconcile_still_updates_its_children(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "usr_recon", None).await;
+        create_collection(&db, p.project_id, "usr_recon", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
-        register_ok(&db, p.base.project_id, "usr_recon", create).await?;
+        register_ok(&db, p.project_id, "usr_recon", create).await?;
         let before = live_by_name(&db, "a").await?.expect("registered");
 
         let update = owner_update(Some(vec![child("a")?]));
-        update_ok(&db, p.base.project_id, "usr_recon", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "usr_recon", CHILD_OWNER, update).await?;
 
         let after = live_by_name(&db, "a").await?.expect("still registered");
-        assert_eq!(after.base.function_id, before.base.function_id);
-        assert_ne!(after.base.id, before.base.id);
+        assert_eq!(after.function_id, before.function_id);
+        assert_ne!(after.id, before.id);
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_updating_a_regular_function_is_still_allowed(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        create_collection(&db, p.base.project_id, "usr_reg", None).await;
+        create_collection(&db, p.project_id, "usr_reg", None).await;
         register_ok(
             &db,
-            p.base.project_id,
+            p.project_id,
             "usr_reg",
             owner_register(&["owned"], None)?,
         )
@@ -2903,7 +2874,7 @@ mod tests {
 
         let mut update = owner_update(None);
         update.description = Some("touched".try_into()?);
-        update_ok(&db, p.base.project_id, "usr_reg", CHILD_OWNER, update).await?;
+        update_ok(&db, p.project_id, "usr_reg", CHILD_OWNER, update).await?;
 
         assert!(live_by_name(&db, CHILD_OWNER).await?.is_some());
         Ok(())

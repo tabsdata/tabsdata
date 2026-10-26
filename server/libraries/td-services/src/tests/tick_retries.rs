@@ -81,11 +81,11 @@ async fn test_a_dispatch_aborted_by_a_concurrent_write_lands_in_the_same_tick(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_retry")?, &UserId::admin())
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .function(&collection, &register("f_retry", None))
         .await?;
@@ -107,24 +107,24 @@ async fn test_a_dispatch_aborted_by_a_concurrent_write_lands_in_the_same_tick(
                 external_uid: None,
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     let execution = dispatch_services(&db).execute_function(execute).await?.data;
     let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution.id).await?;
     let [run] = <[_; 1]>::try_from(runs).expect("one run");
 
     let gate = hold_a_write(
         &db,
-        &p.base.project_id,
+        &p.project_id,
         "transactions",
-        run.base.transaction_id.as_i64(),
+        run.transaction_id.as_i64(),
     )
     .await?;
     let tick = dispatch_services(&db);
     let ticking = tokio::spawn(async move { tick.request(()).await.map(|_| ()) });
     release_once_waited_on(gate, ticking).await?;
 
-    let after: LogicalFunctionRunDB = db.fetch_one(&run.base.id).await?;
-    assert_eq!(after.base.status, LogicalFunctionRunStatus::Requested);
+    let after: LogicalFunctionRunDB = db.fetch_one(&run.id).await?;
+    assert_eq!(after.status, LogicalFunctionRunStatus::Requested);
     Ok(())
 }
 
@@ -133,7 +133,7 @@ async fn test_a_recovery_verdict_aborted_by_a_concurrent_write_lands_in_the_same
     db: TdPool,
 ) -> Result<(), TdError> {
     let (project, attempt) = dispatched_publisher(&db, "c_retry", "f_retry").await?;
-    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.base.id).await?;
+    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.id).await?;
     let [worker] = <[_; 1]>::try_from(workers).expect("one worker");
     let mut recovery = dispatch_services(&db);
     recovery.recovery_config = Ctx::new(RecoveryConfig {
@@ -147,12 +147,12 @@ async fn test_a_recovery_verdict_aborted_by_a_concurrent_write_lands_in_the_same
             .with_workload_observer(StaticWorkloadObserver::default()),
     );
 
-    let gate = hold_a_write(&db, &project, "workers", worker.base.id.as_i64()).await?;
+    let gate = hold_a_write(&db, &project, "workers", worker.id.as_i64()).await?;
     let ticking = tokio::spawn(async move { recovery.recovery(()).await.map(|_| ()) });
     release_once_waited_on(gate, ticking).await?;
 
-    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.base.id).await?;
-    assert_eq!(after.base.status, PhysicalFunctionRunStatus::Failed);
+    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.id).await?;
+    assert_eq!(after.status, PhysicalFunctionRunStatus::Failed);
     Ok(())
 }
 
@@ -161,7 +161,7 @@ async fn test_a_sweep_aborted_by_a_concurrent_write_lands_in_the_same_tick(
     db: TdPool,
 ) -> Result<(), TdError> {
     let (project, attempt) = dispatched_publisher(&db, "c_retry", "f_retry").await?;
-    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.base.id).await?;
+    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.id).await?;
     let [worker] = <[_; 1]>::try_from(workers).expect("one worker");
     let mut sweep = dispatch_services(&db);
     sweep.recovery_config = Ctx::new(RecoveryConfig {
@@ -173,11 +173,11 @@ async fn test_a_sweep_aborted_by_a_concurrent_write_lands_in_the_same_tick(
         TestBridgeProvider::default().with_orchestrator(Orchestrator::Kubernetes),
     );
 
-    let gate = hold_a_write(&db, &project, "workers", worker.base.id.as_i64()).await?;
+    let gate = hold_a_write(&db, &project, "workers", worker.id.as_i64()).await?;
     let ticking = tokio::spawn(async move { sweep.recovery(()).await.map(|_| ()) });
     release_once_waited_on(gate, ticking).await?;
 
-    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.base.id).await?;
-    assert_eq!(after.base.status, PhysicalFunctionRunStatus::Failed);
+    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.id).await?;
+    assert_eq!(after.status, PhysicalFunctionRunStatus::Failed);
     Ok(())
 }

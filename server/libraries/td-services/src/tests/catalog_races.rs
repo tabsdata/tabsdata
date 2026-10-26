@@ -117,7 +117,7 @@ pub(crate) async fn setup(db: &TdPool, project: ProjectId) -> Result<FunctionId,
     Services::with_defaults(db.clone())
         .update_function(freeze_t_gone)
         .await?;
-    Ok(reader.base.function_id)
+    Ok(reader.function_id)
 }
 
 /// A function service's unit on `reader`, and its instant.
@@ -168,11 +168,11 @@ async fn release(mut gate: GatedConnection<RW, InProject>) -> Result<(), TdError
 #[td_test::test(db)]
 async fn test_freeze_keeps_a_concurrent_disable(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let reader = setup(&db, p.base.project_id).await?;
+    let reader = setup(&db, p.project_id).await?;
 
-    let (mut gate, at) = function_service_gate(&db, p.base.project_id).await?;
+    let (mut gate, at) = function_service_gate(&db, p.project_id).await?;
     let conn = gate.get(Grant::asserted("disable held open"));
-    let topology_at = conn.topology().bump(&p.base.project_id, at).await?;
+    let topology_at = conn.topology().bump(&p.project_id, at).await?;
     let current: FunctionDB = conn.scd2().fetch_one(&reader).await?;
     conn.scd2()
         .open(
@@ -181,13 +181,13 @@ async fn test_freeze_keeps_a_concurrent_disable(db: TdPool) -> Result<(), TdErro
         )
         .await?;
 
-    let deleting = delete_t_gone(&db, p.base.project_id);
+    let deleting = delete_t_gone(&db, p.project_id);
     release(gate).await?;
     deleting.await.expect("delete task")?;
 
     let after: FunctionDB = db.scd2().fetch_one(&reader).await?;
-    assert_eq!(after.base.status, FunctionStatus::Frozen);
-    assert_eq!(after.base.enabled, Enabled::FALSE, "the disable was lost");
+    assert_eq!(after.status, FunctionStatus::Frozen);
+    assert_eq!(after.enabled, Enabled::FALSE, "the disable was lost");
     Ok(())
 }
 
@@ -199,16 +199,16 @@ async fn test_freeze_does_not_resurrect_a_concurrently_deleted_function(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let reader = setup(&db, p.base.project_id).await?;
+    let reader = setup(&db, p.project_id).await?;
 
-    let (mut gate, at) = function_service_gate(&db, p.base.project_id).await?;
+    let (mut gate, at) = function_service_gate(&db, p.project_id).await?;
     let conn = gate.get(Grant::asserted("delete held open"));
-    let topology_at = conn.topology().bump(&p.base.project_id, at).await?;
+    let topology_at = conn.topology().bump(&p.project_id, at).await?;
     conn.scd2()
         .close::<FunctionDB>(&reader, topology_at)
         .await?;
 
-    let deleting = delete_t_gone(&db, p.base.project_id);
+    let deleting = delete_t_gone(&db, p.project_id);
     release(gate).await?;
     deleting.await.expect("delete task")?;
 
@@ -228,28 +228,24 @@ async fn test_freeze_does_not_resurrect_a_concurrently_deleted_function(
 #[td_test::test(db)]
 async fn test_freeze_with_an_older_instant_is_not_lost(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let reader = setup(&db, p.base.project_id).await?;
+    let reader = setup(&db, p.project_id).await?;
 
-    let (mut gate, _) = function_service_gate(&db, p.base.project_id).await?;
+    let (mut gate, _) = function_service_gate(&db, p.project_id).await?;
     let later = LockInstant::asserted(Timestamp::from(**AtTime::now() + TimeDelta::seconds(5)));
     let conn = gate.get(Grant::asserted("update held open"));
-    let topology_at = conn.topology().bump(&p.base.project_id, later).await?;
+    let topology_at = conn.topology().bump(&p.project_id, later).await?;
     let current: FunctionDB = conn.scd2().fetch_one(&reader).await?;
     conn.scd2()
         .open(&current.re_registered(&admin(), Enabled::TRUE), topology_at)
         .await?;
 
-    let deleting = delete_t_gone(&db, p.base.project_id);
+    let deleting = delete_t_gone(&db, p.project_id);
     release(gate).await?;
     let deleted = deleting.await.expect("delete task");
 
     let after: FunctionDB = db.scd2().fetch_one(&reader).await?;
     match deleted {
-        Ok(()) => assert_eq!(
-            after.base.status,
-            FunctionStatus::Frozen,
-            "the freeze was lost"
-        ),
+        Ok(()) => assert_eq!(after.status, FunctionStatus::Frozen, "the freeze was lost"),
         Err(e) => assert!(
             e.to_string().contains("changed while it was being frozen"),
             "the delete failed for another reason: {e}"
@@ -266,7 +262,7 @@ async fn test_table_delete_committing_after_a_plan_gives_its_pod_an_answer(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    setup(&db, p.base.project_id).await?;
+    setup(&db, p.project_id).await?;
 
     let execute = admin()
         .create(
@@ -286,9 +282,9 @@ async fn test_table_delete_committing_after_a_plan_gives_its_pod_an_answer(
                 external_uid: None,
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     dispatch_services(&db).execute_function(execute).await?;
-    delete_t_gone(&db, p.base.project_id)
+    delete_t_gone(&db, p.project_id)
         .await
         .expect("delete task")?;
 
@@ -296,11 +292,11 @@ async fn test_table_delete_committing_after_a_plan_gives_its_pod_an_answer(
     let workers: Vec<WorkerDB> = db.fetch_all(()).await?;
     let runner = workers
         .iter()
-        .find(|w| w.base.worker_type == WorkerType::FunctionRunner)
+        .find(|w| w.worker_type == WorkerType::FunctionRunner)
         .expect("the tick dispatched the planned run");
     let resolved = Services::with_defaults(db.clone())
         .resolve_worker_message(admin().read(WorkerParam {
-            worker: runner.base.id.clone(),
+            worker: runner.id.clone(),
         }))
         .await;
     if let Err(error) = resolved {

@@ -52,8 +52,8 @@ async fn read_function(
         .fetch_one(and!(&collection_id, &function_id_name))
         .await?;
 
-    let function_id = function.base.base.function_id;
-    let function_version_id = function.base.base.id.clone();
+    let function_id = function.function_id;
+    let function_version_id = function.id.clone();
     let read: Function = Function::from_dao(function)?;
 
     let tables: Vec<TableDBWithNames> = conn
@@ -71,10 +71,7 @@ async fn read_function(
         .as_of(&version.interval.valid_from)
         .fetch_all(and!(&function_id, TriggerDBWithNames::active()))
         .await?;
-    let trigger_table_ids: Vec<TableId> = triggers
-        .iter()
-        .map(|x| x.base.base.trigger_by_table_id)
-        .collect();
+    let trigger_table_ids: Vec<TableId> = triggers.iter().map(|x| x.trigger_by_table_id).collect();
     let trigger_tables: Vec<TableDBWithNames> = conn
         .scd2()
         .as_of(&version.interval.valid_from)
@@ -91,8 +88,7 @@ async fn read_function(
         .as_of(&version.interval.valid_from)
         .fetch_all(and!(&function_id, DependencyDBWithNames::user()))
         .await?;
-    let dependency_table_ids: Vec<TableId> =
-        dependencies.iter().map(|x| x.base.base.table_id).collect();
+    let dependency_table_ids: Vec<TableId> = dependencies.iter().map(|x| x.table_id).collect();
     let dependency_tables: Vec<TableDBWithNames> = conn
         .scd2()
         .as_of(&version.interval.valid_from)
@@ -124,17 +120,17 @@ pub fn vec_create_table_dependency(
 ) -> Vec<LabeledTableDependency> {
     let tables = tables
         .iter()
-        .map(|t| (t.base.base.table_id, t))
+        .map(|t| (t.table_id, t))
         .collect::<HashMap<_, _>>();
 
     dependencies
         .iter()
-        .filter_map(|d| tables.get(&d.base.base.table_id).map(|table| (d, table)))
+        .filter_map(|d| tables.get(&d.table_id).map(|table| (d, table)))
         .map(|(d, table)| {
-            let versions = d.base.base.table_versions.deref().clone();
+            let versions = d.table_versions.deref().clone();
             LabeledTableDependency::new(VersionedTableRef::new(
                 Some(table.collection.clone()),
-                table.base.base.name.clone(),
+                table.name.clone(),
                 versions,
             ))
         })
@@ -146,9 +142,9 @@ pub fn map_create_worker(
 ) -> Result<HashMap<WorkerTypeDto, WorkerId>, TdError> {
     let workers = workers
         .iter()
-        .filter_map(|w| match w.base.base.worker_type {
-            WorkerType::CronTrigger => Some((WorkerTypeDto::CronTrigger, w.base.base.id.clone())),
-            WorkerType::StageTrigger => Some((WorkerTypeDto::StageTrigger, w.base.base.id.clone())),
+        .filter_map(|w| match w.worker_type {
+            WorkerType::CronTrigger => Some((WorkerTypeDto::CronTrigger, w.id.clone())),
+            WorkerType::StageTrigger => Some((WorkerTypeDto::StageTrigger, w.id.clone())),
             _ => None,
         })
         .collect();
@@ -181,7 +177,7 @@ mod tests {
     async fn test_read(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("cofnig")?, &UserId::admin())
             .await?;
@@ -215,7 +211,7 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -225,7 +221,7 @@ mod tests {
                 CollectionParam {
                     collection: CollectionIdName::from_str(&format!(
                         "~{}",
-                        function.base.collection_id
+                        function.collection_id
                     ))?,
                 },
                 FunctionParam {
@@ -236,29 +232,26 @@ mod tests {
                     at: None,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.read_function(request).await;
         let response = response?;
 
-        assert_eq!(function.base.id, response.function.id);
-        assert_eq!(function.base.collection_id, response.function.collection_id);
-        assert_eq!(function.base.name, response.function.name);
-        assert_eq!(function.base.description, response.function.description);
-        assert_eq!(function.base.function_id, response.function.function_id);
-        assert_eq!(
-            function.base.storage_version,
-            response.function.storage_version
-        );
-        assert_eq!(function.base.bundle_id, response.function.bundle_id);
-        assert_eq!(function.base.snippet, response.function.snippet);
+        assert_eq!(function.id, response.function.id);
+        assert_eq!(function.collection_id, response.function.collection_id);
+        assert_eq!(function.name, response.function.name);
+        assert_eq!(function.description, response.function.description);
+        assert_eq!(function.function_id, response.function.function_id);
+        assert_eq!(function.storage_version, response.function.storage_version);
+        assert_eq!(function.bundle_id, response.function.bundle_id);
+        assert_eq!(function.snippet, response.function.snippet);
         assert_eq!(
             AtTime::from(function.interval.valid_from),
             response.function.defined_on
         );
-        assert_eq!(function.base.defined_by_id, response.function.defined_by_id);
-        assert_eq!(function.base.status, response.function.status);
+        assert_eq!(function.defined_by_id, response.function.defined_by_id);
+        assert_eq!(function.status, response.function.status);
         assert_eq!(
             response.function.collection,
             CollectionLabel::try_from("cofnig")?
@@ -306,7 +299,7 @@ mod tests {
         let collection_name = CollectionName::try_from("doomed")?;
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -331,7 +324,7 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -344,7 +337,7 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str(&collection_name.to_string())?,
                     })
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -359,19 +352,19 @@ mod tests {
                     },
                     topology,
                 ))
-                .in_project(p.base.project_id)
+                .in_project(p.project_id)
         };
         let by_name = collection_name.to_string();
-        let by_id = format!("~{}", collection.base.collection_id);
+        let by_id = format!("~{}", collection.collection_id);
 
         let registered = db
             .scd2()
             .as_of(&registered_at)
-            .fetch_one::<ProjectTopologyDB>(&p.base.project_id)
+            .fetch_one::<ProjectTopologyDB>(&p.project_id)
             .await?;
         for topology in [
             TopologyReadParam {
-                topology_version: Some(registered.base.id),
+                topology_version: Some(registered.id),
                 at: None,
             },
             TopologyReadParam {
@@ -386,8 +379,8 @@ mod tests {
                 .unwrap_err();
             assert_eq!(err.api_error(), ApiError::NotFound);
             let read = service.read_function(request(&by_id, topology)).await?.data;
-            assert_eq!(read.function.id, function.base.id);
-            assert_eq!(read.function.collection_id, collection.base.collection_id);
+            assert_eq!(read.function.id, function.id);
+            assert_eq!(read.function.collection_id, collection.collection_id);
             assert_eq!(read.tables, vec![TableName::try_from("t0")?]);
         }
 
@@ -405,18 +398,18 @@ mod tests {
         );
 
         let recreated = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
         let refunction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&recreated, &create)
             .await?;
 
         let old_topology = || TopologyReadParam {
-            topology_version: Some(registered.base.id),
+            topology_version: Some(registered.id),
             at: None,
         };
         assert!(
@@ -429,7 +422,7 @@ mod tests {
             .read_function(request(&by_id, old_topology()))
             .await?
             .data;
-        assert_eq!(read.function.id, function.base.id);
+        assert_eq!(read.function.id, function.id);
         let read = service
             .read_function(request(
                 &by_name,
@@ -440,8 +433,8 @@ mod tests {
             ))
             .await?
             .data;
-        assert_eq!(read.function.id, refunction.base.id);
-        assert_eq!(read.function.collection_id, recreated.base.collection_id);
+        assert_eq!(read.function.id, refunction.id);
+        assert_eq!(read.function.collection_id, recreated.collection_id);
         Ok(())
     }
 
@@ -453,7 +446,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let upstream_name = CollectionName::try_from("upstream")?;
         let upstream = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&upstream_name, &UserId::admin())
             .await?;
@@ -477,12 +470,12 @@ mod tests {
             enabled: None,
             workers: None,
         };
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .function(&upstream, &publisher)
             .await?;
         let downstream = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("downstream")?, &UserId::admin())
             .await?;
@@ -495,7 +488,7 @@ mod tests {
             ..publisher
         };
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&downstream, &transformer)
             .await?;
@@ -508,7 +501,7 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str(&upstream_name.to_string())?,
                     })
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -524,10 +517,10 @@ mod tests {
                         },
                         topology,
                     ))
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
         };
-        let deleted = format!("[{}]", upstream.base.collection_id);
+        let deleted = format!("[{}]", upstream.collection_id);
         let dependencies = vec![LabeledTableDependency::try_from(format!(
             "{deleted}/t0@HEAD~1"
         ))?];
@@ -539,7 +532,7 @@ mod tests {
         })
         .await?
         .data;
-        assert_eq!(before.function.id, function.base.id);
+        assert_eq!(before.function.id, function.id);
         assert_eq!(before.dependencies, dependencies);
         assert_eq!(before.triggers, triggers);
 
@@ -549,7 +542,7 @@ mod tests {
         })
         .await?
         .data;
-        assert_eq!(frozen.function.function_id, function.base.function_id);
+        assert_eq!(frozen.function.function_id, function.function_id);
         assert_eq!(frozen.function.status, FunctionStatus::Frozen);
         assert!(frozen.dependencies.is_empty());
         assert!(frozen.triggers.is_empty());

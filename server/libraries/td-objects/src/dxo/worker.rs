@@ -185,26 +185,56 @@ impl FromDao for Worker {
     type Dao = WorkerDBWithNames;
 
     fn from_dao(dao: WorkerDBWithNames) -> Result<Self, TdError> {
+        let WorkerDBWithNames {
+            base:
+                WorkerDB {
+                    base:
+                        WorkerInsertDB {
+                            id,
+                            collection_id,
+                            execution_id,
+                            transaction_id,
+                            physical_function_run_id,
+                            function_version_id,
+                            started_on,
+                            ended_on,
+                            status,
+                            worker_type,
+                            ..
+                        },
+                    project_id,
+                    failures,
+                    retry_at,
+                    ..
+                },
+            logical_function_run_id,
+            collection,
+            execution,
+            function,
+            function_version_patch_id,
+            project,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.base.id,
-            project_id: dao.base.project_id,
-            collection_id: dao.base.base.collection_id,
-            execution_id: dao.base.base.execution_id,
-            transaction_id: dao.base.base.transaction_id,
-            physical_function_run_id: dao.base.base.physical_function_run_id,
-            function_version_id: dao.base.base.function_version_id,
-            started_on: dao.base.base.started_on,
-            ended_on: dao.base.base.ended_on,
-            status: dao.base.base.status,
-            failures: dao.base.failures,
-            retry_at: dao.base.retry_at,
-            logical_function_run_id: dao.logical_function_run_id,
-            collection: dao.collection,
-            execution: dao.execution,
-            function: dao.function,
-            worker_type: dao.base.base.worker_type,
-            function_version_patch_id: dao.function_version_patch_id,
-            project: dao.project,
+            id,
+            project_id,
+            collection_id,
+            execution_id,
+            transaction_id,
+            physical_function_run_id,
+            function_version_id,
+            started_on,
+            ended_on,
+            status,
+            failures,
+            retry_at,
+            logical_function_run_id,
+            collection,
+            execution,
+            function,
+            worker_type,
+            function_version_patch_id,
+            project,
         })
     }
 }

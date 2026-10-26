@@ -89,15 +89,15 @@ async fn test_canceling_an_execution_cancels_the_later_transactions_it_reaches(
     ];
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, e, t, f, w| {
             let db = db.clone();
-            let execution = e[&test_executions[0]].base.id.clone();
-            let transaction = t[&test_executions[1].transactions[0]].base.id.clone();
+            let execution = e[&test_executions[0]].id.clone();
+            let transaction = t[&test_executions[1].transactions[0]].id.clone();
             let sibling = &test_executions[1].transactions[0].functions[1];
-            let sibling_attempt = f[sibling].base.id.clone();
-            let sibling_worker = w[sibling].base.id.clone();
+            let sibling_attempt = f[sibling].id.clone();
+            let sibling_worker = w[sibling].id.clone();
             async move {
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .update(ExecutionParam { execution }, ());
@@ -106,7 +106,7 @@ async fn test_canceling_an_execution_cancels_the_later_transactions_it_reaches(
                     .await?;
 
                 let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&transaction).await?;
-                let statuses: Vec<_> = runs.iter().map(|r| r.base.status).collect();
+                let statuses: Vec<_> = runs.iter().map(|r| r.status).collect();
                 assert!(
                     statuses
                         .iter()
@@ -118,9 +118,9 @@ async fn test_canceling_an_execution_cancels_the_later_transactions_it_reaches(
 
                 let attempt: PhysicalFunctionRunDB =
                     db.timeline().fetch_one(&sibling_attempt).await?;
-                assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Failed);
+                assert_eq!(attempt.status, PhysicalFunctionRunStatus::Failed);
                 let worker: WorkerDB = db.fetch_one(&sibling_worker).await?;
-                assert_eq!(worker.base.status, WorkerStatus::Failed);
+                assert_eq!(worker.status, WorkerStatus::Failed);
                 Ok(())
             }
         },

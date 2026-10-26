@@ -49,7 +49,7 @@ mod tests {
     async fn test_read_group_by_name(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -61,7 +61,7 @@ mod tests {
             .read(GroupParam {
                 group: GroupIdName::from_str("analytics")?,
             })
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.read_group(request).await?.data;
@@ -69,9 +69,9 @@ mod tests {
             .scd2()
             .fetch_one::<GroupDB>(&GroupName::try_from("analytics")?)
             .await?;
-        assert_eq!(response.group_id, found.base.group_id);
-        assert_eq!(response.name, found.base.name);
-        assert_eq!(response.description, found.base.description);
+        assert_eq!(response.group_id, found.group_id);
+        assert_eq!(response.name, found.name);
+        assert_eq!(response.description, found.description);
         Ok(())
     }
 
@@ -82,7 +82,7 @@ mod tests {
             .read(GroupParam {
                 group: GroupIdName::from_str("default")?,
             })
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.read_group(request).await?.data;

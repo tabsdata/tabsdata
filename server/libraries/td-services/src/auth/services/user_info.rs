@@ -10,7 +10,7 @@ use td_error::TdError;
 use td_objects::FromDao;
 use td_objects::dxo::crudl::RequestContext;
 use td_objects::dxo::role::{Role, RoleDBWithNames};
-use td_objects::dxo::user::{UserDBWithNames, UserInfo};
+use td_objects::dxo::user::{UserDB, UserDBWithNames, UserInfo};
 use td_objects::dxo::user_role::UserRoleDBWithNames;
 use td_objects::types::basic::RoleId;
 use td_queries::Queries;
@@ -27,27 +27,48 @@ async fn user_info(
     let user: UserDBWithNames = conn.fetch_one(&user_id).await?;
 
     let memberships: Vec<UserRoleDBWithNames> = conn.fetch_all(&user_id).await?;
-    let role_ids: Vec<RoleId> = memberships.iter().map(|x| x.base.role_id).collect();
+    let role_ids: Vec<RoleId> = memberships.iter().map(|x| x.role_id).collect();
     let role_rows: Vec<RoleDBWithNames> = conn.chunked().fetch_all(&role_ids, ()).await?;
     let roles = role_rows
         .into_iter()
         .map(Role::from_dao)
         .collect::<Result<Vec<Role>, _>>()?;
+    let UserDBWithNames {
+        base:
+            UserDB {
+                id,
+                name,
+                full_name,
+                email,
+                created_on,
+                created_by_id,
+                modified_on,
+                modified_by_id,
+                password_set_on,
+                password_must_change,
+                enabled,
+                system,
+                ..
+            },
+        created_by,
+        modified_by,
+        ..
+    } = user;
     Ok(UserInfo {
-        id: user.base.id,
-        name: user.base.name,
-        full_name: user.base.full_name,
-        email: user.base.email,
-        created_on: user.base.created_on,
-        created_by_id: user.base.created_by_id,
-        modified_on: user.base.modified_on,
-        modified_by_id: user.base.modified_by_id,
-        password_set_on: user.base.password_set_on,
-        password_must_change: user.base.password_must_change,
-        enabled: user.base.enabled,
-        system: user.base.system,
-        created_by: user.created_by,
-        modified_by: user.modified_by,
+        id,
+        name,
+        full_name,
+        email,
+        created_on,
+        created_by_id,
+        modified_on,
+        modified_by_id,
+        password_set_on,
+        password_must_change,
+        enabled,
+        system,
+        created_by,
+        modified_by,
         user_roles: roles,
     })
 }

@@ -98,7 +98,7 @@ async fn cancel_execution(db: &TdPool, execution: ExecutionId) -> Result<(), TdE
 async fn assert_discarded(db: &TdPool, transaction: &TransactionId) -> Result<(), TdError> {
     let rolled_up: TransactionDB = db.fetch_one(transaction).await?;
     let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(transaction).await?;
-    let statuses: Vec<_> = runs.iter().map(|r| r.base.status).collect();
+    let statuses: Vec<_> = runs.iter().map(|r| r.status).collect();
     assert!(
         statuses
             .iter()
@@ -114,16 +114,16 @@ async fn split_transaction_settles(db: TdPool, order: Order) -> Result<(), TdErr
     let test_executions = executions()?;
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, e, t, f, w| {
             let db = db.clone();
-            let upstream_execution = e[&test_executions[0]].base.id.clone();
+            let upstream_execution = e[&test_executions[0]].id.clone();
             let split = &test_executions[1].transactions[0];
-            let transaction = t[split].base.id.clone();
+            let transaction = t[split].id.clone();
             let sibling = &split.functions[1];
-            let sibling_run = f[sibling].base.id.clone();
-            let sibling_worker = w[sibling].base.id.clone();
+            let sibling_run = f[sibling].id.clone();
+            let sibling_worker = w[sibling].id.clone();
             async move {
                 match order {
                     Order::DoneThenCancel => {
@@ -152,9 +152,9 @@ async fn split_transaction_settles(db: TdPool, order: Order) -> Result<(), TdErr
                 if matches!(order, Order::CancelThenDone) {
                     let attempt: PhysicalFunctionRunDB =
                         db.timeline().fetch_one(&sibling_run).await?;
-                    assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Failed);
+                    assert_eq!(attempt.status, PhysicalFunctionRunStatus::Failed);
                     let worker: WorkerDB = db.fetch_one(&sibling_worker).await?;
-                    assert_eq!(worker.base.status, WorkerStatus::Failed);
+                    assert_eq!(worker.status, WorkerStatus::Failed);
                 }
                 Ok(())
             }
@@ -206,7 +206,7 @@ async fn seed_transaction(
     }];
     let (_, transactions, _) = run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, _, _, _| async { Ok(()) },
     )
@@ -249,7 +249,7 @@ async fn test_the_tick_commits_an_all_done_transaction(db: TdPool) -> Result<(),
     let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&transaction).await?;
     assert!(
         runs.iter()
-            .all(|r| r.base.status == LogicalFunctionRunStatus::Committed),
+            .all(|r| r.status == LogicalFunctionRunStatus::Committed),
         "the transaction is committed whole"
     );
     let rolled_up: TransactionDB = db.fetch_one(&transaction).await?;
@@ -299,8 +299,8 @@ async fn run_status(
     db: &TdPool,
     run: &PhysicalFunctionRunDB,
 ) -> Result<LogicalFunctionRunStatus, TdError> {
-    let lfr: LogicalFunctionRunDB = db.fetch_one(&run.base.logical_function_run_id).await?;
-    Ok(lfr.base.status)
+    let lfr: LogicalFunctionRunDB = db.fetch_one(&run.logical_function_run_id).await?;
+    Ok(lfr.status)
 }
 
 /// A transaction commits only once the transactions it read from have: a
@@ -314,27 +314,26 @@ async fn test_a_transaction_does_not_commit_before_the_ones_it_read(
     let test_executions = chained()?;
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, e, _, f, w| {
             let db = db.clone();
-            let upstream_execution = e[&test_executions[0]].base.id.clone();
+            let upstream_execution = e[&test_executions[0]].id.clone();
             let upstream = &test_executions[0].transactions[0].functions[0];
             let reader = &test_executions[1].transactions[0].functions[0];
-            let (upstream_run, upstream_worker) =
-                (f[upstream].clone(), w[upstream].base.id.clone());
-            let (reader_run, reader_worker) = (f[reader].clone(), w[reader].base.id.clone());
+            let (upstream_run, upstream_worker) = (f[upstream].clone(), w[upstream].id.clone());
+            let (reader_run, reader_worker) = (f[reader].clone(), w[reader].id.clone());
             async move {
                 post_callback(
                     &db,
-                    &upstream_run.base.id,
+                    &upstream_run.id,
                     &upstream_worker,
                     WorkerCallbackStatus::Done,
                 )
                 .await?;
                 post_callback(
                     &db,
-                    &reader_run.base.id,
+                    &reader_run.id,
                     &reader_worker,
                     WorkerCallbackStatus::Done,
                 )
@@ -368,7 +367,7 @@ async fn test_a_transaction_commits_after_the_ones_it_read(db: TdPool) -> Result
     let test_executions = chained()?;
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, _, f, w| {
             let db = db.clone();
@@ -378,11 +377,11 @@ async fn test_a_transaction_commits_after_the_ones_it_read(db: TdPool) -> Result
                 &test_executions[0].transactions[0].functions[1],
             ]
             .into_iter()
-            .map(|function| (f[function].clone(), w[function].base.id.clone()))
+            .map(|function| (f[function].clone(), w[function].id.clone()))
             .collect();
             async move {
                 for (run, worker) in &runs {
-                    post_callback(&db, &run.base.id, worker, WorkerCallbackStatus::Done).await?;
+                    post_callback(&db, &run.id, worker, WorkerCallbackStatus::Done).await?;
                 }
                 dispatch_services(&db).request(()).await?;
                 for (run, _) in &runs {

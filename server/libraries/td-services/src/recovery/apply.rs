@@ -104,13 +104,9 @@ async fn still_as_read(
 ) -> Result<Vec<WorkerDBWithNames>, TdError> {
     let mut kept = Vec::with_capacity(read.len());
     for worker in read {
-        let current: Option<WorkerDB> = conn
-            .for_update()
-            .fetch_optional(&worker.base.base.id)
-            .await?;
-        if current.is_some_and(|current| {
-            current.base.status == worker.base.base.status && *current.base.worker_enabled
-        }) {
+        let current: Option<WorkerDB> = conn.for_update().fetch_optional(&worker.id).await?;
+        if current.is_some_and(|current| current.status == worker.status && *current.worker_enabled)
+        {
             kept.push(worker.clone());
         }
     }
@@ -132,11 +128,9 @@ async fn fail_exited_streams(
         status: WorkerCallbackStatus::Failed,
     };
     for worker in exited {
-        let id = &worker.base.base.id;
+        let id = &worker.id;
         let current: WorkerDB = conn.fetch_one(id).await?;
-        if current.base.status != worker.base.base.status
-            || !update_worker_status(conn, &failed, id).await?
-        {
+        if current.status != worker.status || !update_worker_status(conn, &failed, id).await? {
             continue;
         }
         let retry = after_failure(&current.failures, &exit, &AtTime::from(at));

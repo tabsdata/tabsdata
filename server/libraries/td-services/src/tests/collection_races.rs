@@ -30,13 +30,13 @@ async fn test_a_rename_planned_before_a_delete_does_not_rename_the_deleted_colle
     let p = db.seed().test_project().await?;
     let name = CollectionName::try_from("c_doomed")?;
     let seeded = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&name, &UserId::admin())
         .await?;
     let across =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let pool = DbPool::in_project(&across, &p.base.project_id);
+    let pool = DbPool::in_project(&across, &p.project_id);
     let admin = RequestContext::with(AccessTokenId::default(), UserId::admin());
     let update = CollectionUpdate {
         name: Some(CollectionName::try_from("c_renamed")?),
@@ -47,7 +47,7 @@ async fn test_a_rename_planned_before_a_delete_does_not_rename_the_deleted_colle
     let plan = {
         let mut conn = pool.read().await?;
         let conn = conn.get(grant());
-        let collection: CollectionDB = conn.scd2().fetch_one(&seeded.base.collection_id).await?;
+        let collection: CollectionDB = conn.scd2().fetch_one(&seeded.collection_id).await?;
         plan_collection_update(conn, &collection, &update).await?
     };
     Services::with_defaults(db.clone())
@@ -56,7 +56,7 @@ async fn test_a_rename_planned_before_a_delete_does_not_rename_the_deleted_colle
                 .delete(CollectionParam {
                     collection: CollectionIdName::from_str(name.as_str())?,
                 })
-                .in_project(p.base.project_id),
+                .in_project(p.project_id),
         )
         .await?;
 
@@ -68,11 +68,11 @@ async fn test_a_rename_planned_before_a_delete_does_not_rename_the_deleted_colle
     let error = outcome.expect_err("the collection is gone");
     assert_eq!(error.api_error(), ApiError::NotFound);
     let versions: Vec<CollectionDB> = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .timeline()
-        .fetch_all(&seeded.base.collection_id)
+        .fetch_all(&seeded.collection_id)
         .await?;
     assert!(versions.iter().all(|v| !v.interval.valid_to.is_infinity()));
-    assert!(versions.iter().all(|v| v.base.name.as_str() != "c_renamed"));
+    assert!(versions.iter().all(|v| v.name.as_str() != "c_renamed"));
     Ok(())
 }

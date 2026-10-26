@@ -18,25 +18,25 @@ pub fn assert_function_status(
     function: &FunctionDBWithNames,
     override_disabled_trigger: &OverrideDisabledTrigger,
 ) -> Result<(), TdError> {
-    if !matches!(function.base.base.status, FunctionStatus::Active) {
+    if !matches!(function.status, FunctionStatus::Active) {
         Err(api_error!(
             ApiError::InputError,
             "Function '{}' must be in an active status to execute. Current status: '{}'",
-            function.base.base.name,
-            function.base.base.status
+            function.name,
+            function.status
         ))?
     }
-    if !*function.base.base.enabled {
+    if !*function.enabled {
         if **override_disabled_trigger {
             msgs.notification(api_message!(
                 "Trigger function '{}' is disabled but override_disabled_trigger is set to true",
-                function.base.base.name
+                function.name
             ));
         } else {
             Err(api_error!(
                 ApiError::InputError,
                 "Function '{}' must be enabled to be executed",
-                function.base.base.name,
+                function.name,
             ))?
         }
     }

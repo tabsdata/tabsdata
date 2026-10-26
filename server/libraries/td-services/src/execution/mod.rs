@@ -50,9 +50,8 @@ pub(crate) async fn trigger_gate<S: SeesProjectRows>(
     function: &FunctionDBWithNames,
     trigger_type: &TriggerType,
 ) -> Result<Option<TriggerResponse>, TdError> {
-    let latest_execution: Option<ExecutionDB> = conn
-        .fetch_first(and!(&function.base.base.id, trigger_type))
-        .await?;
+    let latest_execution: Option<ExecutionDB> =
+        conn.fetch_first(and!(&function.id, trigger_type)).await?;
     if let Some(execution_id) =
         running_execution(conn, &request.skip_if_running, &latest_execution).await?
     {
@@ -61,7 +60,7 @@ pub(crate) async fn trigger_gate<S: SeesProjectRows>(
             execution_id,
         }));
     }
-    external_uid_holder(conn, &function.base.base.function_id, &request.external_uid).await
+    external_uid_holder(conn, &function.function_id, &request.external_uid).await
 }
 
 /// The full trigger flow shared by both trigger services, once
@@ -87,26 +86,26 @@ pub(crate) async fn execute(
     let override_disabled_trigger = request.override_disabled_trigger;
     assert_function_status(msgs, &function, &override_disabled_trigger)?;
 
-    let function_id = function.base.base.function_id;
+    let function_id = function.function_id;
     let options = PlanOptions {
         function_only: request.function_only,
         override_disabled_trigger,
     };
-    let topology = ProjectTopology::current(conn, &function.base.project_id).await?;
+    let topology = ProjectTopology::current(conn, &function.project_id).await?;
     let execution_plan = topology.plan(FunctionState::Executable, &function_id, &options)?;
     execution_plan.validate(transaction_by)?;
 
     let execution = ExecutionInsertDB {
         id: ExecutionId::new(),
         name: request.name,
-        collection_id: function.base.base.collection_id,
-        function_id: function.base.base.function_id,
-        function_version_id: function.base.base.id,
+        collection_id: function.collection_id,
+        function_id: function.function_id,
+        function_version_id: function.id.clone(),
         triggered_on: TriggeredOn::from(at),
         triggered_by_id: request_context.user_id,
         trigger_type,
         external_uid: request.external_uid,
-        topology_version_id: topology.version.base.id,
+        topology_version_id: topology.version.id,
     };
     conn.insert(&execution).await?;
 

@@ -44,7 +44,7 @@ mod tests {
         let mut holder = db.begin().await.unwrap();
         let locked = holder
             .for_update()
-            .fetch_all::<LockedProjectDao>(&project.base.project_id)
+            .fetch_all::<LockedProjectDao>(&project.project_id)
             .await
             .unwrap();
         assert_eq!(locked.len(), 1, "the holder must have locked its row");
@@ -56,7 +56,7 @@ mod tests {
         {
             let mut reader = db.begin().await.unwrap();
             let unlocked: Vec<LockedProjectDao> =
-                tokio::time::timeout(BLOCKED_AFTER, reader.fetch_all(&project.base.project_id))
+                tokio::time::timeout(BLOCKED_AFTER, reader.fetch_all(&project.project_id))
                     .await
                     .expect("an unlocked read must not wait")
                     .unwrap();
@@ -68,7 +68,7 @@ mod tests {
             BLOCKED_AFTER,
             waiter
                 .for_update()
-                .fetch_all::<LockedProjectDao>(&project.base.project_id),
+                .fetch_all::<LockedProjectDao>(&project.project_id),
         )
         .await;
         assert!(
@@ -89,7 +89,7 @@ mod tests {
         let claimed: Vec<LockedProjectDao> = holder.for_update().claim_all(&()).await.unwrap();
         let held: HashSet<String> = claimed.iter().map(|p| p.project_id.to_string()).collect();
         assert!(
-            held.contains(&seeded.base.project_id.to_string()),
+            held.contains(&seeded.project_id.to_string()),
             "the first claimer must take the seeded project"
         );
 

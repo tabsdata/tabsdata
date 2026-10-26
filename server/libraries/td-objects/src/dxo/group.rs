@@ -78,14 +78,11 @@ impl GroupDB {
     pub fn updated(&self, update: &GroupUpdate, ctx: &RequestContext) -> GroupInsertDB {
         GroupInsertDB {
             id: GroupVersionId::default(),
-            name: update
-                .name
-                .clone()
-                .unwrap_or_else(|| self.base.name.clone()),
+            name: update.name.clone().unwrap_or_else(|| self.name.clone()),
             description: update
                 .description
                 .clone()
-                .unwrap_or_else(|| self.base.description.clone()),
+                .unwrap_or_else(|| self.description.clone()),
             defined_by_id: ctx.user_id,
             ..self.base.clone()
         }

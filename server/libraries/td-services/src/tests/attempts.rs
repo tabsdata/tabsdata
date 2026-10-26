@@ -34,27 +34,23 @@ use td_queries::test_utils::SeedEntry;
 async fn test_recover_during_replay_keeps_one_attempt_in_flight(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_twice")?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&collection, &register("f_twice", None))
         .await?;
-    let execution = db
-        .scoped(p.base.project_id)
-        .seed()
-        .execution(&function)
-        .await?;
+    let execution = db.scoped(p.project_id).seed().execution(&function).await?;
     let transaction = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .transaction(&execution, &TransactionKey::try_from("ANY")?)
         .await?;
     let failed = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .physical_function_run(
             &collection,
@@ -64,7 +60,7 @@ async fn test_recover_during_replay_keeps_one_attempt_in_flight(db: TdPool) -> R
             &LogicalFunctionRunStatus::Failed,
         )
         .await?;
-    let run_id = failed.base.logical_function_run_id.clone();
+    let run_id = failed.logical_function_run_id.clone();
 
     let replay = RequestContext::with(AccessTokenId::default(), UserId::admin()).create(
         LogicalFunctionRunParam {
@@ -79,7 +75,7 @@ async fn test_recover_during_replay_keeps_one_attempt_in_flight(db: TdPool) -> R
 
     let recover = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
         ExecutionParam {
-            execution: execution.base.id.clone(),
+            execution: execution.id.clone(),
         },
         (),
     );
@@ -90,13 +86,13 @@ async fn test_recover_during_replay_keeps_one_attempt_in_flight(db: TdPool) -> R
     let attempts: Vec<PhysicalFunctionRunDB> = db.timeline().fetch_all(&run_id).await?;
     let in_flight: Vec<_> = attempts
         .iter()
-        .filter(|a| PhysicalFunctionRunStatus::IN_FLIGHT.contains(&a.base.status))
-        .map(|a| format!("{} {:?}", a.base.id, a.base.status))
+        .filter(|a| PhysicalFunctionRunStatus::IN_FLIGHT.contains(&a.status))
+        .map(|a| format!("{} {:?}", a.id, a.status))
         .collect();
     assert!(
         in_flight.len() <= 1,
         "run {:?} has {} attempts in flight: {in_flight:?}",
-        run.base.status,
+        run.status,
         in_flight.len()
     );
     Ok(())
@@ -135,7 +131,7 @@ async fn test_replay_that_heals_a_producer_releases_its_on_hold_consumers(
     }];
     test_status_update(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, _, f, _| {
             let db = db.clone();
@@ -145,7 +141,7 @@ async fn test_replay_that_heals_a_producer_releases_its_on_hold_consumers(
                 let replay = RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(
                         LogicalFunctionRunParam {
-                            logical_function_run: producer.base.logical_function_run_id.clone(),
+                            logical_function_run: producer.logical_function_run_id.clone(),
                         },
                         (),
                     );
@@ -158,19 +154,14 @@ async fn test_replay_that_heals_a_producer_releases_its_on_hold_consumers(
                 assert_eq!(workers.len(), 1);
 
                 for status in [WorkerCallbackStatus::Running, WorkerCallbackStatus::Done] {
-                    post_callback(
-                        &db,
-                        &replayed.new_function_run_id,
-                        &workers[0].base.id,
-                        status,
-                    )
-                    .await?;
+                    post_callback(&db, &replayed.new_function_run_id, &workers[0].id, status)
+                        .await?;
                 }
 
                 let consumer: LogicalFunctionRunDB =
-                    db.fetch_one(&consumer.base.logical_function_run_id).await?;
+                    db.fetch_one(&consumer.logical_function_run_id).await?;
                 assert_ne!(
-                    consumer.base.status,
+                    consumer.status,
                     LogicalFunctionRunStatus::OnHold,
                     "the healed producer's consumer must be released"
                 );
@@ -212,7 +203,7 @@ async fn test_the_tick_releases_a_run_nothing_holds(db: TdPool) -> Result<(), Td
     }];
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, _, f, _| {
             let db = db.clone();
@@ -220,9 +211,9 @@ async fn test_the_tick_releases_a_run_nothing_holds(db: TdPool) -> Result<(), Td
             async move {
                 dispatch_services(&db).request(()).await?;
                 let consumer: LogicalFunctionRunDB =
-                    db.fetch_one(&consumer.base.logical_function_run_id).await?;
+                    db.fetch_one(&consumer.logical_function_run_id).await?;
                 assert_ne!(
-                    consumer.base.status,
+                    consumer.status,
                     LogicalFunctionRunStatus::OnHold,
                     "nothing holds f_1, so the tick releases it"
                 );

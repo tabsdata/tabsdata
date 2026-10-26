@@ -150,7 +150,7 @@ impl FromDao for ProjectTopologyVersion {
 
     fn from_dao(dao: ProjectTopologyDB) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
+            id: dao.id,
             valid_from: dao.interval.valid_from.into(),
             valid_to: dao.interval.valid_to,
         })

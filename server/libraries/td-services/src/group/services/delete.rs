@@ -32,9 +32,7 @@ async fn delete_group(
         let current: GroupDB = conn.scd2().fetch_one(&param.group).await?;
         assert_not_system(&current)?;
         assert_group_unused(conn, &current).await?;
-        conn.scd2()
-            .close::<GroupDB>(&current.base.group_id, at)
-            .await?;
+        conn.scd2().close::<GroupDB>(&current.group_id, at).await?;
         gated_trx.commit().await?;
         Ok(())
     })
@@ -65,7 +63,7 @@ mod tests {
     async fn test_delete_group(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let group = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -75,9 +73,9 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete(GroupParam {
-                group: GroupIdName::from_str(&format!("~{}", group.base.group_id))?,
+                group: GroupIdName::from_str(&format!("~{}", group.group_id))?,
             })
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         service.delete_group(request).await?;
@@ -100,7 +98,7 @@ mod tests {
             .delete(GroupParam {
                 group: GroupIdName::from_str(SOURCE_GROUP)?,
             })
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.delete_group(request).await;
@@ -114,7 +112,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_delete_group_with_collections_rejected(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let scoped = db.scoped(p.base.project_id);
+        let scoped = db.scoped(p.project_id);
         let group = scoped
             .seed()
             .group(
@@ -135,7 +133,7 @@ mod tests {
             .delete(GroupParam {
                 group: GroupIdName::from_str("analytics")?,
             })
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let err = service.delete_group(request).await.err().unwrap();
@@ -159,7 +157,7 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let scoped = db.scoped(p.base.project_id);
+        let scoped = db.scoped(p.project_id);
         let name = GroupName::try_from("analytics")?;
         let group = scoped
             .seed()
@@ -181,7 +179,7 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str("marts")?,
                     })
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -191,10 +189,10 @@ mod tests {
                     .delete(GroupParam {
                         group: GroupIdName::from_str("analytics")?,
                     })
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
-        let live: Option<GroupDB> = scoped.scd2().fetch_optional(&group.base.group_id).await?;
+        let live: Option<GroupDB> = scoped.scd2().fetch_optional(&group.group_id).await?;
         assert!(live.is_none());
 
         let recreated = service
@@ -207,14 +205,14 @@ mod tests {
                             description: Description::try_from("again")?,
                         },
                     )
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?
             .data;
-        assert_ne!(recreated.group_id, group.base.group_id);
+        assert_ne!(recreated.group_id, group.group_id);
         let live: Vec<GroupDB> = scoped.scd2().fetch_all(&name).await?;
         assert_eq!(live.len(), 1);
-        assert_eq!(live[0].base.group_id, recreated.group_id);
+        assert_eq!(live[0].group_id, recreated.group_id);
         Ok(())
     }
 }

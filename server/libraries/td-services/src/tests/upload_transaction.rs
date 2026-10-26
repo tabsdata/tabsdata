@@ -33,7 +33,7 @@ async fn test_upload_holds_no_transaction_while_the_body_streams(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_up")?, &UserId::admin())
         .await?;
@@ -69,7 +69,7 @@ async fn test_upload_holds_no_transaction_while_the_body_streams(
             },
             upload,
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     let services = Services::with_defaults(db.clone());
     let uploading = tokio::spawn(async move { services.upload_function(request).await });
     reached_rx

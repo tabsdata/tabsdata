@@ -112,7 +112,7 @@ async fn test_an_unauthorized_delete_does_not_lock_the_project(db: TdPool) -> Re
     let probe = lock_row_nowait(
         gate.get(Grant::asserted("row lock probe")),
         "projects",
-        &p.base.project_id.to_string(),
+        &p.project_id.to_string(),
     )
     .await;
     drop(gate);
@@ -196,13 +196,13 @@ async fn test_a_create_racing_a_rename_to_its_name_fails_cleanly(
         .fetch_one(&ProjectName::try_from("p_old")?)
         .await?;
     let update = rename("p_new")?;
-    let mut gate = gate.enter_project(&current.base.project_id).await?;
+    let mut gate = gate.enter_project(&current.project_id).await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("rename held open"));
     conn.scd2()
         .open(&current.updated(&update, &ctx), at)
         .await?;
-    rename_project_roles(conn, &ctx, &current.base.project_id, &update, &current).await?;
+    rename_project_roles(conn, &ctx, &current.project_id, &update, &current).await?;
 
     let creating = tokio::spawn({
         let services = services.clone();
@@ -244,11 +244,11 @@ async fn test_a_rename_racing_a_delete_does_not_deadlock(db: TdPool) -> Result<(
         .scd2()
         .fetch_one(&ProjectName::try_from("p_old")?)
         .await?;
-    let mut gate = gate.enter_project(&current.base.project_id).await?;
+    let mut gate = gate.enter_project(&current.project_id).await?;
     let at = gate.locked_at();
     let conn = gate.get(Grant::asserted("delete held open"));
     conn.scd2()
-        .close::<ProjectDB>(&current.base.project_id, at)
+        .close::<ProjectDB>(&current.project_id, at)
         .await?;
 
     let renaming = tokio::spawn({
@@ -262,7 +262,7 @@ async fn test_a_rename_racing_a_delete_does_not_deadlock(db: TdPool) -> Result<(
     wait_until_blocking(&mut gate, "the rename").await;
     let cascade = delete_project_roles(
         gate.get(Grant::asserted("delete held open")),
-        &current.base.project_id,
+        &current.project_id,
     )
     .await;
     if cascade.is_ok() {

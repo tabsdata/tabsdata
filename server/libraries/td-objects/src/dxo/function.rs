@@ -425,19 +425,42 @@ impl FromDao for FunctionPatchRecord {
     type Dao = FunctionPatchDBWithNames;
 
     fn from_dao(dao: FunctionPatchDBWithNames) -> Result<Self, TdError> {
+        let FunctionPatchDBWithNames {
+            base:
+                FunctionPatchDB {
+                    base:
+                        FunctionPatchInsertDB {
+                            id,
+                            parent_function_version_id,
+                            function_id,
+                            collection_id,
+                            snippet,
+                            bundle_id,
+                            runtime_values,
+                            description,
+                            defined_by_id,
+                            status,
+                            ..
+                        },
+                    interval,
+                    ..
+                },
+            defined_by,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.base.id,
-            parent_function_version_id: dao.base.base.parent_function_version_id,
-            function_id: dao.base.base.function_id,
-            collection_id: dao.base.base.collection_id,
-            snippet: dao.base.base.snippet,
-            bundle_id: dao.base.base.bundle_id,
-            runtime_values: dao.base.base.runtime_values,
-            description: dao.base.base.description,
-            defined_on: dao.base.interval.valid_from.into(),
-            defined_by_id: dao.base.base.defined_by_id,
-            status: dao.base.base.status,
-            defined_by: dao.defined_by,
+            id,
+            parent_function_version_id,
+            function_id,
+            collection_id,
+            snippet,
+            bundle_id,
+            runtime_values,
+            description,
+            defined_on: interval.valid_from.into(),
+            defined_by_id,
+            status,
+            defined_by,
         })
     }
 }
@@ -631,31 +654,66 @@ impl FromDao for Function {
     type Dao = FunctionDBWithNames;
 
     fn from_dao(dao: FunctionDBWithNames) -> Result<Self, TdError> {
+        let FunctionDBWithNames {
+            base:
+                FunctionDB {
+                    base:
+                        FunctionInsertDB {
+                            id,
+                            collection_id,
+                            name,
+                            description,
+                            decorator,
+                            function_type,
+                            parent_function_id,
+                            connector,
+                            connection,
+                            runtime_values,
+                            function_id,
+                            base_path,
+                            stage_id,
+                            stage_base_path,
+                            storage_version,
+                            bundle_id,
+                            snippet,
+                            defined_by_id,
+                            status,
+                            enabled,
+                            ..
+                        },
+                    interval,
+                    ..
+                },
+            collection,
+            group_id,
+            defined_by,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.base.id,
-            collection_id: dao.base.base.collection_id,
-            name: dao.base.base.name,
-            description: dao.base.base.description,
-            decorator: dao.base.base.decorator,
-            function_type: dao.base.base.function_type,
-            parent_function_id: dao.base.base.parent_function_id,
-            connector: dao.base.base.connector,
-            connection: dao.base.base.connection,
-            runtime_values: dao.base.base.runtime_values,
-            function_id: dao.base.base.function_id,
-            base_path: dao.base.base.base_path,
-            stage_id: dao.base.base.stage_id,
-            stage_base_path: dao.base.base.stage_base_path,
-            storage_version: dao.base.base.storage_version,
-            bundle_id: dao.base.base.bundle_id,
-            snippet: dao.base.base.snippet,
-            defined_on: dao.base.interval.valid_from.into(),
-            defined_by_id: dao.base.base.defined_by_id,
-            status: dao.base.base.status,
-            enabled: dao.base.base.enabled,
-            collection: dao.collection,
-            group_id: dao.group_id,
-            defined_by: dao.defined_by,
+            id,
+            collection_id,
+            name,
+            description,
+            decorator,
+            function_type,
+            parent_function_id,
+            connector,
+            connection,
+            runtime_values,
+            function_id,
+            base_path,
+            stage_id,
+            stage_base_path,
+            storage_version,
+            bundle_id,
+            snippet,
+            defined_on: interval.valid_from.into(),
+            defined_by_id,
+            status,
+            enabled,
+            collection,
+            group_id,
+            defined_by,
         })
     }
 }

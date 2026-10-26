@@ -28,7 +28,7 @@ async fn list_simple_permission_by_project(
         .require::<Project, (ManageAccess, ManageProject)>(
             conn,
             &request.context,
-            &project.base.project_id,
+            &project.project_id,
         )
         .await?;
     list_project_access(conn, &request.project).await
@@ -173,7 +173,7 @@ mod tests {
             .seed()
             .role(RoleName::try_from("dev_only")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = p0.base.project_id.try_into()?;
+        let entity_id: EntityId = p0.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::develop_project(),

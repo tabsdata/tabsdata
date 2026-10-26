@@ -25,19 +25,19 @@ use td_queries::test_utils::{SeedEntry, begin_exclusive};
 async fn test_dispatch_stamps_fr_and_tdvs_identically(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let coll_own = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("cown")?, &UserId::admin())
         .await?;
     let coll_own = set_collection_base_path(
         &db,
-        p.base.project_id,
+        p.project_id,
         &coll_own,
         Some(&BasePath::try_from("/coll")?),
     )
     .await?;
     let coll_inherits = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("cinherits")?, &UserId::admin())
         .await?;
@@ -45,14 +45,14 @@ async fn test_dispatch_stamps_fr_and_tdvs_identically(db: TdPool) -> Result<(), 
     let override_base = BasePath::try_from("/fn")?;
     let lfr_override = seed_ready_lfr(
         &db,
-        p.base.project_id,
+        p.project_id,
         &coll_own,
         "fa",
         Some(override_base.clone()),
     )
     .await?;
-    let lfr_collection = seed_ready_lfr(&db, p.base.project_id, &coll_own, "fb", None).await?;
-    let lfr_project = seed_ready_lfr(&db, p.base.project_id, &coll_inherits, "fc", None).await?;
+    let lfr_collection = seed_ready_lfr(&db, p.project_id, &coll_own, "fb", None).await?;
+    let lfr_project = seed_ready_lfr(&db, p.project_id, &coll_inherits, "fc", None).await?;
 
     let ready = vec![
         lfr_override.clone(),
@@ -63,15 +63,15 @@ async fn test_dispatch_stamps_fr_and_tdvs_identically(db: TdPool) -> Result<(), 
     assert_eq!(minted.len(), 3);
 
     let expected = [
-        (lfr_override.base.id.clone(), override_base),
-        (lfr_collection.base.id.clone(), BasePath::try_from("/coll")?),
+        (lfr_override.id.clone(), override_base),
+        (lfr_collection.id.clone(), BasePath::try_from("/coll")?),
         // No collection prefix: the effective prefix is the project's.
-        (lfr_project.base.id.clone(), p.base.base_path.clone()),
+        (lfr_project.id.clone(), p.base_path.clone()),
     ];
     for (lfr_id, base) in &expected {
         let m = minted
             .iter()
-            .find(|m| m.lfr.base.id == *lfr_id)
+            .find(|m| m.lfr.id == *lfr_id)
             .expect("every ready LFR minted");
         assert_eq!(&m.fr.base_path, base, "FR stamps the resolved prefix");
         assert!(!m.tdvs.is_empty());
@@ -83,9 +83,9 @@ async fn test_dispatch_stamps_fr_and_tdvs_identically(db: TdPool) -> Result<(), 
         }
 
         let fr_row = fetch_run(&db, &m.fr.id).await?;
-        assert_eq!(&fr_row.base.base.base_path, base, "the FR row persisted it");
+        assert_eq!(&fr_row.base_path, base, "the FR row persisted it");
         let tdv_row: PhysicalTableDataVersionDB = db.timeline().fetch_one(&m.tdvs[0].id).await?;
-        assert_eq!(&tdv_row.base.base_path, base, "the TDV row persisted it");
+        assert_eq!(&tdv_row.base_path, base, "the TDV row persisted it");
     }
     Ok(())
 }
@@ -95,48 +95,42 @@ async fn test_dispatch_stamps_fr_and_tdvs_identically(db: TdPool) -> Result<(), 
 async fn test_replay_mint_resolves_same_ladder(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let coll = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c0")?, &UserId::admin())
         .await?;
     let coll = set_collection_base_path(
         &db,
-        p.base.project_id,
+        p.project_id,
         &coll,
         Some(&BasePath::try_from("/coll")?),
     )
     .await?;
 
     let override_base = BasePath::try_from("/fn")?;
-    let lfr_override = seed_ready_lfr(
-        &db,
-        p.base.project_id,
-        &coll,
-        "fa",
-        Some(override_base.clone()),
-    )
-    .await?;
-    let lfr_collection = seed_ready_lfr(&db, p.base.project_id, &coll, "fb", None).await?;
+    let lfr_override =
+        seed_ready_lfr(&db, p.project_id, &coll, "fa", Some(override_base.clone())).await?;
+    let lfr_collection = seed_ready_lfr(&db, p.project_id, &coll, "fb", None).await?;
 
     for (lfr, expected) in [
         (&lfr_override, &override_base),
         (&lfr_collection, &BasePath::try_from("/coll")?),
     ] {
         let runnable = RunnableVersion {
-            function_version_id: lfr.base.function_version_id.clone(),
+            function_version_id: lfr.function_version_id.clone(),
             function_version_patch_id: None,
         };
         let mut trx = begin_exclusive(&db, lfr.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("base path test"));
         assert_eq!(
-            &resolve_output_base_path(conn, &lfr.base.function_version_id).await?,
+            &resolve_output_base_path(conn, &lfr.function_version_id).await?,
             expected,
         );
         let fr = mint_function_run(conn, lfr, &runnable, at).await?;
         trx.commit().await?;
         assert_eq!(&fr.base_path, expected);
-        assert_eq!(&fetch_run(&db, &fr.id).await?.base.base.base_path, expected);
+        assert_eq!(&fetch_run(&db, &fr.id).await?.base_path, expected);
     }
     Ok(())
 }

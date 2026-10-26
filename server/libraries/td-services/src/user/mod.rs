@@ -40,7 +40,7 @@ pub fn assert_user_is_not_system(user: &UserDB) -> Result<(), TdError> {
 /// Hides system users from reads: a system user is reported as not found so its
 /// existence is not revealed through the get-by-id/name endpoint.
 pub fn assert_user_readable(user: &UserDBWithNames) -> Result<(), TdError> {
-    if *user.base.system {
+    if *user.system {
         Err(UserError::UserNotFound)?
     }
     Ok(())

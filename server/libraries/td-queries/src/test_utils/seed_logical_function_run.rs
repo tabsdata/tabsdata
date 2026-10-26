@@ -40,29 +40,29 @@ pub(crate) async fn seed_logical_function_run(
 ) -> Result<LogicalFunctionRunDB, TdError> {
     let existing: Option<LogicalFunctionRunDB> = executor
         .reuse()
-        .fetch_optional(and!(&execution.base.id, &function_version.base.function_id))
+        .fetch_optional(and!(&execution.id, &function_version.function_id))
         .await?;
     let logical_id = match existing {
         Some(existing) => {
-            if &existing.base.status != status {
+            if &existing.status != status {
                 let update = LogicalFunctionRunStatusUpdateDB { status: *status };
-                executor.reuse().update(&update, &existing.base.id).await?;
+                executor.reuse().update(&update, &existing.id).await?;
             }
             existing.base.id
         }
         None => {
             let lfr = LogicalFunctionRunInsertDB {
                 id: LogicalFunctionRunId::new(),
-                collection_id: collection.base.collection_id,
-                execution_id: execution.base.id.clone(),
-                transaction_id: transaction.base.id.clone(),
-                function_id: function_version.base.function_id,
-                function_version_id: function_version.base.id.clone(),
+                collection_id: collection.collection_id,
+                execution_id: execution.id.clone(),
+                transaction_id: transaction.id.clone(),
+                function_id: function_version.function_id,
+                function_version_id: function_version.id.clone(),
                 trigger: Trigger::Manual,
-                triggered_on: transaction.base.triggered_on,
-                triggered_by_id: transaction.base.triggered_by_id,
+                triggered_on: transaction.triggered_on,
+                triggered_by_id: transaction.triggered_by_id,
                 status: *status,
-                group_id: collection.base.group_id,
+                group_id: collection.group_id,
             };
             executor.reuse().insert(&lfr).await?;
             lfr.id
@@ -73,21 +73,21 @@ pub(crate) async fn seed_logical_function_run(
     let tables: Vec<TableDB> = executor
         .reuse()
         .scd2()
-        .fetch_all::<TableDB>(&function_version.base.function_id)
+        .fetch_all::<TableDB>(&function_version.function_id)
         .await?;
     for t in &tables {
         let ltdv = LogicalTableDataVersionInsertDB {
             id: LogicalTableDataVersionId::new(),
-            collection_id: collection.base.collection_id,
-            execution_id: execution.base.id.clone(),
-            transaction_id: transaction.base.id.clone(),
-            table_id: t.base.table_id,
-            producer_logical_function_run_id: Some(logical.base.id.clone()),
-            function_param_pos: t.base.function_param_pos,
-            private: t.base.private,
-            triggered_on: transaction.base.triggered_on,
-            triggered_by_id: transaction.base.triggered_by_id,
-            group_id: logical.base.group_id,
+            collection_id: collection.collection_id,
+            execution_id: execution.id.clone(),
+            transaction_id: transaction.id.clone(),
+            table_id: t.table_id,
+            producer_logical_function_run_id: Some(logical.id.clone()),
+            function_param_pos: t.function_param_pos,
+            private: t.private,
+            triggered_on: transaction.triggered_on,
+            triggered_by_id: transaction.triggered_by_id,
+            group_id: logical.group_id,
         };
         executor.reuse().insert(&ltdv).await?;
     }

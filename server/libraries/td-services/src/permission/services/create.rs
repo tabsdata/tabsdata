@@ -107,7 +107,7 @@ mod tests {
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = p0.base.project_id.try_into()?;
+        let entity_id: EntityId = p0.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::manage_project(),
@@ -159,7 +159,7 @@ mod tests {
             .seed()
             .role(RoleName::try_from("r0")?, Description::try_from("d")?)
             .await?;
-        let entity_id: EntityId = p0.base.project_id.try_into()?;
+        let entity_id: EntityId = p0.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::manage_project(),

@@ -92,12 +92,12 @@ pub(crate) async fn reconcile_stored_connection(
             store.delete(project, connection_id).await?;
             Ok(Reconciled::Deleted)
         }
-        Some(collection) if collection.base.name != *written => {
+        Some(collection) if collection.name != *written => {
             rename_stored_connection(
                 store,
                 project,
                 collection_id,
-                &collection.base.name,
+                &collection.name,
                 connection_id,
             )
             .await?;
@@ -165,12 +165,12 @@ pub(crate) async fn escalate_for_connected(
 /// Only `Source`/`Destination` collections carry connection info; reject a
 /// `DataFactory`.
 pub fn ensure_connectable(collection: &CollectionDB) -> Result<(), TdError> {
-    match &collection.base.collection_type {
+    match &collection.collection_type {
         CollectionType::Source | CollectionType::Destination => Ok(()),
         CollectionType::DataFactory => Err(api_error!(
             ApiError::InputError,
             "collection '{}' is a DataFactory and does not carry connection info",
-            collection.base.name
+            collection.name
         )),
     }
 }
@@ -290,7 +290,7 @@ pub async fn resolve_connection<S: SeesProjectRows, M: AccessMode>(
     collection: &CollectionDB,
     document: &ConnectionDocument,
 ) -> Result<ConnectionResolution, TdError> {
-    let connection_id = collection.base.connection_id.ok_or_else(|| {
+    let connection_id = collection.connection_id.ok_or_else(|| {
         api_error!(
             ApiError::NotFound,
             "the collection has no connection configured"
@@ -301,18 +301,18 @@ pub async fn resolve_connection<S: SeesProjectRows, M: AccessMode>(
     Ok(ConnectionResolution {
         row: existing,
         document: document.clone(),
-        collection_id: collection.base.collection_id,
-        collection: collection.base.name.clone(),
+        collection_id: collection.collection_id,
+        collection: collection.name.clone(),
     })
 }
 
 fn ensure_same_kind(existing: &ConnectionDB, kind: &ConnectionKind) -> Result<(), TdError> {
-    if existing.base.kind != *kind {
+    if existing.kind != *kind {
         return Err(api_error!(
             ApiError::InputError,
             "the connection's connector kind is '{}' and cannot change (got '{}'); \
              delete and recreate the collection to use a different connector",
-            existing.base.kind,
+            existing.kind,
             kind
         ));
     }
@@ -321,7 +321,7 @@ fn ensure_same_kind(existing: &ConnectionDB, kind: &ConnectionKind) -> Result<()
 
 /// The collection's connection id, or 404 — without a store round-trip.
 pub fn require_connection_id(collection: &CollectionDB) -> Result<ConnectionId, TdError> {
-    collection.base.connection_id.ok_or_else(|| {
+    collection.connection_id.ok_or_else(|| {
         api_error!(
             ApiError::NotFound,
             "the collection has no connection configured"

@@ -169,32 +169,72 @@ impl FromDao for PhysicalTableDataVersion {
     type Dao = PhysicalTableDataVersionDBWithNames;
 
     fn from_dao(dao: PhysicalTableDataVersionDBWithNames) -> Result<Self, TdError> {
+        let PhysicalTableDataVersionDBWithNames {
+            base:
+                PhysicalTableDataVersionDBWithFunction {
+                    base:
+                        PhysicalTableDataVersionDB {
+                            base:
+                                PhysicalTableDataVersionInsertDB {
+                                    id,
+                                    collection_id,
+                                    table_id,
+                                    name,
+                                    table_version_id,
+                                    function_version_id,
+                                    has_data,
+                                    schema_changed,
+                                    execution_id,
+                                    transaction_id,
+                                    physical_function_run_id,
+                                    function_param_pos,
+                                    column_count,
+                                    row_count,
+                                    data_bytes,
+                                    schema_hash,
+                                    with_data_table_data_version_id,
+                                    ..
+                                },
+                            interval,
+                            ..
+                        },
+                    triggered_by_id,
+                    started_on,
+                    ended_on,
+                    status,
+                    ..
+                },
+            collection,
+            function,
+            created_by,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.base.base.id,
-            collection_id: dao.base.base.base.collection_id,
-            table_id: dao.base.base.base.table_id,
-            name: dao.base.base.base.name,
-            table_version_id: dao.base.base.base.table_version_id,
-            function_version_id: dao.base.base.base.function_version_id,
-            data_changed: dao.base.base.base.has_data.into(),
-            schema_data_changed: dao.base.base.base.schema_changed.into(),
-            execution_id: dao.base.base.base.execution_id,
-            transaction_id: dao.base.base.base.transaction_id,
-            physical_function_run_id: dao.base.base.base.physical_function_run_id,
-            function_param_pos: dao.base.base.base.function_param_pos.into(),
-            created_at: dao.base.base.interval.valid_from.into(),
-            triggered_by_id: dao.base.triggered_by_id,
-            started_on: dao.base.started_on,
-            ended_on: dao.base.ended_on,
-            status: dao.base.status,
-            collection: dao.collection,
-            function: dao.function,
-            created_by: dao.created_by,
-            column_count: dao.base.base.base.column_count,
-            row_count: dao.base.base.base.row_count,
-            data_bytes: dao.base.base.base.data_bytes,
-            schema_hash: dao.base.base.base.schema_hash,
-            with_data_table_data_version_id: dao.base.base.base.with_data_table_data_version_id,
+            id,
+            collection_id,
+            table_id,
+            name,
+            table_version_id,
+            function_version_id,
+            data_changed: has_data.into(),
+            schema_data_changed: schema_changed.into(),
+            execution_id,
+            transaction_id,
+            physical_function_run_id,
+            function_param_pos: function_param_pos.into(),
+            created_at: interval.valid_from.into(),
+            triggered_by_id,
+            started_on,
+            ended_on,
+            status,
+            collection,
+            function,
+            created_by,
+            column_count,
+            row_count,
+            data_bytes,
+            schema_hash,
+            with_data_table_data_version_id,
         })
     }
 }

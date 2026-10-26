@@ -17,7 +17,7 @@ async fn test_create_already_existing(db: TdPool) {
     let p = db.seed().test_project().await.unwrap();
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&name, &UserId::admin())
         .await;
@@ -35,7 +35,7 @@ async fn test_create_already_existing(db: TdPool) {
 
     let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
         .create((), create)
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
 
     // The `ensure_collection_name_free` pre-check rejects the duplicate up front
     // with a clean `EntityAlreadyExists` rather than the raw `UniqueViolation`

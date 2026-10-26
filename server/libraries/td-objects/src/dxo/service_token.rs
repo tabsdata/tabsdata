@@ -93,16 +93,32 @@ impl FromDao for TokenRead {
     type Dao = ServiceTokenDBWithNames;
 
     fn from_dao(dao: ServiceTokenDBWithNames) -> Result<Self, TdError> {
+        let ServiceTokenDBWithNames {
+            base:
+                ServiceTokenDB {
+                    hint,
+                    comment,
+                    created_on,
+                    expires_on,
+                    last_used_on,
+                    scope,
+                    system,
+                    id,
+                    slot,
+                    ..
+                },
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.id,
-            slot: dao.base.slot,
-            hint: dao.base.hint,
-            comment: dao.base.comment,
-            created_on: dao.base.created_on,
-            expires_on: dao.base.expires_on,
-            last_used_on: dao.base.last_used_on,
-            scope: dao.base.scope,
-            system: dao.base.system,
+            id,
+            slot,
+            hint,
+            comment,
+            created_on,
+            expires_on,
+            last_used_on,
+            scope,
+            system,
         })
     }
 }
@@ -123,14 +139,28 @@ impl FromDao for TokenSelf {
     type Dao = ServiceTokenDBWithNames;
 
     fn from_dao(dao: ServiceTokenDBWithNames) -> Result<Self, TdError> {
+        let ServiceTokenDBWithNames {
+            base:
+                ServiceTokenDB {
+                    hint,
+                    comment,
+                    created_on,
+                    expires_on,
+                    id,
+                    slot,
+                    ..
+                },
+            user_name,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.id,
-            slot: dao.base.slot,
-            user_name: dao.user_name,
-            hint: dao.base.hint,
-            comment: dao.base.comment,
-            created_on: dao.base.created_on,
-            expires_on: dao.base.expires_on,
+            id,
+            slot,
+            user_name,
+            hint,
+            comment,
+            created_on,
+            expires_on,
         })
     }
 }

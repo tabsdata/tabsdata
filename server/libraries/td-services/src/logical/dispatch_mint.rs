@@ -55,7 +55,7 @@ pub async fn mint_function_runs_on_dispatch(
         return Ok(Vec::new());
     }
 
-    let lfr_ids: Vec<LogicalFunctionRunId> = ready_lfrs.iter().map(|f| f.base.id.clone()).collect();
+    let lfr_ids: Vec<LogicalFunctionRunId> = ready_lfrs.iter().map(|f| f.id.clone()).collect();
     let producer_filters: Vec<Option<LogicalFunctionRunId>> =
         lfr_ids.iter().cloned().map(Some).collect();
 
@@ -67,7 +67,7 @@ pub async fn mint_function_runs_on_dispatch(
 
     let distinct_fvids: Vec<FunctionVersionId> = ready_lfrs
         .iter()
-        .map(|f| f.base.function_version_id.clone())
+        .map(|f| f.function_version_id.clone())
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
@@ -85,14 +85,14 @@ pub async fn mint_function_runs_on_dispatch(
     // Each run's tables as its plan read them: its execution's topology version.
     let execution_ids: Vec<ExecutionId> = runs
         .iter()
-        .map(|r| r.base.execution_id.clone())
+        .map(|r| r.execution_id.clone())
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
     let executions: Vec<ExecutionDB> = conn.chunked().fetch_all(&execution_ids, ()).await?;
     let versions: Vec<TopologyVersionId> = executions
         .iter()
-        .map(|e| e.base.topology_version_id)
+        .map(|e| e.topology_version_id)
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
@@ -102,14 +102,14 @@ pub async fn mint_function_runs_on_dispatch(
         .fetch_all::<ProjectTopologyDB>(&versions, ())
         .await?
         .into_iter()
-        .map(|v| (v.base.id, v))
+        .map(|v| (v.id, v))
         .collect();
     let planned_by_execution: HashMap<ExecutionId, &ProjectTopologyDB> = executions
         .iter()
         .map(|e| {
             topologies
-                .get(&e.base.topology_version_id)
-                .map(|t| (e.base.id.clone(), t))
+                .get(&e.topology_version_id)
+                .map(|t| (e.id.clone(), t))
                 .ok_or_else(SqlError::not_found::<ProjectTopologyDB>)
         })
         .collect::<Result<_, _>>()?;
@@ -118,12 +118,12 @@ pub async fn mint_function_runs_on_dispatch(
         (&ProjectTopologyDB, HashSet<FunctionId>),
     > = HashMap::new();
     for lfr in ready_lfrs {
-        let topology = planned_by_execution[&lfr.base.execution_id];
+        let topology = planned_by_execution[&lfr.execution_id];
         function_ids_by_version
-            .entry(topology.base.id)
+            .entry(topology.id)
             .or_insert_with(|| (topology, HashSet::new()))
             .1
-            .insert(lfr.base.function_id);
+            .insert(lfr.function_id);
     }
     let mut tables_by_run: HashMap<(TopologyVersionId, FunctionId), Vec<TableDB>> = HashMap::new();
     for (version, (topology, function_ids)) in &function_ids_by_version {
@@ -136,7 +136,7 @@ pub async fn mint_function_runs_on_dispatch(
             .await?;
         for t in tables {
             tables_by_run
-                .entry((*version, t.base.function_id))
+                .entry((*version, t.function_id))
                 .or_default()
                 .push(t);
         }
@@ -163,13 +163,13 @@ pub async fn mint_function_runs_on_dispatch(
 
     for lfr in ready_lfrs.iter() {
         let runnable = runnable_by_fvid
-            .get(&lfr.base.function_version_id)
+            .get(&lfr.function_version_id)
             .ok_or_else(|| {
                 api_error!(
                     ApiError::InternalError,
                     "no runnable resolved for LFR {} (fvid {})",
-                    lfr.base.id,
-                    lfr.base.function_version_id
+                    lfr.id,
+                    lfr.function_version_id
                 )
             })?;
         let base_path = effective
@@ -179,15 +179,12 @@ pub async fn mint_function_runs_on_dispatch(
         let fr = build_function_run(lfr, runnable, at, &base_path)?;
         let empty = Vec::new();
         let tables = tables_by_run
-            .get(&(
-                planned_by_execution[&lfr.base.execution_id].base.id,
-                lfr.base.function_id,
-            ))
+            .get(&(planned_by_execution[&lfr.execution_id].id, lfr.function_id))
             .unwrap_or(&empty);
         let logical_by_table: HashMap<_, _> = ltdvs_all
             .iter()
-            .filter(|f| f.base.producer_logical_function_run_id.as_ref() == Some(&lfr.base.id))
-            .map(|f| (f.base.table_id, f.base.id.clone()))
+            .filter(|f| f.producer_logical_function_run_id.as_ref() == Some(&lfr.id))
+            .map(|f| (f.table_id, f.id.clone()))
             .collect();
         let tdvs = build_output_table_data_versions(
             lfr,
@@ -206,7 +203,7 @@ pub async fn mint_function_runs_on_dispatch(
     if !frs.is_empty() {
         conn.scd2().chunked().open(&frs, at).await?;
         let reattempted: Vec<LogicalFunctionRunId> =
-            per_lfr.iter().map(|(lfr, _)| lfr.base.id.clone()).collect();
+            per_lfr.iter().map(|(lfr, _)| lfr.id.clone()).collect();
         runs_reattempted(conn, &reattempted).await?;
     }
     if !all_tdvs.is_empty() {
@@ -223,14 +220,14 @@ pub async fn mint_function_runs_on_dispatch(
         let tdvs: Vec<PhysicalTableDataVersionInsertDB> =
             (&mut tdvs_iter).take(tdv_count).collect();
         let runnable = runnable_by_fvid
-            .get(&lfr.base.function_version_id)
+            .get(&lfr.function_version_id)
             .cloned()
             .ok_or_else(|| {
                 api_error!(
                     ApiError::InternalError,
                     "no runnable resolved for LFR {} (fvid {})",
-                    lfr.base.id,
-                    lfr.base.function_version_id
+                    lfr.id,
+                    lfr.function_version_id
                 )
             })?;
         output.push(MintedDispatch {
@@ -297,7 +294,7 @@ mod tests {
             )
             .await?;
         let lfr = db
-            .fetch_one::<LogicalFunctionRunDB>(&pfr.base.logical_function_run_id)
+            .fetch_one::<LogicalFunctionRunDB>(&pfr.logical_function_run_id)
             .await?;
         Ok((lfr, pfr.base.id))
     }
@@ -308,20 +305,19 @@ mod tests {
     async fn test_dispatch_mints_tdvs_after_function_update(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
         let services = Services::with_defaults(db.clone());
         let collection_param = || CollectionParam {
-            collection: CollectionIdName::from_str(&format!("~{}", coll.base.collection_id))
-                .unwrap(),
+            collection: CollectionIdName::from_str(&format!("~{}", coll.collection_id)).unwrap(),
         };
         services
             .register_function(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(collection_param(), register("fr", None))
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
         let update = FunctionUpdate {
@@ -340,35 +336,30 @@ mod tests {
                         ),
                         update,
                     )
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
         let functions: Vec<FunctionDB> = db
             .scd2()
-            .fetch_all::<FunctionDB>(&coll.base.collection_id)
+            .fetch_all::<FunctionDB>(&coll.collection_id)
             .await?;
         let func = &functions[0];
-        let tables: Vec<TableDB> = db
-            .scd2()
-            .fetch_all::<TableDB>(&func.base.function_id)
-            .await?;
+        let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&func.function_id).await?;
         assert_eq!(tables.len(), 2, "the user table and the state table");
         assert!(
-            tables
-                .iter()
-                .all(|t| t.base.function_version_id != func.base.id),
+            tables.iter().all(|t| t.function_version_id != func.id),
             "an unchanged table keeps the version that defined it"
         );
 
-        let exec = db.scoped(p.base.project_id).seed().execution(func).await?;
+        let exec = db.scoped(p.project_id).seed().execution(func).await?;
         let trx = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &coll,
@@ -379,10 +370,10 @@ mod tests {
             )
             .await?;
         let lfr = db
-            .fetch_one::<LogicalFunctionRunDB>(&pfr.base.logical_function_run_id)
+            .fetch_one::<LogicalFunctionRunDB>(&pfr.logical_function_run_id)
             .await?;
 
-        let mut trx = begin_exclusive(&db, p.base.project_id).await?;
+        let mut trx = begin_exclusive(&db, p.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("dispatch mint test"));
         let minted = mint_function_runs_on_dispatch(conn, &[lfr], at).await?;
@@ -396,13 +387,13 @@ mod tests {
     async fn test_dispatch_rerun_mints_a_new_attempt(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
-        let (lfr, previous_pfr) = seed_run_lfr(&db, p.base.project_id, &coll, "fr").await?;
+        let (lfr, previous_pfr) = seed_run_lfr(&db, p.project_id, &coll, "fr").await?;
 
-        let mut trx = begin_exclusive(&db, p.base.project_id).await?;
+        let mut trx = begin_exclusive(&db, p.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(Grant::asserted("dispatch mint test"));
         let ready = vec![lfr.clone()];

@@ -58,7 +58,7 @@ mod tests {
     async fn test_list_executions_by_table_data_version(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -85,7 +85,7 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -93,17 +93,17 @@ mod tests {
 
         // Create an execution that produces a table data version.
         let execution_1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version)
             .await?;
         let transaction_1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution_1, &transaction_key)
             .await?;
         let function_run_1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -117,14 +117,14 @@ mod tests {
         let table: TableDB = db
             .scd2()
             .fetch_one::<TableDBWithNames>(and!(
-                &collection.base.collection_id,
+                &collection.collection_id,
                 &TableIdName::Name(TableName::try_from(tables[0].clone())?)
             ))
             .await?
             .base;
 
         let tdv = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -157,24 +157,24 @@ mod tests {
             workers: None,
         };
         let consumer_function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create_consumer)
             .await?;
 
         // Create a second execution with a function requirement pointing to the TDV.
         let execution_2 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&consumer_function_version)
             .await?;
         let transaction_2 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution_2, &transaction_key)
             .await?;
         let function_run_2 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -186,7 +186,7 @@ mod tests {
             .await?;
 
         // Seed a function requirement that references the TDV as input.
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .logical_input(
                 &collection,
@@ -201,7 +201,7 @@ mod tests {
 
         // Create a third execution that does NOT reference the TDV.
         let _execution_3 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version)
             .await?;
@@ -209,7 +209,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
             TableDataVersionParam {
-                table_data_version: tdv.base.logical_table_data_version_id.clone(),
+                table_data_version: tdv.logical_table_data_version_id.clone(),
             },
             ListParams::default(),
         );
@@ -220,7 +220,7 @@ mod tests {
 
         // Only execution_2 should appear (it has the function requirement referencing the TDV).
         assert_eq!(response.len, 1);
-        assert_eq!(response.data[0].id, execution_2.base.id);
+        assert_eq!(response.data[0].id, execution_2.id);
 
         Ok(())
     }
@@ -230,7 +230,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         // Create a TDV with no function requirements pointing to it.
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -257,24 +257,24 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
 
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version)
             .await?;
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await?;
         let physical_function_run = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -288,14 +288,14 @@ mod tests {
         let table: TableDB = db
             .scd2()
             .fetch_one::<TableDBWithNames>(and!(
-                &collection.base.collection_id,
+                &collection.collection_id,
                 &TableIdName::Name(TableName::try_from(tables[0].clone())?)
             ))
             .await?
             .base;
 
         let tdv = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -310,7 +310,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).list(
             TableDataVersionParam {
-                table_data_version: tdv.base.logical_table_data_version_id.clone(),
+                table_data_version: tdv.logical_table_data_version_id.clone(),
             },
             ListParams::default(),
         );

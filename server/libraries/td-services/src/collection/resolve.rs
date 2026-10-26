@@ -19,7 +19,7 @@ pub async fn resolve_collection_id<S: SeesProjectRows, M: AccessMode>(
         CollectionIdName::Id(id) => *id,
         CollectionIdName::Name(_) => {
             let named: CollectionDB = conn.scd2().fetch_one(collection).await?;
-            named.base.collection_id
+            named.collection_id
         }
     })
 }

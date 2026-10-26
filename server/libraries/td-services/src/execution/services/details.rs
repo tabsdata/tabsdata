@@ -28,7 +28,7 @@ async fn execution_details(
 
     let mut trx = db.read().await?;
     let execution: ExecutionDBWithNames = trx.get(authz.none()).fetch_one(&execution_id).await?;
-    let project = execution.base.project_id;
+    let project = execution.project_id;
     let mut trx = trx.enter_project(&project).await?;
     let grant = authz
         .require::<Project, ViewProject>(&mut trx, &ctx, &project)
@@ -41,10 +41,8 @@ async fn execution_details(
     // plan-build identity rows), then all functions via the LFR's
     // function_version_id.
     let lfrs: Vec<LogicalFunctionRunDB> = conn.fetch_all(&execution_id).await?;
-    let function_version_ids: Vec<FunctionVersionId> = lfrs
-        .iter()
-        .map(|x| x.base.function_version_id.clone())
-        .collect();
+    let function_version_ids: Vec<FunctionVersionId> =
+        lfrs.iter().map(|x| x.function_version_id.clone()).collect();
     let function_rows: Vec<FunctionDBWithNames> = conn
         .timeline()
         .chunked()
@@ -75,7 +73,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_execution_details(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let execution = test_execute(db.clone(), p.base.project_id, false, false, false).await?;
+        let execution = test_execute(db.clone(), p.project_id, false, false, false).await?;
 
         let service = Services::with_defaults(db.clone());
         let request =

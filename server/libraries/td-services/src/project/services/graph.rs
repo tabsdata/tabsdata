@@ -33,7 +33,7 @@ async fn project_graph(
     let topology = ProjectTopology::of(conn, version).await?;
     let graph = topology.graph()?;
     Ok(ProjectGraphResponse {
-        version: topology.version.base.id,
+        version: topology.version.id,
         at: AtTime::from(topology.version.interval.valid_from),
         graph: graph_response(&graph, topology.labels(&graph)?).await?,
     })
@@ -141,9 +141,9 @@ mod tests {
     #[td_test::test(db)]
     async fn test_project_graph_holds_the_whole_topology(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        setup(&db, p.base.project_id).await?;
+        setup(&db, p.project_id).await?;
 
-        let graph = graph(&db, p.base.project_id, None).await?;
+        let graph = graph(&db, p.project_id, None).await?;
         assert_eq!(graph.graph.all_functions.len(), 2);
         assert_eq!(graph.graph.user_tables.len(), 3);
         let count = |user: bool, kind: fn(&GraphEdge<_>) -> bool| {
@@ -199,19 +199,19 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        setup(&db, p.base.project_id).await?;
-        let before = graph(&db, p.base.project_id, None).await?;
+        setup(&db, p.project_id).await?;
+        let before = graph(&db, p.project_id, None).await?;
 
         let delete = admin()
             .delete(CollectionParam {
                 collection: CollectionIdName::from_str("c")?,
             })
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         Services::with_defaults(db.clone())
             .delete_collection(delete)
             .await?;
 
-        let replayed = graph(&db, p.base.project_id, Some(before.version)).await?;
+        let replayed = graph(&db, p.project_id, Some(before.version)).await?;
         assert_eq!(shape(&replayed), shape(&before));
         let labels: Vec<_> = replayed.graph.labels.collections.iter().collect();
         assert_eq!(labels.len(), 1);
@@ -228,8 +228,8 @@ mod tests {
     #[td_test::test(db)]
     async fn test_project_graph_of_its_version_replays_it(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        setup(&db, p.base.project_id).await?;
-        let before = graph(&db, p.base.project_id, None).await?;
+        setup(&db, p.project_id).await?;
+        let before = graph(&db, p.project_id, None).await?;
 
         let drop_t_a = admin()
             .update(
@@ -246,17 +246,17 @@ mod tests {
                     ..Default::default()
                 },
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         Services::with_defaults(db.clone())
             .update_function(drop_t_a)
             .await?;
 
-        let after = graph(&db, p.base.project_id, None).await?;
+        let after = graph(&db, p.project_id, None).await?;
         assert!(after.at > before.at);
         assert_ne!(after.version, before.version);
         assert_ne!(shape(&after), shape(&before));
 
-        let replayed = graph(&db, p.base.project_id, Some(before.version)).await?;
+        let replayed = graph(&db, p.project_id, Some(before.version)).await?;
         assert_eq!(replayed.version, before.version);
         assert_eq!(replayed.at, before.at);
         assert_eq!(shape(&replayed), shape(&before));
@@ -266,12 +266,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_topology_versions_list_the_project_timeline(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        setup(&db, p.base.project_id).await?;
-        let latest = graph(&db, p.base.project_id, None).await?;
+        setup(&db, p.project_id).await?;
+        let latest = graph(&db, p.project_id, None).await?;
 
         let request = admin()
             .list((), ListParams::default())
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let versions = Services::with_defaults(db.clone())
             .list_topology_versions(request)
             .await?
@@ -291,7 +291,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_project_graph_of_an_empty_project(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let graph = graph(&db, p.base.project_id, None).await?;
+        let graph = graph(&db, p.project_id, None).await?;
         assert!(graph.graph.all_functions.is_empty() && graph.graph.relations.is_empty());
         Ok(())
     }

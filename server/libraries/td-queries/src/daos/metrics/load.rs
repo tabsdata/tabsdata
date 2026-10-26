@@ -33,7 +33,7 @@ pub async fn load_ended_attempts<M: AccessMode>(
         .fetch_all::<PhysicalFunctionRunDB>(pfr_ids, ())
         .await?
         .into_iter()
-        .filter(|pfr| pfr.base.ended_on.is_some())
+        .filter(|pfr| pfr.ended_on.is_some())
         .collect();
     if attempts.is_empty() {
         return Ok(Vec::new());
@@ -41,7 +41,7 @@ pub async fn load_ended_attempts<M: AccessMode>(
 
     let lfr_ids: Vec<LogicalFunctionRunId> = attempts
         .iter()
-        .map(|pfr| pfr.base.logical_function_run_id.clone())
+        .map(|pfr| pfr.logical_function_run_id.clone())
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
@@ -59,7 +59,7 @@ pub async fn load_ended_attempts<M: AccessMode>(
         .filter(is_user_table)
         .collect();
     let attempt_ids: Vec<PhysicalFunctionRunId> =
-        attempts.iter().map(|pfr| pfr.base.id.clone()).collect();
+        attempts.iter().map(|pfr| pfr.id.clone()).collect();
     let written: Vec<PhysicalTableDataVersionDB> = conn
         .timeline()
         .chunked()
@@ -75,7 +75,7 @@ pub async fn load_ended_attempts<M: AccessMode>(
         .collect();
     let source_ids: Vec<LogicalTableDataVersionId> = inputs
         .iter()
-        .filter_map(|i| i.base.requirement_logical_table_data_version_id.clone())
+        .filter_map(|i| i.requirement_logical_table_data_version_id.clone())
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
@@ -120,35 +120,35 @@ fn is_qualified_input(input: &LogicalFunctionRunInputDB) -> bool {
 
 /// System tables sit at negative positions.
 fn is_user_table(ltdv: &LogicalTableDataVersionDB) -> bool {
-    ltdv.base.function_param_pos.is_some_and(|p| *p >= 0)
+    ltdv.function_param_pos.is_some_and(|p| *p >= 0)
 }
 
 fn version(ltdv: &LogicalTableDataVersionDB, ptdv: Option<&PhysicalTableDataVersionDB>) -> Version {
     Version {
-        collection_id: ltdv.base.collection_id,
-        group_id: ltdv.base.group_id,
-        table_id: ltdv.base.table_id,
-        table_version_id: ltdv.base.id.clone(),
-        private: *ltdv.base.private,
-        has_data: ptdv.and_then(|p| p.base.has_data).is_some_and(|h| *h),
-        row_count: ptdv.and_then(|p| p.base.row_count).map_or(0, |r| *r),
-        data_bytes: ptdv.and_then(|p| p.base.data_bytes).map_or(0, |b| *b),
+        collection_id: ltdv.collection_id,
+        group_id: ltdv.group_id,
+        table_id: ltdv.table_id,
+        table_version_id: ltdv.id.clone(),
+        private: *ltdv.private,
+        has_data: ptdv.and_then(|p| p.has_data).is_some_and(|h| *h),
+        row_count: ptdv.and_then(|p| p.row_count).map_or(0, |r| *r),
+        data_bytes: ptdv.and_then(|p| p.data_bytes).map_or(0, |b| *b),
     }
 }
 
 fn assemble(base: Base) -> Vec<EndedAttempt> {
     let lfr_by_id: HashMap<&LogicalFunctionRunId, &LogicalFunctionRunDB> =
-        base.lfrs.iter().map(|l| (&l.base.id, l)).collect();
+        base.lfrs.iter().map(|l| (&l.id, l)).collect();
 
     let mut outputs_by_run: HashMap<&LogicalFunctionRunId, Vec<&LogicalTableDataVersionDB>> =
         HashMap::new();
     for ltdv in &base.outputs {
-        if let Some(producer) = &ltdv.base.producer_logical_function_run_id {
+        if let Some(producer) = &ltdv.producer_logical_function_run_id {
             outputs_by_run.entry(producer).or_default().push(ltdv);
         }
     }
     for outputs in outputs_by_run.values_mut() {
-        outputs.sort_by(|a, b| a.base.id.cmp(&b.base.id));
+        outputs.sort_by(|a, b| a.id.cmp(&b.id));
     }
 
     let written: HashMap<
@@ -160,8 +160,8 @@ fn assemble(base: Base) -> Vec<EndedAttempt> {
         .map(|p| {
             (
                 (
-                    &p.base.physical_function_run_id,
-                    &p.base.logical_table_data_version_id,
+                    &p.physical_function_run_id,
+                    &p.logical_table_data_version_id,
                 ),
                 p,
             )
@@ -170,18 +170,18 @@ fn assemble(base: Base) -> Vec<EndedAttempt> {
     let current: HashMap<&LogicalTableDataVersionId, &PhysicalTableDataVersionDB> = base
         .current
         .iter()
-        .map(|p| (&p.base.logical_table_data_version_id, p))
+        .map(|p| (&p.logical_table_data_version_id, p))
         .collect();
     let source_by_id: HashMap<&LogicalTableDataVersionId, &LogicalTableDataVersionDB> =
-        base.sources.iter().map(|l| (&l.base.id, l)).collect();
+        base.sources.iter().map(|l| (&l.id, l)).collect();
 
     let mut has_inputs: HashSet<&LogicalFunctionRunId> = HashSet::new();
     let mut read_by_run: HashMap<&LogicalFunctionRunId, Vec<&LogicalTableDataVersionId>> =
         HashMap::new();
     for input in &base.inputs {
-        let run = &input.base.logical_function_run_id;
+        let run = &input.logical_function_run_id;
         has_inputs.insert(run);
-        if let Some(ltdv_id) = &input.base.requirement_logical_table_data_version_id
+        if let Some(ltdv_id) = &input.requirement_logical_table_data_version_id
             && source_by_id.get(ltdv_id).is_some_and(|s| is_user_table(s))
         {
             read_by_run.entry(run).or_default().push(ltdv_id);
@@ -195,7 +195,7 @@ fn assemble(base: Base) -> Vec<EndedAttempt> {
     let mut replays: HashMap<&LogicalFunctionRunId, Vec<&PhysicalFunctionRunDB>> = HashMap::new();
     for pfr in &base.siblings {
         replays
-            .entry(&pfr.base.logical_function_run_id)
+            .entry(&pfr.logical_function_run_id)
             .or_default()
             .push(pfr);
     }
@@ -205,40 +205,40 @@ fn assemble(base: Base) -> Vec<EndedAttempt> {
 
     let mut ended = Vec::with_capacity(base.attempts.len());
     for pfr in &base.attempts {
-        let run_id = &pfr.base.logical_function_run_id;
+        let run_id = &pfr.logical_function_run_id;
         let Some(lfr) = lfr_by_id.get(run_id) else {
             continue;
         };
-        let Some(ended_on) = &pfr.base.ended_on else {
+        let Some(ended_on) = &pfr.ended_on else {
             continue;
         };
         let replay = replays
             .get(run_id)
-            .and_then(|a| a.iter().position(|p| p.base.id == pfr.base.id))
+            .and_then(|a| a.iter().position(|p| p.id == pfr.id))
             .unwrap_or(0) as i64;
         let outs = outputs_by_run
             .get(run_id)
             .into_iter()
             .flatten()
-            .map(|ltdv| version(ltdv, written.get(&(&pfr.base.id, &ltdv.base.id)).copied()))
+            .map(|ltdv| version(ltdv, written.get(&(&pfr.id, &ltdv.id)).copied()))
             .collect();
         let ins = read_by_run
             .get(run_id)
             .into_iter()
             .flatten()
             .filter_map(|ltdv_id| source_by_id.get(ltdv_id))
-            .map(|ltdv| version(ltdv, current.get(&ltdv.base.id).copied()))
+            .map(|ltdv| version(ltdv, current.get(&ltdv.id).copied()))
             .collect();
         ended.push(EndedAttempt {
-            collection_id: lfr.base.collection_id,
-            group_id: lfr.base.group_id,
-            execution_id: lfr.base.execution_id.clone(),
-            transaction_id: lfr.base.transaction_id.clone(),
-            function_id: lfr.base.function_id,
-            function_run_id: lfr.base.id.clone(),
-            attempt_id: pfr.base.id.clone(),
-            attempt_outcome: pfr.base.status,
-            run_status: lfr.base.status,
+            collection_id: lfr.collection_id,
+            group_id: lfr.group_id,
+            execution_id: lfr.execution_id.clone(),
+            transaction_id: lfr.transaction_id.clone(),
+            function_id: lfr.function_id,
+            function_run_id: lfr.id.clone(),
+            attempt_id: pfr.id.clone(),
+            attempt_outcome: pfr.status,
+            run_status: lfr.status,
             replay,
             current: pfr.interval.valid_to.is_infinity(),
             run_has_inputs: has_inputs.contains(run_id),

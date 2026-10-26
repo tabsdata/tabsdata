@@ -77,7 +77,7 @@ fn register(
 async fn seed(db: &TdPool) -> Result<(ProjectTopology, HashMap<String, FunctionId>), TdError> {
     let p = db.seed().test_project().await?;
     let c = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c")?, &UserId::admin())
         .await?;
@@ -92,11 +92,11 @@ async fn seed(db: &TdPool) -> Result<(ProjectTopology, HashMap<String, FunctionI
         register("g", &[], &["d_t"], &["d_t"], true)?,
     ];
     for f in &functions {
-        let seeded = db.scoped(p.base.project_id).seed().function(&c, f).await?;
-        ids.insert(f.name.to_string(), seeded.base.function_id);
+        let seeded = db.scoped(p.project_id).seed().function(&c, f).await?;
+        ids.insert(f.name.to_string(), seeded.function_id);
     }
     let h = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .child_function(
             &c,
@@ -104,23 +104,19 @@ async fn seed(db: &TdPool) -> Result<(ProjectTopology, HashMap<String, FunctionI
             &ids["b"],
         )
         .await?;
-    ids.insert("h".to_string(), h.base.function_id);
+    ids.insert("h".to_string(), h.function_id);
     let i = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&c, &register("i", &["i_t"], &["h_t"], &["h_t"], true)?)
         .await?;
-    ids.insert("i".to_string(), i.base.function_id);
+    ids.insert("i".to_string(), i.function_id);
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut conn = pools
-        .read()
-        .await?
-        .enter_project(&p.base.project_id)
-        .await?;
+    let mut conn = pools.read().await?.enter_project(&p.project_id).await?;
     let conn = conn.get(Grant::asserted("walk tests"));
-    let topology = ProjectTopology::current(conn, &p.base.project_id).await?;
+    let topology = ProjectTopology::current(conn, &p.project_id).await?;
     Ok((topology, ids))
 }
 
@@ -273,7 +269,7 @@ async fn test_nodes_match_the_catalog_views(db: TdPool) -> Result<(), TdError> {
     let (topology, _) = seed(&db).await?;
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let project = topology.version.base.project_id;
+    let project = topology.version.project_id;
     let mut conn = pools.read().await?.enter_project(&project).await?;
     let conn = conn.get(Grant::asserted("walk tests"));
     let at = &topology.version.interval.valid_from;
@@ -287,20 +283,17 @@ async fn test_nodes_match_the_catalog_views(db: TdPool) -> Result<(), TdError> {
             GraphNode::Function(node) => {
                 let row = functions
                     .iter()
-                    .find(|f| f.base.base.function_id == node.function_id)
+                    .find(|f| f.function_id == node.function_id)
                     .unwrap();
                 assert_eq!(node.collection, row.collection);
                 assert_eq!(node.group_id, row.group_id);
-                assert_eq!(node.function_version_id, row.base.base.id);
+                assert_eq!(node.function_version_id, row.id);
             }
             GraphNode::Table(node) => {
-                let row = tables
-                    .iter()
-                    .find(|t| t.base.base.table_id == node.table_id)
-                    .unwrap();
+                let row = tables.iter().find(|t| t.table_id == node.table_id).unwrap();
                 assert_eq!(node.collection, row.collection);
                 assert_eq!(node.system, row.system);
-                assert_eq!(node.table_version_id, row.base.base.id);
+                assert_eq!(node.table_version_id, row.id);
             }
         }
         seen += 1;

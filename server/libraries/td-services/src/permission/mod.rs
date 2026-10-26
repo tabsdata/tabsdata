@@ -64,7 +64,7 @@ pub async fn build_permission_db<S: DbScope, M: AccessMode>(
         let project_name = ProjectName::try_from(entity_name.to_string())?;
         let project = conn.scd2().fetch_one::<ProjectDB>(&project_name).await?;
 
-        EntityId::try_from(project.base.project_id)?
+        EntityId::try_from(project.project_id)?
     } else {
         EntityId::all_entities()
     };

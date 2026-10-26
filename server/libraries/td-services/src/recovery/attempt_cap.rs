@@ -31,7 +31,7 @@ pub(crate) async fn count_recoveries<S: SeesProjectRows, M: WriteMode>(
         let recoveries = RecoveryCount::try_from(*run.recoveries + 1)?;
         conn.update(
             &LogicalFunctionRunRecoveriesUpdateDB { recoveries },
-            &run.base.id,
+            &run.id,
         )
         .await?;
     }
@@ -46,7 +46,7 @@ pub(crate) async fn reset_recoveries<S: SeesProjectRows, M: WriteMode>(
         recoveries: RecoveryCount::default(),
     };
     for run in runs.iter().filter(|run| *run.recoveries != 0) {
-        conn.update(&reset, &run.base.id).await?;
+        conn.update(&reset, &run.id).await?;
     }
     Ok(())
 }

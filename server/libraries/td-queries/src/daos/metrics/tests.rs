@@ -143,15 +143,15 @@ async fn bind_ptdv_with_magnitudes(
 ) -> Result<PhysicalTableDataVersionDB, TdError> {
     let ptdv = PhysicalTableDataVersionInsertDB {
         id: PhysicalTableDataVersionId::new(),
-        collection_id: ltdv.base.collection_id,
-        table_id: table.base.table_id,
-        name: table.base.name.clone(),
-        table_version_id: table.base.id,
-        function_version_id: table.base.function_version_id.clone(),
+        collection_id: ltdv.collection_id,
+        table_id: table.table_id,
+        name: table.name.clone(),
+        table_version_id: table.id,
+        function_version_id: table.function_version_id.clone(),
         function_version_patch_id: None,
-        execution_id: ltdv.base.execution_id.clone(),
-        transaction_id: ltdv.base.transaction_id.clone(),
-        physical_function_run_id: pfr.base.id.clone(),
+        execution_id: ltdv.execution_id.clone(),
+        transaction_id: ltdv.transaction_id.clone(),
+        physical_function_run_id: pfr.id.clone(),
         function_param_pos: table
             .base
             .function_param_pos
@@ -164,7 +164,7 @@ async fn bind_ptdv_with_magnitudes(
         data_bytes: Some(ByteCount::try_from(data_bytes)?),
         schema_hash: None,
         with_data_table_data_version_id: None,
-        logical_table_data_version_id: ltdv.base.id.clone(),
+        logical_table_data_version_id: ltdv.id.clone(),
     };
     let scoped = db.scoped(pfr.project_id);
     (&scoped)
@@ -189,7 +189,7 @@ async fn delete_collection(db: &TdPool, coll: &CollectionDB) -> Result<(), TdErr
     let at = LockInstant::asserted(*in_window()?);
     db.scoped(coll.project_id)
         .scd2()
-        .close::<CollectionDB>(&coll.base.collection_id, at)
+        .close::<CollectionDB>(&coll.collection_id, at)
         .await?;
     Ok(())
 }
@@ -213,7 +213,7 @@ async fn seed_run(
         .physical_function_run(coll, func, &exec, &trx, &status)
         .await?;
     let lfr: LogicalFunctionRunDB = db
-        .fetch_one(and!(&pfr.base.execution_id, &pfr.base.function_id))
+        .fetch_one(and!(&pfr.execution_id, &pfr.function_id))
         .await?;
     Ok((lfr, pfr))
 }
@@ -235,11 +235,11 @@ async fn link_input(
 ) -> Result<(), TdError> {
     let input = LogicalFunctionRunInputInsertDB {
         id: LogicalFunctionRunInputId::default(),
-        collection_id: consumer_coll.base.collection_id,
-        execution_id: consumer.base.execution_id.clone(),
-        transaction_id: consumer.base.transaction_id.clone(),
-        logical_function_run_id: consumer.base.id.clone(),
-        requirement_logical_table_data_version_id: Some(ltdv.base.id.clone()),
+        collection_id: consumer_coll.collection_id,
+        execution_id: consumer.execution_id.clone(),
+        transaction_id: consumer.transaction_id.clone(),
+        logical_function_run_id: consumer.id.clone(),
+        requirement_logical_table_data_version_id: Some(ltdv.id.clone()),
         requirement_input_idx: Some(InputIdx::try_from(0)?),
         requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
         requirement_version_pos: VersionPos::try_from(0)?,
@@ -268,16 +268,15 @@ async fn seed_publisher_with_ltdv(
     let func = make_publisher_function(db, &coll, fn_name).await?;
     let (lfr, pfr) = seed_done_run(db, &coll, &func).await?;
     end_attempt(db, &pfr).await?;
-    let ltdvs: Vec<LogicalTableDataVersionDB> =
-        db.timeline().fetch_all(&lfr.base.execution_id).await?;
+    let ltdvs: Vec<LogicalTableDataVersionDB> = db.timeline().fetch_all(&lfr.execution_id).await?;
     let ltdv = ltdvs
         .into_iter()
-        .find(|t| t.base.producer_logical_function_run_id.as_ref() == Some(&lfr.base.id))
+        .find(|t| t.producer_logical_function_run_id.as_ref() == Some(&lfr.id))
         .expect("publisher mints exactly one output LTDV");
-    let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&func.base.id).await?;
+    let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&func.id).await?;
     let table = tables
         .iter()
-        .find(|t| t.base.table_id == ltdv.base.table_id)
+        .find(|t| t.table_id == ltdv.table_id)
         .expect("LTDV's table_id must match an output table of the function");
     bind_ptdv_with_magnitudes(db, &ltdv, table, &pfr, 10, 100).await?;
     Ok((coll, lfr, ltdv))
@@ -291,19 +290,14 @@ async fn bind_all_outputs(
     lfr: &LogicalFunctionRunDB,
     pfr: &PhysicalFunctionRunDB,
 ) -> Result<(), TdError> {
-    let ltdvs: Vec<LogicalTableDataVersionDB> =
-        db.timeline().fetch_all(&lfr.base.execution_id).await?;
-    let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&func.base.id).await?;
+    let ltdvs: Vec<LogicalTableDataVersionDB> = db.timeline().fetch_all(&lfr.execution_id).await?;
+    let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&func.id).await?;
     for table in &tables {
         let ltdv = ltdvs
             .iter()
-            .find(|l| l.base.table_id == table.base.table_id)
+            .find(|l| l.table_id == table.table_id)
             .expect("one LTDV per output table");
-        let (rows, bytes) = if *table.base.private {
-            (7, 77)
-        } else {
-            (10, 100)
-        };
+        let (rows, bytes) = if *table.private { (7, 77) } else { (10, 100) };
         bind_ptdv_with_magnitudes(db, ltdv, table, pfr, rows, bytes).await?;
     }
     Ok(())
@@ -314,10 +308,10 @@ async fn stamp_status_at(
     pfr: &PhysicalFunctionRunDB,
     status: PhysicalFunctionRunStatus,
 ) -> Result<(), TdError> {
-    let current: PhysicalFunctionRunDB = db.timeline().fetch_one(&pfr.base.id).await?;
+    let current: PhysicalFunctionRunDB = db.timeline().fetch_one(&pfr.id).await?;
     let mut steps = path(
         PhysicalFunctionRunStatus::TRANSITIONS,
-        current.base.status,
+        current.status,
         status,
     );
     if steps.is_empty() {
@@ -332,7 +326,7 @@ async fn stamp_status_at(
         };
         db.scoped(pfr.project_id)
             .scd2()
-            .update(&update, &pfr.base.id)
+            .update(&update, &pfr.id)
             .await?;
     }
     Ok(())
@@ -420,7 +414,7 @@ async fn test_inflight_empty_table(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_inflight_labels_a_deleted_collection_by_its_id(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let coll = seed_collection(&db, p.base.project_id, "inflight_del").await?;
+    let coll = seed_collection(&db, p.project_id, "inflight_del").await?;
     let func = make_publisher_function(&db, &coll, "inflight_del_fn").await?;
     seed_run(&db, &coll, &func, LogicalFunctionRunStatus::Running).await?;
 
@@ -438,7 +432,7 @@ async fn test_inflight_labels_a_deleted_collection_by_its_id(db: TdPool) -> Resu
     assert_eq!(rows.len(), 1, "the run is still in flight, got {rows:?}");
     assert_eq!(
         rows[0].collection_name,
-        CollectionLabel::new(Label::Deleted(coll.base.collection_id))
+        CollectionLabel::new(Label::Deleted(coll.collection_id))
     );
     Ok(())
 }
@@ -453,11 +447,10 @@ async fn test_empty_window_has_no_facts(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_publisher_writes_a_source_edge(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let (coll, lfr, _) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "pub_coll", "pub_fn").await?;
-    let pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.base.id).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, std::slice::from_ref(&pfr.base.id))
+    let (coll, lfr, _) = seed_publisher_with_ltdv(&db, p.project_id, "pub_coll", "pub_fn").await?;
+    let pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.id).await?;
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&pfr.id))
             .await
             .map_err(Into::into)
     })
@@ -470,7 +463,7 @@ async fn test_publisher_writes_a_source_edge(db: TdPool) -> Result<(), TdError> 
         .collect();
     assert_eq!(attempts.len(), 1, "one attempt row, got {rows:?}");
     assert_eq!(attempts[0].fn_runs, 1);
-    assert_eq!(attempts[0].collection_id, coll.base.collection_id);
+    assert_eq!(attempts[0].collection_id, coll.collection_id);
 
     let source = edges_of(&rows, EdgeKind::ExternalSource);
     assert_eq!(source.len(), 1, "one ingress edge, got {rows:?}");
@@ -489,8 +482,8 @@ async fn test_publisher_writes_a_source_edge(db: TdPool) -> Result<(), TdError> 
 async fn test_transformer_reads_a_real_edge(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let (source_coll, source_lfr, ltdv) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "src_coll", "src_fn").await?;
-    let target_coll = seed_collection(&db, p.base.project_id, "tgt_coll").await?;
+        seed_publisher_with_ltdv(&db, p.project_id, "src_coll", "src_fn").await?;
+    let target_coll = seed_collection(&db, p.project_id, "tgt_coll").await?;
     let target_fn = make_function(
         &db,
         &target_coll,
@@ -504,25 +497,19 @@ async fn test_transformer_reads_a_real_edge(db: TdPool) -> Result<(), TdError> {
     link_input(&db, &target_coll, &target_lfr, &ltdv).await?;
     bind_all_outputs(&db, &target_fn, &target_lfr, &target_pfr).await?;
 
-    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(
-            conn,
-            &[source_pfr.base.id.clone(), target_pfr.base.id.clone()],
-        )
-        .await
-        .map_err(Into::into)
+    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.id).await?;
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, &[source_pfr.id.clone(), target_pfr.id.clone()])
+            .await
+            .map_err(Into::into)
     })
     .await?;
 
     let rows = aggregates(&db, Dimension::Collection).await?;
     let real = edges_of(&rows, EdgeKind::Real);
     assert_eq!(real.len(), 1, "one real edge, got {rows:?}");
-    assert_eq!(
-        real[0].from_collection_id,
-        Some(source_coll.base.collection_id)
-    );
-    assert_eq!(real[0].collection_id, target_coll.base.collection_id);
+    assert_eq!(real[0].from_collection_id, Some(source_coll.collection_id));
+    assert_eq!(real[0].collection_id, target_coll.collection_id);
     assert_eq!(real[0].fn_runs, 1);
     assert!(
         edges_of(&rows, EdgeKind::Egress).is_empty(),
@@ -537,10 +524,10 @@ async fn test_written_version_is_unconsumed_until_a_run_binds_it(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let (source_coll, source_lfr, ltdv) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "unread_coll", "unread_fn").await?;
-    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, std::slice::from_ref(&source_pfr.base.id))
+        seed_publisher_with_ltdv(&db, p.project_id, "unread_coll", "unread_fn").await?;
+    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.id).await?;
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&source_pfr.id))
             .await
             .map_err(Into::into)
     })
@@ -548,17 +535,17 @@ async fn test_written_version_is_unconsumed_until_a_run_binds_it(
 
     let rows = aggregates(&db, Dimension::Collection).await?;
     assert_eq!(
-        unconsumed_of(&rows, &source_coll.base.collection_id),
+        unconsumed_of(&rows, &source_coll.collection_id),
         1,
         "nothing has read the published version, got {rows:?}"
     );
     assert_eq!(
-        tables_unread_of(&rows, &source_coll.base.collection_id),
+        tables_unread_of(&rows, &source_coll.collection_id),
         1,
         "every version of the published table is unread, got {rows:?}"
     );
 
-    let target_coll = seed_collection(&db, p.base.project_id, "reader_coll").await?;
+    let target_coll = seed_collection(&db, p.project_id, "reader_coll").await?;
     let target_fn = make_function(
         &db,
         &target_coll,
@@ -571,8 +558,8 @@ async fn test_written_version_is_unconsumed_until_a_run_binds_it(
     end_attempt(&db, &target_pfr).await?;
     link_input(&db, &target_coll, &target_lfr, &ltdv).await?;
     bind_all_outputs(&db, &target_fn, &target_lfr, &target_pfr).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, std::slice::from_ref(&target_pfr.base.id))
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&target_pfr.id))
             .await
             .map_err(Into::into)
     })
@@ -580,22 +567,22 @@ async fn test_written_version_is_unconsumed_until_a_run_binds_it(
 
     let rows = aggregates(&db, Dimension::Collection).await?;
     assert_eq!(
-        unconsumed_of(&rows, &source_coll.base.collection_id),
+        unconsumed_of(&rows, &source_coll.collection_id),
         0,
         "the transformer bound the version, got {rows:?}"
     );
     assert_eq!(
-        tables_unread_of(&rows, &source_coll.base.collection_id),
+        tables_unread_of(&rows, &source_coll.collection_id),
         0,
         "the published table is read, got {rows:?}"
     );
     assert_eq!(
-        unconsumed_of(&rows, &target_coll.base.collection_id),
+        unconsumed_of(&rows, &target_coll.collection_id),
         1,
         "nothing reads what the transformer wrote, got {rows:?}"
     );
     assert_eq!(
-        tables_unread_of(&rows, &target_coll.base.collection_id),
+        tables_unread_of(&rows, &target_coll.collection_id),
         1,
         "the transformer's own table is never read, got {rows:?}"
     );
@@ -606,16 +593,16 @@ async fn test_written_version_is_unconsumed_until_a_run_binds_it(
 async fn test_subscriber_yields_an_egress_edge(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let (_, source_lfr, ltdv) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "sub_src", "sub_src_fn").await?;
-    let coll = seed_collection(&db, p.base.project_id, "sub_coll").await?;
+        seed_publisher_with_ltdv(&db, p.project_id, "sub_src", "sub_src_fn").await?;
+    let coll = seed_collection(&db, p.project_id, "sub_coll").await?;
     let func = make_function(&db, &coll, "sub_fn", Decorator::Subscriber, &[]).await?;
     let (lfr, pfr) = seed_done_run(&db, &coll, &func).await?;
     end_attempt(&db, &pfr).await?;
     link_input(&db, &coll, &lfr, &ltdv).await?;
 
-    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, &[source_pfr.base.id.clone(), pfr.base.id.clone()])
+    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.id).await?;
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, &[source_pfr.id.clone(), pfr.id.clone()])
             .await
             .map_err(Into::into)
     })
@@ -624,7 +611,7 @@ async fn test_subscriber_yields_an_egress_edge(db: TdPool) -> Result<(), TdError
     let rows = aggregates(&db, Dimension::Collection).await?;
     let egress = edges_of(&rows, EdgeKind::Egress);
     assert_eq!(egress.len(), 1, "one egress edge, got {rows:?}");
-    assert_eq!(egress[0].collection_id, coll.base.collection_id);
+    assert_eq!(egress[0].collection_id, coll.collection_id);
     assert_eq!(egress[0].fn_runs, 1, "the attempt is counted once");
     assert_eq!(egress[0].row_count, 10);
     assert_live_matches_backfill(&db).await
@@ -635,17 +622,17 @@ async fn test_subscriber_yields_an_egress_edge(db: TdPool) -> Result<(), TdError
 async fn test_private_outputs_are_marked_and_shown_on_request(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let (_, source_lfr, ltdv) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "priv_src", "priv_src_fn").await?;
-    let coll = seed_collection(&db, p.base.project_id, "priv_coll").await?;
+        seed_publisher_with_ltdv(&db, p.project_id, "priv_src", "priv_src_fn").await?;
+    let coll = seed_collection(&db, p.project_id, "priv_coll").await?;
     let func = make_function(&db, &coll, "priv_fn", Decorator::Transformer, &["_priv"]).await?;
     let (lfr, pfr) = seed_done_run(&db, &coll, &func).await?;
     end_attempt(&db, &pfr).await?;
     link_input(&db, &coll, &lfr, &ltdv).await?;
     bind_all_outputs(&db, &func, &lfr, &pfr).await?;
 
-    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, &[source_pfr.base.id.clone(), pfr.base.id.clone()])
+    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.id).await?;
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, &[source_pfr.id.clone(), pfr.id.clone()])
             .await
             .map_err(Into::into)
     })
@@ -655,7 +642,7 @@ async fn test_private_outputs_are_marked_and_shown_on_request(db: TdPool) -> Res
     assert!(
         hidden
             .iter()
-            .all(|r| r.side != FactSide::Written || r.collection_id != coll.base.collection_id),
+            .all(|r| r.side != FactSide::Written || r.collection_id != coll.collection_id),
         "the private version is hidden by default, got {hidden:?}"
     );
     assert!(
@@ -668,7 +655,7 @@ async fn test_private_outputs_are_marked_and_shown_on_request(db: TdPool) -> Res
     let rows = db.metrics().per_table(&req, &VisibleProjects::All).await?;
     let written: Vec<_> = rows
         .iter()
-        .filter(|r| r.side == FactSide::Written && r.collection_id == coll.base.collection_id)
+        .filter(|r| r.side == FactSide::Written && r.collection_id == coll.collection_id)
         .collect();
     assert_eq!(written.len(), 1, "shown on request, got {rows:?}");
     assert_eq!(written[0].row_count, 7);
@@ -679,12 +666,11 @@ async fn test_private_outputs_are_marked_and_shown_on_request(db: TdPool) -> Res
 #[td_test::test(db)]
 async fn test_an_attempt_ended_twice_owns_its_facts_once(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let (_, lfr, _) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "twice_coll", "twice_fn").await?;
-    let pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.base.id).await?;
+    let (_, lfr, _) = seed_publisher_with_ltdv(&db, p.project_id, "twice_coll", "twice_fn").await?;
+    let pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.id).await?;
     for _ in 0..2 {
-        in_project(&db, p.base.project_id, async |conn| {
-            attempts_ended(conn, std::slice::from_ref(&pfr.base.id))
+        in_project(&db, p.project_id, async |conn| {
+            attempts_ended(conn, std::slice::from_ref(&pfr.id))
                 .await
                 .map_err(Into::into)
         })
@@ -704,7 +690,7 @@ async fn test_an_attempt_ended_twice_owns_its_facts_once(db: TdPool) -> Result<(
 async fn test_group_dim_counts_a_run_once_per_source_group(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let group = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .group(
             GroupName::try_from("shared")?,
@@ -715,7 +701,7 @@ async fn test_group_dim_counts_a_run_once_per_source_group(db: TdPool) -> Result
     let mut ended = Vec::new();
     for name in ["grp_a", "grp_b"] {
         let coll = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection_in_group(&CollectionName::try_from(name)?, &system_user()?, &group)
             .await?;
@@ -724,15 +710,15 @@ async fn test_group_dim_counts_a_run_once_per_source_group(db: TdPool) -> Result
         end_attempt(&db, &pfr).await?;
         bind_all_outputs(&db, &func, &lfr, &pfr).await?;
         let versions: Vec<LogicalTableDataVersionDB> =
-            db.timeline().fetch_all(&lfr.base.execution_id).await?;
+            db.timeline().fetch_all(&lfr.execution_id).await?;
         ltdvs.extend(
             versions
                 .into_iter()
-                .filter(|t| t.base.producer_logical_function_run_id.as_ref() == Some(&lfr.base.id)),
+                .filter(|t| t.producer_logical_function_run_id.as_ref() == Some(&lfr.id)),
         );
-        ended.push(pfr.base.id.clone());
+        ended.push(pfr.id.clone());
     }
-    let reader_coll = seed_collection(&db, p.base.project_id, "grp_reader").await?;
+    let reader_coll = seed_collection(&db, p.project_id, "grp_reader").await?;
     let reader_fn = make_function(
         &db,
         &reader_coll,
@@ -747,8 +733,8 @@ async fn test_group_dim_counts_a_run_once_per_source_group(db: TdPool) -> Result
         link_input(&db, &reader_coll, &reader_lfr, ltdv).await?;
     }
     bind_all_outputs(&db, &reader_fn, &reader_lfr, &reader_pfr).await?;
-    ended.push(reader_pfr.base.id.clone());
-    in_project(&db, p.base.project_id, async |conn| {
+    ended.push(reader_pfr.id.clone());
+    in_project(&db, p.project_id, async |conn| {
         attempts_ended(conn, &ended).await.map_err(Into::into)
     })
     .await?;
@@ -766,8 +752,7 @@ async fn test_group_dim_counts_a_run_once_per_source_group(db: TdPool) -> Result
     let by_group = aggregates(&db, Dimension::Group).await?;
     let real = edges_of(&by_group, EdgeKind::Real);
     assert!(
-        real.iter()
-            .all(|r| r.from_group_id == Some(group.base.group_id)),
+        real.iter().all(|r| r.from_group_id == Some(group.group_id)),
         "got {by_group:?}"
     );
     let runs: i64 = real.iter().map(|r| r.fn_runs).sum();
@@ -779,8 +764,8 @@ async fn test_group_dim_counts_a_run_once_per_source_group(db: TdPool) -> Result
 async fn test_collection_filter_keeps_either_endpoint(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let (source_coll, source_lfr, ltdv) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "flt_src", "flt_src_fn").await?;
-    let target_coll = seed_collection(&db, p.base.project_id, "flt_tgt").await?;
+        seed_publisher_with_ltdv(&db, p.project_id, "flt_src", "flt_src_fn").await?;
+    let target_coll = seed_collection(&db, p.project_id, "flt_tgt").await?;
     let target_fn = make_function(
         &db,
         &target_coll,
@@ -794,17 +779,17 @@ async fn test_collection_filter_keeps_either_endpoint(db: TdPool) -> Result<(), 
     link_input(&db, &target_coll, &target_lfr, &ltdv).await?;
     bind_all_outputs(&db, &target_fn, &target_lfr, &target_pfr).await?;
     let (other_coll, other_lfr, _) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "flt_other", "flt_other_fn").await?;
+        seed_publisher_with_ltdv(&db, p.project_id, "flt_other", "flt_other_fn").await?;
 
-    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
-    let other_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&other_lfr.base.id).await?;
-    in_project(&db, p.base.project_id, async |conn| {
+    let source_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.id).await?;
+    let other_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&other_lfr.id).await?;
+    in_project(&db, p.project_id, async |conn| {
         attempts_ended(
             conn,
             &[
-                source_pfr.base.id.clone(),
-                target_pfr.base.id.clone(),
-                other_pfr.base.id.clone(),
+                source_pfr.id.clone(),
+                target_pfr.id.clone(),
+                other_pfr.id.clone(),
             ],
         )
         .await
@@ -813,12 +798,12 @@ async fn test_collection_filter_keeps_either_endpoint(db: TdPool) -> Result<(), 
     .await?;
 
     let mut req = metrics_request(Dimension::Collection);
-    req.collections = DimensionFilter::new(vec![target_coll.base.collection_id], vec![]);
+    req.collections = DimensionFilter::new(vec![target_coll.collection_id], vec![]);
     let rows = db.metrics().per_table(&req, &VisibleProjects::All).await?;
     assert!(
         rows.iter()
-            .all(|r| r.collection_id == target_coll.base.collection_id
-                || r.from_collection_id == Some(target_coll.base.collection_id)),
+            .all(|r| r.collection_id == target_coll.collection_id
+                || r.from_collection_id == Some(target_coll.collection_id)),
         "got {rows:?}"
     );
     assert_eq!(
@@ -828,22 +813,22 @@ async fn test_collection_filter_keeps_either_endpoint(db: TdPool) -> Result<(), 
     );
     assert!(
         rows.iter()
-            .all(|r| r.collection_id != other_coll.base.collection_id),
+            .all(|r| r.collection_id != other_coll.collection_id),
         "the unrelated collection is gone"
     );
 
     let mut req = metrics_request(Dimension::Collection);
-    req.collections = DimensionFilter::new(vec![], vec![source_coll.base.collection_id]);
+    req.collections = DimensionFilter::new(vec![], vec![source_coll.collection_id]);
     let rows = db.metrics().per_table(&req, &VisibleProjects::All).await?;
     assert!(
         rows.iter()
-            .all(|r| r.collection_id != source_coll.base.collection_id
-                && r.from_collection_id != Some(source_coll.base.collection_id)),
+            .all(|r| r.collection_id != source_coll.collection_id
+                && r.from_collection_id != Some(source_coll.collection_id)),
         "the excluded collection is gone from both ends, got {rows:?}"
     );
     assert!(
         rows.iter()
-            .any(|r| r.collection_id == other_coll.base.collection_id),
+            .any(|r| r.collection_id == other_coll.collection_id),
         "the unrelated collection stays"
     );
     Ok(())
@@ -853,10 +838,10 @@ async fn test_collection_filter_keeps_either_endpoint(db: TdPool) -> Result<(), 
 async fn test_commit_moves_the_run_status(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let (_, lfr, _) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "commit_coll", "commit_fn").await?;
-    let pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.base.id).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, std::slice::from_ref(&pfr.base.id))
+        seed_publisher_with_ltdv(&db, p.project_id, "commit_coll", "commit_fn").await?;
+    let pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.id).await?;
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&pfr.id))
             .await
             .map_err(Into::into)
     })
@@ -870,10 +855,10 @@ async fn test_commit_moves_the_run_status(db: TdPool) -> Result<(), TdError> {
         "got {before:?}"
     );
 
-    in_project(&db, p.base.project_id, async |conn| {
+    in_project(&db, p.project_id, async |conn| {
         runs_status_changed(
             conn,
-            std::slice::from_ref(&lfr.base.id),
+            std::slice::from_ref(&lfr.id),
             &LogicalFunctionRunStatus::Committed,
         )
         .await
@@ -894,21 +879,21 @@ async fn test_commit_moves_the_run_status(db: TdPool) -> Result<(), TdError> {
 #[td_test::test(db)]
 async fn test_failed_attempt_keeps_its_outcome(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let coll = seed_collection(&db, p.base.project_id, "fail_coll").await?;
+    let coll = seed_collection(&db, p.project_id, "fail_coll").await?;
     let func = make_publisher_function(&db, &coll, "fail_fn").await?;
     let (lfr, pfr) = seed_run(&db, &coll, &func, LogicalFunctionRunStatus::Failed).await?;
     stamp_status_at(&db, &pfr, PhysicalFunctionRunStatus::Failed).await?;
 
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, std::slice::from_ref(&pfr.base.id))
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&pfr.id))
             .await
             .map_err(Into::into)
     })
     .await?;
-    in_project(&db, p.base.project_id, async |conn| {
+    in_project(&db, p.project_id, async |conn| {
         runs_status_changed(
             conn,
-            std::slice::from_ref(&lfr.base.id),
+            std::slice::from_ref(&lfr.id),
             &LogicalFunctionRunStatus::Committed,
         )
         .await
@@ -929,10 +914,10 @@ async fn test_failed_attempt_keeps_its_outcome(db: TdPool) -> Result<(), TdError
 async fn test_replaced_attempt_is_filtered_not_deducted(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let (_, lfr, _) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "replay_coll", "replay_fn").await?;
-    let first: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.base.id).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, std::slice::from_ref(&first.base.id))
+        seed_publisher_with_ltdv(&db, p.project_id, "replay_coll", "replay_fn").await?;
+    let first: PhysicalFunctionRunDB = db.scd2().fetch_one(&lfr.id).await?;
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&first.id))
             .await
             .map_err(Into::into)
     })
@@ -946,12 +931,12 @@ async fn test_replaced_attempt_is_filtered_not_deducted(db: TdPool) -> Result<()
         ended_on: None,
         ..first.base.clone()
     };
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .scd2()
         .open(&replay, LockInstant::asserted(*AtTime::now()))
         .await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        runs_reattempted(conn, std::slice::from_ref(&lfr.base.id))
+    in_project(&db, p.project_id, async |conn| {
+        runs_reattempted(conn, std::slice::from_ref(&lfr.id))
             .await
             .map_err(Into::into)
     })
@@ -981,8 +966,8 @@ async fn test_replaced_attempt_is_filtered_not_deducted(db: TdPool) -> Result<()
 async fn test_replaying_a_consumed_producer_keeps_what_was_read(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let (source_coll, source_lfr, ltdv) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "rp_src", "rp_src_fn").await?;
-    let target_coll = seed_collection(&db, p.base.project_id, "rp_tgt").await?;
+        seed_publisher_with_ltdv(&db, p.project_id, "rp_src", "rp_src_fn").await?;
+    let target_coll = seed_collection(&db, p.project_id, "rp_tgt").await?;
     let target_fn = make_function(
         &db,
         &target_coll,
@@ -995,9 +980,9 @@ async fn test_replaying_a_consumed_producer_keeps_what_was_read(db: TdPool) -> R
     end_attempt(&db, &target_pfr).await?;
     link_input(&db, &target_coll, &target_lfr, &ltdv).await?;
     bind_all_outputs(&db, &target_fn, &target_lfr, &target_pfr).await?;
-    let first: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.base.id).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, &[first.base.id.clone(), target_pfr.base.id.clone()])
+    let first: PhysicalFunctionRunDB = db.scd2().fetch_one(&source_lfr.id).await?;
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, &[first.id.clone(), target_pfr.id.clone()])
             .await
             .map_err(Into::into)
     })
@@ -1011,12 +996,12 @@ async fn test_replaying_a_consumed_producer_keeps_what_was_read(db: TdPool) -> R
         ended_on: None,
         ..first.base.clone()
     };
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .scd2()
         .open(&replay, LockInstant::asserted(*AtTime::now()))
         .await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        runs_reattempted(conn, std::slice::from_ref(&source_lfr.base.id))
+    in_project(&db, p.project_id, async |conn| {
+        runs_reattempted(conn, std::slice::from_ref(&source_lfr.id))
             .await
             .map_err(Into::into)
     })
@@ -1024,16 +1009,16 @@ async fn test_replaying_a_consumed_producer_keeps_what_was_read(db: TdPool) -> R
     let replay: PhysicalFunctionRunDB = db.timeline().fetch_one(&replay.id).await?;
     let tables: Vec<TableDB> = db
         .scd2()
-        .fetch_all::<TableDB>(&source_lfr.base.function_id)
+        .fetch_all::<TableDB>(&source_lfr.function_id)
         .await?;
     let table = tables
         .iter()
-        .find(|t| t.base.table_id == ltdv.base.table_id)
+        .find(|t| t.table_id == ltdv.table_id)
         .expect("the publisher's table");
     bind_ptdv_with_magnitudes(&db, &ltdv, table, &replay, 20, 200).await?;
     end_attempt(&db, &replay).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, std::slice::from_ref(&replay.base.id))
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&replay.id))
             .await
             .map_err(Into::into)
     })
@@ -1042,20 +1027,18 @@ async fn test_replaying_a_consumed_producer_keeps_what_was_read(db: TdPool) -> R
     let rows = aggregates(&db, Dimension::Collection).await?;
     let read: Vec<_> = rows
         .iter()
-        .filter(|r| r.side == FactSide::Read && r.collection_id == target_coll.base.collection_id)
+        .filter(|r| r.side == FactSide::Read && r.collection_id == target_coll.collection_id)
         .collect();
     assert_eq!(read.len(), 1, "got {rows:?}");
     assert_eq!(read[0].row_count, 10, "the reader keeps what it read");
     assert_eq!(
-        unconsumed_of(&rows, &source_coll.base.collection_id),
+        unconsumed_of(&rows, &source_coll.collection_id),
         0,
         "the re-materialized version was read before, got {rows:?}"
     );
     let written: Vec<_> = rows
         .iter()
-        .filter(|r| {
-            r.side == FactSide::Written && r.collection_id == source_coll.base.collection_id
-        })
+        .filter(|r| r.side == FactSide::Written && r.collection_id == source_coll.collection_id)
         .collect();
     assert_eq!(
         written[0].row_count, 20,
@@ -1069,12 +1052,12 @@ async fn test_replaying_a_consumed_producer_keeps_what_was_read(db: TdPool) -> R
 #[td_test::test(db)]
 async fn test_a_recovered_run_supersedes_its_failed_attempt(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let coll = seed_collection(&db, p.base.project_id, "recover_coll").await?;
+    let coll = seed_collection(&db, p.project_id, "recover_coll").await?;
     let func = make_publisher_function(&db, &coll, "recover_fn").await?;
     let (lfr, failed) = seed_run(&db, &coll, &func, LogicalFunctionRunStatus::Failed).await?;
     stamp_status_at(&db, &failed, PhysicalFunctionRunStatus::Failed).await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, std::slice::from_ref(&failed.base.id))
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&failed.id))
             .await
             .map_err(Into::into)
     })
@@ -1088,12 +1071,12 @@ async fn test_a_recovered_run_supersedes_its_failed_attempt(db: TdPool) -> Resul
         ended_on: None,
         ..failed.base.clone()
     };
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .scd2()
         .open(&retry, LockInstant::asserted(*AtTime::now()))
         .await?;
-    in_project(&db, p.base.project_id, async |conn| {
-        runs_reattempted(conn, std::slice::from_ref(&lfr.base.id))
+    in_project(&db, p.project_id, async |conn| {
+        runs_reattempted(conn, std::slice::from_ref(&lfr.id))
             .await
             .map_err(Into::into)
     })
@@ -1110,20 +1093,20 @@ async fn test_a_recovered_run_supersedes_its_failed_attempt(db: TdPool) -> Resul
         .into_iter()
         .chain(recovered)
     {
-        db.scoped(p.base.project_id)
-            .update(&LogicalFunctionRunStatusUpdateDB { status }, &lfr.base.id)
+        db.scoped(p.project_id)
+            .update(&LogicalFunctionRunStatusUpdateDB { status }, &lfr.id)
             .await?;
     }
-    in_project(&db, p.base.project_id, async |conn| {
-        attempts_ended(conn, std::slice::from_ref(&retry.base.id))
+    in_project(&db, p.project_id, async |conn| {
+        attempts_ended(conn, std::slice::from_ref(&retry.id))
             .await
             .map_err(Into::into)
     })
     .await?;
-    in_project(&db, p.base.project_id, async |conn| {
+    in_project(&db, p.project_id, async |conn| {
         runs_status_changed(
             conn,
-            std::slice::from_ref(&lfr.base.id),
+            std::slice::from_ref(&lfr.id),
             &LogicalFunctionRunStatus::Committed,
         )
         .await
@@ -1159,9 +1142,9 @@ async fn test_a_recovered_run_supersedes_its_failed_attempt(db: TdPool) -> Resul
 async fn test_mixed_project_matches_backfill(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let (_, publisher, ltdv) =
-        seed_publisher_with_ltdv(&db, p.base.project_id, "mix_pub", "mix_pub_fn").await?;
+        seed_publisher_with_ltdv(&db, p.project_id, "mix_pub", "mix_pub_fn").await?;
 
-    let mid = seed_collection(&db, p.base.project_id, "mix_mid").await?;
+    let mid = seed_collection(&db, p.project_id, "mix_mid").await?;
     let mid_fn = make_function(
         &db,
         &mid,
@@ -1175,7 +1158,7 @@ async fn test_mixed_project_matches_backfill(db: TdPool) -> Result<(), TdError> 
     link_input(&db, &mid, &mid_lfr, &ltdv).await?;
     bind_all_outputs(&db, &mid_fn, &mid_lfr, &mid_pfr).await?;
 
-    let sink = seed_collection(&db, p.base.project_id, "mix_sink").await?;
+    let sink = seed_collection(&db, p.project_id, "mix_sink").await?;
     let sink_fn = make_function(&db, &sink, "mix_sink_fn", Decorator::Subscriber, &[]).await?;
     let (sink_lfr, sink_pfr) = seed_done_run(&db, &sink, &sink_fn).await?;
     end_attempt(&db, &sink_pfr).await?;
@@ -1192,14 +1175,14 @@ async fn test_mixed_project_matches_backfill(db: TdPool) -> Result<(), TdError> 
     let (_, failed_pfr) = seed_run(&db, &mid, &failed_fn, LogicalFunctionRunStatus::Failed).await?;
     stamp_status_at(&db, &failed_pfr, PhysicalFunctionRunStatus::Failed).await?;
 
-    let publisher_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&publisher.base.id).await?;
+    let publisher_pfr: PhysicalFunctionRunDB = db.scd2().fetch_one(&publisher.id).await?;
     let ended = vec![
-        publisher_pfr.base.id.clone(),
-        mid_pfr.base.id.clone(),
-        sink_pfr.base.id.clone(),
-        failed_pfr.base.id.clone(),
+        publisher_pfr.id.clone(),
+        mid_pfr.id.clone(),
+        sink_pfr.id.clone(),
+        failed_pfr.id.clone(),
     ];
-    in_project(&db, p.base.project_id, async |conn| {
+    in_project(&db, p.project_id, async |conn| {
         attempts_ended(conn, &ended).await.map_err(Into::into)
     })
     .await?;
@@ -1210,7 +1193,7 @@ async fn test_mixed_project_matches_backfill(db: TdPool) -> Result<(), TdError> 
 #[td_test::test(db)]
 async fn test_the_rung_derives_a_cold_database(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    seed_publisher_with_ltdv(&db, p.base.project_id, "cold_coll", "cold_fn").await?;
+    seed_publisher_with_ltdv(&db, p.project_id, "cold_coll", "cold_fn").await?;
     assert!(aggregates(&db, Dimension::Collection).await?.is_empty());
 
     derive_metrics_facts(&db).await?;

@@ -40,7 +40,7 @@ async fn function_run_read(
     // stays readable once its function is frozen, disabled or its collection gone.
     let topology: ProjectTopologyDB = conn
         .timeline()
-        .fetch_one(&execution.base.topology_version_id)
+        .fetch_one(&execution.topology_version_id)
         .await?;
 
     let function_id_name = function_param.function;
@@ -52,8 +52,7 @@ async fn function_run_read(
         .await?;
 
     // Replays mint several attempts under one LFR; the current one is canonical.
-    let run =
-        resolve_current_function_run(conn, &execution_id, &function.base.base.function_id).await?;
+    let run = resolve_current_function_run(conn, &execution_id, &function.function_id).await?;
     PhysicalFunctionRun::from_dao(run)
 }
 #[cfg(test)]
@@ -170,7 +169,7 @@ mod tests {
                     function: FunctionIdName::from_str(FUNCTION).unwrap(),
                 },
                 ExecutionParam {
-                    execution: execution.base.id.clone(),
+                    execution: execution.id.clone(),
                 },
             ))
             .in_project(project)
@@ -179,7 +178,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_read_function_run(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let seeded = seed_done_run(&db, p.base.project_id, None).await?;
+        let seeded = seed_done_run(&db, p.project_id, None).await?;
         let SeededRun {
             collection,
             function,
@@ -189,28 +188,28 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let response = service
-            .function_run_read(read_request(p.base.project_id, execution))
+            .function_run_read(read_request(p.project_id, execution))
             .await?
             .data;
 
-        assert_eq!(response.id, run.base.id);
-        assert_eq!(response.collection_id, run.base.collection_id);
-        assert_eq!(response.function_version_id, run.base.function_version_id);
-        assert_eq!(response.execution_id, run.base.execution_id);
-        assert_eq!(response.transaction_id, run.base.transaction_id);
+        assert_eq!(response.id, run.id);
+        assert_eq!(response.collection_id, run.collection_id);
+        assert_eq!(response.function_version_id, run.function_version_id);
+        assert_eq!(response.execution_id, run.execution_id);
+        assert_eq!(response.transaction_id, run.transaction_id);
         assert_eq!(response.triggered_on, AtTime::from(run.interval.valid_from));
-        assert_eq!(response.trigger, run.base.trigger);
-        assert_eq!(response.started_on, run.base.started_on);
-        assert_eq!(response.ended_on, run.base.ended_on);
+        assert_eq!(response.trigger, run.trigger);
+        assert_eq!(response.started_on, run.started_on);
+        assert_eq!(response.ended_on, run.ended_on);
         assert_eq!(response.status, PhysicalFunctionRunStatus::Done);
         assert_eq!(response.name, FunctionName::try_from(FUNCTION)?);
         assert_eq!(
             response.collection,
-            CollectionLabel::new(collection.base.name.clone())
+            CollectionLabel::new(collection.name.clone())
         );
-        assert_eq!(response.execution, execution.base.name);
+        assert_eq!(response.execution, execution.name);
         assert_eq!(response.triggered_by, UserLabel::new(UserName::admin()));
-        assert_eq!(function.base.name, response.name);
+        assert_eq!(function.name, response.name);
         Ok(())
     }
 
@@ -219,7 +218,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_read_function_run_of_deleted_collection(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let seeded = seed_done_run(&db, p.base.project_id, None).await?;
+        let seeded = seed_done_run(&db, p.project_id, None).await?;
 
         let service = Services::with_defaults(db.clone());
         service
@@ -228,30 +227,26 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str(COLLECTION)?,
                     })
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
         let err = service
-            .function_run_read(read_request(p.base.project_id, &seeded.execution))
+            .function_run_read(read_request(p.project_id, &seeded.execution))
             .await
             .map(|_| ())
             .unwrap_err();
         assert_eq!(err.api_error(), ApiError::NotFound);
 
-        let by_id = format!("~{}", seeded.collection.base.collection_id);
+        let by_id = format!("~{}", seeded.collection.collection_id);
         let response = service
-            .function_run_read(read_request_in(
-                p.base.project_id,
-                &by_id,
-                &seeded.execution,
-            ))
+            .function_run_read(read_request_in(p.project_id, &by_id, &seeded.execution))
             .await?
             .data;
-        assert_eq!(response.id, seeded.run.base.id);
+        assert_eq!(response.id, seeded.run.id);
         assert_eq!(
             response.collection,
-            CollectionLabel::new(Label::Deleted(seeded.collection.base.collection_id))
+            CollectionLabel::new(Label::Deleted(seeded.collection.collection_id))
         );
         Ok(())
     }
@@ -259,13 +254,13 @@ mod tests {
     #[td_test::test(db)]
     async fn test_read_function_run_of_disabled_function(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let seeded = seed_done_run(&db, p.base.project_id, Some(Enabled::FALSE)).await?;
+        let seeded = seed_done_run(&db, p.project_id, Some(Enabled::FALSE)).await?;
 
         let response = Services::with_defaults(db.clone())
-            .function_run_read(read_request(p.base.project_id, &seeded.execution))
+            .function_run_read(read_request(p.project_id, &seeded.execution))
             .await?
             .data;
-        assert_eq!(response.id, seeded.run.base.id);
+        assert_eq!(response.id, seeded.run.id);
         Ok(())
     }
 }

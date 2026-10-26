@@ -25,27 +25,27 @@ use td_queries::test_utils::{SeedEntry, begin_exclusive};
 async fn test_collection_move_freezes_prior_runs(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let coll = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c0")?, &UserId::admin())
         .await?;
     let old = BasePath::try_from("/old")?;
-    let coll = set_collection_base_path(&db, p.base.project_id, &coll, Some(&old)).await?;
+    let coll = set_collection_base_path(&db, p.project_id, &coll, Some(&old)).await?;
 
-    let lfr_before = seed_ready_lfr(&db, p.base.project_id, &coll, "fa", None).await?;
+    let lfr_before = seed_ready_lfr(&db, p.project_id, &coll, "fa", None).await?;
     let minted_before = mint_committed(&db, std::slice::from_ref(&lfr_before)).await?;
     let before = &minted_before[0];
     assert_eq!(before.fr.base_path, old);
 
     let new = BasePath::try_from("/new")?;
-    let coll = set_collection_base_path(&db, p.base.project_id, &coll, Some(&new)).await?;
+    let coll = set_collection_base_path(&db, p.project_id, &coll, Some(&new)).await?;
 
     // The live resolution moved...
-    let mut trx = begin_exclusive(&db, p.base.project_id).await?;
+    let mut trx = begin_exclusive(&db, p.project_id).await?;
     assert_eq!(
         resolve_output_base_path(
             trx.get(Grant::asserted("base path test")),
-            &lfr_before.base.function_version_id
+            &lfr_before.function_version_id
         )
         .await?,
         new,
@@ -55,18 +55,12 @@ async fn test_collection_move_freezes_prior_runs(db: TdPool) -> Result<(), TdErr
 
     // ...the stamped rows did not.
     let fr_row: PhysicalFunctionRunDB = db.timeline().fetch_one(&before.fr.id).await?;
-    assert_eq!(
-        fr_row.base.base_path, old,
-        "prior FR keeps its frozen prefix"
-    );
+    assert_eq!(fr_row.base_path, old, "prior FR keeps its frozen prefix");
     let tdv_row: PhysicalTableDataVersionDB = db.timeline().fetch_one(&before.tdvs[0].id).await?;
-    assert_eq!(
-        tdv_row.base.base_path, old,
-        "prior TDV keeps its frozen prefix"
-    );
+    assert_eq!(tdv_row.base_path, old, "prior TDV keeps its frozen prefix");
 
     // A run minted after the move stamps the new prefix.
-    let lfr_after = seed_ready_lfr(&db, p.base.project_id, &coll, "fb", None).await?;
+    let lfr_after = seed_ready_lfr(&db, p.project_id, &coll, "fb", None).await?;
     let minted_after = mint_committed(&db, std::slice::from_ref(&lfr_after)).await?;
     assert_eq!(minted_after[0].fr.base_path, new);
     assert_eq!(minted_after[0].tdvs[0].base_path, new);
@@ -79,27 +73,27 @@ async fn test_collection_move_freezes_prior_runs(db: TdPool) -> Result<(), TdErr
 async fn test_collection_clear_falls_back_to_project(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let coll = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c0")?, &UserId::admin())
         .await?;
     let own = BasePath::try_from("/own")?;
-    let coll = set_collection_base_path(&db, p.base.project_id, &coll, Some(&own)).await?;
+    let coll = set_collection_base_path(&db, p.project_id, &coll, Some(&own)).await?;
 
-    let lfr_owned = seed_ready_lfr(&db, p.base.project_id, &coll, "fa", None).await?;
+    let lfr_owned = seed_ready_lfr(&db, p.project_id, &coll, "fa", None).await?;
     let minted_owned = mint_committed(&db, std::slice::from_ref(&lfr_owned)).await?;
     assert_eq!(minted_owned[0].fr.base_path, own);
 
-    let coll = set_collection_base_path(&db, p.base.project_id, &coll, None).await?;
-    assert_eq!(coll.base.base_path, None);
+    let coll = set_collection_base_path(&db, p.project_id, &coll, None).await?;
+    assert_eq!(coll.base_path, None);
 
-    let lfr_inherited = seed_ready_lfr(&db, p.base.project_id, &coll, "fb", None).await?;
+    let lfr_inherited = seed_ready_lfr(&db, p.project_id, &coll, "fb", None).await?;
     let minted_inherited = mint_committed(&db, std::slice::from_ref(&lfr_inherited)).await?;
-    assert_eq!(minted_inherited[0].fr.base_path, p.base.base_path);
+    assert_eq!(minted_inherited[0].fr.base_path, p.base_path);
 
     let fr_row: PhysicalFunctionRunDB = db.timeline().fetch_one(&minted_owned[0].fr.id).await?;
     assert_eq!(
-        fr_row.base.base_path, own,
+        fr_row.base_path, own,
         "the earlier run keeps the cleared prefix"
     );
     Ok(())
@@ -112,19 +106,19 @@ async fn test_collection_clear_falls_back_to_project(db: TdPool) -> Result<(), T
 async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let coll = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c0")?, &UserId::admin())
         .await?;
     let old = BasePath::try_from("/old")?;
-    let coll = set_collection_base_path(&db, p.base.project_id, &coll, Some(&old)).await?;
-    let lfr = seed_ready_lfr(&db, p.base.project_id, &coll, "fa", None).await?;
+    let coll = set_collection_base_path(&db, p.project_id, &coll, Some(&old)).await?;
+    let lfr = seed_ready_lfr(&db, p.project_id, &coll, "fa", None).await?;
     let runnable = RunnableVersion {
-        function_version_id: lfr.base.function_version_id.clone(),
+        function_version_id: lfr.function_version_id.clone(),
         function_version_patch_id: None,
     };
 
-    let mut trx = begin_exclusive(&db, p.base.project_id).await?;
+    let mut trx = begin_exclusive(&db, p.project_id).await?;
     let at = trx.locked_at();
     let attempt_1 = mint_function_run(
         trx.get(Grant::asserted("base path test")),
@@ -136,9 +130,9 @@ async fn test_replay_attempts_diverge_across_move(db: TdPool) -> Result<(), TdEr
     trx.commit().await?;
 
     let new = BasePath::try_from("/new")?;
-    set_collection_base_path(&db, p.base.project_id, &coll, Some(&new)).await?;
+    set_collection_base_path(&db, p.project_id, &coll, Some(&new)).await?;
 
-    let mut trx = begin_exclusive(&db, p.base.project_id).await?;
+    let mut trx = begin_exclusive(&db, p.project_id).await?;
     let at = trx.locked_at();
     trx.get(Grant::asserted("base path test"))
         .physical_runs()

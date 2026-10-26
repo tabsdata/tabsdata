@@ -163,7 +163,7 @@ mod tests {
             .await
             .unwrap();
         let lfr = db
-            .fetch_one::<LogicalFunctionRunDB>(&fr.base.logical_function_run_id)
+            .fetch_one::<LogicalFunctionRunDB>(&fr.logical_function_run_id)
             .await
             .unwrap();
         (lfr, fr, func.base.id)
@@ -176,9 +176,9 @@ mod tests {
     ) -> Result<FunctionVersionId, TdError> {
         let patch = FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: head.base.id.clone().into(),
-            function_id: head.base.function_id,
-            collection_id: head.base.collection_id,
+            parent_function_version_id: head.id.clone().into(),
+            function_id: head.function_id,
+            collection_id: head.collection_id,
             snippet: Snippet::try_from(RawSnippet::try_from("patched").unwrap()).unwrap(),
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("rv-patch").unwrap(),
@@ -203,7 +203,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (lfr, fr_old, _head) = seed_runnable(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c0",
             "f0",
             LogicalFunctionRunStatus::Committed,
@@ -212,35 +212,35 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let response = service
-            .replay_logical_function_run(replay_request(&lfr.base.id))
+            .replay_logical_function_run(replay_request(&lfr.id))
             .await?
             .data;
 
-        assert_eq!(response.logical_function_run_id, lfr.base.id);
-        assert_eq!(response.previous_function_run_id, fr_old.base.id);
-        assert_ne!(response.new_function_run_id, fr_old.base.id);
+        assert_eq!(response.logical_function_run_id, lfr.id);
+        assert_eq!(response.previous_function_run_id, fr_old.id);
+        assert_ne!(response.new_function_run_id, fr_old.id);
 
         let frs: Vec<PhysicalFunctionRunDB> = db
             .timeline()
-            .fetch_all::<PhysicalFunctionRunDB>(and!(&lfr.base.execution_id, &lfr.base.function_id))
+            .fetch_all::<PhysicalFunctionRunDB>(and!(&lfr.execution_id, &lfr.function_id))
             .await?;
         assert_eq!(frs.len(), 2);
 
-        let lfr_after = db.fetch_one::<LogicalFunctionRunDB>(&lfr.base.id).await?;
-        assert_eq!(lfr_after.base.status, LogicalFunctionRunStatus::Committed);
+        let lfr_after = db.fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
+        assert_eq!(lfr_after.status, LogicalFunctionRunStatus::Committed);
 
         // The replay attempt is the run's current version from mint.
         let current = db
             .scd2()
-            .fetch_one::<PhysicalFunctionRunDB>(&lfr.base.id)
+            .fetch_one::<PhysicalFunctionRunDB>(&lfr.id)
             .await?;
-        assert_eq!(current.base.id, response.new_function_run_id);
+        assert_eq!(current.id, response.new_function_run_id);
 
         let pfr_new = db
             .timeline()
             .fetch_one::<PhysicalFunctionRunDB>(&response.new_function_run_id)
             .await?;
-        assert_eq!(pfr_new.base.status, PhysicalFunctionRunStatus::Requested);
+        assert_eq!(pfr_new.status, PhysicalFunctionRunStatus::Requested);
 
         Ok(())
     }
@@ -252,7 +252,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (lfr, fr_old, _head) = seed_runnable(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c0",
             "f0",
             LogicalFunctionRunStatus::Done,
@@ -260,13 +260,13 @@ mod tests {
         .await;
 
         let response = Services::with_defaults(db.clone())
-            .replay_logical_function_run(replay_request(&lfr.base.id))
+            .replay_logical_function_run(replay_request(&lfr.id))
             .await?
             .data;
 
-        assert_ne!(response.new_function_run_id, fr_old.base.id);
-        let lfr_after = db.fetch_one::<LogicalFunctionRunDB>(&lfr.base.id).await?;
-        assert_eq!(lfr_after.base.status, LogicalFunctionRunStatus::Done);
+        assert_ne!(response.new_function_run_id, fr_old.id);
+        let lfr_after = db.fetch_one::<LogicalFunctionRunDB>(&lfr.id).await?;
+        assert_eq!(lfr_after.status, LogicalFunctionRunStatus::Done);
         Ok(())
     }
 
@@ -276,7 +276,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (lfr, _fr, _head) = seed_runnable(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c0",
             "f0",
             LogicalFunctionRunStatus::Running,
@@ -284,7 +284,7 @@ mod tests {
         .await;
 
         let result = Services::with_defaults(db.clone())
-            .replay_logical_function_run(replay_request(&lfr.base.id))
+            .replay_logical_function_run(replay_request(&lfr.id))
             .await;
 
         assert!(result.is_err(), "expected refusal, got {result:?}");
@@ -299,7 +299,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let (lfr, fr, _head) = seed_runnable(
             &db,
-            p.base.project_id,
+            p.project_id,
             "c0",
             "f0",
             LogicalFunctionRunStatus::Committed,
@@ -310,19 +310,19 @@ mod tests {
             status: PhysicalFunctionRunStatus::Dispatched,
             ..fr.base.clone()
         };
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .scd2()
             .open(&dispatched, LockInstant::asserted(*AtTime::now()))
             .await?;
 
         let result = Services::with_defaults(db.clone())
-            .replay_logical_function_run(replay_request(&lfr.base.id))
+            .replay_logical_function_run(replay_request(&lfr.id))
             .await;
 
         assert!(result.is_err(), "expected refusal, got {result:?}");
         let attempts: Vec<PhysicalFunctionRunDB> = db
             .timeline()
-            .fetch_all::<PhysicalFunctionRunDB>(and!(&fr.base.execution_id, &fr.base.function_id))
+            .fetch_all::<PhysicalFunctionRunDB>(and!(&fr.execution_id, &fr.function_id))
             .await?;
         assert_eq!(attempts.len(), 2, "no new attempt minted");
         Ok(())
@@ -337,7 +337,7 @@ mod tests {
     async fn test_replay_picks_up_latest_patch(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -362,18 +362,18 @@ mod tests {
             workers: None,
         };
         let head = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&coll, &create)
             .await?;
-        let exec = db.scoped(p.base.project_id).seed().execution(&head).await?;
+        let exec = db.scoped(p.project_id).seed().execution(&head).await?;
         let trx = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
         let fr_old = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &coll,
@@ -384,14 +384,11 @@ mod tests {
             )
             .await?;
         let lfr_old: LogicalFunctionRunDB = db
-            .fetch_one::<LogicalFunctionRunDB>(and!(
-                &fr_old.base.execution_id,
-                &fr_old.base.function_id
-            ))
+            .fetch_one::<LogicalFunctionRunDB>(and!(&fr_old.execution_id, &fr_old.function_id))
             .await?;
-        let lfr_id = lfr_old.base.id.clone();
+        let lfr_id = lfr_old.id.clone();
 
-        let patch_id = seed_patch(&db, p.base.project_id, &head).await?;
+        let patch_id = seed_patch(&db, p.project_id, &head).await?;
 
         let response = Services::with_defaults(db.clone())
             .replay_logical_function_run(replay_request(&lfr_id))
@@ -406,9 +403,9 @@ mod tests {
             .await?;
         // FR.function_version_id stays at the head fvid (FK valid);
         // the patch id is recorded on the dedicated column.
-        assert_eq!(fr_new.base.function_version_id, head.base.id);
+        assert_eq!(fr_new.function_version_id, head.id);
         assert_eq!(
-            fr_new.base.function_version_patch_id,
+            fr_new.function_version_patch_id,
             Some(Patch::from(patch_id.clone()))
         );
 
@@ -416,12 +413,12 @@ mod tests {
         // column, patch id on the dedicated column.
         let tdvs: Vec<PhysicalTableDataVersionDB> = db
             .timeline()
-            .fetch_all::<PhysicalTableDataVersionDB>(&fr_new.base.id)
+            .fetch_all::<PhysicalTableDataVersionDB>(&fr_new.id)
             .await?;
         assert_eq!(tdvs.len(), 1);
-        assert_eq!(tdvs[0].base.function_version_id, head.base.id);
+        assert_eq!(tdvs[0].function_version_id, head.id);
         assert_eq!(
-            tdvs[0].base.function_version_patch_id,
+            tdvs[0].function_version_patch_id,
             Some(Patch::from(patch_id.clone()))
         );
 
@@ -435,7 +432,7 @@ mod tests {
     async fn test_replay_no_attempt_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let coll = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("c0")?, &UserId::admin())
             .await?;
@@ -460,13 +457,13 @@ mod tests {
             workers: None,
         };
         let head = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&coll, &create)
             .await?;
-        let exec = db.scoped(p.base.project_id).seed().execution(&head).await?;
+        let exec = db.scoped(p.project_id).seed().execution(&head).await?;
         let trx = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&exec, &TransactionKey::try_from("ANY")?)
             .await?;
@@ -474,19 +471,19 @@ mod tests {
         // Bound event we don't want here) and append InitialMint Pending.
         let lfr = LogicalFunctionRunInsertDB {
             id: LogicalFunctionRunId::new(),
-            collection_id: coll.base.collection_id,
+            collection_id: coll.collection_id,
             execution_id: exec.base.id,
             transaction_id: trx.base.id,
-            function_id: head.base.function_id,
+            function_id: head.function_id,
             function_version_id: head.base.id,
             trigger: td_objects::types::basic::Trigger::Manual,
             triggered_on: trx.base.triggered_on,
             triggered_by_id: trx.base.triggered_by_id,
             status: LogicalFunctionRunStatus::Committed,
-            group_id: coll.base.group_id,
+            group_id: coll.group_id,
         };
         // No attempt at all, so the run has no binding to replay.
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .insert::<LogicalFunctionRunInsertDB>(&lfr)
             .await?;
 

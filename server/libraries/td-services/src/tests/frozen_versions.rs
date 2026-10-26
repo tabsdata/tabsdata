@@ -32,11 +32,11 @@ async fn test_collection_delete_freezes_a_wide_dependant_once(db: TdPool) -> Res
         .collect::<Result<_, _>>()?;
 
     let producer_collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_0")?, &UserId::admin())
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .function(
             &producer_collection,
@@ -48,7 +48,7 @@ async fn test_collection_delete_freezes_a_wide_dependant_once(db: TdPool) -> Res
         .await?;
 
     let dependant_collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_1")?, &UserId::admin())
         .await?;
@@ -56,7 +56,7 @@ async fn test_collection_delete_freezes_a_wide_dependant_once(db: TdPool) -> Res
         .iter()
         .map(|t| TableDependencyDto::try_from(format!("c_0/{t}")))
         .collect::<Result<Vec<_>, _>>()?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .function(
             &dependant_collection,
@@ -71,7 +71,7 @@ async fn test_collection_delete_freezes_a_wide_dependant_once(db: TdPool) -> Res
         .delete(CollectionParam {
             collection: CollectionIdName::from_str("c_0")?,
         })
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     Services::with_defaults(db.clone())
         .delete_collection(request)
         .await?;
@@ -82,7 +82,7 @@ async fn test_collection_delete_freezes_a_wide_dependant_once(db: TdPool) -> Res
         .await?;
     let frozen = versions
         .iter()
-        .filter(|v| v.base.base.status == FunctionStatus::Frozen)
+        .filter(|v| v.status == FunctionStatus::Frozen)
         .count();
     assert_eq!(frozen, 1, "one deletion, one frozen version");
     Ok(())

@@ -56,7 +56,7 @@ pub(crate) mod tests {
                     !((t.collection.is_none()
                         || t.collection
                             .as_ref()
-                            .map(|c| c == &collection.base.name)
+                            .map(|c| c == &collection.name)
                             .unwrap_or(false))
                         && req_tables.contains(&t.table))
                 })
@@ -64,7 +64,7 @@ pub(crate) mod tests {
                 .collect()
         };
 
-        assert_eq!(response.collection_id, collection.base.collection_id);
+        assert_eq!(response.collection_id, collection.collection_id);
         assert_eq!(response.name, create.name);
         assert_eq!(response.description, create.description);
         assert_eq!(response.status, FunctionStatus::Active);
@@ -74,7 +74,7 @@ pub(crate) mod tests {
         assert_eq!(response.defined_by_id, *user_id);
         assert_eq!(
             response.collection,
-            CollectionLabel::new(collection.base.name.clone())
+            CollectionLabel::new(collection.name.clone())
         );
         assert_eq!(response.enabled, Enabled::TRUE);
 
@@ -87,13 +87,13 @@ pub(crate) mod tests {
             .await?;
         assert_eq!(functions.len(), 1);
         let function = &functions[0];
-        assert_eq!(function.base.collection_id, response.collection_id);
-        assert_eq!(function.base.name, response.name);
-        assert_eq!(function.base.function_id, response.function_id);
-        assert_eq!(function.base.bundle_id, response.bundle_id);
-        assert_eq!(function.base.snippet, response.snippet);
-        assert_eq!(function.base.decorator, response.decorator);
-        assert_eq!(function.base.status, FunctionStatus::Active);
+        assert_eq!(function.collection_id, response.collection_id);
+        assert_eq!(function.name, response.name);
+        assert_eq!(function.function_id, response.function_id);
+        assert_eq!(function.bundle_id, response.bundle_id);
+        assert_eq!(function.snippet, response.snippet);
+        assert_eq!(function.decorator, response.decorator);
+        assert_eq!(function.status, FunctionStatus::Active);
 
         let table_versions: Vec<TableDB> = db
             .scd2()
@@ -106,16 +106,16 @@ pub(crate) mod tests {
         for table in req_tables {
             let found = table_versions
                 .iter()
-                .find(|t| **t.base.name == **table)
+                .find(|t| **t.name == **table)
                 .expect("table version not found");
-            assert_eq!(found.base.collection_id, function.base.collection_id);
-            assert_eq!(**found.base.name, **table);
+            assert_eq!(found.collection_id, function.collection_id);
+            assert_eq!(**found.name, **table);
             // Defined by this version or by an earlier one it left unchanged.
-            assert_eq!(found.base.function_id, function.base.function_id);
-            assert!(found.base.function_param_pos.is_some());
+            assert_eq!(found.function_id, function.function_id);
+            assert!(found.function_param_pos.is_some());
             assert!(found.interval.valid_from <= function.interval.valid_from);
-            assert_eq!(found.base.defined_by_id, function.base.defined_by_id);
-            assert_eq!(found.base.status, TableStatus::Active);
+            assert_eq!(found.defined_by_id, function.defined_by_id);
+            assert_eq!(found.status, TableStatus::Active);
         }
 
         let dependency_versions: Vec<DependencyDBWithNames> =
@@ -134,7 +134,7 @@ pub(crate) mod tests {
                         &(dependency
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.base.name.clone()))
+                            .unwrap_or_else(|| collection.name.clone()))
                     )
                     .await?,
                     &TableIdName::Name(dependency.table.clone())
@@ -142,22 +142,22 @@ pub(crate) mod tests {
                 .await?;
             let found = dependency_versions
                 .iter()
-                .find(|d| d.base.base.table_id == dependency_table.base.base.table_id)
+                .find(|d| d.table_id == dependency_table.table_id)
                 .expect("dependency version not found");
-            assert_eq!(found.base.base.collection_id, function.base.collection_id);
-            assert_eq!(found.base.base.function_id, function.base.function_id);
+            assert_eq!(found.collection_id, function.collection_id);
+            assert_eq!(found.function_id, function.function_id);
             assert_eq!(
                 *found.table_collection,
                 CollectionLabel::new(
                     dependency
                         .collection
                         .clone()
-                        .unwrap_or_else(|| collection.base.name.clone())
+                        .unwrap_or_else(|| collection.name.clone())
                 )
             );
-            assert_eq!(*found.base.base.table_versions, dependency.versions);
-            assert!(found.base.interval.valid_from <= function.interval.valid_from);
-            assert_eq!(found.base.base.defined_by_id, function.base.defined_by_id);
+            assert_eq!(*found.table_versions, dependency.versions);
+            assert!(found.interval.valid_from <= function.interval.valid_from);
+            assert_eq!(found.defined_by_id, function.defined_by_id);
         }
 
         let trigger_versions: Vec<TriggerDBWithNames> = db
@@ -175,7 +175,7 @@ pub(crate) mod tests {
                         &(trigger
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.base.name.clone()))
+                            .unwrap_or_else(|| collection.name.clone()))
                     )
                     .await?,
                     &TableIdName::Name(trigger.table.clone())
@@ -183,20 +183,20 @@ pub(crate) mod tests {
                 .await?;
             let found = trigger_versions
                 .iter()
-                .find(|d| d.base.base.trigger_by_table_id == trigger_table.base.base.table_id)
+                .find(|d| d.trigger_by_table_id == trigger_table.table_id)
                 .expect("trigger version not found");
-            assert_eq!(found.base.base.collection_id, function.base.collection_id);
-            assert_eq!(found.base.base.function_id, function.base.function_id);
+            assert_eq!(found.collection_id, function.collection_id);
+            assert_eq!(found.function_id, function.function_id);
             assert_eq!(
                 *found.trigger_by_collection,
                 CollectionLabel::new(
                     trigger
                         .collection
                         .clone()
-                        .unwrap_or_else(|| collection.base.name.clone())
+                        .unwrap_or_else(|| collection.name.clone())
                 )
             );
-            assert_eq!(found.base.base.status, TriggerStatus::Active);
+            assert_eq!(found.status, TriggerStatus::Active);
         }
 
         Ok(())
@@ -214,13 +214,13 @@ pub(crate) mod tests {
     ) -> Result<(), TdError> {
         let functions: Vec<FunctionDB> = db
             .timeline()
-            .fetch_all::<FunctionDB>(&created_function.base.function_id)
+            .fetch_all::<FunctionDB>(&created_function.function_id)
             .await?;
         assert_eq!(functions.len(), 2);
 
         let functions: Vec<FunctionDB> = db
             .timeline()
-            .fetch_all::<FunctionDB>(&created_function.base.id)
+            .fetch_all::<FunctionDB>(&created_function.id)
             .await?;
         assert_eq!(functions.len(), 1);
         assert_eq!(functions[0].base, created_function.base);
@@ -228,7 +228,7 @@ pub(crate) mod tests {
 
         match &update.snippet {
             Some(snippet) => assert_eq!(*response.snippet, **snippet),
-            None => assert_eq!(response.snippet, created_function.base.snippet),
+            None => assert_eq!(response.snippet, created_function.snippet),
         }
 
         // A table the update keeps unchanged is not re-versioned: its open
@@ -238,13 +238,12 @@ pub(crate) mod tests {
             let table = &TableName::try_from(table_dto)?;
             let versions = db
                 .timeline()
-                .fetch_all::<TableDB>(and!(collection.base.collection_id, table))
+                .fetch_all::<TableDB>(and!(collection.collection_id, table))
                 .await?;
             let created = versions
                 .iter()
                 .find(|v| {
-                    v.base.function_version_id == created_function.base.id
-                        && v.base.status == TableStatus::Active
+                    v.function_version_id == created_function.id && v.status == TableStatus::Active
                 })
                 .expect("the created version of the table");
             if update.tables.as_deref().unwrap_or(&[]).contains(table_dto) {
@@ -255,10 +254,10 @@ pub(crate) mod tests {
                 assert!(!created.interval.valid_to.is_infinity());
                 let frozen = versions
                     .iter()
-                    .find(|v| v.base.status == TableStatus::Frozen)
+                    .find(|v| v.status == TableStatus::Frozen)
                     .expect("the frozen successor");
                 assert!(frozen.interval.valid_to.is_infinity());
-                assert_eq!(frozen.base.table_id, created.base.table_id);
+                assert_eq!(frozen.table_id, created.table_id);
             }
         }
 
@@ -278,7 +277,7 @@ pub(crate) mod tests {
                         &(dependency
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.base.name.clone()))
+                            .unwrap_or_else(|| collection.name.clone()))
                     )
                     .await?,
                     &TableIdName::Name(dependency.table.clone())
@@ -288,8 +287,8 @@ pub(crate) mod tests {
                 .scd2()
                 .as_of(&before_at_time)
                 .fetch_all::<DependencyDBWithNames>(and!(
-                    dependency_table.base.base.table_id,
-                    created_function.base.function_id
+                    dependency_table.table_id,
+                    created_function.function_id
                 ))
                 .await?;
             assert_eq!(old_version.len(), 1);
@@ -302,7 +301,7 @@ pub(crate) mod tests {
                         &(dependency
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.base.name.clone()))
+                            .unwrap_or_else(|| collection.name.clone()))
                     )
                     .await?,
                     &TableIdName::Name(dependency.table.clone())
@@ -311,7 +310,7 @@ pub(crate) mod tests {
             let new_version = db
                 .scd2()
                 .fetch_all::<DependencyDBWithNames>(and!(
-                    dependency_table.base.base.table_id,
+                    dependency_table.table_id,
                     response.function_id
                 ))
                 .await?;
@@ -322,10 +321,7 @@ pub(crate) mod tests {
                 .contains(dependency_dto)
             {
                 assert_eq!(new_version.len(), 1);
-                assert_eq!(
-                    old_version[0].base.base.dependency_id,
-                    new_version[0].base.base.dependency_id
-                );
+                assert_eq!(old_version[0].dependency_id, new_version[0].dependency_id);
             } else {
                 assert!(new_version.is_empty());
             }
@@ -341,7 +337,7 @@ pub(crate) mod tests {
                         &(trigger
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.base.name.clone()))
+                            .unwrap_or_else(|| collection.name.clone()))
                     )
                     .await?,
                     &TableIdName::Name(trigger.table.clone())
@@ -351,18 +347,15 @@ pub(crate) mod tests {
                 .scd2()
                 .as_of(&before_at_time)
                 .fetch_all::<TriggerDBWithNames>(and!(
-                    trigger_table.base.base.table_id,
-                    created_function.base.function_id
+                    trigger_table.table_id,
+                    created_function.function_id
                 ))
                 .await?;
             assert_eq!(old_version.len(), 1);
 
             let new_version = db
                 .scd2()
-                .fetch_all::<TriggerDBWithNames>(and!(
-                    trigger_table.base.base.table_id,
-                    response.function_id
-                ))
+                .fetch_all::<TriggerDBWithNames>(and!(trigger_table.table_id, response.function_id))
                 .await?;
             if update
                 .triggers
@@ -371,11 +364,8 @@ pub(crate) mod tests {
                 .contains(trigger_dto)
             {
                 assert_eq!(new_version.len(), 1);
-                assert_eq!(new_version[0].base.base.status, TriggerStatus::Active);
-                assert_eq!(
-                    old_version[0].base.base.trigger_id,
-                    new_version[0].base.base.trigger_id
-                );
+                assert_eq!(new_version[0].status, TriggerStatus::Active);
+                assert_eq!(old_version[0].trigger_id, new_version[0].trigger_id);
             } else {
                 assert!(new_version.is_empty());
             }
@@ -417,13 +407,13 @@ pub(crate) mod tests {
     ) -> Result<(), TdError> {
         let live: Option<FunctionDB> = db
             .scd2()
-            .fetch_optional::<FunctionDB>(&created_function.base.function_id)
+            .fetch_optional::<FunctionDB>(&created_function.function_id)
             .await?;
         assert!(live.is_none());
 
         let functions: Vec<FunctionDB> = db
             .timeline()
-            .fetch_all::<FunctionDB>(&created_function.base.id)
+            .fetch_all::<FunctionDB>(&created_function.id)
             .await?;
         assert_eq!(functions.len(), 1);
         assert_eq!(functions[0].base, created_function.base);
@@ -431,7 +421,7 @@ pub(crate) mod tests {
 
         let created_tables: Vec<TableDB> = db
             .timeline()
-            .fetch_all::<TableDB>(and!(&created_function.base.id, TableDB::active()))
+            .fetch_all::<TableDB>(and!(&created_function.id, TableDB::active()))
             .await?;
         assert!(
             created_tables
@@ -440,38 +430,27 @@ pub(crate) mod tests {
         );
         let active: Vec<TableDB> = db
             .scd2()
-            .fetch_all::<TableDB>(and!(&created_function.base.id, TableDB::active()))
+            .fetch_all::<TableDB>(and!(&created_function.id, TableDB::active()))
             .await?;
         assert!(active.is_empty());
-        let current: Vec<TableDB> = db
-            .scd2()
-            .fetch_all::<TableDB>(&created_function.base.id)
-            .await?;
+        let current: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&created_function.id).await?;
         let user_tables = created_tables
             .iter()
-            .filter(|t| !t.base.name.is_private())
+            .filter(|t| !t.name.is_private())
             .count();
         assert_eq!(current.len(), user_tables);
-        assert!(current.iter().all(|t| t.base.status == TableStatus::Frozen));
-        assert!(current.iter().all(|t| !t.base.name.is_private()));
+        assert!(current.iter().all(|t| t.status == TableStatus::Frozen));
+        assert!(current.iter().all(|t| !t.name.is_private()));
 
         for table_dto in create.tables.as_deref().unwrap_or(&[]) {
             let table = &TableName::try_from(table_dto)?;
             let versions = db
                 .timeline()
-                .fetch_all::<TableDB>(and!(
-                    collection.base.collection_id,
-                    table,
-                    &created_function.base.id
-                ))
+                .fetch_all::<TableDB>(and!(collection.collection_id, table, &created_function.id))
                 .await?;
             assert_eq!(versions.len(), 2);
-            let active = versions
-                .iter()
-                .find(|v| v.base.status == TableStatus::Active);
-            let frozen = versions
-                .iter()
-                .find(|v| v.base.status == TableStatus::Frozen);
+            let active = versions.iter().find(|v| v.status == TableStatus::Active);
+            let frozen = versions.iter().find(|v| v.status == TableStatus::Frozen);
             assert!(
                 !active
                     .expect("closed active version")
@@ -499,7 +478,7 @@ pub(crate) mod tests {
                         &(dependency
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.base.name.clone()))
+                            .unwrap_or_else(|| collection.name.clone()))
                     )
                     .await?,
                     &TableIdName::Name(dependency.table.clone())
@@ -509,8 +488,8 @@ pub(crate) mod tests {
                 .scd2()
                 .as_of(&AtTime::from(created_function.interval.valid_from))
                 .fetch_all::<DependencyDBWithNames>(and!(
-                    table_dependency.base.base.table_id,
-                    created_function.base.function_id
+                    table_dependency.table_id,
+                    created_function.function_id
                 ))
                 .await?;
             assert_eq!(old_version.len(), 1);
@@ -527,7 +506,7 @@ pub(crate) mod tests {
                         &(trigger
                             .collection
                             .clone()
-                            .unwrap_or_else(|| collection.base.name.clone()))
+                            .unwrap_or_else(|| collection.name.clone()))
                     )
                     .await?,
                     &TableIdName::Name(trigger.table.clone())
@@ -537,12 +516,12 @@ pub(crate) mod tests {
                 .scd2()
                 .as_of(&AtTime::from(created_function.interval.valid_from))
                 .fetch_all::<TriggerDBWithNames>(and!(
-                    table_trigger.base.base.table_id,
-                    created_function.base.function_id
+                    table_trigger.table_id,
+                    created_function.function_id
                 ))
                 .await?;
             assert_eq!(old_version.len(), 1);
-            assert_eq!(old_version[0].base.base.status, TriggerStatus::Active);
+            assert_eq!(old_version[0].status, TriggerStatus::Active);
         }
 
         Ok(())

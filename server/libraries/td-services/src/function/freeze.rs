@@ -30,7 +30,7 @@ pub async fn freeze_functions(
     for (function, frozen) in functions.iter().zip(&frozen) {
         let triggers: Vec<WorkerDB> = conn
             .fetch_all(and!(
-                &function.base.id,
+                &function.id,
                 or!(WorkerType::CronTrigger, WorkerType::StageTrigger),
             ))
             .await?;
@@ -38,7 +38,7 @@ pub async fn freeze_functions(
             let update = WorkerFreezeUpdateDB {
                 function_version_id: frozen.id.clone(),
             };
-            conn.update(&update, &worker.base.id).await?;
+            conn.update(&update, &worker.id).await?;
         }
         stop_triggers(conn, &triggers, topology_at.into()).await?;
     }

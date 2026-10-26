@@ -19,7 +19,7 @@ async fn test_update_collection_validate(db: TdPool) {
     let p = db.seed().test_project().await.unwrap();
     let name = CollectionName::try_from("c0").unwrap();
     let _ = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&name, &UserId::admin())
         .await;
@@ -37,7 +37,7 @@ async fn test_update_collection_validate(db: TdPool) {
             },
             update,
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
 
     let service = Services::with_defaults(db);
     assert_service_error(service.update_collection(request).await, |err| {

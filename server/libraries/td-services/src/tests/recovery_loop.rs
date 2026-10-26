@@ -88,11 +88,11 @@ fn observing(
 async fn dispatch(db: &TdPool, decorator: Decorator) -> Result<(ProjectId, Attempt), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from(COLLECTION)?, &UserId::admin())
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .function(
             &collection,
@@ -120,11 +120,11 @@ async fn dispatch(db: &TdPool, decorator: Decorator) -> Result<(ProjectId, Attem
                 external_uid: None,
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     let execution = dispatch_services(db).execute_function(request).await?.data;
     dispatch_services(db).request(()).await?;
     let attempt = current_attempt(db, &execution).await?;
-    Ok((p.base.project_id, attempt))
+    Ok((p.project_id, attempt))
 }
 
 async fn attempts(
@@ -145,8 +145,8 @@ async fn current_attempt(db: &TdPool, execution: &ExecutionResponse) -> Result<A
     let worker = workers
         .into_iter()
         .find(|w| {
-            w.base.worker_type == WorkerType::FunctionRunner
-                && w.base.physical_function_run_id.as_ref() == Some(&pfr.base.id)
+            w.worker_type == WorkerType::FunctionRunner
+                && w.physical_function_run_id.as_ref() == Some(&pfr.id)
         })
         .expect("the attempt's worker");
     Ok(Attempt {
@@ -158,7 +158,7 @@ async fn current_attempt(db: &TdPool, execution: &ExecutionResponse) -> Result<A
 
 async fn lfr(db: &TdPool, pfr: &PhysicalFunctionRunDB) -> Result<LogicalFunctionRunDB, TdError> {
     Ok(db
-        .fetch_one::<LogicalFunctionRunDB>(and!(&pfr.base.execution_id, &pfr.base.function_id))
+        .fetch_one::<LogicalFunctionRunDB>(and!(&pfr.execution_id, &pfr.function_id))
         .await?)
 }
 
@@ -176,13 +176,13 @@ async fn started(
         ended_on: None,
         status: PhysicalFunctionRunStatus::Running,
     };
-    db.scd2().update(&update, &pfr.base.id).await?;
+    db.scd2().update(&update, &pfr.id).await?;
     let run = lfr(db, pfr).await?;
     db.update(
         &LogicalFunctionRunStatusUpdateDB {
             status: LogicalFunctionRunStatus::Running,
         },
-        &run.base.id,
+        &run.id,
     )
     .await?;
     Ok(())
@@ -195,12 +195,12 @@ fn workload(
     since: AtTime,
 ) -> ObservedWorkload {
     ObservedWorkload {
-        worker_id: Some(attempt.worker.base.id.clone()),
-        function_id: Some(attempt.pfr.base.function_id),
+        worker_id: Some(attempt.worker.id.clone()),
+        function_id: Some(attempt.pfr.function_id),
         function: FunctionName::try_from(FUNCTION).ok(),
         kind: WorkloadKind::Function,
         decorator: Some(decorator),
-        name: format!("fn-{}", attempt.worker.base.id),
+        name: format!("fn-{}", attempt.worker.id),
         phase,
         phase_since: Some(since),
         finished_at: None,
@@ -233,7 +233,7 @@ async fn test_a_redispatched_subscriber_keeps_its_transaction(db: TdPool) -> Res
     dispatch_services(&db).request(()).await?;
 
     for pfr in attempts(&db, &attempt.execution).await? {
-        assert_eq!(pfr.base.transaction_id, attempt.pfr.base.transaction_id);
+        assert_eq!(pfr.transaction_id, attempt.pfr.transaction_id);
     }
     Ok(())
 }
@@ -285,7 +285,7 @@ async fn test_a_transiently_failed_streamer_is_started_again(db: TdPool) -> Resu
     let p = db.seed().test_project().await?;
     let (_, stage) = trigger_worker(
         &db,
-        p.base.project_id,
+        p.project_id,
         "c_stage",
         WorkerType::StageTrigger,
         WorkerStatus::Running,
@@ -302,7 +302,7 @@ async fn test_a_transiently_failed_streamer_is_started_again(db: TdPool) -> Resu
     };
     let callback = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
         WorkerParam {
-            worker: stage.base.id.clone(),
+            worker: stage.id.clone(),
         },
         failed,
     );
@@ -340,19 +340,19 @@ async fn test_a_streamer_that_exits_unreported_restarts_with_backoff(
     let p = db.seed().test_project().await?;
     let (_, stage) = trigger_worker(
         &db,
-        p.base.project_id,
+        p.project_id,
         "c_stage_exit",
         WorkerType::StageTrigger,
         WorkerStatus::Running,
     )
     .await?;
     let exited = ObservedWorkload {
-        worker_id: Some(stage.base.id.clone()),
+        worker_id: Some(stage.id.clone()),
         function_id: None,
         function: None,
         kind: WorkloadKind::StageTrigger,
         decorator: None,
-        name: format!("stm-{}", stage.base.id),
+        name: format!("stm-{}", stage.id),
         phase: WorkloadPhase::Failed,
         phase_since: Some(ago(chrono::Duration::minutes(5))),
         finished_at: None,
@@ -363,8 +363,8 @@ async fn test_a_streamer_that_exits_unreported_restarts_with_backoff(
     let (services, sent) = observing(&db, RecoveryConfig::default(), vec![exited]);
     services.clone().recovery(()).await?;
 
-    let after: WorkerDB = db.fetch_one(&stage.base.id).await?;
-    assert_eq!(after.base.status, WorkerStatus::Failed);
+    let after: WorkerDB = db.fetch_one(&stage.id).await?;
+    assert_eq!(after.status, WorkerStatus::Failed);
     assert_eq!(*after.failures, 1);
     assert!(
         after.retry_at.is_some_and(|at| *at > AtTime::now()),
@@ -380,7 +380,7 @@ async fn test_a_streamer_that_exits_unreported_restarts_with_backoff(
 
 fn stop_sent(sent: &InMemoryOrchestratorMessageQueue, worker: &WorkerDB) -> bool {
     sent.messages().into_iter().any(|message| {
-        message.id == worker.base.id.to_string()
+        message.id == worker.id.to_string()
             && matches!(
                 message.payload,
                 OrchestratorMessagePayload::OrchestratorFunctionRequestMessagePayload(
@@ -429,7 +429,7 @@ async fn test_a_no_recover_verdict_survives_an_aborted_tick(db: TdPool) -> Resul
     let _: WorkerDB = gate
         .get(Grant::asserted("the run's worker held open"))
         .for_update()
-        .fetch_one(&attempt.worker.base.id)
+        .fetch_one(&attempt.worker.id)
         .await?;
     let (first, first_sent) = observing(&db, config, vec![working.clone()]);
     let ticking = first.clone();
@@ -449,11 +449,11 @@ async fn test_a_no_recover_verdict_survives_an_aborted_tick(db: TdPool) -> Resul
     let run = lfr(&db, &attempt.pfr).await?;
     assert!(
         !matches!(
-            run.base.status,
+            run.status,
             LogicalFunctionRunStatus::ReScheduled | LogicalFunctionRunStatus::Requested
         ),
         "a run recovery decided not to re-run was re-run: {:?}",
-        run.base.status
+        run.status
     );
     Ok(())
 }
@@ -487,11 +487,11 @@ async fn test_a_run_whose_workload_keeps_vanishing_is_not_redispatched_forever(
     assert!(
         dispatched < CYCLES
             && !matches!(
-                run.base.status,
+                run.status,
                 LogicalFunctionRunStatus::Requested | LogicalFunctionRunStatus::ReScheduled
             ),
         "{dispatched} attempts after {CYCLES} rounds, run {:?}",
-        run.base.status
+        run.status
     );
     Ok(())
 }
@@ -514,7 +514,7 @@ async fn test_a_user_recover_starts_the_recovery_count_over(db: TdPool) -> Resul
         services.clone().request(()).await?;
     }
     let gave_up = lfr(&db, &attempt.pfr).await?;
-    assert_eq!(gave_up.base.status, LogicalFunctionRunStatus::Failed);
+    assert_eq!(gave_up.status, LogicalFunctionRunStatus::Failed);
     assert_eq!(*gave_up.recoveries, 3);
 
     let recover = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
@@ -526,7 +526,7 @@ async fn test_a_user_recover_starts_the_recovery_count_over(db: TdPool) -> Resul
     services.clone().execution_recover(recover).await?;
 
     let recovered = lfr(&db, &attempt.pfr).await?;
-    assert_eq!(recovered.base.status, LogicalFunctionRunStatus::ReScheduled);
+    assert_eq!(recovered.status, LogicalFunctionRunStatus::ReScheduled);
     assert_eq!(*recovered.recoveries, 0);
     Ok(())
 }
@@ -540,19 +540,19 @@ async fn test_a_cron_job_left_suspended_is_repaired(db: TdPool) -> Result<(), Td
     let p = db.seed().test_project().await?;
     let (function, cron) = trigger_worker(
         &db,
-        p.base.project_id,
+        p.project_id,
         "c_cron",
         WorkerType::CronTrigger,
         WorkerStatus::Running,
     )
     .await?;
     let suspended = ObservedWorkload {
-        worker_id: Some(cron.base.id.clone()),
-        function_id: Some(function.base.function_id),
-        function: Some(function.base.name.clone()),
+        worker_id: Some(cron.id.clone()),
+        function_id: Some(function.function_id),
+        function: Some(function.name.clone()),
         kind: WorkloadKind::CronTrigger,
         decorator: None,
-        name: format!("crn-{}", cron.base.id),
+        name: format!("crn-{}", cron.id),
         phase: WorkloadPhase::Suspended,
         phase_since: Some(ago(chrono::Duration::hours(1))),
         finished_at: None,
@@ -566,7 +566,7 @@ async fn test_a_cron_job_left_suspended_is_repaired(db: TdPool) -> Result<(), Td
     let repaired = sent
         .messages()
         .iter()
-        .any(|message| message.id == cron.base.id.to_string());
+        .any(|message| message.id == cron.id.to_string());
     assert!(repaired, "a suspended CronJob was left suspended");
     Ok(())
 }
@@ -605,7 +605,7 @@ async fn test_recovery_does_not_start_a_trigger_stopped_since_its_snapshot(
         .await?;
     let stopped = WorkerUpdateDB::stop_scheduled();
     gate.get(Grant::asserted("rotation held open"))
-        .update(&stopped, &cron.base.id)
+        .update(&stopped, &cron.id)
         .await?;
     let ticking = services.clone();
     let tick = tokio::spawn(async move { ticking.recovery(()).await });
@@ -614,7 +614,7 @@ async fn test_recovery_does_not_start_a_trigger_stopped_since_its_snapshot(
     tick.await.expect("recovery task")?;
 
     let restarted = sent.messages().into_iter().any(|message| {
-        message.id == cron.base.id.to_string()
+        message.id == cron.id.to_string()
             && matches!(
                 message.payload,
                 OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(
@@ -649,10 +649,10 @@ async fn call_back(
     let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
         (
             FunctionRunParam {
-                function_run: attempt.pfr.base.id.clone(),
+                function_run: attempt.pfr.id.clone(),
             },
             WorkerParam {
-                worker: attempt.worker.base.id.clone(),
+                worker: attempt.worker.id.clone(),
             },
         ),
         callback,
@@ -690,7 +690,7 @@ async fn test_a_run_lost_after_it_began_its_destination_write_is_not_re_run(
     lose_workload(&db).await?;
 
     let run = lfr(&db, &attempt.pfr).await?;
-    assert_eq!(run.base.status, LogicalFunctionRunStatus::Failed);
+    assert_eq!(run.status, LogicalFunctionRunStatus::Failed);
     Ok(())
 }
 
@@ -703,6 +703,6 @@ async fn test_a_run_lost_before_its_write_is_re_run(db: TdPool) -> Result<(), Td
     lose_workload(&db).await?;
 
     let run = lfr(&db, &attempt.pfr).await?;
-    assert_eq!(run.base.status, LogicalFunctionRunStatus::ReScheduled);
+    assert_eq!(run.status, LogicalFunctionRunStatus::ReScheduled);
     Ok(())
 }

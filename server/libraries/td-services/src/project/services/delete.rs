@@ -30,29 +30,29 @@ async fn delete_project(
         let conn = trx.get(authz.none());
         let current = conn.scd2().fetch_one::<ProjectDB>(&id_name).await?;
         let _grant = authz
-            .require::<Project, ManageProject>(conn, &ctx, &current.base.project_id)
+            .require::<Project, ManageProject>(conn, &ctx, &current.project_id)
             .await?;
 
         // Guard before the delete: never strand a non-empty project's data.
-        let collections: Vec<CollectionDB> = conn.scd2().fetch_all(current.base.project_id).await?;
-        reject_delete_non_empty_project(&current.base.project_id, &collections)?;
+        let collections: Vec<CollectionDB> = conn.scd2().fetch_all(current.project_id).await?;
+        reject_delete_non_empty_project(&current.project_id, &collections)?;
 
         // The project row closes before the role cascade, as a rename writes it
         // before its roles: both serialize on the project row, never on each
         // other's roles.
-        let mut trx = trx.enter_project(&current.base.project_id).await?;
+        let mut trx = trx.enter_project(&current.project_id).await?;
         let at = trx.locked_at();
         let conn = trx.get(authz.none());
         conn.scd2()
-            .close::<ProjectDB>(&current.base.project_id, at)
+            .close::<ProjectDB>(&current.project_id, at)
             .await?;
         conn.scd2()
-            .close::<GroupDB>(&current.base.project_id, at)
+            .close::<GroupDB>(&current.project_id, at)
             .await?;
         // System cascade: drop the project's three per-project roles together
         // with their permission + membership rows (bypasses the `fixed` guard;
         // see `delete_project_roles`).
-        delete_project_roles(conn, &current.base.project_id).await?;
+        delete_project_roles(conn, &current.project_id).await?;
         trx.commit().await?;
         Ok(())
     })
@@ -95,19 +95,19 @@ mod tests {
     #[td_test::test(db)]
     async fn test_delete_project_hides_it_and_its_plans(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let execution = seed_run(&db, p.base.project_id).await?.execution;
+        let execution = seed_run(&db, p.project_id).await?.execution;
         let ctx = RequestContext::with(AccessTokenId::default(), UserId::admin());
         let service = Services::with_defaults(db.clone());
         let delete_project = || {
             ctx.delete(ProjectParam {
-                project: ProjectIdName::from_str(&format!("~{}", p.base.project_id)).unwrap(),
+                project: ProjectIdName::from_str(&format!("~{}", p.project_id)).unwrap(),
             })
         };
 
         let err = service.delete_project(delete_project()).await.unwrap_err();
         assert!(matches!(
             err.domain_err(),
-            ProjectError::ProjectNotEmpty(id) if *id == p.base.project_id.to_string()
+            ProjectError::ProjectNotEmpty(id) if *id == p.project_id.to_string()
         ));
 
         service
@@ -115,7 +115,7 @@ mod tests {
                 ctx.delete(CollectionParam {
                     collection: CollectionIdName::from_str("collection")?,
                 })
-                .in_project(p.base.project_id),
+                .in_project(p.project_id),
             )
             .await?;
         service.delete_project(delete_project()).await?;
@@ -128,24 +128,20 @@ mod tests {
             projects
                 .data
                 .iter()
-                .all(|row| row.project_id != p.base.project_id)
+                .all(|row| row.project_id != p.project_id)
         );
         let executions = service
             .execution_list(ctx.list((), ListParams::default()))
             .await?
             .data;
         assert!(executions.data.iter().all(|row| row.id != execution));
-        let live: Option<ProjectDB> = db.scd2().fetch_optional(&p.base.project_id).await?;
+        let live: Option<ProjectDB> = db.scd2().fetch_optional(&p.project_id).await?;
         assert!(live.is_none());
 
         // The project's groups close with it.
-        let groups: Vec<GroupDB> = db.scoped(p.base.project_id).scd2().fetch_all(()).await?;
+        let groups: Vec<GroupDB> = db.scoped(p.project_id).scd2().fetch_all(()).await?;
         assert!(groups.is_empty());
-        let versions: Vec<GroupDB> = db
-            .scoped(p.base.project_id)
-            .timeline()
-            .fetch_all(())
-            .await?;
+        let versions: Vec<GroupDB> = db.scoped(p.project_id).timeline().fetch_all(()).await?;
         assert_eq!(versions.len(), 3);
         assert!(versions.iter().all(|g| !g.interval.valid_to.is_infinity()));
         Ok(())

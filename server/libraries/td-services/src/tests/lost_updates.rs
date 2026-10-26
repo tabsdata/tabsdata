@@ -160,7 +160,7 @@ async fn test_description_update_racing_rename_keeps_the_new_name(
     let _ = racing.await.expect("update task");
 
     let after: ProjectDB = db.scd2().fetch_one(&p.project_id).await?;
-    assert_eq!(after.base.name, ProjectName::try_from("p_after")?);
+    assert_eq!(after.name, ProjectName::try_from("p_after")?);
     Ok(())
 }
 
@@ -224,14 +224,14 @@ async fn test_collection_description_update_racing_rename_keeps_the_new_name(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let c = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_before")?, &UserId::admin())
         .await?;
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = DbPool::in_project(&pools, &p.base.project_id)
+    let mut gate = DbPool::in_project(&pools, &p.project_id)
         .begin(Attempt::unretried())
         .await?;
     let at = gate.locked_at();
@@ -246,7 +246,7 @@ async fn test_collection_description_update_racing_rename_keeps_the_new_name(
     let update = admin()
         .update(
             CollectionParam {
-                collection: CollectionIdName::from_str(&format!("~{}", c.base.collection_id))?,
+                collection: CollectionIdName::from_str(&format!("~{}", c.collection_id))?,
             },
             CollectionUpdate {
                 name: None,
@@ -254,7 +254,7 @@ async fn test_collection_description_update_racing_rename_keeps_the_new_name(
                 base_path: None,
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     let services = Services::with_defaults(db.clone());
     let racing = tokio::spawn(async move { services.update_collection(update).await });
     assert!(
@@ -267,7 +267,7 @@ async fn test_collection_description_update_racing_rename_keeps_the_new_name(
     gate.commit().await?;
     let _ = racing.await.expect("update task");
 
-    let after: CollectionDB = db.scd2().fetch_one(&c.base.collection_id).await?;
-    assert_eq!(after.base.name, CollectionName::try_from("c_after")?);
+    let after: CollectionDB = db.scd2().fetch_one(&c.collection_id).await?;
+    assert_eq!(after.name, CollectionName::try_from("c_after")?);
     Ok(())
 }

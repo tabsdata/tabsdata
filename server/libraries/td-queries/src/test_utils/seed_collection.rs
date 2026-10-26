@@ -40,7 +40,7 @@ pub(crate) async fn seed_collection_in_group(
     created_by: &UserId,
     group: &GroupDB,
 ) -> Result<CollectionDB, TdError> {
-    let collection_type = CollectionType::from_group_kind(&group.base.kind);
+    let collection_type = CollectionType::from_group_kind(&group.kind);
 
     let at = seed_instant();
     let collection = CollectionInsertDB {
@@ -49,7 +49,7 @@ pub(crate) async fn seed_collection_in_group(
         name: collection_name.clone(),
         description: Description::default(),
         base_path: None,
-        group_id: group.base.group_id,
+        group_id: group.group_id,
         collection_type,
         connection_id: None,
         defined_by_id: *created_by,
@@ -79,7 +79,7 @@ mod tests {
     async fn test_seed_collection(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -91,15 +91,15 @@ mod tests {
         // Read it back through a project-scoped executor: serving connections
         // run as `td_app` under RLS, so an unscoped read would see nothing.
         let found = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .scd2()
-            .fetch_one::<CollectionDB>(&collection.base.collection_id)
+            .fetch_one::<CollectionDB>(&collection.collection_id)
             .await
             .unwrap();
-        assert_eq!(found.base.collection_id, collection.base.collection_id);
-        assert_eq!(found.base.name, collection.base.name);
-        assert_eq!(found.base.description, collection.base.description);
+        assert_eq!(found.collection_id, collection.collection_id);
+        assert_eq!(found.name, collection.name);
+        assert_eq!(found.description, collection.description);
         assert_eq!(found.interval, collection.interval);
-        assert_eq!(found.base.defined_by_id, collection.base.defined_by_id);
+        assert_eq!(found.defined_by_id, collection.defined_by_id);
     }
 }

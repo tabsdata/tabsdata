@@ -14,7 +14,7 @@ pub async fn build_response(
     labels: GraphLabels,
 ) -> Result<TableFlowGraphResponse, TdError> {
     Ok(TableFlowGraphResponse {
-        table: table.base.base.id,
+        table: table.id,
         graph: graph_response(graph, labels).await?,
     })
 }

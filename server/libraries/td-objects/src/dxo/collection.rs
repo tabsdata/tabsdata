@@ -60,9 +60,9 @@ impl CollectionDB {
     /// version is open, `[<id>]` once it is closed.
     pub fn label(&self) -> CollectionLabel {
         if self.interval.valid_to.is_infinity() {
-            CollectionLabel::new(self.base.name.clone())
+            CollectionLabel::new(self.name.clone())
         } else {
-            CollectionLabel::new(Label::Deleted(self.base.collection_id))
+            CollectionLabel::new(Label::Deleted(self.collection_id))
         }
     }
 
@@ -71,18 +71,15 @@ impl CollectionDB {
     pub fn updated(&self, update: &CollectionUpdate, ctx: &RequestContext) -> CollectionInsertDB {
         CollectionInsertDB {
             id: CollectionVersionId::default(),
-            name: update
-                .name
-                .clone()
-                .unwrap_or_else(|| self.base.name.clone()),
+            name: update.name.clone().unwrap_or_else(|| self.name.clone()),
             description: update
                 .description
                 .clone()
-                .unwrap_or_else(|| self.base.description.clone()),
+                .unwrap_or_else(|| self.description.clone()),
             base_path: update
                 .base_path
                 .clone()
-                .unwrap_or_else(|| self.base.base_path.clone()),
+                .unwrap_or_else(|| self.base_path.clone()),
             defined_by_id: ctx.user_id,
             ..self.base.clone()
         }

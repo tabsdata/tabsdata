@@ -120,11 +120,11 @@ pub async fn materialize_replay_dispatch<S: SeesProjectRows, M: AccessMode>(
         return Ok(Vec::new());
     }
 
-    let pfr_ids: Vec<PhysicalFunctionRunId> = pfrs.iter().map(|p| p.base.id.clone()).collect();
+    let pfr_ids: Vec<PhysicalFunctionRunId> = pfrs.iter().map(|p| p.id.clone()).collect();
 
     let exec_ids: Vec<ExecutionId> = pfrs
         .iter()
-        .map(|p| p.base.execution_id.clone())
+        .map(|p| p.execution_id.clone())
         .collect::<std::collections::HashSet<_>>()
         .into_iter()
         .collect();
@@ -143,7 +143,7 @@ pub async fn materialize_replay_dispatch<S: SeesProjectRows, M: AccessMode>(
         HashMap::new();
     for t in tdvs {
         tdvs_by_fr
-            .entry(t.base.physical_function_run_id.clone())
+            .entry(t.physical_function_run_id.clone())
             .or_default()
             .push(t.base);
     }
@@ -151,22 +151,22 @@ pub async fn materialize_replay_dispatch<S: SeesProjectRows, M: AccessMode>(
     let mut output = Vec::with_capacity(pfrs.len());
     for pfr in pfrs.iter() {
         let Some(lfr) = lfr_by_exec_fn
-            .get(&pfr.base.execution_id)
-            .and_then(|inner| inner.get(&pfr.base.function_id))
+            .get(&pfr.execution_id)
+            .and_then(|inner| inner.get(&pfr.function_id))
         else {
             return Err(api_error!(
                 ApiError::InternalError,
                 "replay-dispatch: no LFR for PFR {} via (execution_id={}, function_id={})",
-                pfr.base.id,
-                pfr.base.execution_id,
-                pfr.base.function_id,
+                pfr.id,
+                pfr.execution_id,
+                pfr.function_id,
             ));
         };
         let runnable = RunnableVersion {
-            function_version_id: pfr.base.function_version_id.clone(),
-            function_version_patch_id: pfr.base.function_version_patch_id.clone(),
+            function_version_id: pfr.function_version_id.clone(),
+            function_version_patch_id: pfr.function_version_patch_id.clone(),
         };
-        let tdvs = tdvs_by_fr.remove(&pfr.base.id).unwrap_or_default();
+        let tdvs = tdvs_by_fr.remove(&pfr.id).unwrap_or_default();
         output.push(MintedDispatch {
             lfr: lfr.clone(),
             fr: pfr.base.clone(),
@@ -208,7 +208,7 @@ pub async fn enrich_minted_dispatch<S: SeesProjectRows, M: AccessMode>(
 pub fn lfr_ids_from_minted_dispatch(
     minted: &[MintedDispatch],
 ) -> Result<Vec<LogicalFunctionRunId>, TdError> {
-    Ok(minted.iter().map(|m| m.lfr.base.id.clone()).collect())
+    Ok(minted.iter().map(|m| m.lfr.id.clone()).collect())
 }
 
 /// Extract the PFR ids from the successfully dispatched workers so the
@@ -286,8 +286,7 @@ pub async fn create_locked_function_runner_workers_start_request<
             let worker_id = WorkerId::new();
 
             // Responder: where the worker POSTs its status back (both paths).
-            let responder =
-                internal_api.function_run_responder(&f.base.base.base.id, &worker_id)?;
+            let responder = internal_api.function_run_responder(&f.id, &worker_id)?;
 
             // The message kind differs by orchestrator: supervisor ships a flat
             // request carrying the fully-resolved Function context; kubernetes
@@ -325,14 +324,14 @@ pub async fn create_locked_function_runner_workers_start_request<
                             decorator: f.decorator.to_message(),
                             resolver,
                             responder,
-                            project_id: f.base.base.project_id,
-                            project: f.base.project.as_ref().map(|p| p.name()).transpose()?,
-                            collection_id: f.base.base.base.collection_id,
-                            collection: f.base.collection.name()?,
+                            project_id: f.project_id,
+                            project: f.project.as_ref().map(|p| p.name()).transpose()?,
+                            collection_id: f.collection_id,
+                            collection: f.collection.name()?,
                             connection_id: f.connection_id,
-                            connection: f.base.connection.clone(),
-                            function_id: f.base.base.base.function_id,
-                            function: f.base.name.clone(),
+                            connection: f.connection.clone(),
+                            function_id: f.function_id,
+                            function: f.name.clone(),
                         }),
                     )
                 }
@@ -342,11 +341,11 @@ pub async fn create_locked_function_runner_workers_start_request<
             // project so its callbacks land in the right RLS scope.
             let message = WorkerInsertDB {
                 id: worker_id,
-                collection_id: f.base.base.base.collection_id,
-                execution_id: Some(f.base.base.base.execution_id.clone()),
-                transaction_id: Some(f.base.base.base.transaction_id.clone()),
-                physical_function_run_id: Some(f.base.base.base.id.clone()),
-                function_version_id: f.base.base.base.function_version_id.clone(),
+                collection_id: f.collection_id,
+                execution_id: Some(f.execution_id.clone()),
+                transaction_id: Some(f.transaction_id.clone()),
+                physical_function_run_id: Some(f.id.clone()),
+                function_version_id: f.function_version_id.clone(),
                 started_on: None,
                 ended_on: None,
                 status: WorkerStatus::Requested,
@@ -370,7 +369,7 @@ pub async fn create_locked_function_runner_workers_start_request<
                 results.push(message);
             }
             Err(e) => warn!(
-                pfr_id = %f.base.base.base.id,
+                pfr_id = %f.id,
                 reason = ?e,
                 "request: skipping function-run dispatch; will retry next tick"
             ),

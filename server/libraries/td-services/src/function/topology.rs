@@ -93,10 +93,8 @@ pub async fn latest_patch_or_head_batch<S: SeesProjectRows, M: AccessMode>(
         .chunked()
         .fetch_all::<FunctionDB>(&fvids, ())
         .await?;
-    let mut canonical_by_id: HashMap<FunctionVersionId, FunctionDB> = canonical
-        .into_iter()
-        .map(|f| (f.base.id.clone(), f))
-        .collect();
+    let mut canonical_by_id: HashMap<FunctionVersionId, FunctionDB> =
+        canonical.into_iter().map(|f| (f.id.clone(), f)).collect();
     let unresolved: Vec<FunctionVersionId> = fvids
         .iter()
         .filter(|id| !canonical_by_id.contains_key(*id))
@@ -112,7 +110,7 @@ pub async fn latest_patch_or_head_batch<S: SeesProjectRows, M: AccessMode>(
     };
     let mut patch_lookup_by_id: HashMap<FunctionVersionId, FunctionPatchDB> = patch_lookups
         .into_iter()
-        .map(|p| (p.base.id.clone(), p))
+        .map(|p| (p.id.clone(), p))
         .collect();
 
     let mut head_by_input: HashMap<FunctionVersionId, FunctionVersionId> = HashMap::new();
@@ -144,14 +142,14 @@ pub async fn latest_patch_or_head_batch<S: SeesProjectRows, M: AccessMode>(
     };
     let patch_by_head: HashMap<FunctionVersionId, FunctionPatchDB> = latest_patches
         .into_iter()
-        .map(|p| ((*p.base.parent_function_version_id).clone(), p))
+        .map(|p| ((*p.parent_function_version_id).clone(), p))
         .collect();
 
     let mut out = HashMap::with_capacity(head_by_input.len());
     for (input_fvid, head_fvid) in head_by_input {
         let latest = patch_by_head
             .get(&head_fvid)
-            .map(|p| Patch::from(p.base.id.clone()));
+            .map(|p| Patch::from(p.id.clone()));
         out.insert(
             input_fvid,
             RunnableVersion {
@@ -228,9 +226,9 @@ mod tests {
     ) -> Result<FunctionVersionId, TdError> {
         let patch = FunctionPatchInsertDB {
             id: FunctionVersionId::new(),
-            parent_function_version_id: head.base.id.clone().into(),
-            function_id: head.base.function_id,
-            collection_id: head.base.collection_id,
+            parent_function_version_id: head.id.clone().into(),
+            function_id: head.function_id,
+            collection_id: head.collection_id,
             snippet: Snippet::try_from(RawSnippet::try_from(snippet)?)?,
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("rv")?,
@@ -251,7 +249,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_latest_patch_or_head_time_pinning(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (_coll, head) = seed_head(&db, p.base.project_id, "c0", "f0").await?;
+        let (_coll, head) = seed_head(&db, p.project_id, "c0", "f0").await?;
 
         // Three deterministic points: `before` (epoch — no patches), `t1`
         // (p1 alive), `t2 = t1 + 1ms` (p2 alive).
@@ -260,19 +258,19 @@ mod tests {
         let t2 = AtTime::from(td_common::datetime::Timestamp::from(
             **t1 + chrono::Duration::milliseconds(1),
         ));
-        let p1 = insert_patch(&db, p.base.project_id, &head, t1, "p1").await?;
-        let p2 = insert_patch(&db, p.base.project_id, &head, t2, "p2").await?;
+        let p1 = insert_patch(&db, p.project_id, &head, t1, "p1").await?;
+        let p2 = insert_patch(&db, p.project_id, &head, t2, "p2").await?;
 
         let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
 
-        let at_t1 = latest_patch_or_head(&mut conn, &head.base.id, &t1).await?;
-        assert_eq!(at_t1.function_version_id, head.base.id);
+        let at_t1 = latest_patch_or_head(&mut conn, &head.id, &t1).await?;
+        assert_eq!(at_t1.function_version_id, head.id);
         assert_eq!(at_t1.function_version_patch_id, Some(Patch::from(p1)));
 
-        let at_t2 = latest_patch_or_head(&mut conn, &head.base.id, &t2).await?;
+        let at_t2 = latest_patch_or_head(&mut conn, &head.id, &t2).await?;
         assert_eq!(at_t2.function_version_patch_id, Some(Patch::from(p2)));
 
-        let at_before = latest_patch_or_head(&mut conn, &head.base.id, &before).await?;
+        let at_before = latest_patch_or_head(&mut conn, &head.id, &before).await?;
         assert_eq!(at_before.function_version_patch_id, None);
         Ok(())
     }
@@ -287,26 +285,23 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let (_coll_a, head_a) = seed_head(&db, p.base.project_id, "c0", "fa").await?;
-        let (_coll_b, head_b) = seed_head(&db, p.base.project_id, "c1", "fb").await?;
+        let (_coll_a, head_a) = seed_head(&db, p.project_id, "c0", "fa").await?;
+        let (_coll_b, head_b) = seed_head(&db, p.project_id, "c1", "fb").await?;
 
         let now = AtTime::now();
-        let p_a = insert_patch(&db, p.base.project_id, &head_a, now, "p-a").await?;
-        let p_b = insert_patch(&db, p.base.project_id, &head_b, now, "p-b").await?;
+        let p_a = insert_patch(&db, p.project_id, &head_a, now, "p-a").await?;
+        let p_b = insert_patch(&db, p.project_id, &head_b, now, "p-b").await?;
 
         let mut conn = DomainConnection::<Apiserver, InProject, RW>::new(db.begin().await.unwrap());
-        let map = latest_patch_or_head_batch(
-            &mut conn,
-            vec![head_a.base.id.clone(), head_b.base.id.clone()],
-            &now,
-        )
-        .await?;
+        let map =
+            latest_patch_or_head_batch(&mut conn, vec![head_a.id.clone(), head_b.id.clone()], &now)
+                .await?;
 
-        let r_a = map.get(&head_a.base.id).expect("missing head_a");
-        let r_b = map.get(&head_b.base.id).expect("missing head_b");
-        assert_eq!(r_a.function_version_id, head_a.base.id);
+        let r_a = map.get(&head_a.id).expect("missing head_a");
+        let r_b = map.get(&head_b.id).expect("missing head_b");
+        assert_eq!(r_a.function_version_id, head_a.id);
         assert_eq!(r_a.function_version_patch_id, Some(Patch::from(p_a)));
-        assert_eq!(r_b.function_version_id, head_b.base.id);
+        assert_eq!(r_b.function_version_id, head_b.id);
         assert_eq!(r_b.function_version_patch_id, Some(Patch::from(p_b)));
         Ok(())
     }

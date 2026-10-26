@@ -124,7 +124,7 @@ async fn test_list_filters_to_visible_projects(db: TdPool) -> Result<(), TdError
         .permission(
             PermissionType::view_project(),
             None,
-            Some(EntityId::try_from(alpha.base.project_id)?),
+            Some(EntityId::try_from(alpha.project_id)?),
             &alpha_viewers,
         )
         .await?;

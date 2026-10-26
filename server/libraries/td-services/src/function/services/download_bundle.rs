@@ -105,15 +105,15 @@ pub async fn build_bundle_download<S: SeesProjectRows, M: AccessMode>(
     // storage prefix frozen at upload.
     let bundle = conn.fetch_one::<BundleDB>(&function.bundle_id).await?;
     let (path, _) = StorageLocation::from(&function.storage_version)
-        .builder(&bundle.base.base_path)
-        .collection(&bundle.base.collection_id)
-        .function(&bundle.base.id)
+        .builder(&bundle.base_path)
+        .collection(&bundle.collection_id)
+        .function(&bundle.id)
         .build()?;
     let stream = storage.read_stream(&path).await?.map_err(TdError::from);
     let stream = SyncStream::new(stream);
     Ok(BundleDownload {
         stream: BoxedSyncStream::new(stream),
-        etag: bundle.base.hash.clone(),
+        etag: bundle.hash.clone(),
         function_name: function.name.clone(),
         function_version_id: function.id.clone(),
     })
@@ -156,19 +156,14 @@ mod tests {
 
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
 
         let payload_a = b"BUNDLE-PAYLOAD-A".to_vec();
-        let bundle_a_id = upload_bundle(
-            &context,
-            p.base.project_id,
-            &collection.base.name,
-            payload_a.clone(),
-        )
-        .await?;
+        let bundle_a_id =
+            upload_bundle(&context, p.project_id, &collection.name, payload_a.clone()).await?;
 
         let create_v1 = FunctionRegister {
             child_functions: None,
@@ -191,7 +186,7 @@ mod tests {
             workers: None,
         };
         let v1 = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create_v1)
             .await?;
@@ -201,13 +196,8 @@ mod tests {
         // UpdateFunctionService would drag in trigger/dependency rebuilds
         // that are irrelevant to what we're asserting here.
         let payload_b = b"BUNDLE-PAYLOAD-B".to_vec();
-        let bundle_b_id = upload_bundle(
-            &context,
-            p.base.project_id,
-            &collection.base.name,
-            payload_b.clone(),
-        )
-        .await?;
+        let bundle_b_id =
+            upload_bundle(&context, p.project_id, &collection.name, payload_b.clone()).await?;
 
         let v2 = FunctionInsertDB {
             id: FunctionVersionId::new(),
@@ -215,7 +205,7 @@ mod tests {
             bundle_id: bundle_b_id,
             ..v1.base.clone()
         };
-        let (mut conn, version) = topology_write(&db, &p.base.project_id).await?;
+        let (mut conn, version) = topology_write(&db, &p.project_id).await?;
         conn.scd2().open(&v2, version).await?;
         commit_topology_write(conn).await?;
 
@@ -256,8 +246,8 @@ mod tests {
         let payload_patch = b"BUNDLE-PAYLOAD-PATCH".to_vec();
         let bundle_patch_id = upload_bundle(
             &context,
-            p.base.project_id,
-            &collection.base.name,
+            p.project_id,
+            &collection.name,
             payload_patch.clone(),
         )
         .await?;
@@ -273,7 +263,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .scd2()
             .open(&patch, LockInstant::asserted(*AtTime::now()))
             .await?;
@@ -297,7 +287,7 @@ mod tests {
 
         // Deleting the function closes its interval, so a prior version of
         // it (v1) — still readable in its own row — is no longer downloadable.
-        let (mut conn, version) = topology_write(&db, &p.base.project_id).await?;
+        let (mut conn, version) = topology_write(&db, &p.project_id).await?;
         conn.scd2()
             .close::<FunctionDB>(&v2.function_id, version)
             .await?;
@@ -305,7 +295,7 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(
             FunctionVersionParam {
-                function_version: v1.base.id.clone(),
+                function_version: v1.id.clone(),
             },
         );
         let err = service
@@ -330,7 +320,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .scd2()
             .open(&orphan, LockInstant::asserted(*AtTime::now()))
             .await?;
@@ -371,14 +361,13 @@ mod tests {
 
         let collection_name = CollectionName::try_from("deltest")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
 
         let payload = b"BUNDLE-PAYLOAD".to_vec();
-        let bundle_id =
-            upload_bundle(&context, p.base.project_id, &collection.base.name, payload).await?;
+        let bundle_id = upload_bundle(&context, p.project_id, &collection.name, payload).await?;
         let create = FunctionRegister {
             child_functions: None,
             name: "joaquin".try_into()?,
@@ -400,7 +389,7 @@ mod tests {
             workers: None,
         };
         let version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -416,20 +405,20 @@ mod tests {
         };
         service
             .clone()
-            .download_bundle(download(version.base.id.clone()))
+            .download_bundle(download(version.id.clone()))
             .await?;
 
         // Delete the function through the real service.
         let delete_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete((
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("{}", collection.base.name))?,
+                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
                 },
                 FunctionParam {
                     function: FunctionIdName::from_str("joaquin")?,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         Services::with_defaults(db.clone())
             .delete_function(delete_request)
             .await?;

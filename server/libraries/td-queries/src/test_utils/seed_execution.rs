@@ -41,14 +41,14 @@ async fn _seed_execution(
     let execution_db = ExecutionInsertDB {
         id: ExecutionId::new(),
         name: Some(ExecutionName::try_from("test_execution")?),
-        collection_id: function_version.base.collection_id,
-        function_id: function_version.base.function_id,
-        function_version_id: function_version.base.id.clone(),
+        collection_id: function_version.collection_id,
+        function_id: function_version.function_id,
+        function_version_id: function_version.id.clone(),
         triggered_on: TriggeredOn::asserted(Timestamp::default()),
         triggered_by_id: UserId::admin(),
         trigger_type,
         external_uid: None,
-        topology_version_id: topology.base.id,
+        topology_version_id: topology.id,
     };
 
     // Field-less row; runs on a project-scoped connection so `project_id`
@@ -73,7 +73,7 @@ mod tests {
     async fn test_seed_execution(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -108,28 +108,28 @@ mod tests {
         };
 
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version)
             .await
             .unwrap();
         assert_eq!(
-            execution.base.name,
+            execution.name,
             Some(ExecutionName::try_from("test_execution").unwrap())
         );
-        assert_eq!(execution.base.collection_id, collection.base.collection_id);
-        assert_eq!(execution.base.function_version_id, function_version.base.id);
+        assert_eq!(execution.collection_id, collection.collection_id);
+        assert_eq!(execution.function_version_id, function_version.id);
         assert_eq!(
-            **execution.base.triggered_by_id,
-            **function_version.base.defined_by_id
+            **execution.triggered_by_id,
+            **function_version.defined_by_id
         );
-        assert!(execution.base.triggered_on < TriggeredOn::asserted(Timestamp::default()));
+        assert!(execution.triggered_on < TriggeredOn::asserted(Timestamp::default()));
     }
 }

@@ -321,7 +321,7 @@ mod tests {
     /// the subject of condition 5 — must be seeded explicitly here.
     async fn seed_per_project_roles(db: &TdPool, project: &ProjectDB) -> Result<(), TdError> {
         let context = admin_context();
-        let entity_id = EntityId::try_from(project.base.project_id)?;
+        let entity_id = EntityId::try_from(project.project_id)?;
         let specs = [
             (
                 RoleKind::ProjectAdmin,
@@ -340,7 +340,7 @@ mod tests {
             ),
         ];
         for (kind, suffix, permission_type) in specs {
-            let role_name = RoleName::try_from(format!("{}_{suffix}", project.base.name))?;
+            let role_name = RoleName::try_from(format!("{}_{suffix}", project.name))?;
             let role_create = RoleCreate {
                 name: role_name,
                 description: Description::try_from("per-project role")?,
@@ -354,7 +354,7 @@ mod tests {
                 modified_on: context.time.into(),
                 modified_by_id: context.user_id.into(),
                 kind,
-                project_id: Some(project.base.project_id),
+                project_id: Some(project.project_id),
                 fixed: Fixed::TRUE,
             };
             let permission = PermissionDB {
@@ -443,7 +443,7 @@ mod tests {
             .permission(
                 PermissionType::view_project(),
                 None,
-                Some(EntityId::try_from(project.base.project_id)?),
+                Some(EntityId::try_from(project.project_id)?),
                 &default_role,
             )
             .await?;
@@ -470,7 +470,7 @@ mod tests {
             .permission(
                 PermissionType::manage_project(),
                 None,
-                Some(EntityId::try_from(project.base.project_id)?),
+                Some(EntityId::try_from(project.project_id)?),
                 &project_creator,
             )
             .await?;

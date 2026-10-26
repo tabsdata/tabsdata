@@ -104,13 +104,13 @@ async fn test_a_report_after_its_attempt_ended_is_stale(db: TdPool) -> Result<()
     }];
     test_status_update(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, _, f, w| {
             let db = db.clone();
             let test_function = &test_executions[0].transactions[0].functions[0];
-            let function_run = f[test_function].base.id.clone();
-            let worker = w[test_function].base.id.clone();
+            let function_run = f[test_function].id.clone();
+            let worker = w[test_function].id.clone();
             async move {
                 let done = report_attempt(&db, &function_run, &worker, WorkerCallbackStatus::Done);
                 assert_eq!(done.await?, CallbackOutcome::Applied);
@@ -140,13 +140,13 @@ async fn test_an_end_reported_again_changes_nothing(db: TdPool) -> Result<(), Td
     }];
     test_status_update(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, _, f, w| {
             let db = db.clone();
             let test_function = &test_executions[0].transactions[0].functions[0];
-            let function_run = f[test_function].base.id.clone();
-            let worker = w[test_function].base.id.clone();
+            let function_run = f[test_function].id.clone();
+            let worker = w[test_function].id.clone();
             async move {
                 let failed = report_between(WorkerCallbackStatus::Failed, 1_000, 2_000);
                 let first = send(&db, &function_run, &worker, failed).await?;
@@ -160,11 +160,11 @@ async fn test_an_end_reported_again_changes_nothing(db: TdPool) -> Result<(), Td
                 assert_eq!(again, CallbackOutcome::Applied);
                 let attempt_after: PhysicalFunctionRunDB =
                     db.timeline().fetch_one(&function_run).await?;
-                assert_eq!(attempt_after.base.started_on, attempt.base.started_on);
-                assert_eq!(attempt_after.base.ended_on, attempt.base.ended_on);
+                assert_eq!(attempt_after.started_on, attempt.started_on);
+                assert_eq!(attempt_after.ended_on, attempt.ended_on);
                 let runner_after: WorkerDB = db.fetch_one(&worker).await?;
-                assert_eq!(runner_after.base.started_on, runner.base.started_on);
-                assert_eq!(runner_after.base.ended_on, runner.base.ended_on);
+                assert_eq!(runner_after.started_on, runner.started_on);
+                assert_eq!(runner_after.ended_on, runner.ended_on);
                 Ok(())
             }
         },
@@ -187,13 +187,13 @@ async fn test_a_worker_reporting_another_attempt_is_not_found(db: TdPool) -> Res
     }];
     test_status_update(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, _, f, w| {
             let db = db.clone();
             let functions = &test_executions[0].transactions[0].functions;
-            let function_run = f[&functions[0]].base.id.clone();
-            let other_worker = w[&functions[1]].base.id.clone();
+            let function_run = f[&functions[0]].id.clone();
+            let other_worker = w[&functions[1]].id.clone();
             async move {
                 let error = report_attempt(
                     &db,
@@ -215,12 +215,12 @@ async fn test_a_worker_reporting_another_attempt_is_not_found(db: TdPool) -> Res
 async fn test_a_trigger_report_after_its_stop_is_stale(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_0")?, &UserId::admin())
         .await?;
     let function = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&collection, &register("f_0", None))
         .await?;
@@ -230,13 +230,13 @@ async fn test_a_trigger_report_after_its_stop_is_stale(db: TdPool) -> Result<(),
         (WorkerStatus::StopScheduled, CallbackOutcome::Stale),
     ] {
         let worker = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .worker(&collection, &function, &WorkerType::CronTrigger, &status)
             .await?;
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin()).update(
             WorkerParam {
-                worker: worker.base.id.clone(),
+                worker: worker.id.clone(),
             },
             report(WorkerCallbackStatus::Running),
         );

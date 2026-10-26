@@ -50,9 +50,9 @@ pub(crate) struct DispatchPrefetch {
 impl DispatchPrefetch {
     fn lfr_id_for(&self, f: &PhysicalFunctionRunToExecute) -> Option<LogicalFunctionRunId> {
         self.lfr_by_fr_key
-            .get(&f.base.base.base.execution_id)
-            .and_then(|m| m.get(&f.base.base.base.function_id))
-            .map(|l| l.base.id.clone())
+            .get(&f.execution_id)
+            .and_then(|m| m.get(&f.function_id))
+            .map(|l| l.id.clone())
     }
 
     /// The minted output PTDVs for one FR (empty if none).
@@ -75,11 +75,11 @@ pub(crate) async fn prefetch_dispatch<S: SeesProjectRows, M: AccessMode>(
 ) -> Result<DispatchPrefetch, TdError> {
     let fr_ids: Vec<PhysicalFunctionRunId> = physical_function_runs
         .iter()
-        .map(|f| f.base.base.base.id.clone())
+        .map(|f| f.id.clone())
         .collect();
     let exec_ids: Vec<ExecutionId> = physical_function_runs
         .iter()
-        .map(|f| f.base.base.base.execution_id.clone())
+        .map(|f| f.execution_id.clone())
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
@@ -95,9 +95,9 @@ pub(crate) async fn prefetch_dispatch<S: SeesProjectRows, M: AccessMode>(
         .iter()
         .filter_map(|f| {
             lfr_by_fr_key
-                .get(&f.base.base.base.execution_id)
-                .and_then(|m| m.get(&f.base.base.base.function_id))
-                .map(|l| l.base.id.clone())
+                .get(&f.execution_id)
+                .and_then(|m| m.get(&f.function_id))
+                .map(|l| l.id.clone())
         })
         .collect();
 
@@ -114,7 +114,7 @@ pub(crate) async fn prefetch_dispatch<S: SeesProjectRows, M: AccessMode>(
         Vec<PhysicalTableDataVersionDBWithNames>,
     > = all_output_tables
         .into_iter()
-        .into_group_map_by(|t| t.base.base.base.physical_function_run_id.clone());
+        .into_group_map_by(|t| t.physical_function_run_id.clone());
 
     let all_lfr_inputs: Vec<LogicalFunctionRunInputDB> = if lfr_ids.is_empty() {
         Vec::new()
@@ -125,12 +125,12 @@ pub(crate) async fn prefetch_dispatch<S: SeesProjectRows, M: AccessMode>(
     };
     let input_ftdv_ids: Vec<LogicalTableDataVersionId> = all_lfr_inputs
         .iter()
-        .filter_map(|i| i.base.requirement_logical_table_data_version_id.clone())
+        .filter_map(|i| i.requirement_logical_table_data_version_id.clone())
         .collect();
     let lfr_inputs_by_lfr: HashMap<LogicalFunctionRunId, Vec<LogicalFunctionRunInputDB>> =
         all_lfr_inputs
             .into_iter()
-            .into_group_map_by(|inp| inp.base.logical_function_run_id.clone());
+            .into_group_map_by(|inp| inp.logical_function_run_id.clone());
 
     let mut bound_tdv_id_by_ftdv: HashMap<
         LogicalTableDataVersionId,
@@ -146,9 +146,7 @@ pub(crate) async fn prefetch_dispatch<S: SeesProjectRows, M: AccessMode>(
             .fetch_all::<PhysicalTableDataVersionDB>(&input_ftdv_ids, ())
             .await?;
         for tdv in bound {
-            if let Some(slot) =
-                bound_tdv_id_by_ftdv.get_mut(&tdv.base.logical_table_data_version_id)
-            {
+            if let Some(slot) = bound_tdv_id_by_ftdv.get_mut(&tdv.logical_table_data_version_id) {
                 *slot = Some(tdv.base.id);
             }
         }
@@ -166,7 +164,7 @@ pub(crate) async fn prefetch_dispatch<S: SeesProjectRows, M: AccessMode>(
                 .fetch_all::<PhysicalTableDataVersionDBWithNames>(&bound_tdv_ids, ())
                 .await?
                 .into_iter()
-                .map(|t| (t.base.base.base.id.clone(), t))
+                .map(|t| (t.id.clone(), t))
                 .collect()
         };
 
@@ -187,7 +185,7 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
     f: &PhysicalFunctionRunToExecute,
     prefetch: &DispatchPrefetch,
 ) -> Result<(Vec<InputTable>, Vec<InputTable>), TdError> {
-    let storage_location = StorageLocation::from(&f.base.storage_version);
+    let storage_location = StorageLocation::from(&f.storage_version);
 
     let empty_inputs = Vec::new();
     let lfr_id = prefetch.lfr_id_for(f);
@@ -217,8 +215,8 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
     for lfri in lfr_inputs.iter() {
         // Skip NO_VERSIONS placeholders (NULL idx/dep_pos).
         let (Some(input_idx), Some(dependency_pos)) = (
-            lfri.base.requirement_input_idx.as_ref(),
-            lfri.base.requirement_dependency_pos.as_ref(),
+            lfri.requirement_input_idx.as_ref(),
+            lfri.requirement_dependency_pos.as_ref(),
         ) else {
             continue;
         };
@@ -236,33 +234,33 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
         // version when no TDV is bound.
         let (name, collection_id, collection, table_id, table_version_id) = match bound_tdv {
             Some(tdv) => (
-                tdv.base.base.base.name.clone(),
-                tdv.base.base.base.collection_id,
+                tdv.name.clone(),
+                tdv.collection_id,
                 tdv.collection.clone(),
-                tdv.base.base.base.table_id,
-                tdv.base.base.base.table_version_id,
+                tdv.table_id,
+                tdv.table_version_id,
             ),
             None => {
                 if fallback_cache.is_none() {
                     let deps: HashMap<DependencyPos, DependencyDB> = conn
                         .dependencies()
-                        .active_for_function_at(&f.base.base.base.function_id, &f.defined_on)
+                        .active_for_function_at(&f.function_id, &f.defined_on)
                         .await?
                         .into_iter()
-                        .map(|d| (d.base.dep_pos, d))
+                        .map(|d| (d.dep_pos, d))
                         .collect();
                     // The table versions the plan read, never the tables as of
                     // a later instant: a delete committing after the plan has
                     // closed them since.
                     let pinned: Vec<TableVersionId> = lfr_inputs
                         .iter()
-                        .filter_map(|i| i.base.requirement_table_version_id)
+                        .filter_map(|i| i.requirement_table_version_id)
                         .collect::<HashSet<_>>()
                         .into_iter()
                         .collect();
                     let coll_ids: Vec<CollectionId> = deps
                         .values()
-                        .map(|d| *d.base.table_collection_id)
+                        .map(|d| *d.table_collection_id)
                         .collect::<HashSet<_>>()
                         .into_iter()
                         .collect();
@@ -274,7 +272,7 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                             .fetch_all::<TableDB>(&pinned, ())
                             .await?
                             .into_iter()
-                            .map(|t| (t.base.id, t))
+                            .map(|t| (t.id, t))
                             .collect()
                     };
                     // The last version, so a dependency in a deleted
@@ -288,7 +286,7 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                             .fetch_all::<CollectionDB>(&coll_ids, ())
                             .await?
                             .into_iter()
-                            .map(|c| (c.base.collection_id, c))
+                            .map(|c| (c.collection_id, c))
                             .collect()
                     };
                     fallback_cache = Some(FallbackCache {
@@ -304,7 +302,7 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                         "LFR_input dep_pos {dependency_pos} not found in function_version's deps"
                     )
                 })?;
-                let pinned = lfri.base.requirement_table_version_id.ok_or_else(|| {
+                let pinned = lfri.requirement_table_version_id.ok_or_else(|| {
                     api_error!(
                         status = StatusCode::CONFLICT,
                         "The input at dependency position {dependency_pos} was planned before \
@@ -317,21 +315,18 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                         "TableDB not found for planned table version {pinned}"
                     )
                 })?;
-                let coll = cache
-                    .colls
-                    .get(&*dep.base.table_collection_id)
-                    .ok_or_else(|| {
-                        api_error!(
-                            ApiError::InternalError,
-                            "No collection {} for a dependency during fallback",
-                            dep.base.table_collection_id
-                        )
-                    })?;
+                let coll = cache.colls.get(&*dep.table_collection_id).ok_or_else(|| {
+                    api_error!(
+                        ApiError::InternalError,
+                        "No collection {} for a dependency during fallback",
+                        dep.table_collection_id
+                    )
+                })?;
                 (
-                    table.base.name.clone(),
-                    *dep.base.table_collection_id,
+                    table.name.clone(),
+                    *dep.table_collection_id,
                     coll.label(),
-                    dep.base.table_id,
+                    dep.table_id,
                     pinned,
                 )
             }
@@ -342,39 +337,37 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
         let (found_data_version, location) = match bound_tdv {
             None => (None, None),
             Some(found_data_version) => {
-                let data_version_with_data = if matches!(
-                    found_data_version.base.base.base.has_data,
-                    Some(HasData::TRUE)
-                ) {
-                    Some(Cow::Borrowed(found_data_version))
-                } else {
-                    let key = found_data_version
-                        .base
-                        .base
-                        .base
-                        .logical_table_data_version_id
-                        .clone();
-                    let res = if let Some(cached) = latest_with_data_cache.get(&key) {
-                        cached.clone()
+                let data_version_with_data =
+                    if matches!(found_data_version.has_data, Some(HasData::TRUE)) {
+                        Some(Cow::Borrowed(found_data_version))
                     } else {
-                        let r = conn
-                            .table_data_versions()
-                            .committed_data_before(&key)
-                            .await?;
-                        latest_with_data_cache.insert(key, r.clone());
-                        r
+                        let key = found_data_version
+                            .base
+                            .base
+                            .base
+                            .logical_table_data_version_id
+                            .clone();
+                        let res = if let Some(cached) = latest_with_data_cache.get(&key) {
+                            cached.clone()
+                        } else {
+                            let r = conn
+                                .table_data_versions()
+                                .committed_data_before(&key)
+                                .await?;
+                            latest_with_data_cache.insert(key, r.clone());
+                            r
+                        };
+                        res.map(Cow::Owned)
                     };
-                    res.map(Cow::Owned)
-                };
 
                 if let Some(data_version_with_data) = data_version_with_data.as_ref() {
                     let (path, _) = storage_location
-                        .builder(&data_version_with_data.base.base.base.base_path)
-                        .collection(&data_version_with_data.base.base.base.collection_id)
-                        .data(&data_version_with_data.base.base.base.id)
+                        .builder(&data_version_with_data.base_path)
+                        .collection(&data_version_with_data.collection_id)
+                        .data(&data_version_with_data.id)
                         .table(
-                            &data_version_with_data.base.base.base.table_id,
-                            &data_version_with_data.base.base.base.table_version_id,
+                            &data_version_with_data.table_id,
+                            &data_version_with_data.table_version_id,
                         )
                         .build()?;
                     let (location, _) = build_external_location(storage, &path)?;
@@ -391,28 +384,24 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
             table_id,
             table: name,
             table_version_id,
-            execution_id: found_data_version
-                .as_ref()
-                .map(|v| v.base.base.base.execution_id.clone()),
+            execution_id: found_data_version.as_ref().map(|v| v.execution_id.clone()),
             transaction_id: found_data_version
                 .as_ref()
-                .map(|v| v.base.base.base.transaction_id.clone()),
+                .map(|v| v.transaction_id.clone()),
             physical_function_run_id: found_data_version
                 .as_ref()
-                .map(|v| v.base.base.base.physical_function_run_id.clone()),
+                .map(|v| v.physical_function_run_id.clone()),
             triggered_on: found_data_version
                 .as_ref()
-                .map(|v| AtTime::from(v.base.base.interval.valid_from)),
+                .map(|v| AtTime::from(v.interval.valid_from)),
             logical_table_data_version_id: found_data_version
                 .as_ref()
-                .map(|v| v.base.base.base.logical_table_data_version_id.clone()),
-            physical_table_data_version_id: found_data_version
-                .as_ref()
-                .map(|v| v.base.base.base.id.clone()),
+                .map(|v| v.logical_table_data_version_id.clone()),
+            physical_table_data_version_id: found_data_version.as_ref().map(|v| v.id.clone()),
             location,
             input_idx: *input_idx,
             table_pos: *dependency_pos,
-            version_pos: lfri.base.requirement_version_pos,
+            version_pos: lfri.requirement_version_pos,
         };
 
         input_tables_map

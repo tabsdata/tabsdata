@@ -80,7 +80,7 @@ impl<'a> VersionResolver<'a> {
             .await?;
         Ok(heads
             .into_iter()
-            .map(|ltdv| (ltdv.base.base.table_id, ltdv))
+            .map(|ltdv| (ltdv.table_id, ltdv))
             .collect())
     }
 
@@ -198,7 +198,7 @@ impl<'a> VersionResolver<'a> {
                 .fetch_all::<ActiveLogicalTableDataVersionDB>(&ids, ())
                 .await?
                 .into_iter()
-                .map(|f| (f.base.base.id.clone(), f))
+                .map(|f| (f.id.clone(), f))
                 .collect();
             let mut out = HashMap::new();
             let mut not_found = Vec::new();
@@ -367,7 +367,7 @@ impl<'a> VersionResolver<'a> {
         let last_logical = match last_lfr {
             Some(last) => {
                 conn.timeline()
-                    .at(&last.base.triggered_on, table_id)
+                    .at(&last.triggered_on, table_id)
                     .fetch_optional::<ActiveLogicalTableDataVersionDB>(&Versions::None)
                     .await?
             }
@@ -377,9 +377,7 @@ impl<'a> VersionResolver<'a> {
         let resolved = match last_logical {
             Some(boundary) => {
                 // Strictly newer than the boundary: range from one-newer to Head(0).
-                let boundary_offset = self
-                    .fixed_to_head_offset(conn, &boundary.base.base.id)
-                    .await?;
+                let boundary_offset = self.fixed_to_head_offset(conn, &boundary.id).await?;
                 let boundary_pos = match boundary_offset {
                     Version::Head(k) => -k as usize,
                     _ => unreachable!(),

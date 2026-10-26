@@ -25,18 +25,18 @@ pub(crate) async fn ensure_freezes_on_top<M: WriteMode>(
     read: &[FunctionDB],
     at: LockInstant,
 ) -> Result<(), TdError> {
-    let ids: Vec<FunctionId> = read.iter().map(|f| f.base.function_id).collect();
+    let ids: Vec<FunctionId> = read.iter().map(|f| f.function_id).collect();
     let open: Vec<FunctionDB> = conn.scd2().chunked().fetch_all(&ids, ()).await?;
     let open: HashMap<FunctionId, (&FunctionVersionId, Timestamp)> = open
         .iter()
-        .map(|f| (f.base.function_id, (&f.base.id, *f.interval.valid_from)))
+        .map(|f| (f.function_id, (&f.id, *f.interval.valid_from)))
         .collect();
     for function in read {
         on_top(
-            open.get(&function.base.function_id),
-            &function.base.id,
+            open.get(&function.function_id),
+            &function.id,
             at,
-            &function.base.name,
+            &function.name,
         )?;
     }
     Ok(())
@@ -47,18 +47,18 @@ pub(crate) async fn ensure_flips_on_top<M: WriteMode>(
     read: &[TriggerDB],
     at: LockInstant,
 ) -> Result<(), TdError> {
-    let ids: Vec<TriggerId> = read.iter().map(|t| t.base.trigger_id).collect();
+    let ids: Vec<TriggerId> = read.iter().map(|t| t.trigger_id).collect();
     let open: Vec<TriggerDB> = conn.scd2().chunked().fetch_all(&ids, ()).await?;
     let open: HashMap<TriggerId, (&TriggerVersionId, Timestamp)> = open
         .iter()
-        .map(|t| (t.base.trigger_id, (&t.base.id, *t.interval.valid_from)))
+        .map(|t| (t.trigger_id, (&t.id, *t.interval.valid_from)))
         .collect();
     for trigger in read {
         on_top(
-            open.get(&trigger.base.trigger_id),
-            &trigger.base.id,
+            open.get(&trigger.trigger_id),
+            &trigger.id,
             at,
-            &trigger.base.trigger_id,
+            &trigger.trigger_id,
         )?;
     }
     Ok(())

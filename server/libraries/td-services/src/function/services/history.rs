@@ -44,7 +44,7 @@ async fn function_history(
     let rows = conn
         .timeline()
         .until(&at)
-        .list(and!(&function.base.base.function_id), &query_params)
+        .list(and!(&function.function_id), &query_params)
         .await?;
     build_list_response(&list_params, &query_params, rows)
 }
@@ -75,7 +75,7 @@ mod tests {
     async fn test_function_history(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -103,7 +103,7 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -122,10 +122,7 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!(
-                            "{}",
-                            collection.base.name
-                        ))?,
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("function_1")?,
@@ -133,7 +130,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -145,7 +142,7 @@ mod tests {
             id: FunctionVersionId::new(),
             parent_function_version_id: updated.id.clone().into(),
             function_id: updated.function_id,
-            collection_id: collection.base.collection_id,
+            collection_id: collection.collection_id,
             snippet: Snippet::try_from("patched snippet")?,
             bundle_id: BundleId::default(),
             runtime_values: FunctionRuntimeValues::try_from("mock runtime values")?,
@@ -153,7 +150,7 @@ mod tests {
             defined_by_id: UserId::admin(),
             status: FunctionStatus::Active,
         };
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .scd2()
             .open(&patch, LockInstant::asserted(*AtTime::now()))
             .await?;
@@ -163,13 +160,13 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .delete((
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("{}", collection.base.name))?,
+                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
                 },
                 FunctionParam {
                     function: FunctionIdName::from_str("function_2")?,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let service = Services::with_defaults(db.clone());
         service.delete_function(request).await?;
 
@@ -197,7 +194,7 @@ mod tests {
             workers: None,
         };
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -210,7 +207,7 @@ mod tests {
                     CollectionParam {
                         collection: CollectionIdName::from_str(&format!(
                             "~{}",
-                            collection.base.collection_id
+                            collection.collection_id
                         ))?,
                     },
                     FunctionParam {
@@ -220,7 +217,7 @@ mod tests {
                 ),
                 ListParams::default(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.function_history(request).await;
@@ -233,7 +230,7 @@ mod tests {
                     CollectionParam {
                         collection: CollectionIdName::from_str(&format!(
                             "~{}",
-                            collection.base.collection_id
+                            collection.collection_id
                         ))?,
                     },
                     FunctionParam {
@@ -250,7 +247,7 @@ mod tests {
                     ..Default::default()
                 },
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.function_history(request).await;
@@ -266,7 +263,7 @@ mod tests {
                     CollectionParam {
                         collection: CollectionIdName::from_str(&format!(
                             "~{}",
-                            collection.base.collection_id
+                            collection.collection_id
                         ))?,
                     },
                     FunctionParam {
@@ -276,7 +273,7 @@ mod tests {
                 ),
                 ListParams::default(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.function_history(request).await;
@@ -295,7 +292,7 @@ mod tests {
                     CollectionParam {
                         collection: CollectionIdName::from_str(&format!(
                             "~{}",
-                            collection.base.collection_id
+                            collection.collection_id
                         ))?,
                     },
                     FunctionParam {
@@ -305,7 +302,7 @@ mod tests {
                 ),
                 ListParams::default(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.function_history(request).await;
@@ -327,7 +324,7 @@ mod tests {
                     CollectionParam {
                         collection: CollectionIdName::from_str(&format!(
                             "~{}",
-                            collection.base.collection_id
+                            collection.collection_id
                         ))?,
                     },
                     FunctionParam {
@@ -337,7 +334,7 @@ mod tests {
                 ),
                 ListParams::default(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.function_history(request).await;
@@ -350,7 +347,7 @@ mod tests {
                     CollectionParam {
                         collection: CollectionIdName::from_str(&format!(
                             "~{}",
-                            collection.base.collection_id
+                            collection.collection_id
                         ))?,
                     },
                     FunctionParam {
@@ -367,7 +364,7 @@ mod tests {
                     ..Default::default()
                 },
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.function_history(request).await;
@@ -384,7 +381,7 @@ mod tests {
         let collection_name = CollectionName::try_from("doomed")?;
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -409,7 +406,7 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -422,7 +419,7 @@ mod tests {
                     .delete(CollectionParam {
                         collection: CollectionIdName::from_str(&collection_name.to_string())?,
                     })
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -440,9 +437,9 @@ mod tests {
                     ),
                     ListParams::default(),
                 )
-                .in_project(p.base.project_id)
+                .in_project(p.project_id)
         };
-        let by_id = format!("~{}", collection.base.collection_id);
+        let by_id = format!("~{}", collection.collection_id);
 
         let err = service
             .function_history(request(&collection_name.to_string(), registered_at))
@@ -457,7 +454,7 @@ mod tests {
             .data
             .data;
         assert_eq!(data.len(), 1);
-        assert_eq!(data[0].id, function.base.id);
+        assert_eq!(data[0].id, function.id);
 
         assert!(
             service

@@ -75,10 +75,10 @@ async fn assert_ended(
     worker: &WorkerId,
 ) -> Result<(), TdError> {
     let ended: PhysicalFunctionRunDB = db.timeline().fetch_one(attempt).await?;
-    assert_eq!(ended.base.status, PhysicalFunctionRunStatus::Failed);
+    assert_eq!(ended.status, PhysicalFunctionRunStatus::Failed);
     let worker_row: WorkerDB = db.fetch_one(worker).await?;
     assert_eq!(
-        worker_row.base.status,
+        worker_row.status,
         WorkerStatus::Failed,
         "the abandoned attempt's worker was left behind"
     );
@@ -94,15 +94,15 @@ async fn test_recovering_a_transaction_ends_the_abandoned_attempts_worker(
     let test_executions = requested()?;
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, t, f, w| {
             let db = db.clone();
             let test_transaction = &test_executions[0].transactions[0];
             let function = &test_transaction.functions[0];
-            let transaction = t[test_transaction].base.id.clone();
-            let attempt = f[function].base.id.clone();
-            let worker = w[function].base.id.clone();
+            let transaction = t[test_transaction].id.clone();
+            let attempt = f[function].id.clone();
+            let worker = w[function].id.clone();
             async move {
                 let (services, sent) = recover_services(&db);
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -124,14 +124,14 @@ async fn test_recovering_an_execution_ends_the_abandoned_attempts_worker(
     let test_executions = requested()?;
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, e, _, f, w| {
             let db = db.clone();
             let function = &test_executions[0].transactions[0].functions[0];
-            let execution = e[&test_executions[0]].base.id.clone();
-            let attempt = f[function].base.id.clone();
-            let worker = w[function].base.id.clone();
+            let execution = e[&test_executions[0]].id.clone();
+            let attempt = f[function].id.clone();
+            let worker = w[function].id.clone();
             async move {
                 let (services, sent) = recover_services(&db);
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())

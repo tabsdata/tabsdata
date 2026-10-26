@@ -39,21 +39,21 @@ use td_queries::test_utils::SeedEntry;
 async fn test_new_versions_resolve_per_reading_function(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c")?, &UserId::admin())
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .function(&collection, &register("producer", None))
         .await?;
     let first = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&collection, &register("first", None))
         .await?;
     let second = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&collection, &register("second", None))
         .await?;
@@ -77,7 +77,7 @@ async fn test_new_versions_resolve_per_reading_function(db: TdPool) -> Result<()
                     external_uid: None,
                 },
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let response = Services::with_defaults(db.clone())
             .execute_function(request)
             .await?;
@@ -88,36 +88,32 @@ async fn test_new_versions_resolve_per_reading_function(db: TdPool) -> Result<()
 
     // `first` read the producer's table with run 1; `second` never ran.
     let run_1_transaction: TransactionDB = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .fetch_all::<TransactionDB>(&run_1)
         .await?
         .remove(0);
-    let run_1_execution: ExecutionDB = db.scoped(p.base.project_id).fetch_one(&run_1).await?;
-    db.scoped(p.base.project_id)
+    let run_1_execution: ExecutionDB = db.scoped(p.project_id).fetch_one(&run_1).await?;
+    db.scoped(p.project_id)
         .insert::<LogicalFunctionRunInsertDB>(&LogicalFunctionRunInsertDB {
             id: LogicalFunctionRunId::new(),
-            collection_id: collection.base.collection_id,
+            collection_id: collection.collection_id,
             execution_id: run_1.clone(),
-            transaction_id: run_1_transaction.base.id.clone(),
-            function_id: first.base.function_id,
+            transaction_id: run_1_transaction.id.clone(),
+            function_id: first.function_id,
             function_version_id: first.base.id,
             trigger: Trigger::Dependency,
-            triggered_on: run_1_execution.base.triggered_on,
+            triggered_on: run_1_execution.triggered_on,
             triggered_by_id: UserId::admin(),
             status: LogicalFunctionRunStatus::Committed,
-            group_id: collection.base.group_id,
+            group_id: collection.group_id,
         })
         .await?;
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut trx = pools
-        .read()
-        .await?
-        .enter_project(&p.base.project_id)
-        .await?;
+    let mut trx = pools.read().await?.enter_project(&p.project_id).await?;
     let conn = trx.get(Grant::asserted("plan versions test"));
-    let project = ProjectTopology::current(conn, &p.base.project_id)
+    let project = ProjectTopology::current(conn, &p.project_id)
         .await?
         .graph()?;
     let node = |found: &dyn Fn(&GraphNode) -> bool| {
@@ -131,7 +127,7 @@ async fn test_new_versions_resolve_per_reading_function(db: TdPool) -> Result<()
     let first_node =
         node(&|n| matches!(n, GraphNode::Function(f) if f.function_id == first.base.function_id));
     let second_node =
-        node(&|n| matches!(n, GraphNode::Function(f) if f.function_id == second.base.function_id));
+        node(&|n| matches!(n, GraphNode::Function(f) if f.function_id == second.function_id));
     let table_node =
         node(&|n| matches!(n, GraphNode::Table(t) if t.name.to_string() == "producer_t0"));
 
@@ -159,7 +155,7 @@ async fn test_new_versions_resolve_per_reading_function(db: TdPool) -> Result<()
     let plan = ExecutionPlan::new(TopologyGraph { inner: graph }, &trigger)?;
 
     let execution: ExecutionDB = conn.fetch_one(&run_2).await?;
-    let resolved = resolve_execution_plan_versions(conn, &execution.base, &plan).await?;
+    let resolved = resolve_execution_plan_versions(conn, &execution, &plan).await?;
 
     let mut compared = Vec::new();
     for edge in resolved.inner.edge_indices() {
@@ -171,12 +167,12 @@ async fn test_new_versions_resolve_per_reading_function(db: TdPool) -> Result<()
             .function_id(&function.function_id)
             .table_id(&table_id)
             .versions(&Versions::New)
-            .triggered_on(&AtTime::from(execution.base.triggered_on))
+            .triggered_on(&AtTime::from(execution.triggered_on))
             .build()?
             .resolve(&mut *conn)
             .await?
             .into_iter()
-            .map(|v| v.map(|v| v.base.base.id))
+            .map(|v| v.map(|v| v.id.clone()))
             .collect();
         assert_eq!(
             resolved.inner[edge].versions().inner,

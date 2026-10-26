@@ -36,20 +36,20 @@ async fn table_state_download(
     let mut trx = db.read().await?;
     let conn = trx.get(authz.none());
     let function: FunctionDBWithNames = conn.timeline().fetch_one(&function_version_id).await?;
-    if !function.base.interval.covers(&at) {
+    if !function.interval.covers(&at) {
         return Err(api_error!(
             ApiError::NotFound,
             "Function version '{function_version_id}' was not live at '{at}'",
         ));
     }
-    let project = function.base.project_id;
+    let project = function.project_id;
     let mut trx = trx.enter_project(&project).await?;
     let conn = trx.get(authz.none());
 
     let system_tables: Vec<TableDBWithNames> = conn
         .scd2()
         .as_of(&at)
-        .fetch_all(and!(&function.base.base.id, TableDBWithNames::system()))
+        .fetch_all(and!(&function.id, TableDBWithNames::system()))
         .await?;
     let (collection, table, version_at, uncommitted) =
         get_table_at_id_name(&at, &function, &system_tables)?;
@@ -72,7 +72,7 @@ pub fn get_table_at_id_name(
 ) -> Result<(CollectionParam, TableParam, AtTimeParam, UncommittedParam), TdError> {
     let state_tables = system_tables
         .iter()
-        .filter(|t| t.base.base.name.starts_with(TD_FN_STATE_PREFIX))
+        .filter(|t| t.name.starts_with(TD_FN_STATE_PREFIX))
         .collect::<Vec<_>>();
     let state_table = match state_tables.len() {
         1 => state_tables[0],
@@ -83,10 +83,10 @@ pub fn get_table_at_id_name(
     };
     Ok((
         CollectionParam {
-            collection: CollectionIdName::Id(function.base.base.collection_id),
+            collection: CollectionIdName::Id(function.collection_id),
         },
         TableParam {
-            table: TableIdName::Id(state_table.base.base.table_id),
+            table: TableIdName::Id(state_table.table_id),
         },
         AtTimeParam { at: *at_time },
         // Internal path: allow uncommitted versions for now.
@@ -119,7 +119,7 @@ mod tests {
         let context = Services::with_defaults(db.clone());
 
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -149,21 +149,21 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let system_tables = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .system_tables(&function)
             .await?;
         let td_fn_state_table = system_tables
             .iter()
-            .find(|t| t.base.name.starts_with(TD_FN_STATE_PREFIX))
+            .find(|t| t.name.starts_with(TD_FN_STATE_PREFIX))
             .unwrap();
 
-        let function_version_id = function.base.id.clone();
+        let function_version_id = function.id.clone();
 
         let get_download = async move |context: &Services,
                                        _table: &str, // not using table because always getting state table of the fn
@@ -199,7 +199,7 @@ mod tests {
             Ok(bytes_with_ids)
         };
 
-        let tables = std::slice::from_ref(&td_fn_state_table.base.name);
+        let tables = std::slice::from_ref(&td_fn_state_table.name);
         test_download_tables(
             &db,
             &context,

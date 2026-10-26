@@ -79,20 +79,20 @@ pub async fn fetch_stale_dispatched_runs<S: SeesProjectRows, M: AccessMode>(
     let lfr_by_function: HashMap<(&ExecutionId, &FunctionId), &LogicalFunctionRunDB> =
         logical_function_runs
             .iter()
-            .map(|lfr| ((&lfr.base.execution_id, &lfr.base.function_id), lfr))
+            .map(|lfr| ((&lfr.execution_id, &lfr.function_id), lfr))
             .collect();
 
     let mut seen: HashSet<LogicalFunctionRunId> = HashSet::new();
     let mut stuck_lfrs = Vec::new();
     let mut abandoned_pfr_ids = Vec::new();
     for pfr in &stale {
-        match lfr_by_function.get(&(&pfr.base.execution_id, &pfr.base.function_id)) {
-            Some(lfr) if lfr.base.status == LogicalFunctionRunStatus::Requested => {
-                if seen.insert(lfr.base.id.clone()) {
+        match lfr_by_function.get(&(&pfr.execution_id, &pfr.function_id)) {
+            Some(lfr) if lfr.status == LogicalFunctionRunStatus::Requested => {
+                if seen.insert(lfr.id.clone()) {
                     stuck_lfrs.push((*lfr).clone());
                 }
             }
-            _ => abandoned_pfr_ids.push(pfr.base.id.clone()),
+            _ => abandoned_pfr_ids.push(pfr.id.clone()),
         }
     }
     debug!(

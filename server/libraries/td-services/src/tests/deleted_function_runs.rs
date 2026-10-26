@@ -114,7 +114,7 @@ async fn delete(db: &TdPool, project: ProjectId) -> Result<(), TdError> {
 
 async fn resolve(db: &TdPool, worker: &WorkerDB) -> Result<(), TdError> {
     let request = context().read(WorkerParam {
-        worker: worker.base.id.clone(),
+        worker: worker.id.clone(),
     });
     Services::with_defaults(db.clone())
         .resolve_worker_message(request)
@@ -126,17 +126,17 @@ async fn function_runners(db: &TdPool) -> Result<Vec<WorkerDB>, TdError> {
     let workers: Vec<WorkerDB> = db.fetch_all::<WorkerDB>(()).await?;
     Ok(workers
         .into_iter()
-        .filter(|w| w.base.worker_type == WorkerType::FunctionRunner)
+        .filter(|w| w.worker_type == WorkerType::FunctionRunner)
         .collect())
 }
 
 async fn setup(db: &TdPool) -> Result<ProjectId, TdError> {
     let p = db.seed().test_project().await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from(COLLECTION)?, &UserId::admin())
         .await?;
-    Ok(p.base.project_id)
+    Ok(p.project_id)
 }
 
 /// A run of a deleted function ends Canceled on the next tick, and its pod
@@ -155,9 +155,9 @@ async fn test_a_pending_run_of_a_deleted_function_ends(db: TdPool) -> Result<(),
     assert!(!lfrs.is_empty());
     for lfr in &lfrs {
         assert!(
-            lfr.base.status == LogicalFunctionRunStatus::Canceled,
+            lfr.status == LogicalFunctionRunStatus::Canceled,
             "a run of a deleted version must end, got {:?}",
-            lfr.base.status
+            lfr.status
         );
     }
     for worker in function_runners(&db).await? {

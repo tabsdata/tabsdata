@@ -38,28 +38,28 @@ pub(crate) async fn seed_logical_input(
     let consumer_lfr: LogicalFunctionRunDB = executor
         .reuse()
         .fetch_one(and!(
-            &physical_function_run.base.execution_id,
-            &physical_function_run.base.function_id
+            &physical_function_run.execution_id,
+            &physical_function_run.function_id
         ))
         .await?;
-    let consumer_lfr_id = consumer_lfr.base.id.clone();
+    let consumer_lfr_id = consumer_lfr.id.clone();
     // The requirement is the logical version the given materialization is
     // of — it names it, so there is nothing to mint or bind here.
     let requirement_ltdv_id =
-        requirement_table_data_version.map(|tdv| tdv.base.logical_table_data_version_id.clone());
+        requirement_table_data_version.map(|tdv| tdv.logical_table_data_version_id.clone());
 
     let ffr_input = LogicalFunctionRunInputInsertDB {
         id: LogicalFunctionRunInputId::default(),
-        collection_id: collection.base.collection_id,
-        execution_id: execution.base.id.clone(),
-        transaction_id: transaction.base.id.clone(),
+        collection_id: collection.collection_id,
+        execution_id: execution.id.clone(),
+        transaction_id: transaction.id.clone(),
         logical_function_run_id: consumer_lfr_id,
         requirement_logical_table_data_version_id: requirement_ltdv_id,
         requirement_input_idx: None,
         requirement_dependency_pos: requirement_dependency_pos.cloned(),
         requirement_version_pos: *requirement_version_pos,
         requirement_table_version_id: requirement_table_data_version
-            .map(|tdv| tdv.base.table_version_id),
+            .map(|tdv| tdv.table_version_id),
     };
     executor.reuse().insert(&ffr_input).await?;
     Ok(executor.reuse().fetch_one(&ffr_input.id).await?)
@@ -85,7 +85,7 @@ mod tests {
     async fn test_seed_logical_input(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -116,27 +116,27 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function)
             .await
             .unwrap();
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -148,16 +148,12 @@ mod tests {
             .await
             .unwrap();
 
-        let requirement_tables = db
-            .scd2()
-            .fetch_all::<TableDB>(&function.base.id)
-            .await
-            .unwrap();
+        let requirement_tables = db.scd2().fetch_all::<TableDB>(&function.id).await.unwrap();
         assert_eq!(requirement_tables.len(), 1);
         let requirement_table = &requirement_tables[0];
 
         let requirement_table_data_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_table_data_version(
                 &collection,
@@ -191,26 +187,26 @@ mod tests {
         };
 
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function)
             .await
             .unwrap();
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let _requirement_function_run = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -223,7 +219,7 @@ mod tests {
             .unwrap();
 
         let ffri = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .logical_input(
                 &collection,
@@ -237,27 +233,27 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(ffri.base.collection_id, collection.base.collection_id);
-        assert_eq!(ffri.base.execution_id, execution.base.id);
+        assert_eq!(ffri.collection_id, collection.collection_id);
+        assert_eq!(ffri.execution_id, execution.id);
         let consumer_lfr: LogicalFunctionRunDB = db
             .fetch_one::<LogicalFunctionRunDB>(and!(
-                &physical_function_run.base.execution_id,
-                &physical_function_run.base.function_id
+                &physical_function_run.execution_id,
+                &physical_function_run.function_id
             ))
             .await
             .unwrap();
-        assert_eq!(ffri.base.logical_function_run_id, consumer_lfr.base.id);
+        assert_eq!(ffri.logical_function_run_id, consumer_lfr.id);
         assert!(
             ffri.base
                 .requirement_logical_table_data_version_id
                 .is_some()
         );
         assert_eq!(
-            ffri.base.requirement_dependency_pos,
+            ffri.requirement_dependency_pos,
             Some(DependencyPos::try_from(0).unwrap())
         );
         assert_eq!(
-            ffri.base.requirement_version_pos,
+            ffri.requirement_version_pos,
             VersionPos::try_from(0).unwrap()
         );
     }

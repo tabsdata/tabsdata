@@ -88,7 +88,7 @@ pub struct PhysicalFunctionRunToExecute {
     pub connection_id: Option<ConnectionId>,
     // Joined base paths (see function_run_to_execute_select): the effective
     // bundle's stamped prefix, and the function version's stage identity +
-    // stamped stage prefix. The run's own prefix is `base.base.base_path`.
+    // stamped stage prefix. The run's own prefix is `base_path`.
     pub bundle_base_path: BasePath,
     pub stage_id: StageId,
     pub stage_base_path: BasePath,
@@ -140,23 +140,50 @@ impl FromDao for PhysicalFunctionRun {
     type Dao = PhysicalFunctionRunDBWithNames;
 
     fn from_dao(dao: PhysicalFunctionRunDBWithNames) -> Result<Self, TdError> {
+        let PhysicalFunctionRunDBWithNames {
+            base:
+                PhysicalFunctionRunDB {
+                    base:
+                        PhysicalFunctionRunInsertDB {
+                            id,
+                            collection_id,
+                            function_version_id,
+                            function_version_patch_id,
+                            execution_id,
+                            transaction_id,
+                            trigger,
+                            started_on,
+                            ended_on,
+                            status,
+                            ..
+                        },
+                    interval,
+                    ..
+                },
+            name,
+            collection,
+            execution,
+            execution_function_version_id,
+            triggered_by,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.base.id,
-            collection_id: dao.base.base.collection_id,
-            function_version_id: dao.base.base.function_version_id,
-            function_version_patch_id: dao.base.base.function_version_patch_id,
-            execution_id: dao.base.base.execution_id,
-            transaction_id: dao.base.base.transaction_id,
-            triggered_on: dao.base.interval.valid_from.into(),
-            trigger: dao.base.base.trigger,
-            started_on: dao.base.base.started_on,
-            ended_on: dao.base.base.ended_on,
-            status: dao.base.base.status,
-            name: dao.name,
-            collection: dao.collection,
-            execution: dao.execution,
-            execution_function_version_id: dao.execution_function_version_id,
-            triggered_by: dao.triggered_by,
+            id,
+            collection_id,
+            function_version_id,
+            function_version_patch_id,
+            execution_id,
+            transaction_id,
+            triggered_on: interval.valid_from.into(),
+            trigger,
+            started_on,
+            ended_on,
+            status,
+            name,
+            collection,
+            execution,
+            execution_function_version_id,
+            triggered_by,
         })
     }
 }

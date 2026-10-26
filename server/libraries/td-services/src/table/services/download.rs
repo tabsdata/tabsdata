@@ -87,7 +87,7 @@ pub(crate) mod tests {
         let context = Services::with_defaults(db.clone());
 
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -117,13 +117,13 @@ pub(crate) mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
 
-        let (collection_name, collection_id) =
-            (collection.base.name.clone(), collection.base.collection_id);
+        let (collection_name, collection_id) = (collection.name.clone(), collection.collection_id);
+        let project_id = p.project_id;
         let get_download = async move |context: &Services,
                                        table: &str,
                                        at_time: &AtTime|
@@ -141,7 +141,7 @@ pub(crate) mod tests {
                         uncommitted: UncommittedStatus::TRUE,
                     },
                 ))
-                .in_project(p.base.project_id);
+                .in_project(project_id);
             let service = context.clone();
             let response = service.table_download(request).await?.data;
             let mut stream = response.into_inner();
@@ -162,7 +162,7 @@ pub(crate) mod tests {
                         uncommitted: UncommittedStatus::TRUE,
                     },
                 ))
-                .in_project(p.base.project_id);
+                .in_project(project_id);
             let service = context.clone();
             let response = service.table_download(request).await?.data;
             let mut stream = response.into_inner();
@@ -204,21 +204,17 @@ pub(crate) mod tests {
         // 3 function runs, 2 with data and 1 without, per table
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
-            let execution = db
-                .scoped(p.base.project_id)
-                .seed()
-                .execution(function)
-                .await?;
+            let execution = db.scoped(p.project_id).seed().execution(function).await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = db
-                .scoped(p.base.project_id)
+                .scoped(p.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?;
 
             at_times.push(AtTime::now());
             let physical_function_run = db
-                .scoped(p.base.project_id)
+                .scoped(p.project_id)
                 .seed()
                 .physical_function_run(
                     collection,
@@ -233,7 +229,7 @@ pub(crate) mod tests {
                 let table_version = db
                     .scd2()
                     .fetch_one::<TableDBWithNames>(and!(
-                        &collection.base.collection_id,
+                        &collection.collection_id,
                         &TableIdName::Name(table.clone())
                     ))
                     .await?
@@ -241,7 +237,7 @@ pub(crate) mod tests {
 
                 if i % 2 == 0 {
                     let physical_table_data_version = db
-                        .scoped(p.base.project_id)
+                        .scoped(p.project_id)
                         .seed()
                         .physical_table_data_version_with_data(
                             collection,
@@ -253,12 +249,12 @@ pub(crate) mod tests {
                         .await?;
 
                     let (path, _) = StorageLocation::from(&storage_location)
-                        .builder(&physical_table_data_version.base.base_path)
-                        .collection(&physical_table_data_version.base.collection_id)
-                        .data(&physical_table_data_version.base.id)
+                        .builder(&physical_table_data_version.base_path)
+                        .collection(&physical_table_data_version.collection_id)
+                        .data(&physical_table_data_version.id)
                         .table(
-                            &physical_table_data_version.base.table_id,
-                            &physical_table_data_version.base.table_version_id,
+                            &physical_table_data_version.table_id,
+                            &physical_table_data_version.table_version_id,
                         )
                         .build()?;
 
@@ -300,7 +296,7 @@ pub(crate) mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    db.scoped(p.base.project_id)
+                    db.scoped(p.project_id)
                         .seed()
                         .physical_table_data_version(
                             collection,

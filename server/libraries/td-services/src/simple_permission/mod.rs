@@ -141,16 +141,14 @@ pub async fn resolve_grant<S: DbScope, M: AccessMode>(
             // By the project's id, not its name: a rename racing the grant
             // must not send it to the role of another project now holding
             // the name.
-            let roles: Vec<RoleDB> = conn
-                .fetch_all::<RoleDB>(Some(project.base.project_id))
-                .await?;
+            let roles: Vec<RoleDB> = conn.fetch_all::<RoleDB>(Some(project.project_id)).await?;
             let role = roles.into_iter().find(|r| r.kind == kind).ok_or_else(|| {
-                SimplePermissionError::ProjectRoleNotFound(format!("{} {kind}", project.base.name))
+                SimplePermissionError::ProjectRoleNotFound(format!("{} {kind}", project.name))
             })?;
             Ok(ResolvedGrant {
                 user_id: user.id,
                 role_id: role.id,
-                project_id: Some(project.base.project_id),
+                project_id: Some(project.project_id),
             })
         }
         SimplePermissionType::CreateProjects => {
@@ -339,7 +337,7 @@ pub async fn list_project_access<S: DbScope, M: AccessMode>(
     let mut system_source_roles: HashSet<RoleId> = HashSet::new();
 
     for role in &roles {
-        if role.project_id.as_ref() == Some(&project.base.project_id)
+        if role.project_id.as_ref() == Some(&project.project_id)
             && let Some(permission) = project_role_permission(role)
         {
             project_source.insert(role.id, (permission, format!("project ({})", role.name)));

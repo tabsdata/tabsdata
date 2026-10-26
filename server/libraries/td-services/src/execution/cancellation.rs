@@ -28,7 +28,7 @@ use tracing::{debug, warn};
 
 fn unfinished(lfr: &LogicalFunctionRunDB) -> bool {
     !matches!(
-        lfr.base.status,
+        lfr.status,
         LogicalFunctionRunStatus::Committed
             | LogicalFunctionRunStatus::Canceled
             | LogicalFunctionRunStatus::Yanked
@@ -59,7 +59,7 @@ pub async fn cancel_runs(
         });
     }
     let stops = end_cancelled_attempts(conn, at, &cancelled).await?;
-    let ids: Vec<LogicalFunctionRunId> = cancelled.iter().map(|lfr| lfr.base.id.clone()).collect();
+    let ids: Vec<LogicalFunctionRunId> = cancelled.iter().map(|lfr| lfr.id.clone()).collect();
     conn.logical_runs()
         .set_status(&ids, LogicalFunctionRunStatus::Canceled)
         .await?;
@@ -84,13 +84,13 @@ async fn cancel_closure(
     let mut frontier: Vec<LogicalFunctionRunDB> =
         named.iter().filter(|l| unfinished(l)).cloned().collect();
     for lfr in &frontier {
-        reached.insert(lfr.base.id.clone(), lfr.clone());
+        reached.insert(lfr.id.clone(), lfr.clone());
     }
 
     while !frontier.is_empty() {
         let transactions: Vec<TransactionId> = frontier
             .iter()
-            .map(|lfr| lfr.base.transaction_id.clone())
+            .map(|lfr| lfr.transaction_id.clone())
             .filter(|t| lifted.insert(t.clone()))
             .unique()
             .collect();
@@ -103,8 +103,8 @@ async fn cancel_closure(
         };
         let mut next: Vec<LogicalFunctionRunDB> = Vec::new();
         for lfr in siblings {
-            if unfinished(&lfr) && !reached.contains_key(&lfr.base.id) {
-                reached.insert(lfr.base.id.clone(), lfr.clone());
+            if unfinished(&lfr) && !reached.contains_key(&lfr.id) {
+                reached.insert(lfr.id.clone(), lfr.clone());
                 next.push(lfr);
             }
         }
@@ -112,7 +112,7 @@ async fn cancel_closure(
         let from: Vec<LogicalFunctionRunId> = frontier
             .iter()
             .chain(next.iter())
-            .map(|lfr| lfr.base.id.clone())
+            .map(|lfr| lfr.id.clone())
             .collect();
         let exclude: Vec<LogicalFunctionRunId> = reached.keys().cloned().collect();
         let downstream_ids: Vec<LogicalFunctionRunId> = conn
@@ -125,8 +125,8 @@ async fn cancel_closure(
                 .fetch_all::<LogicalFunctionRunDB>(&downstream_ids, ())
                 .await?;
             for lfr in downstream {
-                if unfinished(&lfr) && !reached.contains_key(&lfr.base.id) {
-                    reached.insert(lfr.base.id.clone(), lfr.clone());
+                if unfinished(&lfr) && !reached.contains_key(&lfr.id) {
+                    reached.insert(lfr.id.clone(), lfr.clone());
                     next.push(lfr);
                 }
             }
@@ -144,8 +144,7 @@ async fn end_cancelled_attempts(
     at: LockInstant,
     cancelled: &[LogicalFunctionRunDB],
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
-    let lfr_ids: Vec<LogicalFunctionRunId> =
-        cancelled.iter().map(|lfr| lfr.base.id.clone()).collect();
+    let lfr_ids: Vec<LogicalFunctionRunId> = cancelled.iter().map(|lfr| lfr.id.clone()).collect();
     let current: Vec<PhysicalFunctionRunDB> = conn
         .scd2()
         .chunked()
@@ -153,8 +152,8 @@ async fn end_cancelled_attempts(
         .await?;
     let ended: Vec<PhysicalFunctionRunId> = current
         .iter()
-        .filter(|pfr| PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status))
-        .map(|pfr| pfr.base.id.clone())
+        .filter(|pfr| PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.status))
+        .map(|pfr| pfr.id.clone())
         .collect();
     let workers = conn.physical_runs().end(&ended, at).await?;
     function_stops(conn, workers).await
@@ -169,7 +168,7 @@ pub(crate) async fn function_stops(
     }
     let function_version_ids: Vec<FunctionVersionId> = workers
         .iter()
-        .map(|worker| worker.base.base.function_version_id.clone())
+        .map(|worker| worker.function_version_id.clone())
         .unique()
         .collect();
     let decorators: HashMap<FunctionVersionId, Decorator> = conn
@@ -183,10 +182,10 @@ pub(crate) async fn function_stops(
     Ok(workers
         .into_iter()
         .filter_map(|worker| {
-            let decorator = decorators.get(&worker.base.base.function_version_id)?;
+            let decorator = decorators.get(&worker.function_version_id)?;
             Some(FunctionStopRequest {
                 worker: WorkerName::Function,
-                worker_id: worker.base.base.id,
+                worker_id: worker.id.clone(),
                 decorator: decorator.to_message(),
                 function_id: worker.function_id,
                 function: worker.function,

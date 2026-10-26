@@ -128,7 +128,7 @@ mod tests {
 
         assert!(
             source
-                .is_current::<Project, _, _>(&mut slot, &project.base.project_id)
+                .is_current::<Project, _, _>(&mut slot, &project.project_id)
                 .await?
         );
         assert!(
@@ -143,11 +143,11 @@ mod tests {
         );
 
         db.scd2()
-            .close::<ProjectDB>(&project.base.project_id, seed_instant())
+            .close::<ProjectDB>(&project.project_id, seed_instant())
             .await?;
         assert!(
             !source
-                .is_current::<Project, _, _>(&mut slot, &project.base.project_id)
+                .is_current::<Project, _, _>(&mut slot, &project.project_id)
                 .await?
         );
         Ok(())

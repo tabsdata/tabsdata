@@ -50,7 +50,7 @@ mod tests {
         let p = db.seed().test_project().await.unwrap();
         let name = CollectionName::try_from("ds0").unwrap();
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&name, &UserId::admin())
             .await
@@ -74,7 +74,7 @@ mod tests {
             .seed()
             .user(&UserName::try_from("u0")?, &UserEnabled::TRUE)
             .await?;
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("ds0")?, &author.id)
             .await?;
@@ -116,7 +116,7 @@ mod tests {
 
         let name = CollectionName::try_from("ds0")?;
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&name, &UserId::admin())
             .await?;
@@ -146,12 +146,12 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_collections_spans_projects(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        db.scoped(base.base.project_id)
+        db.scoped(base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_base")?, &UserId::admin())
             .await?;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        db.scoped(alpha.base.project_id)
+        db.scoped(alpha.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_alpha")?, &UserId::admin())
             .await?;
@@ -166,7 +166,7 @@ mod tests {
             .data;
 
         let projects: Vec<_> = response.data.iter().map(|c| c.project.clone()).collect();
-        assert!(projects.contains(&ProjectLabel::new(base.base.name.clone())));
+        assert!(projects.contains(&ProjectLabel::new(base.name.clone())));
         assert!(projects.contains(&ProjectLabel::try_from("alpha")?));
         Ok(())
     }
@@ -174,17 +174,17 @@ mod tests {
     #[td_test::test(db)]
     async fn test_list_collections_filters_to_viewable(db: TdPool) -> Result<(), TdError> {
         let base = db.seed().test_project().await?;
-        db.scoped(base.base.project_id)
+        db.scoped(base.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_base")?, &UserId::admin())
             .await?;
         let alpha = db.seed().project(ProjectName::try_from("alpha")?).await?;
-        db.scoped(alpha.base.project_id)
+        db.scoped(alpha.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_alpha")?, &UserId::admin())
             .await?;
 
-        let user = seed_project_viewer(&db, base.base.project_id).await?;
+        let user = seed_project_viewer(&db, base.project_id).await?;
 
         let service = Services::with_defaults(db.clone());
         let response = service
@@ -196,7 +196,7 @@ mod tests {
             .data;
 
         let projects: Vec<_> = response.data.iter().map(|c| c.project.clone()).collect();
-        assert!(projects.contains(&ProjectLabel::new(base.base.name.clone())));
+        assert!(projects.contains(&ProjectLabel::new(base.name.clone())));
         assert!(!projects.contains(&ProjectLabel::try_from("alpha")?));
         Ok(())
     }

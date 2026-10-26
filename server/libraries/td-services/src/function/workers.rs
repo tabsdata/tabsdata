@@ -66,7 +66,7 @@ pub async fn stop_triggers<S: SeesProjectRows, M: WriteMode>(
     let (unstarted, started): (Vec<WorkerDB>, Vec<WorkerDB>) = workers
         .iter()
         .cloned()
-        .partition(|w| w.base.status == WorkerStatus::Scheduled);
+        .partition(|w| w.status == WorkerStatus::Scheduled);
     let ended = move_workers(conn, &unstarted, &WorkerUpdateDB::stopped(at)).await?;
     let stopping = move_workers(conn, &started, &WorkerUpdateDB::stop_scheduled()).await?;
     Ok(ended + stopping)
@@ -123,7 +123,7 @@ pub async fn build_workers<S: SeesProjectRows, M: AccessMode>(
         );
         let current_workers = conn.fetch_all::<WorkerDB>(to_recreate).await?;
         for worker in current_workers {
-            let worker_db = new_worker(worker.base.worker_type, worker.base.worker_config.clone());
+            let worker_db = new_worker(worker.worker_type, worker.worker_config.clone());
             new_workers.push(worker_db);
         }
     }

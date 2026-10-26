@@ -58,7 +58,7 @@ async fn upload_function(
         &bundle_id,
         &storage_version,
         &base_path,
-        &collection.base.base.collection_id,
+        &collection.collection_id,
         &upload,
     )
     .await?;
@@ -66,7 +66,7 @@ async fn upload_function(
     // Pending until a function claims it.
     let bundle = BundleInsertDB {
         id: bundle_id,
-        collection_id: collection.base.base.collection_id,
+        collection_id: collection.collection_id,
         hash: hash.clone(),
         base_path: base_path.clone(),
         status: BundleStatus::Pending,
@@ -156,7 +156,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -170,11 +170,11 @@ mod tests {
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create(
                 CollectionParam {
-                    collection: CollectionIdName::from_str(&format!("{}", collection.base.name))?,
+                    collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
                 },
                 function_upload,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let context = Services::with_defaults(db.clone());
         let service = context.clone();
@@ -185,24 +185,24 @@ mod tests {
 
         assert_eq!(bundle_db.len(), 1);
         let bundle = &bundle_db[0];
-        assert_eq!(bundle.base.id, response.id);
-        assert_eq!(bundle.base.collection_id, collection.base.collection_id);
+        assert_eq!(bundle.id, response.id);
+        assert_eq!(bundle.collection_id, collection.collection_id);
         let hash = hex::encode(&Sha256::digest(payload)[..]);
-        assert_eq!(bundle.base.hash.to_string(), hash);
-        assert_eq!(bundle.base.created_by_id, UserId::admin());
+        assert_eq!(bundle.hash.to_string(), hash);
+        assert_eq!(bundle.created_by_id, UserId::admin());
 
         // Bundle is stamped with the effective base_path and starts Pending. The
         // seeded collection inherits (NULL base_path), so it resolves to the
         // project's `/` (BasePath::default()).
-        assert_eq!(collection.base.base_path, None);
-        assert_eq!(bundle.base.base_path, BasePath::default());
-        assert_eq!(bundle.base.status, BundleStatus::Pending);
+        assert_eq!(collection.base_path, None);
+        assert_eq!(bundle.base_path, BasePath::default());
+        assert_eq!(bundle.status, BundleStatus::Pending);
 
         let base_path = BasePath::default();
         let (bundle_location, _) = StorageLocation::current()
             .builder(&base_path)
-            .collection(&collection.base.collection_id)
-            .function(&bundle.base.id)
+            .collection(&collection.collection_id)
+            .function(&bundle.id)
             .build()?;
         let content = context.storage.read(&bundle_location).await?;
         let content = String::from_utf8(content).unwrap();
@@ -248,7 +248,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("prod_coll")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -258,21 +258,21 @@ mod tests {
         // public surface offers no base_path knob).
         let prod = BasePath::try_from("/prod")?;
         let reloaded =
-            set_collection_base_path(&db, p.base.project_id, &collection, Some(&prod)).await?;
-        assert_eq!(reloaded.base.base_path, Some(prod.clone()));
+            set_collection_base_path(&db, p.project_id, &collection, Some(&prod)).await?;
+        assert_eq!(reloaded.base_path, Some(prod.clone()));
 
         // Upload: the bundle must inherit the collection's non-default base_path.
         let payload = "TEXT";
-        upload_once(&context, p.base.project_id, &collection_name, payload).await?;
+        upload_once(&context, p.project_id, &collection_name, payload).await?;
 
         let bundle_db: Vec<BundleDB> = db.fetch_all::<BundleDB>(()).await?;
         assert_eq!(bundle_db.len(), 1);
-        assert_eq!(bundle_db[0].base.base_path, prod);
+        assert_eq!(bundle_db[0].base_path, prod);
 
         let (location, _) = StorageLocation::current()
             .builder(&prod)
-            .collection(&bundle_db[0].base.collection_id)
-            .function(&bundle_db[0].base.id)
+            .collection(&bundle_db[0].collection_id)
+            .function(&bundle_db[0].id)
             .build()?;
         let content = String::from_utf8(context.storage.read(&location).await?).unwrap();
         assert_eq!(content, payload);

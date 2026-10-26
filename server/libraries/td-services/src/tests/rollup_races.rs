@@ -49,17 +49,17 @@ async fn test_sibling_reports_racing_roll_up_like_a_recompute(db: TdPool) -> Res
     }];
     test_status_update(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, e, t, f, w| {
             let db = db.clone();
             let test_transaction = &test_executions[0].transactions[0];
-            let execution = e[&test_executions[0]].base.id.clone();
-            let transaction = t[test_transaction].base.id.clone();
+            let execution = e[&test_executions[0]].id.clone();
+            let transaction = t[test_transaction].id.clone();
             let reports: Vec<_> = test_transaction
                 .functions
                 .iter()
-                .map(|function| (f[function].base.id.clone(), w[function].base.id.clone()))
+                .map(|function| (f[function].id.clone(), w[function].id.clone()))
                 .collect();
             async move {
                 let outcomes = try_join_all(reports.iter().map(|(function_run, worker)| {

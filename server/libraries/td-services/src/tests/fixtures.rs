@@ -33,7 +33,7 @@ pub(crate) async fn collection_named(
     name: &CollectionName,
 ) -> Result<CollectionId, TdError> {
     let collection: CollectionDB = db.scd2().fetch_one(name).await?;
-    Ok(collection.base.collection_id)
+    Ok(collection.collection_id)
 }
 
 /// A publisher registration with one regular output table, `<name>_t0`, so
@@ -87,7 +87,7 @@ pub(crate) async fn set_collection_base_path(
         .await?;
     let updated = db
         .scd2()
-        .fetch_one::<CollectionDB>(&collection.base.collection_id)
+        .fetch_one::<CollectionDB>(&collection.collection_id)
         .await?;
     Ok(updated)
 }
@@ -159,11 +159,11 @@ pub(crate) async fn dispatched_publisher(
 ) -> Result<(ProjectId, PhysicalFunctionRunDB), TdError> {
     let p = db.seed().test_project().await?;
     let seeded = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from(collection)?, &UserId::admin())
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .function(&seeded, &register(function, None))
         .await?;
@@ -185,7 +185,7 @@ pub(crate) async fn dispatched_publisher(
                 external_uid: None,
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     let execution = dispatch_services(db).execute_function(execute).await?.data;
     dispatch_services(db).request(()).await?;
     let attempts: Vec<PhysicalFunctionRunDB> = db
@@ -193,8 +193,8 @@ pub(crate) async fn dispatched_publisher(
         .fetch_all(&(&execution.manual_trigger))
         .await?;
     let [attempt] = <[_; 1]>::try_from(attempts).expect("one attempt");
-    assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Dispatched);
-    Ok((p.base.project_id, attempt))
+    assert_eq!(attempt.status, PhysicalFunctionRunStatus::Dispatched);
+    Ok((p.project_id, attempt))
 }
 
 async fn seed_run_prelude(

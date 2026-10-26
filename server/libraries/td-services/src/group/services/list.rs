@@ -46,7 +46,7 @@ mod tests {
     async fn test_list_groups_includes_seeds(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -56,7 +56,7 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.list_group(request).await?.data;

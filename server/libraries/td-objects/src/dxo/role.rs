@@ -104,19 +104,38 @@ impl FromDao for Role {
     type Dao = RoleDBWithNames;
 
     fn from_dao(dao: RoleDBWithNames) -> Result<Self, TdError> {
+        let RoleDBWithNames {
+            base:
+                RoleDB {
+                    name,
+                    description,
+                    created_on,
+                    created_by_id,
+                    modified_on,
+                    modified_by_id,
+                    kind,
+                    project_id,
+                    fixed,
+                    id,
+                    ..
+                },
+            created_by,
+            modified_by,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.id,
-            name: dao.base.name,
-            description: dao.base.description,
-            created_on: dao.base.created_on,
-            created_by_id: dao.base.created_by_id,
-            modified_on: dao.base.modified_on,
-            modified_by_id: dao.base.modified_by_id,
-            kind: dao.base.kind,
-            project_id: dao.base.project_id,
-            fixed: dao.base.fixed,
-            created_by: dao.created_by,
-            modified_by: dao.modified_by,
+            id,
+            name,
+            description,
+            created_on,
+            created_by_id,
+            modified_on,
+            modified_by_id,
+            kind,
+            project_id,
+            fixed,
+            created_by,
+            modified_by,
         })
     }
 }

@@ -43,7 +43,7 @@ async fn test_a_group_rename_does_not_block_inserts_referencing_the_group(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let group = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .group(
             GroupName::try_from("analytics")?,
@@ -51,18 +51,18 @@ async fn test_a_group_rename_does_not_block_inserts_referencing_the_group(
         )
         .await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection_in_group(&CollectionName::try_from("c_g")?, &UserId::admin(), &group)
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .function(&collection, &register("f_g", None))
         .await?;
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = DbPool::in_project(&pools, &p.base.project_id)
+    let mut gate = DbPool::in_project(&pools, &p.project_id)
         .begin(Attempt::unretried())
         .await?;
     let context = admin().read::<String>("").context;
@@ -77,7 +77,7 @@ async fn test_a_group_rename_does_not_block_inserts_referencing_the_group(
         .await?;
 
     let services = dispatch_services(&db);
-    let project = p.base.project_id;
+    let project = p.project_id;
     let mut executing = tokio::spawn(async move {
         let request = admin()
             .create(

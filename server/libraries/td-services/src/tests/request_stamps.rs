@@ -38,13 +38,13 @@ async fn assert_ends_after_the_write_it_waited_on(
     request: Request,
 ) -> Result<(), TdError> {
     let (project, attempt) = dispatched_publisher(&db, COLLECTION, FUNCTION).await?;
-    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.base.id).await?;
+    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.id).await?;
     let [worker] = <[_; 1]>::try_from(workers).expect("one worker");
-    let run: LogicalFunctionRunDB = db.fetch_one(&attempt.base.logical_function_run_id).await?;
+    let run: LogicalFunctionRunDB = db.fetch_one(&attempt.logical_function_run_id).await?;
     let context = RequestContext::with(AccessTokenId::default(), UserId::admin());
     let services: Services = dispatch_services(&db);
 
-    let gate = hold_a_write(&db, &project, "workers", worker.base.id.as_i64()).await?;
+    let gate = hold_a_write(&db, &project, "workers", worker.id.as_i64()).await?;
     let sending = tokio::spawn(async move {
         match request {
             Request::CancelExecution => {
@@ -72,11 +72,11 @@ async fn assert_ends_after_the_write_it_waited_on(
     let committed = AtTime::now();
     release_once_waited_on(gate, sending).await?;
 
-    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.base.id).await?;
-    let ended_on = after.base.ended_on.expect("an ended attempt");
+    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.id).await?;
+    let ended_on = after.ended_on.expect("an ended attempt");
     assert!(*ended_on >= committed, "{ended_on:?} < {committed:?}");
-    let after: WorkerDB = db.fetch_one(&worker.base.id).await?;
-    let ended_on = after.base.ended_on.expect("an ended worker");
+    let after: WorkerDB = db.fetch_one(&worker.id).await?;
+    let ended_on = after.ended_on.expect("an ended worker");
     assert!(*ended_on >= committed, "{ended_on:?} < {committed:?}");
     Ok(())
 }

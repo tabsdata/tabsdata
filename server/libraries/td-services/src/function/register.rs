@@ -79,15 +79,15 @@ pub async fn ensure_connection_kind_matches<S: SeesProjectRows, M: AccessMode>(
             let function_connection = function.connection.as_ref().ok_or_else(|| {
                 RegisterFunctionError::ConnectionKindRequired(function.decorator.clone())
             })?;
-            let connection_id = collection.base.connection_id.ok_or_else(|| {
-                RegisterFunctionError::CollectionHasNoConnection(collection.base.name.clone())
+            let connection_id = collection.connection_id.ok_or_else(|| {
+                RegisterFunctionError::CollectionHasNoConnection(collection.name.clone())
             })?;
             let connection: ConnectionDB = conn.fetch_one(connection_id).await?;
-            if *function_connection != connection.base.kind {
+            if *function_connection != connection.kind {
                 Err(RegisterFunctionError::ConnectionKindMismatch(
                     function_connection.clone(),
-                    connection.base.kind.clone(),
-                    collection.base.name.clone(),
+                    connection.kind.clone(),
+                    collection.name.clone(),
                 ))?
             }
         }
@@ -99,11 +99,11 @@ pub async fn ensure_connection_kind_matches<S: SeesProjectRows, M: AccessMode>(
             }
 
             if function.parent_function_id.is_none()
-                && !matches!(collection.base.collection_type, CollectionType::DataFactory)
+                && !matches!(collection.collection_type, CollectionType::DataFactory)
             {
                 Err(RegisterFunctionError::TransformerInConnectedCollection(
-                    collection.base.name.clone(),
-                    collection.base.collection_type.clone(),
+                    collection.name.clone(),
+                    collection.collection_type.clone(),
                 ))?
             }
         }

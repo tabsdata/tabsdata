@@ -56,19 +56,19 @@ async fn test_a_swept_attempt_fails_its_worker_and_stops_its_pod(
     db: TdPool,
 ) -> Result<(), TdError> {
     let (_, attempt) = dispatched_publisher(&db, "c_swept", "f_swept").await?;
-    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.base.id).await?;
+    let workers: Vec<WorkerDB> = db.fetch_all(&attempt.id).await?;
     let [worker] = <[_; 1]>::try_from(workers).expect("one worker");
 
     let (services, sent) = sweeping(&db);
     services.recovery(()).await?;
 
-    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.base.id).await?;
-    assert_eq!(after.base.status, PhysicalFunctionRunStatus::Failed);
-    let run: LogicalFunctionRunDB = db.fetch_one(&attempt.base.logical_function_run_id).await?;
-    assert_eq!(run.base.status, LogicalFunctionRunStatus::ReScheduled);
-    let worker_after: WorkerDB = db.fetch_one(&worker.base.id).await?;
-    assert_eq!(worker_after.base.status, WorkerStatus::Failed);
-    assert!(worker_after.base.ended_on.is_some());
-    assert_eq!(function_stops(&sent), vec![worker.base.id.to_string()]);
+    let after: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt.id).await?;
+    assert_eq!(after.status, PhysicalFunctionRunStatus::Failed);
+    let run: LogicalFunctionRunDB = db.fetch_one(&attempt.logical_function_run_id).await?;
+    assert_eq!(run.status, LogicalFunctionRunStatus::ReScheduled);
+    let worker_after: WorkerDB = db.fetch_one(&worker.id).await?;
+    assert_eq!(worker_after.status, WorkerStatus::Failed);
+    assert!(worker_after.ended_on.is_some());
+    assert_eq!(function_stops(&sent), vec![worker.id.to_string()]);
     Ok(())
 }

@@ -70,7 +70,7 @@ pub async fn resolve_worker_message<S: SeesProjectRows, M: WriteMode>(
     let _: WorkerDB = conn.for_update().fetch_one(worker_id).await?;
     let worker: WorkerDBWithNames = conn.fetch_one::<WorkerDBWithNames>(worker_id).await?;
 
-    let input = match worker.base.base.worker_type {
+    let input = match worker.worker_type {
         WorkerType::FunctionRunner => {
             let function_run_id = worker
                 .base
@@ -91,7 +91,7 @@ pub async fn resolve_worker_message<S: SeesProjectRows, M: WriteMode>(
                 .timeline()
                 .fetch_one::<PhysicalFunctionRunDB>(&function_run_id)
                 .await?;
-            if !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status) {
+            if !PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.status) {
                 return Err(api_error!(
                     ApiError::NotFound,
                     "function run [{}] for worker [{}] is not in flight",
@@ -105,7 +105,7 @@ pub async fn resolve_worker_message<S: SeesProjectRows, M: WriteMode>(
             // reference tables deleted with it.
             let function: Option<FunctionDB> = conn
                 .scd2()
-                .fetch_optional::<FunctionDB>(&pfr.base.function_id)
+                .fetch_optional::<FunctionDB>(&pfr.function_id)
                 .await?;
             if function.is_none() {
                 return Err(api_error!(
@@ -139,7 +139,7 @@ pub async fn resolve_worker_message<S: SeesProjectRows, M: WriteMode>(
             // row at Failed/Done while recovery restarts the workload, and
             // the restarted pod's re-pull must succeed.
             if matches!(
-                worker.base.base.status,
+                worker.status,
                 WorkerStatus::StopScheduled | WorkerStatus::StopRequested | WorkerStatus::Stopped
             ) {
                 return Err(api_error!(
@@ -148,7 +148,7 @@ pub async fn resolve_worker_message<S: SeesProjectRows, M: WriteMode>(
                     worker_id,
                 ));
             }
-            match worker.base.base.worker_type {
+            match worker.worker_type {
                 WorkerType::StageTrigger => {
                     let streamer_input = build_streamer_input(&mut *conn, storage, worker).await?;
                     WorkerInput::Streamer(Box::new(streamer_input))
@@ -183,7 +183,7 @@ mod tests {
     async fn test_resolve_worker_message(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_resolve")?, &UserId::admin())
             .await?;
@@ -208,22 +208,18 @@ mod tests {
             workers: None,
         };
         let function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
-        let execution = db
-            .scoped(p.base.project_id)
-            .seed()
-            .execution(&function)
-            .await?;
+        let execution = db.scoped(p.project_id).seed().execution(&function).await?;
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         let pfr = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -234,13 +230,13 @@ mod tests {
             )
             .await?;
         let worker = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function_runner_worker(&execution, &transaction, &pfr)
             .await?;
 
         let param = WorkerParam {
-            worker: worker.base.id.clone(),
+            worker: worker.id.clone(),
         };
         let read = RequestContext::with(AccessTokenId::default(), UserId::admin()).read(param);
         let response = Services::with_defaults(db.clone())
@@ -251,7 +247,7 @@ mod tests {
         let WorkerInput::Function(message) = response else {
             panic!("expected Function");
         };
-        assert_eq!(message.info.physical_function_run_id, pfr.base.id);
+        assert_eq!(message.info.physical_function_run_id, pfr.id);
 
         Ok(())
     }

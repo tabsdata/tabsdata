@@ -49,20 +49,20 @@ async fn enable_function(
             .fetch_one(and!(&collection_id, &function_param.function))
             .await?;
 
-        ensure_user_managed(&current.base.base)?;
+        ensure_user_managed(&current)?;
 
-        let previous: FunctionDB = conn.timeline().fetch_one(&current.base.base.id).await?;
+        let previous: FunctionDB = conn.timeline().fetch_one(&current.id).await?;
         let function = previous.re_registered(&ctx, enable.enabled);
         conn.scd2().open(&function, topology_at).await?;
 
-        let previous_version_id = Some(current.base.base.id);
+        let previous_version_id = Some(current.id.clone());
         let no_workers: Option<HashMap<WorkerTypeDto, WorkerConfig>> = None;
         register_workers(conn, &function, &previous_version_id, &no_workers, at).await?;
 
         cascade_enabled(
             conn,
             &ctx,
-            &current.base.base.function_id,
+            &current.function_id,
             enable.enabled,
             topology_at,
         )
@@ -184,7 +184,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -215,7 +215,7 @@ mod tests {
         };
 
         let _dummy_function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &dummy)
             .await?;
@@ -242,7 +242,7 @@ mod tests {
         };
 
         let created_function = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -251,10 +251,7 @@ mod tests {
             .update(
                 (
                     CollectionParam {
-                        collection: CollectionIdName::from_str(&format!(
-                            "{}",
-                            collection.base.name
-                        ))?,
+                        collection: CollectionIdName::from_str(&format!("{}", collection.name))?,
                     },
                     FunctionParam {
                         function: FunctionIdName::from_str("foo")?,
@@ -264,37 +261,31 @@ mod tests {
                     enabled: enabled_update,
                 },
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.enable_function(request).await;
         let response = response?;
 
-        assert_ne!(response.id, created_function.base.id);
+        assert_ne!(response.id, created_function.id);
         assert_ne!(
             response.defined_on,
             AtTime::from(created_function.interval.valid_from)
         );
 
-        assert_eq!(response.collection_id, created_function.base.collection_id);
-        assert_eq!(response.name, created_function.base.name);
-        assert_eq!(response.description, created_function.base.description);
-        assert_eq!(response.decorator, created_function.base.decorator);
-        assert_eq!(response.connector, created_function.base.connector);
-        assert_eq!(
-            response.runtime_values,
-            created_function.base.runtime_values
-        );
-        assert_eq!(response.function_id, created_function.base.function_id);
-        assert_eq!(
-            response.storage_version,
-            created_function.base.storage_version
-        );
-        assert_eq!(response.bundle_id, created_function.base.bundle_id);
-        assert_eq!(response.snippet, created_function.base.snippet);
-        assert_eq!(response.status, created_function.base.status);
+        assert_eq!(response.collection_id, created_function.collection_id);
+        assert_eq!(response.name, created_function.name);
+        assert_eq!(response.description, created_function.description);
+        assert_eq!(response.decorator, created_function.decorator);
+        assert_eq!(response.connector, created_function.connector);
+        assert_eq!(response.runtime_values, created_function.runtime_values);
+        assert_eq!(response.function_id, created_function.function_id);
+        assert_eq!(response.storage_version, created_function.storage_version);
+        assert_eq!(response.bundle_id, created_function.bundle_id);
+        assert_eq!(response.snippet, created_function.snippet);
+        assert_eq!(response.status, created_function.status);
 
-        assert_eq!(created_function.base.enabled, enabled);
+        assert_eq!(created_function.enabled, enabled);
         assert_eq!(response.enabled, enabled_update);
 
         let current_function: Vec<FunctionDB> = db
@@ -303,25 +294,25 @@ mod tests {
             .await?;
         assert_eq!(current_function.len(), 1);
         let current_function = current_function.first().unwrap();
-        assert_eq!(current_function.base.id, response.id);
-        assert_eq!(current_function.base.enabled, enabled_update);
+        assert_eq!(current_function.id, response.id);
+        assert_eq!(current_function.enabled, enabled_update);
 
         // Flipping the flag versions the function alone: its tables keep the
         // version that defined them.
         let current_tables: Vec<TableDB> = db
             .scd2()
-            .fetch_all::<TableDB>(and!(&current_function.base.function_id, TableDB::active()))
+            .fetch_all::<TableDB>(and!(&current_function.function_id, TableDB::active()))
             .await?;
         assert_eq!(current_tables.len(), tables.unwrap_or_default().len());
         assert!(
             current_tables
                 .iter()
-                .all(|t| t.base.function_version_id == created_function.base.id)
+                .all(|t| t.function_version_id == created_function.id)
         );
 
         let current_dependencies: Vec<DependencyDB> = db
             .scd2()
-            .fetch_all::<DependencyDB>(&current_function.base.function_id)
+            .fetch_all::<DependencyDB>(&current_function.function_id)
             .await?;
         assert_eq!(
             current_dependencies.len(),
@@ -330,12 +321,11 @@ mod tests {
 
         let current_triggers: Vec<TriggerDB> = db
             .scd2()
-            .fetch_all::<TriggerDB>(&current_function.base.function_id)
+            .fetch_all::<TriggerDB>(&current_function.function_id)
             .await?;
         assert_eq!(current_triggers.len(), triggers.unwrap_or_default().len());
 
-        let current_workers: Vec<WorkerDB> =
-            db.fetch_all::<WorkerDB>(&current_function.base.id).await?;
+        let current_workers: Vec<WorkerDB> = db.fetch_all::<WorkerDB>(&current_function.id).await?;
         assert_eq!(current_workers.len(), workers.unwrap_or_default().len());
 
         Ok(())
@@ -469,44 +459,43 @@ mod tests {
     #[td_test::test(db)]
     async fn test_disable_cascades_to_a_child(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = a_collection(&db, p.base.project_id, "endis").await?;
+        let collection = a_collection(&db, p.project_id, "endis").await?;
         let owner = register_fn(
             &db,
-            p.base.project_id,
+            p.project_id,
             &collection,
             cascade_dto(OWNER, Some(vec![child("child")?]), Enabled::TRUE)?,
         )
         .await?;
         let child = live_child(&db, &owner.function_id).await?;
 
-        let response =
-            set_enabled(&db, p.base.project_id, &collection, OWNER, Enabled::FALSE).await?;
+        let response = set_enabled(&db, p.project_id, &collection, OWNER, Enabled::FALSE).await?;
 
         assert_eq!(response.name, FunctionName::try_from(OWNER)?);
         assert_eq!(response.enabled, Enabled::FALSE);
-        let child = current_version(&db, &child.base.function_id).await?;
-        assert_eq!(child.base.enabled, Enabled::FALSE);
+        let child = current_version(&db, &child.function_id).await?;
+        assert_eq!(child.enabled, Enabled::FALSE);
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_enable_cascades_back_to_the_subtree(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = a_collection(&db, p.base.project_id, "endis_back").await?;
+        let collection = a_collection(&db, p.project_id, "endis_back").await?;
         let owner = register_fn(
             &db,
-            p.base.project_id,
+            p.project_id,
             &collection,
             cascade_dto(OWNER, Some(vec![child("child")?]), Enabled::TRUE)?,
         )
         .await?;
         let child = live_child(&db, &owner.function_id).await?;
 
-        set_enabled(&db, p.base.project_id, &collection, OWNER, Enabled::FALSE).await?;
-        set_enabled(&db, p.base.project_id, &collection, OWNER, Enabled::TRUE).await?;
+        set_enabled(&db, p.project_id, &collection, OWNER, Enabled::FALSE).await?;
+        set_enabled(&db, p.project_id, &collection, OWNER, Enabled::TRUE).await?;
 
-        let child = current_version(&db, &child.base.function_id).await?;
-        assert_eq!(child.base.enabled, Enabled::TRUE);
+        let child = current_version(&db, &child.function_id).await?;
+        assert_eq!(child.enabled, Enabled::TRUE);
         Ok(())
     }
 
@@ -524,56 +513,50 @@ mod tests {
         db: TdPool,
     ) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = a_collection(&db, p.base.project_id, "endis_skip").await?;
+        let collection = a_collection(&db, p.project_id, "endis_skip").await?;
         let owner = register_fn(
             &db,
-            p.base.project_id,
+            p.project_id,
             &collection,
             cascade_dto(OWNER, Some(vec![child("child")?]), Enabled::TRUE)?,
         )
         .await?;
-        set_enabled(&db, p.base.project_id, &collection, OWNER, Enabled::FALSE).await?;
+        set_enabled(&db, p.project_id, &collection, OWNER, Enabled::FALSE).await?;
         let disabled = live_child(&db, &owner.function_id).await?;
 
-        set_enabled(&db, p.base.project_id, &collection, OWNER, Enabled::FALSE).await?;
+        set_enabled(&db, p.project_id, &collection, OWNER, Enabled::FALSE).await?;
 
-        let current = current_version(&db, &disabled.base.function_id).await?;
-        assert_eq!(current.base.id, disabled.base.id);
+        let current = current_version(&db, &disabled.function_id).await?;
+        assert_eq!(current.id, disabled.id);
         Ok(())
     }
 
     #[td_test::test(db)]
     async fn test_toggling_a_child_function_directly_is_refused(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = a_collection(&db, p.base.project_id, "endis_guard").await?;
+        let collection = a_collection(&db, p.project_id, "endis_guard").await?;
         let owner = register_fn(
             &db,
-            p.base.project_id,
+            p.project_id,
             &collection,
             cascade_dto(OWNER, Some(vec![child("child_fn")?]), Enabled::TRUE)?,
         )
         .await?;
         let child = live_child(&db, &owner.function_id).await?;
 
-        let err = set_enabled(
-            &db,
-            p.base.project_id,
-            &collection,
-            "child_fn",
-            Enabled::FALSE,
-        )
-        .await
-        .expect_err("a child function must not be toggled directly");
+        let err = set_enabled(&db, p.project_id, &collection, "child_fn", Enabled::FALSE)
+            .await
+            .expect_err("a child function must not be toggled directly");
 
         assert!(matches!(
             err.domain_err::<ChildFunctionError>(),
             ChildFunctionError::NotUserManaged(_)
         ));
-        let current = current_version(&db, &child.base.function_id).await?;
-        assert_eq!(current.base.enabled, Enabled::TRUE);
-        assert_eq!(current.base.id, child.base.id);
+        let current = current_version(&db, &child.function_id).await?;
+        assert_eq!(current.enabled, Enabled::TRUE);
+        assert_eq!(current.id, child.id);
         let owner_now = current_version(&db, &owner.function_id).await?;
-        assert_eq!(owner_now.base.enabled, Enabled::TRUE);
+        assert_eq!(owner_now.enabled, Enabled::TRUE);
         Ok(())
     }
 
@@ -582,20 +565,20 @@ mod tests {
     #[td_test::test(db)]
     async fn test_the_cascade_still_reaches_a_child_function(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let collection = a_collection(&db, p.base.project_id, "endis_cascade").await?;
+        let collection = a_collection(&db, p.project_id, "endis_cascade").await?;
         let owner = register_fn(
             &db,
-            p.base.project_id,
+            p.project_id,
             &collection,
             cascade_dto(OWNER, Some(vec![child("child_fn")?]), Enabled::TRUE)?,
         )
         .await?;
         let child = live_child(&db, &owner.function_id).await?;
 
-        set_enabled(&db, p.base.project_id, &collection, OWNER, Enabled::FALSE).await?;
+        set_enabled(&db, p.project_id, &collection, OWNER, Enabled::FALSE).await?;
 
-        let current = current_version(&db, &child.base.function_id).await?;
-        assert_eq!(current.base.enabled, Enabled::FALSE);
+        let current = current_version(&db, &child.function_id).await?;
+        assert_eq!(current.enabled, Enabled::FALSE);
         Ok(())
     }
 }

@@ -76,7 +76,7 @@ mod tests {
             .metrics(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .read(request)
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?
             .data;

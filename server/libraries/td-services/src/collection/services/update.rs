@@ -63,14 +63,7 @@ async fn update_collection(
         let conn = conn.get(grant);
         let collection: CollectionDB = conn.scd2().fetch_one(&param.collection).await?;
         // source/destination collections carry connection config: manage_project
-        escalate_for_connected(
-            &authz,
-            conn,
-            &ctx,
-            &project,
-            &collection.base.collection_type,
-        )
-        .await?;
+        escalate_for_connected(&authz, conn, &ctx, &project, &collection.collection_type).await?;
         update_collection_validate(&update)?;
         let plan = plan_collection_update(conn, &collection, &update).await?;
         (plan, grant)
@@ -160,23 +153,21 @@ pub async fn plan_collection_update<S: SeesProjectRows, M: AccessMode>(
     // otherwise the existing owner's worker artifact would be overwritten (and
     // deleted by the revert). Renaming to the current name is a no-op.
     if let Some(name) = &update.name
-        && *name != collection.base.name
+        && *name != collection.name
     {
         ensure_collection_name_free(conn, name).await?;
     }
-    let rename = match (&update.name, collection.base.connection_id) {
-        (Some(name), Some(connection_id)) if *name != collection.base.name => {
-            Some(ConnectionRename {
-                collection_id: collection.base.collection_id,
-                old_name: collection.base.name.clone(),
-                new_name: name.clone(),
-                connection_id,
-            })
-        }
+    let rename = match (&update.name, collection.connection_id) {
+        (Some(name), Some(connection_id)) if *name != collection.name => Some(ConnectionRename {
+            collection_id: collection.collection_id,
+            old_name: collection.name.clone(),
+            new_name: name.clone(),
+            connection_id,
+        }),
         _ => None,
     };
     Ok(CollectionUpdatePlan {
-        collection_id: collection.base.collection_id,
+        collection_id: collection.collection_id,
         update: update.clone(),
         rename,
     })
@@ -265,7 +256,7 @@ mod tests {
         let p = db.seed().test_project().await.unwrap();
         let create_name = CollectionName::try_from("ds0").unwrap();
         let seeded = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&create_name, &UserId::admin())
             .await
@@ -285,7 +276,7 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let response = service
             .update_collection(update_request(
-                p.base.project_id,
+                p.project_id,
                 &create_name.to_string(),
                 update,
             ))
@@ -301,22 +292,22 @@ mod tests {
 
         // The update is a new version of the collection, not of the topology.
         let mut timeline: Vec<CollectionDB> = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .timeline()
-            .fetch_all(&seeded.base.collection_id)
+            .fetch_all(&seeded.collection_id)
             .await
             .unwrap();
         timeline.sort_by_key(|v| v.interval.valid_from);
-        let names: Vec<_> = timeline.iter().map(|v| v.base.name.clone()).collect();
+        let names: Vec<_> = timeline.iter().map(|v| v.name.clone()).collect();
         assert_eq!(names, [create_name, name]);
         assert_eq!(
             *timeline[0].interval.valid_to.at().unwrap(),
             *timeline[1].interval.valid_from
         );
         let topology: ProjectTopologyDB = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .scd2()
-            .fetch_one(&p.base.project_id)
+            .fetch_one(&p.project_id)
             .await
             .unwrap();
         assert!(*topology.interval.valid_from < *timeline[1].interval.valid_from);
@@ -357,7 +348,7 @@ mod tests {
             .await?;
         let function = active
             .into_iter()
-            .find(|f| f.base.name == *name)
+            .find(|f| f.name == *name)
             .expect("matching active function exists");
         Ok(function)
     }
@@ -367,18 +358,18 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("bp_coll")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
 
         // Seeded collections start with NULL base_path (they inherit the project).
-        assert_eq!(collection.base.base_path, None);
+        assert_eq!(collection.base_path, None);
 
         let data = BasePath::try_from("/data")?;
         update_collection(
             &db,
-            p.base.project_id,
+            p.project_id,
             &collection_name,
             None,
             None,
@@ -388,25 +379,17 @@ mod tests {
 
         let reloaded: CollectionDB = db
             .scd2()
-            .fetch_one::<CollectionDB>(&collection.base.collection_id)
+            .fetch_one::<CollectionDB>(&collection.collection_id)
             .await?;
-        assert_eq!(reloaded.base.base_path, Some(data.clone()));
+        assert_eq!(reloaded.base_path, Some(data.clone()));
 
         // Clearing it (base_path = null) reverts to inheriting the project.
-        update_collection(
-            &db,
-            p.base.project_id,
-            &collection_name,
-            None,
-            None,
-            Some(None),
-        )
-        .await?;
+        update_collection(&db, p.project_id, &collection_name, None, None, Some(None)).await?;
         let reloaded: CollectionDB = db
             .scd2()
-            .fetch_one::<CollectionDB>(&collection.base.collection_id)
+            .fetch_one::<CollectionDB>(&collection.collection_id)
             .await?;
-        assert_eq!(reloaded.base.base_path, None, "cleared back to inherit");
+        assert_eq!(reloaded.base_path, None, "cleared back to inherit");
         Ok(())
     }
 
@@ -434,7 +417,7 @@ mod tests {
         let p = db.seed().test_project().await.unwrap();
         let collection_name = CollectionName::try_from("noop_coll").unwrap();
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await;
@@ -452,7 +435,7 @@ mod tests {
                 },
                 update,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db);
         assert_service_error(service.update_collection(request).await, |err| {
@@ -475,7 +458,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("move_coll")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -485,7 +468,7 @@ mod tests {
         let a = BasePath::try_from("/a")?;
         update_collection(
             &db,
-            p.base.project_id,
+            p.project_id,
             &collection_name,
             None,
             None,
@@ -506,7 +489,7 @@ mod tests {
                 },
                 upload,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let bundle = context.clone().upload_function(request).await?.data;
 
         let create = FunctionRegister {
@@ -536,7 +519,7 @@ mod tests {
                 },
                 create,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         Services::with_defaults(db.clone())
             .register_function(request)
             .await?;
@@ -544,16 +527,15 @@ mod tests {
         // Both artifacts are stamped with the old "/a" prefix at create time.
         let function_name = FunctionName::try_from("artifact_fn")?;
         let function = active_function(&db, &function_name).await?;
-        assert_eq!(function.base.stage_base_path, a);
-        let bundle_before: Vec<BundleDB> =
-            db.fetch_all::<BundleDB>(&function.base.bundle_id).await?;
+        assert_eq!(function.stage_base_path, a);
+        let bundle_before: Vec<BundleDB> = db.fetch_all::<BundleDB>(&function.bundle_id).await?;
         assert_eq!(bundle_before.len(), 1);
-        assert_eq!(bundle_before[0].base.base_path, a);
+        assert_eq!(bundle_before[0].base_path, a);
 
         let b = BasePath::try_from("/b")?;
         update_collection(
             &db,
-            p.base.project_id,
+            p.project_id,
             &collection_name,
             None,
             None,
@@ -562,27 +544,26 @@ mod tests {
         .await?;
         let reloaded: CollectionDB = db
             .scd2()
-            .fetch_one::<CollectionDB>(&collection.base.collection_id)
+            .fetch_one::<CollectionDB>(&collection.collection_id)
             .await?;
-        assert_eq!(reloaded.base.base_path, Some(b));
+        assert_eq!(reloaded.base_path, Some(b));
 
         // The previously-generated artifacts still carry "/a": the move did not
         // relocate them, and no new function version was created.
         let function_after = active_function(&db, &function_name).await?;
         assert_eq!(
-            function_after.base.id, function.base.id,
+            function_after.id, function.id,
             "collection update must not bump the function version"
         );
         assert_eq!(
-            function_after.base.stage_base_path, a,
+            function_after.stage_base_path, a,
             "function stage_base_path stays on the prefix it was stamped with"
         );
-        let bundle_after: Vec<BundleDB> = db
-            .fetch_all::<BundleDB>(&function_after.base.bundle_id)
-            .await?;
+        let bundle_after: Vec<BundleDB> =
+            db.fetch_all::<BundleDB>(&function_after.bundle_id).await?;
         assert_eq!(bundle_after.len(), 1);
         assert_eq!(
-            bundle_after[0].base.base_path, a,
+            bundle_after[0].base_path, a,
             "bundle base_path stays on the prefix it was stamped with"
         );
 
@@ -592,14 +573,14 @@ mod tests {
         use futures::StreamExt;
         let download_request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .read(FunctionVersionParam {
-                function_version: function_after.base.id.clone(),
+                function_version: function_after.id.clone(),
             });
         let response = context
             .clone()
             .download_bundle(download_request)
             .await?
             .data;
-        assert_eq!(response.etag, bundle_after[0].base.hash.clone());
+        assert_eq!(response.etag, bundle_after[0].hash.clone());
         let mut stream = response.stream.into_inner();
         let mut buf = Vec::new();
         while let Some(chunk) = stream.next().await {
@@ -624,7 +605,7 @@ mod tests {
             ..Services::with_defaults(db.clone())
         }
         .create_collection(create_request(
-            p.base.project_id,
+            p.project_id,
             "src0",
             Some(GroupName::source()),
         ))
@@ -635,18 +616,16 @@ mod tests {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .update_collection(update_request(p.base.project_id, "src0", rename_to("src1")))
+        .update_collection(update_request(p.project_id, "src0", rename_to("src1")))
         .await
         .unwrap();
         assert_eq!(renamed.name.to_string(), "src1");
 
         // The stored document followed the rename, values intact.
-        let connection = linked_connection(&db, p.base.project_id, "src1")
-            .await
-            .unwrap();
+        let connection = linked_connection(&db, p.project_id, "src1").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.base.project_id, &connection.base.id)
+            .fetch(&p.project_id, &connection.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "src1");
@@ -663,7 +642,7 @@ mod tests {
             ..Services::with_defaults(db.clone())
         }
         .create_collection(create_request(
-            p.base.project_id,
+            p.project_id,
             "src0",
             Some(GroupName::source()),
         ))
@@ -671,7 +650,7 @@ mod tests {
         .unwrap();
         let taken = CollectionName::try_from("taken").unwrap();
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&taken, &UserId::admin())
             .await;
@@ -683,20 +662,14 @@ mod tests {
             bridge: bridge.clone(),
             ..Services::with_defaults(db.clone())
         }
-        .update_collection(update_request(
-            p.base.project_id,
-            "src0",
-            rename_to("taken"),
-        ))
+        .update_collection(update_request(p.project_id, "src0", rename_to("taken")))
         .await
         .expect_err("renaming onto an existing collection must fail");
 
-        let connection = linked_connection(&db, p.base.project_id, "src0")
-            .await
-            .unwrap();
+        let connection = linked_connection(&db, p.project_id, "src0").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.base.project_id, &connection.base.id)
+            .fetch(&p.project_id, &connection.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "src0");
@@ -713,17 +686,15 @@ mod tests {
             ..Services::with_defaults(db.clone())
         }
         .create_collection(create_request(
-            p.base.project_id,
+            p.project_id,
             "src0",
             Some(GroupName::source()),
         ))
         .await
         .unwrap();
-        let connection = linked_connection(&db, p.base.project_id, "src0")
-            .await
-            .unwrap();
+        let connection = linked_connection(&db, p.project_id, "src0").await.unwrap();
         let collection: CollectionDB = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .scd2()
             .fetch_one(&CollectionName::try_from("src0").unwrap())
             .await
@@ -732,10 +703,10 @@ mod tests {
         let store = bridge.connection_store();
         rename_stored_connection(
             store,
-            &p.base.project_id,
-            &collection.base.collection_id,
+            &p.project_id,
+            &collection.collection_id,
             &stale,
-            &connection.base.id,
+            &connection.id,
         )
         .await
         .unwrap();
@@ -743,21 +714,18 @@ mod tests {
         let pools =
             DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
         reconcile_stored_connection(
-            &DbPool::in_project(&pools, &p.base.project_id),
+            &DbPool::in_project(&pools, &p.project_id),
             Grant::asserted("reconcile"),
             store,
-            &p.base.project_id,
-            &collection.base.collection_id,
+            &p.project_id,
+            &collection.collection_id,
             &stale,
-            &connection.base.id,
+            &connection.id,
         )
         .await
         .unwrap();
 
-        let stored = store
-            .fetch(&p.base.project_id, &connection.base.id)
-            .await
-            .unwrap();
+        let stored = store.fetch(&p.project_id, &connection.id).await.unwrap();
         assert_eq!(stored.connection["name"], "src0");
     }
 
@@ -766,11 +734,11 @@ mod tests {
     #[td_test::test(db)]
     async fn test_source_update_requires_manage_project(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
-        let dev = seed_dev_user(&db, p.base.project_id).await;
+        let dev = seed_dev_user(&db, p.project_id).await;
 
         // DataFactory rename with develop_project: fine.
         Services::with_defaults(db.clone())
-            .create_collection(create_request(p.base.project_id, "dev_df_u", None))
+            .create_collection(create_request(p.project_id, "dev_df_u", None))
             .await?;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(
@@ -779,19 +747,13 @@ mod tests {
                 },
                 rename_to("dev_df_u2"),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         Services::with_defaults(db.clone())
             .update_collection(request)
             .await?;
 
         // Source rename with develop_project: forbidden.
-        create_collection(
-            &db,
-            p.base.project_id,
-            "dev_src_u",
-            Some(GroupName::source()),
-        )
-        .await;
+        create_collection(&db, p.project_id, "dev_src_u", Some(GroupName::source())).await;
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .update(
                 CollectionParam {
@@ -799,7 +761,7 @@ mod tests {
                 },
                 rename_to("dev_src_u2"),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let err = Services::with_defaults(db.clone())
             .update_collection(request)
             .await

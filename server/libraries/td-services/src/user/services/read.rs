@@ -26,7 +26,7 @@ async fn read_user(
     let row: UserDBWithNames = conn.fetch_one(&id_name).await?;
     assert_user_readable(&row)?;
     let _grant = authz
-        .require::<User, (SelfUser, ManageAccess)>(conn, &ctx, &row.base.id)
+        .require::<User, (SelfUser, ManageAccess)>(conn, &ctx, &row.id)
         .await?;
     UserRead::from_dao(row)
 }

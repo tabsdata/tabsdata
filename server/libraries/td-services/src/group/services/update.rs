@@ -46,7 +46,7 @@ async fn update_group(
             .open(&current.updated(&update, &ctx), at)
             .await
             .map_err(SqlError::already_exists)?;
-        let with_names: GroupDBWithNames = conn.scd2().fetch_one(&current.base.group_id).await?;
+        let with_names: GroupDBWithNames = conn.scd2().fetch_one(&current.group_id).await?;
         let read = Group::from_dao(with_names)?;
         gated_trx.commit().await?;
         Ok(read)
@@ -73,7 +73,7 @@ mod tests {
     async fn test_update_group(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics")?,
@@ -93,7 +93,7 @@ mod tests {
                 },
                 update,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_group(request).await?.data;
@@ -102,10 +102,10 @@ mod tests {
             .scd2()
             .fetch_one::<GroupDB>(&GroupName::try_from("ml")?)
             .await?;
-        assert_eq!(response.group_id, found.base.group_id);
-        assert_eq!(response.name, found.base.name);
-        assert_eq!(response.description, found.base.description);
-        assert!(!*found.base.system);
+        assert_eq!(response.group_id, found.group_id);
+        assert_eq!(response.name, found.name);
+        assert_eq!(response.description, found.description);
+        assert!(!*found.system);
         Ok(())
     }
 
@@ -117,7 +117,7 @@ mod tests {
     async fn test_update_rename_to_existing_name_rejected(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),
@@ -125,7 +125,7 @@ mod tests {
             )
             .await;
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .group(
                 GroupName::try_from("ml").unwrap(),
@@ -145,7 +145,7 @@ mod tests {
                 },
                 update,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         assert_service_error(service.update_group(request).await, |err| match err {
@@ -169,7 +169,7 @@ mod tests {
                 },
                 update,
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let res = service.update_group(request).await;

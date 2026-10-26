@@ -102,7 +102,7 @@ mod tests {
                 .flat_map(|e| &e.transactions)
                 .nth(recover_on)
                 .unwrap();
-            let transaction = t[&test_transaction].base.id.to_string();
+            let transaction = t[&test_transaction].id.to_string();
             async move {
                 let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .update(
@@ -126,7 +126,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -151,7 +151,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -186,7 +186,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![
@@ -224,7 +224,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Running,
@@ -265,7 +265,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![
                 TestExecution {
                     expected_status: ExecutionStatus::Running,
@@ -306,7 +306,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         test_recover_transaction(
             db,
-            p.base.project_id,
+            p.project_id,
             vec![TestExecution {
                 expected_status: ExecutionStatus::Running,
                 transactions: vec![TestTransaction {
@@ -344,7 +344,7 @@ mod tests {
                 let db = db.clone();
                 test_recover_transaction(
                     db,
-                    p.base.project_id,
+                    p.project_id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Running,
                         transactions: vec![TestTransaction {
@@ -401,7 +401,7 @@ mod tests {
                 let db = db.clone();
                 test_recover_transaction(
                     db,
-                    p.base.project_id,
+                    p.project_id,
                     vec![TestExecution {
                         expected_status: ExecutionStatus::Running,
                         transactions: vec![TestTransaction {

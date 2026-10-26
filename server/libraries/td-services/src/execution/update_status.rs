@@ -63,8 +63,8 @@ pub async fn update_worker_status<S: SeesProjectRows, M: WriteMode>(
     // or an abandon got there first) and is dropped. Keyed on the status
     // read, so a write landing in between drops it too.
     let worker: WorkerDB = conn.fetch_one(worker_id).await?;
-    let from = worker.base.status;
-    if !from.can_move_to(&worker.base.worker_type, &update.status) {
+    let from = worker.status;
+    if !from.can_move_to(&worker.worker_type, &update.status) {
         debug!(%from, to = %update.status, "worker.callback: dropped a late report");
         return Ok(false);
     }
@@ -87,12 +87,9 @@ pub async fn move_workers<S: SeesProjectRows, M: WriteMode>(
     let keys: Vec<_> = workers
         .iter()
         .filter(|w| {
-            w.base.status != update.status
-                && w.base
-                    .status
-                    .can_move_to(&w.base.worker_type, &update.status)
+            w.status != update.status && w.status.can_move_to(&w.worker_type, &update.status)
         })
-        .map(|w| and!(w.base.id.clone(), w.base.status))
+        .map(|w| and!(w.id.clone(), w.status))
         .collect();
     if keys.is_empty() {
         return Ok(0);
@@ -117,8 +114,8 @@ pub async fn abandon_requested_physical_runs(
 ) -> Result<Vec<FunctionStopRequest>, TdError> {
     let requested: HashSet<(&ExecutionId, &FunctionId)> = logical_function_runs
         .iter()
-        .filter(|lfr| lfr.base.status == LogicalFunctionRunStatus::Requested)
-        .map(|lfr| (&lfr.base.execution_id, &lfr.base.function_id))
+        .filter(|lfr| lfr.status == LogicalFunctionRunStatus::Requested)
+        .map(|lfr| (&lfr.execution_id, &lfr.function_id))
         .collect();
     if requested.is_empty() {
         return Ok(Vec::new());
@@ -137,10 +134,10 @@ pub async fn abandon_requested_physical_runs(
     let abandoned: Vec<PhysicalFunctionRunId> = physical_function_runs
         .iter()
         .filter(|pfr| {
-            PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status)
-                && requested.contains(&(&pfr.base.execution_id, &pfr.base.function_id))
+            PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.status)
+                && requested.contains(&(&pfr.execution_id, &pfr.function_id))
         })
-        .map(|pfr| pfr.base.id.clone())
+        .map(|pfr| pfr.id.clone())
         .collect();
     if abandoned.is_empty() {
         return Ok(Vec::new());
@@ -169,7 +166,7 @@ enum Transition {
 /// runs are simply not part of the operation. Cancels never come here: they
 /// go through `cancel_runs`.
 fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus) -> Transition {
-    match (&current.base.status, target) {
+    match (&current.status, target) {
         (
             LogicalFunctionRunStatus::Committed
             | LogicalFunctionRunStatus::Canceled
@@ -190,13 +187,13 @@ fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus)
             | LogicalFunctionRunStatus::Error
             | LogicalFunctionRunStatus::Failed,
         ) => Transition::Absorb(UpdateStatusRunError::StickyFinalStatus(
-            current.base.id.clone(),
+            current.id.clone(),
             *s,
         )),
         (s @ LogicalFunctionRunStatus::Yanked, LogicalFunctionRunStatus::Yanked)
         | (s @ LogicalFunctionRunStatus::Committed, LogicalFunctionRunStatus::Committed) => {
             Transition::Absorb(UpdateStatusRunError::StickyFinalStatus(
-                current.base.id.clone(),
+                current.id.clone(),
                 *s,
             ))
         }
@@ -206,7 +203,7 @@ fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus)
             | LogicalFunctionRunStatus::Yanked),
             _,
         ) => Transition::Refuse(UpdateStatusRunError::StickyFinalStatus(
-            current.base.id.clone(),
+            current.id.clone(),
             *s,
         )),
 
@@ -220,12 +217,9 @@ fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus)
             | LogicalFunctionRunStatus::Error
             | LogicalFunctionRunStatus::Failed,
         )
-        | (LogicalFunctionRunStatus::Done, LogicalFunctionRunStatus::Done) => {
-            Transition::Absorb(UpdateStatusRunError::ReplayCallbackAbsorbed(
-                current.base.id.clone(),
-                current.base.status,
-            ))
-        }
+        | (LogicalFunctionRunStatus::Done, LogicalFunctionRunStatus::Done) => Transition::Absorb(
+            UpdateStatusRunError::ReplayCallbackAbsorbed(current.id.clone(), current.status),
+        ),
         (LogicalFunctionRunStatus::Failed, LogicalFunctionRunStatus::Done) => Transition::Apply,
 
         (LogicalFunctionRunStatus::Scheduled, LogicalFunctionRunStatus::Requested) => {
@@ -262,8 +256,8 @@ fn transition(current: &LogicalFunctionRunDB, target: &LogicalFunctionRunStatus)
         (current, new) if current == new => Transition::Skip,
 
         _ => Transition::Refuse(UpdateStatusRunError::UnexpectedFunctionRunStatusTransition(
-            current.base.id.clone(),
-            current.base.status,
+            current.id.clone(),
+            current.status,
             *target,
         )),
     }
@@ -275,7 +269,7 @@ fn cascade_transition(
     current: &LogicalFunctionRunDB,
     target: &LogicalFunctionRunStatus,
 ) -> Transition {
-    let status = current.base.status;
+    let status = current.status;
     if status == *target {
         return Transition::Skip;
     }
@@ -286,7 +280,7 @@ fn cascade_transition(
             | LogicalFunctionRunStatus::Yanked
     ) {
         return Transition::Absorb(UpdateStatusRunError::StickyFinalStatus(
-            current.base.id.clone(),
+            current.id.clone(),
             status,
         ));
     }
@@ -307,8 +301,8 @@ pub(crate) async fn without_attempt_in_flight(
         .await?;
     let busy: HashSet<&LogicalFunctionRunId> = current
         .iter()
-        .filter(|pfr| PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.base.status))
-        .map(|pfr| &pfr.base.logical_function_run_id)
+        .filter(|pfr| PhysicalFunctionRunStatus::IN_FLIGHT.contains(&pfr.status))
+        .map(|pfr| &pfr.logical_function_run_id)
         .collect();
     if !busy.is_empty() {
         debug!(
@@ -335,10 +329,8 @@ async fn recoverable(
     let mut kept: HashSet<LogicalFunctionRunId> = ids.iter().cloned().collect();
     let on_hold: Vec<LogicalFunctionRunId> = runs
         .iter()
-        .filter(|lfr| {
-            lfr.base.status == LogicalFunctionRunStatus::OnHold && kept.contains(&lfr.base.id)
-        })
-        .map(|lfr| lfr.base.id.clone())
+        .filter(|lfr| lfr.status == LogicalFunctionRunStatus::OnHold && kept.contains(&lfr.id))
+        .map(|lfr| lfr.id.clone())
         .collect();
     if on_hold.is_empty() {
         return Ok(ids);
@@ -391,7 +383,7 @@ pub async fn update_function_run_status(
     let mut lfr_ids = Vec::new();
     for current in logical_function_runs {
         match transition(current, &status) {
-            Transition::Apply => lfr_ids.push(current.base.id.clone()),
+            Transition::Apply => lfr_ids.push(current.id.clone()),
             Transition::Skip => {}
             Transition::Absorb(reported) => msgs.warning(Message::of(reported)),
             Transition::Refuse(refused) => return Err(refused.into()),
@@ -426,19 +418,16 @@ pub async fn update_function_run_status(
         let updated_set: HashSet<&LogicalFunctionRunId> = lfr_ids.iter().collect();
         let execution_ids: Vec<ExecutionId> = logical_function_runs
             .iter()
-            .filter(|f| updated_set.contains(&f.base.id))
-            .map(|f| f.base.execution_id.clone())
+            .filter(|f| updated_set.contains(&f.id))
+            .map(|f| f.execution_id.clone())
             .unique()
             .collect();
         commit_done_transactions(conn, &execution_ids).await?;
 
         let healed: Vec<LogicalFunctionRunId> = logical_function_runs
             .iter()
-            .filter(|f| {
-                f.base.status == LogicalFunctionRunStatus::Failed
-                    && updated_set.contains(&f.base.id)
-            })
-            .map(|f| f.base.id.clone())
+            .filter(|f| f.status == LogicalFunctionRunStatus::Failed && updated_set.contains(&f.id))
+            .map(|f| f.id.clone())
             .collect();
         release_readers_of(conn, &healed).await?;
     }
@@ -487,7 +476,7 @@ async fn cascade_downstream_status(
     let mut to_update = Vec::new();
     for current in &downstream {
         match cascade_transition(current, status) {
-            Transition::Apply => to_update.push(current.base.id.clone()),
+            Transition::Apply => to_update.push(current.id.clone()),
             Transition::Skip => {}
             Transition::Absorb(reported) | Transition::Refuse(reported) => {
                 msgs.warning(Message::of(reported))
@@ -580,13 +569,13 @@ pub async fn update_table_data_version_status<S: SeesProjectRows, M: WriteMode>(
 
             let latest_version_with_data = conn
                 .table_data_versions()
-                .committed_data_before(&data_version.base.base.base.logical_table_data_version_id)
+                .committed_data_before(&data_version.logical_table_data_version_id)
                 .await?;
 
             let update = if let Some(table_info) = table_info {
                 let schema_changed = match &latest_version_with_data {
                     Some(prev) => SchemaChanged::from(
-                        prev.base.base.base.schema_hash.as_ref() != Some(&table_info.schema_hash),
+                        prev.schema_hash.as_ref() != Some(&table_info.schema_hash),
                     ),
                     None => SchemaChanged::FALSE,
                 };
@@ -598,20 +587,18 @@ pub async fn update_table_data_version_status<S: SeesProjectRows, M: WriteMode>(
                     row_count: Some(table_info.row_count),
                     data_bytes: table_info.data_bytes,
                     schema_hash: Some(table_info.schema_hash.clone()),
-                    with_data_table_data_version_id: Some(
-                        data_version.base.base.base.id.clone().into(),
-                    ),
+                    with_data_table_data_version_id: Some(data_version.id.clone().into()),
                 }
             } else if let Some(latest_version_with_data) = latest_version_with_data {
                 PhysicalTableDataVersionUpdateDB {
                     has_data: Some(HasData::FALSE),
                     schema_changed: Some(SchemaChanged::FALSE),
-                    column_count: latest_version_with_data.base.base.base.column_count,
-                    row_count: latest_version_with_data.base.base.base.row_count,
-                    data_bytes: latest_version_with_data.base.base.base.data_bytes,
-                    schema_hash: latest_version_with_data.base.base.base.schema_hash.clone(),
+                    column_count: latest_version_with_data.column_count,
+                    row_count: latest_version_with_data.row_count,
+                    data_bytes: latest_version_with_data.data_bytes,
+                    schema_hash: latest_version_with_data.schema_hash.clone(),
                     with_data_table_data_version_id: Some(
-                        latest_version_with_data.base.base.base.id.into(),
+                        latest_version_with_data.id.clone().into(),
                     ),
                 }
             } else {
@@ -627,7 +614,7 @@ pub async fn update_table_data_version_status<S: SeesProjectRows, M: WriteMode>(
             };
 
             conn.table_data_versions()
-                .settle(&update, &data_version.base.base.base.id, at)
+                .settle(&update, &data_version.id, at)
                 .await?;
         }
     }
@@ -720,22 +707,22 @@ pub(crate) mod tests {
             run_status_scenario(db.clone(), project_id, test_executions, test_run).await?;
         for test_execution in test_executions {
             let executions = db
-                .fetch_all::<ExecutionDBWithNames>(&executions.get(test_execution).unwrap().base.id)
+                .fetch_all::<ExecutionDBWithNames>(&executions.get(test_execution).unwrap().id)
                 .await?;
             assert_eq!(executions.len(), 1);
             let execution = &executions[0];
-            assert_eq!(execution.base.status, test_execution.expected_status);
+            assert_eq!(execution.status, test_execution.expected_status);
         }
 
         for test_transaction in test_executions.iter().flat_map(|e| &e.transactions) {
             let transactions = db
                 .fetch_all::<TransactionDBWithNames>(
-                    &transactions.get(test_transaction).unwrap().base.id,
+                    &transactions.get(test_transaction).unwrap().id,
                 )
                 .await?;
             assert_eq!(transactions.len(), 1);
             let transaction = &transactions[0];
-            assert_eq!(transaction.base.status, test_transaction.expected_status);
+            assert_eq!(transaction.status, test_transaction.expected_status);
         }
 
         for test_function in test_executions
@@ -750,29 +737,29 @@ pub(crate) mod tests {
             // (execution_id, function_id).
             let physical_function_runs = db
                 .timeline()
-                .fetch_all::<PhysicalFunctionRunDB>(&physical_function_run.base.id)
+                .fetch_all::<PhysicalFunctionRunDB>(&physical_function_run.id)
                 .await?;
             assert_eq!(physical_function_runs.len(), 1);
             let physical_function_run = &physical_function_runs[0];
             let lfr: LogicalFunctionRunDB = db
                 .fetch_one::<LogicalFunctionRunDB>(and!(
-                    &physical_function_run.base.execution_id,
-                    &physical_function_run.base.function_id
+                    &physical_function_run.execution_id,
+                    &physical_function_run.function_id
                 ))
                 .await?;
-            assert_eq!(lfr.base.status, test_function.expected_status);
+            assert_eq!(lfr.status, test_function.expected_status);
 
             // Per-attempt status on physical_table_data_versions__with_function
             // mirrors FR.status (the producer attempt's lifecycle).
             // Canonical (sticky-Committed) status lives on the producer LFR.
             let physical_table_data_versions = db
                 .timeline()
-                .fetch_all::<PhysicalTableDataVersionDBWithFunction>(&physical_function_run.base.id)
+                .fetch_all::<PhysicalTableDataVersionDBWithFunction>(&physical_function_run.id)
                 .await?;
             for physical_table_data_version in &physical_table_data_versions {
                 assert_eq!(
                     physical_table_data_version.status,
-                    physical_function_run.base.status
+                    physical_function_run.status
                 );
             }
         }
@@ -850,7 +837,7 @@ pub(crate) mod tests {
             let existing = db
                 .scd2()
                 .fetch_optional::<FunctionDBWithNames>(and!(
-                    &collection.base.collection_id,
+                    &collection.collection_id,
                     &FunctionIdName::Name(test_function.name.clone())
                 ))
                 .await?
@@ -988,7 +975,7 @@ pub(crate) mod tests {
 
                     let tables = db
                         .timeline()
-                        .fetch_all::<TableDB>(&function_versions.get(f).unwrap().base.id)
+                        .fetch_all::<TableDB>(&function_versions.get(f).unwrap().id)
                         .await
                         .unwrap();
 
@@ -1061,13 +1048,13 @@ pub(crate) mod tests {
                     let physical_table_data_versions = db
                         .timeline()
                         .fetch_all::<PhysicalTableDataVersionDB>(
-                            &function_versions.get(dependency_f).unwrap().base.id,
+                            &function_versions.get(dependency_f).unwrap().id,
                         )
                         .await
                         .unwrap();
                     let physical_table_data_versions = physical_table_data_versions
                         .iter()
-                        .map(|tdv| (&tdv.base.name, tdv))
+                        .map(|tdv| (&tdv.name, tdv))
                         .collect::<HashMap<_, _>>();
 
                     let req = db

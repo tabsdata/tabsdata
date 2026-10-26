@@ -161,21 +161,42 @@ impl FromDao for UserRead {
     type Dao = UserDBWithNames;
 
     fn from_dao(dao: UserDBWithNames) -> Result<Self, TdError> {
+        let UserDBWithNames {
+            base:
+                UserDB {
+                    name,
+                    full_name,
+                    email,
+                    created_on,
+                    created_by_id,
+                    modified_on,
+                    modified_by_id,
+                    password_set_on,
+                    password_must_change,
+                    enabled,
+                    system,
+                    id,
+                    ..
+                },
+            created_by,
+            modified_by,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.id,
-            name: dao.base.name,
-            full_name: dao.base.full_name,
-            email: dao.base.email,
-            created_on: dao.base.created_on,
-            created_by_id: dao.base.created_by_id,
-            modified_on: dao.base.modified_on,
-            modified_by_id: dao.base.modified_by_id,
-            password_set_on: dao.base.password_set_on,
-            password_must_change: dao.base.password_must_change,
-            enabled: dao.base.enabled,
-            system: dao.base.system,
-            created_by: dao.created_by,
-            modified_by: dao.modified_by,
+            id,
+            name,
+            full_name,
+            email,
+            created_on,
+            created_by_id,
+            modified_on,
+            modified_by_id,
+            password_set_on,
+            password_must_change,
+            enabled,
+            system,
+            created_by,
+            modified_by,
         })
     }
 }

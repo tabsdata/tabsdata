@@ -18,9 +18,9 @@ use td_storage::{SPath, Storage};
 
 pub fn raw_data_dir(run: &PhysicalFunctionRunDBWithNames) -> Result<SPath, TdError> {
     let (path, _) = StorageLocation::from(&run.storage_version)
-        .builder(&run.base.base.base_path)
-        .collection(&run.base.base.collection_id)
-        .function_run(&run.base.base.id)
+        .builder(&run.base_path)
+        .collection(&run.collection_id)
+        .function_run(&run.id)
         .raw()
         .build()?;
     Ok(path)
@@ -31,9 +31,9 @@ pub fn raw_data_file(
     input_idx: &InputIdx,
 ) -> Result<SPath, TdError> {
     let (path, _) = StorageLocation::from(&run.storage_version)
-        .builder(&run.base.base.base_path)
-        .collection(&run.base.base.collection_id)
-        .function_run(&run.base.base.id)
+        .builder(&run.base_path)
+        .collection(&run.collection_id)
+        .function_run(&run.id)
         .raw_input(input_idx)
         .build()?;
     Ok(path)

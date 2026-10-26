@@ -39,7 +39,7 @@ pub async fn find_data_version_location_at<S: SeesProjectRows, M: AccessMode>(
         .as_of(at)
         .fetch_one(and!(&collection_id, table))
         .await?;
-    let table_id = table_row.base.base.table_id;
+    let table_id = table_row.table_id;
     let location = resolve_table_location(conn, at, &table_id, uncommitted).await?;
     Ok((table_row, location))
 }

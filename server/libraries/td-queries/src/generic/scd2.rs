@@ -202,7 +202,7 @@ mod last_tests {
     #[td_test::test(db)]
     async fn test_last_reads_one_row_per_timeline(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        let scoped = db.scoped(p.base.project_id);
+        let scoped = db.scoped(p.project_id);
         let first = scoped
             .seed()
             .collection(&CollectionName::try_from("c").unwrap(), &UserId::admin())
@@ -240,11 +240,11 @@ mod last_tests {
 
         let last: Vec<CollectionDB> = scoped.scd2().last().fetch_all(()).await.unwrap();
         assert_eq!(last.len(), 1);
-        assert_eq!(last[0].base.id, renamed.id);
+        assert_eq!(last[0].id, renamed.id);
 
         let rows: Vec<FunctionDBWithNames> = scoped
             .scd2()
-            .fetch_all(&function.base.function_id)
+            .fetch_all(&function.function_id)
             .await
             .unwrap();
         assert_eq!(rows.len(), 1);
@@ -252,27 +252,24 @@ mod last_tests {
             rows[0].collection,
             CollectionLabel::new(renamed.name.clone())
         );
-        assert_eq!(rows[0].group_id, first.base.group_id);
+        assert_eq!(rows[0].group_id, first.group_id);
 
         scoped
             .scd2()
-            .close::<CollectionDB>(
-                &first.base.collection_id,
-                LockInstant::asserted(*AtTime::now()),
-            )
+            .close::<CollectionDB>(&first.collection_id, LockInstant::asserted(*AtTime::now()))
             .await
             .unwrap();
         let rows: Vec<FunctionDBWithNames> = scoped
             .scd2()
-            .fetch_all(&function.base.function_id)
+            .fetch_all(&function.function_id)
             .await
             .unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(
             rows[0].collection,
-            CollectionLabel::new(Label::Deleted(first.base.collection_id))
+            CollectionLabel::new(Label::Deleted(first.collection_id))
         );
-        assert_eq!(rows[0].group_id, first.base.group_id);
+        assert_eq!(rows[0].group_id, first.group_id);
         let last: Vec<CollectionDB> = scoped.scd2().last().fetch_all(()).await.unwrap();
         assert_eq!(last.len(), 1);
         assert!(!last[0].interval.valid_to.is_infinity());

@@ -54,33 +54,33 @@ async fn table_delete(
         let collection: CollectionDB = conn.scd2().fetch_one(&collection_id_name).await?;
         let table: TableDBWithNames = conn
             .scd2()
-            .fetch_one(and!(&collection.base.collection_id, &table_id_name))
+            .fetch_one(and!(&collection.collection_id, &table_id_name))
             .await?;
-        if !matches!(table.base.base.status, TableStatus::Frozen) {
+        if !matches!(table.status, TableStatus::Frozen) {
             Err(DeleteTableError::TableNotFrozen(
-                table.base.base.name.clone(),
-                collection.base.name.clone(),
+                table.name.clone(),
+                collection.name.clone(),
             ))?
         }
-        let table_id = table.base.base.table_id;
+        let table_id = table.table_id;
 
         let parent = Some(Parent::from(table_id));
         let children: Vec<TableDB> = conn
             .scd2()
-            .fetch_all(and!(&parent, &collection.base.collection_id))
+            .fetch_all(and!(&parent, &collection.collection_id))
             .await?;
         for child in &children {
-            if !matches!(child.base.status, TableStatus::Frozen) {
+            if !matches!(child.status, TableStatus::Frozen) {
                 Err(DeleteTableError::DerivedTableNotFrozen(
-                    child.base.name.clone(),
-                    table.base.base.name.clone(),
-                    collection.base.name.clone(),
+                    child.name.clone(),
+                    table.name.clone(),
+                    collection.name.clone(),
                 ))?
             }
         }
         let mut table_ids = Vec::with_capacity(children.len() + 1);
         table_ids.push(table_id);
-        table_ids.extend(children.iter().map(|child| child.base.table_id));
+        table_ids.extend(children.iter().map(|child| child.table_id));
 
         let functions = dependants_of_tables(conn, &table_ids).await?;
         ensure_freezes_on_top(conn, &functions, at).await?;
@@ -129,7 +129,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -159,7 +159,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -181,7 +181,7 @@ mod tests {
                     CollectionParam {
                         collection: CollectionIdName::from_str(&format!(
                             "~{}",
-                            collection.base.collection_id
+                            collection.collection_id
                         ))?,
                     },
                     FunctionParam {
@@ -190,7 +190,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -201,14 +201,14 @@ mod tests {
                 CollectionParam {
                     collection: CollectionIdName::from_str(&format!(
                         "~{}",
-                        collection.base.collection_id
+                        collection.collection_id
                     ))?,
                 },
                 TableParam {
                     table: TableIdName::from_str("super_table")?,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         service.table_delete(request).await?;
@@ -229,7 +229,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cascade")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -275,13 +275,13 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let collection_param = CollectionParam {
-            collection: CollectionIdName::from_str(&format!("~{}", collection.base.collection_id))?,
+            collection: CollectionIdName::from_str(&format!("~{}", collection.collection_id))?,
         };
         service
             .register_function(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(collection_param.clone(), create)
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -309,7 +309,7 @@ mod tests {
                         ),
                         update,
                     )
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -322,7 +322,7 @@ mod tests {
                             table: TableIdName::from_str("super_table")?,
                         },
                     ))
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -351,7 +351,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cascade_dqs")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -389,13 +389,13 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let collection_param = CollectionParam {
-            collection: CollectionIdName::from_str(&format!("~{}", collection.base.collection_id))?,
+            collection: CollectionIdName::from_str(&format!("~{}", collection.collection_id))?,
         };
         service
             .register_function(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(collection_param.clone(), create)
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -421,7 +421,7 @@ mod tests {
                         ),
                         update,
                     )
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -434,7 +434,7 @@ mod tests {
                             table: TableIdName::from_str("super_table")?,
                         },
                     ))
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -460,7 +460,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cascade_live")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -506,13 +506,13 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         let collection_param = CollectionParam {
-            collection: CollectionIdName::from_str(&format!("~{}", collection.base.collection_id))?,
+            collection: CollectionIdName::from_str(&format!("~{}", collection.collection_id))?,
         };
         service
             .register_function(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .create(collection_param.clone(), create)
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -541,7 +541,7 @@ mod tests {
                         ),
                         update,
                     )
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await?;
 
@@ -554,7 +554,7 @@ mod tests {
                             table: TableIdName::from_str("super_table")?,
                         },
                     ))
-                    .in_project(p.base.project_id),
+                    .in_project(p.project_id),
             )
             .await
             .expect_err("a live derived table refuses the delete");
@@ -576,7 +576,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -603,7 +603,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -613,14 +613,14 @@ mod tests {
                 CollectionParam {
                     collection: CollectionIdName::from_str(&format!(
                         "~{}",
-                        collection.base.collection_id
+                        collection.collection_id
                     ))?,
                 },
                 TableParam {
                     table: TableIdName::from_str("super_table")?,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let error = service.table_delete(request).await.unwrap_err();
@@ -643,7 +643,7 @@ mod tests {
         let p = db.seed().test_project().await?;
         let collection_name = CollectionName::try_from("cofnig")?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&collection_name, &UserId::admin())
             .await?;
@@ -673,7 +673,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -700,7 +700,7 @@ mod tests {
         };
 
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -722,7 +722,7 @@ mod tests {
                     CollectionParam {
                         collection: CollectionIdName::from_str(&format!(
                             "~{}",
-                            collection.base.collection_id
+                            collection.collection_id
                         ))?,
                     },
                     FunctionParam {
@@ -731,7 +731,7 @@ mod tests {
                 ),
                 update.clone(),
             )
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.update_function(request).await;
@@ -742,14 +742,14 @@ mod tests {
                 CollectionParam {
                     collection: CollectionIdName::from_str(&format!(
                         "~{}",
-                        collection.base.collection_id
+                        collection.collection_id
                     ))?,
                 },
                 TableParam {
                     table: TableIdName::from_str("super_table")?,
                 },
             ))
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         service.table_delete(request).await?;

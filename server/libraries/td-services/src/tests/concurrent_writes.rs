@@ -44,7 +44,7 @@ async fn test_write_units_are_serializable(db: TdPool) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let across =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut trx = DbPool::in_project(&across, &p.base.project_id)
+    let mut trx = DbPool::in_project(&across, &p.project_id)
         .begin(Attempt::unretried())
         .await?;
     let isolation = show_setting(
@@ -64,14 +64,14 @@ async fn test_concurrent_creates_of_one_collection_name_leave_one(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let services = Services::with_defaults(db.clone());
-    let outcomes =
-        join_all((0..CONTENDERS).map(|_| {
-            services.create_collection(create_request(p.base.project_id, "c_twin", None))
-        }))
-        .await;
+    let outcomes = join_all(
+        (0..CONTENDERS)
+            .map(|_| services.create_collection(create_request(p.project_id, "c_twin", None))),
+    )
+    .await;
     one_winner(outcomes);
     let live: Vec<CollectionDB> = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .scd2()
         .fetch_all(&CollectionName::try_from("c_twin")?)
         .await?;

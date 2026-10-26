@@ -112,9 +112,9 @@ impl ProjectTopology {
             table_order: tables.iter().map(|t| t.table_id).collect(),
             collections: collections
                 .into_iter()
-                .map(|c| (c.base.collection_id, c))
+                .map(|c| (c.collection_id, c))
                 .collect(),
-            groups: groups.into_iter().map(|g| (g.base.group_id, g)).collect(),
+            groups: groups.into_iter().map(|g| (g.group_id, g)).collect(),
             tables: tables.into_iter().map(|t| (t.table_id, t)).collect(),
             functions: functions.into_iter().map(|f| (f.function_id, f)).collect(),
             triggers,
@@ -125,16 +125,14 @@ impl ProjectTopology {
 
     fn collection_label(&self, collection: &CollectionId) -> CollectionLabel {
         match self.collections.get(collection) {
-            Some(c) if c.interval.valid_to.is_infinity() => {
-                CollectionLabel::new(c.base.name.clone())
-            }
+            Some(c) if c.interval.valid_to.is_infinity() => CollectionLabel::new(c.name.clone()),
             _ => CollectionLabel::new(Label::Deleted(*collection)),
         }
     }
 
     fn group_label(&self, group: &GroupId) -> GroupLabel {
         match self.groups.get(group) {
-            Some(g) if g.interval.valid_to.is_infinity() => GroupLabel::new(g.base.name.clone()),
+            Some(g) if g.interval.valid_to.is_infinity() => GroupLabel::new(g.name.clone()),
             _ => GroupLabel::new(Label::Deleted(*group)),
         }
     }

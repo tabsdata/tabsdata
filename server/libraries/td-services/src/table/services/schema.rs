@@ -154,7 +154,7 @@ mod tests {
         let storage = Ctx::new(storage);
 
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -184,7 +184,7 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
@@ -195,20 +195,20 @@ mod tests {
         let mut at_times = vec![AtTime::now()];
         for i in 0..3 {
             let execution = db
-                .scoped(p.base.project_id)
+                .scoped(p.project_id)
                 .seed()
                 .execution(&function_version)
                 .await?;
             let transaction_key = TransactionKey::try_from("ANY")?;
             let transaction = db
-                .scoped(p.base.project_id)
+                .scoped(p.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?;
 
             at_times.push(AtTime::now());
             let physical_function_run = db
-                .scoped(p.base.project_id)
+                .scoped(p.project_id)
                 .seed()
                 .physical_function_run(
                     &collection,
@@ -224,7 +224,7 @@ mod tests {
                 let table_version: TableDB = db
                     .scd2()
                     .fetch_one::<TableDBWithNames>(and!(
-                        &collection.base.collection_id,
+                        &collection.collection_id,
                         &TableIdName::Name(table.clone())
                     ))
                     .await?
@@ -232,7 +232,7 @@ mod tests {
 
                 if i % 2 == 0 {
                     let physical_table_data_version = db
-                        .scoped(p.base.project_id)
+                        .scoped(p.project_id)
                         .seed()
                         .physical_table_data_version_with_data(
                             &collection,
@@ -244,12 +244,12 @@ mod tests {
                         .await?;
 
                     let (path, _) = StorageLocation::from(&storage_location)
-                        .builder(&physical_table_data_version.base.base_path)
-                        .collection(&physical_table_data_version.base.collection_id)
-                        .data(&physical_table_data_version.base.id)
+                        .builder(&physical_table_data_version.base_path)
+                        .collection(&physical_table_data_version.collection_id)
+                        .data(&physical_table_data_version.id)
                         .table(
-                            &physical_table_data_version.base.table_id,
-                            &physical_table_data_version.base.table_version_id,
+                            &physical_table_data_version.table_id,
+                            &physical_table_data_version.table_version_id,
                         )
                         .build()?;
 
@@ -291,7 +291,7 @@ mod tests {
                     .collect()
                     .unwrap();
                 } else {
-                    db.scoped(p.base.project_id)
+                    db.scoped(p.project_id)
                         .seed()
                         .physical_table_data_version(
                             &collection,
@@ -344,9 +344,9 @@ mod tests {
         // No data before the first function run
         let response_with_ids = get_schema(
             db.clone(),
-            p.base.project_id,
+            p.project_id,
             storage.clone(),
-            format!("~{}", collection.base.collection_id).as_str(),
+            format!("~{}", collection.collection_id).as_str(),
             created_tables[0].as_str(),
             &at_times[0],
         )
@@ -356,9 +356,9 @@ mod tests {
 
         let response_with_names = get_schema(
             db.clone(),
-            p.base.project_id,
+            p.project_id,
             storage.clone(),
-            &collection.base.name,
+            &collection.name,
             created_tables[0].as_str(),
             &at_times[0],
         )
@@ -368,9 +368,9 @@ mod tests {
 
         let response_with_ids = get_schema(
             db.clone(),
-            p.base.project_id,
+            p.project_id,
             storage.clone(),
-            format!("~{}", collection.base.collection_id).as_str(),
+            format!("~{}", collection.collection_id).as_str(),
             created_tables[0].as_str(),
             &at_times[1],
         )
@@ -378,9 +378,9 @@ mod tests {
 
         let response_with_names = get_schema(
             db.clone(),
-            p.base.project_id,
+            p.project_id,
             storage.clone(),
-            &collection.base.name,
+            &collection.name,
             created_tables[0].as_str(),
             &at_times[1],
         )
@@ -405,9 +405,9 @@ mod tests {
         // Schema named 0 at second function run (as it has no data, it doesn't change)
         let response_with_ids = get_schema(
             db.clone(),
-            p.base.project_id,
+            p.project_id,
             storage.clone(),
-            format!("~{}", collection.base.collection_id).as_str(),
+            format!("~{}", collection.collection_id).as_str(),
             created_tables[0].as_str(),
             &at_times[2],
         )
@@ -415,9 +415,9 @@ mod tests {
 
         let response_with_names = get_schema(
             db.clone(),
-            p.base.project_id,
+            p.project_id,
             storage.clone(),
-            &collection.base.name,
+            &collection.name,
             created_tables[0].as_str(),
             &at_times[2],
         )
@@ -442,9 +442,9 @@ mod tests {
         // Schema named 2 at third function run (skip 1 as second run had no data)
         let response_with_ids = get_schema(
             db.clone(),
-            p.base.project_id,
+            p.project_id,
             storage.clone(),
-            format!("~{}", collection.base.collection_id).as_str(),
+            format!("~{}", collection.collection_id).as_str(),
             created_tables[0].as_str(),
             &at_times[3],
         )
@@ -452,9 +452,9 @@ mod tests {
 
         let response_with_names = get_schema(
             db.clone(),
-            p.base.project_id,
+            p.project_id,
             storage.clone(),
-            &collection.base.name,
+            &collection.name,
             created_tables[0].as_str(),
             &at_times[3],
         )

@@ -123,21 +123,21 @@ impl RecoveryActions {
         }
         for worker in self.stage_exits {
             grouped
-                .entry(worker.base.project_id)
+                .entry(worker.project_id)
                 .or_default()
                 .stage_exits
                 .push(worker);
         }
         for worker in self.cron_recreates {
             grouped
-                .entry(worker.base.project_id)
+                .entry(worker.project_id)
                 .or_default()
                 .cron_recreates
                 .push(worker);
         }
         for worker in self.stage_recreates {
             grouped
-                .entry(worker.base.project_id)
+                .entry(worker.project_id)
                 .or_default()
                 .stage_recreates
                 .push(worker);
@@ -166,12 +166,12 @@ pub async fn fn_candidates<S: SeesProjectRows, M: AccessMode>(
         return Ok(FnCandidates::default());
     }
     // Oldest-dispatched first, so the per-tick cap never starves a run.
-    pfrs.sort_by_key(|a| a.base.dispatched_on);
+    pfrs.sort_by_key(|a| a.dispatched_on);
 
     // Condition columns resolve by exact field type: the nullable worker
     // column needs `Option`-wrapped keys.
     let pfr_ids: Vec<Option<PhysicalFunctionRunId>> =
-        pfrs.iter().map(|pfr| Some(pfr.base.id.clone())).collect();
+        pfrs.iter().map(|pfr| Some(pfr.id.clone())).collect();
     let workers: Vec<WorkerDB> = conn.chunked().fetch_all::<WorkerDB>(&pfr_ids, ()).await?;
     let worker_by_pfr: HashMap<&PhysicalFunctionRunId, &WorkerDB> = workers
         .iter()
@@ -187,9 +187,7 @@ pub async fn fn_candidates<S: SeesProjectRows, M: AccessMode>(
     let attempts = pfrs
         .iter()
         .map(|pfr| FnAttempt {
-            worker_id: worker_by_pfr
-                .get(&pfr.base.id)
-                .map(|worker| worker.base.id.clone()),
+            worker_id: worker_by_pfr.get(&pfr.id).map(|worker| worker.id.clone()),
             pfr: pfr.clone(),
         })
         .collect();
@@ -206,14 +204,14 @@ pub async fn stage_trigger_functions<S: SeesProjectRows, M: AccessMode>(
     let fvids: Vec<FunctionVersionId> = stage
         .0
         .iter()
-        .map(|worker| worker.base.base.function_version_id.clone())
+        .map(|worker| worker.function_version_id.clone())
         .collect();
     let functions = conn
         .logical_runs()
         .with_bundle_base_path(&fvids)
         .await?
         .into_iter()
-        .map(|function| (function.base.base.id.clone(), function))
+        .map(|function| (function.id.clone(), function))
         .collect();
     Ok(StageFunctions(functions))
 }
@@ -231,7 +229,7 @@ pub async fn current_trigger_versions<S: SeesProjectRows, M: AccessMode>(
         .0
         .iter()
         .chain(stage.0.iter())
-        .map(|worker| worker.base.base.function_version_id.clone())
+        .map(|worker| worker.function_version_id.clone())
         .unique()
         .collect();
     if fvids.is_empty() {
@@ -261,8 +259,7 @@ pub fn build_recovery_snapshot(
     // Outdated-version trigger workers are not recovery's to maintain
     // (fn update/disable supersedes them; their leftover workloads fall to
     // the orphan pass).
-    let is_current =
-        |worker: &&WorkerDBWithNames| current.0.contains(&worker.base.base.function_version_id);
+    let is_current = |worker: &&WorkerDBWithNames| current.0.contains(&worker.function_version_id);
     Ok(RecoverySnapshot {
         at: *at,
         cron: cron.0.iter().filter(is_current).cloned().collect(),
@@ -330,7 +327,7 @@ pub fn classify_divergence(
             .worker_id
             .as_ref()
             .and_then(|worker_id| workload_by_worker.get(worker_id).copied());
-        let dispatched_old = before(&attempt.pfr.base.dispatched_on.map(|d| *d), &grace_cutoff);
+        let dispatched_old = before(&attempt.pfr.dispatched_on.map(|d| *d), &grace_cutoff);
         // The backend answers for a Start it holds: it creates the workload or
         // gives it up, and only then can the workload be missing.
         let queued = attempt
@@ -346,14 +343,14 @@ pub fn classify_divergence(
             None => None,
             Some(w) => match w.phase {
                 WorkloadPhase::Pending => {
-                    if attempt.pfr.base.status == PhysicalFunctionRunStatus::Dispatched
+                    if attempt.pfr.status == PhysicalFunctionRunStatus::Dispatched
                         && before_or_undated(&w.phase_since, &prerun_cutoff)
                         && dispatched_old
                     {
                         Some((true, true, "exceeded max pre-running time".to_string()))
-                    } else if attempt.pfr.base.status == PhysicalFunctionRunStatus::Running
+                    } else if attempt.pfr.status == PhysicalFunctionRunStatus::Running
                         && running_cutoff
-                            .map(|cutoff| before(&attempt.pfr.base.started_on.map(|s| *s), &cutoff))
+                            .map(|cutoff| before(&attempt.pfr.started_on.map(|s| *s), &cutoff))
                             .unwrap_or(false)
                     {
                         Some((true, false, "exceeded max running time".to_string()))
@@ -375,10 +372,7 @@ pub fn classify_divergence(
                     // callback may still be retrying through an outage.
                     let finished_old = match &w.finished_at {
                         Some(finished) => dt(finished) < completion_cutoff,
-                        None => before(
-                            &attempt.pfr.base.dispatched_on.map(|d| *d),
-                            &completion_cutoff,
-                        ),
+                        None => before(&attempt.pfr.dispatched_on.map(|d| *d), &completion_cutoff),
                     };
                     if finished_old {
                         // Outputs never bound; a fresh attempt is the only
@@ -436,8 +430,8 @@ pub fn classify_divergence(
         if let Some((remove, recover, reason)) = outcome {
             decisions.fn_actions.push(FnRecoveryAction {
                 worker_id: attempt.worker_id.clone(),
-                pfr_id: attempt.pfr.base.id.clone(),
-                seen: attempt.pfr.base.status,
+                pfr_id: attempt.pfr.id.clone(),
+                seen: attempt.pfr.status,
                 project_id: attempt.pfr.project_id,
                 lfr: None,
                 recover,
@@ -449,7 +443,7 @@ pub fn classify_divergence(
     }
 
     for worker in &snapshot.cron {
-        match workload_by_worker.get(&worker.base.base.id) {
+        match workload_by_worker.get(&worker.id) {
             None => decisions.cron_recreates.push(worker.clone()),
             // A CronJob is created suspended and released once complete; one
             // left suspended past the grace never fires.
@@ -459,16 +453,16 @@ pub fn classify_divergence(
             {
                 decisions
                     .cron_restarts
-                    .push((worker.base.base.id.clone(), (*w).clone()));
+                    .push((worker.id.clone(), (*w).clone()));
             }
             Some(_) => {}
         }
     }
 
     for worker in &snapshot.stage {
-        match workload_by_worker.get(&worker.base.base.id) {
+        match workload_by_worker.get(&worker.id) {
             // A streamer that reported Done exited while it should run.
-            None if worker.base.base.status == WorkerStatus::Done => {
+            None if worker.status == WorkerStatus::Done => {
                 decisions.stage_exits.push(worker.clone())
             }
             None => decisions.stage_recreates.push(worker.clone()),
@@ -479,7 +473,7 @@ pub fn classify_divergence(
                     // Streamers are services: an exit is a failure, which
                     // restarts with backoff. One already failed is restarting.
                     WorkloadPhase::Succeeded | WorkloadPhase::Failed => {
-                        if worker.base.base.status != WorkerStatus::Failed {
+                        if worker.status != WorkerStatus::Failed {
                             decisions.stage_exits.push(worker.clone());
                             continue;
                         }
@@ -493,7 +487,7 @@ pub fn classify_divergence(
                 if restart {
                     decisions
                         .stage_restarts
-                        .push((worker.base.base.id.clone(), (*w).clone()));
+                        .push((worker.id.clone(), (*w).clone()));
                 }
             }
         }
@@ -508,10 +502,10 @@ pub fn classify_divergence(
         }
     }
     for worker in &snapshot.cron {
-        expected.insert(&worker.base.base.id);
+        expected.insert(&worker.id);
     }
     for worker in &snapshot.stage {
-        expected.insert(&worker.base.base.id);
+        expected.insert(&worker.id);
     }
     for workload in &observation.workloads {
         let Some(worker_id) = &workload.worker_id else {
@@ -721,22 +715,22 @@ pub async fn recreate_trigger_workloads(
     stage_functions: &HashMap<FunctionVersionId, FunctionDBWithBundleBasePath>,
 ) {
     for worker in &actions.cron_recreates {
-        warn!(worker_id = %worker.base.base.id, "recovery: recreating cron workload");
+        warn!(worker_id = %worker.id, "recovery: recreating cron workload");
         if let Err(e) = put_cron_trigger_start(bridge, internal_api, worker).await {
             warn!(
-                worker_id = %worker.base.base.id,
+                worker_id = %worker.id,
                 reason = ?e,
                 "recovery: cron recreate failed; retrying next tick"
             );
         }
     }
     for worker in &actions.stage_recreates {
-        warn!(worker_id = %worker.base.base.id, "recovery: recreating streamer workload");
+        warn!(worker_id = %worker.id, "recovery: recreating streamer workload");
         if let Err(e) =
             put_stage_trigger_start(bridge, storage, internal_api, stage_functions, worker).await
         {
             warn!(
-                worker_id = %worker.base.base.id,
+                worker_id = %worker.id,
                 reason = ?e,
                 "recovery: streamer recreate failed; retrying next tick"
             );
@@ -773,11 +767,11 @@ pub async fn finalize_recovery_actions<S: SeesProjectRows, M: AccessMode>(
         .fetch_all::<PhysicalFunctionRunDB>(&pfr_ids, ())
         .await?;
     let pfr_by_id: HashMap<&PhysicalFunctionRunId, &PhysicalFunctionRunDB> =
-        current_pfrs.iter().map(|pfr| (&pfr.base.id, pfr)).collect();
+        current_pfrs.iter().map(|pfr| (&pfr.id, pfr)).collect();
 
     let execution_ids: Vec<ExecutionId> = current_pfrs
         .iter()
-        .map(|pfr| pfr.base.execution_id.clone())
+        .map(|pfr| pfr.execution_id.clone())
         .unique()
         .collect();
     let lfrs: Vec<LogicalFunctionRunDB> = conn
@@ -806,24 +800,24 @@ pub async fn finalize_recovery_actions<S: SeesProjectRows, M: AccessMode>(
         let Some(pfr) = pfr_by_id.get(&action.pfr_id) else {
             continue;
         };
-        if pfr.base.status != action.seen {
+        if pfr.status != action.seen {
             debug!(
                 function_run_id = %action.pfr_id,
                 seen = %action.seen,
-                now = %pfr.base.status,
+                now = %pfr.status,
                 "recovery: attempt moved since it was judged; its report wins"
             );
             continue;
         }
         let lfr = lfr_by_exec_fn
-            .get(&pfr.base.execution_id)
-            .and_then(|by_fn| by_fn.get(&pfr.base.function_id))
+            .get(&pfr.execution_id)
+            .and_then(|by_fn| by_fn.get(&pfr.function_id))
             .cloned();
         let lfr_recoverable = lfr
             .as_ref()
             .map(|lfr| {
                 matches!(
-                    lfr.base.status,
+                    lfr.status,
                     LogicalFunctionRunStatus::Requested | LogicalFunctionRunStatus::Running
                 )
             })
@@ -911,8 +905,8 @@ pub fn fail_running_lfrs_for_recover(
         .iter()
         .filter(|action| action.recover)
         .filter_map(|action| action.lfr.clone())
-        .filter(|lfr| lfr.base.status == LogicalFunctionRunStatus::Running)
-        .unique_by(|lfr| lfr.base.id.clone())
+        .filter(|lfr| lfr.status == LogicalFunctionRunStatus::Running)
+        .unique_by(|lfr| lfr.id.clone())
         .collect())
 }
 
@@ -926,13 +920,13 @@ pub fn recover_lfrs_from_actions(
         .filter_map(|action| action.lfr.clone())
         .filter(|lfr| {
             matches!(
-                lfr.base.status,
+                lfr.status,
                 LogicalFunctionRunStatus::Requested | LogicalFunctionRunStatus::Running
             )
         })
         // Running rows were failed just above in this transaction; the
         // status validator reads the in-memory row, so reflect that here.
-        .map(|lfr| match lfr.base.status {
+        .map(|lfr| match lfr.status {
             LogicalFunctionRunStatus::Running => LogicalFunctionRunDB {
                 base: LogicalFunctionRunInsertDB {
                     status: LogicalFunctionRunStatus::Failed,
@@ -942,7 +936,7 @@ pub fn recover_lfrs_from_actions(
             },
             _ => lfr,
         })
-        .unique_by(|lfr| lfr.base.id.clone())
+        .unique_by(|lfr| lfr.id.clone())
         .collect())
 }
 
@@ -956,11 +950,11 @@ pub fn fail_lfrs_from_actions(
         .filter_map(|action| action.lfr.clone())
         .filter(|lfr| {
             matches!(
-                lfr.base.status,
+                lfr.status,
                 LogicalFunctionRunStatus::Requested | LogicalFunctionRunStatus::Running
             )
         })
-        .unique_by(|lfr| lfr.base.id.clone())
+        .unique_by(|lfr| lfr.id.clone())
         .collect())
 }
 

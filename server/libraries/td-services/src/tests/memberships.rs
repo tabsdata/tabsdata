@@ -151,7 +151,7 @@ async fn test_a_project_delete_and_a_user_delete_do_not_deadlock(
         .scd2()
         .fetch_one(&ProjectName::try_from("p_gone")?)
         .await?;
-    let roles: Vec<RoleDB> = conn.fetch_all(Some(current.base.project_id)).await?;
+    let roles: Vec<RoleDB> = conn.fetch_all(Some(current.project_id)).await?;
     conn.delete::<PermissionDB>(roles[0].id).await?;
     conn.delete::<UserRoleDB>(roles[0].id).await?;
 
@@ -179,16 +179,16 @@ async fn test_a_project_delete_and_a_user_delete_do_not_deadlock(
             conn.delete::<PermissionDB>(role.id).await?;
             conn.delete::<UserRoleDB>(role.id).await?;
         }
-        conn.delete::<RoleDB>(Some(current.base.project_id)).await?;
+        conn.delete::<RoleDB>(Some(current.project_id)).await?;
         Ok(())
     }
     .await;
     if cascade.is_ok() {
-        let mut gate = gate.enter_project(&current.base.project_id).await?;
+        let mut gate = gate.enter_project(&current.project_id).await?;
         let at = gate.locked_at();
         let conn = gate.get(Grant::asserted("project delete held open"));
         conn.scd2()
-            .close::<ProjectDB>(&current.base.project_id, at)
+            .close::<ProjectDB>(&current.project_id, at)
             .await?;
         gate.commit().await?;
     } else {
@@ -265,7 +265,7 @@ async fn test_a_simple_grant_lands_in_the_resolved_projects_role(
         description: None,
         secrets: None,
     };
-    rename_project_roles(conn, &ctx, &current.base.project_id, &rename, &current).await?;
+    rename_project_roles(conn, &ctx, &current.project_id, &rename, &current).await?;
     conn.scd2()
         .open(&current.updated(&rename, &ctx), seed_instant())
         .await?;

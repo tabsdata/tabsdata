@@ -23,13 +23,13 @@ pub fn assert_function_version(
     function_version_id: &FunctionVersionId,
     function: &FunctionDBWithNames,
 ) -> Result<(), TdError> {
-    if function.base.base.id != *function_version_id {
+    if function.id != *function_version_id {
         Err(api_error!(
             ApiError::InputError,
             r#"Function version missmatch. There is a newer version of the function.
             Requested function version '{}' must be the current version of the function '{}'."#,
             function_version_id,
-            function.base.base.id
+            function.id
         ))?
     }
     Ok(())
@@ -60,23 +60,20 @@ pub async fn running_execution<S: SeesProjectRows, M: AccessMode>(
         return Ok(None);
     };
     let lfr: Option<LogicalFunctionRunDB> = conn
-        .fetch_optional(and!(
-            &latest_execution.base.id,
-            &latest_execution.base.function_id,
-        ))
+        .fetch_optional(and!(&latest_execution.id, &latest_execution.function_id,))
         .await?;
     let physical_function_run: Option<PhysicalFunctionRunDB> = match lfr {
         Some(lfr) => {
             conn.scd2()
-                .fetch_optional::<PhysicalFunctionRunDB>(&lfr.base.id)
+                .fetch_optional::<PhysicalFunctionRunDB>(&lfr.id)
                 .await?
         }
         None => None,
     };
     match physical_function_run {
-        Some(fr) if !fr.base.status.is_ended() => {
-            debug!(physical_function_run_id = %fr.base.id, status = ?fr.base.status, "Latest function run running");
-            Ok(Some(latest_execution.base.id.clone()))
+        Some(fr) if !fr.status.is_ended() => {
+            debug!(physical_function_run_id = %fr.id, status = ?fr.status, "Latest function run running");
+            Ok(Some(latest_execution.id.clone()))
         }
         _ => Ok(None),
     }
@@ -111,14 +108,13 @@ pub async fn external_uid_holder<S: SeesProjectRows>(
     let Some(existing) = existing else {
         return Ok(None);
     };
-    let lfr: Option<LogicalFunctionRunDB> = conn
-        .fetch_optional(and!(&existing.base.id, function_id))
-        .await?;
-    let outcome = match lfr.map(|lfr| lfr.base.status) {
+    let lfr: Option<LogicalFunctionRunDB> =
+        conn.fetch_optional(and!(&existing.id, function_id)).await?;
+    let outcome = match lfr.map(|lfr| lfr.status) {
         Some(LogicalFunctionRunStatus::Canceled | LogicalFunctionRunStatus::Yanked) => {
             conn.update::<ExecutionExternalUidReleaseDB>(
                 &ExecutionExternalUidReleaseDB::released(),
-                &existing.base.id,
+                &existing.id,
             )
             .await?;
             return Ok(None);

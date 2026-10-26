@@ -94,11 +94,11 @@ mod tests {
 
         let found = db
             .scd2()
-            .fetch_one::<ProjectDB>(&project.base.project_id)
+            .fetch_one::<ProjectDB>(&project.project_id)
             .await
             .unwrap();
-        assert_eq!(found.base.project_id, project.base.project_id);
-        assert_eq!(found.base.name, project.base.name);
+        assert_eq!(found.project_id, project.project_id);
+        assert_eq!(found.name, project.name);
 
         // Project tagging is covered by `test_collection_rls_scoped_by_project`.
         for (kind, name) in [
@@ -107,16 +107,16 @@ mod tests {
             (GroupKind::Destinations, GroupName::destination()),
         ] {
             let group: GroupDB = db
-                .scoped(project.base.project_id)
+                .scoped(project.project_id)
                 .scd2()
                 .fetch_one::<GroupDB>(&name)
                 .await
                 .unwrap();
             assert_eq!(
-                group.base.kind, kind,
+                group.kind, kind,
                 "system group '{name}' must carry its kind"
             );
-            assert!(*group.base.system);
+            assert!(*group.system);
         }
     }
 }

@@ -25,7 +25,7 @@ async fn read_project(
     let row: ProjectDBWithNames = conn.scd2().fetch_one(&id_name).await?;
     // Reading a project's metadata requires `view_project` on that project.
     let _grant = authz
-        .require::<Project, ViewProject>(conn, &ctx, &row.base.base.project_id)
+        .require::<Project, ViewProject>(conn, &ctx, &row.project_id)
         .await?;
     ProjectRead::from_dao(row)
 }

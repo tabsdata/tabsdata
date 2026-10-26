@@ -33,9 +33,9 @@ async fn delete_role(
         let role: RoleDBWithNames = conn.fetch_one(&param.role).await?;
         assert_not_fixed(&role)?;
 
-        conn.delete::<PermissionDB>(role.base.id).await?;
-        conn.delete::<UserRoleDB>(role.base.id).await?;
-        conn.delete::<RoleDB>(role.base.id).await?;
+        conn.delete::<PermissionDB>(role.id).await?;
+        conn.delete::<UserRoleDB>(role.id).await?;
+        conn.delete::<RoleDB>(role.id).await?;
         trx.commit().await?;
         Ok(())
     })

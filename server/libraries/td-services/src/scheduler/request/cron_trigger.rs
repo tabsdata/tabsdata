@@ -46,7 +46,7 @@ pub fn create_locked_cron_trigger_workers_start_request(
                 kept.push(cron_trigger_worker);
             }
             Err(e) => warn!(
-                worker_id = %cron_trigger_worker.base.base.id,
+                worker_id = %cron_trigger_worker.id,
                 reason = ?e,
                 "request: skipping cron-trigger start; will retry next tick"
             ),
@@ -60,19 +60,19 @@ pub(crate) fn cron_trigger_start_message(
     kubernetes: bool,
     cron_trigger_worker: &WorkerDBWithNames,
 ) -> Result<(String, OrchestratorMessagePayload<serde_yaml::Value>), TdError> {
-    let worker_id = cron_trigger_worker.base.base.id.to_string();
-    let callback = internal_api.worker_responder(&cron_trigger_worker.base.base.id)?;
+    let worker_id = cron_trigger_worker.id.to_string();
+    let callback = internal_api.worker_responder(&cron_trigger_worker.id)?;
 
     // Build trigger task (tokenized POST to the execute endpoint).
     let task = internal_api.function_version_execute(
-        &cron_trigger_worker.base.base.function_version_id,
+        &cron_trigger_worker.function_version_id,
         HashMap::from([("content-type".to_string(), "application/json".to_string())]),
     )?;
 
     let payload = if kubernetes {
         // Kubernetes: lean request built entirely from the worker
         // row. The pod resolves its message from the resolver.
-        let resolver = internal_api.worker_resolver(&cron_trigger_worker.base.base.id)?;
+        let resolver = internal_api.worker_resolver(&cron_trigger_worker.id)?;
         // The CronJob's schedule must be known when the gateway
         // creates it, so the mask travels in the start request
         // rather than being resolved in-pod later. It is not a
@@ -100,22 +100,22 @@ pub(crate) fn cron_trigger_start_message(
         OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(CronRequest::Start(
             CronStartRequest {
                 worker: WorkerName::CronTrigger,
-                worker_id: cron_trigger_worker.base.base.id.clone(),
+                worker_id: cron_trigger_worker.id.clone(),
                 resolver,
                 trigger: Callback::Http(task),
                 responder: callback,
-                project_id: cron_trigger_worker.base.project_id,
+                project_id: cron_trigger_worker.project_id,
                 project: cron_trigger_worker
                     .project
                     .as_ref()
                     .map(|p| p.name())
                     .transpose()?,
-                collection_id: cron_trigger_worker.base.base.collection_id,
+                collection_id: cron_trigger_worker.collection_id,
                 collection: cron_trigger_worker.collection.name()?,
                 connection_id: cron_trigger_worker.connection_id,
                 connection: cron_trigger_worker.connection.clone(),
                 function_id: cron_trigger_worker.function_id,
-                function_version_id: cron_trigger_worker.base.base.function_version_id.clone(),
+                function_version_id: cron_trigger_worker.function_version_id.clone(),
                 function: cron_trigger_worker.function.clone(),
                 schedule: cron_config.mask,
             },
@@ -124,14 +124,14 @@ pub(crate) fn cron_trigger_start_message(
         // Supervisor: resolve the full message here.
         // TODO ADD get_states to states
         let info = cron_trigger::Info {
-            worker_id: cron_trigger_worker.base.base.id.clone(),
-            collection_id: cron_trigger_worker.base.base.collection_id,
+            worker_id: cron_trigger_worker.id.clone(),
+            collection_id: cron_trigger_worker.collection_id,
             collection: cron_trigger_worker.collection.name()?,
-            function_version_id: cron_trigger_worker.base.base.function_version_id.clone(),
+            function_version_id: cron_trigger_worker.function_version_id.clone(),
             function: cron_trigger_worker.function.clone(),
             scheduled_on: AtTime::now(),
             task,
-            config: WorkerConfig::serialize(&cron_trigger_worker.base.base.worker_config)?,
+            config: WorkerConfig::serialize(&cron_trigger_worker.worker_config)?,
         };
         let cron_trigger_input = CronTriggerInput { info };
         let context = WorkerInput::CronTrigger(Box::new(cron_trigger_input));
@@ -185,7 +185,7 @@ pub fn create_locked_cron_trigger_workers_stop_request(
     let mut kept = Vec::with_capacity(cron_trigger_workers.len());
     for cron_trigger_worker in cron_trigger_workers {
         let built = (|| {
-            let worker_id = cron_trigger_worker.base.base.id.to_string();
+            let worker_id = cron_trigger_worker.id.to_string();
 
             // Kubernetes ships a lean Stop keyed by the worker id (so the
             // gateway can derive the pod to delete); supervisor ships a flat
@@ -196,7 +196,7 @@ pub fn create_locked_cron_trigger_workers_stop_request(
                     OrchestratorMessagePayload::OrchestratorCronRequestMessagePayload(
                         CronRequest::Stop(CronStopRequest {
                             worker: WorkerName::CronTrigger,
-                            worker_id: cron_trigger_worker.base.base.id.clone(),
+                            worker_id: cron_trigger_worker.id.clone(),
                             function_id: cron_trigger_worker.function_id,
                             function: cron_trigger_worker.function.clone(),
                         }),
@@ -226,7 +226,7 @@ pub fn create_locked_cron_trigger_workers_stop_request(
                 kept.push(cron_trigger_worker);
             }
             Err(e) => warn!(
-                worker_id = %cron_trigger_worker.base.base.id,
+                worker_id = %cron_trigger_worker.id,
                 reason = ?e,
                 "request: skipping cron-trigger stop; will retry next tick"
             ),

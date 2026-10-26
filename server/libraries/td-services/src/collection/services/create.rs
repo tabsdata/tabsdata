@@ -52,12 +52,11 @@ async fn create_collection(
             .await?;
         let conn = conn.get(grant);
         let group: GroupDB = conn.scd2().fetch_one(&create.group).await?;
-        let collection_type = CollectionType::from_group_kind(&group.base.kind);
+        let collection_type = CollectionType::from_group_kind(&group.kind);
         // source/destination collections carry connection config: manage_project
         escalate_for_connected(&authz, conn, &ctx, &project, &collection_type).await?;
         let plan =
-            plan_collection_create(conn, &ctx, &create, &group.base.group_id, &collection_type)
-                .await?;
+            plan_collection_create(conn, &ctx, &create, &group.group_id, &collection_type).await?;
         (plan, grant)
     };
 
@@ -184,7 +183,7 @@ mod tests {
         let before = AtTime::now();
         let service = Services::with_defaults(db.clone());
         let response = service
-            .create_collection(request(p.base.project_id, create))
+            .create_collection(request(p.project_id, create))
             .await;
         assert!(response.is_ok());
         let created = response.unwrap().data;
@@ -229,7 +228,7 @@ mod tests {
             secrets: None,
         };
         let response = Services::with_defaults(db.clone())
-            .create_collection(request(p.base.project_id, create))
+            .create_collection(request(p.project_id, create))
             .await;
         assert!(
             response.is_err(),
@@ -242,7 +241,7 @@ mod tests {
     async fn test_create_collection_resolves_group_by_name(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let group = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),
@@ -263,7 +262,7 @@ mod tests {
 
         let service = Services::with_defaults(db.clone());
         service
-            .create_collection(request(p.base.project_id, create))
+            .create_collection(request(p.project_id, create))
             .await
             .unwrap();
 
@@ -272,7 +271,7 @@ mod tests {
             .fetch_one::<td_objects::dxo::collection::CollectionDBWithNames>(&name)
             .await
             .unwrap();
-        assert_eq!(found.base.base.group_id, group.base.group_id);
+        assert_eq!(found.group_id, group.group_id);
         assert_eq!(found.group, GroupLabel::new(group.base.name));
     }
 
@@ -283,7 +282,7 @@ mod tests {
         // source/destination cases go through `create_collection`, which
         // attaches the (now mandatory) connection payload.
         let p = db.seed().test_project().await.unwrap();
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
             .group(
                 GroupName::try_from("analytics").unwrap(),
@@ -292,17 +291,11 @@ mod tests {
             .await
             .unwrap();
 
-        create_collection(&db, p.base.project_id, "c_src", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "c_src", Some(GroupName::source())).await;
+        create_collection(&db, p.project_id, "c_dst", Some(GroupName::destination())).await;
         create_collection(
             &db,
-            p.base.project_id,
-            "c_dst",
-            Some(GroupName::destination()),
-        )
-        .await;
-        create_collection(
-            &db,
-            p.base.project_id,
+            p.project_id,
             "c_fac",
             Some(GroupName::try_from("analytics").unwrap()),
         )
@@ -320,10 +313,7 @@ mod tests {
                 )
                 .await
                 .unwrap();
-            assert_eq!(
-                found.base.base.collection_type, expected,
-                "collection {name}"
-            );
+            assert_eq!(found.collection_type, expected, "collection {name}");
         }
     }
 
@@ -338,7 +328,7 @@ mod tests {
 
         create
             .create_collection(create_request(
-                p.base.project_id,
+                p.project_id,
                 "dup",
                 Some(GroupName::source()),
             ))
@@ -350,7 +340,7 @@ mod tests {
         // rollback.
         let err = create
             .create_collection(create_request(
-                p.base.project_id,
+                p.project_id,
                 "dup",
                 Some(GroupName::source()),
             ))
@@ -358,12 +348,10 @@ mod tests {
             .expect_err("duplicate name must be rejected before the store is touched");
         assert!(err.to_string().contains("already exists"), "got: {err}");
 
-        let connection = linked_connection(&db, p.base.project_id, "dup")
-            .await
-            .unwrap();
+        let connection = linked_connection(&db, p.project_id, "dup").await.unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.base.project_id, &connection.base.id)
+            .fetch(&p.project_id, &connection.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "dup");
@@ -392,16 +380,16 @@ mod tests {
         };
 
         create
-            .create_collection(request(p.base.project_id, payload))
+            .create_collection(request(p.project_id, payload))
             .await
             .unwrap();
 
-        let connection = linked_connection(&db, p.base.project_id, "nameless")
+        let connection = linked_connection(&db, p.project_id, "nameless")
             .await
             .unwrap();
         let stored = bridge
             .connection_store()
-            .fetch(&p.base.project_id, &connection.base.id)
+            .fetch(&p.project_id, &connection.id)
             .await
             .unwrap();
         assert_eq!(stored.connection["name"], "nameless");
@@ -419,7 +407,7 @@ mod tests {
             secrets: None,
         };
         let err = Services::with_defaults(db.clone())
-            .create_collection(request(p.base.project_id, create))
+            .create_collection(request(p.project_id, create))
             .await
             .expect_err("a source collection without a connection must be rejected");
         assert!(
@@ -440,7 +428,7 @@ mod tests {
             secrets: Some(secrets()),
         };
         let err = Services::with_defaults(db.clone())
-            .create_collection(request(p.base.project_id, create))
+            .create_collection(request(p.project_id, create))
             .await
             .expect_err("a DataFactory with a connection must be rejected");
         assert!(err.to_string().contains("cannot carry"), "got: {err}");
@@ -449,11 +437,11 @@ mod tests {
     #[td_test::test(db)]
     async fn test_create_source_links_connection(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        create_collection(&db, p.base.project_id, "src_new", Some(GroupName::source())).await;
-        let row = linked_connection(&db, p.base.project_id, "src_new")
+        create_collection(&db, p.project_id, "src_new", Some(GroupName::source())).await;
+        let row = linked_connection(&db, p.project_id, "src_new")
             .await
             .expect("the collection must be born linked");
-        assert_eq!(row.base.kind.to_string(), "mysqlSrcConn");
+        assert_eq!(row.kind.to_string(), "mysqlSrcConn");
     }
 
     #[td_test::test(db)]
@@ -474,7 +462,7 @@ mod tests {
             bridge,
             ..Services::with_defaults(db.clone())
         }
-        .create_collection(request(p.base.project_id, create))
+        .create_collection(request(p.project_id, create))
         .await
         .expect_err("store failure must surface");
         assert!(err.to_string().contains("store unreachable"), "got: {err}");
@@ -495,7 +483,7 @@ mod tests {
         // Two distinct projects to prove isolation, each seeded with its own
         // system groups. A collection resolves its default group within its
         // own project, so both projects must carry one.
-        let project_a = db.seed().test_project().await.unwrap().base.project_id;
+        let project_a = db.seed().test_project().await.unwrap().project_id;
         let project_b = db
             .seed()
             .project(ProjectName::try_from("project_b").unwrap())
@@ -548,7 +536,7 @@ mod tests {
     #[td_test::test(db)]
     async fn test_source_create_requires_manage_project(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
-        let dev = seed_dev_user(&db, p.base.project_id).await;
+        let dev = seed_dev_user(&db, p.project_id).await;
 
         let create = CollectionCreate {
             name: CollectionName::try_from("dev_df").unwrap(),
@@ -560,7 +548,7 @@ mod tests {
         };
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .create((), create)
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         Services::with_defaults(db.clone())
             .create_collection(request)
             .await
@@ -576,7 +564,7 @@ mod tests {
         };
         let request = RequestContext::with(AccessTokenId::default(), dev)
             .create((), create)
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
         let err = Services::with_defaults(db.clone())
             .create_collection(request)
             .await

@@ -122,25 +122,54 @@ impl FromDao for Table {
     type Dao = TableDBWithNames;
 
     fn from_dao(dao: TableDBWithNames) -> Result<Self, TdError> {
+        let TableDBWithNames {
+            base:
+                TableDB {
+                    base:
+                        TableInsertDB {
+                            id,
+                            collection_id,
+                            table_id,
+                            name,
+                            function_id,
+                            function_version_id,
+                            function_param_pos,
+                            private,
+                            partitioned,
+                            defined_by_id,
+                            status,
+                            table_type,
+                            parent_table_id,
+                            ..
+                        },
+                    interval,
+                    ..
+                },
+            system,
+            defined_by,
+            collection,
+            function,
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.base.id,
-            collection_id: dao.base.base.collection_id,
-            table_id: dao.base.base.table_id,
-            name: dao.base.base.name,
-            function_id: dao.base.base.function_id,
-            function_version_id: dao.base.base.function_version_id,
-            function_param_pos: dao.base.base.function_param_pos,
-            private: dao.base.base.private,
-            partitioned: dao.base.base.partitioned,
-            defined_on: dao.base.interval.valid_from.into(),
-            defined_by_id: dao.base.base.defined_by_id,
-            status: dao.base.base.status,
-            table_type: dao.base.base.table_type,
-            parent_table_id: dao.base.base.parent_table_id,
-            system: dao.system,
-            defined_by: dao.defined_by,
-            collection: dao.collection,
-            function: dao.function,
+            id,
+            collection_id,
+            table_id,
+            name,
+            function_id,
+            function_version_id,
+            function_param_pos,
+            private,
+            partitioned,
+            defined_on: interval.valid_from.into(),
+            defined_by_id,
+            status,
+            table_type,
+            parent_table_id,
+            system,
+            defined_by,
+            collection,
+            function,
         })
     }
 }

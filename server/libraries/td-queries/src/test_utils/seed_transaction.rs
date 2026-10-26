@@ -23,17 +23,17 @@ pub(crate) async fn seed_transaction(
     let collection: CollectionDB = executor
         .reuse()
         .scd2()
-        .fetch_one::<CollectionDB>(&execution.base.collection_id)
+        .fetch_one::<CollectionDB>(&execution.collection_id)
         .await?;
     let transaction_db = TransactionInsertDB {
         id: TransactionId::new(),
-        collection_id: execution.base.collection_id,
-        execution_id: execution.base.id.clone(),
+        collection_id: execution.collection_id,
+        execution_id: execution.id.clone(),
         transaction_by: "ANY".try_into()?,
         transaction_key: transaction_key.clone(),
-        triggered_on: execution.base.triggered_on,
-        triggered_by_id: execution.base.triggered_by_id,
-        group_id: collection.base.group_id,
+        triggered_on: execution.triggered_on,
+        triggered_by_id: execution.triggered_by_id,
+        group_id: collection.group_id,
     };
 
     // Field-less row; runs on a project-scoped connection so `project_id`
@@ -55,7 +55,7 @@ mod tests {
     async fn test_seed_transaction(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -90,14 +90,14 @@ mod tests {
         };
 
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version)
             .await
@@ -105,19 +105,16 @@ mod tests {
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
-        assert_eq!(transaction.base.collection_id, execution.base.collection_id);
-        assert_eq!(transaction.base.execution_id, execution.base.id);
-        assert_eq!(transaction.base.transaction_key, transaction_key);
-        assert_eq!(transaction.base.triggered_on, execution.base.triggered_on);
-        assert_eq!(
-            transaction.base.triggered_by_id,
-            execution.base.triggered_by_id
-        );
+        assert_eq!(transaction.collection_id, execution.collection_id);
+        assert_eq!(transaction.execution_id, execution.id);
+        assert_eq!(transaction.transaction_key, transaction_key);
+        assert_eq!(transaction.triggered_on, execution.triggered_on);
+        assert_eq!(transaction.triggered_by_id, execution.triggered_by_id);
     }
 }

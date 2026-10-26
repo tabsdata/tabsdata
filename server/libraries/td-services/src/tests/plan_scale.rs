@@ -41,12 +41,12 @@ async fn test_plan_scale(db: TdPool) -> Result<(), TdError> {
         .unwrap_or(500);
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c")?, &UserId::admin())
         .await?;
     let parent = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .function(&collection, &register("parent", None))
         .await?;
@@ -57,9 +57,9 @@ async fn test_plan_scale(db: TdPool) -> Result<(), TdError> {
             dependencies: Some(vec![TableDependencyDto::try_from("parent_t0")?]),
             ..register(&format!("child_{i}"), None)
         };
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .seed()
-            .child_function(&collection, &child, &parent.base.function_id)
+            .child_function(&collection, &child, &parent.function_id)
             .await?;
     }
     eprintln!("seeded {children} children in {:?}", seeding.elapsed());
@@ -82,7 +82,7 @@ async fn test_plan_scale(db: TdPool) -> Result<(), TdError> {
                 external_uid: None,
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     let services = Services::with_defaults(db.clone());
     let started = Instant::now();
     let executed = services.execute_function(request).await?.data;
@@ -90,15 +90,11 @@ async fn test_plan_scale(db: TdPool) -> Result<(), TdError> {
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut trx = pools
-        .read()
-        .await?
-        .enter_project(&p.base.project_id)
-        .await?;
+    let mut trx = pools.read().await?.enter_project(&p.project_id).await?;
     let conn = trx.get(Grant::asserted("plan scale"));
 
     let started = Instant::now();
-    let topology = ProjectTopology::current(conn, &p.base.project_id).await?;
+    let topology = ProjectTopology::current(conn, &p.project_id).await?;
     let load = started.elapsed();
 
     let options = PlanOptions {
@@ -106,11 +102,7 @@ async fn test_plan_scale(db: TdPool) -> Result<(), TdError> {
         override_disabled_trigger: OverrideDisabledTrigger::FALSE,
     };
     let started = Instant::now();
-    let plan = topology.plan(
-        FunctionState::Executable,
-        &parent.base.function_id,
-        &options,
-    )?;
+    let plan = topology.plan(FunctionState::Executable, &parent.function_id, &options)?;
     let planned = started.elapsed();
 
     let started = Instant::now();
@@ -120,7 +112,7 @@ async fn test_plan_scale(db: TdPool) -> Result<(), TdError> {
     let execution: ExecutionDB = conn.fetch_one(&executed.id).await?;
     let edges = plan.inner.edge_count();
     let started = Instant::now();
-    resolve_execution_plan_versions(conn, &execution.base, &plan).await?;
+    resolve_execution_plan_versions(conn, &execution, &plan).await?;
     let resolve = started.elapsed();
     drop(trx);
 

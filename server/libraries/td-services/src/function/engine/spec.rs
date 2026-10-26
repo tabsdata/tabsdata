@@ -13,7 +13,7 @@ use td_execution::VersionResolver;
 use td_objects::and;
 use td_objects::dxo::collection::CollectionDB;
 use td_objects::dxo::function::{FunctionRegister, FunctionUpdate};
-use td_objects::dxo::table::{TableDBWithNames, TableInsertDB};
+use td_objects::dxo::table::{TableDB, TableDBWithNames, TableInsertDB};
 use td_objects::system::{
     SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES, SYSTEM_OUTPUT_TABLE_NAMES_PREFIXES, TD_FN_STATE_PREFIX,
 };
@@ -155,8 +155,8 @@ pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
             duplicates.into(),
         ))?
     }
-    check_private_tables(&collection.base.name, spec.dependencies)?;
-    check_private_tables(&collection.base.name, spec.triggers)?;
+    check_private_tables(&collection.name, spec.dependencies)?;
+    check_private_tables(&collection.name, spec.triggers)?;
 
     let tables = resolve_tables(conn, collection, function_id, spec).await?;
 
@@ -166,21 +166,20 @@ pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
         .iter()
         .map(TableDependency::try_from)
         .try_collect()?;
-    let triggers = trigger_list(spec, &collection.base.name)?;
+    let triggers = trigger_list(spec, &collection.name)?;
 
     // The function's own tables, system ones included, are addressable before
     // they are written: a dependency on the state table is resolved here.
-    let mut referenced =
-        referenced_rows(conn, &collection.base.name, &dependencies, &triggers).await?;
+    let mut referenced = referenced_rows(conn, &collection.name, &dependencies, &triggers).await?;
     for table in &tables {
         let row = ReferencedRow {
-            collection_id: collection.base.collection_id,
+            collection_id: collection.collection_id,
             function_id: *function_id,
             table_id: table.table_id,
             system: System::from(table.pos < 0),
             status: TableStatus::Active,
         };
-        referenced.insert((collection.base.name.clone(), table.name.clone()), row);
+        referenced.insert((collection.name.clone(), table.name.clone()), row);
     }
 
     let system_dependencies: Vec<TableDependency> = SYSTEM_INPUT_TABLE_DEPENDENCY_PREFIXES
@@ -193,7 +192,7 @@ pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
             dependency
                 .collection
                 .clone()
-                .unwrap_or_else(|| collection.base.name.clone()),
+                .unwrap_or_else(|| collection.name.clone()),
             dependency.table.clone(),
         );
         let row = referenced.get(&key).ok_or_else(|| {
@@ -222,7 +221,7 @@ pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
             trigger
                 .collection
                 .clone()
-                .unwrap_or_else(|| collection.base.name.clone()),
+                .unwrap_or_else(|| collection.name.clone()),
             trigger.table.clone(),
         );
         let row = referenced
@@ -231,7 +230,7 @@ pub async fn resolve<S: SeesProjectRows, M: AccessMode>(
         let own_collection = trigger
             .collection
             .as_ref()
-            .is_none_or(|c| *c == collection.base.name);
+            .is_none_or(|c| *c == collection.name);
         if own_collection && own_tables.iter().any(|t| ***t == *trigger.table) {
             Err(RegisterFunctionError::SelfTrigger(trigger.clone()))?
         }
@@ -288,13 +287,11 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
         .try_collect()?;
 
     let lookups: Vec<_> = positioned(&user_tables, &system_tables)
-        .map(|(_, (name, _))| and!(&collection.base.collection_id, name))
+        .map(|(_, (name, _))| and!(&collection.collection_id, name))
         .collect();
     let current: Vec<TableDBWithNames> = conn.scd2().chunked().fetch_all(&lookups, ()).await?;
-    let current: HashMap<&TableName, &TableInsertDB> = current
-        .iter()
-        .map(|t| (&t.base.base.name, &t.base.base))
-        .collect();
+    let current: HashMap<&TableName, &TableInsertDB> =
+        current.iter().map(|t| (&t.name, &t.base.base)).collect();
 
     // A parent is either one of the function's own tables, which may only now
     // be getting its id, or a table already in the collection.
@@ -307,7 +304,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
         .try_collect()?;
     let lookups: Vec<_> = elsewhere
         .iter()
-        .map(|name| and!(&collection.base.collection_id, name))
+        .map(|name| and!(&collection.collection_id, name))
         .collect();
     let found: Vec<TableDBWithNames> = if lookups.is_empty() {
         Vec::new()
@@ -316,12 +313,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
     };
     let mut parent_candidates: HashMap<TableName, (TableId, TableType)> = found
         .iter()
-        .map(|t| {
-            (
-                t.base.base.name.clone(),
-                (t.base.base.table_id, t.base.base.table_type.clone()),
-            )
-        })
+        .map(|t| (t.name.clone(), (t.table_id, t.table_type.clone())))
         .collect();
 
     let mut owned_elsewhere = Vec::new();
@@ -335,7 +327,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
             Some(t) if t.status == TableStatus::Frozen => {
                 Err(RegisterFunctionError::FrozenTableAlreadyExists(
                     name.clone(),
-                    collection.base.name.clone(),
+                    collection.name.clone(),
                 ))?
             }
             Some(t) if t.function_id == *function_id => (t.table_id, false),
@@ -367,10 +359,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
             continue;
         };
         let (parent_id, parent_type) = parent_candidates.get(&parent).ok_or_else(|| {
-            RegisterFunctionError::ParentTableDoesNotExist(
-                parent.clone(),
-                collection.base.name.clone(),
-            )
+            RegisterFunctionError::ParentTableDoesNotExist(parent.clone(), collection.name.clone())
         })?;
         if !matches!(parent_type, TableType::Regular) {
             Err(RegisterFunctionError::ParentTableMustBeRegular(
@@ -388,7 +377,7 @@ async fn resolve_tables<S: SeesProjectRows, M: AccessMode>(
     if !owned_elsewhere.is_empty() {
         Err(RegisterFunctionError::TableAlreadyExists(
             owned_elsewhere.into(),
-            collection.base.name.clone(),
+            collection.name.clone(),
         ))?
     }
     Ok(tables)
@@ -455,15 +444,32 @@ async fn referenced_rows<S: SeesProjectRows, M: AccessMode>(
     Ok(rows
         .into_iter()
         .filter_map(|t| {
-            let collection = names_by_id.get(&t.base.base.collection_id)?.clone();
+            let TableDBWithNames {
+                base:
+                    TableDB {
+                        base:
+                            TableInsertDB {
+                                collection_id,
+                                function_id,
+                                table_id,
+                                status,
+                                name,
+                                ..
+                            },
+                        ..
+                    },
+                system,
+                ..
+            } = t;
+            let collection = names_by_id.get(&collection_id)?.clone();
             let row = ReferencedRow {
-                collection_id: t.base.base.collection_id,
-                function_id: t.base.base.function_id,
-                table_id: t.base.base.table_id,
-                system: t.system,
-                status: t.base.base.status,
+                collection_id,
+                function_id,
+                table_id,
+                system,
+                status,
             };
-            Some(((collection, t.base.base.name), row))
+            Some(((collection, name), row))
         })
         .collect())
 }

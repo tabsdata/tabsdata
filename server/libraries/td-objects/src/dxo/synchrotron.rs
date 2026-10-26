@@ -2,7 +2,7 @@
 // Copyright 2025 Tabsdata Inc.
 //
 
-use crate::dxo::transaction::TransactionDBWithNames;
+use crate::dxo::transaction::{TransactionDB, TransactionDBWithNames, TransactionInsertDB};
 use crate::types::basic::{
     CollectionId, ExecutionId, TransactionId, TransactionStatus, TriggeredOn, UserId,
 };
@@ -30,13 +30,30 @@ impl FromDao for SynchrotronResponse {
     type Dao = TransactionDBWithNames;
 
     fn from_dao(dao: TransactionDBWithNames) -> Result<Self, TdError> {
+        let TransactionDBWithNames {
+            base:
+                TransactionDB {
+                    base:
+                        TransactionInsertDB {
+                            id,
+                            collection_id,
+                            execution_id,
+                            triggered_on,
+                            triggered_by_id,
+                            ..
+                        },
+                    status,
+                    ..
+                },
+            ..
+        } = dao;
         Ok(Self {
-            id: dao.base.base.id,
-            collection_id: dao.base.base.collection_id,
-            execution_id: dao.base.base.execution_id,
-            triggered_on: dao.base.base.triggered_on,
-            triggered_by_id: dao.base.base.triggered_by_id,
-            status: dao.base.status,
+            id,
+            collection_id,
+            execution_id,
+            triggered_on,
+            triggered_by_id,
+            status,
         })
     }
 }

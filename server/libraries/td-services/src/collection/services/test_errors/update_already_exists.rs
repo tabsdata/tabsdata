@@ -19,13 +19,13 @@ async fn test_update_already_existing(db: TdPool) {
     let p = db.seed().test_project().await.unwrap();
     let name0 = CollectionName::try_from("ds0").unwrap();
     let _ = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&name0, &UserId::admin())
         .await;
     let name1 = CollectionName::try_from("ds1").unwrap();
     let _ = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&name1, &UserId::admin())
         .await;
@@ -45,7 +45,7 @@ async fn test_update_already_existing(db: TdPool) {
             },
             update,
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
 
     // The `ensure_collection_name_free` pre-check rejects the rename collision
     // up front with a clean `EntityAlreadyExists` rather than the raw

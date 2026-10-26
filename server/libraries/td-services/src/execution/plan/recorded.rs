@@ -65,5 +65,5 @@ pub async fn recorded_execution_plan<S: SeesProjectRows, M: AccessMode>(
     triggers.dedup();
     dependencies.sort();
     dependencies.dedup();
-    topology.recorded(&execution.base.function_id, &triggers, &dependencies)
+    topology.recorded(&execution.function_id, &triggers, &dependencies)
 }

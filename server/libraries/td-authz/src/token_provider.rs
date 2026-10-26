@@ -43,7 +43,7 @@ impl ServiceTokens {
     }
 
     pub fn accept(&self, token: &ServiceTokenDBWithNames, at: &AtTime) -> Result<(), TdError> {
-        if !token.base.expires_on.is_live_at(at) {
+        if !token.expires_on.is_live_at(at) {
             Err(TokenError::Expired)?
         }
         if !*token.user_enabled {

@@ -72,10 +72,10 @@ async fn trigger_flips(
     let mut flipped = Vec::new();
     let mut flips = Vec::new();
     for trigger in triggers {
-        let Some(transition) = by_table.get(&trigger.base.trigger_by_table_id) else {
+        let Some(transition) = by_table.get(&trigger.trigger_by_table_id) else {
             continue;
         };
-        match (&transition.status, &trigger.base.status) {
+        match (&transition.status, &trigger.status) {
             (TableStatus::Frozen, TriggerStatus::Active) => flips.push(TriggerInsertDB {
                 id: TriggerVersionId::default(),
                 status: TriggerStatus::Frozen,
@@ -106,7 +106,7 @@ pub async fn dependants_of_tables<S: SeesProjectRows, M: AccessMode>(
     // id per function, or a chunked read would return it once per chunk.
     let function_ids: Vec<FunctionId> = dependencies
         .iter()
-        .map(|d| d.base.function_id)
+        .map(|d| d.function_id)
         .unique()
         .collect();
     let functions = conn

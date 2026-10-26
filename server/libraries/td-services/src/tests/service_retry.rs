@@ -30,7 +30,7 @@ async fn test_a_service_aborted_by_a_concurrent_write_runs_again(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let group = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .group(
             GroupName::try_from("g_retry")?,
@@ -41,7 +41,7 @@ async fn test_a_service_aborted_by_a_concurrent_write_runs_again(
 
     let pools =
         DbPool::<AcrossProjects>::new(DomainPools::of_apiserver(db.clone()), AcrossProjects);
-    let mut gate = DbPool::in_project(&pools, &p.base.project_id)
+    let mut gate = DbPool::in_project(&pools, &p.project_id)
         .begin(Attempt::unretried())
         .await?;
     let at = gate.locked_at();
@@ -64,7 +64,7 @@ async fn test_a_service_aborted_by_a_concurrent_write_runs_again(
                 description: Some(Description::try_from("retried")?),
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     let services = Services::with_defaults(db.clone());
     let updating = tokio::spawn(async move { services.update_group(request).await });
     assert!(
@@ -81,7 +81,7 @@ async fn test_a_service_aborted_by_a_concurrent_write_runs_again(
         updated.is_ok(),
         "the service was not run again: {updated:?}"
     );
-    let stored: GroupDB = db.scd2().fetch_one(&group.base.group_id).await?;
-    assert_eq!(stored.base.description, Description::try_from("retried")?);
+    let stored: GroupDB = db.scd2().fetch_one(&group.group_id).await?;
+    assert_eq!(stored.description, Description::try_from("retried")?);
     Ok(())
 }

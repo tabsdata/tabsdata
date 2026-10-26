@@ -35,43 +35,37 @@ pub(crate) mod tests {
         let table_versions: Vec<TableDB> = db.timeline().fetch_all(&table_name).await?;
         assert_eq!(table_versions.len(), 2);
         for table_version in &table_versions {
-            assert_eq!(table_version.base.name, *table_name);
-            assert_eq!(
-                table_version.base.collection_id,
-                collection.base.collection_id
-            );
-            assert_eq!(table_version.base.defined_by_id, *user_id);
+            assert_eq!(table_version.name, *table_name);
+            assert_eq!(table_version.collection_id, collection.collection_id);
+            assert_eq!(table_version.defined_by_id, *user_id);
             assert!(!table_version.interval.valid_to.is_infinity());
         }
-        assert_eq!(table_versions[0].base.status, TableStatus::Frozen);
-        assert_eq!(table_versions[1].base.status, TableStatus::Active);
-        assert_eq!(
-            table_versions[0].base.table_id,
-            table_versions[1].base.table_id
-        );
+        assert_eq!(table_versions[0].status, TableStatus::Frozen);
+        assert_eq!(table_versions[1].status, TableStatus::Active);
+        assert_eq!(table_versions[0].table_id, table_versions[1].table_id);
 
         let function: FunctionDB = db
             .scd2()
-            .fetch_one::<FunctionDB>(&table_versions[0].base.function_id)
+            .fetch_one::<FunctionDB>(&table_versions[0].function_id)
             .await?;
-        assert_eq!(function.base.status, FunctionStatus::Active);
+        assert_eq!(function.status, FunctionStatus::Active);
 
         let dependency_versions: Vec<DependencyDB> = db
             .scd2()
-            .fetch_all::<DependencyDB>(&table_versions[0].base.table_id)
+            .fetch_all::<DependencyDB>(&table_versions[0].table_id)
             .await?;
 
         for dependency_version in &dependency_versions {
             let function: FunctionDB = db
                 .scd2()
-                .fetch_one::<FunctionDB>(&dependency_version.base.function_id)
+                .fetch_one::<FunctionDB>(&dependency_version.function_id)
                 .await?;
-            assert_eq!(function.base.status, FunctionStatus::Frozen);
+            assert_eq!(function.status, FunctionStatus::Frozen);
 
             // Note that the function version in the dependency still points to the active function version
             // thus being active itself.
-            let function_version: FunctionDB = db.timeline().fetch_one(&function.base.id).await?;
-            assert_eq!(function_version.base.status, FunctionStatus::Frozen);
+            let function_version: FunctionDB = db.timeline().fetch_one(&function.id).await?;
+            assert_eq!(function_version.status, FunctionStatus::Frozen);
         }
 
         Ok(())
@@ -86,7 +80,7 @@ pub(crate) mod tests {
         let table: Option<TableDBWithNames> = db
             .scd2()
             .fetch_optional(and!(
-                &collection.base.collection_id,
+                &collection.collection_id,
                 &TableIdName::Name(table_name.clone())
             ))
             .await?;
@@ -94,13 +88,10 @@ pub(crate) mod tests {
 
         let table_versions: Vec<TableDB> = db.timeline().fetch_all(&table_name).await?;
         for table_version in &table_versions {
-            assert_eq!(table_version.base.name, *table_name);
-            assert_eq!(
-                table_version.base.collection_id,
-                collection.base.collection_id
-            );
-            assert_eq!(table_version.base.defined_by_id, *user_id);
-            assert_eq!(table_version.base.status, TableStatus::Active);
+            assert_eq!(table_version.name, *table_name);
+            assert_eq!(table_version.collection_id, collection.collection_id);
+            assert_eq!(table_version.defined_by_id, *user_id);
+            assert_eq!(table_version.status, TableStatus::Active);
         }
 
         // Function can still be frozen if another table got deleted

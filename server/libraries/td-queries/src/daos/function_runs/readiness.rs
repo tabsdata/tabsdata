@@ -461,7 +461,7 @@ mod tests {
     async fn test_blocked_ids_same_plan_unmaterialized_input(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("c_0")?, &UserId::admin())
             .await?;
@@ -488,7 +488,7 @@ mod tests {
             })
         };
         let producer = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(
                 &collection,
@@ -496,7 +496,7 @@ mod tests {
             )
             .await?;
         let consumer = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(
                 &collection,
@@ -508,18 +508,14 @@ mod tests {
             )
             .await?;
 
-        let execution = db
-            .scoped(p.base.project_id)
-            .seed()
-            .execution(&producer)
-            .await?;
+        let execution = db.scoped(p.project_id).seed().execution(&producer).await?;
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &TransactionKey::try_from("ANY")?)
             .await?;
         for function in [&producer, &consumer] {
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .physical_function_run(
                     &collection,
@@ -531,46 +527,46 @@ mod tests {
                 .await?;
         }
         let producer_lfr: LogicalFunctionRunDB = db
-            .fetch_one(and!(&execution.base.id, &producer.base.function_id))
+            .fetch_one(and!(&execution.id, &producer.function_id))
             .await?;
         let consumer_lfr: LogicalFunctionRunDB = db
-            .fetch_one(and!(&execution.base.id, &consumer.base.function_id))
+            .fetch_one(and!(&execution.id, &consumer.function_id))
             .await?;
-        let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&producer.base.id).await?;
+        let tables: Vec<TableDB> = db.scd2().fetch_all::<TableDB>(&producer.id).await?;
         let table = &tables[0];
 
         let ltdv = LogicalTableDataVersionInsertDB {
             id: LogicalTableDataVersionId::new(),
-            collection_id: collection.base.collection_id,
-            execution_id: execution.base.id.clone(),
-            transaction_id: transaction.base.id.clone(),
-            table_id: table.base.table_id,
-            producer_logical_function_run_id: Some(producer_lfr.base.id.clone()),
+            collection_id: collection.collection_id,
+            execution_id: execution.id.clone(),
+            transaction_id: transaction.id.clone(),
+            table_id: table.table_id,
+            producer_logical_function_run_id: Some(producer_lfr.id.clone()),
             function_param_pos: None,
-            private: table.base.private,
-            triggered_on: execution.base.triggered_on,
-            triggered_by_id: execution.base.triggered_by_id,
-            group_id: producer_lfr.base.group_id,
+            private: table.private,
+            triggered_on: execution.triggered_on,
+            triggered_by_id: execution.triggered_by_id,
+            group_id: producer_lfr.group_id,
         };
-        db.scoped(p.base.project_id)
+        db.scoped(p.project_id)
             .chunked()
             .insert(std::slice::from_ref(&ltdv))
             .await?;
         let input = LogicalFunctionRunInputInsertDB {
             id: LogicalFunctionRunInputId::default(),
-            collection_id: collection.base.collection_id,
-            execution_id: execution.base.id.clone(),
-            transaction_id: transaction.base.id.clone(),
-            logical_function_run_id: consumer_lfr.base.id.clone(),
+            collection_id: collection.collection_id,
+            execution_id: execution.id.clone(),
+            transaction_id: transaction.id.clone(),
+            logical_function_run_id: consumer_lfr.id.clone(),
             requirement_logical_table_data_version_id: Some(ltdv.id.clone()),
             requirement_input_idx: None,
             requirement_dependency_pos: Some(DependencyPos::try_from(0)?),
             requirement_version_pos: VersionPos::try_from(0)?,
             requirement_table_version_id: None,
         };
-        db.scoped(p.base.project_id).insert(&input).await?;
+        db.scoped(p.project_id).insert(&input).await?;
 
-        let blocked = db.logical_runs().blocked_ids(&execution.base.id).await?;
+        let blocked = db.logical_runs().blocked_ids(&execution.id).await?;
         assert!(
             blocked.is_empty(),
             "unmaterialized in-plan input must not block"
@@ -585,11 +581,11 @@ mod tests {
             db.chunked()
                 .update(
                     &LogicalFunctionRunStatusUpdateDB { status },
-                    std::slice::from_ref(&producer_lfr.base.id),
+                    std::slice::from_ref(&producer_lfr.id),
                 )
                 .await?;
         }
-        let blocked = db.logical_runs().blocked_ids(&execution.base.id).await?;
+        let blocked = db.logical_runs().blocked_ids(&execution.id).await?;
         assert_eq!(blocked, vec![consumer_lfr.base.id]);
         Ok(())
     }

@@ -83,12 +83,12 @@ impl FromDao for UserRole {
 
     fn from_dao(dao: UserRoleDBWithNames) -> Result<Self, TdError> {
         Ok(Self {
-            id: dao.base.id,
-            user_id: dao.base.user_id,
-            role_id: dao.base.role_id,
-            added_on: dao.base.added_on,
-            added_by_id: dao.base.added_by_id,
-            fixed: dao.base.fixed,
+            id: dao.id,
+            user_id: dao.user_id,
+            role_id: dao.role_id,
+            added_on: dao.added_on,
+            added_by_id: dao.added_by_id,
+            fixed: dao.fixed,
             user: dao.user,
             role: dao.role,
             added_by: dao.added_by,

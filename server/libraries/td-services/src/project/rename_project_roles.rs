@@ -35,7 +35,7 @@ pub async fn assert_project_roles_rename_available<S: DbScope, M: AccessMode>(
     let Some(new_name) = &update.name else {
         return Ok(());
     };
-    if new_name == &current.base.name {
+    if new_name == &current.name {
         return Ok(());
     }
     for role_name in new_role_names(new_name)? {
@@ -59,7 +59,7 @@ pub async fn rename_project_roles<S: DbScope, M: WriteMode>(
     let Some(new_name) = &update.name else {
         return Ok(());
     };
-    if new_name == &current.base.name {
+    if new_name == &current.name {
         return Ok(());
     }
 

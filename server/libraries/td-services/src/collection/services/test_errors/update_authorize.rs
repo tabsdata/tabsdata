@@ -22,7 +22,7 @@ async fn test_not_allowed_to_update_collection(db: TdPool) {
     let p = db.seed().test_project().await.unwrap();
     let name = CollectionName::try_from("ds0").unwrap();
     let _ = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&name, &UserId::admin())
         .await;
@@ -61,7 +61,7 @@ async fn test_not_allowed_to_update_collection(db: TdPool) {
             },
             update,
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
 
     assert_service_error(service.update_collection(request).await, |err| match err {
         RbacError::Forbidden(_, _) => {}

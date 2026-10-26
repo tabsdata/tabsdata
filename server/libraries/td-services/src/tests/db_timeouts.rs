@@ -34,7 +34,7 @@ async fn test_regular_units_have_bounded_statements_and_idle_transactions(
     db: TdPool,
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
-    let mut conn = DbPool::in_project(&pools(&db), &p.base.project_id)
+    let mut conn = DbPool::in_project(&pools(&db), &p.project_id)
         .begin(Attempt::unretried())
         .await?;
     let mut unbounded = Vec::new();

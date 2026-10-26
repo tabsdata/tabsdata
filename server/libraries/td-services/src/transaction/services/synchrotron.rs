@@ -49,7 +49,7 @@ mod tests {
     async fn test_synchrotron(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(&CollectionName::try_from("collection")?, &UserId::admin())
             .await?;
@@ -79,34 +79,34 @@ mod tests {
             workers: None,
         };
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await?;
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version)
             .await?;
         let transaction_key = TransactionKey::try_from("ANY")?;
         let transactions = [
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
-            db.scoped(p.base.project_id)
+            db.scoped(p.project_id)
                 .seed()
                 .transaction(&execution, &transaction_key)
                 .await?,
@@ -115,16 +115,16 @@ mod tests {
         let service = Services::with_defaults(db.clone());
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .list((), ListParams::default())
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let response = service.synchrotron(request).await?.data;
         assert_eq!(response.len, transactions.len());
         // Shared `triggered_on`: paging by id makes seed order the response order.
-        let expected: Vec<_> = transactions.iter().map(|t| t.base.id.clone()).collect();
+        let expected: Vec<_> = transactions.iter().map(|t| t.id.clone()).collect();
         let listed: Vec<_> = response.data.iter().map(|t| t.id.clone()).collect();
         assert_eq!(listed, expected);
         for t in &response.data {
-            assert_eq!(t.triggered_on, transactions[0].base.triggered_on);
+            assert_eq!(t.triggered_on, transactions[0].triggered_on);
         }
         Ok(())
     }

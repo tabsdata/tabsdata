@@ -61,11 +61,11 @@ async fn test_recovering_a_run_blocked_on_a_foreign_failure_does_not_read_runnin
     ];
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, e, _, _, _| {
             let db = db.clone();
-            let execution = e[&test_executions[1]].base.id.clone();
+            let execution = e[&test_executions[1]].id.clone();
             async move {
                 let recover = RequestContext::with(AccessTokenId::default(), UserId::admin())
                     .update(
@@ -78,7 +78,7 @@ async fn test_recovering_a_run_blocked_on_a_foreign_failure_does_not_read_runnin
                 dispatch_services(&db).request(()).await?;
 
                 let runs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution).await?;
-                let statuses: Vec<_> = runs.iter().map(|r| r.base.status).collect();
+                let statuses: Vec<_> = runs.iter().map(|r| r.status).collect();
                 assert!(
                     !statuses.contains(&LogicalFunctionRunStatus::Requested),
                     "the blocked run was dispatched: {statuses:?}"

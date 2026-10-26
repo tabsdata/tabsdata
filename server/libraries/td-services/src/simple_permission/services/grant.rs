@@ -320,7 +320,7 @@ mod tests {
                 td_objects::types::basic::Description::try_from("d")?,
             )
             .await?;
-        let entity_id: EntityId = p0.base.project_id.try_into()?;
+        let entity_id: EntityId = p0.project_id.try_into()?;
         db.seed()
             .permission(
                 PermissionType::develop_project(),

@@ -98,21 +98,21 @@ async fn test_trailing_failed_after_commit_leaves_attempt_and_worker_done(
     }];
     test_status_update(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, _, f, w| {
             let db = db.clone();
             let test_function = &test_executions[0].transactions[0].functions[0];
-            let function_run = f[test_function].base.id.clone();
-            let worker = w[test_function].base.id.clone();
+            let function_run = f[test_function].id.clone();
+            let worker = w[test_function].id.clone();
             async move {
                 post_callback(&db, &function_run, &worker, WorkerCallbackStatus::Done).await?;
                 post_callback(&db, &function_run, &worker, WorkerCallbackStatus::Failed).await?;
 
                 let attempt: PhysicalFunctionRunDB = db.timeline().fetch_one(&function_run).await?;
-                assert_eq!(attempt.base.status, PhysicalFunctionRunStatus::Done);
+                assert_eq!(attempt.status, PhysicalFunctionRunStatus::Done);
                 let worker: WorkerDB = db.fetch_one(&worker).await?;
-                assert_eq!(worker.base.status, WorkerStatus::Done);
+                assert_eq!(worker.status, WorkerStatus::Done);
                 Ok(())
             }
         },
@@ -129,11 +129,11 @@ async fn test_late_callbacks_of_an_abandoned_attempt_do_not_revive_it(
 ) -> Result<(), TdError> {
     let p = db.seed().test_project().await?;
     let collection = db
-        .scoped(p.base.project_id)
+        .scoped(p.project_id)
         .seed()
         .collection(&CollectionName::try_from("c_late")?, &UserId::admin())
         .await?;
-    db.scoped(p.base.project_id)
+    db.scoped(p.project_id)
         .seed()
         .function(&collection, &register("f_late", None))
         .await?;
@@ -155,7 +155,7 @@ async fn test_late_callbacks_of_an_abandoned_attempt_do_not_revive_it(
                 external_uid: None,
             },
         )
-        .in_project(p.base.project_id);
+        .in_project(p.project_id);
     let execution = dispatch_services(&db).execute_function(request).await?.data;
     dispatch_services(&db).request(()).await?;
 
@@ -165,7 +165,7 @@ async fn test_late_callbacks_of_an_abandoned_attempt_do_not_revive_it(
         .await?;
     assert_eq!(attempts.len(), 1);
     let abandoned = attempts.into_iter().next().unwrap();
-    let workers: Vec<WorkerDB> = db.fetch_all(&abandoned.base.id).await?;
+    let workers: Vec<WorkerDB> = db.fetch_all(&abandoned.id).await?;
     assert_eq!(workers.len(), 1);
     let abandoned_worker = workers.into_iter().next().unwrap();
 
@@ -177,23 +177,23 @@ async fn test_late_callbacks_of_an_abandoned_attempt_do_not_revive_it(
     recovery.recovery(()).await?;
 
     let abandoned_after_recovery: PhysicalFunctionRunDB =
-        db.timeline().fetch_one(&abandoned.base.id).await?;
+        db.timeline().fetch_one(&abandoned.id).await?;
     assert_eq!(
-        abandoned_after_recovery.base.status,
+        abandoned_after_recovery.status,
         PhysicalFunctionRunStatus::Failed
     );
 
     post_callback(
         &db,
-        &abandoned.base.id,
-        &abandoned_worker.base.id,
+        &abandoned.id,
+        &abandoned_worker.id,
         WorkerCallbackStatus::Running,
     )
     .await?;
     let abandoned_after_running: PhysicalFunctionRunDB =
-        db.timeline().fetch_one(&abandoned.base.id).await?;
+        db.timeline().fetch_one(&abandoned.id).await?;
     assert_eq!(
-        abandoned_after_running.base.status,
+        abandoned_after_running.status,
         PhysicalFunctionRunStatus::Failed,
         "a late Running must not revive an abandoned attempt"
     );
@@ -201,19 +201,16 @@ async fn test_late_callbacks_of_an_abandoned_attempt_do_not_revive_it(
 
     post_callback(
         &db,
-        &abandoned.base.id,
-        &abandoned_worker.base.id,
+        &abandoned.id,
+        &abandoned_worker.id,
         WorkerCallbackStatus::Done,
     )
     .await?;
     let run: LogicalFunctionRunDB = db
-        .fetch_one(and!(
-            &abandoned.base.execution_id,
-            &abandoned.base.function_id
-        ))
+        .fetch_one(and!(&abandoned.execution_id, &abandoned.function_id))
         .await?;
     assert_eq!(
-        run.base.status,
+        run.status,
         LogicalFunctionRunStatus::Requested,
         "the abandoned attempt's Done must not settle the run its successor owns"
     );

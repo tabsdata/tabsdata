@@ -37,10 +37,9 @@ async fn update_role(
     // Fixed roles carry names other rules derive (a project's roles follow
     // its name), so they are not renamed or redescribed by hand.
     assert_not_fixed(&current)?;
-    conn.update::<RoleUpdateDB>(&update_db, current.base.id)
-        .await?;
+    conn.update::<RoleUpdateDB>(&update_db, current.id).await?;
 
-    let with_names: RoleDBWithNames = conn.fetch_one(&current.base.id).await?;
+    let with_names: RoleDBWithNames = conn.fetch_one(&current.id).await?;
     let read = Role::from_dao(with_names)?;
     Ok(read)
 }

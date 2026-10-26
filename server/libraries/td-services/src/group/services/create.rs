@@ -77,7 +77,7 @@ mod tests {
 
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create((), create)
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         let service = Services::with_defaults(db.clone());
         let response = service.create_group(request).await?.data;
@@ -86,13 +86,13 @@ mod tests {
             .scd2()
             .fetch_one::<GroupDB>(&GroupName::try_from("analytics")?)
             .await?;
-        assert_eq!(response.group_id, found.base.group_id);
-        assert_eq!(response.name, found.base.name);
-        assert_eq!(response.description, found.base.description);
-        assert_eq!(response.id, found.base.id);
-        assert_eq!(response.defined_by_id, found.base.defined_by_id);
+        assert_eq!(response.group_id, found.group_id);
+        assert_eq!(response.name, found.name);
+        assert_eq!(response.description, found.description);
+        assert_eq!(response.id, found.id);
+        assert_eq!(response.defined_by_id, found.defined_by_id);
         // User-created groups are never system.
-        assert!(!*found.base.system);
+        assert!(!*found.system);
         Ok(())
     }
 
@@ -107,7 +107,7 @@ mod tests {
         let p = db.seed().test_project().await.unwrap();
         let name = GroupName::try_from("analytics").unwrap();
         let _ = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .group(name.clone(), Description::try_from("first one").unwrap())
             .await;
@@ -119,7 +119,7 @@ mod tests {
         };
         let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
             .create((), create)
-            .in_project(p.base.project_id);
+            .in_project(p.project_id);
 
         assert_service_error(service.create_group(request).await, |err| match err {
             SqlError::EntityAlreadyExists(_, _) => {}
@@ -143,7 +143,7 @@ mod tests {
 
         // `dup` in the first project.
         Services::with_defaults(db.clone())
-            .create_group(ctx().create((), dup()).in_project(p.base.project_id))
+            .create_group(ctx().create((), dup()).in_project(p.project_id))
             .await?;
 
         // A second project, then the same group name within it — succeeds

@@ -63,14 +63,14 @@ async fn test_a_cancel_writes_the_worker_before_the_attempt(db: TdPool) -> Resul
     let test_executions = running()?;
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, e, _, f, w| {
             let db = db.clone();
             let function = &test_executions[0].transactions[0].functions[0];
-            let execution = e[&test_executions[0]].base.id.clone();
-            let attempt = f[function].base.id.clone();
-            let worker = w[function].base.id.clone();
+            let execution = e[&test_executions[0]].id.clone();
+            let attempt = f[function].id.clone();
+            let worker = w[function].id.clone();
             async move {
                 let mut gate = gate(&db).await?;
                 lock_row_nowait(gate.get(Grant::asserted("worker held")), "workers", &worker)
@@ -105,7 +105,7 @@ async fn test_a_cancel_writes_the_worker_before_the_attempt(db: TdPool) -> Resul
                     "the cancel locked the attempt before the worker: {probe:?}"
                 );
                 let ended: PhysicalFunctionRunDB = db.timeline().fetch_one(&attempt).await?;
-                assert_eq!(ended.base.status, PhysicalFunctionRunStatus::Failed);
+                assert_eq!(ended.status, PhysicalFunctionRunStatus::Failed);
                 Ok(())
             }
         },
@@ -120,14 +120,14 @@ async fn test_a_callback_writes_the_attempt_before_the_run(db: TdPool) -> Result
     let test_executions = running()?;
     run_status_scenario(
         db.clone(),
-        p.base.project_id,
+        p.project_id,
         &test_executions,
         |_, _, _, f, w| {
             let db = db.clone();
             let function = &test_executions[0].transactions[0].functions[0];
-            let attempt = f[function].base.id.clone();
-            let run = f[function].base.logical_function_run_id.clone();
-            let worker = w[function].base.id.clone();
+            let attempt = f[function].id.clone();
+            let run = f[function].logical_function_run_id.clone();
+            let worker = w[function].id.clone();
             async move {
                 let mut gate = gate(&db).await?;
                 lock_row_nowait(
@@ -166,7 +166,7 @@ async fn test_a_callback_writes_the_attempt_before_the_run(db: TdPool) -> Result
                     "the callback locked the run before the attempt: {probe:?}"
                 );
                 let reported: LogicalFunctionRunDB = db.fetch_one(&run).await?;
-                assert_eq!(reported.base.status, LogicalFunctionRunStatus::Committed);
+                assert_eq!(reported.status, LogicalFunctionRunStatus::Committed);
                 Ok(())
             }
         },

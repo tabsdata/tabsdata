@@ -40,25 +40,25 @@ pub(crate) async fn seed_physical_function_run(
     let pfr_id = PhysicalFunctionRunId::new();
     let function_db = PhysicalFunctionRunInsertDB {
         id: pfr_id.clone(),
-        collection_id: collection.base.collection_id,
-        function_id: function_version.base.function_id,
-        function_version_id: function_version.base.id.clone(),
-        execution_id: execution.base.id.clone(),
-        transaction_id: transaction.base.id.clone(),
-        triggered_by_id: transaction.base.triggered_by_id,
+        collection_id: collection.collection_id,
+        function_id: function_version.function_id,
+        function_version_id: function_version.id.clone(),
+        execution_id: execution.id.clone(),
+        transaction_id: transaction.id.clone(),
+        triggered_by_id: transaction.triggered_by_id,
         trigger: Trigger::Manual,
         base_path: function_version
             .base
             .base_path
             .clone()
-            .or_else(|| collection.base.base_path.clone())
+            .or_else(|| collection.base_path.clone())
             .unwrap_or_default(),
         dispatched_on: None,
         started_on: None,
         ended_on: None,
         status: *attempt_status,
         function_version_patch_id: None,
-        logical_function_run_id: logical.base.id.clone(),
+        logical_function_run_id: logical.id.clone(),
     };
 
     executor
@@ -66,7 +66,7 @@ pub(crate) async fn seed_physical_function_run(
         .scd2()
         .open(
             &function_db,
-            LockInstant::asserted(*transaction.base.triggered_on),
+            LockInstant::asserted(*transaction.triggered_on),
         )
         .await?;
 
@@ -93,7 +93,7 @@ mod tests {
     async fn test_seed_function_run(db: TdPool) {
         let p = db.seed().test_project().await.unwrap();
         let collection = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .collection(
                 &CollectionName::try_from("collection").unwrap(),
@@ -128,14 +128,14 @@ mod tests {
         };
 
         let function_version = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .function(&collection, &create)
             .await
             .unwrap();
 
         let execution = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .execution(&function_version)
             .await
@@ -143,14 +143,14 @@ mod tests {
 
         let transaction_key = TransactionKey::try_from("ANY").unwrap();
         let transaction = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .transaction(&execution, &transaction_key)
             .await
             .unwrap();
 
         let physical_function_run = db
-            .scoped(p.base.project_id)
+            .scoped(p.project_id)
             .seed()
             .physical_function_run(
                 &collection,
@@ -163,23 +163,20 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            physical_function_run.base.collection_id,
-            collection.base.collection_id
+            physical_function_run.collection_id,
+            collection.collection_id
         );
         assert_eq!(
-            physical_function_run.base.function_version_id,
-            function_version.base.id
+            physical_function_run.function_version_id,
+            function_version.id
         );
-        assert_eq!(physical_function_run.base.execution_id, execution.base.id);
-        assert_eq!(
-            physical_function_run.base.transaction_id,
-            transaction.base.id
-        );
+        assert_eq!(physical_function_run.execution_id, execution.id);
+        assert_eq!(physical_function_run.transaction_id, transaction.id);
         assert_eq!(
             *physical_function_run.interval.valid_from,
-            *transaction.base.triggered_on
+            *transaction.triggered_on
         );
-        assert_eq!(physical_function_run.base.trigger, Trigger::Manual);
+        assert_eq!(physical_function_run.trigger, Trigger::Manual);
         // Status lives on the LFR; PhysicalFunctionRunDB no longer has it.
         let _ = LogicalFunctionRunStatus::Scheduled;
     }
