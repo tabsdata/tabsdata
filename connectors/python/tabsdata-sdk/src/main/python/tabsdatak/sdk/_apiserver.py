@@ -13,7 +13,7 @@ import time
 from contextlib import contextmanager, nullcontext
 from http import HTTPStatus
 from typing import List
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -1104,6 +1104,38 @@ class APIServer:
     ):
         endpoint = f"/logical-function-runs/{logical_function_run_id}/replay"
         response = self.post(endpoint, json={})
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def tag_list(self, entity: str, raise_for_status: bool = True):
+        endpoint = self._scoped(f"{entity}/tags")
+        response = self.get(endpoint)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def tags_list(
+        self,
+        request_len: int = None,
+        request_filter: List[str] | str = None,
+        order_by: str = None,
+        pagination_id: str = None,
+        next_step: str = None,
+        raise_for_status: bool = True,
+    ):
+        endpoint = self._scoped("/tags")
+        params = self.get_params_dict(
+            DEFAULT_LIST_ENDPOINT_PARAMETERS,
+            [request_len, request_filter, order_by, pagination_id, next_step],
+        )
+        response = self.get(endpoint, params)
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def tag_set(self, entity: str, key: str, value: str, raise_for_status: bool = True):
+        endpoint = self._scoped(f"{entity}/tags")
+        response = self.post(endpoint, json={"key": key, "value": value})
+        return self.raise_for_status_or_return(raise_for_status, response)
+
+    def tag_delete(self, entity: str, key: str, raise_for_status: bool = True):
+        endpoint = self._scoped(f"{entity}/tags/{quote(key, safe='')}")
+        response = self.delete(endpoint)
         return self.raise_for_status_or_return(raise_for_status, response)
 
     def group_create(

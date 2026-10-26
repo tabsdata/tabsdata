@@ -240,7 +240,7 @@ def test_config_pin_and_hints_are_not_commands():
         assert cli.commands.get(name) is None
 
 
-def test_project_group_has_crud_and_secrets_only():
+def test_project_group_has_crud_secrets_and_tags_only():
     # pin/unpin/pinned moved to `tdk set --proj`.
     project = cli.commands.get("project")
     assert project is not None
@@ -250,6 +250,7 @@ def test_project_group_has_crud_and_secrets_only():
         "get",
         "list",
         "secrets",
+        "tag",
         "update",
     ]
 

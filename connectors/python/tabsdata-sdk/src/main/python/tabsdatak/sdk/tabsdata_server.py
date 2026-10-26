@@ -4684,6 +4684,108 @@ class TabsdataServer:
         group.create(raise_for_status=raise_for_status)
         return group
 
+    @staticmethod
+    def _tag_entity(
+        collection: str | None,
+        function: str | None,
+        table: str | None,
+        group: str | None,
+    ) -> str:
+        """The path, within the active project, of the entity a tag call
+        addresses: the project itself when nothing is named."""
+        if group is not None:
+            if collection or function or table:
+                raise ValueError("A group tag names no collection, function or table.")
+            return f"/groups/{group}"
+        if function is not None and table is not None:
+            raise ValueError("Name a function or a table, not both.")
+        if (function is not None or table is not None) and collection is None:
+            raise ValueError("A function or table tag needs its collection.")
+        if collection is None:
+            return ""
+        if function is not None:
+            return f"/collections/{collection}/functions/{function}"
+        if table is not None:
+            return f"/collections/{collection}/tables/{table}"
+        return f"/collections/{collection}"
+
+    def list_tags(
+        self,
+        collection: str = None,
+        function: str = None,
+        table: str = None,
+        group: str = None,
+        filter: List[str] | str = None,
+        order_by: str = None,
+        raise_for_status: bool = True,
+    ) -> List[dict]:
+        """The open tags of the collection, function, table or group named, or,
+        when nothing is named, of every entity in the project, narrowed by
+        ``filter`` (``entity_type:eq:T``, ``key:eq:td.parent``,
+        ``value:eq:<id>``, ...). Each tag is a dict with ``entity_type``
+        (``P``, ``G``, ``C``, ``F`` or ``T``), ``entity_id``, ``key``,
+        ``value`` and ``kind``: ``T`` for topology tags (``_``-prefixed, like
+        ``_parent``, versioned with the project's topology), ``S`` for other
+        system ones and ``U`` for user tags."""
+        entity = self._tag_entity(collection, function, table, group)
+        if entity:
+            if filter is not None or order_by is not None:
+                raise ValueError(
+                    "An entity's tags are listed whole; filter the project's."
+                )
+            response = self.connection.tag_list(
+                entity, raise_for_status=raise_for_status
+            )
+            return response.json().get("data")
+        tags = []
+        next_pagination_id = None
+        next_step = None
+        first_page = True
+        while first_page or (next_pagination_id is not None and next_step is not None):
+            response = self.connection.tags_list(
+                request_filter=filter,
+                order_by=order_by,
+                pagination_id=next_pagination_id,
+                next_step=next_step,
+                raise_for_status=raise_for_status,
+            )
+            data = response.json().get("data")
+            next_pagination_id = data.get("next_pagination_id")
+            next_step = data.get("next")
+            tags.extend(data.get("data") or [])
+            first_page = False
+        return tags
+
+    def set_tag(
+        self,
+        key: str,
+        value: str = "",
+        collection: str = None,
+        function: str = None,
+        table: str = None,
+        group: str = None,
+        raise_for_status: bool = True,
+    ) -> dict:
+        """Set a user tag, replacing the key's value if it is already set."""
+        entity = self._tag_entity(collection, function, table, group)
+        response = self.connection.tag_set(
+            entity, key, value, raise_for_status=raise_for_status
+        )
+        return response.json().get("data")
+
+    def delete_tag(
+        self,
+        key: str,
+        collection: str = None,
+        function: str = None,
+        table: str = None,
+        group: str = None,
+        raise_for_status: bool = True,
+    ) -> None:
+        """Remove a user tag."""
+        entity = self._tag_entity(collection, function, table, group)
+        self.connection.tag_delete(entity, key, raise_for_status=raise_for_status)
+
     def delete_group(self, name: str, raise_for_status: bool = True) -> None:
         """Delete a group by name."""
         Group(self.connection, name).delete(raise_for_status=raise_for_status)

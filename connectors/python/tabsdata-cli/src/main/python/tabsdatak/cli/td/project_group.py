@@ -23,6 +23,7 @@ from tabsdatak.cli.cli_utils import (
     verify_login_or_prompt,
     view_options,
 )
+from tabsdatak.cli.td.tag_commands import tag_group
 from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 
 if TYPE_CHECKING:
@@ -299,3 +300,6 @@ def update(
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to update project: {e}")
+
+
+project.add_command(tag_group("project"))

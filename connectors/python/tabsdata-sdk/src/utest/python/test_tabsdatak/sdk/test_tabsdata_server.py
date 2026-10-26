@@ -994,3 +994,76 @@ def test_a_worker_loads_its_own_status(monkeypatch):
     )
     worker = ts.Worker(connection, "w1")
     assert worker.status == "Running"
+
+
+@pytest.mark.parametrize(
+    "named, entity",
+    [
+        ({}, ""),
+        ({"group": "g"}, "/groups/g"),
+        ({"collection": "c"}, "/collections/c"),
+        ({"collection": "c", "function": "f"}, "/collections/c/functions/f"),
+        ({"collection": "c", "table": "t"}, "/collections/c/tables/t"),
+    ],
+)
+def test_tag_entity_paths(named, entity):
+    names = {"collection": None, "function": None, "table": None, "group": None}
+    names.update(named)
+    assert ts.TabsdataServer._tag_entity(**names) == entity
+
+
+@pytest.mark.parametrize(
+    "named",
+    [
+        {"function": "f"},
+        {"table": "t"},
+        {"collection": "c", "function": "f", "table": "t"},
+        {"group": "g", "collection": "c"},
+    ],
+)
+def test_tag_entity_rejects_ambiguous_targets(named):
+    names = {"collection": None, "function": None, "table": None, "group": None}
+    names.update(named)
+    with pytest.raises(ValueError):
+        ts.TabsdataServer._tag_entity(**names)
+
+
+def _tag_server():
+    from unittest.mock import MagicMock
+
+    connection = MagicMock()
+    server = ts.TabsdataServer.__new__(ts.TabsdataServer)
+    server.connection = connection
+    return server, connection
+
+
+def test_list_tags_of_an_entity_returns_the_entity_list():
+    server, connection = _tag_server()
+    connection.tag_list.return_value.json.return_value = {"data": [{"key": "k"}]}
+    assert server.list_tags(collection="c", table="t") == [{"key": "k"}]
+    connection.tag_list.assert_called_once_with(
+        "/collections/c/tables/t", raise_for_status=True
+    )
+    connection.tags_list.assert_not_called()
+
+
+def test_list_tags_of_the_project_walks_every_page_with_the_filter():
+    server, connection = _tag_server()
+    pages = [
+        {"data": {"data": [{"key": "a"}], "next_pagination_id": "p", "next": "n"}},
+        {"data": {"data": [{"key": "b"}], "next_pagination_id": None, "next": None}},
+    ]
+    connection.tags_list.return_value.json.side_effect = pages
+    assert server.list_tags(filter=["entity_type:eq:T"]) == [{"key": "a"}, {"key": "b"}]
+    assert connection.tags_list.call_count == 2
+    first = connection.tags_list.call_args_list[0].kwargs
+    assert first["request_filter"] == ["entity_type:eq:T"]
+    assert first["pagination_id"] is None
+    second = connection.tags_list.call_args_list[1].kwargs
+    assert (second["pagination_id"], second["next_step"]) == ("p", "n")
+
+
+def test_list_tags_of_an_entity_rejects_a_filter():
+    server, _ = _tag_server()
+    with pytest.raises(ValueError):
+        server.list_tags(group="g", filter=["key:eq:k"])

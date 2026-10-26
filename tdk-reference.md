@@ -257,6 +257,19 @@ table delete   --name NAME  [--proj PROJECT] [--coll COLLECTION] [--confirm dele
 
 ---
 
+## Tags (`tag` under `project`, `collection`, `group`, `function`, `table`)
+
+```
+<entity> tag list   [--name NAME] [--proj PROJECT] [--coll COLLECTION] [-o]
+<entity> tag set    [--name NAME] [--proj PROJECT] [--coll COLLECTION] --key KEY [--value VALUE]
+<entity> tag delete [--name NAME] [--proj PROJECT] [--coll COLLECTION] --key KEY
+                    #   --name names the collection, group, function or table (none for project);
+                    #   --coll only for function and table. `list` shows the `_`-prefixed tags the
+                    #   system sets (kind Topology or System) and user tags;
+                    #   `project tag list` lists the tags of every entity in the project, with the
+                    #   entity type (P/G/C/F/T) and id of each. `set` / `delete` act on user tags only.
+```
+
 ## Execution
 
 All ids (plan, transaction, run, worker) are globally unique: the id-keyed

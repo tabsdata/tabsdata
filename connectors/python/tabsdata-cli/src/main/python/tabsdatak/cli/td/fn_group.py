@@ -27,6 +27,7 @@ from tabsdatak.cli.cli_utils import (
     view_options,
 )
 from tabsdatak.cli.td.execution_utils import live_monitor
+from tabsdatak.cli.td.tag_commands import tag_group
 from tabsdatak.common._tabular import Column, Kind, RecordView, TableView
 from tabsdatak.sdk.status_utils.execution import EXECUTION_FINAL_STATUSES
 from tabsdatak.sdk.status_utils.function_run import (
@@ -1134,3 +1135,6 @@ def list_patches(ctx: click.Context, name: str, coll: str):
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to list patches: {e}")
+
+
+fn.add_command(tag_group("function"))
