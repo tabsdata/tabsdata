@@ -9,7 +9,7 @@
 
 use crate::components::{ApiserverComponent, SchemaComponent};
 use crate::config::{PostgresConnect, RlsRoles};
-use crate::connection::PgConnectionExt;
+use crate::connection::{PgConnectionExt, scope_in_project};
 use crate::error::DbError;
 use crate::generated_sql::generated;
 use crate::pool::TdPool;
@@ -265,7 +265,7 @@ async fn test_rls_scd2_close_out_trigger_under_role() {
 
     let mut c = db.begin().await.unwrap();
     {
-        c.scope_in_project("A").await.unwrap();
+        scope_in_project(&mut c, "A").await.unwrap();
         // project_id defaults to the scope GUC ('A'), satisfying RLS WITH CHECK.
         sqlx::query(
             "INSERT INTO collections (id, collection_id, name, description, group_id, \
@@ -310,7 +310,7 @@ async fn test_rls_scd2_close_out_trigger_under_role() {
 
     let mut c = db.begin().await.unwrap();
     {
-        c.scope_in_project("B").await.unwrap();
+        scope_in_project(&mut c, "B").await.unwrap();
         let f: i64 = sqlx::query_scalar("SELECT count(*) FROM functions")
             .fetch_one(&mut *c)
             .await
@@ -332,7 +332,7 @@ async fn test_set_rls_scope_primitive() {
     {
         let mut conn = db.begin().await.unwrap();
         conn.scope_across_projects().await.unwrap();
-        conn.scope_in_project("PROJ_X").await.unwrap();
+        scope_in_project(&mut conn, "PROJ_X").await.unwrap();
         let (role, project): (String, String) =
             sqlx::query_as("SELECT current_user::text, current_setting('app.project_id', true)")
                 .fetch_one(&mut *conn)

@@ -7,9 +7,10 @@
 //! project waits and a second one elsewhere does not. PostgreSQL only.
 
 use crate::access::Attempt;
-use crate::access::{DbPool, GatedConnection, InProject, ServiceDbError, XW};
+use crate::access::{DbPool, GatedConnection, InProject, ProjectKey, ServiceDbError, XW};
 use crate::domain::DomainPools;
 use crate::test_utils::TestDb;
+use std::fmt::{Display, Formatter};
 use std::time::Duration;
 
 /// Short, so a lock that is genuinely held reports instead of holding up the
@@ -26,10 +27,22 @@ async fn pools() -> (TestDb, DomainPools) {
     (db, DomainPools::of_apiserver(pool))
 }
 
+/// This crate has no project id type; the scope only needs a key.
+#[derive(Clone)]
+struct TestProject(String);
+
+impl Display for TestProject {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl ProjectKey for TestProject {}
+
 /// A project no other test shares: advisory locks live in the database, not in
 /// the per-test schema, so a fixed id would collide across the suite.
-fn project() -> String {
-    format!("p_{}", td_common::id::id())
+fn project() -> TestProject {
+    TestProject(format!("p_{}", td_common::id::id()))
 }
 
 #[tokio::test]

@@ -5,6 +5,7 @@
 use ta_objects::{Typed, TypedOpenApi, TypedSerde, TypedSqlx};
 use td_common::id::{ID_LENGTH, Id};
 use td_common::logic_id::IdL;
+use td_database::access::ProjectKey;
 use td_security::{
     ID_ALL_ENTITIES, ID_ROLE_DEFAULT, ID_ROLE_PROJECT_CREATOR, ID_ROLE_SYS_ADMIN, ID_SYSTEM,
     ID_USER_ADMIN,
@@ -45,6 +46,8 @@ pub struct ConnectionId(Id);
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 #[typed(try_from = EntityId)]
 pub struct ProjectId(Id);
+
+impl ProjectKey for ProjectId {}
 
 #[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
 pub struct DependencyId(Id);

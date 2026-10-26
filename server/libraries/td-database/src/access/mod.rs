@@ -37,7 +37,7 @@ mod retry;
 #[cfg(test)]
 mod tests;
 
-use crate::connection::PgConnectionExt;
+use crate::connection::{PgConnectionExt, scope_in_project};
 use crate::domain::{Apiserver, DomainConnection, DomainPools, ScopedBy, Supports};
 pub use connection::GatedConnection;
 pub use grant::{Gated, Grant};
@@ -136,12 +136,23 @@ impl DbScope for AcrossProjects {
     }
 }
 
+/// The id a project scope is keyed by. Implemented by the project's entity id
+/// alone, so a version id, another entity's id or a name cannot scope a
+/// connection, nor key the lock [`XW`] serializes on.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a project's entity id",
+    note = "scope by the project's `project_id`, not its version `id` or its name"
+)]
+pub trait ProjectKey: Display + Clone + Send + Sync {}
+
+impl<T: ProjectKey> ProjectKey for &T {}
+
 /// Scope bound to one project: every acquire sets `app.project_id`.
 #[derive(Debug, Clone)]
 pub struct InProject(String);
 
 impl InProject {
-    pub fn new(project: &impl Display) -> Self {
+    pub fn new(project: &impl ProjectKey) -> Self {
         Self(project.to_string())
     }
 
@@ -153,7 +164,7 @@ impl InProject {
 
 impl DbScope for InProject {
     async fn apply(&self, conn: &mut PgConnection) -> Result<(), TdError> {
-        conn.scope_in_project(&self.0)
+        scope_in_project(conn, &self.0)
             .await
             .map_err(|e| TdError::from(ServiceDbError::CannotSetProjectScope(e)))
     }
@@ -262,7 +273,7 @@ impl<S: DbScope, D: ScopedBy<S>> DbPool<S, D> {
 impl<S: DbScope, D: ScopedBy<S> + ScopedBy<InProject>> DbPool<S, D> {
     /// Re-scope to one project — for work that creates a project, or discovers
     /// which one it is about, and then operates inside it.
-    pub fn in_project(&self, project: &impl Display) -> DbPool<InProject, D> {
+    pub fn in_project(&self, project: &impl ProjectKey) -> DbPool<InProject, D> {
         DbPool::new(self.pools.clone(), InProject::new(project))
     }
 }

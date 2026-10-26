@@ -8,11 +8,12 @@
 //! already-scoped connection from their `DbPool` handle.
 //!
 //! For a multi-statement scope, scope one connection with
-//! [`PgConnectionExt::scope_in_project`]; a plain `db.begin()` otherwise runs
+//! [`InProject`](crate::access::InProject); a plain `db.begin()` otherwise runs
 //! as the connection's session role, which in test builds is the
 //! cross-project one.
 
-use crate::connection::PgConnectionExt;
+use crate::access::ProjectKey;
+use crate::connection::scope_in_project;
 use crate::pool::TdPool;
 use crate::pool::scoped::Scoped;
 use crate::sea_query::builder::SeaQuerySqlxBuild;
@@ -20,10 +21,9 @@ use crate::sea_query::executor::{RunOp, SeaExecutor};
 use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
 use sqlx::Error;
-use std::fmt::Display;
 
 impl TdPool {
-    pub fn scoped<P>(&self, project: P) -> Scoped<&TdPool, P> {
+    pub fn scoped<P: ProjectKey>(&self, project: P) -> Scoped<&TdPool, P> {
         Scoped {
             project,
             inner: self,
@@ -31,7 +31,7 @@ impl TdPool {
     }
 }
 
-impl<'a, P: Display + Clone + Sync> SeaExecutor for &'_ Scoped<&'a TdPool, P> {
+impl<'a, P: ProjectKey> SeaExecutor for &'_ Scoped<&'a TdPool, P> {
     type Reused<'b>
         = &'b Scoped<&'a TdPool, P>
     where
@@ -56,7 +56,7 @@ impl<'a, P: Display + Clone + Sync> SeaExecutor for &'_ Scoped<&'a TdPool, P> {
         let (sql, values) = query.build_sea_query();
         async move {
             let mut trx = pool.begin().await?;
-            trx.scope_in_project(&project).await?;
+            scope_in_project(&mut trx, &project).await?;
             match op(sql, values, &mut trx).await {
                 Ok(value) => {
                     trx.commit().await?;

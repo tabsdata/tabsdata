@@ -4,8 +4,7 @@
 
 use crate::Queries;
 use ta_objects::errors::SqlError;
-use td_database::access::{InProject, LockInstant, RW};
-use td_database::connection::PgConnectionExt;
+use td_database::access::{DbScope, InProject, LockInstant, RW};
 use td_database::domain::{Apiserver, DomainConnection};
 use td_database::pool::TdPool;
 use td_error::TdError;
@@ -29,9 +28,7 @@ pub async fn topology_write_at(
 ) -> Result<(DomainConnection<Apiserver, InProject, RW>, TopologyInstant), TdError> {
     let failed = |e| SqlError::AnySqlxError("topology".to_string(), e);
     let mut trx = db.begin_serializable().await.map_err(failed)?;
-    trx.scope_in_project(&project.to_string())
-        .await
-        .map_err(failed)?;
+    InProject::new(project).apply(&mut trx).await?;
     let mut conn = DomainConnection::new(trx);
     let topology_at = conn.topology().bump(project, at).await?;
     Ok((conn, topology_at))

@@ -262,7 +262,6 @@ mod tests {
             .project(ProjectName::try_from("g_inflight_b")?)
             .await?;
         let coll_b_name = CollectionName::try_from("g_inflight_b_coll")?;
-        let project_b_id = project_b.base.project_id.to_string();
         Services::with_defaults(db.clone())
             .create_collection(
                 RequestContext::with(AccessTokenId::default(), UserId::admin())
@@ -281,7 +280,7 @@ mod tests {
             )
             .await?;
         let coll_b: CollectionDB = db
-            .scoped(&project_b_id)
+            .scoped(project_b.base.project_id)
             .scd2()
             .fetch_one::<CollectionDB>(&coll_b_name)
             .await?;

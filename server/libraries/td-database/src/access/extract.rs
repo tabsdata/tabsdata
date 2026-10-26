@@ -9,10 +9,9 @@
 //! declaring a project-bound connection on an unscoped request does not
 //! compile.
 
-use super::{AcrossProjects, DbPool, GatedConnection, Global, InProject, OpensIn};
+use super::{AcrossProjects, DbPool, GatedConnection, Global, InProject, OpensIn, ProjectKey};
 use crate::domain::{DomainPools, ScopedBy, Supports};
 use crate::pool::scoped::Scoped;
-use std::fmt::Display;
 use ta_services::factory::{Extract, ExtractMut, FieldAccessor, Finished, Pass};
 use td_error::TdError;
 
@@ -26,7 +25,7 @@ pub(crate) trait ProjectScoped {
     fn project_scope(&self) -> InProject;
 }
 
-impl<R, P: Display> ProjectScoped for Scoped<R, P> {
+impl<R, P: ProjectKey> ProjectScoped for Scoped<R, P> {
     fn project_scope(&self) -> InProject {
         InProject::new(&self.project)
     }

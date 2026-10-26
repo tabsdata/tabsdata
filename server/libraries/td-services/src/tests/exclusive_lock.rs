@@ -15,7 +15,7 @@ use td_database::pool::TdPool;
 use td_error::TdError;
 use td_objects::dxo::collection::{CollectionDB, CollectionUpdate};
 use td_objects::dxo::crudl::RequestContext;
-use td_objects::types::basic::{AccessTokenId, CollectionName, UserId};
+use td_objects::types::basic::{AccessTokenId, CollectionName, ProjectName, UserId};
 use td_queries::Queries;
 use td_queries::test_utils::probes::show_setting;
 use td_queries::test_utils::{SeedEntry, seed_instant};
@@ -58,7 +58,11 @@ async fn test_project_lock_bounds_only_its_own_wait(db: TdPool) -> Result<(), Td
 async fn test_waiting_on_one_project_does_not_starve_another(db: TdPool) -> Result<(), TdError> {
     let busy_project = db.seed().test_project().await?;
     let busy = DbPool::in_project(&pools(&db), &busy_project.base.project_id);
-    let idle = DbPool::in_project(&pools(&db), &"another_project");
+    let idle_project = db
+        .seed()
+        .project(ProjectName::try_from("idle_project")?)
+        .await?;
+    let idle = DbPool::in_project(&pools(&db), &idle_project.base.project_id);
 
     let held: GatedConnection<XW, InProject> = busy.begin_exclusive(Attempt::unretried()).await?;
     let queued =

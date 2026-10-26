@@ -19,10 +19,9 @@
 //! project cannot be spelled project-scoped.
 
 use super::retry::{retry_after, succeeded};
-use super::{AccessMode, DbScope, EntersProject, Gated, Global, InProject, WriteMode};
+use super::{AccessMode, DbScope, EntersProject, Gated, Global, InProject, ProjectKey, WriteMode};
 use crate::access::{Grant, LockInstant};
 use crate::domain::{Apiserver, DomainConnection, ScopedBy};
-use std::fmt::Display;
 use std::marker::PhantomData;
 use ta_services::factory::{Finished, Pass};
 use td_error::TdError;
@@ -98,7 +97,7 @@ impl<M: AccessMode, S: EntersProject, D: ScopedBy<S> + ScopedBy<InProject>>
     /// service handed a bare id enters the project it resolved as the owner.
     pub async fn enter_project(
         self,
-        project: &impl Display,
+        project: &impl ProjectKey,
     ) -> Result<GatedConnection<M, InProject, D>, TdError> {
         let scope = InProject::new(project);
         let mut conn = DomainConnection::<D, InProject, M>::new(self.conn.into_transaction());

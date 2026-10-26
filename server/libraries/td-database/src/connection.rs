@@ -66,14 +66,6 @@ pub trait PgConnectionExt {
     /// the archived schemas an upgrade ladder starts from carry them.
     fn admit_legacy_project_scope(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
 
-    /// Scopes the rest of the transaction to one project. Switching the role
-    /// matters when re-scoping from an earlier cross-project scope, where a
-    /// lingering cross-project role would un-isolate the writes.
-    fn scope_in_project(
-        &mut self,
-        project_id: &str,
-    ) -> impl Future<Output = Result<(), Error>> + Send;
-
     #[cfg(feature = "td-test")]
     fn explain(&mut self, sql: &str) -> impl Future<Output = Result<Vec<String>, Error>> + Send;
 
@@ -169,18 +161,6 @@ impl PgConnectionExt for PgConnection {
         Ok(())
     }
 
-    async fn scope_in_project(&mut self, project_id: &str) -> Result<(), Error> {
-        sqlx::query(
-            "SELECT set_config('role', current_setting($1), true), set_config($2, $3, true)",
-        )
-        .bind(IN_PROJECT_ROLE_GUC)
-        .bind(PROJECT_ID_GUC)
-        .bind(project_id)
-        .execute(&mut *self)
-        .await?;
-        Ok(())
-    }
-
     #[cfg(feature = "td-test")]
     async fn explain(&mut self, sql: &str) -> Result<Vec<String>, Error> {
         sqlx::query_scalar::<_, String>(generated(format!("EXPLAIN {sql}")))
@@ -226,4 +206,22 @@ impl PgConnectionExt for PgConnection {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     }
+}
+
+/// Scopes the rest of the transaction to one project. Switching the role
+/// matters when re-scoping from an earlier cross-project scope, where a
+/// lingering cross-project role would un-isolate the writes. Outside this
+/// crate a project is entered through [`InProject`](crate::access::InProject),
+/// which only a [`ProjectKey`](crate::access::ProjectKey) builds.
+pub(crate) async fn scope_in_project(
+    conn: &mut PgConnection,
+    project_id: &str,
+) -> Result<(), Error> {
+    sqlx::query("SELECT set_config('role', current_setting($1), true), set_config($2, $3, true)")
+        .bind(IN_PROJECT_ROLE_GUC)
+        .bind(PROJECT_ID_GUC)
+        .bind(project_id)
+        .execute(conn)
+        .await?;
+    Ok(())
 }
