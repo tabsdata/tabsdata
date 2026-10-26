@@ -35,8 +35,8 @@ use td_objects::dxo::function::FunctionDB;
 use td_objects::dxo::table::TableDB;
 use td_objects::dxo::trigger::TriggerDB;
 use td_objects::dxo::worker::WorkerDB;
-use td_objects::types::basic::{TableId, TagEntityId, TagEntityType};
 use td_objects::types::basic::{CollectionId, WorkerType};
+use td_objects::types::basic::{TableId, TagEntityId, TagEntityType};
 use td_objects::{and, or};
 use td_queries::Queries;
 use tracing::debug;
@@ -152,12 +152,12 @@ pub async fn update_deleted_workers<S: SeesProjectRows, M: WriteMode>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tag::parent::test_support::function_parent;
     use crate::Services;
     use crate::collection::services::connection::test_support::{
         bridge, create_collection, create_request, linked_connection, seed_dev_user,
     };
     use crate::collection::services::connection::{Reconciled, reconcile_stored_connection};
+    use crate::tag::parent::test_support::function_parent;
     use std::str::FromStr;
     use td_bridge::connection::memory::InMemoryConnectionStore;
     use td_database::access::{AcrossProjects, Grant};

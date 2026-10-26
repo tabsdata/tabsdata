@@ -2165,17 +2165,14 @@ mod tests {
     /// The link is stored as the parent's *logical* id, so renaming the owner
     /// does not break it and the child's next version carries it forward.
     #[td_test::test(db)]
-    async fn test_parent_function_id_is_stable_across_writes(db: TdPool) -> Result<(), TdError> {
+    async fn test_parent_tag_is_stable_across_writes(db: TdPool) -> Result<(), TdError> {
         let p = db.seed().test_project().await?;
         create_collection(&db, p.project_id, "parent_stable", None).await;
         let create = owner_register(&["owned"], Some(vec![child("a")?]))?;
         let owner = register_ok(&db, p.project_id, "parent_stable", create).await?;
         let expected = Some(owner.function_id);
         let before = live_by_name(&db, "a").await?.expect("child registered");
-        assert_eq!(
-            function_parent(&db, &before.function_id).await?,
-            expected
-        );
+        assert_eq!(function_parent(&db, &before.function_id).await?, expected);
 
         let mut update = owner_update(Some(vec![child("a")?]));
         update.name = Some("owner_renamed".try_into()?);
@@ -2185,10 +2182,7 @@ mod tests {
             .await?
             .expect("child still registered");
         assert_ne!(after.id, before.id);
-        assert_eq!(
-            function_parent(&db, &after.function_id).await?,
-            expected
-        );
+        assert_eq!(function_parent(&db, &after.function_id).await?, expected);
         Ok(())
     }
 

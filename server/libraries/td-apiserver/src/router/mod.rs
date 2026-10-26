@@ -24,6 +24,7 @@ pub(crate) mod roles;
 pub(crate) mod server_status;
 pub(crate) mod simple_permissions;
 pub(crate) mod tables;
+pub(crate) mod tags;
 pub(crate) mod tokens;
 pub(crate) mod transactions;
 pub(crate) mod user_roles;
@@ -305,6 +306,7 @@ mod tests {
             (SIMPLE, "list_by_user"),
             (SIMPLE, "revoke"),
             (PROJECT, "create_collection"),
+            (PROJECT, "list_tags"),
             (PROJECT, "create_group"),
             (PROJECT, "delete_collection"),
             (PROJECT, "delete_function"),
@@ -450,6 +452,7 @@ mod tests {
             ("GET", "/projects/{project}/snapshot"),
             ("GET", "/projects/{project}/synchrotron"),
             ("GET", "/projects/{project}/tables"),
+            ("GET", "/projects/{project}/tags"),
             ("GET", "/projects/{project}/topology-versions"),
             ("GET", "/runtime-info"),
             ("GET", "/snapshot"),
@@ -636,6 +639,7 @@ mod tests {
             "/projects/{project}/synchrotron",
             "/projects/{project}/tables",
             "/projects/{project}/topology-versions",
+            "/projects/{project}/tags",
             "/resources/{*path}",
             "/roles",
             "/roles/{role}",

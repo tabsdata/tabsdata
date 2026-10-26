@@ -5,6 +5,7 @@
 //! Topology tags open and close at topology instants; system and user tags at
 //! the lock instant, and planning never reads them.
 
+use crate::FromDao;
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::{
@@ -12,6 +13,7 @@ use crate::types::basic::{
     TopologyTagKey, UserId, UserTagKey,
 };
 use ta_objects::sql_condition::SqlCondition;
+use td_error::TdError;
 
 #[ta_objects::Dao]
 #[dao(table = "tags", ops(insert), scd2(at = TopologyInstant), project_scoped)]
@@ -149,4 +151,38 @@ pub struct TagDB {
     pub defined_by_id: UserId,
     #[dao(flatten)]
     pub interval: Scd2Interval,
+}
+
+/// An open tag as `/tags` lists them, across every entity of the project.
+#[ta_objects::Dto]
+#[dto(list(on = TagDB))]
+#[derive(Eq, PartialEq)]
+pub struct Tag {
+    #[dto(list(pagination_by = "+"))]
+    pub id: TagVersionId,
+    #[dto(list(filter, order_by))]
+    pub entity_type: TagEntityType,
+    #[dto(list(filter))]
+    pub entity_id: TagEntityId,
+    #[dto(list(filter))]
+    pub kind: TagKind,
+    #[dto(list(filter, filter_like, order_by))]
+    pub key: TagKey,
+    #[dto(list(filter, filter_like, order_by))]
+    pub value: TagValue,
+}
+
+impl FromDao for Tag {
+    type Dao = TagDB;
+
+    fn from_dao(dao: TagDB) -> Result<Self, TdError> {
+        Ok(Self {
+            id: dao.id,
+            entity_type: dao.entity_type,
+            entity_id: dao.entity_id,
+            kind: dao.kind,
+            key: dao.key,
+            value: dao.value,
+        })
+    }
 }
