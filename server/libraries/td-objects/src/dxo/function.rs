@@ -13,7 +13,9 @@ use crate::types::basic::{
     ProjectId, RawSnippet, ResetStage, ResetState, ReuseFrozen, Snippet, StageId, StorageVersion,
     TableName, TableNameDto, TableType, UserId, UserLabel, WorkerConfig, WorkerId, WorkerTypeDto,
 };
-use crate::types::composed::{TableDependency, TableDependencyDto, TableTrigger, TableTriggerDto};
+use crate::types::composed::{
+    LabeledTableDependency, LabeledTableTrigger, TableDependencyDto, TableTriggerDto,
+};
 use std::collections::HashMap;
 use ta_objects::FromDao;
 use ta_objects::sql_condition::SqlCondition;
@@ -662,8 +664,8 @@ impl FromDao for Function {
 pub struct FunctionWithTables {
     #[serde(flatten)]
     pub function: Function,
-    pub dependencies: Vec<TableDependency>,
-    pub triggers: Vec<TableTrigger>,
+    pub dependencies: Vec<LabeledTableDependency>,
+    pub triggers: Vec<LabeledTableTrigger>,
     pub workers: HashMap<WorkerTypeDto, WorkerId>,
     pub tables: Vec<TableName>,
 }

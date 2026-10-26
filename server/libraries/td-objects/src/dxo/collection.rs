@@ -10,10 +10,11 @@ use crate::dxo::connection::KeyValue;
 use crate::dxo::crudl::RequestContext;
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::types::basic::{
-    AtTime, BasePath, CollectionId, CollectionIdName, CollectionName, CollectionType,
-    CollectionVersionId, ConnectionId, Description, GroupId, GroupLabel, GroupName, ProjectId,
-    ProjectLabel, Scd2ValidFrom, UserId, UserLabel,
+    AtTime, BasePath, CollectionId, CollectionIdName, CollectionLabel, CollectionName,
+    CollectionType, CollectionVersionId, ConnectionId, Description, GroupId, GroupLabel, GroupName,
+    ProjectId, ProjectLabel, Scd2ValidFrom, UserId, UserLabel,
 };
+use crate::types::label::Label;
 use ta_objects::FromDao;
 use td_error::TdError;
 
@@ -55,6 +56,16 @@ pub struct CollectionDB {
 }
 
 impl CollectionDB {
+    /// How a row names this version's collection: its name while this
+    /// version is open, `[<id>]` once it is closed.
+    pub fn label(&self) -> CollectionLabel {
+        if self.interval.valid_to.is_infinity() {
+            CollectionLabel::new(self.base.name.clone())
+        } else {
+            CollectionLabel::new(Label::Deleted(self.base.collection_id))
+        }
+    }
+
     /// The version an update opens: this one's values with the update's
     /// changes on top.
     pub fn updated(&self, update: &CollectionUpdate, ctx: &RequestContext) -> CollectionInsertDB {

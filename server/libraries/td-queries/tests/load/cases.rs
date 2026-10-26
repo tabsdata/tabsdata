@@ -192,6 +192,12 @@ pub const LOAD_CASES: &[LoadCase] = &[
         status: Status::Implemented,
     },
     LoadCase {
+        name: "last::fetch_all_chunked",
+        covers: &["LastChunked::fetch_all"],
+        family: Family::Latest,
+        status: Status::Implemented,
+    },
+    LoadCase {
         name: "latest::list",
         covers: &["Scd2::list"],
         family: Family::Latest,

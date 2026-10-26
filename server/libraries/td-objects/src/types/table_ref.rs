@@ -137,16 +137,19 @@ impl From<&Versions> for Versions {
     }
 }
 
+/// A table named from a function: an optional collection, the table and
+/// its versions. The collection is a name on a request, a label on a read.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, new)]
-pub struct VersionedTableRef<T> {
-    pub collection: Option<CollectionName>,
+pub struct VersionedTableRef<T, C = CollectionName> {
+    pub collection: Option<C>,
     pub table: T,
     pub versions: Versions,
 }
 
-impl<T, E> ComposedString for VersionedTableRef<T>
+impl<T, C, E> ComposedString for VersionedTableRef<T, C>
 where
     T: Display + TryFrom<String, Error = E>,
+    C: Display + TryFrom<String, Error = TdError>,
     E: Into<TdError>,
 {
     fn parse(s: impl Into<String>) -> Result<Self, TdError> {
@@ -158,18 +161,20 @@ where
     }
 }
 
-impl<T> From<VersionedTableRef<T>> for String
+impl<T, C> From<VersionedTableRef<T, C>> for String
 where
     T: Display,
+    C: Display,
 {
-    fn from(value: VersionedTableRef<T>) -> Self {
+    fn from(value: VersionedTableRef<T, C>) -> Self {
         value.to_string()
     }
 }
 
-impl<T> Display for VersionedTableRef<T>
+impl<T, C> Display for VersionedTableRef<T, C>
 where
     T: Display,
+    C: Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match (&self.collection, &self.versions) {
@@ -184,14 +189,15 @@ where
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, new)]
-pub struct TableRef<T> {
-    pub collection: Option<CollectionName>,
+pub struct TableRef<T, C = CollectionName> {
+    pub collection: Option<C>,
     pub table: T,
 }
 
-impl<T, E> ComposedString for TableRef<T>
+impl<T, C, E> ComposedString for TableRef<T, C>
 where
     T: Display + TryFrom<String, Error = E>,
+    C: Display + TryFrom<String, Error = TdError>,
     E: Into<TdError>,
 {
     fn parse(s: impl Into<String>) -> Result<Self, TdError> {
@@ -203,18 +209,20 @@ where
     }
 }
 
-impl<T> From<TableRef<T>> for String
+impl<T, C> From<TableRef<T, C>> for String
 where
     T: Display,
+    C: Display,
 {
-    fn from(value: TableRef<T>) -> Self {
+    fn from(value: TableRef<T, C>) -> Self {
         value.to_string()
     }
 }
 
-impl<T> Display for TableRef<T>
+impl<T, C> Display for TableRef<T, C>
 where
     T: Display,
+    C: Display,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         if let Some(collection) = &self.collection {
@@ -228,7 +236,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::basic::TableName;
+    use crate::types::basic::{CollectionId, CollectionLabel, TableName};
+    use crate::types::label::Label;
 
     #[test]
     fn test_versioned_table_ref_to_string() {
@@ -271,6 +280,32 @@ mod tests {
         assert_eq!(table.to_string(), "table");
         let table = TableRef::<TableName>::parse("collection/table").unwrap();
         assert_eq!(table.to_string(), "collection/table");
+    }
+
+    #[test]
+    fn test_labeled_refs_round_trip_a_deleted_collection() {
+        let id = CollectionId::default();
+        let deleted = format!("[{id}]");
+        let table = TableRef::<TableName, CollectionLabel>::parse("collection/table").unwrap();
+        assert_eq!(table.to_string(), "collection/table");
+        let table =
+            TableRef::<TableName, CollectionLabel>::parse(format!("{deleted}/table")).unwrap();
+        assert_eq!(
+            table.collection,
+            Some(CollectionLabel::new(Label::Deleted(id)))
+        );
+        assert_eq!(table.to_string(), format!("{deleted}/table"));
+        let table = VersionedTableRef::<TableName, CollectionLabel>::parse(format!(
+            "{deleted}/table@HEAD^^"
+        ))
+        .unwrap();
+        assert_eq!(
+            table.collection,
+            Some(CollectionLabel::new(Label::Deleted(id)))
+        );
+        assert_eq!(table.to_string(), format!("{deleted}/table@HEAD~2"));
+        assert!(TableRef::<TableName>::parse(format!("{deleted}/table")).is_err());
+        assert!(VersionedTableRef::<TableName>::parse(format!("{deleted}/table@HEAD")).is_err());
     }
 
     #[test]

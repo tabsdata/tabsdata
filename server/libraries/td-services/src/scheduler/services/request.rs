@@ -468,19 +468,20 @@ mod tests {
     use td_execution::{MaxFunctionsPerTick, RecoveryConfig, StuckRequestedTimeout};
     use td_objects::dxo::collection::CollectionParam;
     use td_objects::dxo::crudl::RequestContext;
-    use td_objects::dxo::execution::ExecutionRequest;
+    use td_objects::dxo::execution::{ExecutionDB, ExecutionRequest};
     use td_objects::dxo::function::FunctionParam;
     use td_objects::dxo::function::FunctionRegister;
+    use td_objects::dxo::logical::LogicalFunctionRunDB;
     use td_objects::dxo::physical_function_run::PhysicalFunctionRunDB;
     use td_objects::dxo::physical_table_data_version::PhysicalTableDataVersionDBWithNames;
     use td_objects::dxo::worker_input::WorkerInput;
     use td_objects::dxo::worker_input::function::{InputTable, OutputTable};
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
-        AccessTokenId, BundleId, CollectionIdName, CollectionName, CronMask, Decorator, EnvPrefix,
-        ExecutionName, FunctionIdName, FunctionOnly, FunctionRuntimeValues,
-        OverrideDisabledTrigger, PhysicalFunctionRunStatus, ProjectId, ProjectName, SkipIfRunning,
-        TableName, TableNameDto, UserId, WorkerStatus, WorkerType,
+        AccessTokenId, BundleId, CollectionIdName, CollectionLabel, CollectionName, CronMask,
+        Decorator, EnvPrefix, ExecutionName, ExecutionStatus, FunctionIdName, FunctionOnly,
+        FunctionRuntimeValues, OverrideDisabledTrigger, PhysicalFunctionRunStatus, ProjectId,
+        ProjectName, SkipIfRunning, TableName, TableNameDto, UserId, WorkerStatus, WorkerType,
     };
     use td_objects::types::composed::TableDependencyDto;
     use td_queries::Queries;
@@ -638,7 +639,10 @@ mod tests {
                 assert!(input.physical_table_data_version_id.is_none());
                 assert_eq!(input.table, TableName::try_from("table_1")?);
                 assert_eq!(input.collection_id, collection.base.collection_id);
-                assert_eq!(input.collection, collection.base.name);
+                assert_eq!(
+                    input.collection,
+                    CollectionLabel::new(collection.base.name.clone())
+                );
                 assert!(input.location.is_none());
                 assert_eq!(*input.table_pos, 0);
                 assert_eq!(*input.version_pos, -1);
@@ -970,6 +974,96 @@ mod tests {
             &worker_id.to_string()
         );
 
+        Ok(())
+    }
+
+    /// A collection deleted while one of its runs waits for dispatch: the
+    /// tick's housekeeping ends the runs of deleted functions before it
+    /// dispatches, so the run is cancelled, its execution finished and
+    /// nothing is sent.
+    #[td_test::test(db)]
+    async fn test_delete_racing_a_requested_run_is_skipped_kubernetes(
+        db: TdPool,
+    ) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection_name = CollectionName::try_from("c_gone")?;
+        let collection = db
+            .scoped(p.base.project_id)
+            .seed()
+            .collection(&collection_name, &UserId::admin())
+            .await?;
+        let create = FunctionRegister {
+            child_functions: None,
+            name: "function_1".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: vec![TableNameDto::try_from("table_1")?].into(),
+            table_types: None,
+            parent_tables: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        db.scoped(p.base.project_id)
+            .seed()
+            .function(&collection, &create)
+            .await?;
+
+        let request = RequestContext::with(AccessTokenId::default(), UserId::admin())
+            .create(
+                (
+                    CollectionParam {
+                        collection: CollectionIdName::from_str(&collection_name.to_string())?,
+                    },
+                    FunctionParam {
+                        function: FunctionIdName::from_str("function_1")?,
+                    },
+                ),
+                ExecutionRequest {
+                    name: Some(ExecutionName::try_from("e_gone")?),
+                    function_only: FunctionOnly::default(),
+                    override_disabled_trigger: OverrideDisabledTrigger::default(),
+                    skip_if_running: SkipIfRunning::default(),
+                    external_uid: None,
+                },
+            )
+            .in_project(p.base.project_id);
+        let services = dispatch_services(&db);
+        let execution = services.execute_function(request).await?.data;
+        services
+            .delete_collection(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .delete(CollectionParam {
+                        collection: CollectionIdName::from_str(&collection_name.to_string())?,
+                    })
+                    .in_project(p.base.project_id),
+            )
+            .await?;
+
+        let (context, sent) = kubernetes_scheduler_context(&db);
+        context.clone().request(()).await?;
+
+        assert!(sent.messages().is_empty());
+        let lfrs: Vec<LogicalFunctionRunDB> = db.fetch_all(&execution.id).await?;
+        assert_eq!(lfrs.len(), 1);
+        assert_eq!(lfrs[0].base.status, LogicalFunctionRunStatus::Canceled);
+        let executions: Vec<ExecutionDB> = db.fetch_all(&execution.id).await?;
+        assert_eq!(executions[0].status, ExecutionStatus::Finished);
+        let runs: Vec<PhysicalFunctionRunDB> = db
+            .timeline()
+            .fetch_all::<PhysicalFunctionRunDB>(&execution.id)
+            .await?;
+        assert!(runs.is_empty());
+        let workers: Vec<WorkerDB> = db.fetch_all(&WorkerType::FunctionRunner).await?;
+        assert!(workers.is_empty());
         Ok(())
     }
 

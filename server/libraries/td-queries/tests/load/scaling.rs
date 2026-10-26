@@ -347,6 +347,15 @@ async fn time_chain_queries(
     );
     let _ = timed!(
         out,
+        "last::fetch_all_chunked",
+        (db).scd2()
+            .last()
+            .chunked()
+            .fetch_all::<TableDB>(&fvids, ())
+            .await?
+    );
+    let _ = timed!(
+        out,
         "latest::fetch_all_chunked",
         (db).scd2()
             .chunked()

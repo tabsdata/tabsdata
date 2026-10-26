@@ -62,6 +62,22 @@ async fn load_last_fetch_all(db: TdPool) -> Result<(), TdError> {
 }
 
 #[td_test::test(db)]
+async fn load_last_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
+    let (h, profile, seeded) = seed(&db).await?;
+    let fvids = vec![h.producer_function_version_id.clone()];
+    let t = Instant::now();
+    let rows = db
+        .scd2()
+        .last()
+        .chunked()
+        .fetch_all::<TableDB>(&fvids, ())
+        .await?;
+    record("last::fetch_all_chunked", profile, t, rows.len(), seeded);
+    assert!(!rows.is_empty());
+    Ok(())
+}
+
+#[td_test::test(db)]
 async fn load_current_fetch_all_chunked(db: TdPool) -> Result<(), TdError> {
     let (h, profile, seeded) = seed(&db).await?;
     let fvids = vec![h.producer_function_version_id.clone()];

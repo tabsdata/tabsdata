@@ -24,7 +24,7 @@ pub use daos::table_data_versions::TableDataVersions;
 
 pub use executor::{QueryExecutor, Serves, Writes};
 pub use generic::as_of::AsOf;
-pub use generic::chunked::{AsOfChunked, Chunked, Scd2Chunked, TimelineChunked};
+pub use generic::chunked::{AsOfChunked, Chunked, LastChunked, Scd2Chunked, TimelineChunked};
 pub use generic::data_version::DataVersion;
 pub use generic::for_update::ForUpdate;
 pub use generic::timeline::Timeline;

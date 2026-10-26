@@ -7,6 +7,7 @@
 //! entity is still found.
 
 use crate::Serves;
+use crate::generic::chunked::LastChunked;
 use crate::primitives::scd2::select_last;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
@@ -18,6 +19,12 @@ pub struct Last<E> {
 }
 
 impl<E> Last<E> {
+    pub fn chunked(self) -> LastChunked<E> {
+        LastChunked {
+            executor: self.executor,
+        }
+    }
+
     pub async fn fetch_all<D: SelectDao + Scd2Dao + PkDao>(
         self,
         condition: impl SqlCondition<D>,

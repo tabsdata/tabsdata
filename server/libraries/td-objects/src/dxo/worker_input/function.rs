@@ -4,11 +4,11 @@
 
 use crate::dxo::worker_input::location::{Location, Locations};
 use crate::types::basic::{
-    AtTime, ByteCount, CollectionId, CollectionName, ColumnCount, DependencyPos, ExecutionId,
-    ExecutionName, FunctionId, FunctionName, FunctionVersionId, InputIdx, IsEmptyVersions,
-    LogicalFunctionRunId, LogicalTableDataVersionId, PartitionFileName, PartitionName,
-    PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId, ProjectName, RowCount,
-    SchemaHash, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
+    AtTime, ByteCount, CollectionId, CollectionLabel, CollectionName, ColumnCount, DependencyPos,
+    ExecutionId, ExecutionName, FunctionId, FunctionName, FunctionVersionId, InputIdx,
+    IsEmptyVersions, LogicalFunctionRunId, LogicalTableDataVersionId, PartitionFileName,
+    PartitionName, PhysicalFunctionRunId, PhysicalTableDataVersionId, ProjectId, ProjectName,
+    RowCount, SchemaHash, TableFunctionParamPos, TableId, TableName, TableVersionId, TransactionId,
     VersionPos,
 };
 use serde::{Deserialize, Serialize};
@@ -74,7 +74,7 @@ pub struct FunctionInfo {
 #[derive(Eq, PartialEq)]
 pub struct InputTableVersion {
     pub collection_id: CollectionId,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub table_id: TableId,
     pub table: TableName,
     pub table_version_id: TableVersionId,
@@ -109,7 +109,7 @@ impl Locations for InputTableVersion {
 #[derive(Eq, PartialEq)]
 pub struct InputPartitionTableVersion {
     pub collection_id: CollectionId,
-    pub collection: CollectionName,
+    pub collection: CollectionLabel,
     pub table_id: TableId,
     pub table: TableName,
     pub table_version_id: TableVersionId,
@@ -325,7 +325,7 @@ mod tests {
                 scheduled_on,
             },
             system_input: vec![InputTable::Table(InputTableVersion {
-                collection: CollectionName::try_from("collection").unwrap(),
+                collection: CollectionLabel::new(CollectionName::try_from("collection").unwrap()),
                 table_id,
                 table_version_id,
                 table: TableName::try_from("table").unwrap(),
@@ -342,7 +342,7 @@ mod tests {
                 version_pos: Default::default(),
             })],
             input: vec![InputTable::Table(InputTableVersion {
-                collection: CollectionName::try_from("collection").unwrap(),
+                collection: CollectionLabel::new(CollectionName::try_from("collection").unwrap()),
                 table_id,
                 table_version_id,
                 table: TableName::try_from("table").unwrap(),

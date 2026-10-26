@@ -10,14 +10,15 @@ use crate::Serves;
 use crate::Writes;
 use crate::primitives::chunked::{
     MAX_INSERT_ROWS, MAX_QUERY_CONDITIONS, close_chunk_query, fetch_all_at_chunk_query,
-    fetch_all_chunk_query, fetch_all_current_chunk_query, fetch_chunked, insert_vec_query,
-    open_vec_query, update_chunk_query, update_open_chunk_query, warn_if_chunked,
+    fetch_all_chunk_query, fetch_all_current_chunk_query, fetch_all_last_chunk_query,
+    fetch_chunked, insert_vec_query, open_vec_query, update_chunk_query, update_open_chunk_query,
+    warn_if_chunked,
 };
 use sqlx::postgres::PgQueryResult;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    InsertDao, InsertableFrom, SameInner, Scd2CloseDao, Scd2Dao, Scd2OpenDao, SelectDao,
+    InsertDao, InsertableFrom, PkDao, SameInner, Scd2CloseDao, Scd2Dao, Scd2OpenDao, SelectDao,
     TimelineDao, UnversionedDao, UpdateDao,
 };
 use td_database::sea_query::builder::SeaQueryExt;
@@ -210,6 +211,27 @@ impl<E, V> AsOfChunked<'_, E, V> {
         let extra = extra.resolve();
         fetch_chunked::<D, D, _, _>(self.executor, values, |chunk| {
             fetch_all_at_chunk_query::<D, V>(chunk, self.on, &extra)
+        })
+        .await
+    }
+}
+
+pub struct LastChunked<E> {
+    pub(crate) executor: E,
+}
+
+impl<E> LastChunked<E> {
+    pub async fn fetch_all<D: SelectDao + Scd2Dao + PkDao>(
+        self,
+        values: &[impl SqlCondition<D>],
+        extra: impl SqlCondition<D>,
+    ) -> Result<Vec<D>, SqlError>
+    where
+        E: Serves<D>,
+    {
+        let extra = extra.resolve();
+        fetch_chunked::<D, D, _, _>(self.executor, values, |chunk| {
+            fetch_all_last_chunk_query::<D>(chunk, &extra)
         })
         .await
     }

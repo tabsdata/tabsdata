@@ -6,14 +6,17 @@
 //! slice may exceed the bind-parameter limit.
 
 use crate::QueryExecutor;
-use crate::primitives::scd2::{close_query, open_interval_cond, stamp, visible_at_cond};
+use crate::primitives::scd2::{
+    close_query, last_version_cond, open_interval_cond, stamp, visible_at_cond,
+};
 use sea_query::{Condition, InsertStatement, Query, SelectStatement, UpdateStatement};
 use sqlx::FromRow;
 use sqlx::postgres::PgRow;
 use ta_objects::errors::SqlError;
 use ta_objects::sql_condition::SqlCondition;
 use ta_objects::{
-    Dao, Insertable, SameInner, Scd2Dao, Scd2OpenDao, SelectDao, TableDao, TimelineDao, UpdateDao,
+    Dao, Insertable, PkDao, SameInner, Scd2Dao, Scd2OpenDao, SelectDao, TableDao, TimelineDao,
+    UpdateDao,
 };
 use td_database::access::LockInstant;
 use td_database::sea_query::builder::SeaQueryExt;
@@ -197,6 +200,18 @@ pub(crate) fn fetch_all_current_chunk_query<D: SelectDao + Scd2Dao>(
         chunk,
         Condition::all()
             .add(open_interval_cond::<D>())
+            .add(extra.clone()),
+    )
+}
+
+pub(crate) fn fetch_all_last_chunk_query<D: SelectDao + Scd2Dao + PkDao>(
+    chunk: &[impl SqlCondition<D>],
+    extra: &Condition,
+) -> SelectStatement {
+    select_chunk::<D>(
+        chunk,
+        Condition::all()
+            .add(last_version_cond::<D>())
             .add(extra.clone()),
     )
 }
@@ -473,6 +488,20 @@ mod tests {
         assert_eq!(
             sql,
             r#"SELECT "id", "partition_id", "status", "valid_from", "valid_to" FROM "test_chunked_current_table" WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND ("valid_to" = ('infinity'::timestamptz) AND TRUE) ORDER BY "id" DESC"#
+        );
+    }
+
+    #[test]
+    fn test_fetch_all_last_chunk_query() {
+        let ids = vec![
+            TestPartition::try_from("p1").unwrap(),
+            TestPartition::try_from("p2").unwrap(),
+        ];
+        let sql = fetch_all_last_chunk_query::<TestCurrentDao>(&ids, &Condition::all())
+            .to_string(PostgresQueryBuilder);
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "partition_id", "status", "valid_from", "valid_to" FROM "test_chunked_current_table" WHERE ("partition_id" = 'p1' OR "partition_id" = 'p2') AND ((NOT EXISTS(SELECT 1 FROM "test_chunked_current_table" AS "later" WHERE "later"."partition_id" = "test_chunked_current_table"."partition_id" AND ("later"."valid_from", "later"."id") > ("test_chunked_current_table"."valid_from", "test_chunked_current_table"."id"))) AND TRUE) ORDER BY "id" DESC"#
         );
     }
 }

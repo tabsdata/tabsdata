@@ -23,8 +23,7 @@ use td_objects::dxo::trigger::TriggerDBWithNames;
 use td_objects::dxo::worker::WorkerDBWithNames;
 use td_objects::types::basic::WorkerType;
 use td_objects::types::basic::{TableId, TableName, WorkerId, WorkerTypeDto};
-use td_objects::types::composed::TableDependency;
-use td_objects::types::composed::TableTrigger;
+use td_objects::types::composed::{LabeledTableDependency, LabeledTableTrigger};
 use td_objects::types::table_ref::VersionedTableRef;
 use td_objects::{FromDao, and};
 use td_queries::Queries;
@@ -84,8 +83,8 @@ async fn read_function(
         .await?;
     let table_triggers = trigger_tables
         .iter()
-        .map(TableTrigger::try_from)
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(LabeledTableTrigger::from)
+        .collect();
 
     let dependencies: Vec<DependencyDBWithNames> = conn
         .scd2()
@@ -100,7 +99,7 @@ async fn read_function(
         .chunked()
         .fetch_all(&dependency_table_ids, ())
         .await?;
-    let table_dependencies = vec_create_table_dependency(&dependencies, &dependency_tables)?;
+    let table_dependencies = vec_create_table_dependency(&dependencies, &dependency_tables);
 
     let workers: Vec<WorkerDBWithNames> = conn
         .fetch_all::<WorkerDBWithNames>(and!(
@@ -122,25 +121,24 @@ async fn read_function(
 pub fn vec_create_table_dependency(
     dependencies: &[DependencyDBWithNames],
     tables: &[TableDBWithNames],
-) -> Result<Vec<TableDependency>, TdError> {
+) -> Vec<LabeledTableDependency> {
     let tables = tables
         .iter()
         .map(|t| (t.base.base.table_id, t))
         .collect::<HashMap<_, _>>();
 
-    let table_deps = dependencies
+    dependencies
         .iter()
         .filter_map(|d| tables.get(&d.base.base.table_id).map(|table| (d, table)))
         .map(|(d, table)| {
             let versions = d.base.base.table_versions.deref().clone();
-            Ok(TableDependency::new(VersionedTableRef::new(
-                Some(table.collection.name()?),
+            LabeledTableDependency::new(VersionedTableRef::new(
+                Some(table.collection.clone()),
                 table.base.base.name.clone(),
                 versions,
-            )))
+            ))
         })
-        .collect::<Result<Vec<_>, TdError>>()?;
-    Ok(table_deps)
+        .collect()
 }
 
 pub fn map_create_worker(
@@ -169,13 +167,14 @@ mod tests {
     use td_objects::dxo::function::FunctionRegister;
     use td_objects::dxo::topology::ProjectTopologyDB;
     use td_objects::types::basic::CollectionLabel;
+    use td_objects::types::basic::FunctionStatus;
     use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, FunctionRuntimeValues, TableNameDto,
         UserId, UserLabel, UserName, WorkerConfig,
     };
     use td_objects::types::basic::{AtTime, CollectionIdName, FunctionIdName};
-    use td_objects::types::composed::{TableDependency, TableDependencyDto, TableTriggerDto};
+    use td_objects::types::composed::{TableDependencyDto, TableTriggerDto};
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -274,7 +273,7 @@ mod tests {
             dependencies
                 .unwrap_or(vec![])
                 .into_iter()
-                .map(TableDependency::try_from)
+                .map(|d| LabeledTableDependency::try_from(d.to_string()))
                 .collect::<Result<Vec<_>, _>>()?
         );
         assert_eq!(
@@ -282,7 +281,7 @@ mod tests {
             triggers
                 .unwrap_or(vec![])
                 .into_iter()
-                .map(TableTrigger::try_from)
+                .map(|t| LabeledTableTrigger::try_from(t.to_string()))
                 .collect::<Result<Vec<_>, _>>()?
         );
         assert_eq!(
@@ -443,6 +442,118 @@ mod tests {
             .data;
         assert_eq!(read.function.id, refunction.base.id);
         assert_eq!(read.function.collection_id, recreated.base.collection_id);
+        Ok(())
+    }
+
+    /// Deleting a collection freezes the functions elsewhere that read its
+    /// tables and closes those edges: before the delete they read the tables
+    /// labelled by the deleted collection's id, the frozen version has none.
+    #[td_test::test(db)]
+    async fn test_read_dependant_of_deleted_collection(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let upstream_name = CollectionName::try_from("upstream")?;
+        let upstream = db
+            .scoped(p.base.project_id)
+            .seed()
+            .collection(&upstream_name, &UserId::admin())
+            .await?;
+        let publisher = FunctionRegister {
+            child_functions: None,
+            name: "publisher".try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: Some(vec![TableNameDto::try_from("t0")?]),
+            table_types: None,
+            parent_tables: None,
+            runtime_values: FunctionRuntimeValues::try_from("rv")?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        };
+        db.scoped(p.base.project_id)
+            .seed()
+            .function(&upstream, &publisher)
+            .await?;
+        let downstream = db
+            .scoped(p.base.project_id)
+            .seed()
+            .collection(&CollectionName::try_from("downstream")?, &UserId::admin())
+            .await?;
+        let transformer = FunctionRegister {
+            name: "transformer".try_into()?,
+            decorator: Decorator::Transformer,
+            dependencies: Some(vec![TableDependencyDto::try_from("upstream/t0@HEAD~1")?]),
+            triggers: Some(vec![TableTriggerDto::try_from("upstream/t0")?]),
+            tables: Some(vec![TableNameDto::try_from("t1")?]),
+            ..publisher
+        };
+        let function = db
+            .scoped(p.base.project_id)
+            .seed()
+            .function(&downstream, &transformer)
+            .await?;
+        let registered_at = AtTime::now();
+
+        let service = Services::with_defaults(db.clone());
+        service
+            .delete_collection(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .delete(CollectionParam {
+                        collection: CollectionIdName::from_str(&upstream_name.to_string())?,
+                    })
+                    .in_project(p.base.project_id),
+            )
+            .await?;
+
+        let read = |topology: TopologyReadParam| {
+            service.read_function(
+                RequestContext::with(AccessTokenId::default(), UserId::admin())
+                    .read((
+                        CollectionParam {
+                            collection: CollectionIdName::from_str("downstream").unwrap(),
+                        },
+                        FunctionParam {
+                            function: FunctionIdName::from_str("transformer").unwrap(),
+                        },
+                        topology,
+                    ))
+                    .in_project(p.base.project_id),
+            )
+        };
+        let deleted = format!("[{}]", upstream.base.collection_id);
+        let dependencies = vec![LabeledTableDependency::try_from(format!(
+            "{deleted}/t0@HEAD~1"
+        ))?];
+        let triggers = vec![LabeledTableTrigger::try_from(format!("{deleted}/t0"))?];
+
+        let before = read(TopologyReadParam {
+            topology_version: None,
+            at: Some(registered_at),
+        })
+        .await?
+        .data;
+        assert_eq!(before.function.id, function.base.id);
+        assert_eq!(before.dependencies, dependencies);
+        assert_eq!(before.triggers, triggers);
+
+        let frozen = read(TopologyReadParam {
+            topology_version: None,
+            at: None,
+        })
+        .await?
+        .data;
+        assert_eq!(frozen.function.function_id, function.base.function_id);
+        assert_eq!(frozen.function.status, FunctionStatus::Frozen);
+        assert!(frozen.dependencies.is_empty());
+        assert!(frozen.triggers.is_empty());
+        assert_eq!(frozen.tables, vec![TableName::try_from("t1")?]);
         Ok(())
     }
 }

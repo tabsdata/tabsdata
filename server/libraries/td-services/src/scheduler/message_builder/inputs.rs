@@ -238,7 +238,7 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
             Some(tdv) => (
                 tdv.base.base.base.name.clone(),
                 tdv.base.base.base.collection_id,
-                tdv.collection.name()?,
+                tdv.collection.clone(),
                 tdv.base.base.base.table_id,
                 tdv.base.base.base.table_version_id,
             ),
@@ -277,10 +277,13 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                             .map(|t| (t.base.id, t))
                             .collect()
                     };
+                    // The last version, so a dependency in a deleted
+                    // collection still resolves, labelled `[<id>]`.
                     let colls: HashMap<CollectionId, CollectionDB> = if coll_ids.is_empty() {
                         HashMap::new()
                     } else {
                         conn.scd2()
+                            .last()
                             .chunked()
                             .fetch_all::<CollectionDB>(&coll_ids, ())
                             .await?
@@ -320,14 +323,14 @@ pub(crate) async fn resolve_input_tables<S: SeesProjectRows, M: AccessMode>(
                     .ok_or_else(|| {
                         api_error!(
                             ApiError::InternalError,
-                            "No live collection {} for a dependency during fallback",
+                            "No collection {} for a dependency during fallback",
                             dep.base.table_collection_id
                         )
                     })?;
                 (
                     table.base.name.clone(),
                     *dep.base.table_collection_id,
-                    coll.base.name.clone(),
+                    coll.label(),
                     dep.base.table_id,
                     pinned,
                 )
