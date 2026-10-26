@@ -32,18 +32,19 @@ def _split(value: str | None) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
 
 
+DEFAULT_UNIT = "day"
+
 EXTERNAL_LABELS = {
     "ExternalSource": "(external sources)",
     "ExternalDestination": "(external destinations)",
 }
 
 
-def _summary_view(data: dict, scope: list) -> TableView:
+def _summary_view(data: dict, scope: list, unit: str) -> TableView:
     """Single condensed table: one row per
     `(dim_entity, group, status)`, magnitudes summed across buckets.
     """
     dim = (data.get("dim") or "").lower()
-    unit = data.get("unit", "?")
     start_ms = data.get("start_ms")
     end_ms = data.get("end_ms")
     context = [
@@ -166,7 +167,7 @@ def metrics():
         ["hour", "day", "week", "month", "quarter", "year"], case_sensitive=False
     ),
     default=None,
-    help="Window unit. Defaults to `day` server-side.",
+    help=f"Window unit. Defaults to `{DEFAULT_UNIT}` server-side.",
 )
 @click.option(
     "--align",
@@ -255,7 +256,13 @@ def show(
             group_exclude=_split(group_exclude) or None,
             status=_split(status) or None,
         )
-        render(ctx, data=data, view=lambda: _summary_view(data, ancestry(ctx)))
+        render(
+            ctx,
+            data=data,
+            view=lambda: _summary_view(
+                data, ancestry(ctx), (unit or DEFAULT_UNIT).lower()
+            ),
+        )
     except Exception as e:
         hint_common_solutions(ctx, e)
         raise click.ClickException(f"Failed to fetch metrics: {e}")
