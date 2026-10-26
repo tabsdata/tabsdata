@@ -7,7 +7,7 @@ use sea_query::{
     IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::executions::Executions;
 use super::function_patches::FunctionPatches;
 use super::functions::Functions;
@@ -17,7 +17,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
-use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::scd2::{closed_version, label_of, last_version_of, open_interval};
 use crate::schema::sql::{Scd2PendingTriggerDef, Scd2TriggerDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
@@ -108,13 +108,6 @@ impl Entity for Defs {
                     ForeignKey::create()
                         .from(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::LogicalTableDataVersionId)
                         .to(LogicalTableDataVersions::Table, LogicalTableDataVersions::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(PhysicalTableDataVersions::Table, PhysicalTableDataVersions::CollectionId)
-                        .to(Collections::Table, Collections::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -242,19 +235,27 @@ impl Entity for Defs {
                 PtdvWithNames,
                 Query::select()
                     .expr(Expr::col((PtdvWithFunction, Asterisk)))
-                    .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-                    .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
+                    .expr_as(
+                        label_of(LastCollection, Collections::Name, (PtdvWithFunction, PhysicalTableDataVersions::CollectionId)),
+                        Alias::new("collection"),
+                    )
+                    .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
                     .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                     .expr_as(
                         name_or_id((Users::Table, Users::Name), (PtdvWithFunction, Alias::new("triggered_by_id"))),
                         Alias::new("created_by"),
                     )
                     .from(PtdvWithFunction)
-                    .join(
+                    .join_as(
                         JoinType::LeftJoin,
-                        CollectionsResolved,
-                        Expr::col((PtdvWithFunction, PhysicalTableDataVersions::CollectionId))
-                            .equals((CollectionsResolved, Collections::Id)),
+                        Collections::Table,
+                        LastCollection,
+                        last_version_of(
+                            Collections::Table,
+                            LastCollection,
+                            Collections::CollectionId,
+                            (PtdvWithFunction, PhysicalTableDataVersions::CollectionId),
+                        ),
                     )
                     .join(
                         JoinType::LeftJoin,

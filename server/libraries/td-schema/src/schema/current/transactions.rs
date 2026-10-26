@@ -7,15 +7,16 @@ use sea_query::{
     Query, Table, TableCreateStatement,
 };
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::executions::Executions;
 use super::groups::Groups;
 use super::logical_function_runs::{LogicalFunctionRuns, RUN_ACTIVE, RUN_AWAITING, RUN_BLOCKED, RUN_TERMINALS, run_status_count};
 use super::physical_function_runs::PhysicalFunctionRuns;
-use super::projects::{Projects, ProjectsResolved};
+use super::projects::{LastProject, Projects};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
+use crate::schema::sql::scd2::{closed_version, label_of, last_version_of};
 use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
@@ -88,22 +89,8 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Transactions::EndedOn).timestamp_with_time_zone().null())
                 .foreign_key(
                     ForeignKey::create()
-                        .from(Transactions::Table, Transactions::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
-                .foreign_key(
-                    ForeignKey::create()
                         .from(Transactions::Table, Transactions::ExecutionId)
                         .to(Executions::Table, Executions::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(Transactions::Table, Transactions::GroupId)
-                        .to(Groups::Table, Groups::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -172,24 +159,36 @@ impl Entity for Defs {
             TransactionsWithNames,
             Query::select()
                 .expr(Expr::col((Transactions::Table, Asterisk)))
-                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
+                .expr_as(
+                    label_of(LastCollection, Collections::Name, (Transactions::Table, Transactions::CollectionId)),
+                    Alias::new("collection"),
+                )
+                .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(
                     name_or_id((Users::Table, Users::Name), (Transactions::Table, Transactions::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
-                .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
-                .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
+                .expr_as(
+                    name_or_id((groups_alias.clone(), Groups::Name), (Transactions::Table, Transactions::GroupId)),
+                    Alias::new("group"),
+                )
+                .expr_as(label_of(LastProject, Projects::Name, (Transactions::Table, Transactions::ProjectId)), Alias::new("project"))
                 .expr_as(
                     run_status_count(LogicalFunctionRuns::TransactionId, (Transactions::Table, Transactions::Id)),
                     Alias::new("function_run_status_count"),
                 )
                 .from(Transactions::Table)
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    CollectionsResolved,
-                    Expr::col((Transactions::Table, Transactions::CollectionId)).equals((CollectionsResolved, Collections::Id)),
+                    Collections::Table,
+                    LastCollection,
+                    last_version_of(
+                        Collections::Table,
+                        LastCollection,
+                        Collections::CollectionId,
+                        (Transactions::Table, Transactions::CollectionId),
+                    ),
                 )
                 .join(
                     JoinType::LeftJoin,
@@ -201,16 +200,17 @@ impl Entity for Defs {
                     Users::Table,
                     Expr::col((Transactions::Table, Transactions::TriggeredById)).equals((Users::Table, Users::Id)),
                 )
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    ProjectsResolved,
-                    Expr::col((Transactions::Table, Transactions::ProjectId)).equals((ProjectsResolved, Projects::Id)),
+                    Projects::Table,
+                    LastProject,
+                    last_version_of(Projects::Table, LastProject, Projects::ProjectId, (Transactions::Table, Transactions::ProjectId)),
                 )
                 .join_as(
                     JoinType::LeftJoin,
                     Groups::Table,
                     groups_alias.clone(),
-                    Expr::col((Transactions::Table, Transactions::GroupId)).equals((groups_alias, Groups::Id)),
+                    last_version_of(Groups::Table, groups_alias.clone(), Groups::GroupId, (Transactions::Table, Transactions::GroupId)),
                 )
                 .to_owned(),
         )]

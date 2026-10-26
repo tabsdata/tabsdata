@@ -14,7 +14,7 @@ use sea_query::{
     TableCreateStatement,
 };
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::executions::Executions;
 use super::functions::Functions;
 use super::groups::Groups;
@@ -27,7 +27,7 @@ use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
-use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::scd2::{closed_version, last_version_of, open_interval};
 use crate::schema::sql::{id_column, logical_id_column};
 
 #[derive(Iden, Clone, Copy)]
@@ -84,20 +84,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(LogicalTableDataVersions::TriggeredOn).timestamp_with_time_zone().not_null())
                 .col(id_column(LogicalTableDataVersions::TriggeredById).not_null())
                 .col(id_column(LogicalTableDataVersions::GroupId).not_null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)
-                        .to(Groups::Table, Groups::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
                 .foreign_key(
                     ForeignKey::create()
                         .from(LogicalTableDataVersions::Table, LogicalTableDataVersions::ExecutionId)
@@ -184,14 +170,26 @@ impl Entity for Defs {
                 TableDataVersionsWithNames,
                 Query::select()
                     .expr(Expr::col((LogicalTableDataVersions::Table, Asterisk)))
-                    .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-                    .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
+                    .expr_as(
+                        name_or_id(
+                            (LastCollection, Collections::Name),
+                            (LogicalTableDataVersions::Table, LogicalTableDataVersions::CollectionId),
+                        ),
+                        Alias::new("collection"),
+                    )
+                    .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
                     .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                     .expr_as(
                         name_or_id((Users::Table, Users::Name), (LogicalTableDataVersions::Table, LogicalTableDataVersions::TriggeredById)),
                         Alias::new("triggered_by"),
                     )
-                    .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
+                    .expr_as(
+                        name_or_id(
+                            (groups_alias.clone(), Groups::Name),
+                            (LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId),
+                        ),
+                        Alias::new("group"),
+                    )
                     // PTDV-derived columns (the bound materialization).
                     .expr_as(
                         Expr::col((PhysicalTableDataVersions::Table, PhysicalTableDataVersions::Id)),
@@ -245,11 +243,16 @@ impl Entity for Defs {
                     .expr_as(Expr::col((Functions::Table, Functions::StorageVersion)), Alias::new("storage_version"))
                     .expr_as(Expr::col((Tables::Table, Tables::ParentTableId)), Alias::new("parent_table_id"))
                     .from(LogicalTableDataVersions::Table)
-                    .join(
+                    .join_as(
                         JoinType::LeftJoin,
-                        CollectionsResolved,
-                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::CollectionId))
-                            .equals((CollectionsResolved, Collections::Id)),
+                        Collections::Table,
+                        LastCollection,
+                        last_version_of(
+                            Collections::Table,
+                            LastCollection,
+                            Collections::CollectionId,
+                            (LogicalTableDataVersions::Table, LogicalTableDataVersions::CollectionId),
+                        ),
                     )
                     .join(
                         JoinType::LeftJoin,
@@ -301,7 +304,12 @@ impl Entity for Defs {
                         JoinType::LeftJoin,
                         Groups::Table,
                         groups_alias.clone(),
-                        Expr::col((LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId)).equals((groups_alias, Groups::Id)),
+                        last_version_of(
+                            Groups::Table,
+                            groups_alias.clone(),
+                            Groups::GroupId,
+                            (LogicalTableDataVersions::Table, LogicalTableDataVersions::GroupId),
+                        ),
                     )
                     .to_owned(),
             ),

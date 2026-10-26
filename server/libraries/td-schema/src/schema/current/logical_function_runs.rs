@@ -15,18 +15,18 @@ use sea_query::{
     Query, SimpleExpr, SubQueryStatement, Table, TableCreateStatement,
 };
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::executions::Executions;
 use super::functions::Functions;
 use super::groups::Groups;
 use super::physical_function_runs::PhysicalFunctionRuns;
-use super::projects::{Projects, ProjectsResolved};
+use super::projects::{LastProject, Projects};
 use super::transactions::Transactions;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::{json_object_agg, name_or_id};
 use crate::schema::source::Derived;
-use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::scd2::{closed_version, label_of, last_version_of, open_interval};
 use crate::schema::sql::{Transitions, TransitionsTriggerDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
@@ -141,20 +141,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(LogicalFunctionRuns::Recoveries).integer().not_null().default(0))
                 .foreign_key(
                     ForeignKey::create()
-                        .from(LogicalFunctionRuns::Table, LogicalFunctionRuns::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(LogicalFunctionRuns::Table, LogicalFunctionRuns::GroupId)
-                        .to(Groups::Table, Groups::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
-                .foreign_key(
-                    ForeignKey::create()
                         .from(LogicalFunctionRuns::Table, LogicalFunctionRuns::ExecutionId)
                         .to(Executions::Table, Executions::Id)
                         .on_delete(ForeignKeyAction::Restrict)
@@ -257,15 +243,24 @@ impl Entity for Defs {
             Query::select()
                 .expr(Expr::col((LogicalFunctionRuns::Table, Asterisk)))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("name"))
-                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
+                .expr_as(
+                    label_of(LastCollection, Collections::Name, (LogicalFunctionRuns::Table, LogicalFunctionRuns::CollectionId)),
+                    Alias::new("collection"),
+                )
+                .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(
                     name_or_id((Users::Table, Users::Name), (LogicalFunctionRuns::Table, LogicalFunctionRuns::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
-                .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
-                .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
+                .expr_as(
+                    name_or_id((groups_alias.clone(), Groups::Name), (LogicalFunctionRuns::Table, LogicalFunctionRuns::GroupId)),
+                    Alias::new("group"),
+                )
+                .expr_as(
+                    label_of(LastProject, Projects::Name, (LogicalFunctionRuns::Table, LogicalFunctionRuns::ProjectId)),
+                    Alias::new("project"),
+                )
                 .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::Id)), Alias::new("physical_function_run_id"))
                 .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::StartedOn)), Alias::new("started_on"))
                 .expr_as(Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::EndedOn)), Alias::new("ended_on"))
@@ -275,22 +270,38 @@ impl Entity for Defs {
                     Alias::new("function_version_patch_id"),
                 )
                 .from(LogicalFunctionRuns::Table)
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    CollectionsResolved,
-                    Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::CollectionId))
-                        .equals((CollectionsResolved, Collections::Id)),
+                    Collections::Table,
+                    LastCollection,
+                    last_version_of(
+                        Collections::Table,
+                        LastCollection,
+                        Collections::CollectionId,
+                        (LogicalFunctionRuns::Table, LogicalFunctionRuns::CollectionId),
+                    ),
                 )
                 .join_as(
                     JoinType::LeftJoin,
                     Groups::Table,
                     groups_alias.clone(),
-                    Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::GroupId)).equals((groups_alias, Groups::Id)),
+                    last_version_of(
+                        Groups::Table,
+                        groups_alias.clone(),
+                        Groups::GroupId,
+                        (LogicalFunctionRuns::Table, LogicalFunctionRuns::GroupId),
+                    ),
                 )
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    ProjectsResolved,
-                    Expr::col((LogicalFunctionRuns::Table, LogicalFunctionRuns::ProjectId)).equals((ProjectsResolved, Projects::Id)),
+                    Projects::Table,
+                    LastProject,
+                    last_version_of(
+                        Projects::Table,
+                        LastProject,
+                        Projects::ProjectId,
+                        (LogicalFunctionRuns::Table, LogicalFunctionRuns::ProjectId),
+                    ),
                 )
                 .join(
                     JoinType::LeftJoin,

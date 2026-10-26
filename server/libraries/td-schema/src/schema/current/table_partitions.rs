@@ -4,7 +4,6 @@
 
 use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Table, TableCreateStatement};
 
-use super::collections::Collections;
 use super::functions::Functions;
 use super::physical_table_data_versions::PhysicalTableDataVersions;
 use crate::schema::Entity;
@@ -40,13 +39,6 @@ impl Entity for Defs {
                 .col(logical_id_column(TablePartitions::TableDataVersionId).not_null())
                 .col(ColumnDef::new(TablePartitions::PartitionKey).text().null())
                 .col(ColumnDef::new(TablePartitions::PartitionDeleted).boolean().null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(TablePartitions::Table, TablePartitions::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
                 .foreign_key(
                     ForeignKey::create()
                         .from(TablePartitions::Table, TablePartitions::FunctionVersionId)

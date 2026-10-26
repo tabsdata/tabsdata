@@ -8,16 +8,17 @@
 //! produces via `create_db_triggers` for its SCD2 close-out.
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
-    IntoIden, JoinType, Query, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, Iden, Index, IndexCreateStatement, IntoIden, JoinType, Query, Table,
+    TableCreateStatement,
 };
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::users::Users;
 use crate::schema::Entity;
+use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
 use crate::schema::sql::id_column;
-use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::scd2::{closed_version, label_of, last_version_of, open_interval};
 use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except};
 
 /// `triggers__with_names` view name. Re-used inside this file by
@@ -68,13 +69,6 @@ impl Entity for Defs {
                 .col(id_column(Triggers::DefinedById).not_null())
                 .col(ColumnDef::new(Triggers::System).boolean().not_null())
                 .col(ColumnDef::new(Triggers::ValidTo).timestamp_with_time_zone().not_null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(Triggers::Table, Triggers::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
                 .to_owned(),
         ]
     }
@@ -169,21 +163,30 @@ fn triggers_with_names() -> ViewDef {
         TriggersWithNames,
         Query::select()
             .expr(Expr::col((Triggers::Table, Asterisk)))
-            .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-            .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
-            .expr_as(Expr::col((trigger_by_collection.clone(), Collections::Name)), Alias::new("trigger_by_collection"))
+            .expr_as(label_of(LastCollection, Collections::Name, (Triggers::Table, Triggers::CollectionId)), Alias::new("collection"))
+            .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
+            .expr_as(
+                name_or_id((trigger_by_collection.clone(), Collections::Name), (Triggers::Table, Triggers::TriggerByCollectionId)),
+                Alias::new("trigger_by_collection"),
+            )
             .from(Triggers::Table)
-            .join(
+            .join_as(
                 JoinType::LeftJoin,
-                CollectionsResolved,
-                Expr::col((Triggers::Table, Triggers::CollectionId)).equals((CollectionsResolved, Collections::Id)),
+                Collections::Table,
+                LastCollection,
+                last_version_of(Collections::Table, LastCollection, Collections::CollectionId, (Triggers::Table, Triggers::CollectionId)),
             )
             .join(JoinType::LeftJoin, Users::Table, Expr::col((Triggers::Table, Triggers::DefinedById)).equals((Users::Table, Users::Id)))
             .join_as(
                 JoinType::LeftJoin,
-                CollectionsResolved,
+                Collections::Table,
                 trigger_by_collection.clone(),
-                Expr::col((Triggers::Table, Triggers::TriggerByCollectionId)).equals((trigger_by_collection, Collections::Id)),
+                last_version_of(
+                    Collections::Table,
+                    trigger_by_collection.clone(),
+                    Collections::CollectionId,
+                    (Triggers::Table, Triggers::TriggerByCollectionId),
+                ),
             )
             .to_owned(),
     )

@@ -2,9 +2,8 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
-use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Table, TableCreateStatement};
+use sea_query::{ColumnDef, Iden, Table, TableCreateStatement};
 
-use super::collections::Collections;
 use crate::schema::Entity;
 use crate::schema::sql::id_column;
 
@@ -40,13 +39,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Bundles::Status).text().not_null())
                 .col(ColumnDef::new(Bundles::CreatedOn).timestamp_with_time_zone().not_null())
                 .col(id_column(Bundles::CreatedById).not_null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(Bundles::Table, Bundles::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
                 .to_owned(),
         ]
     }

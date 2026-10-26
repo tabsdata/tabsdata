@@ -7,13 +7,14 @@ use sea_query::{
     Query, Table, TableCreateStatement,
 };
 
-use super::projects::{Projects, ProjectsResolved};
+use super::projects::{LastProject, Projects};
 use super::roles::Roles;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
 use crate::schema::sql::id_column;
+use crate::schema::sql::scd2::{last_version_of, open_name};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "permissions__with_names"]
@@ -106,7 +107,7 @@ impl Entity for Defs {
                         Alias::new("entity_id"),
                     )
                     .expr_as(Expr::col((Roles::Table, Roles::Name)), Alias::new("role"))
-                    .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("entity"))
+                    .expr_as(open_name(LastProject, Projects::Name), Alias::new("entity"))
                     .from(Permissions::Table)
                     .join(
                         JoinType::LeftJoin,
@@ -118,10 +119,11 @@ impl Entity for Defs {
                         Roles::Table,
                         Expr::col((Permissions::Table, Permissions::RoleId)).equals((Roles::Table, Roles::Id)),
                     )
-                    .join(
+                    .join_as(
                         JoinType::LeftJoin,
-                        ProjectsResolved,
-                        Expr::col((Permissions::Table, Permissions::EntityId)).equals((ProjectsResolved, Projects::Id)),
+                        Projects::Table,
+                        LastProject,
+                        last_version_of(Projects::Table, LastProject, Projects::ProjectId, (Permissions::Table, Permissions::EntityId)),
                     )
                     .to_owned(),
             ),

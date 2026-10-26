@@ -3,16 +3,16 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
-    IntoIden, JoinType, Query, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, Iden, Index, IndexCreateStatement, IntoIden, JoinType, Query, Table,
+    TableCreateStatement,
 };
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
-use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::scd2::{closed_version, label_of, last_version_of, open_interval};
 use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except};
 use crate::schema::sql::{id_column, logical_id_column};
 
@@ -84,13 +84,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Functions::ValidTo).timestamp_with_time_zone().not_null())
                 .col(ColumnDef::new(Functions::FunctionType).text().not_null())
                 .col(id_column(Functions::ParentFunctionId).null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(Functions::Table, Functions::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
                 .to_owned(),
         ]
     }
@@ -162,17 +155,21 @@ impl Entity for Defs {
             FunctionsWithNames,
             Query::select()
                 .expr(Expr::col((Functions::Table, Asterisk)))
-                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
-                // Group snapshot from the function's collection. Used at LFR/LTDV
-                // mint time to stamp `group_id` onto each minted row.
-                .expr_as(Expr::col((CollectionsResolved, Collections::GroupId)), Alias::new("group_id"))
+                .expr_as(label_of(LastCollection, Collections::Name, (Functions::Table, Functions::CollectionId)), Alias::new("collection"))
+                .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
+                .expr_as(Expr::col((LastCollection, Collections::GroupId)), Alias::new("group_id"))
                 .expr_as(name_or_id((Users::Table, Users::Name), (Functions::Table, Functions::DefinedById)), Alias::new("defined_by"))
                 .from(Functions::Table)
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    CollectionsResolved,
-                    Expr::col((Functions::Table, Functions::CollectionId)).equals((CollectionsResolved, Collections::Id)),
+                    Collections::Table,
+                    LastCollection,
+                    last_version_of(
+                        Collections::Table,
+                        LastCollection,
+                        Collections::CollectionId,
+                        (Functions::Table, Functions::CollectionId),
+                    ),
                 )
                 .join(
                     JoinType::LeftJoin,

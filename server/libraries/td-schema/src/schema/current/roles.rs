@@ -3,11 +3,10 @@
 //
 
 use sea_query::{
-    Alias, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
-    InsertStatement, JoinType, Keyword, Query, Table, TableCreateStatement,
+    Alias, ColumnDef, ConditionalStatement, Expr, ExprTrait, Iden, Index, IndexCreateStatement, InsertStatement, JoinType, Keyword, Query,
+    Table, TableCreateStatement,
 };
 
-use super::projects::Projects;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
@@ -52,13 +51,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Roles::Kind).text().not_null())
                 .col(id_column(Roles::ProjectId).null())
                 .col(ColumnDef::new(Roles::Fixed).boolean().not_null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(Roles::Table, Roles::ProjectId)
-                        .to(Projects::Table, Projects::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
                 .to_owned(),
         ]
     }

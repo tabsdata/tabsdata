@@ -14,13 +14,14 @@
 
 use sea_query::{Alias, Asterisk, Expr, ExprTrait, Iden, JoinType, Query, UnionType};
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::function_patches::FunctionPatches;
 use super::functions::Functions;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::sql::ViewDef;
+use crate::schema::sql::scd2::{label_of, last_version_of};
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "function_versions__with_names"]
@@ -33,14 +34,15 @@ impl Entity for Defs {
         let parent = Alias::new("parent");
         let mut heads = Query::select()
             .expr(Expr::col((Functions::Table, Asterisk)))
-            .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
+            .expr_as(label_of(LastCollection, Collections::Name, (Functions::Table, Functions::CollectionId)), Alias::new("collection"))
             .expr_as(name_or_id((Users::Table, Users::Name), (Functions::Table, Functions::DefinedById)), Alias::new("defined_by"))
             .expr_as(Expr::val(None::<String>), Alias::new("patch_of"))
             .from(Functions::Table)
-            .join(
+            .join_as(
                 JoinType::LeftJoin,
-                CollectionsResolved,
-                Expr::col((Functions::Table, Functions::CollectionId)).equals((CollectionsResolved, Collections::Id)),
+                Collections::Table,
+                LastCollection,
+                last_version_of(Collections::Table, LastCollection, Collections::CollectionId, (Functions::Table, Functions::CollectionId)),
             )
             .join(JoinType::LeftJoin, Users::Table, Expr::col((Functions::Table, Functions::DefinedById)).equals((Users::Table, Users::Id)))
             .to_owned();
@@ -68,7 +70,7 @@ impl Entity for Defs {
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::ValidTo)))
             .expr(Expr::col((parent.clone(), Functions::FunctionType)))
             .expr(Expr::col((parent.clone(), Functions::ParentFunctionId)))
-            .expr(Expr::col((CollectionsResolved, Collections::Name)))
+            .expr(label_of(LastCollection, Collections::Name, (FunctionPatches::Table, FunctionPatches::CollectionId)))
             .expr(name_or_id((Users::Table, Users::Name), (FunctionPatches::Table, FunctionPatches::DefinedById)))
             .expr(Expr::col((FunctionPatches::Table, FunctionPatches::ParentFunctionVersionId)))
             .from(FunctionPatches::Table)
@@ -78,10 +80,16 @@ impl Entity for Defs {
                 parent.clone(),
                 Expr::col((FunctionPatches::Table, FunctionPatches::ParentFunctionVersionId)).equals((parent, Functions::Id)),
             )
-            .join(
+            .join_as(
                 JoinType::LeftJoin,
-                CollectionsResolved,
-                Expr::col((FunctionPatches::Table, FunctionPatches::CollectionId)).equals((CollectionsResolved, Collections::Id)),
+                Collections::Table,
+                LastCollection,
+                last_version_of(
+                    Collections::Table,
+                    LastCollection,
+                    Collections::CollectionId,
+                    (FunctionPatches::Table, FunctionPatches::CollectionId),
+                ),
             )
             .join(
                 JoinType::LeftJoin,

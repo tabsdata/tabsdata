@@ -7,13 +7,13 @@ use sea_query::{
     IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::functions::Functions;
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
-use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::scd2::{closed_version, label_of, last_version_of, open_interval};
 use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except};
 use crate::schema::sql::{id_column, logical_id_column};
 
@@ -65,13 +65,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Tables::TableType).text().not_null().default("R"))
                 .col(ColumnDef::new(Tables::ValidTo).timestamp_with_time_zone().not_null())
                 .col(id_column(Tables::ParentTableId).null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(Tables::Table, Tables::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
                 .foreign_key(
                     ForeignKey::create()
                         .from(Tables::Table, Tables::FunctionVersionId)
@@ -152,14 +145,15 @@ impl Entity for Defs {
                 .expr(Expr::col((Tables::Table, Asterisk)))
                 .expr_as(Expr::col((Tables::Table, Tables::FunctionParamPos)).lt(0), Alias::new("system"))
                 .expr_as(name_or_id((Users::Table, Users::Name), (Tables::Table, Tables::DefinedById)), Alias::new("defined_by"))
-                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
+                .expr_as(label_of(LastCollection, Collections::Name, (Tables::Table, Tables::CollectionId)), Alias::new("collection"))
+                .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .from(Tables::Table)
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    CollectionsResolved,
-                    Expr::col((Tables::Table, Tables::CollectionId)).equals((CollectionsResolved, Collections::Id)),
+                    Collections::Table,
+                    LastCollection,
+                    last_version_of(Collections::Table, LastCollection, Collections::CollectionId, (Tables::Table, Tables::CollectionId)),
                 )
                 .join(
                     JoinType::LeftJoin,

@@ -37,6 +37,7 @@ mod v13_backfills;
 mod v14_backfills;
 mod v15_repairs;
 mod v16_backfills;
+mod v17_backfills;
 mod v17_repairs;
 use crate::generated_sql::generated;
 use crate::pool::TdPool;

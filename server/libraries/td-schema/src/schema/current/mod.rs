@@ -42,7 +42,7 @@ use sea_query::{DynIden, IntoIden};
 /// Schema revision within the current major; resets to 1 at each major bump
 /// (cross-major upgrade is refused via `tabsdata_version`). To evolve the
 /// schema, follow the README runbook; `test_schema_ddl_snapshot` gates the DDL.
-pub const VERSION: usize = 17;
+pub const VERSION: usize = 18;
 
 pub use crate::schema::sql::{Changed, Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs};
 pub use executions::rollup as execution_rollup;
@@ -90,9 +90,10 @@ pub(crate) const ENTITIES: &[&dyn Entity] = &[
 
 /// Tables that carry a `project_id` and get PostgreSQL row-level security.
 /// These are exactly the tables to which `project_id` was added in `current/`;
-/// keep this list in sync with that column. The `projects` registry itself is
-/// intentionally absent — it is keyed by `id`, not `project_id`, and the app
-/// never lists it (the active project arrives in the request).
+/// keep this list in sync with that column. The `projects` registry is
+/// intentionally absent: its `project_id` is the project itself, and the
+/// resolver reads it before any project is entered (the active project arrives
+/// in the request).
 ///
 /// `test_project_scoped_tables_match_project_id_columns` cross-checks this list
 /// against the tables that actually declare a `project_id` column, so an

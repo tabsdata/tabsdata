@@ -797,8 +797,8 @@ async fn v8_to_v9_remints_system_group_ids_postgres() {
 
     let groups = scalars(
         &db.serving,
-        "SELECT project_id || '/' || name || '=' || id || '/' || kind \
-         FROM groups ORDER BY project_id, name",
+        "SELECT project_id || '/' || name || '=' || group_id || '/' || kind \
+         FROM groups WHERE valid_to = 'infinity' ORDER BY project_id, name",
     )
     .await;
     let mut expected = vec![
@@ -826,7 +826,7 @@ async fn v8_to_v9_remints_system_group_ids_postgres() {
         let project = Id::try_from(*p).unwrap();
         for row in scalars(
             &db.serving,
-            &format!("SELECT id FROM groups WHERE project_id = '{p}' AND kind <> 'custom'"),
+            &format!("SELECT group_id FROM groups WHERE project_id = '{p}' AND kind <> 'custom'"),
         )
         .await
         {
@@ -885,7 +885,7 @@ async fn v8_to_v9_remints_system_group_ids_postgres() {
 
     let mismatched = scalars(
         &db.serving,
-        "SELECT c.id FROM collections c JOIN groups g ON g.id = c.group_id \
+        "SELECT c.collection_id FROM collections c JOIN groups g ON g.group_id = c.group_id \
          WHERE (g.kind = 'sources') <> (c.collection_type = 'S')",
     )
     .await;
@@ -895,41 +895,15 @@ async fn v8_to_v9_remints_system_group_ids_postgres() {
     );
 
     let pool = db.serving.as_ref();
-    let orphan = sqlx::query(generated(format!(
-        "INSERT INTO collections (id, project_id, name, description, created_on, created_by_id, \
-           modified_on, modified_by_id, group_id, base_path, collection_type) \
-         VALUES ('orphan', '{keeper}', 'orphan', '', now(), 'u0', now(), 'u0', 'no-such-group', \
-           NULL, 'F')"
+    let deleted = sqlx::query(generated(format!(
+        "DELETE FROM groups WHERE group_id = '{DEFAULT_GROUP_ID}'"
     )))
     .execute(pool)
     .await;
     assert_eq!(
-        sqlstate(orphan),
-        "23503",
-        "the re-added FK must refuse an unknown group"
-    );
-    let still_referenced = sqlx::query(generated(format!(
-        "DELETE FROM groups WHERE id = '{DEFAULT_GROUP_ID}'"
-    )))
-    .execute(pool)
-    .await;
-    assert_eq!(
-        sqlstate(still_referenced),
-        "23001",
-        "RESTRICT must keep a referenced group"
-    );
-    let duplicate = sqlx::query(generated(format!(
-        "INSERT INTO groups (id, project_id, name, description, created_on, created_by_id, \
-           modified_on, modified_by_id, system, kind) \
-         VALUES ('{DEFAULT_GROUP_ID}', '{}', 'again', '', now(), 'u0', now(), 'u0', false, 'custom')",
-        minted[0]
-    )))
-    .execute(pool)
-    .await;
-    assert_eq!(
-        sqlstate(duplicate),
-        "23505",
-        "the primary key must hold instance-wide, not per project"
+        sqlstate(deleted),
+        "P0001",
+        "a group's versions are insert-only"
     );
 }
 

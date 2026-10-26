@@ -2,43 +2,51 @@
 // Copyright 2026 Tabsdata Inc.
 //
 
+//! `collections` is the SCD2 timeline of every collection: `id` is a version,
+//! `collection_id` the collection every function, table and run points at.
+//! Its project, group, type and connection are fixed for the collection's
+//! life; a delete closes the timeline.
+//!
+//! Referrers read it through their `*__with_names` views, which join its last
+//! version: every read is current. An as-of read needs the instant in the
+//! join, which a view cannot take; when reads move to as-of, these views give
+//! way to parameterized reads.
+
 use sea_query::{
-    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Func, Iden, Index,
-    IndexCreateStatement, JoinType, Query, Table, TableCreateStatement,
+    Alias, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Func, FunctionCall, Iden, Index,
+    IndexCreateStatement, IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
 use super::connections::Connections;
-use super::groups::Groups;
-use super::projects::{Projects, ProjectsResolved};
+use super::groups::{Groups, LastGroup};
+use super::projects::{LastProject, Projects};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
-use crate::schema::sql::ViewDef;
-use crate::schema::sql::id_column;
+use crate::schema::source::Derived;
+use crate::schema::sql::scd2::{label_of, last_version_of, open_interval};
+use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of, cols_of_except, id_column};
 
 #[derive(Iden, Clone, Copy, strum::EnumIter)]
 pub enum Collections {
     Table,
     Id,
     ProjectId,
+    CollectionId,
     Name,
     Description,
-    CreatedOn,
-    CreatedById,
-    ModifiedOn,
-    ModifiedById,
-    NameWhenDeleted,
-    GroupId,
     BasePath,
+    GroupId,
     CollectionType,
     ConnectionId,
+    ValidFrom,
+    ValidTo,
+    DefinedById,
 }
 
+/// A referrer's join to its collection's open version.
 #[derive(Iden, Clone, Copy)]
-pub struct CollectionsResolved;
-
-#[derive(Iden, Clone, Copy)]
-pub struct CollectionsActive;
+pub struct LastCollection;
 
 #[derive(Iden, Clone, Copy)]
 #[iden = "collections__with_names"]
@@ -56,31 +64,23 @@ impl Entity for Defs {
                 // write that omits it hits NOT NULL. On postgres the RLS phase
                 // sets the column default to read `app.project_id` (the request's
                 .col(id_column(Collections::ProjectId).not_null())
+                .col(id_column(Collections::CollectionId).not_null())
                 .col(ColumnDef::new(Collections::Name).text().not_null())
                 .col(ColumnDef::new(Collections::Description).text().not_null())
-                .col(ColumnDef::new(Collections::CreatedOn).timestamp_with_time_zone().not_null())
-                .col(id_column(Collections::CreatedById).not_null())
-                .col(ColumnDef::new(Collections::ModifiedOn).timestamp_with_time_zone().not_null())
-                .col(id_column(Collections::ModifiedById).not_null())
-                .col(ColumnDef::new(Collections::NameWhenDeleted).text().null())
-                .col(id_column(Collections::GroupId).not_null())
                 // Logical storage prefix for the collection's artifacts. Optional:
                 // NULL means "inherit the owning project's base_path" (resolved at
-                // stamp time via COALESCE(function, collection, project)). Mutable;
+                // stamp time via COALESCE(function, collection, project));
                 // physical backend is selected by mounts.
                 .col(ColumnDef::new(Collections::BasePath).text().null())
+                .col(id_column(Collections::GroupId).not_null())
                 // Collection flavour (DataFactory/Source/Destination), single-char code.
                 .col(ColumnDef::new(Collections::CollectionType).text().not_null())
-                // The collection's connection (source/destination only); set on the
-                // first connection upsert.
+                // The collection's connection (source/destination only), minted
+                // with the collection.
                 .col(id_column(Collections::ConnectionId).null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(Collections::Table, Collections::GroupId)
-                        .to(Groups::Table, Groups::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
+                .col(ColumnDef::new(Collections::ValidFrom).timestamp_with_time_zone().not_null())
+                .col(ColumnDef::new(Collections::ValidTo).timestamp_with_time_zone().not_null())
+                .col(id_column(Collections::DefinedById).not_null())
                 .foreign_key(
                     ForeignKey::create()
                         .from(Collections::Table, Collections::ConnectionId)
@@ -94,34 +94,39 @@ impl Entity for Defs {
 
     fn create_indices(&self) -> Vec<IndexCreateStatement> {
         vec![
-            // Resolved-name lookup, as on `projects`. `(project_id, name)`
-            // cannot serve it — the name read is the expression, not the
-            // column — so this is its own index, project-led like the rest.
             Index::create()
-                .name("collections___project_id__resolved_name___idx")
+                .name("collections___collection_id___current_uidx")
+                .table(Collections::Table)
+                .col(Collections::CollectionId)
+                .unique()
+                .and_where(open_interval(Collections::ValidTo))
+                .to_owned(),
+            // Leads with project_id so it serves the RLS predicate; unique makes
+            // live collection names unique within a project, not globally.
+            Index::create()
+                .name("collections___project_id__name___current_uidx")
                 .table(Collections::Table)
                 .col(Collections::ProjectId)
-                .col(Expr::cust("COALESCE(\"name_when_deleted\", \"name\")"))
+                .col(Collections::Name)
+                .unique()
+                .and_where(open_interval(Collections::ValidTo))
                 .to_owned(),
-            // The group-delete RESTRICT FK probe; project_id trails so the
-            // tenant-scoped group filter is served too.
+            // The latest version of a timeline, open or closed: what a referrer
+            // joins for its label and the entity's fixed columns.
+            Index::create()
+                .name("collections___collection_id__valid_from__id___idx")
+                .table(Collections::Table)
+                .col(Collections::CollectionId)
+                .col(Collections::ValidFrom)
+                .col(Collections::Id)
+                .to_owned(),
+            // The group-delete probe for a live collection in the group;
+            // project_id trails so the tenant-scoped group filter is served too.
             Index::create()
                 .name("collections___group_id__project_id___idx")
                 .table(Collections::Table)
                 .col(Collections::GroupId)
                 .col(Collections::ProjectId)
-                .to_owned(),
-            // Leads with project_id so it serves the RLS predicate; unique makes
-            // live collection names unique within a project, not globally.
-            // Partial, so a delete's tombstone rename takes no key lock and
-            // never blocks the foreign-key checks of rows that point here.
-            Index::create()
-                .name("collections___project_id__name___live_uidx")
-                .table(Collections::Table)
-                .col(Collections::ProjectId)
-                .col(Collections::Name)
-                .and_where(Expr::col(Collections::NameWhenDeleted).is_null())
-                .unique()
                 .to_owned(),
             // Keyset pagination: `ORDER BY id` under the tenant predicate.
             Index::create()
@@ -134,120 +139,62 @@ impl Entity for Defs {
     }
 
     fn create_views(&self) -> Vec<ViewDef> {
+        vec![collections_with_names()]
+    }
+
+    fn create_db_triggers(&self) -> Vec<Derived> {
         vec![
-            // Every row, including soft-deleted, with the real name resolved via
-            // COALESCE(name_when_deleted, name) and a `deleted` flag. The canonical
-            // join surface: the base row is always present, so a foreign-key
-            // resolution never misses. `effective_base_path` joins the base
-            // `projects` table (not `projects_active`) so a deleted collection
-            // under a deleted project still resolves a prefix.
-            ViewDef::new(
-                CollectionsResolved,
-                Query::select()
-                    .column((Collections::Table, Collections::Id))
-                    .column((Collections::Table, Collections::ProjectId))
-                    .expr_as(
-                        Func::coalesce([
-                            Expr::col((Collections::Table, Collections::NameWhenDeleted)),
-                            Expr::col((Collections::Table, Collections::Name)),
-                        ]),
-                        Alias::new("name"),
-                    )
-                    .column((Collections::Table, Collections::Description))
-                    .column((Collections::Table, Collections::CreatedOn))
-                    .column((Collections::Table, Collections::CreatedById))
-                    .column((Collections::Table, Collections::ModifiedOn))
-                    .column((Collections::Table, Collections::ModifiedById))
-                    .column((Collections::Table, Collections::NameWhenDeleted))
-                    .column((Collections::Table, Collections::GroupId))
-                    .column((Collections::Table, Collections::BasePath))
-                    .column((Collections::Table, Collections::CollectionType))
-                    .column((Collections::Table, Collections::ConnectionId))
-                    .expr_as(
-                        Func::coalesce([
-                            Expr::col((Collections::Table, Collections::BasePath)),
-                            Expr::col((Projects::Table, Projects::BasePath)),
-                        ]),
-                        Alias::new("effective_base_path"),
-                    )
-                    .expr_as(Expr::col((Collections::Table, Collections::NameWhenDeleted)).is_not_null(), Alias::new("deleted"))
-                    .from(Collections::Table)
-                    .join(
-                        JoinType::LeftJoin,
-                        Projects::Table,
-                        Expr::col((Collections::Table, Collections::ProjectId)).equals((Projects::Table, Projects::Id)),
-                    )
-                    .to_owned(),
-            ),
-            // Non-soft-deleted subset of the resolved view.
-            ViewDef::new(
-                CollectionsActive,
-                Query::select()
-                    .column((CollectionsResolved, Collections::Id))
-                    .column((CollectionsResolved, Collections::ProjectId))
-                    .column((CollectionsResolved, Collections::Name))
-                    .column((CollectionsResolved, Collections::Description))
-                    .column((CollectionsResolved, Collections::CreatedOn))
-                    .column((CollectionsResolved, Collections::CreatedById))
-                    .column((CollectionsResolved, Collections::ModifiedOn))
-                    .column((CollectionsResolved, Collections::ModifiedById))
-                    .column((CollectionsResolved, Collections::GroupId))
-                    .column((CollectionsResolved, Collections::BasePath))
-                    .column((CollectionsResolved, Collections::CollectionType))
-                    .column((CollectionsResolved, Collections::ConnectionId))
-                    .expr(Expr::col((CollectionsResolved, Alias::new("effective_base_path"))))
-                    .from(CollectionsResolved)
-                    .and_where(Expr::col((CollectionsResolved, Collections::NameWhenDeleted)).is_null())
-                    .to_owned(),
-            ),
-            collections_with_names(),
+            ImmutableColumnsTriggerDef {
+                name: format!("{}__immutable", Collections::Table.to_string()),
+                source_table: Collections::Table.into_iden(),
+                columns: cols_of_except(Collections::ValidTo),
+            }
+            .derived(),
+            Scd2TriggerDef {
+                name: format!("{}__scd2_close", Collections::Table.to_string()),
+                source_table: Collections::Table.into_iden(),
+                partition_col: Collections::CollectionId.into_iden(),
+                valid_from_col: Collections::ValidFrom.into_iden(),
+                valid_to_col: Collections::ValidTo.into_iden(),
+                pk_col: Collections::Id.into_iden(),
+            }
+            .derived(),
         ]
     }
 }
 
+/// Every version of every collection with its resolved prefix and labels; a
+/// read of its open rows is the live collections.
 fn collections_with_names() -> ViewDef {
-    let created_by_user = Alias::new("created_by_user");
-    let modified_by_user = Alias::new("modified_by_user");
-    let groups_alias = Alias::new("groups_for_collection");
+    let effective_base_path: FunctionCall = Func::coalesce([
+        Expr::col((Collections::Table, Collections::BasePath)),
+        Expr::col((LastProject, Projects::BasePath)),
+    ]);
     ViewDef::new(
         CollectionsWithNames,
         Query::select()
-            .expr(Expr::col((CollectionsActive, Asterisk)))
-            .expr_as(
-                name_or_id((created_by_user.clone(), Users::Name), (CollectionsActive, Collections::CreatedById)),
-                Alias::new("created_by"),
-            )
-            .expr_as(
-                name_or_id((modified_by_user.clone(), Users::Name), (CollectionsActive, Collections::ModifiedById)),
-                Alias::new("modified_by"),
-            )
-            .expr_as(Expr::col((groups_alias.clone(), Groups::Name)), Alias::new("group"))
-            .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
-            .from(CollectionsActive)
+            .columns(cols_of::<Collections>().into_iter().map(|c| (Collections::Table.into_iden(), c)))
+            .expr_as(effective_base_path, Alias::new("effective_base_path"))
+            .expr_as(label_of(LastProject, Projects::Name, (Collections::Table, Collections::ProjectId)), Alias::new("project"))
+            .expr_as(name_or_id((Users::Table, Users::Name), (Collections::Table, Collections::DefinedById)), Alias::new("defined_by"))
+            .expr_as(label_of(LastGroup, Groups::Name, (Collections::Table, Collections::GroupId)), Alias::new("group"))
+            .from(Collections::Table)
             .join_as(
                 JoinType::LeftJoin,
-                Users::Table,
-                created_by_user.clone(),
-                Expr::col((CollectionsActive, Collections::CreatedById)).equals((created_by_user, Users::Id)),
-            )
-            .join_as(
-                JoinType::LeftJoin,
-                Users::Table,
-                modified_by_user.clone(),
-                Expr::col((CollectionsActive, Collections::ModifiedById)).equals((modified_by_user, Users::Id)),
+                Projects::Table,
+                LastProject,
+                last_version_of(Projects::Table, LastProject, Projects::ProjectId, (Collections::Table, Collections::ProjectId)),
             )
             .join_as(
                 JoinType::LeftJoin,
                 Groups::Table,
-                groups_alias.clone(),
-                Expr::col((CollectionsActive, Collections::GroupId)).equals((groups_alias, Groups::Id)),
+                LastGroup,
+                last_version_of(Groups::Table, LastGroup, Groups::GroupId, (Collections::Table, Collections::GroupId)),
             )
-            // Safe as an inner join: projects_resolved holds every project
-            // (soft-deleted included), so it never drops a collection row.
             .join(
-                JoinType::InnerJoin,
-                ProjectsResolved,
-                Expr::col((CollectionsActive, Collections::ProjectId)).equals((ProjectsResolved, Projects::Id)),
+                JoinType::LeftJoin,
+                Users::Table,
+                Expr::col((Collections::Table, Collections::DefinedById)).equals((Users::Table, Users::Id)),
             )
             .to_owned(),
     )

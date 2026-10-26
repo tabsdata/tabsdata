@@ -15,23 +15,23 @@ use super::{at_rest, execute, scalars};
 async fn seed_prelude(db: &TdPool) {
     execute(
         db,
-        "INSERT INTO projects (id, name, description, base_path, created_on, created_by_id, \
-           modified_on, modified_by_id) \
-         VALUES ('p0', 'p0', '', '/p', now(), 'u0', now(), 'u0')",
+        "INSERT INTO projects (id, project_id, name, description, base_path, valid_from, \
+           defined_by_id) \
+         VALUES ('pv0', 'p0', 'p0', '', '/p', now(), 'u0')",
     )
     .await;
     execute(
         db,
-        "INSERT INTO groups (id, project_id, name, description, created_on, created_by_id, \
-           modified_on, modified_by_id, system, kind) \
-         VALUES ('g0', 'p0', 'g0', '', now(), 'u0', now(), 'u0', false, 'custom')",
+        "INSERT INTO groups (id, project_id, group_id, name, description, system, kind, \
+           valid_from, defined_by_id) \
+         VALUES ('gv0', 'p0', 'g0', 'g0', '', false, 'custom', now(), 'u0')",
     )
     .await;
     execute(
         db,
-        "INSERT INTO collections (id, project_id, name, description, created_on, \
-           created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type) \
-         VALUES ('c0', 'p0', 'c0', '', now(), 'u0', now(), 'u0', 'g0', NULL, 'R')",
+        "INSERT INTO collections (id, project_id, collection_id, name, description, base_path, \
+           group_id, collection_type, valid_from, defined_by_id) \
+         VALUES ('cv0', 'p0', 'c0', 'c0', '', NULL, 'g0', 'R', now(), 'u0')",
     )
     .await;
 }

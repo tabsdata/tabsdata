@@ -557,10 +557,13 @@ fn test_project_scoped_tables_match_project_id_columns() {
     // plain FK to `projects` — roles are managed GLOBALLY (a single namespace
     // shared across tenants), NOT tenant-RLS-scoped. So `roles` is deliberately
     // absent from project_scoped_tables and must be excluded from this
-    // column-vs-list cross-check.
+    // column-vs-list cross-check. `projects` carries the project it versions
+    // as `project_id` and is global: the resolver reads it before any project
+    // is entered.
+    let global = ["roles", "projects"];
     let with_project_id: HashSet<String> = COLS_BY_TABLE
         .iter()
-        .filter(|(t, cols)| t.as_str() != "roles" && cols.iter().any(|c| c == "project_id"))
+        .filter(|(t, cols)| !global.contains(&t.as_str()) && cols.iter().any(|c| c == "project_id"))
         .map(|(t, _)| t.clone())
         .collect();
     let listed: HashSet<String> = current::project_scoped_tables().iter().map(|t| t.to_string()).collect();

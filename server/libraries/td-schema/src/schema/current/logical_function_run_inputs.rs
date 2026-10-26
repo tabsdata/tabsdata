@@ -6,7 +6,6 @@
 
 use sea_query::{ColumnDef, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement, Table, TableCreateStatement};
 
-use super::collections::Collections;
 use super::executions::Executions;
 use super::logical_function_runs::LogicalFunctionRuns;
 use super::logical_table_data_versions::LogicalTableDataVersions;
@@ -58,13 +57,6 @@ impl Entity for Defs {
                 // request is built from it, never from the table as of a later
                 // instant. NULL on trigger-edge rows.
                 .col(id_column(LogicalFunctionRunInputs::RequirementTableVersionId).null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(LogicalFunctionRunInputs::Table, LogicalFunctionRunInputs::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
                 .foreign_key(
                     ForeignKey::create()
                         .from(LogicalFunctionRunInputs::Table, LogicalFunctionRunInputs::ExecutionId)

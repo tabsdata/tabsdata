@@ -7,16 +7,17 @@ use sea_query::{
     Query, Table, TableCreateStatement,
 };
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::functions::Functions;
 use super::logical_function_runs::{LogicalFunctionRuns, run_status_count};
 use super::physical_function_runs::PhysicalFunctionRuns;
 use super::project_topologies::ProjectTopologies;
-use super::projects::{Projects, ProjectsResolved};
+use super::projects::{LastProject, Projects};
 use super::transactions::{TRANSACTION_TERMINALS, Transactions};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
+use crate::schema::sql::scd2::{closed_version, label_of, last_version_of};
 use crate::schema::sql::{Children, Instants, Parent, Physical, RollupArm, RollupDef, Runs, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
@@ -77,13 +78,6 @@ impl Entity for Defs {
                 .col(ColumnDef::new(Executions::StartedOn).timestamp_with_time_zone().null())
                 .col(ColumnDef::new(Executions::EndedOn).timestamp_with_time_zone().null())
                 .col(id_column(Executions::TopologyVersionId).not_null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(Executions::Table, Executions::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
                 .foreign_key(
                     ForeignKey::create()
                         .from(Executions::Table, Executions::TopologyVersionId)
@@ -167,23 +161,32 @@ impl Entity for Defs {
             ExecutionsWithNames,
             Query::select()
                 .expr(Expr::col((Executions::Table, Asterisk)))
-                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
+                .expr_as(
+                    label_of(LastCollection, Collections::Name, (Executions::Table, Executions::CollectionId)),
+                    Alias::new("collection"),
+                )
+                .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("function"))
                 .expr_as(
                     name_or_id((Users::Table, Users::Name), (Executions::Table, Executions::TriggeredById)),
                     Alias::new("triggered_by"),
                 )
-                .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
+                .expr_as(label_of(LastProject, Projects::Name, (Executions::Table, Executions::ProjectId)), Alias::new("project"))
                 .expr_as(
                     run_status_count(LogicalFunctionRuns::ExecutionId, (Executions::Table, Executions::Id)),
                     Alias::new("function_run_status_count"),
                 )
                 .from(Executions::Table)
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    CollectionsResolved,
-                    Expr::col((Executions::Table, Executions::CollectionId)).equals((CollectionsResolved, Collections::Id)),
+                    Collections::Table,
+                    LastCollection,
+                    last_version_of(
+                        Collections::Table,
+                        LastCollection,
+                        Collections::CollectionId,
+                        (Executions::Table, Executions::CollectionId),
+                    ),
                 )
                 .join(
                     JoinType::LeftJoin,
@@ -195,10 +198,11 @@ impl Entity for Defs {
                     Users::Table,
                     Expr::col((Executions::Table, Executions::TriggeredById)).equals((Users::Table, Users::Id)),
                 )
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    ProjectsResolved,
-                    Expr::col((Executions::Table, Executions::ProjectId)).equals((ProjectsResolved, Projects::Id)),
+                    Projects::Table,
+                    LastProject,
+                    last_version_of(Projects::Table, LastProject, Projects::ProjectId, (Executions::Table, Executions::ProjectId)),
                 )
                 .to_owned(),
         )]

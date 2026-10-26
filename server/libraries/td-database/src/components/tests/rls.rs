@@ -37,8 +37,8 @@ async fn scope(tx: &mut sqlx::Transaction<'static, sqlx::Postgres>, tenant: &str
 #[tokio::test]
 async fn test_rls_project_isolation() {
     const INSERT: &str = "INSERT INTO collections \
-        (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type) \
-        VALUES ($1, $2, 'd', now(), 'u', now(), 'u', $3, '/', 'F')";
+        (id, collection_id, name, description, group_id, collection_type, valid_from, defined_by_id) \
+        VALUES ($1::text || '_v', $1, $1, 'd', $2, 'F', now(), 'u')";
     const COUNT: &str = "SELECT count(*) FROM collections";
 
     let db = crate::test_utils::postgres::pool().await;
@@ -75,15 +75,6 @@ async fn test_rls_project_isolation() {
              TO \"{tenant}\", \"{across}\", \"{app_user}\""
         ),
         format!("ALTER ROLE \"{app_user}\" SET search_path TO \"{schema}\""),
-        // Collections FK groups(id); the schema seeds no project on Postgres,
-        // so seed a group per test project. `su` bypasses RLS, so set
-        // project_id explicitly.
-        format!(
-            "INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system, kind) VALUES ('g_a', 'A', 'g', 'd', now(), 'u', now(), 'u', false, 'custom')"
-        ),
-        format!(
-            "INSERT INTO \"{schema}\".groups (id, project_id, name, description, created_on, created_by_id, modified_on, modified_by_id, system, kind) VALUES ('g_b', 'B', 'g', 'd', now(), 'u', now(), 'u', false, 'custom')"
-        ),
     ] {
         sqlx::query(generated(stmt.clone()))
             .execute(&su)
@@ -108,15 +99,15 @@ async fn test_rls_project_isolation() {
     scope(&mut t, &tenant, "A").await;
     sqlx::query(INSERT)
         .bind("c_a")
-        .bind("ca")
         .bind("g_a")
         .execute(&mut *t)
         .await
         .unwrap();
-    let pid: String = sqlx::query_scalar("SELECT project_id FROM collections WHERE id = 'c_a'")
-        .fetch_one(&mut *t)
-        .await
-        .unwrap();
+    let pid: String =
+        sqlx::query_scalar("SELECT project_id FROM collections WHERE collection_id = 'c_a'")
+            .fetch_one(&mut *t)
+            .await
+            .unwrap();
     assert_eq!(pid, "A", "omitted project_id should default to the GUC");
     t.commit().await.unwrap();
 
@@ -130,8 +121,9 @@ async fn test_rls_project_isolation() {
     scope(&mut t, &tenant, "B").await;
     let bad = sqlx::query(
         "INSERT INTO collections \
-         (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type, project_id) \
-         VALUES ('x', 'x', 'd', now(), 'u', now(), 'u', 'g_a', '/', 'F', 'A')",
+         (id, collection_id, name, description, group_id, collection_type, valid_from, \
+          defined_by_id, project_id) \
+         VALUES ('x_v', 'x', 'x', 'd', 'g_a', 'F', now(), 'u', 'A')",
     )
     .execute(&mut *t)
     .await;
@@ -145,7 +137,6 @@ async fn test_rls_project_isolation() {
     scope(&mut t, &tenant, "B").await;
     sqlx::query(INSERT)
         .bind("c_b")
-        .bind("cb")
         .bind("g_b")
         .execute(&mut *t)
         .await
@@ -275,18 +266,11 @@ async fn test_rls_scd2_close_out_trigger_under_role() {
     let mut c = db.begin().await.unwrap();
     {
         c.scope_in_project("A").await.unwrap();
-        // Collections FK groups(id); project_id defaults to the scope GUC
-        // ('A'), satisfying RLS WITH CHECK and the collection's FK.
+        // project_id defaults to the scope GUC ('A'), satisfying RLS WITH CHECK.
         sqlx::query(
-            "INSERT INTO groups (id, name, description, created_on, created_by_id, modified_on, modified_by_id, system, kind) \
-             VALUES ('g', 'g', 'd', now(), 'u', now(), 'u', false, 'custom')",
-        )
-        .execute(&mut *c)
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO collections (id, name, description, created_on, created_by_id, modified_on, modified_by_id, group_id, base_path, collection_type) \
-             VALUES ('col', 'c', 'd', now(), 'u', now(), 'u', 'g', '/', 'F')",
+            "INSERT INTO collections (id, collection_id, name, description, group_id, \
+               collection_type, valid_from, defined_by_id) \
+             VALUES ('col_v', 'col', 'c', 'd', 'g', 'F', now(), 'u')",
         )
         .execute(&mut *c)
         .await

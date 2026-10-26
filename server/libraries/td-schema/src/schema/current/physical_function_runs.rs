@@ -7,18 +7,18 @@ use sea_query::{
     IntoIden, JoinType, Query, Table, TableCreateStatement,
 };
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::connections::Connections;
 use super::executions::Executions;
 use super::function_patches::FunctionPatches;
 use super::functions::Functions;
 use super::logical_function_runs::LogicalFunctionRuns;
-use super::projects::{Projects, ProjectsResolved};
+use super::projects::{LastProject, Projects};
 use super::users::Users;
 use crate::schema::Entity;
 use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
-use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::scd2::{closed_version, label_of, last_version_of, open_interval};
 use crate::schema::sql::{Scd2TriggerDef, SupersedeEndedTriggerDef, Transitions, TransitionsTriggerDef, ViewDef};
 use crate::schema::sql::{id_column, logical_id_column};
 
@@ -108,13 +108,6 @@ impl Entity for Defs {
                     ForeignKey::create()
                         .from(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::LogicalFunctionRunId)
                         .to(LogicalFunctionRuns::Table, LogicalFunctionRuns::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(PhysicalFunctionRuns::Table, PhysicalFunctionRuns::CollectionId)
-                        .to(Collections::Table, Collections::Id)
                         .on_delete(ForeignKeyAction::Restrict)
                         .on_update(ForeignKeyAction::Restrict),
                 )
@@ -258,11 +251,17 @@ impl Entity for Defs {
             Query::select()
                 .expr(Expr::col((PhysicalFunctionRuns::Table, Asterisk)))
                 .expr_as(Expr::col((Functions::Table, Functions::Name)), Alias::new("name"))
-                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
-                .expr_as(Expr::col((CollectionsResolved, Collections::ConnectionId)), Alias::new("connection_id"))
+                .expr_as(
+                    label_of(LastCollection, Collections::Name, (PhysicalFunctionRuns::Table, PhysicalFunctionRuns::CollectionId)),
+                    Alias::new("collection"),
+                )
+                .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
+                .expr_as(Expr::col((LastCollection, Collections::ConnectionId)), Alias::new("connection_id"))
                 .expr_as(Expr::col((Connections::Table, Connections::Kind)), Alias::new("connection"))
-                .expr_as(Expr::col((ProjectsResolved, Projects::Name)), Alias::new("project"))
+                .expr_as(
+                    label_of(LastProject, Projects::Name, (PhysicalFunctionRuns::Table, PhysicalFunctionRuns::ProjectId)),
+                    Alias::new("project"),
+                )
                 .expr_as(Expr::col((Executions::Table, Executions::Name)), Alias::new("execution"))
                 .expr_as(Expr::col((Executions::Table, Executions::FunctionVersionId)), Alias::new("execution_function_version_id"))
                 .expr_as(Expr::col((Functions::Table, Functions::StorageVersion)), Alias::new("storage_version"))
@@ -271,27 +270,38 @@ impl Entity for Defs {
                     Alias::new("triggered_by"),
                 )
                 .from(PhysicalFunctionRuns::Table)
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    CollectionsResolved,
-                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::CollectionId))
-                        .equals((CollectionsResolved, Collections::Id)),
+                    Collections::Table,
+                    LastCollection,
+                    last_version_of(
+                        Collections::Table,
+                        LastCollection,
+                        Collections::CollectionId,
+                        (PhysicalFunctionRuns::Table, PhysicalFunctionRuns::CollectionId),
+                    ),
                 )
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    Connections::Table,
-                    Expr::col((CollectionsResolved, Collections::ConnectionId)).equals((Connections::Table, Connections::Id)),
-                )
-                .join(
-                    JoinType::LeftJoin,
-                    ProjectsResolved,
-                    Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::ProjectId)).equals((ProjectsResolved, Projects::Id)),
+                    Projects::Table,
+                    LastProject,
+                    last_version_of(
+                        Projects::Table,
+                        LastProject,
+                        Projects::ProjectId,
+                        (PhysicalFunctionRuns::Table, PhysicalFunctionRuns::ProjectId),
+                    ),
                 )
                 .join(
                     JoinType::LeftJoin,
                     Functions::Table,
                     Expr::col((PhysicalFunctionRuns::Table, PhysicalFunctionRuns::FunctionVersionId))
                         .equals((Functions::Table, Functions::Id)),
+                )
+                .join(
+                    JoinType::LeftJoin,
+                    Connections::Table,
+                    Expr::col((LastCollection, Collections::ConnectionId)).equals((Connections::Table, Connections::Id)),
                 )
                 .join(
                     JoinType::LeftJoin,

@@ -3,16 +3,17 @@
 //
 
 use sea_query::{
-    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, ForeignKey, ForeignKeyAction, Iden, Index, IndexCreateStatement,
-    IntoIden, JoinType, Query, Table, TableCreateStatement,
+    Alias, Asterisk, ColumnDef, ConditionalStatement, Expr, ExprTrait, Iden, Index, IndexCreateStatement, IntoIden, JoinType, Query, Table,
+    TableCreateStatement,
 };
 
-use super::collections::{Collections, CollectionsResolved};
+use super::collections::{Collections, LastCollection};
 use super::users::Users;
 use crate::schema::Entity;
+use crate::schema::render::name_or_id;
 use crate::schema::source::Derived;
 use crate::schema::sql::id_column;
-use crate::schema::sql::scd2::open_interval;
+use crate::schema::sql::scd2::{closed_version, label_of, last_version_of, open_interval};
 use crate::schema::sql::{ImmutableColumnsTriggerDef, Scd2TriggerDef, ViewDef, cols_of_except};
 
 #[derive(Iden, Clone, Copy)]
@@ -59,13 +60,6 @@ impl Entity for Defs {
                 .col(id_column(Dependencies::DefinedById).not_null())
                 .col(ColumnDef::new(Dependencies::System).boolean().not_null())
                 .col(ColumnDef::new(Dependencies::ValidTo).timestamp_with_time_zone().not_null())
-                .foreign_key(
-                    ForeignKey::create()
-                        .from(Dependencies::Table, Dependencies::CollectionId)
-                        .to(Collections::Table, Collections::Id)
-                        .on_delete(ForeignKeyAction::Restrict)
-                        .on_update(ForeignKeyAction::Restrict),
-                )
                 .to_owned(),
         ]
     }
@@ -126,14 +120,26 @@ impl Entity for Defs {
             DependenciesWithNames,
             Query::select()
                 .expr(Expr::col((Dependencies::Table, Asterisk)))
-                .expr_as(Expr::col((CollectionsResolved, Collections::Name)), Alias::new("collection"))
-                .expr_as(Expr::col((CollectionsResolved, Alias::new("deleted"))), Alias::new("collection_deleted"))
-                .expr_as(Expr::col((table_collection.clone(), Collections::Name)), Alias::new("table_collection"))
+                .expr_as(
+                    label_of(LastCollection, Collections::Name, (Dependencies::Table, Dependencies::CollectionId)),
+                    Alias::new("collection"),
+                )
+                .expr_as(closed_version(LastCollection), Alias::new("collection_deleted"))
+                .expr_as(
+                    name_or_id((table_collection.clone(), Collections::Name), (Dependencies::Table, Dependencies::TableCollectionId)),
+                    Alias::new("table_collection"),
+                )
                 .from(Dependencies::Table)
-                .join(
+                .join_as(
                     JoinType::LeftJoin,
-                    CollectionsResolved,
-                    Expr::col((Dependencies::Table, Dependencies::CollectionId)).equals((CollectionsResolved, Collections::Id)),
+                    Collections::Table,
+                    LastCollection,
+                    last_version_of(
+                        Collections::Table,
+                        LastCollection,
+                        Collections::CollectionId,
+                        (Dependencies::Table, Dependencies::CollectionId),
+                    ),
                 )
                 .join(
                     JoinType::LeftJoin,
@@ -142,9 +148,14 @@ impl Entity for Defs {
                 )
                 .join_as(
                     JoinType::LeftJoin,
-                    CollectionsResolved,
+                    Collections::Table,
                     table_collection.clone(),
-                    Expr::col((Dependencies::Table, Dependencies::TableCollectionId)).equals((table_collection, Collections::Id)),
+                    last_version_of(
+                        Collections::Table,
+                        table_collection.clone(),
+                        Collections::CollectionId,
+                        (Dependencies::Table, Dependencies::TableCollectionId),
+                    ),
                 )
                 .to_owned(),
         )]
