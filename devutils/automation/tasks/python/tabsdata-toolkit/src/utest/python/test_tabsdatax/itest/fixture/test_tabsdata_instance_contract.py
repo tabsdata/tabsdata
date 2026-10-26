@@ -148,3 +148,13 @@ def test_collection_forbids_direct_meta_instance_request(pytester):
         result,
         rf"requests `{tabsdata.INSTANCE_META_FIXTURE}` directly",
     )
+
+
+def test_requested_consumers_reads_the_fntest_names():
+    names = ("fn_tabsdata_instance", "instance_fntest")
+    assert tabsdata.requested_consumers(names) == {"fntest"}
+
+
+def test_fntest_shorthand_fails_when_consumer_undeclared(request):
+    with pytest.raises(pytest.fail.Exception, match="'fntest' not declared"):
+        tabsdata.enforced_instance(request, tabsdata.CONSUMER_FNTEST)
