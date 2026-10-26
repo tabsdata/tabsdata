@@ -13,7 +13,7 @@ use td_database::access::LockInstant;
     note = "declare it with `#[ta_objects::Dao]` and a `table = \"...\"` / `view = \"...\"`"
 )]
 pub trait Dao: Send + Sync {
-    type Iden: sea_query::Iden + Copy + Sync + std::fmt::Debug;
+    type Iden: sea_query::Iden + Copy + Sync + std::fmt::Debug + 'static;
 
     type Db: td_database::domain::DbDomain;
 
@@ -34,6 +34,16 @@ pub trait Dao: Send + Sync {
 
     /// Column name and display value pairs, for error messages.
     fn column_display_values(&self) -> Vec<(String, String)>;
+}
+
+/// Rows that are entities carrying tags, from `#[dao(tagged = ..)]`: reads of
+/// them can select by tags.
+pub trait TaggedDao: Dao {
+    /// The column holding the row's entity id.
+    const ENTITY: Self::Iden;
+
+    /// The tags' entity type of the rows.
+    fn entity_type() -> sea_query::Expr;
 }
 
 /// The DAO's column of domain type `T`. The macro bans duplicate field types,

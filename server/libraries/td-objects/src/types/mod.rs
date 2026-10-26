@@ -12,4 +12,5 @@ pub mod plan;
 pub mod status_count;
 pub mod stream;
 pub mod table_ref;
+pub mod tag_selector;
 pub mod visible_projects;

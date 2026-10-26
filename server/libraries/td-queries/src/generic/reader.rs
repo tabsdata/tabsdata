@@ -9,6 +9,7 @@
 
 use crate::generic::chunked::Chunked;
 use crate::generic::grain::{Grain, OneRow, select_in};
+use crate::generic::tagged::TagFilter;
 use crate::{QueryExecutor, Serves};
 use sea_query::{Order, SelectStatement};
 use ta_objects::errors::{SqlError, format_hint};
@@ -163,17 +164,16 @@ impl<E, G> Reader<E, G> {
     pub async fn list<T>(
         self,
         condition: impl SqlCondition<T::Dao>,
-        params: &ListQueryParams<T>,
+        params: &ListQueryParams<T, impl TagFilter<T::Dao, G, E>>,
     ) -> Result<Vec<T>, SqlError>
     where
         T: ListDto,
         G: Grain<T::Dao>,
         E: Serves<T::Dao>,
     {
-        let query = params
-            .apply_to(select_in::<T::Dao, G>(&self.grain, condition))
-            .take();
-        rows::<T::Dao>(query, self.executor)
+        let mut base = select_in::<T::Dao, G>(&self.grain, condition);
+        params.tags.restrict(&self.grain, &mut base);
+        rows::<T::Dao>(params.apply_to(base), self.executor)
             .await?
             .into_iter()
             .map(|dao| T::from_dao(dao).map_err(SqlError::DtoConversionError))

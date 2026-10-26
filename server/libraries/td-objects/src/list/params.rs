@@ -270,7 +270,13 @@ where
     }
 }
 
-pub struct ListQueryParams<D>
+/// A listing that takes no `tag.` filters: the default of [`ListQueryParams`],
+/// to which such a filter is an unknown field.
+pub struct Untagged;
+
+/// A listing's parsed parameters. `Tags` is [`Untagged`] or, for a DTO over a
+/// tagged DAO, the listing's `tag.` filters.
+pub struct ListQueryParams<D, Tags = Untagged>
 where
     D: ListDto,
 {
@@ -279,9 +285,10 @@ where
     pub natural_order: Order<D>,
     pub order: Option<Order<D>>,
     pub pagination: Option<Pagination<D>>,
+    pub tags: Tags,
 }
 
-impl<D> ListQueryParams<D>
+impl<D, Tags> ListQueryParams<D, Tags>
 where
     D: ListDto,
 {
@@ -568,6 +575,7 @@ impl<D: ListDto> TryFrom<&ListParams> for ListQueryParams<D> {
             natural_order,
             order,
             pagination,
+            tags: Untagged,
         })
     }
 }

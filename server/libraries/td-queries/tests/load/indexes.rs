@@ -411,7 +411,7 @@ const INDEX_CASES: &[IndexCase] = &[
     },
     IndexCase {
         index: "tags___key__value__entity_type___current_idx",
-        served_by: Path("children of a parent function or table"),
+        served_by: Queries(&["Scd2Tagged::list"]),
     },
     IndexCase {
         index: "tags___project_id__valid_to___topology_idx",

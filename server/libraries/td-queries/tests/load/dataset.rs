@@ -239,6 +239,22 @@ struct Unit {
 /// (publishes `src`) and a consumer (depends on `src` and consumes the
 /// producer's LTDV via an LFRI) — populating every table the chain queries
 /// scan.
+/// A `team` user tag on every open table, `a` on about half of them, so a
+/// tag selector has rows to match and rows to skip. A second pass leaves the
+/// tags of the tables the first one tagged.
+async fn tag_tables(db: &TdPool) {
+    let sql = ["INSERT INTO tags (id, tag_id, project_id, entity_type, entity_id, kind, key, \
+                                  value, valid_from, defined_by_id, valid_to) \
+                SELECT substr(md5('id' || table_id), 1, 26), substr(md5('tag' || table_id), 1, 26), \
+                       project_id, 'T', table_id, 'U', 'team', \
+                       CASE WHEN hashtext(table_id) % 2 = 0 THEN 'a' ELSE 'b' END, \
+                       valid_from, defined_by_id, 'infinity' \
+                FROM tables WHERE valid_to = 'infinity' \
+                ON CONFLICT DO NOTHING"
+        .to_string()];
+    db.execute_batch(&sql).await.expect("tag tables");
+}
+
 pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle, TdError> {
     let user = system_user()?;
     let project = test_projects(db, 1).await?.remove(0);
@@ -310,6 +326,7 @@ pub async fn chain_dataset(db: &TdPool, knobs: ChainKnobs) -> Result<ChainHandle
     }
 
     graph.flush(db, &pid).await?;
+    tag_tables(db).await;
 
     let (consumer_function_id, producer_function_version_id) =
         first.expect("chain_dataset requires units >= 1");

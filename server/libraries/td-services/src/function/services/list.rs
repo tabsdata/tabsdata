@@ -12,6 +12,7 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::function::Function;
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
+use td_objects::types::tag_selector::TagSelector;
 use td_queries::Queries;
 
 #[service_factory]
@@ -27,7 +28,7 @@ async fn function_list(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let query_params = ListQueryParams::<Function>::try_from(&list_params)?;
+    let query_params = ListQueryParams::<Function, TagSelector>::try_from(&list_params)?;
     let rows = conn.scd2().list((), &query_params).await?;
     build_list_response(&list_params, &query_params, rows)
 }
@@ -42,11 +43,11 @@ mod tests {
     use td_objects::dxo::crudl::ListParams;
     use td_objects::dxo::crudl::RequestContext;
     use td_objects::dxo::function::FunctionRegister;
-    use td_objects::types::basic::ReuseFrozen;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionName, Decorator, Description, FunctionName, RoleName,
         UserEnabled, UserId, UserName,
     };
+    use td_objects::types::basic::{ReuseFrozen, TagValue};
     use td_queries::test_utils::SeedEntry;
 
     #[td_test::test(db)]
@@ -122,6 +123,100 @@ mod tests {
         assert_eq!(data.len(), 2);
         assert_eq!(data[0].name, FunctionName::try_from("function_1")?);
         assert_eq!(data[1].name, FunctionName::try_from("function_2")?);
+        Ok(())
+    }
+
+    fn publisher(name: &str) -> Result<FunctionRegister, TdError> {
+        Ok(FunctionRegister {
+            child_functions: None,
+            name: name.try_into()?,
+            description: "d".try_into()?,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            decorator: Decorator::Publisher,
+            connector: None,
+            connection: None,
+            base_path: None,
+            dependencies: None,
+            triggers: None,
+            tables: None,
+            table_types: None,
+            parent_tables: None,
+            runtime_values: "mock runtime values".try_into()?,
+            reuse_frozen_tables: ReuseFrozen::FALSE,
+            enabled: None,
+            workers: None,
+        })
+    }
+
+    #[td_test::test(db)]
+    async fn test_list_functions_by_parent_tag(db: TdPool) -> Result<(), TdError> {
+        let p = db.seed().test_project().await?;
+        let collection = db
+            .scoped(p.project_id)
+            .seed()
+            .collection(&CollectionName::try_from("collection")?, &UserId::admin())
+            .await?;
+        let owner = db
+            .scoped(p.project_id)
+            .seed()
+            .function(&collection, &publisher("owner")?)
+            .await?;
+        db.scoped(p.project_id)
+            .seed()
+            .child_function(&collection, &publisher("child")?, &owner.function_id)
+            .await?;
+
+        let service = Services::with_defaults(db.clone());
+        let project = p.project_id;
+        let names = |filter: Vec<String>| {
+            let service = &service;
+            async move {
+                let listed = service
+                    .function_list(
+                        RequestContext::with(AccessTokenId::default(), UserId::admin())
+                            .list(
+                                (),
+                                ListParams {
+                                    filter,
+                                    ..ListParams::default()
+                                },
+                            )
+                            .in_project(project),
+                    )
+                    .await?
+                    .data
+                    .data;
+                Ok::<_, TdError>(
+                    listed
+                        .into_iter()
+                        .map(|f| f.name.to_string())
+                        .collect::<Vec<_>>(),
+                )
+            }
+        };
+        let parent = TagValue::of_id(owner.function_id);
+
+        assert_eq!(
+            names(vec![format!("tag.td.parent:eq:{}", *parent)]).await?,
+            ["child"]
+        );
+        assert_eq!(
+            names(vec!["tag.td.parent:is:not_null".to_string()]).await?,
+            ["child"]
+        );
+        assert_eq!(
+            names(vec!["tag.td.parent:is:null".to_string()]).await?,
+            ["owner"]
+        );
+        assert!(
+            names(vec![
+                format!("tag.td.parent:eq:{}", *parent),
+                "name:eq:owner".to_string()
+            ])
+            .await?
+            .is_empty()
+        );
         Ok(())
     }
 

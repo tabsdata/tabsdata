@@ -15,6 +15,7 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::table::{Table, TableDBWithNames};
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
+use td_objects::types::tag_selector::TagSelector;
 use td_queries::Queries;
 
 #[service_factory]
@@ -32,7 +33,7 @@ async fn table_list_by_collection(
 
     let collection_id_name = param.collection;
     let collection: CollectionDB = conn.scd2().fetch_one(&collection_id_name).await?;
-    let query_params = ListQueryParams::<Table>::try_from(&list_params)?;
+    let query_params = ListQueryParams::<Table, TagSelector>::try_from(&list_params)?;
     let rows = conn
         .scd2()
         .list(

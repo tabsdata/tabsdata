@@ -12,6 +12,7 @@ use td_objects::dxo::crudl::{ListRequest, ListResponse, WithinProject};
 use td_objects::dxo::table::{Table, TableDBWithNames};
 use td_objects::list::params::ListQueryParams;
 use td_objects::list::response::build_list_response;
+use td_objects::types::tag_selector::TagSelector;
 use td_queries::Queries;
 
 #[service_factory]
@@ -27,7 +28,7 @@ async fn table_list(
         .require::<Project, ViewProject>(gated_conn, &ctx, &project)
         .await?;
     let conn = gated_conn.get(grant);
-    let query_params = ListQueryParams::<Table>::try_from(&list_params)?;
+    let query_params = ListQueryParams::<Table, TagSelector>::try_from(&list_params)?;
     let rows = conn
         .scd2()
         .list(TableDBWithNames::user(), &query_params)
@@ -51,11 +52,11 @@ mod tests {
     use td_objects::dxo::function::{ChildFunction, FunctionRegister};
     use td_objects::dxo::table::TableDB;
     use td_objects::types::basic::ReuseFrozen;
-    use td_objects::types::basic::TableType;
     use td_objects::types::basic::{
         AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description,
         FunctionType, RoleName, TableName, TableNameDto, UserEnabled, UserId, UserName,
     };
+    use td_objects::types::basic::{TableType, TagValue};
     use td_queries::Queries;
     use td_queries::test_utils::SeedEntry;
 
@@ -203,6 +204,41 @@ mod tests {
             .find(|table| table.name == TableName::try_from("t0").unwrap())
             .expect("owner table is listed");
         assert_eq!(table_parent(&db, &owner.table_id).await?, None);
+
+        let project = p.project_id;
+        let names = |filter: String| {
+            let service = &service;
+            async move {
+                let listed = service
+                    .table_list(
+                        RequestContext::with(AccessTokenId::default(), UserId::admin())
+                            .list(
+                                (),
+                                ListParams {
+                                    filter: vec![filter],
+                                    ..ListParams::default()
+                                },
+                            )
+                            .in_project(project),
+                    )
+                    .await?
+                    .data
+                    .data;
+                Ok::<_, TdError>(
+                    listed
+                        .into_iter()
+                        .map(|t| t.name.to_string())
+                        .collect::<Vec<_>>(),
+                )
+            }
+        };
+        let parent = TagValue::of_id(owner_table.table_id);
+        assert_eq!(
+            names(format!("tag.td.parent:eq:{}", *parent)).await?,
+            ["tt"]
+        );
+        let roots = names("tag.td.parent:is:null".to_string()).await?;
+        assert!(roots.contains(&"t0".to_string()) && !roots.contains(&"tt".to_string()));
         Ok(())
     }
 

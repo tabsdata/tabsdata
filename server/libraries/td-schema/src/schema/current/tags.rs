@@ -3,7 +3,8 @@
 //
 
 use sea_query::{
-    ColumnDef, ConditionalStatement, Expr, ExprTrait, Iden, Index, IndexCreateStatement, IntoIden, Table, TableCreateStatement,
+    Alias, ColumnDef, ConditionalStatement, Expr, ExprTrait, Iden, Index, IndexCreateStatement, IntoIden, IntoIndexColumn, Table,
+    TableCreateStatement,
 };
 
 use crate::schema::Entity;
@@ -85,11 +86,13 @@ impl Entity for Defs {
                 .unique()
                 .and_where(open_interval(Tags::ValidTo))
                 .to_owned(),
+            // `text_pattern_ops` on the value so a `tag.<key>:lk:<prefix>*`
+            // filter is a range scan; `=` still uses it.
             Index::create()
                 .name("tags___key__value__entity_type___current_idx")
                 .table(Tags::Table)
                 .col(Tags::Key)
-                .col(Tags::Value)
+                .col(Tags::Value.into_index_column().with_operator_class(Alias::new("text_pattern_ops")))
                 .col(Tags::EntityType)
                 .and_where(open_interval(Tags::ValidTo))
                 .to_owned(),

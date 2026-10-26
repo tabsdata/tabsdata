@@ -10,3 +10,4 @@
 pub(crate) mod chunked;
 pub(crate) mod scd2;
 pub(crate) mod table;
+pub(crate) mod tags;

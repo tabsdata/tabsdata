@@ -5,6 +5,7 @@
 use crate::dxo::crudl::RequestContext;
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
+use crate::types::basic::TagEntityType;
 use crate::types::basic::{
     AtTime, CollectionId, CollectionLabel, FunctionId, FunctionName, FunctionVersionId,
     Partitioned, Private, ProjectId, SampleLen, SampleOffset, SchemaFieldName, SchemaFieldType,
@@ -67,6 +68,7 @@ impl TableDB {
 #[dao(
     view = "tables__with_names",
     scd2,
+    tagged = TagEntityType::Table,
     project_scoped(unique_at(CollectionId, TableIdName))
 )]
 pub struct TableDBWithNames {

@@ -44,6 +44,9 @@ pub struct DaoArguments {
     scd2: Option<Override<Scd2Arguments>>,
     timeline: Flag,
     project_scoped: Option<ProjectScopedArguments>,
+    /// `tagged = TagEntityType::X`: rows are entities of that tag entity
+    /// type, identified by the partition column (versioned) or the pk.
+    tagged: Option<syn::Path>,
 }
 
 /// `scd2(at = T)`, on a DAO that opens (`ops(insert)`) or closes (`ops(close)`)
@@ -549,6 +552,20 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
             )
         }
     };
+    let tagged = parsed.tagged.as_ref().map(|entity_type| {
+        let entity = match is_scd2 {
+            true => quote! { <Self as ta_objects::Partitioned>::PARTITION },
+            false => quote! { <Self as ta_objects::PkDao>::PK },
+        };
+        quote! {
+            impl ta_objects::TaggedDao for #ident {
+                const ENTITY: Self::Iden = #entity;
+                fn entity_type() -> sea_query::Expr {
+                    ta_objects::SeaValue::as_sea_expr(&#entity_type)
+                }
+            }
+        }
+    });
     let dao_core = quote! {
         impl ta_objects::Dao for #ident {
             type Iden = #table_iden;
@@ -580,6 +597,7 @@ fn expand(parsed: &DaoArguments, item: &ItemStruct) -> syn::Result<proc_macro2::
                 __values
             }
         }
+        #tagged
     };
 
     let is_project_scoped = parsed.project_scoped.is_some();

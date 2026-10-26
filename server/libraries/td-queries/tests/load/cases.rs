@@ -199,6 +199,12 @@ pub const LOAD_CASES: &[LoadCase] = &[
         family: Family::Latest,
         status: Status::Implemented,
     },
+    LoadCase {
+        name: "tagged::list",
+        covers: &["Scd2Tagged::list"],
+        family: Family::Latest,
+        status: Status::Implemented,
+    },
     // generic/at cases — partition-keyed lookups through FindAt.
     LoadCase {
         name: "as_of::fetch_one_by_partition",

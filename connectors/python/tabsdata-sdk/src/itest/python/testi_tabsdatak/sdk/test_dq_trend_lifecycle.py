@@ -110,21 +110,12 @@ def parent_table_id(collection: Collection, name: str) -> str | None:
 def trend_functions(collection: Collection, owner_id: str) -> list:
     """The trend functions the server says belong to ``owner_id`` -- found by
     their ``td.parent`` tag, which is what the reconciler itself keys on."""
-    tags = collection.connection.tags_list(
-        request_filter=[
-            "entity_type:eq:F",
-            f"key:eq:{PARENT_TAG}",
-            f"value:eq:{owner_id}",
+    return collection.list_functions(
+        filter=[
+            f"tag.{PARENT_TAG}:eq:{owner_id}",
+            f"function_type:eq:{FunctionType.DQSummaryTrends.value}",
         ]
-    ).json()["data"]["data"]
-    children = {tag["entity_id"] for tag in tags}
-    return [
-        function
-        for function in collection.list_functions(
-            filter=[f"function_type:eq:{FunctionType.DQSummaryTrends.value}"]
-        )
-        if function.kwargs.get("function_id") in children
-    ]
+    )
 
 
 @tabsdata_instance(consumer="tdtest")

@@ -6,6 +6,7 @@ use crate::dxo::crudl::RequestContext;
 use crate::dxo::scd2_interval::Scd2Interval;
 use crate::dxo::topology::TopologyInstant;
 use crate::types::basic::Scd2ValidFrom;
+use crate::types::basic::TagEntityType;
 use crate::types::basic::{
     AtTime, BasePath, BundleId, CollectionId, CollectionLabel, ConnectionKind, Connector,
     Decorator, Description, Enabled, FunctionId, FunctionIdName, FunctionName,
@@ -463,6 +464,7 @@ impl FromDao for FunctionPatchRecord {
 #[dao(
     view = "functions__with_names",
     scd2,
+    tagged = TagEntityType::Function,
     project_scoped(unique_at(CollectionId, FunctionIdName))
 )]
 pub struct FunctionDBWithNames {

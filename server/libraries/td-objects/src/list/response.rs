@@ -9,9 +9,9 @@ use std::collections::HashSet;
 use ta_objects::ListDto;
 use td_error::TdError;
 
-pub fn build_list_response<T>(
+pub fn build_list_response<T, Tags>(
     list_params: &ListParams,
-    query_params: &ListQueryParams<T>,
+    query_params: &ListQueryParams<T, Tags>,
     mut result: Vec<T>,
 ) -> Result<ListResponse<T>, TdError>
 where
@@ -54,9 +54,9 @@ where
     })
 }
 
-fn compute_previous<T: ListDto>(
+fn compute_previous<T: ListDto, Tags>(
     list_params: &ListParams,
-    query_params: &ListQueryParams<T>,
+    query_params: &ListQueryParams<T, Tags>,
     result: &[T],
     has_more: bool,
 ) -> (Option<String>, Option<String>) {
@@ -82,9 +82,9 @@ fn compute_previous<T: ListDto>(
     }
 }
 
-fn compute_next<T: ListDto>(
+fn compute_next<T: ListDto, Tags>(
     list_params: &ListParams,
-    query_params: &ListQueryParams<T>,
+    query_params: &ListQueryParams<T, Tags>,
     result: &[T],
     has_more: bool,
 ) -> (Option<String>, Option<String>) {
@@ -111,7 +111,7 @@ fn compute_next<T: ListDto>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::list::params::Order;
+    use crate::list::params::{Order, Untagged};
     use sea_query::Condition;
     use ta_objects::FromDao;
     use ta_objects::ListDto;
@@ -157,6 +157,7 @@ mod tests {
             natural_order: Order::Asc(id_col),
             order: None,
             pagination: None,
+            tags: Untagged,
         }
     }
 

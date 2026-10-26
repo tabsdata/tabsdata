@@ -512,7 +512,7 @@ CREATE UNIQUE INDEX "tags___tag_id___current_uidx" ON "tags" ("tag_id") WHERE "v
 
 CREATE UNIQUE INDEX "tags___entity_type__entity_id__key___current_uidx" ON "tags" ("entity_type", "entity_id", "key") WHERE "valid_to" = ('infinity'::timestamptz)
 
-CREATE INDEX "tags___key__value__entity_type___current_idx" ON "tags" ("key", "value", "entity_type") WHERE "valid_to" = ('infinity'::timestamptz)
+CREATE INDEX "tags___key__value__entity_type___current_idx" ON "tags" ("key", "value" text_pattern_ops, "entity_type") WHERE "valid_to" = ('infinity'::timestamptz)
 
 CREATE UNIQUE INDEX "collections___collection_id___current_uidx" ON "collections" ("collection_id") WHERE "valid_to" = ('infinity'::timestamptz)
 

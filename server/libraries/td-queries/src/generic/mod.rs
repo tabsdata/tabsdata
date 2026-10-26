@@ -26,4 +26,5 @@ pub mod grain;
 pub mod reader;
 mod row_locks;
 pub mod scd2;
+pub mod tagged;
 pub mod timeline;

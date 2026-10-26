@@ -132,7 +132,7 @@ pub struct FunctionName(String);
 #[typed(secret, max_len = 4096, default = "{}")]
 pub struct FunctionRuntimeValues(String);
 
-#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi)]
+#[derive(Typed, TypedSerde, TypedSqlx, TypedOpenApi, Eq, PartialEq)]
 pub struct LikeFilter(String);
 
 const MIN_PASSWORD_LEN: usize = 8;

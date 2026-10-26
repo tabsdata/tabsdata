@@ -40,6 +40,7 @@ use td_objects::dxo::query_filters::{DimensionFilter, TimeWindow};
 use td_objects::dxo::table::{Table, TableDB};
 use td_objects::dxo::topology::ProjectTopologyDB;
 use td_objects::list::params::ListQueryParams;
+use td_objects::list::tagged::TaggedListQuery;
 use td_objects::types::basic::{
     AtTime, DependencyPos, EpochMs, FactSide, IncludePrivate, IncludeReplaced, InputIdx,
     LogicalFunctionRunInputId, LogicalFunctionRunStatus, PhysicalFunctionRunStatus, VersionPos,
@@ -557,6 +558,18 @@ async fn time_chain_queries(
         (db).scd2()
             .as_of(&version.interval.valid_from)
             .list::<Function>((), &fn_params)
+            .await?
+    );
+    let team_a = TaggedListQuery::<Table>::try_from(&ListParams {
+        filter: vec!["tag.team:eq:a".to_string()],
+        ..ListParams::default()
+    })?;
+    let _ = timed!(
+        out,
+        "tagged::list",
+        (db).scd2()
+            .tagged(&team_a.selector)
+            .list::<Table>((), &team_a.params)
             .await?
     );
 
