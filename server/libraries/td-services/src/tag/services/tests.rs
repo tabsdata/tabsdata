@@ -3,23 +3,26 @@
 //
 
 use crate::Services;
+use crate::tag::parent::test_support::table_parent;
 use crate::tag::user::TagError;
+use std::collections::HashMap;
 use std::str::FromStr;
 use td_database::pool::TdPool;
 use td_database::pool::scoped::ScopedExt as _;
 use td_error::{TdError, assert_service_error};
+use td_objects::FromDao;
 use td_objects::Typed;
-use td_objects::dxo::collection::{ActiveCollectionDB, CollectionParam};
+use td_objects::dxo::collection::{CollectionDB, CollectionParam};
 use td_objects::dxo::crudl::{ListParams, RequestContext};
 use td_objects::dxo::project::ProjectParam;
-use td_objects::dxo::function::{FunctionDB, FunctionParam, FunctionRegister};
+use td_objects::dxo::function::{ChildFunction, FunctionDB, FunctionParam, FunctionRegister};
 use td_objects::dxo::group::{GroupDB, GroupParam};
+use td_objects::dxo::table::{TableDBWithNames, TableParam};
 use td_objects::dxo::tag::{Tag, TagDB, TagParam, TagSet};
 use td_objects::types::basic::{
-    AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description,
-    FunctionIdName, GroupIdName, GroupName, ProjectId, ProjectIdName, ReuseFrozen, TagEntity, TagKind,
-    TagValue, TopologyTagKey, UserId, UserTagKey,
+    AccessTokenId, BundleId, CollectionIdName, CollectionName, Decorator, Description, FunctionIdName, FunctionType, GroupIdName, GroupName, ProjectId, ProjectIdName, ReuseFrozen, TableIdName, TableNameDto, TableStatus, TableType, TagEntity, TagKind, TagValue, TopologyTagKey, UserId, UserTagKey,
 };
+use td_objects::types::composed::TableDependencyDto;
 use td_queries::Queries;
 use td_queries::test_utils::SeedEntry;
 
@@ -377,5 +380,104 @@ async fn test_deleting_a_project_closes_its_and_its_groups_tags(
     assert!(open.is_empty());
     let versions: Vec<TagDB> = db.scoped(project).timeline().fetch_all(()).await?;
     assert_eq!(versions.len(), groups.len() + 1);
+
+#[td_test::test(db)]
+async fn test_a_frozen_table_keeps_its_parent_and_user_tags(db: TdPool) -> Result<(), TdError> {
+    let p = db.seed().test_project().await?;
+    db.scoped(p.base.project_id)
+        .seed()
+        .collection(&CollectionName::try_from("c")?, &UserId::admin())
+        .await?;
+    let service = Services::with_defaults(db.clone());
+    let collection = || CollectionParam {
+        collection: CollectionIdName::from_str("c").unwrap(),
+    };
+    let trend = TableNameDto::try_from("owner_trends")?;
+    let owner = FunctionRegister {
+        tables: Some(vec![TableNameDto::try_from("owner_t0")?]),
+        parent_tables: Some(HashMap::from([(
+            trend.clone(),
+            TableNameDto::try_from("owner_t0")?,
+        )])),
+        child_functions: Some(vec![ChildFunction {
+            name: "owner_trend".try_into()?,
+            function_type: FunctionType::DQSummaryTrends,
+            bundle_id: BundleId::default(),
+            snippet: "s".try_into()?,
+            dependencies: Some(vec![TableDependencyDto::try_from("owner_t0")?]),
+            tables: Some(vec![trend.clone()]),
+            table_types: Some(HashMap::from([(trend, TableType::DQSummaryTrends)])),
+        }]),
+        ..publisher("owner")?
+    };
+    let owner = service
+        .register_function(
+            ctx()
+                .create(collection(), owner)
+                .in_project(p.base.project_id),
+        )
+        .await?
+        .data;
+    let trend_table = |db: &TdPool| {
+        let db = db.clone();
+        async move {
+            let open: Vec<TableDBWithNames> = db
+                .scd2()
+                .fetch_all(&TableName::try_from("owner_trends")?)
+                .await?;
+            Ok::<_, TdError>(open.into_iter().next().expect("the trend table"))
+        }
+    };
+    let trend_id = trend_table(&db).await?.base.base.table_id;
+    assert!(table_parent(&db, &trend_id).await?.is_some());
+    service
+        .set_table_tag(
+            ctx()
+                .create(
+                    (
+                        collection(),
+                        TableParam {
+                            table: TableIdName::from_str("owner_trends")?,
+                        },
+                    ),
+                    set("team", "a")?,
+                )
+                .in_project(p.base.project_id),
+        )
+        .await?;
+
+    service
+        .delete_function(
+            ctx()
+                .delete((
+                    collection(),
+                    FunctionParam {
+                        function: FunctionIdName::from_str(&owner.name.to_string())?,
+                    },
+                ))
+                .in_project(p.base.project_id),
+        )
+        .await?;
+
+    let frozen = trend_table(&db).await?;
+    assert_eq!(frozen.base.base.status, TableStatus::Frozen);
+    let parent = table_parent(&db, &trend_id)
+        .await?
+        .expect("frozen child keeps its parent");
+    let kept: Vec<TagDB> = db
+        .scd2()
+        .fetch_all(TagEntity::from(trend_id).rows())
+        .await?;
+    let kept = kept
+        .into_iter()
+        .map(Tag::from_dao)
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(
+        sorted(kept),
+        [
+            tag("td.parent", &TagValue::of_id(parent), TagKind::Topology),
+            tag("team", "a", TagKind::User),
+        ]
+    );
     Ok(())
 }

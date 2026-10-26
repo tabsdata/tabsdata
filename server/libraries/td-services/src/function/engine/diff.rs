@@ -75,17 +75,23 @@ impl Changes {
             if is_system_table(table) {
                 changes.close_tables.push(table.table_id);
             } else {
-                changes.tables.push(table.frozen_version(ctx));
-                changes.table_transitions.push(TableTransition {
-                    table_id: table.table_id,
-                    status: TableStatus::Frozen,
-                    function_id: table.function_id,
-                });
+                changes.freeze(table, ctx);
             }
         }
         changes.close_dependencies = state.dependencies.iter().map(|d| d.dependency_id).collect();
         changes.close_triggers = state.triggers.iter().map(|t| t.trigger_id).collect();
         changes
+    }
+
+    /// A frozen table keeps every tag: its `_parent` is how deleting the
+    /// parent table still finds it, and its user tags go to whoever adopts it.
+    fn freeze(&mut self, table: &TableDB, ctx: &RequestContext) {
+        self.tables.push(table.frozen_version(ctx));
+        self.table_transitions.push(TableTransition {
+            table_id: table.table_id,
+            status: TableStatus::Frozen,
+            function_id: table.function_id,
+        });
     }
 
     fn diff_tables(
@@ -123,12 +129,7 @@ impl Changes {
             if kept.contains(&table.name) || table.status != TableStatus::Active {
                 continue;
             }
-            self.tables.push(table.frozen_version(ctx));
-            self.table_transitions.push(TableTransition {
-                table_id: table.table_id,
-                status: TableStatus::Frozen,
-                function_id: table.function_id,
-            });
+            self.freeze(table, ctx);
         }
         Ok(())
     }
@@ -150,7 +151,7 @@ impl Changes {
                 )?),
                 None => self
                     .close_tags
-                    .extend(current.map(|current| current.base.tag_id)),
+                    .extend(current.map(|current| current.tag_id)),
             }
         }
         Ok(())
