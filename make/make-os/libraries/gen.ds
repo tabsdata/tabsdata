@@ -52,3 +52,18 @@ fn instance_in_arena
     release ${allowed_list}
     return ${matched}
 end
+
+fn instance_type_wanted
+    instance_type = trim ${1}
+    if eq ${instance_type} "fntest"
+        with_monkey = get_env TD_WITH_MONKEY
+        if is_empty ${with_monkey}
+            with_monkey = set "false"
+        end
+        if eq ${with_monkey} "false"
+            return false
+        end
+    end
+    wanted = instance_in_arena ${instance_type}
+    return ${wanted}
+end

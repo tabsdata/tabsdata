@@ -106,7 +106,7 @@ script = [
 
         for instance_type in ${instance_types}
             instance_type = trim ${instance_type}
-            in_arena = instance_in_arena ${instance_type}
+            in_arena = instance_type_wanted ${instance_type}
             if ${in_arena}
                 resolved_arguments = exec tdx-itest arguments ${ITEST_INSTANCES_CONFIG} ${instance_type}
                 if not eq ${resolved_arguments.code} "0"

@@ -21,6 +21,7 @@ from __future__ import annotations
 import tempfile
 import uuid
 from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from time import sleep
 
@@ -115,11 +116,11 @@ def server(instance_tdtest: Instance) -> TabsdataServer:
     )
 
 
-@pytest.fixture
-def collection_factory(server: TabsdataServer) -> Iterator[CollectionFactory]:
-    """Create collections under a per-test project, cleaning up every collection
-    and the project on teardown. The project is created lazily on first use so a
-    skipped test provisions nothing."""
+@contextmanager
+def project_collections(server: TabsdataServer) -> Iterator[CollectionFactory]:
+    """Create collections under a project of their own on `server`, deleting every
+    collection and the project on exit. The project is created lazily on first use
+    so a skipped test provisions nothing."""
     state: dict[str, str | None] = {"project": None}
     created: list[str] = []
 
@@ -149,12 +150,21 @@ def collection_factory(server: TabsdataServer) -> Iterator[CollectionFactory]:
         created.append(name)
         return collection
 
-    yield make
+    try:
+        yield make
+    finally:
+        for name in reversed(created):
+            server.delete_collection(name, raise_for_status=False)
+        if state["project"]:
+            server.delete_project(state["project"], raise_for_status=False)
 
-    for name in reversed(created):
-        server.delete_collection(name, raise_for_status=False)
-    if state["project"]:
-        server.delete_project(state["project"], raise_for_status=False)
+
+@pytest.fixture
+def collection_factory(server: TabsdataServer) -> Iterator[CollectionFactory]:
+    """Collections under a per-test project of the ``tdtest`` instance, deleted
+    with the project on teardown."""
+    with project_collections(server) as make:
+        yield make
 
 
 def _connection_document(conn: Conn) -> tuple[str, list[dict]]:

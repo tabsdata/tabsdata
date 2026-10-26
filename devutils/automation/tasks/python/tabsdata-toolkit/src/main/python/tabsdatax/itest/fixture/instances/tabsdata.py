@@ -16,12 +16,13 @@ from urllib.request import urlopen
 import pytest
 import yaml
 
-Consumer = Literal["tdtest", "aitest", "uitest"]
+Consumer = Literal["tdtest", "aitest", "uitest", "fntest"]
 MARKER = "tabsdata_instance"
 
 CONSUMER_TDTEST: Consumer = "tdtest"
 CONSUMER_AITEST: Consumer = "aitest"
 CONSUMER_UITEST: Consumer = "uitest"
+CONSUMER_FNTEST: Consumer = "fntest"
 Service = Literal[
     "apiserver_public_port",
     "apiserver_private_port",
@@ -289,6 +290,7 @@ SHORTHAND_CONSUMERS: dict[str, Consumer] = {
     "td_tabsdata_instance": CONSUMER_TDTEST,
     "ai_tabsdata_instance": CONSUMER_AITEST,
     "ui_tabsdata_instance": CONSUMER_UITEST,
+    "fn_tabsdata_instance": CONSUMER_FNTEST,
 }
 INSTANCE_FIXTURE_PREFIX = "instance_"
 INSTANCE_META_FIXTURE = "instance"
@@ -343,6 +345,11 @@ def ai_tabsdata_instance(request) -> Instance:
 @pytest.fixture
 def ui_tabsdata_instance(request) -> Instance:
     return enforced_instance(request, CONSUMER_UITEST)
+
+
+@pytest.fixture
+def fn_tabsdata_instance(request) -> Instance:
+    return enforced_instance(request, CONSUMER_FNTEST)
 
 
 @pytest.fixture(name=INSTANCE_META_FIXTURE)
