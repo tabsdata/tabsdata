@@ -25,35 +25,37 @@ you are probably solving the wrong problem.
 Three modules. Everything an end user ever types comes from one of them.
 
 ```python
-# 1. Core API: decorators + abstract bases + value refs + type aliases.
+# 1. Core API: decorators + triggers + value refs + type aliases.
 from tabsdatak.api import (
     publisher,
     stream_publisher,
     transformer,
     subscriber,  # entry points
-    CronTrigger,  # firing rule
+    CronTrigger,
+    TablesTrigger,
+    AllTablesTrigger,  # firing rules
     Secret,  # secret value ref
-    # function-signature slot
+    TableFrameSpec,
+    TableFramesSpec,  # function-signature slots
 )
 from tabsdatak.tableframe import TableFrame
+from tabsdatak.tableframe.functions import col, lit, concat
 
-# 2. Cross-cutting connector types: credentials, cloud locations, conn_cfg.
+# 2. Cross-cutting connector types: credentials.
 from tabsdatak.conn.common.types import (
     UserPassword,
     GCPJson,
+    GCPHmac,
     AwsAccessSecretKey,
     AzureAccountKey,
-    HMAC,
-    S3Location,
-    AzBlobLocation,
-    GCSLocation,
 )
 
-# 3. The vendor connector you need (one of ~17). Example:
+# 3. The vendor connector you need (one of ~18). Example:
 from tabsdatak.conn.mysql import MySQLSrc, MySQLDest
-# (The `<Vendor>Conn` class is NOT imported in flow code: the
-#  connection is registered on the function's collection and the
-#  runtime resolves it and hands it to the connector at run time.)
+# (The `<Vendor>SrcConn` / `<Vendor>DestConn` class is NOT imported
+#  in flow code: the connection is registered on the function's
+#  collection and the runtime resolves it and hands it to the
+#  connector at run time.)
 
 # 4. (Optional) Errors — only if you need to react to them.
 from tabsdatak.error import ApiException
@@ -65,19 +67,8 @@ from tabsdatak._connectors import avail_srcs, avail_stream_srcs, avail_dests
 # plugins: "mysql-sql-in", "s3-file-in", "salesforce-report-in",
 # ...). Values are SrcDef /
 # StreamSrcDef / DestDef instances exposing the concrete config
-# class (.src / .dest), .table_mode (for sources), .cardinality,
-# .plugin, and .explorer.
-
-# 6. (Optional) Vendor-level metadata without importing connectors.
-from tabsdatak.conn.common._connectors import (
-    CONNECTORS,
-    list_connectors,
-    import_connector,
-)
-# CONNECTORS is a dict[str, ConnectorInfo] keyed by vendor key
-# ("mysql", "s3", ...). Each ConnectorInfo carries class names
-# as strings (src_classes / dest_classes / conn_classes), kind /
-# kind_tags, and staging description.
+# class (.src / .dest), its connection class (.conn), .table_mode
+# (for sources), .cardinality, .plugin, and .explorer.
 ```
 
 **That's the entire user-facing surface.** Anything else is
@@ -89,7 +80,7 @@ The "src field" / "dest field" columns name the field on
 `<Vendor>Src` / `<Vendor>Dest` that lists what the connector
 reads from / writes to. The names are vendor-shaped on purpose
 (SQL connectors run `queries`; file connectors enumerate
-`path` entries; Salesforce has its own SOQL / Report shapes;
+`paths` entries; Salesforce has its own SOQL / Report shapes;
 MongoDB carries an id-column per collection) -- see "Common
 LLM authoring traps #12" below for the full asymmetry rundown.
 
@@ -99,7 +90,7 @@ LLM authoring traps #12" below for the full asymmetry rundown.
 | PostgreSQL | `tabsdatak.conn.postgres` | src + dest | `queries: list[str]` | `tables: list[str]` |
 | Oracle | `tabsdatak.conn.oracle` | src + dest | `queries: list[str]` | `tables: list[str]` |
 | MSSQL | `tabsdatak.conn.mssql` | src + dest | `queries: list[str]` | `tables: list[str]` |
-| IBM Db2 | `tabsdatak.conn.db2` | src only | `queries: list[str]` | — |
+| IBM Db2 | `tabsdatak.conn.db2` | src + dest | `queries: list[str]` | `tables: list[str]` |
 | BigQuery | `tabsdatak.conn.bigquery` | dest only | — | `tables: list[str]` |
 | Snowflake | `tabsdatak.conn.snowflake` | dest only | — | `tables: list[str]` |
 | Databricks | `tabsdatak.conn.databricks` | src + dest | `queries: list[str]` | `tables: list[str]` |
@@ -108,19 +99,26 @@ LLM authoring traps #12" below for the full asymmetry rundown.
 | StarRocks | `tabsdatak.conn.starrocks` | dest only | — | `tables: list[str]` |
 | MongoDB | `tabsdatak.conn.mongodb` | dest only | — | `collections_with_ids: list[tuple[str, str \| None]]` |
 | Salesforce | `tabsdatak.conn.salesforce` | src only (SOQL + Reports) | `SalesforceSrc.queries: list[str]` (max 1) / `SalesforceReportSrc.reports: list[str]` (max 1) | — |
-| Local file | `tabsdatak.conn.localfile` | src + dest | `path: list[str]` | `path: list[str]` |
-| AWS S3 | `tabsdatak.conn.s3` | src + dest | `path: list[str]` | `path: list[str]` |
-| GCS | `tabsdatak.conn.gcs` | src + dest | `path: list[str]` | `path: list[str]` |
-| Azure Blob | `tabsdatak.conn.azureblob` | src + dest | `path: list[str]` | `path: list[str]` |
+| Local file | `tabsdatak.conn.localfile` | src + dest | `paths: list[str]` | `paths: list[str]` |
+| AWS S3 | `tabsdatak.conn.s3` | src + dest | `paths: list[str]` | `paths: list[str]` |
+| GCS | `tabsdatak.conn.gcs` | src + dest | `paths: list[str]` | `paths: list[str]` |
+| Azure Blob | `tabsdatak.conn.azureblob` | src + dest | `paths: list[str]` | `paths: list[str]` |
+| Development | `tabsdatak.conn.dev` | src + dest | `DataGenSrc.data: list[Data]` | — (`TrashDest` discards) |
 
-Class naming is uniform: `<Vendor>Src` / `<Vendor>Dest`.
+Stream sources for `@stream_publisher`: `KafkaStreamSrc`
+(`tabsdatak.conn.kafka`), `PostgresCdcStreamSrc`, `MySQLCdcStreamSrc`
+and `Db2CdcStreamSrc`.
+
+Class naming is uniform: `<Vendor>Src` / `<Vendor>Dest`, with the
+connections `<Vendor>SrcConn` / `<Vendor>DestConn`.
 Source-only or dest-only connectors omit the missing `Src`/`Dest`.
 
 **Flow code never declares a connection.** A `Src` / `Dest` carries
-only its own config (`queries` / `path` / `tables` / ...) — there is
+only its own config (`queries` / `paths` / `tables` / ...) — there is
 no `conn` field and no `conn=` argument anywhere in user flow code.
-The connection (the `<Vendor>Conn`) is registered on the function's
-*collection*; the runtime resolves it and hands it to the
+The connection (the `<Vendor>SrcConn` / `<Vendor>DestConn`) is
+registered on the function's *collection* (`tdk collection create
+--conn-file`); the runtime resolves it and hands it to the
 connector's plugin at run time.
 
 ### Canonical user code
@@ -186,24 +184,26 @@ registered on the collection and resolved by the runtime.
 
 ### 3. Type aliases are descriptive
 
-`TableNameSpec`, `TableNamesSpec`, `CronMaskSpec`, `VarNameSpec`,
-`UriSpec`, `IdentifierSpec`. The shape *is* the name. When a field
-is typed `UriSpec`, you know it's a string + a URI validator.
+`TableNameSpec`, `TableNamesSpec`, `CronMaskSpec`, `UriSpec`,
+`IdentifierSpec`. The shape *is* the name. When a field is typed
+`UriSpec`, you know it's a string + a URI validator.
 
-### 4. `Var` / `Secret` work everywhere a string does
+### 4. `Secret` works everywhere a string-or-secret does
 
-Anywhere a field accepts `ValOrRefSpec` (the `str | ValRef` union),
-you can pass either:
+Anywhere a connection field is typed `StrOrSecretSpec` (the
+`str | Secret` union), you can pass either:
 
 ```python
-password = "literal-pw"  # literal string
-password = Var(name="DB_PASSWORD")  # env var lookup at runtime
-password = Secret(name="db-creds#PASSWORD")  # K8s secret lookup
+uri = "mysql://db.example.com:3306/sales"  # literal string
+password = Secret("hunter2")  # secret value
 ```
 
-No special syntax per call site. You don't have to know which
-connectors support `Var` / `Secret`; they all do, because the field
-type is the union.
+A `Secret` always serializes to the redacted marker `":secret:"`,
+so its value never lands in a serialized descriptor. In a connection
+file the same choice is spelled with a prefix: `str:<value>`,
+`secret:<value>`, or `$secret:<ENV_VAR>` to read the secret from an
+environment variable on the client (`tdk connection template`
+writes the skeleton).
 
 ### 5. Errors are named, not numbered
 
@@ -233,7 +233,7 @@ plumbing.
 ### 7. The connection is not your problem
 
 You never declare, name, or build a connection in flow code. The
-`<Vendor>Conn` is registered on the function's collection and the
+`<Vendor>SrcConn` / `<Vendor>DestConn` is registered on the function's collection and the
 runtime resolves it and hands it to the connector at run time. A
 `Src` / `Dest` carries only its own config, so generated flow code
 has nothing to guess about credentials or URIs:
@@ -360,14 +360,14 @@ def make_pub():
 ### 5. There is no `conn` argument on a `Src` / `Dest`
 
 Flow code never wires a connection. A `Src` / `Dest` has no `conn`
-field; passing `conn=...` (a string, a `<V>Conn`, anything) is a
+field; passing `conn=...` (a string, a `<V>SrcConn`, anything) is a
 `TypeError`. The connection is registered on the function's
 collection and resolved by the runtime:
 
 ```python
 # rejected -- no such field:
 src = MySQLSrc(conn="prod_mysql", queries=["SELECT 1"])
-src = MySQLSrc(conn=MySQLConn(...), queries=["SELECT 1"])
+src = MySQLSrc(conn=MySQLSrcConn(...), queries=["SELECT 1"])
 
 # correct -- config only:
 src = MySQLSrc(queries=["SELECT 1"])
@@ -383,22 +383,18 @@ connection-configuration concern rather than something the `Dest`
 carries. The connection looks like:
 
 ```python
-from tabsdatak.conn.common.types import (
-    AwsAccessSecretKey,
-    S3Location,
-    UserPassword,
-)
-from tabsdatak.conn.clickhouse import ClickHouseConn
+from tabsdatak.conn.common.types import AwsAccessSecretKey, UserPassword
+from tabsdatak.conn.clickhouse import ClickHouseDestConn, S3Location
 
-dc = ClickHouseConn(
+dc = ClickHouseDestConn(
     host="ch.local",
-    port=9000,
+    port="8123",
     database="analytics",
     credentials=UserPassword(user="u", password="p"),
     staging=S3Location(
         bucket="my-staging",
         region="us-east-1",
-        base_path="ch/",
+        base_path="/ch",
         credentials=AwsAccessSecretKey(
             access_key_id="...",
             secret_access_key="...",
@@ -407,9 +403,13 @@ dc = ClickHouseConn(
 )
 ```
 
-The `S3Location` itself needs `bucket`, `region`, `base_path` (must
-end with `/`), and `credentials`. Omitting any of those throws the
-load failure at run time.
+The location classes come from the connector that takes them
+(`tabsdatak.conn.clickhouse`, `.druid`, `.starrocks`, `.bigquery`).
+An `S3Location` needs `bucket`, `region` and `credentials`;
+`base_path` defaults to `/`, and any other value starts with `/` and
+has no trailing `/` (`"/ch"`). A `GCSLocation` takes `bucket`,
+`credentials` and `hmac_credentials`; an `AzBlobLocation` takes
+`container` and `credentials`.
 
 ### 7. Source-only / destination-only connectors
 
@@ -420,7 +420,7 @@ These connectors **do not have** a `<V>Src`:
 
 These do not have a `<V>Dest`:
 
-* `db2`, `salesforce` — src-only.
+* `salesforce` — src-only.
 
 LLMs frequently invent `BigQuerySrc` or `SalesforceDest` because
 they look symmetric. They don't exist.
@@ -468,18 +468,21 @@ list. (Pydantic's `Literal` enforcement will say which.)
 
 ### 11. `format_cfg` keys depend on the side
 
-For S3 / GCS / AzureBlob / LocalFile sources and destinations, the
-`format_cfg` field accepts CSV options, but the *allowed key set*
-depends on whether you're on the src or dest side:
+For S3 / GCS / AzureBlob / LocalFile sources and destinations,
+`format_cfg` is keyed by format (`{"CSV": {...}}`), and the
+*allowed key set* depends on whether you're on the src or dest side:
 
 ```python
 # CSV common (both sides): separator, quote_char, eol_char
 # CSV src-only: encoding, null_values, has_header, skip_rows, ...
 # CSV dest-only: include_header, datetime_format, quote_style, ...
+S3Src(paths=["in/a.csv"], format_cfg={"CSV": {"has_header": True}})
+S3Dest(paths=["out/a.csv"], format_cfg={"CSV": {"include_header": True}})
 ```
 
 Mixing them up (e.g. `include_header` on a `Src`) raises
-`ConnValidateException(<NAME>_5)`.
+`<NAME>ValidateException(<NAME>_3)` wrapping `FILE_COMMON_11`, which
+lists the allowed keys.
 
 ### 12. Source / destination "what to read from" / "what to write to" fields are vendor-shaped
 
@@ -490,7 +493,7 @@ the same shorthand does **not** work everywhere:
 | Connector kind | Src field | Dest field |
 |---|---|---|
 | SQL / warehouse (MySQL, Postgres, Oracle, MSSQL, Db2, Databricks, ClickHouse, Druid, StarRocks, BigQuery, Snowflake) | `queries: list[str]` (SQL strings, src side) | `tables: list[str]` (target table names) |
-| File / object storage (LocalFile, S3, GCS, AzureBlob) | `path: list[str]` (file / object / glob paths) | `path: list[str]` |
+| File / object storage (LocalFile, S3, GCS, AzureBlob) | `paths: list[str]` (file / object / glob paths) | `paths: list[str]` (no trailing `/`) |
 | MongoDB | — (dest-only) | `collections_with_ids: list[tuple[str, str \| None]]` (collection name + id-column name; `None` to auto-generate) |
 | Salesforce | `SalesforceSrc.queries: list[str]` (SOQL, exactly 1 entry today) and `SalesforceReportSrc.reports: list[str]` (exactly 1 entry today) | — (src-only) |
 
@@ -499,7 +502,7 @@ the same shorthand does **not** work everywhere:
 MySQLDest(tables=["users_out", "orders_out"])
 
 # fine -- file dest:
-S3Dest(path=["out/users/", "out/orders/"])
+S3Dest(paths=["out/users.parquet", "out/orders.parquet"])
 
 # rejected -- MongoDB doesn't take 'tables':
 MongoDBDest(tables=["users", "orders"])
@@ -507,7 +510,7 @@ MongoDBDest(tables=["users", "orders"])
 
 # rejected -- file dest doesn't take 'tables':
 S3Dest(tables=["out/users.csv"])
-#   -> use path=["out/users.csv"]
+#   -> use paths=["out/users.csv"]
 ```
 
 The full per-connector mapping is in the **Connector index**
@@ -536,10 +539,11 @@ layer relies on.
 >   first implementation. The prose describes the gap and the
 >   smallest reasonable fix.
 >
-> Current tally: **D1, D2, D3, D4, D5, D6, D7, D8, D10, D11,
-> D14** are Implemented; **D12** is Partially implemented (the
-> structural cleanup landed; a registry surface follow-up is
-> still open); **D9, D13** are Open. The API as it stands today
+> Current tally: **D1, D2, D3, D4, D6, D8, D10, D11, D13,
+> D14** are Implemented; **D7** and **D12** are Partially
+> implemented (D7: the docstrings name each role, without the
+> structured header; D12: the structural cleanup landed, a registry
+> surface follow-up is still open); **D5, D9** are Open. The API as it stands today
 > is described in the sections *above* this one -- none of the
 > Open items block first-shot LLM authoring.
 
@@ -552,51 +556,36 @@ Without a discovery surface, a generated
 `from tabsdatak.conn.snowflake import SnowflakeSrc` just fails
 (snowflake is dest-only) with no recourse.
 
-**Mitigation in place.** Two complementary discovery surfaces:
-
-* :mod:`tabsdatak.connectors` -- the *runtime* binding registry.
-  ``avail_srcs() / avail_stream_srcs() / avail_dests()`` each return
-  a fresh ``dict[str, <Def>]`` keyed by ``type_``
-  (unique across all plugins), populated lazily on first call from the
-  ``tabsdatak.connectors`` entry-point group. Each ``SrcDef`` /
-  ``StreamSrcDef`` / ``DestDef`` exposes the concrete config class
-  (``.src`` / ``.dest``), ``.table_mode`` (sources), ``.cardinality``,
-  ``.plugin``, and ``.explorer``.
-* :mod:`tabsdatak.conn.connectors` -- the *vendor-level* index.
-  ``CONNECTORS: dict[str, ConnectorInfo]`` is hand-curated; each
-  ``ConnectorInfo`` carries class **names as strings**
-  (``src_classes`` / ``dest_classes`` / ``conn_classes``) plus
-  ``kind`` (e.g. ``"SQL OLTP"``, ``"OLAP SQL"``), ``kind_tags``
-  (``"sql"`` / ``"oltp"`` / ``"warehouse"`` / ``"file"`` / ...),
-  and a ``staging`` description. ``import_connector(name)`` lazily
-  imports the public module so an LLM can resolve the strings to
-  classes only when needed.
+**Mitigation in place.** The *runtime* binding registry,
+:mod:`tabsdatak._connectors`.
+``avail_srcs() / avail_stream_srcs() / avail_dests()`` each return
+a fresh ``dict[str, <Def>]`` keyed by ``type_``
+(unique across all plugins), populated lazily on first call from the
+``tabsdatak.connectors`` entry-point group. Each ``SrcDef`` /
+``StreamSrcDef`` / ``DestDef`` exposes the concrete config class
+(``.src`` / ``.dest``), its connection class (``.conn``),
+``.table_mode`` (sources), ``.cardinality``, ``.plugin``, and
+``.explorer``. From a shell, ``tdk connection types`` lists the same
+types.
 
 ```python
 from tabsdatak._connectors import avail_srcs, avail_dests
-from tabsdatak.conn.common._connectors import (
-    CONNECTORS,
-    list_connectors,
-    import_connector,
-)
 
 # What's installed?
-sorted(CONNECTORS)
-# ['azureblob', 'bigquery', 'clickhouse', 'databricks', 'db2', ...]
+sorted(avail_dests())
+# ['az-file-out', 'bigquery-bulk-out', 'clickhouse-bulk-out', ...]
 
-# Pick a destination class (resolve the string name to the class):
-sf_mod = import_connector("snowflake")
-DestCls = getattr(sf_mod, CONNECTORS["snowflake"].dest_classes[0])
+# Pick a destination class:
+DestCls = avail_dests()["snowflake-bulk-out"].dest
 
-# Find every ARRAY-mode source (the runtime binding registry
-# carries table_mode):
+# Find every ARRAY-mode file source (the registry carries table_mode):
 [d.src for d in avail_srcs().values() if d.table_mode.name == "ARRAY"]
-# [LocalFileSrc, S3Src, GCSSrc, AzureBlobSrc]
-
-# All vendors with a source role, filtered by tag:
-list_connectors(role="src", tag="object-storage")
-# ['azureblob', 'gcs', 's3']
+# [..., AzureBlobSrc, GCSSrc, LocalFileSrc, S3Src]
 ```
+
+A hand-curated *vendor-level* index (class names as strings, kind
+tags, staging descriptions) was designed alongside it but did not
+ship.
 
 The mechanism is open: third-party connector packages that declare
 the same entry-point group and expose ``SrcDef`` / ``StreamSrcDef``
@@ -679,31 +668,33 @@ runtime resolves it and hands it to the connector at run time. Flow
 code that passes `conn=...` fails with an "unexpected keyword"
 `TypeError`, which steers the LLM to drop the argument.
 
-#### Diagnosis 5: Cloud-staging boilerplate is heavy for an LLM  **[Implemented]**
+#### Diagnosis 5: Cloud-staging boilerplate is heavy for an LLM  **[Open]**
 
-**Problem.** A `ClickHouseConn` with an `S3Location` staging is
+**Problem.** A `ClickHouseDestConn` with an `S3Location` staging is
 ~10 lines of nested constructors. LLMs frequently miss `region`,
-`base_path` (which must end in `/`), or one of the
-`AwsAccessSecretKey` fields.
+the `base_path` shape (a leading `/`, no trailing `/`), or one of
+the `AwsAccessSecretKey` fields.
 
-**Mitigation in place.** Each cloud `Location` ships a `from_uri`
-classmethod that fills the structural fields from a single URI:
+**Fix.** A `from_uri` classmethod on each cloud `Location` that fills
+the structural fields from a single URI:
 
 ```python
 S3Location.from_uri(
-    "s3://my-staging/ch/?region=us-east-1",
+    "s3://my-staging/ch?region=us-east-1",
     credentials=AwsAccessSecretKey(...),
 )
 ```
 
-`bucket`, `base_path`, and `region` come from the URI; the LLM only
-supplies `credentials`. Same for `GCSLocation.from_uri` /
-`AzBlobLocation.from_uri`.
+`bucket`, `base_path`, and `region` would come from the URI; the LLM
+would only supply `credentials`. Same for `GCSLocation` /
+`AzBlobLocation`. The connection is written as a connection file
+(`tdk connection template`) rather than in flow code, which takes
+some of the pressure off.
 
 #### Diagnosis 6: `format_cfg` allowed-keys are documented in code, not in errors  **[Implemented]**
 
 **Problem.** A wrong key on `format_cfg` (e.g. `include_header` on a
-`Src`) used to raise `FILECOMMON_3` whose primary message was
+`Src`) used to raise an error whose primary message was
 just "format_cfg validation failed"; the allowed-key list only
 appeared as a chained `ValueError` cause. An LLM iterating
 against the error had to drill into the cause chain to learn the
@@ -711,18 +702,18 @@ recovery path.
 
 **Mitigation in place.** Two changes:
 
-1. The two failure modes are now distinct codes: ``FILECOMMON_3``
-   for unknown-key errors, ``FILECOMMON_4`` for non-dict cfg
+1. The two failure modes are now distinct codes: ``FILE_COMMON_11``
+   for unknown-key errors, ``FILE_COMMON_12`` for non-dict cfg
    values. Each has a dedicated message template.
-2. ``FILECOMMON_3``'s template inlines the format, side, the
+2. ``FILE_COMMON_11``'s template inlines the format, side, the
    unknown keys, and the full allowed-key set via
    ``str.format_map``:
 
    ```
-   FILECOMMON_3: format_cfg[CSV] has unknown keys ['include_header'];
-                 allowed for CSV (src): ['comment_prefix',
-                 'decimal_comma', 'encoding', 'eol_char',
-                 'has_header', ...]
+   FILE_COMMON_11: format_cfg[CSV] has unknown keys ['include_header'];
+                   allowed for CSV (src): ['comment_prefix',
+                   'decimal_comma', 'encoding', 'eol_char',
+                   'has_header', ...]
    ```
 
    Same data is also available structured on ``e.extra``
@@ -731,11 +722,11 @@ recovery path.
 
 The "src vs dest CSV keys" reference also lives in the
 :data:`SrcFormatCfgSpec` / :data:`DestFormatCfgSpec` docstrings
-in :mod:`tabsdatak.conn.file_common_typing`, so an LLM reading
+in :mod:`tabsdatak.conn.common.file.typing_`, so an LLM reading
 the type annotations sees the same set without having to trigger
 a failure first.
 
-#### Diagnosis 7: Source-only / destination-only is invisible from the public surface  **[Implemented]**
+#### Diagnosis 7: Source-only / destination-only is invisible from the public surface  **[Partially implemented]**
 
 **Problem.** The asymmetry between `mysql` (both) and `bigquery`
 (dest-only) is documented only in the README. Module docstrings on
@@ -747,7 +738,7 @@ connector."
 ```python
 """BigQuery destination connector for tabsdatak.
 
-ROLES: dest-only (no `BigQuerySrc`; the conn is `BigQueryConn`).
+ROLES: dest-only (no `BigQuerySrc`; the conn is `BigQueryDestConn`).
 KIND: SQL.
 STAGING: requires `staging: GCSLocation` on the dest connection.
 ...
@@ -755,7 +746,12 @@ STAGING: requires `staging: GCSLocation` on the dest connection.
 ```
 
 Three structured fields the LLM can grep for: ROLES, KIND, STAGING.
-Apply uniformly to all 17 connector docstrings.
+
+**Status.** Every connector's module docstring now opens with its
+public classes and what each is for (the `<V>Src` / `<V>Dest`, the
+`<V>SrcConn` / `<V>DestConn`, and any staging location), which
+makes the role visible; the structured `ROLES:` / `KIND:` /
+`STAGING:` header is not there yet.
 
 #### Diagnosis 8: Validation errors don't link to the field that failed in the user code  **[Implemented]**
 
@@ -787,14 +783,14 @@ frames (``<frozen ...>``, ``<string>``, eval'd code) and any
 frame inside ``tabsdatak`` / ``pydantic``.
 
 To disable in environments that don't want the capture, set
-``TABSDATAK_DEBUG_FRAMES`` to a falsy value (``"0"``,
+``TABSDATA_DEBUG_FRAMES`` to a falsy value (``"0"``,
 ``"false"``, ``"no"``, ``"off"``, or empty). Programmatic check:
-``tabsdatak.api_error.DEBUG_FRAMES_ENV_VAR``.
+``tabsdatak.error.DEBUG_FRAMES_ENV_VAR``.
 
 #### Diagnosis 9: No high-level "build this connector with reasonable defaults" helper  **[Open]**
 
 **Problem.** An LLM asked to write a Postgres publisher needs to
-remember every required field on `PostgresConn`. A generated
+remember every required field on `PostgresSrcConn`. A generated
 example often omits `credentials` or invents a field like
 `database_url`.
 
@@ -803,7 +799,7 @@ example often omits `credentials` or invents a field like
 ```python
 from tabsdatak.conn.mysql.quickstart import mysql_src
 
-src = mysql_src(uri="mysql://...", user="etl", password=Var(...), queries=["SELECT 1"])
+src = mysql_src(uri="mysql://...", user="etl", password=Secret(...), queries=["SELECT 1"])
 ```
 
 The function does the wiring; the LLM only sets actual values. Same
@@ -897,19 +893,21 @@ shape wins.
 the connection before they can ingest, but the vendor-side
 mechanism differs:
 
-* ``ClickHouseConn``, ``DruidConn``, ``StarRocksConn`` --
-  ``staging: CloudLocation`` (any of :class:`S3Location` /
-  :class:`GCSLocation` / :class:`AzBlobLocation`).
-* ``BigQueryConn`` -- ``staging: GCSLocation`` (BigQuery only
+* ``ClickHouseDestConn``, ``DruidDestConn``, ``StarRocksDestConn``
+  -- ``staging: CloudLocation`` (the :class:`S3Location` /
+  :class:`GCSLocation` / :class:`AzBlobLocation` classes each
+  connector exports; Druid takes S3 and Azure).
+* ``BigQueryDestConn`` -- ``staging: GCSLocation`` (BigQuery only
   loads from GCS).
-* ``DatabricksConn`` -- ``volume: VolumeSpec`` (a Databricks
-  Unity Catalog Volume reference).
-* ``SnowflakeConn`` -- optional ``stage: IdentifierSpec`` (a
+* ``DatabricksSrcConn`` / ``DatabricksDestConn`` -- ``volume:
+  VolumeSpec`` (a Databricks Unity Catalog Volume reference).
+* ``SnowflakeDestConn`` -- optional ``stage: IdentifierSpec`` (a
   pre-created Snowflake stage object that wraps the underlying
   S3 / GCS / Azure location, managed Snowflake-side).
-* SQL transactional conns (``MySQLConn`` / ``PostgresConn`` /
-  ``OracleConn`` / ``MSSQLConn``) and the file/object-storage
-  conns need no staging.
+* SQL transactional conns (``MySQLSrcConn`` / ``PostgresSrcConn``
+  / ``OracleSrcConn`` / ``MSSQLSrcConn`` and their ``DestConn``
+  counterparts) and the file/object-storage conns need no
+  staging.
 
 The earlier draft (uniform ``staging: <something>`` field
 everywhere) over-simplified this: Snowflake's ``stage`` and
@@ -920,7 +918,7 @@ vendor-specific concepts, not interchangeable cloud locations.
 
 1. **All staging info now lives on the connection**, never on
    the dest descriptor. Snowflake's ``stage`` was moved from
-   ``SnowflakeDest`` to ``SnowflakeConn`` so an LLM wiring the
+   ``SnowflakeDest`` to ``SnowflakeDestConn`` so an LLM wiring the
    connection has all the info to know whether a ``stage`` is
    even relevant. (Databricks's ``volume`` was already on the
    conn; ClickHouse / Druid / StarRocks already had ``staging:
@@ -937,13 +935,13 @@ The vendor-specific *names* (``staging`` / ``stage`` /
 differences in how each backend handles staging.
 
 **Open follow-up.** The registry could still surface a hint
-like ``info.staging_field`` (``"staging"`` / ``"stage"`` /
-``"volume"`` / ``None``) so an LLM walking
-``CONNECTORS`` can ask *"does this dest's connection take a
+like ``staging_field`` (``"staging"`` / ``"stage"`` /
+``"volume"`` / ``None``) on each ``DestDef`` so an LLM walking
+``avail_dests()`` can ask *"does this dest's connection take a
 staging-shaped field, and what's it called?"* without parsing
 each connector's docstring. Additive, non-breaking, one-line
-per connector. Today the workaround is the ``staging`` string
-field on :class:`ConnectorInfo` (free-form description).
+per connector. Today the workaround is the connection class on
+``.conn`` and its fields.
 
 #### Diagnosis 13: Stream sources and on-tables actions ship  **[Resolved]**
 
@@ -967,7 +965,7 @@ targets" fields have different names per connector kind:
 
 * SQL / warehouse: ``queries: list[str]`` on src,
   ``tables: list[str]`` on dest;
-* file / object-storage: ``path: list[str]`` on both sides;
+* file / object-storage: ``paths: list[str]`` on both sides;
 * MongoDB: ``collections_with_ids: list[tuple[str, str|None]]``
   on dest (different *shape* too -- name + id-column);
 * Salesforce: ``SalesforceSrc.queries`` (SOQL) and
@@ -1011,7 +1009,7 @@ e.api_error  # the named ErrorCode enum value
 e.cause  # underlying exception (typically pydantic ValidationError)
 e.extra  # dict of any kwargs passed at the raise site
 e.source  # "<file>:<line>: <code>" of the user call site
-#   (None only if disabled via TABSDATAK_DEBUG_FRAMES=0
+#   (None only if disabled via TABSDATA_DEBUG_FRAMES=0
 #   or no user frame can be located)
 str(e)  # one-line summary: "<CODE>: <message>: <cause-summary>"
 #   (with " at <file>:<line>: <code>" appended when source is set)
@@ -1021,10 +1019,10 @@ str(e)  # one-line summary: "<CODE>: <message>: <cause-summary>"
 fire at pipeline-build time, so pinning each error to its call
 site is worth the small stack-walk cost. To turn it off in
 environments that don't want the capture, set
-`TABSDATAK_DEBUG_FRAMES` to a falsy value:
+`TABSDATA_DEBUG_FRAMES` to a falsy value:
 
 ```sh
-TABSDATAK_DEBUG_FRAMES=0 python my_pipeline.py
+TABSDATA_DEBUG_FRAMES=0 python my_pipeline.py
 ```
 
 Decision tree:
@@ -1036,7 +1034,7 @@ Decision tree:
 2. **`ConnException` subclass** — the error is in connector
    configuration (bad URI, missing credential, schema/database
    mismatch, etc.). The code (`MYSQL_3`, `S3_5` etc.) tells you
-   which connector + site. Fix in the `<V>Conn` / `<V>Src` /
+   which connector + site. Fix in the `<V>SrcConn` / `<V>DestConn` / `<V>Src` /
    `<V>Dest` constructor.
 3. **Other exception** — it's not a tabsdatak validation error;
    you've hit a runtime issue (network, file, etc.). Read the
