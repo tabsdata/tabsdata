@@ -45,3 +45,35 @@ def test_function_transformer_api(driver, transformer_function):
     )
     check_system_columns(run)
     compare("transformer", snapshot(run))
+
+
+@pytest.fixture
+def cardinality_function(tmp_path, monkeypatch):
+    project = copy_project(RESOURCES, tmp_path, monkeypatch, "cardinality_project")
+    yield Function(
+        TRANSFORMER,
+        project,
+        "function_api_cardinality",
+        "transformer",
+        "merge",
+    )
+    forget("function_api_cardinality")
+
+
+def test_function_transformer_api_with_more_inputs_than_outputs(
+    driver, cardinality_function
+):
+    run = driver.run(
+        cardinality_function,
+        outputs=["merged"],
+        inputs={
+            "first": pl.DataFrame({"id": [1], "name": ["first"]}),
+            "versions": [
+                pl.DataFrame({"id": [2], "name": ["older"]}),
+                pl.DataFrame({"id": [3, 4], "name": ["newer", "newest"]}),
+            ],
+            "last": pl.DataFrame({"id": [5], "name": ["last"]}),
+        },
+    )
+    check_system_columns(run)
+    compare("transformer_cardinality", snapshot(run))

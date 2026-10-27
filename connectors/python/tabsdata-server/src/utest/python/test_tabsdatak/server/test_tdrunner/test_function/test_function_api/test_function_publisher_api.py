@@ -50,3 +50,28 @@ def test_function_publisher_api(driver, publisher_function):
     )
     check_system_columns(run)
     compare("publisher", snapshot(run))
+
+
+@pytest.fixture
+def paths_function(tmp_path, monkeypatch):
+    project = copy_project(RESOURCES, tmp_path, monkeypatch, "paths_project")
+    yield Function(
+        PUBLISHER, project, "function_api_paths", "publisher", "publish_paths"
+    )
+    forget("function_api_paths")
+
+
+def test_function_publisher_api_with_one_input_per_path(driver, paths_function):
+    run = driver.run(
+        paths_function,
+        outputs=["concat_all", "first_only", "skipped"],
+        source_files={
+            "a.parquet": pl.DataFrame({"id": [1, 2], "name": ["a1", "a2"]}),
+            "b.parquet": pl.DataFrame({"id": [10], "name": ["b1"]}),
+        },
+        connection=lambda base_path: LocalFileSrcConn(
+            base_path=str(base_path)
+        ).to_dict(),
+    )
+    check_system_columns(run)
+    compare("publisher_paths", snapshot(run))

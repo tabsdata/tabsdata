@@ -156,25 +156,59 @@ class Driver:
             }
         }
 
-    def input_table(self, name: str, index: int, source: Path) -> dict:
+    def input_table(
+        self,
+        name: str,
+        position: int,
+        index: int,
+        source: Path,
+        version: int | None = None,
+    ) -> dict:
+        suffix = "" if version is None else f".{version}"
         return {
-            "Table": {
-                "collection_id": 1,
-                "collection": "c",
-                "table_id": f"T-{name}",
-                "table": name,
-                "table_version_id": f"TV-{name}",
-                "input_idx": index,
-                "table_pos": index,
-                "version_pos": 0,
-                "execution_id": 2,
-                "transaction_id": 3,
-                "triggered_on": 1780000000100,
-                "logical_table_data_version_id": f"LDV-{name}",
-                "physical_table_data_version_id": f"PDV-{name}",
-                "location": {"uri": source.as_uri(), "env_prefix": STORAGE_MOUNT},
-            }
+            "collection_id": 1,
+            "collection": "c",
+            "table_id": f"T-{name}",
+            "table": name,
+            "table_version_id": f"TV-{name}",
+            "input_idx": index,
+            "table_pos": position,
+            "version_pos": 0 if version is None else version,
+            "execution_id": 2,
+            "transaction_id": 3,
+            "triggered_on": 1780000000100,
+            "logical_table_data_version_id": f"LDV-{name}{suffix}",
+            "physical_table_data_version_id": f"PDV-{name}{suffix}",
+            "location": {"uri": source.as_uri(), "env_prefix": STORAGE_MOUNT},
         }
+
+    def inputs(self, inputs: dict[str, pl.DataFrame | list[pl.DataFrame]]) -> list:
+        catalog = self.root / "catalog"
+        catalog.mkdir()
+        entries = []
+        index = 0
+        for position, (name, value) in enumerate(inputs.items()):
+            if isinstance(value, pl.DataFrame):
+                value.write_parquet(catalog / f"{name}.parquet")
+                entries.append({
+                    "Table": self.input_table(
+                        name, position, index, catalog / f"{name}.parquet"
+                    )
+                })
+                index += 1
+                continue
+            versions = []
+            for version, frame in enumerate(value):
+                source = catalog / f"{name}.{version}.parquet"
+                frame.write_parquet(source)
+                versions.append(
+                    self.input_table(name, position, index, source, version)
+                )
+                index += 1
+            entries.append({
+                "TableVersions": {"is_empty": not versions, "versions": versions}
+            })
+        return entries
 
     def begin(self) -> None:
         self.step(begin_execution, "begin-execution")
@@ -296,7 +330,7 @@ class Driver:
         function: Function,
         *,
         outputs: list[str],
-        inputs: dict[str, pl.DataFrame] | None = None,
+        inputs: dict[str, pl.DataFrame | list[pl.DataFrame]] | None = None,
         source_files: dict[str, pl.DataFrame] | None = None,
         connection: Callable[[Path], dict] | None = None,
     ) -> Run:
@@ -316,14 +350,7 @@ class Driver:
                 }
             }
         if inputs:
-            catalog = self.root / "catalog"
-            catalog.mkdir()
-            body["input"] = []
-            for index, (name, frame) in enumerate(inputs.items()):
-                frame.write_parquet(catalog / f"{name}.parquet")
-                body["input"].append(
-                    self.input_table(name, index, catalog / f"{name}.parquet")
-                )
+            body["input"] = self.inputs(inputs)
         self.write_request(bundle, body)
 
         connection_file = None

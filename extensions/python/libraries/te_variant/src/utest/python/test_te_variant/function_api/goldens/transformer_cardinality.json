@@ -1,0 +1,88 @@
+{
+  "callbacks": [
+    {
+      "exit_status": 0,
+      "start": "<masked>",
+      "status": "Running"
+    },
+    {
+      "end": "<masked>",
+      "exit_status": 0,
+      "output": {
+        "output": [
+          {
+            "Data": {
+              "info": {
+                "column_count": 3,
+                "data_bytes": "<masked>",
+                "row_count": 5,
+                "schema_hash": "sha256:df378b7de96d155a921f5f52a85189fd7b3094b48f0cb0e57978feb02ccb0725"
+              },
+              "table": "merged"
+            }
+          }
+        ]
+      },
+      "start": "<masked>",
+      "status": "Done"
+    }
+  ],
+  "outputs": {
+    "merged": {
+      "columns": [
+        [
+          "id",
+          "Int64"
+        ],
+        [
+          "name",
+          "String"
+        ],
+        [
+          "$td.id",
+          "String"
+        ]
+      ],
+      "rows": [
+        {
+          "$td.id": "<random>",
+          "id": 1,
+          "name": "first"
+        },
+        {
+          "$td.id": "<random>",
+          "id": 2,
+          "name": "older"
+        },
+        {
+          "$td.id": "<random>",
+          "id": 3,
+          "name": "newer"
+        },
+        {
+          "$td.id": "<random>",
+          "id": 4,
+          "name": "newest"
+        },
+        {
+          "$td.id": "<random>",
+          "id": 5,
+          "name": "last"
+        }
+      ]
+    }
+  },
+  "response": {
+    "output": [
+      {
+        "info": {
+          "column_count": 3,
+          "data_bytes": "<masked>",
+          "row_count": 5,
+          "schema_hash": "sha256:df378b7de96d155a921f5f52a85189fd7b3094b48f0cb0e57978feb02ccb0725"
+        },
+        "table": "merged"
+      }
+    ]
+  }
+}

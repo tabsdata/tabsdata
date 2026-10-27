@@ -1,0 +1,147 @@
+{
+  "callbacks": [
+    {
+      "exit_status": 0,
+      "start": "<masked>",
+      "status": "Running"
+    },
+    {
+      "end": "<masked>",
+      "exit_status": 0,
+      "output": {
+        "output": [
+          {
+            "Data": {
+              "info": {
+                "column_count": 4,
+                "data_bytes": "<masked>",
+                "row_count": 3,
+                "schema_hash": "sha256:ded3f5c77fc0657f7da49daa2e88041a5b926687cb2e437d2b6815adb73a1c4f"
+              },
+              "table": "concat_all"
+            }
+          },
+          {
+            "Data": {
+              "info": {
+                "column_count": 4,
+                "data_bytes": "<masked>",
+                "row_count": 2,
+                "schema_hash": "sha256:ded3f5c77fc0657f7da49daa2e88041a5b926687cb2e437d2b6815adb73a1c4f"
+              },
+              "table": "first_only"
+            }
+          },
+          {
+            "NoData": {
+              "table": "skipped"
+            }
+          }
+        ]
+      },
+      "start": "<masked>",
+      "status": "Done"
+    }
+  ],
+  "outputs": {
+    "concat_all": {
+      "columns": [
+        [
+          "id",
+          "Int64"
+        ],
+        [
+          "name",
+          "String"
+        ],
+        [
+          "@td.file.path",
+          "String"
+        ],
+        [
+          "$td.id",
+          "String"
+        ]
+      ],
+      "rows": [
+        {
+          "$td.id": "<random>",
+          "@td.file.path": "<root>/connection-base/a.parquet",
+          "id": 1,
+          "name": "a1"
+        },
+        {
+          "$td.id": "<random>",
+          "@td.file.path": "<root>/connection-base/a.parquet",
+          "id": 2,
+          "name": "a2"
+        },
+        {
+          "$td.id": "<random>",
+          "@td.file.path": "<root>/connection-base/b.parquet",
+          "id": 10,
+          "name": "b1"
+        }
+      ]
+    },
+    "first_only": {
+      "columns": [
+        [
+          "id",
+          "Int64"
+        ],
+        [
+          "name",
+          "String"
+        ],
+        [
+          "@td.file.path",
+          "String"
+        ],
+        [
+          "$td.id",
+          "String"
+        ]
+      ],
+      "rows": [
+        {
+          "$td.id": "<random>",
+          "@td.file.path": "<root>/connection-base/a.parquet",
+          "id": 1,
+          "name": "a1"
+        },
+        {
+          "$td.id": "<random>",
+          "@td.file.path": "<root>/connection-base/a.parquet",
+          "id": 2,
+          "name": "a2"
+        }
+      ]
+    }
+  },
+  "response": {
+    "output": [
+      {
+        "info": {
+          "column_count": 4,
+          "data_bytes": "<masked>",
+          "row_count": 3,
+          "schema_hash": "sha256:ded3f5c77fc0657f7da49daa2e88041a5b926687cb2e437d2b6815adb73a1c4f"
+        },
+        "table": "concat_all"
+      },
+      {
+        "info": {
+          "column_count": 4,
+          "data_bytes": "<masked>",
+          "row_count": 2,
+          "schema_hash": "sha256:ded3f5c77fc0657f7da49daa2e88041a5b926687cb2e437d2b6815adb73a1c4f"
+        },
+        "table": "first_only"
+      },
+      {
+        "table": "skipped"
+      }
+    ]
+  }
+}
